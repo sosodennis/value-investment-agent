@@ -13,6 +13,8 @@ BACKEND_ORIGIN="${BACKEND_ORIGIN%/}"
 SECRET_FILE="${STAGING_SECRET_FILE:-$ROOT/.env}"
 REPORT="${STAGING_SMOKE_REPORT:-$ROOT/.audit/refactor-staging-smoke.jsonl}"
 TIMEOUT_SECONDS="${STAGING_SMOKE_TIMEOUT_SECONDS:-90}"
+COMPLETION_WAIT_SECONDS="${STAGING_COMPLETION_WAIT_SECONDS:-600}"
+COMPLETION_POLL_SECONDS="${STAGING_COMPLETION_POLL_SECONDS:-5}"
 RETRY_ATTEMPTS="${STAGING_SMOKE_RETRY_ATTEMPTS:-3}"
 THREAD_ID="refactor-smoke-$(date -u +%Y%m%d%H%M%S)-$$"
 
@@ -53,8 +55,7 @@ mkdir -p "$(dirname "$REPORT")"
 cookie_jar="$(mktemp)"
 response_body="$(mktemp)"
 response_headers="$(mktemp)"
-sse_body="$(mktemp)"
-trap 'rm -f "$cookie_jar" "$response_body" "$response_headers" "$sse_body"' EXIT
+trap 'rm -f "$cookie_jar" "$response_body" "$response_headers"' EXIT
 
 record() {
   local check="$1" status="$2" request_id="${3:-}" latency_ms="${4:-0}" attempts="${5:-1}" error_code="${6:-}"
@@ -138,7 +139,7 @@ ensure_key() {
 }
 
 completion() {
-  local run_payload run_id event_count terminal_count attempt=1
+  local run_payload run_id event_count completed_event_count run_status artifact_ids artifact_id artifact_count artifact_failures attempt=1 deadline
   run_payload="$(jq -cn --arg message "${STAGING_COMPLETION_MESSAGE:-Analyze the valuation workflow for AAPL and return a concise result.}" '{message:$message}')"
   while (( attempt <= RETRY_ATTEMPTS )); do
     request POST "/api/v1/threads/$THREAD_ID/runs" "$run_payload" "$CSRF_TOKEN"
@@ -152,18 +153,45 @@ completion() {
     sleep "$attempt"
   done
   [[ -n "$run_id" ]] || { record completion NOT_VERIFIED "$REQUEST_ID" "$REQUEST_LATENCY_MS" "$RETRY_ATTEMPTS" retry_exhausted; return 1; }
-  curl --silent --show-error --max-time "$TIMEOUT_SECONDS" --output "$sse_body" -N \
-    -H 'Accept: text/event-stream' -H "Last-Event-ID: 0" -b "$cookie_jar" \
-    "$BACKEND_ORIGIN/api/v1/threads/$THREAD_ID/events?run_id=$run_id&after_seq=0" >/dev/null || true
-  event_count="$(awk '/^event: / {count++} END {print count+0}' "$sse_body")"
-  terminal_count="$(
-    awk '/^data: / {sub(/^data: /, ""); print}' "$sse_body" |
-      jq -s --arg run_id "$run_id" '[.[] | select(.event_name == "workflow.activity" and .run_id == $run_id and .payload.run_id == $run_id and (.payload.status == "completed" or .payload.status == "failed" or .payload.status == "cancelled"))] | length'
-  )"
-  if (( event_count > 0 && terminal_count > 0 )); then
+  deadline=$((SECONDS + COMPLETION_WAIT_SECONDS))
+  while :; do
+    request GET "/api/v1/threads/$THREAD_ID/activities?run_id=$run_id"
+    if [[ "$REQUEST_CODE" != "200" ]]; then
+      record completion NOT_VERIFIED "$REQUEST_ID" "$REQUEST_LATENCY_MS" "$attempt" "snapshot_http_$REQUEST_CODE"
+      return 1
+    fi
+    run_status="$(jq -r '.run_status // "unknown"' "$response_body")"
+    [[ "$run_status" == "completed" || "$run_status" == "failed" || "$run_status" == "cancelled" ]] && break
+    if (( SECONDS >= deadline )); then
+      record completion NOT_VERIFIED "$REQUEST_ID" "$REQUEST_LATENCY_MS" "$attempt" "completion_timeout_${run_status}"
+      return 1
+    fi
+    sleep "$COMPLETION_POLL_SECONDS"
+  done
+
+  event_count="$(jq -r '.cursor // 0' "$response_body")"
+  completed_event_count="$(jq -r --arg run_id "$run_id" '[.recent_activities[]? | select(.activity_id == "workflow" and .run_id == $run_id and .status == "completed")] | length' "$response_body")"
+  run_status="$(jq -r '.run_status // "unknown"' "$response_body")"
+  artifact_ids="$(jq -r --arg run_id "$run_id" '[.completed_outputs[]? | select(.identity.run_id == $run_id) | .artifact_id // empty] | unique | .[]' "$response_body")"
+  artifact_count="$(jq -r --arg run_id "$run_id" '[.completed_outputs[]? | select(.identity.run_id == $run_id and .artifact_id != null)] | length' "$response_body")"
+  artifact_failures=0
+
+  while IFS= read -r artifact_id; do
+    [[ -n "$artifact_id" ]] || continue
+    request GET "/api/v1/artifacts/$artifact_id?run_id=$run_id"
+    if [[ "$REQUEST_CODE" != "200" ]] || ! jq -e 'type == "object" and has("data")' "$response_body" >/dev/null; then
+      artifact_failures=$((artifact_failures + 1))
+    fi
+  done <<< "$artifact_ids"
+
+  if (( event_count > 0 && completed_event_count > 0 )) && [[ "$run_status" == "completed" ]] && (( artifact_count > 0 && artifact_failures == 0 )); then
     record completion VERIFIED "$REQUEST_ID" "$REQUEST_LATENCY_MS" "$attempt"
   else
-    record completion NOT_VERIFIED "$REQUEST_ID" "$REQUEST_LATENCY_MS" "$attempt" no_terminal_event
+    local error_code="run_status_${run_status}"
+    if (( event_count == 0 || completed_event_count == 0 )); then error_code="no_completed_event"; fi
+    if (( artifact_count == 0 )); then error_code="missing_output_artifact_reference"; fi
+    if (( artifact_failures > 0 )); then error_code="artifact_fetch_failed"; fi
+    record completion NOT_VERIFIED "$REQUEST_ID" "$REQUEST_LATENCY_MS" "$attempt" "$error_code"
     return 1
   fi
 }

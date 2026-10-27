@@ -7,6 +7,19 @@ export function buildArtifactUrl(artifactId: string, runId?: string): string {
     return runId ? `${base}?run_id=${encodeURIComponent(runId)}` : base;
 }
 
+export function getArtifactRunId(
+    reference: Pick<ArtifactReference, 'download_url'> | null | undefined
+): string | null {
+    if (!reference) return null;
+    try {
+        const url = new URL(reference.download_url, 'http://artifact-reference.local');
+        const runId = url.searchParams.get('run_id');
+        return runId?.trim() || null;
+    } catch {
+        return null;
+    }
+}
+
 type ArtifactReferenceUrlInput = string | Pick<ArtifactReference, 'download_url'>;
 
 export function buildArtifactReferenceUrl(

@@ -7399,6 +7399,17 @@
             ],
             "title": "Resolved At"
           },
+          "run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Id"
+          },
           "run_type": {
             "title": "Run Type",
             "type": "string"

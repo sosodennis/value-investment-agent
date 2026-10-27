@@ -19,7 +19,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/co
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import type { WorkspaceRouteIntent } from './workspace-route-intent';
 
-type WorkspacePageProps = { assistantId?: string; initialTicker?: string | null; autoStart?: boolean; routeIntent?: WorkspaceRouteIntent };
+type WorkspacePageProps = { assistantId?: string; initialTicker?: string | null; initialPrompt?: string | null; autoStart?: boolean; routeIntent?: WorkspaceRouteIntent };
 const NEW_ANALYSIS_INTENT: WorkspaceRouteIntent = { kind: 'new-analysis' };
 type ReportTab = 'activity' | 'fundamental_analysis' | 'technical_analysis' | 'financial_news_research' | 'debate';
 const reportTabs: { id: ReportTab; label: string }[] = [
@@ -35,7 +35,7 @@ const statusLabel: Record<AgentStatus, string> = { idle: 'Idle', running: 'Runni
 const statusVariant: Record<AgentStatus, 'outline' | 'default' | 'success' | 'warning' | 'destructive'> = { idle: 'outline', running: 'default', done: 'success', attention: 'warning', error: 'destructive', degraded: 'warning' };
 const connectionLabels: Record<ConnectionState, string> = { disconnected: 'Disconnected', connecting: 'Connecting', connected: 'Live', reconnecting: 'Reconnecting', closed: 'Connection closed' };
 
-export function WorkspacePage({ assistantId = 'agent', initialTicker = null, autoStart = false, routeIntent = NEW_ANALYSIS_INTENT }: WorkspacePageProps) {
+export function WorkspacePage({ assistantId = 'agent', initialTicker = null, initialPrompt = null, autoStart = false, routeIntent = NEW_ANALYSIS_INTENT }: WorkspacePageProps) {
     const agent = useAgent(assistantId);
     const { loadHistory, sendMessage, isLoading } = agent;
     const [ticker, setTicker] = useState(initialTicker?.toUpperCase() ?? '');
@@ -52,6 +52,7 @@ export function WorkspacePage({ assistantId = 'agent', initialTicker = null, aut
     })), [agent.agentStatuses]);
     const preferredAgentId = agents.find((item) => item.status === 'running' || item.status === 'attention')?.id ?? agents.find((item) => item.status !== 'idle')?.id ?? null;
     const isActive = agent.workflow?.runStatus === 'running' || agent.workflow?.runStatus === 'queued' || agent.workflow?.runStatus === 'waiting';
+    const autoStartMessage = initialPrompt?.trim() || (initialTicker?.trim() ? `Valuate ${initialTicker.trim().toUpperCase()}` : null);
     const historyThreadId = routeIntent.kind === 'exact-run' ? routeIntent.threadId : null;
     const historyRunId = routeIntent.kind === 'exact-run' ? routeIntent.runId : null;
     const isHistoryRoute = routeIntent.kind !== 'new-analysis';
@@ -62,10 +63,10 @@ export function WorkspacePage({ assistantId = 'agent', initialTicker = null, aut
     }, [historyRunId, historyThreadId, loadHistory]);
 
     useEffect(() => {
-        if (routeIntent.kind !== 'new-analysis' || autoStarted.current || !autoStart || !initialTicker || isLoading) return;
+        if (routeIntent.kind !== 'new-analysis' || autoStarted.current || !autoStart || !autoStartMessage || isLoading) return;
         autoStarted.current = true;
-        void sendMessage(`Valuate ${initialTicker.toUpperCase()}`, true);
-    }, [autoStart, initialTicker, isLoading, routeIntent.kind, sendMessage]);
+        void sendMessage(autoStartMessage, true);
+    }, [autoStart, autoStartMessage, isLoading, routeIntent.kind, sendMessage]);
 
     function startRun(event: FormEvent<HTMLFormElement>) {
         event.preventDefault();
@@ -83,7 +84,7 @@ export function WorkspacePage({ assistantId = 'agent', initialTicker = null, aut
         <main className="mx-auto grid min-h-[calc(100dvh-3.5rem)] w-full max-w-[1600px] grid-rows-[auto_auto_1fr] text-foreground">
             <header className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3 sm:px-6">
                 <div className="flex min-w-0 items-center gap-3">
-                    <Sheet><SheetTrigger asChild><Button variant="outline" size="icon" className="lg:hidden" aria-label="Open agent list"><Menu /></Button></SheetTrigger><SheetContent side="left" className="w-[min(22rem,90vw)] p-0"><SheetHeader className="border-b px-4 py-4"><SheetTitle>Analysis agents</SheetTitle></SheetHeader>{roster}</SheetContent></Sheet>
+                    <Sheet><SheetTrigger asChild><Button variant="outline" size="icon" className="min-[1440px]:hidden" aria-label="Open agent list"><Menu /></Button></SheetTrigger><SheetContent side="left" className="w-[min(22rem,90vw)] p-0"><SheetHeader className="border-b px-4 py-4"><SheetTitle>Analysis agents</SheetTitle></SheetHeader>{roster}</SheetContent></Sheet>
                     <div className="min-w-0"><p className="text-xs text-muted-foreground">Analysis workspace</p><h1 className="truncate text-lg font-semibold">{routeIntent.kind === 'invalid-history' ? 'Analysis link unavailable' : ticker || agent.workflow ? ticker || 'Analysis run' : routeIntent.kind === 'exact-run' ? 'Analysis run' : 'New analysis'}</h1></div>
                 </div>
                 <div className="flex items-center gap-2">
@@ -98,8 +99,8 @@ export function WorkspacePage({ assistantId = 'agent', initialTicker = null, aut
                 {agent.threadId && <p className="ml-auto max-w-full truncate font-mono text-xs text-muted-foreground" title={agent.threadId}>Thread {agent.threadId}</p>}
             </form>}
 
-            <div className="grid min-h-0 lg:grid-cols-[17rem_minmax(0,1fr)]">
-                <aside className="hidden border-r lg:block" aria-label="Analysis agents">{roster}</aside>
+            <div className="grid min-h-0 min-[1440px]:grid-cols-[17rem_minmax(0,1fr)]">
+                <aside className="hidden border-r min-[1440px]:block" aria-label="Analysis agents">{roster}</aside>
                 <section className="min-w-0 px-4 py-5 sm:px-6">
                     {routeIntent.kind === 'invalid-history' && <Alert variant="destructive" role="alert" className="mb-4"><CircleAlert className="size-4" /><AlertTitle>History link is incomplete</AlertTitle><AlertDescription>This history link must include both a thread ID and a run ID. Return to dashboard history and open the run again.</AlertDescription></Alert>}
                     {agent.error && <Alert variant="destructive" role="alert" className="mb-4"><CircleAlert className="size-4" /><AlertTitle>{routeIntent.kind === 'exact-run' ? 'Selected analysis run could not be loaded' : 'Workflow request failed'}</AlertTitle><AlertDescription className="break-words">{routeIntent.kind === 'exact-run' && historyRunId ? `Run ${historyRunId} for thread ${historyThreadId} is unavailable. ` : ''}{agent.error}</AlertDescription></Alert>}

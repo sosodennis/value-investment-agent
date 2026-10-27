@@ -5,6 +5,7 @@ import {
     buildTechnicalObservabilitySearchParams,
     createDefaultTechnicalObservabilityFilters,
     parseFilterListInput,
+    parseTechnicalMonitoringEventDetailResponse,
 } from './technical-observability';
 
 describe('technical observability types', () => {
@@ -45,5 +46,33 @@ describe('technical observability types', () => {
             'MSFT',
             'NVDA',
         ]);
+    });
+
+    it('keeps the optional run scope on event details', () => {
+        const detail = parseTechnicalMonitoringEventDetailResponse({
+            event_id: 'event-1',
+            event_time: '2026-03-20T00:00:00Z',
+            ticker: 'AAPL',
+            agent_source: 'technical_analysis',
+            timeframe: '1d',
+            horizon: '1d',
+            direction: 'bullish',
+            logic_version: 'v1',
+            feature_contract_version: 'technical_feature_contract_v1',
+            run_type: 'workflow',
+            full_report_artifact_id: 'report-1',
+            source_artifact_refs: { feature_pack: 'source-1' },
+            context_payload: {},
+            data_quality_flags: [],
+            run_id: 'run-1',
+        });
+
+        expect(detail.run_id).toBe('run-1');
+        expect(
+            parseTechnicalMonitoringEventDetailResponse({
+                ...detail,
+                run_id: undefined,
+            }).run_id
+        ).toBeUndefined();
     });
 });

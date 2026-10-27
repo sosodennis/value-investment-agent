@@ -38,6 +38,7 @@ import {
     TechnicalTimeseriesBundle
 } from '@/types/agents/technical';
 import { useArtifact, type ArtifactRetryContract } from '../../../../hooks/useArtifact';
+import { buildArtifactUrl, getArtifactRunId } from '@/features/artifacts/api';
 import { AgentLoadingState } from '../shared/AgentLoadingState';
 import { ArtifactLoadError } from '../shared/ArtifactLoadError';
 import { TechnicalAnalysisSupplementarySection } from './TechnicalAnalysisSupplementarySection';
@@ -570,6 +571,16 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
     const [priceTimeframe, setPriceTimeframe] = useState<string | null>(null);
     const crosshairSync = useCrosshairSync();
     const sectionHeaderTextClass = 'text-[10px] font-bold text-muted-foreground uppercase tracking-[0.2em]';
+    const runId = getArtifactRunId(reference);
+
+    const supplementaryReference = (artifactId: string | null, type: string): ArtifactReference | null =>
+        artifactId === null
+            ? null
+            : {
+                  artifact_id: artifactId,
+                  download_url: buildArtifactUrl(artifactId, runId ?? undefined),
+                  type,
+              };
 
     const {
         data: reportData,
@@ -594,7 +605,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
         isRetrying: isFeaturePackRetrying,
         retryable: featurePackRetryable,
     } = useArtifact<TechnicalFeaturePack>(
-        showFeaturePack ? featurePackId : null,
+        showFeaturePack ? supplementaryReference(featurePackId, 'ta_feature_pack') : null,
         parseTechnicalFeaturePackArtifact,
         'technical_output.feature_pack',
         'ta_feature_pack'
@@ -609,7 +620,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
         isRetrying: isPatternPackRetrying,
         retryable: patternPackRetryable,
     } = useArtifact<TechnicalPatternPack>(
-        showPatternPack ? patternPackId : null,
+        showPatternPack ? supplementaryReference(patternPackId, 'ta_pattern_pack') : null,
         parseTechnicalPatternPackArtifact,
         'technical_output.pattern_pack',
         'ta_pattern_pack'
@@ -624,7 +635,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
         isRetrying: isAlertsRetrying,
         retryable: alertsRetryable,
     } = useArtifact<TechnicalAlertsArtifact>(
-        showAlerts ? alertsId : null,
+        showAlerts ? supplementaryReference(alertsId, 'ta_alerts') : null,
         parseTechnicalAlertsArtifact,
         'technical_output.alerts',
         'ta_alerts'
@@ -639,7 +650,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
         isRetrying: isFusionReportRetrying,
         retryable: fusionReportRetryable,
     } = useArtifact<TechnicalFusionReport>(
-        showFusionReport ? fusionReportId : null,
+        showFusionReport ? supplementaryReference(fusionReportId, 'ta_fusion_report') : null,
         parseTechnicalFusionReportArtifact,
         'technical_output.fusion_report',
         'ta_fusion_report'
@@ -655,7 +666,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
         isRetrying: isDirectionScorecardRetrying,
         retryable: directionScorecardRetryable,
     } = useArtifact<TechnicalDirectionScorecard>(
-        showFusionReport ? directionScorecardId : null,
+        showFusionReport ? supplementaryReference(directionScorecardId, 'ta_direction_scorecard') : null,
         parseTechnicalDirectionScorecardArtifact,
         'technical_output.direction_scorecard',
         'ta_direction_scorecard'
@@ -671,7 +682,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
         isRetrying: isVerificationReportRetrying,
         retryable: verificationReportRetryable,
     } = useArtifact<TechnicalVerificationReport>(
-        showVerificationReport ? verificationReportId : null,
+        showVerificationReport ? supplementaryReference(verificationReportId, 'ta_verification_report') : null,
         parseTechnicalVerificationReportArtifact,
         'technical_output.verification_report',
         'ta_verification_report'
@@ -685,7 +696,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
         isRetrying: isTimeseriesBundleRetrying,
         retryable: timeseriesBundleRetryable,
     } = useArtifact<TechnicalTimeseriesBundle>(
-        timeseriesBundleId,
+        supplementaryReference(timeseriesBundleId, 'ta_timeseries_bundle'),
         parseTechnicalTimeseriesBundleArtifact,
         'technical_output.timeseries_bundle',
         'ta_timeseries_bundle',
@@ -700,7 +711,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
         isRetrying: isIndicatorSeriesRetrying,
         retryable: indicatorSeriesRetryable,
     } = useArtifact<TechnicalIndicatorSeriesArtifact>(
-        indicatorSeriesId,
+        supplementaryReference(indicatorSeriesId, 'ta_indicator_series'),
         parseTechnicalIndicatorSeriesArtifact,
         'technical_output.indicator_series',
         'ta_indicator_series',

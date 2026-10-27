@@ -572,6 +572,11 @@ function parseTechnicalMonitoringEventDetailModel(
         'resolved_at',
         parseNullableString(record.resolved_at, `${context}.resolved_at`)
     );
+    assignIfDefined(
+        model,
+        'run_id',
+        parseNullableString(record.run_id, `${context}.run_id`)
+    );
     return model;
 }
 

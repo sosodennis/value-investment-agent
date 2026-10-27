@@ -2644,6 +2644,8 @@ export interface components {
             reliability_level?: string | null;
             /** Resolved At */
             resolved_at?: string | null;
+            /** Run Id */
+            run_id?: string | null;
             /** Run Type */
             run_type: string;
             /** Source Artifact Refs */

@@ -40,7 +40,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
-import { buildArtifactReferenceUrl } from '@/features/artifacts/api';
+import { buildArtifactUrl } from '@/features/artifacts/api';
 
 const VIEWS: { id: TechnicalObservabilityView; label: string }[] = [
     { id: 'overview', label: 'Overview' },
@@ -1088,6 +1088,7 @@ function EventExplorer({
                                             artifactId={
                                                 detailData.full_report_artifact_id
                                             }
+                                            runId={detailData.run_id}
                                         />
                                     </li>
                                     {sourceRefs.map(([label, artifactId]) => (
@@ -1095,6 +1096,7 @@ function EventExplorer({
                                             <ArtifactLink
                                                 label={label.replaceAll('_', ' ')}
                                                 artifactId={artifactId}
+                                                runId={detailData.run_id}
                                             />
                                         </li>
                                     ))}
@@ -1143,11 +1145,13 @@ function EventExplorer({
 function ArtifactLink({
     label,
     artifactId,
+    runId,
 }: {
     label: string;
     artifactId: string;
+    runId?: string | null;
 }) {
-    const href = buildArtifactReferenceUrl(artifactId);
+    const href = buildArtifactUrl(artifactId, runId ?? undefined);
 
     return (
         <a

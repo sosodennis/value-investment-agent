@@ -34,7 +34,7 @@ const GenericAgentOutputComponent: React.FC<GenericAgentOutputProps> = ({
         retry,
         isRetrying,
         retryable,
-    } = useArtifact(reference?.artifact_id, parseUnknownArtifact, 'generic_output.artifact');
+    } = useArtifact(reference, parseUnknownArtifact, 'generic_output.artifact');
 
     const fallbackPayload: UnknownRecord = {};
     if (viewModel.summary !== null) fallbackPayload.summary = viewModel.summary;

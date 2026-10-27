@@ -15,7 +15,12 @@ describe('TechnicalAnalysisOutput', () => {
     beforeEach(() => {
         mockFeatureRetry.mockReset();
         mockUseArtifact.mockImplementation((target: unknown) => {
-            if (target === 'feature-1') {
+            const artifactId = typeof target === 'string'
+                ? target
+                : target && typeof target === 'object' && 'download_url' in target && typeof target.download_url === 'string'
+                    ? decodeURIComponent(new URL(target.download_url, 'http://test').pathname.split('/').pop() ?? '')
+                    : null;
+            if (artifactId === 'feature-1') {
                 return {
                     data: null,
                     isLoading: false,
@@ -25,13 +30,6 @@ describe('TechnicalAnalysisOutput', () => {
                     retryable: true,
                 };
             }
-            const artifactId = typeof target === 'string'
-                ? target
-                : target && typeof target === 'object' && 'download_url' in target
-                    ? target.download_url === '/api/v1/artifacts/report-1'
-                        ? 'report-1'
-                        : null
-                    : null;
             if (artifactId === 'report-1') {
                 return {
                     data: {
@@ -192,7 +190,7 @@ describe('TechnicalAnalysisOutput', () => {
             <TechnicalAnalysisOutput
                 reference={{
                     artifact_id: 'report-1',
-                    download_url: '/api/v1/artifacts/report-1',
+                    download_url: '/api/v1/artifacts/report-1?run_id=run-technical-1',
                     type: 'technical_analysis.output',
                 }}
                 previewData={null}
@@ -253,7 +251,7 @@ describe('TechnicalAnalysisOutput', () => {
             <TechnicalAnalysisOutput
                 reference={{
                     artifact_id: 'report-1',
-                    download_url: '/api/v1/artifacts/report-1',
+                    download_url: '/api/v1/artifacts/report-1?run_id=run-technical-1',
                     type: 'technical_analysis.output',
                 }}
                 previewData={null}
@@ -267,6 +265,13 @@ describe('TechnicalAnalysisOutput', () => {
             .find((button) => button.textContent?.trim() === 'Feature Pack');
         if (!featurePackButton) throw new Error('Feature Pack control is unavailable.');
         fireEvent.click(featurePackButton);
+        const featurePackTarget = mockUseArtifact.mock.calls
+            .map(([target]) => target)
+            .find((target) => target && typeof target === 'object' && 'artifact_id' in target && target.artifact_id === 'feature-1');
+        expect(featurePackTarget).toMatchObject({
+            artifact_id: 'feature-1',
+            download_url: 'http://localhost:8000/api/v1/artifacts/feature-1?run_id=run-technical-1',
+        });
         screen.getByText('Feature pack temporarily unavailable.');
         fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
 

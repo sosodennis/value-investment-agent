@@ -188,6 +188,13 @@ describe('WorkspacePage', () => {
         expect(hook.sendMessage).not.toHaveBeenCalled();
     });
 
+    it('starts an initial research prompt without rewriting it as a ticker valuation command', () => {
+        hook.value = defaultHook();
+        const prompt = 'What are the main risks to Apple\'s valuation?';
+        render(<WorkspacePage initialPrompt={prompt} autoStart />);
+        expect(hook.sendMessage).toHaveBeenCalledWith(prompt, true);
+    });
+
     it('renders a typed ticker interaction outside the activity projection and submits its identity', () => {
         vi.stubGlobal('ResizeObserver', class {
             observe() {}

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
     buildArtifactReferenceUrl,
     buildArtifactUrl,
+    getArtifactRunId,
 } from './api';
 
 describe('artifact API URLs', () => {
@@ -26,5 +27,11 @@ describe('artifact API URLs', () => {
         expect(
             buildArtifactReferenceUrl('/api/v1/artifacts/report-1?run_id=run-1')
         ).toBe('/api/v1/artifacts/report-1?run_id=run-1');
+    });
+
+    it('reads the run scope from relative and absolute artifact references', () => {
+        expect(getArtifactRunId({ download_url: '/api/v1/artifacts/report-1?run_id=run-1' })).toBe('run-1');
+        expect(getArtifactRunId({ download_url: 'http://localhost:8000/api/v1/artifacts/report-1?run_id=run%2F2' })).toBe('run/2');
+        expect(getArtifactRunId({ download_url: '/api/v1/artifacts/report-1' })).toBeNull();
     });
 });

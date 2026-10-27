@@ -103,6 +103,7 @@ class TechnicalMonitoringEventDetailModel(BaseModel):
     mae: float | None = None
     realized_volatility: float | None = None
     data_quality_flags: list[str]
+    run_id: str | None = None
 
 
 def build_technical_monitoring_row_model(
@@ -181,6 +182,7 @@ def build_technical_monitoring_event_detail_model(
         mae=record.mae,
         realized_volatility=record.realized_volatility,
         data_quality_flags=list(record.data_quality_flags),
+        run_id=record.run_id,
     )
 
 

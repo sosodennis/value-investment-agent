@@ -5,6 +5,8 @@ Tests artifact storage, retrieval, and edge cases.
 
 import json
 import uuid
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -111,6 +113,144 @@ async def test_artifact_not_found():
 
     # Assert
     assert artifact is None
+
+
+@pytest.mark.anyio
+async def test_get_agent_output_thread_id_uses_the_matching_run_event():
+    session = AsyncMock()
+    session.scalar.return_value = "thread_123"
+    session_context = MagicMock()
+    session_context.__aenter__ = AsyncMock(return_value=session)
+    session_context.__aexit__ = AsyncMock(return_value=None)
+
+    with patch(
+        "src.services.artifact_manager.AsyncSessionLocal",
+        return_value=session_context,
+    ):
+        thread_id = await artifact_manager.get_agent_output_thread_id(
+            artifact_id="artifact_123",
+            run_id="run_123",
+        )
+
+    assert thread_id == "thread_123"
+    statement = session.scalar.await_args.args[0]
+    compiled = statement.compile()
+    assert "workflow_activity_events.run_id" in str(compiled)
+    assert "workflow_activity_events.event_name" in str(compiled)
+    assert "workflow_activity_events.payload" in str(compiled)
+    assert {"run_123", "workflow.agent_output", "artifact_123"}.issubset(
+        set(compiled.params.values())
+    )
+
+
+@pytest.mark.anyio
+async def test_get_referenced_artifact_thread_id_uses_parent_output_scope():
+    output_event = SimpleNamespace(
+        thread_id="thread_123",
+        payload={"artifact_id": "parent_report"},
+    )
+    parent_artifact = SimpleNamespace(
+        id="parent_report",
+        data={
+            "kind": "ta_full_report",
+            "data": {
+                "artifact_refs": {
+                    "chart_data_id": "child_chart",
+                    "verification_report_id": "child_verification",
+                }
+            },
+        },
+    )
+    events_result = MagicMock()
+    events_result.all.return_value = [output_event]
+    artifacts_result = MagicMock()
+    artifacts_result.all.return_value = [parent_artifact]
+    session = MagicMock()
+    session.scalars = AsyncMock(side_effect=[events_result, artifacts_result])
+    session_context = MagicMock()
+    session_context.__aenter__ = AsyncMock(return_value=session)
+    session_context.__aexit__ = AsyncMock(return_value=None)
+
+    with patch(
+        "src.services.artifact_manager.AsyncSessionLocal",
+        return_value=session_context,
+    ):
+        thread_id = await artifact_manager.get_referenced_artifact_thread_id(
+            artifact_id="child_chart",
+            run_id="run_123",
+        )
+
+    assert thread_id == "thread_123"
+    first_statement = session.scalars.await_args_list[0].args[0]
+    assert "workflow_activity_events.run_id" in str(first_statement.compile())
+    assert "run_123" in set(first_statement.compile().params.values())
+
+
+@pytest.mark.anyio
+async def test_get_referenced_artifact_thread_id_rejects_unlisted_child():
+    output_event = SimpleNamespace(
+        thread_id="thread_123",
+        payload={"artifact_id": "parent_report"},
+    )
+    parent_artifact = SimpleNamespace(
+        id="parent_report",
+        data={"data": {"artifact_refs": {"chart_data_id": "other_child"}}},
+    )
+    events_result = MagicMock()
+    events_result.all.return_value = [output_event]
+    artifacts_result = MagicMock()
+    artifacts_result.all.return_value = [parent_artifact]
+    session = MagicMock()
+    session.scalars = AsyncMock(side_effect=[events_result, artifacts_result])
+    session_context = MagicMock()
+    session_context.__aenter__ = AsyncMock(return_value=session)
+    session_context.__aexit__ = AsyncMock(return_value=None)
+
+    with patch(
+        "src.services.artifact_manager.AsyncSessionLocal",
+        return_value=session_context,
+    ):
+        thread_id = await artifact_manager.get_referenced_artifact_thread_id(
+            artifact_id="child_chart",
+            run_id="run_123",
+        )
+
+    assert thread_id is None
+
+
+@pytest.mark.anyio
+async def test_is_referenced_artifact_reference_scopes_lookup_to_thread():
+    output_event = SimpleNamespace(
+        thread_id="thread_123",
+        payload={"artifact_id": "parent_report"},
+    )
+    parent_artifact = SimpleNamespace(
+        id="parent_report",
+        data={"data": {"artifact_refs": {"chart_data_id": "child_chart"}}},
+    )
+    events_result = MagicMock()
+    events_result.all.return_value = [output_event]
+    artifacts_result = MagicMock()
+    artifacts_result.all.return_value = [parent_artifact]
+    session = MagicMock()
+    session.scalars = AsyncMock(side_effect=[events_result, artifacts_result])
+    session_context = MagicMock()
+    session_context.__aenter__ = AsyncMock(return_value=session)
+    session_context.__aexit__ = AsyncMock(return_value=None)
+
+    with patch(
+        "src.services.artifact_manager.AsyncSessionLocal",
+        return_value=session_context,
+    ):
+        is_referenced = await artifact_manager.is_referenced_artifact_reference(
+            artifact_id="child_chart",
+            thread_id="thread_123",
+        )
+
+    assert is_referenced is True
+    event_query = session.scalars.await_args_list[0].args[0].compile()
+    assert "workflow_activity_events.thread_id" in str(event_query)
+    assert "thread_123" in set(event_query.params.values())
 
 
 @pytest.mark.anyio

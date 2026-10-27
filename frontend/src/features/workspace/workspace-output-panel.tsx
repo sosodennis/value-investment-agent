@@ -94,7 +94,7 @@ export function WorkspaceOutputPanel({
     }
 
     return (
-        <div className="grid gap-4">
+        <div className="grid min-w-0 grid-cols-1 gap-4">
             {viewModel.summary ? (
                 <Card className="border">
                     <CardContent className="pt-4 text-sm leading-6 text-muted-foreground">
@@ -102,7 +102,7 @@ export function WorkspaceOutputPanel({
                     </CardContent>
                 </Card>
             ) : null}
-            {report}
+            <div className="min-w-0">{report}</div>
         </div>
     );
 }
