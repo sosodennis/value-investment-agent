@@ -1,5 +1,5 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { HomeApiError } from './home-api';
 import { HomeDashboard } from './home-dashboard';
 
@@ -21,6 +21,17 @@ const resource = (overrides: Record<string, unknown> = {}) => ({
 });
 
 describe('HomeDashboard', () => {
+    const originalTimezone = process.env.TZ;
+
+    beforeAll(() => {
+        process.env.TZ = 'UTC';
+    });
+
+    afterAll(() => {
+        if (originalTimezone === undefined) delete process.env.TZ;
+        else process.env.TZ = originalTimezone;
+    });
+
     afterEach(() => { cleanup(); vi.clearAllMocks(); });
 
     it('renders each resource independently and links the exact recent run', () => {
@@ -42,7 +53,7 @@ describe('HomeDashboard', () => {
             .toBe('/workspace?thread_id=thread+1&run_id=run%2F2');
         screen.getByText('market data unavailable');
         screen.getByText('SEC EDGAR');
-        expect(screen.getByText(/health check/).textContent).toContain('checked Oct 24, 2026, 6:00 PM');
+        expect(screen.getByText(/health check/).textContent).toContain('checked Oct 24, 2026, 10:00 AM');
     });
 
     it('shows independent loading, stale source freshness, and retries the failed resource', () => {
