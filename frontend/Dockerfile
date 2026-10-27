@@ -1,17 +1,17 @@
 # ==========================================
 # Stage 1: Dependencies
 # ==========================================
-FROM node:20-bookworm-slim AS deps
+FROM node:22-bookworm-slim AS deps
 WORKDIR /app
 
 # Install dependencies based on the preferred package manager
 COPY package.json package-lock.json* ./
-RUN npm ci --only=production
+RUN npm ci --omit=dev
 
 # ==========================================
 # Stage 2: Builder
 # ==========================================
-FROM node:20-bookworm-slim AS builder
+FROM node:22-bookworm-slim AS builder
 WORKDIR /app
 
 # Copy dependencies from deps stage
@@ -31,7 +31,7 @@ RUN npm run build
 # ==========================================
 # Stage 3: Runner (Production)
 # ==========================================
-FROM node:20-bookworm-slim AS runner
+FROM node:22-bookworm-slim AS runner
 WORKDIR /app
 
 # Set production environment
@@ -55,6 +55,10 @@ USER nextjs
 
 # Expose the port
 EXPOSE 3000
+
+# Report the standalone server's HTTP readiness to Docker.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD node -e "fetch('http://127.0.0.1:3000/login').then(r => process.exit(r.status < 500 ? 0 : 1)).catch(() => process.exit(1))"
 
 # Set hostname for container
 ENV HOSTNAME="0.0.0.0"
