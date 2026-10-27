@@ -6,8 +6,15 @@ from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Interrupt, interrupt
 
-from src.analysis_runtime.domain.contracts import Activity
-from src.analysis_runtime.domain.errors import InvalidRunnerInterruptError
+from src.analysis_runtime.domain.contracts import (
+    Activity,
+    InteractionRequested,
+    WorkflowAgentOutput,
+)
+from src.analysis_runtime.domain.errors import (
+    InvalidRunnerInterruptError,
+    InvalidRunnerOutputError,
+)
 from src.analysis_runtime.infrastructure.langgraph_runner import LangGraphRunner
 from src.llm_provider.entrypoint import get_provider_principal
 from src.shared.internal_services import get_request_principal
@@ -41,7 +48,9 @@ def _metadata(**values: object) -> dict[str, object]:
     }
 
 
-async def _run(events: list[Mapping[str, object]]) -> list[Activity]:
+async def _run(
+    events: list[Mapping[str, object]],
+) -> list[Activity | InteractionRequested | WorkflowAgentOutput]:
     runner = LangGraphRunner(_EventGraph(events))
     return [
         activity
@@ -228,6 +237,87 @@ async def test_runner_emits_tool_and_model_lifecycle_events_but_skips_stream_chu
 
 
 @pytest.mark.asyncio
+async def test_runner_emits_compact_output_on_completed_agent_subgraph() -> None:
+    items = await _run(
+        [
+            {
+                "event": "on_chain_end",
+                "run_id": "intent-node",
+                "parent_ids": [],
+                "metadata": _metadata(
+                    agent_id="intent_extraction",
+                    agent_scope="agent",
+                    agent_node="intent_agent",
+                    langgraph_node="intent_agent",
+                ),
+                "data": {
+                    "output": {
+                        "intent_extraction": {
+                            "artifact": {
+                                "kind": "intent_extraction.output",
+                                "version": "v1",
+                                "summary": "Resolved AAPL",
+                                "preview": {"ticker": "AAPL"},
+                                "reference": {
+                                    "artifact_id": "artifact-1",
+                                    "type": "intent_report",
+                                },
+                            }
+                        }
+                    }
+                },
+            }
+        ]
+    )
+
+    assert len(items) == 2
+    activity, output = items
+    assert isinstance(activity, Activity)
+    assert activity.status == "completed"
+    assert isinstance(output, WorkflowAgentOutput)
+    assert output.identity.thread_id == "thread-1"
+    assert output.identity.run_id == "runtime-run-1"
+    assert output.identity.activity_id == activity.activity_id
+    assert output.agent_id == "intent_extraction"
+    assert output.output_kind == "intent_extraction.output"
+    assert output.preview == {"ticker": "AAPL"}
+    assert output.artifact_id == "artifact-1"
+    assert output.artifact_type == "intent_report"
+
+
+@pytest.mark.asyncio
+async def test_runner_rejects_oversized_preview_without_artifact_reference() -> None:
+    with pytest.raises(InvalidRunnerOutputError, match="artifact reference"):
+        await _run(
+            [
+                {
+                    "event": "on_chain_end",
+                    "run_id": "news-node",
+                    "parent_ids": [],
+                    "metadata": _metadata(
+                        agent_id="financial_news_research",
+                        agent_scope="agent",
+                        agent_node="news_agent",
+                        langgraph_node="news_agent",
+                    ),
+                    "data": {
+                        "output": {
+                            "financial_news_research": {
+                                "artifact": {
+                                    "kind": "financial_news_research.output",
+                                    "version": "v1",
+                                    "summary": "News report",
+                                    "preview": {"large": "x" * (17 * 1024)},
+                                }
+                            }
+                        }
+                    },
+                }
+            ]
+        )
+
+
+@pytest.mark.asyncio
 async def test_runner_projects_typed_interrupt_and_stops_at_suspension() -> None:
     graph = _EventGraph(
         [
@@ -293,11 +383,11 @@ async def test_runner_projects_typed_interrupt_and_stops_at_suspension() -> None
 
     waiting = activities[-1]
     assert len(activities) == 2
-    assert waiting.activity_id == "langgraph:clarifying-node"
-    assert waiting.status == "waiting"
-    assert waiting.interruption is not None
-    assert waiting.interruption.interaction_id == "interaction-1"
-    assert waiting.interruption.request.candidates[0].symbol == "AAPL"
+    assert isinstance(waiting, InteractionRequested)
+    assert waiting.activity.activity_id == "langgraph:clarifying-node"
+    assert waiting.activity.status == "waiting"
+    assert waiting.identity.interaction_id == "interaction-1"
+    assert waiting.request.candidates[0].symbol == "AAPL"
 
 
 @pytest.mark.asyncio
@@ -364,10 +454,10 @@ async def test_runner_uses_pinned_langgraph_stream_for_wait_and_resume() -> None
         )
     ]
     waiting = first[-1]
-    assert waiting.status == "waiting"
-    assert waiting.scope_path == ("clarifying",)
-    assert waiting.interruption is not None
-    assert waiting.interruption.request.candidates[0].symbol == "AAPL"
+    assert isinstance(waiting, InteractionRequested)
+    assert waiting.activity.status == "waiting"
+    assert waiting.activity.scope_path == ("clarifying",)
+    assert waiting.request.candidates[0].symbol == "AAPL"
 
     resumed = [
         item
@@ -379,16 +469,19 @@ async def test_runner_uses_pinned_langgraph_stream_for_wait_and_resume() -> None
                     "type": "ticker_selection",
                     "selected_symbol": "AAPL",
                 },
-                "resuming_activity_id": waiting.activity_id,
-                "resuming_scope_path": list(waiting.scope_path),
-                "resuming_attempt": waiting.attempt,
+                "resuming_activity_id": waiting.activity.activity_id,
+                "resuming_scope_path": list(waiting.activity.scope_path),
+                "resuming_attempt": waiting.activity.attempt,
             },
             principal_id="principal-1",
         )
     ]
     resumed_activity = next(
-        item for item in resumed if item.activity_id == waiting.activity_id
+        item
+        for item in resumed
+        if isinstance(item, Activity)
+        and item.activity_id == waiting.activity.activity_id
     )
-    assert resumed_activity.status == "running"
-    assert resumed_activity.attempt == waiting.attempt + 1
-    assert all(item.interruption is None for item in resumed)
+    assert resumed_activity.status == "completed"
+    assert resumed_activity.attempt == waiting.activity.attempt + 1
+    assert all(not isinstance(item, InteractionRequested) for item in resumed)

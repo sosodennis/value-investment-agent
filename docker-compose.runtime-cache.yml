@@ -1,0 +1,44 @@
+# Optional development mode for a writable model cache.
+#
+# The default Compose stack reads models directly from each image's baked
+# cache. Use this file only when a workflow needs a persistent runtime cache:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.override.yml \
+#     -f docker-compose.runtime-cache.yml up -d --build
+#
+# The three model volumes intentionally duplicate baked artifacts in this
+# mode; keep this override opt-in so the default stack does not pay that cost.
+services:
+  backend:
+    environment:
+      HF_HOME: /opt/hf-cache
+      HF_BAKED_CACHE: /opt/hf-cache-baked
+      HF_HUB_CACHE: /opt/hf-cache/hub
+      SENTENCE_TRANSFORMERS_HOME: /opt/hf-cache/hub
+      FASTEMBED_CACHE_PATH: /opt/hf-cache/hub
+      TRANSFORMERS_CACHE: /opt/hf-cache/hub
+    volumes:
+      - hf_cache:/opt/hf-cache
+
+  model-inference-news:
+    environment:
+      HF_HOME: /opt/hf-cache
+      HF_BAKED_CACHE: /opt/hf-cache-baked
+      HF_HUB_CACHE: /opt/hf-cache/hub
+      TRANSFORMERS_CACHE: /opt/hf-cache/hub
+    volumes:
+      - inference_news_hf_cache:/opt/hf-cache
+
+  model-inference-fls:
+    environment:
+      HF_HOME: /opt/hf-cache
+      HF_BAKED_CACHE: /opt/hf-cache-baked
+      HF_HUB_CACHE: /opt/hf-cache/hub
+      TRANSFORMERS_CACHE: /opt/hf-cache/hub
+    volumes:
+      - inference_fls_hf_cache:/opt/hf-cache
+
+volumes:
+  hf_cache:
+  inference_news_hf_cache:
+  inference_fls_hf_cache:

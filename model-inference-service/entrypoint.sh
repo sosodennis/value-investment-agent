@@ -3,7 +3,7 @@ set -eu
 
 runtime_cache="${HF_HOME:-/opt/hf-cache}"
 baked_cache="${HF_BAKED_CACHE:-/opt/hf-cache-baked}"
-if [ -d "${baked_cache}" ]; then
+if [ "${runtime_cache}" != "${baked_cache}" ] && [ -d "${baked_cache}" ]; then
   mkdir -p "${runtime_cache}"
   if [ -z "$(ls -A "${runtime_cache}" 2>/dev/null || true)" ]; then
     cp -a "${baked_cache}/." "${runtime_cache}/"

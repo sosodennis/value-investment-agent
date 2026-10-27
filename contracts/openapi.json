@@ -62,6 +62,170 @@
         "title": "AIAnalysisModel",
         "type": "object"
       },
+      "Activity": {
+        "additionalProperties": false,
+        "properties": {
+          "activity_id": {
+            "minLength": 1,
+            "title": "Activity Id",
+            "type": "string"
+          },
+          "attempt": {
+            "minimum": 1.0,
+            "title": "Attempt",
+            "type": "integer"
+          },
+          "failure": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WorkflowFailure"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "kind": {
+            "enum": [
+              "phase",
+              "node",
+              "tool",
+              "subgraph"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Label",
+            "type": "string"
+          },
+          "parent_activity_id": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Activity Id"
+          },
+          "progress": {
+            "anyOf": [
+              {
+                "maximum": 100.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Progress"
+          },
+          "run_id": {
+            "minLength": 1,
+            "title": "Run Id",
+            "type": "string"
+          },
+          "scope_path": {
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Scope Path",
+            "type": "array"
+          },
+          "status": {
+            "enum": [
+              "queued",
+              "running",
+              "waiting",
+              "completed",
+              "failed",
+              "cancelled",
+              "skipped"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "thread_id": {
+            "minLength": 1,
+            "title": "Thread Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "activity_id",
+          "thread_id",
+          "run_id",
+          "scope_path",
+          "kind",
+          "status",
+          "label",
+          "attempt"
+        ],
+        "title": "Activity",
+        "type": "object"
+      },
+      "ActivityEvent": {
+        "additionalProperties": false,
+        "properties": {
+          "event_id": {
+            "minLength": 1,
+            "title": "Event Id",
+            "type": "string"
+          },
+          "event_name": {
+            "const": "workflow.activity",
+            "default": "workflow.activity",
+            "title": "Event Name",
+            "type": "string"
+          },
+          "event_version": {
+            "const": "v2",
+            "default": "v2",
+            "title": "Event Version",
+            "type": "string"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/Activity"
+          },
+          "run_id": {
+            "minLength": 1,
+            "title": "Run Id",
+            "type": "string"
+          },
+          "seq_id": {
+            "minimum": 1.0,
+            "title": "Seq Id",
+            "type": "integer"
+          },
+          "thread_id": {
+            "minLength": 1,
+            "title": "Thread Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "event_id",
+          "seq_id",
+          "thread_id",
+          "run_id",
+          "occurred_at",
+          "payload"
+        ],
+        "title": "ActivityEvent",
+        "type": "object"
+      },
       "AlertReadoutItemModel": {
         "properties": {
           "code": {
@@ -546,6 +710,52 @@
         "title": "ArtifactRefsModel",
         "type": "object"
       },
+      "CapabilityItem": {
+        "additionalProperties": false,
+        "description": "One observed backend or downstream service readiness check.",
+        "properties": {
+          "checked_at": {
+            "description": "UTC time when the backend performed this readiness check.",
+            "format": "date-time",
+            "title": "Checked At",
+            "type": "string"
+          },
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Stable, non-sensitive diagnostic code; never includes credentials or probe URLs.",
+            "title": "Detail"
+          },
+          "id": {
+            "description": "Stable identifier of the runtime, database, or configured downstream service.",
+            "title": "Id",
+            "type": "string"
+          },
+          "source": {
+            "description": "Probe implementation or dependency that owns this status.",
+            "title": "Source",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/DashboardStatus",
+            "description": "Observed result of this capability's readiness probe."
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "source",
+          "checked_at"
+        ],
+        "title": "CapabilityItem",
+        "type": "object"
+      },
       "ConfidenceCalibrationModel": {
         "properties": {
           "calibration_applied": {
@@ -648,6 +858,48 @@
         },
         "title": "ConfidenceEligibilityModel",
         "type": "object"
+      },
+      "DashboardCapabilities": {
+        "additionalProperties": false,
+        "description": "Backend-observed service readiness; it is not a claim about every agent.",
+        "properties": {
+          "capabilities": {
+            "description": "Observed runtime, database, and configured downstream service checks; an empty list means no checks were reported.",
+            "items": {
+              "$ref": "#/components/schemas/CapabilityItem"
+            },
+            "title": "Capabilities",
+            "type": "array"
+          },
+          "checked_at": {
+            "description": "UTC time at which this readiness snapshot was collected.",
+            "format": "date-time",
+            "title": "Checked At",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/DashboardStatus",
+            "description": "Aggregate of the reported capability checks."
+          }
+        },
+        "required": [
+          "status",
+          "checked_at",
+          "capabilities"
+        ],
+        "title": "DashboardCapabilities",
+        "type": "object"
+      },
+      "DashboardStatus": {
+        "description": "Observed readiness: operational, degraded, unavailable, or unresolved.",
+        "enum": [
+          "operational",
+          "degraded",
+          "unavailable",
+          "unknown"
+        ],
+        "title": "DashboardStatus",
+        "type": "string"
       },
       "DebateArtifactModel": {
         "properties": {
@@ -2127,6 +2379,40 @@
         "title": "IndustrialExtensionModel",
         "type": "object"
       },
+      "InteractionIdentity": {
+        "additionalProperties": false,
+        "properties": {
+          "activity_id": {
+            "minLength": 1,
+            "title": "Activity Id",
+            "type": "string"
+          },
+          "interaction_id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Interaction Id",
+            "type": "string"
+          },
+          "run_id": {
+            "minLength": 1,
+            "title": "Run Id",
+            "type": "string"
+          },
+          "thread_id": {
+            "minLength": 1,
+            "title": "Thread Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "thread_id",
+          "run_id",
+          "activity_id",
+          "interaction_id"
+        ],
+        "title": "InteractionIdentity",
+        "type": "object"
+      },
       "KeyFactModel": {
         "properties": {
           "citation": {
@@ -2227,6 +2513,143 @@
           "password"
         ],
         "title": "LoginRequest",
+        "type": "object"
+      },
+      "MarketMoverItem": {
+        "additionalProperties": false,
+        "description": "A quote row returned by the configured market-data provider.",
+        "properties": {
+          "change_absolute": {
+            "description": "Absolute regular-market price change supplied by Yahoo Finance.",
+            "title": "Change Absolute",
+            "type": "number"
+          },
+          "change_percent": {
+            "description": "Percentage regular-market price change supplied by Yahoo Finance.",
+            "title": "Change Percent",
+            "type": "number"
+          },
+          "currency": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Provider currency code, or null when Yahoo Finance omits it.",
+            "title": "Currency"
+          },
+          "market_state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Provider market state, or null when Yahoo Finance omits it.",
+            "title": "Market State"
+          },
+          "name": {
+            "description": "Provider company name, falling back to the ticker symbol.",
+            "title": "Name",
+            "type": "string"
+          },
+          "price": {
+            "description": "Latest regular-market price supplied by Yahoo Finance.",
+            "title": "Price",
+            "type": "number"
+          },
+          "quote_time": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Provider quote timestamp; missing timestamps make the response stale.",
+            "title": "Quote Time"
+          },
+          "symbol": {
+            "description": "Ticker symbol supplied by Yahoo Finance.",
+            "title": "Symbol",
+            "type": "string"
+          }
+        },
+        "required": [
+          "symbol",
+          "name",
+          "price",
+          "change_absolute",
+          "change_percent"
+        ],
+        "title": "MarketMoverItem",
+        "type": "object"
+      },
+      "MarketMoversResponse": {
+        "additionalProperties": false,
+        "description": "Authenticated market-data snapshot with explicit freshness and failure state.",
+        "properties": {
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Stable, non-sensitive refresh or freshness reason; null when the response is fresh.",
+            "title": "Error Code"
+          },
+          "fetched_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Backend fetch time for the returned snapshot, or the original fetch time when serving cached data; null when no quote snapshot is available.",
+            "title": "Fetched At"
+          },
+          "items": {
+            "description": "Yahoo Finance most-active quotes, or an empty list when no usable quote rows are available.",
+            "items": {
+              "$ref": "#/components/schemas/MarketMoverItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "source": {
+            "default": "yahoo_finance",
+            "description": "Market-data provider that supplied the quote rows.",
+            "title": "Source",
+            "type": "string"
+          },
+          "status": {
+            "description": "Fresh means all quote timestamps are within 24 hours; stale means quotes are old or a cached last-good response is served after refresh failure; unavailable means no usable quote rows are available.",
+            "enum": [
+              "fresh",
+              "stale",
+              "unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "MarketMoversResponse",
         "type": "object"
       },
       "ModelOptionResponse": {
@@ -3498,6 +3921,149 @@
         "title": "RealEstateExtensionModel",
         "type": "object"
       },
+      "RecentAnalysesResponse": {
+        "additionalProperties": false,
+        "description": "Stable, account-scoped page of persisted analysis runs.",
+        "properties": {
+          "fetched_at": {
+            "description": "UTC time when the backend read this page.",
+            "format": "date-time",
+            "title": "Fetched At",
+            "type": "string"
+          },
+          "items": {
+            "description": "Runs owned by the authenticated account, ordered by started_at descending with null timestamps last, then thread_id and run_id descending; empty when the account has no matching runs.",
+            "items": {
+              "$ref": "#/components/schemas/RecentAnalysisItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Opaque cursor for the next page in the same deterministic order; null when there are no more runs.",
+            "title": "Next Cursor"
+          },
+          "source": {
+            "const": "analysis_runtime",
+            "default": "analysis_runtime",
+            "description": "Persisted run-history capability that owns these records.",
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "fetched_at"
+        ],
+        "title": "RecentAnalysesResponse",
+        "type": "object"
+      },
+      "RecentAnalysisItem": {
+        "additionalProperties": false,
+        "description": "A single run owned by the authenticated account, including historical runs.",
+        "properties": {
+          "company_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Company name explicitly persisted in this run's input data; null when it was not persisted.",
+            "title": "Company Name"
+          },
+          "run_id": {
+            "description": "Exact workflow run identifier used with thread_id to reopen this historical run.",
+            "title": "Run Id",
+            "type": "string"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Start time recorded by analysis runtime; null when the runtime has no start time.",
+            "title": "Started At"
+          },
+          "status": {
+            "description": "Latest status recorded for this exact run by analysis runtime.",
+            "enum": [
+              "queued",
+              "running",
+              "waiting",
+              "completed",
+              "failed",
+              "cancelled",
+              "unknown"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Summary explicitly persisted in this run's input data; null when it was not persisted.",
+            "title": "Summary"
+          },
+          "thread_id": {
+            "description": "Runtime thread identifier used with run_id to reopen this exact workspace snapshot.",
+            "title": "Thread Id",
+            "type": "string"
+          },
+          "ticker": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Ticker explicitly persisted in this run's input data; null when it was not persisted.",
+            "title": "Ticker"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Last update time recorded by analysis runtime; null when unavailable.",
+            "title": "Updated At"
+          }
+        },
+        "required": [
+          "thread_id",
+          "run_id",
+          "status"
+        ],
+        "title": "RecentAnalysisItem",
+        "type": "object"
+      },
       "RegimeSummaryModel": {
         "properties": {
           "average_confidence": {
@@ -3562,23 +4128,15 @@
       "ResumeRequest": {
         "additionalProperties": false,
         "properties": {
-          "activity_id": {
-            "minLength": 1,
-            "title": "Activity Id",
-            "type": "string"
-          },
-          "interaction_id": {
-            "minLength": 1,
-            "title": "Interaction Id",
-            "type": "string"
+          "identity": {
+            "$ref": "#/components/schemas/InteractionIdentity"
           },
           "response": {
             "$ref": "#/components/schemas/TickerSelectionResponse"
           }
         },
         "required": [
-          "activity_id",
-          "interaction_id",
+          "identity",
           "response"
         ],
         "title": "ResumeRequest",
@@ -6841,6 +7399,17 @@
             ],
             "title": "Resolved At"
           },
+          "run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Id"
+          },
           "run_type": {
             "title": "Run Type",
             "type": "string"
@@ -8397,6 +8966,97 @@
         "title": "TechnicalWfaSummaryData",
         "type": "object"
       },
+      "TickerCandidate": {
+        "additionalProperties": false,
+        "properties": {
+          "confidence": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "type": "number"
+          },
+          "exchange": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exchange"
+          },
+          "name": {
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "symbol": {
+            "maxLength": 32,
+            "minLength": 1,
+            "title": "Symbol",
+            "type": "string"
+          },
+          "type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Type"
+          }
+        },
+        "required": [
+          "symbol",
+          "name",
+          "confidence"
+        ],
+        "title": "TickerCandidate",
+        "type": "object"
+      },
+      "TickerSelectionRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/TickerCandidate"
+            },
+            "maxItems": 20,
+            "minItems": 1,
+            "title": "Candidates",
+            "type": "array"
+          },
+          "description": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Description",
+            "type": "string"
+          },
+          "title": {
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          },
+          "type": {
+            "const": "ticker_selection",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "description",
+          "candidates"
+        ],
+        "title": "TickerSelectionRequest",
+        "type": "object"
+      },
       "TickerSelectionResponse": {
         "additionalProperties": false,
         "properties": {
@@ -8631,6 +9291,395 @@
         "title": "VolumeProfileSummaryModel",
         "type": "object"
       },
+      "WorkflowActivityIdentity": {
+        "additionalProperties": false,
+        "properties": {
+          "activity_id": {
+            "minLength": 1,
+            "title": "Activity Id",
+            "type": "string"
+          },
+          "run_id": {
+            "minLength": 1,
+            "title": "Run Id",
+            "type": "string"
+          },
+          "thread_id": {
+            "minLength": 1,
+            "title": "Thread Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "thread_id",
+          "run_id",
+          "activity_id"
+        ],
+        "title": "WorkflowActivityIdentity",
+        "type": "object"
+      },
+      "WorkflowAgentOutput": {
+        "additionalProperties": false,
+        "properties": {
+          "agent_id": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Agent Id",
+            "type": "string"
+          },
+          "artifact_id": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Artifact Id"
+          },
+          "artifact_type": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Artifact Type"
+          },
+          "identity": {
+            "$ref": "#/components/schemas/WorkflowActivityIdentity"
+          },
+          "output_kind": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Output Kind",
+            "type": "string"
+          },
+          "output_version": {
+            "maxLength": 40,
+            "minLength": 1,
+            "title": "Output Version",
+            "type": "string"
+          },
+          "preview": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preview"
+          },
+          "summary": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Summary",
+            "type": "string"
+          }
+        },
+        "required": [
+          "identity",
+          "agent_id",
+          "output_kind",
+          "output_version",
+          "summary"
+        ],
+        "title": "WorkflowAgentOutput",
+        "type": "object"
+      },
+      "WorkflowAgentOutputEvent": {
+        "additionalProperties": false,
+        "properties": {
+          "event_id": {
+            "minLength": 1,
+            "title": "Event Id",
+            "type": "string"
+          },
+          "event_name": {
+            "const": "workflow.agent_output",
+            "default": "workflow.agent_output",
+            "title": "Event Name",
+            "type": "string"
+          },
+          "event_version": {
+            "const": "v1",
+            "default": "v1",
+            "title": "Event Version",
+            "type": "string"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/WorkflowAgentOutput"
+          },
+          "run_id": {
+            "minLength": 1,
+            "title": "Run Id",
+            "type": "string"
+          },
+          "seq_id": {
+            "minimum": 1.0,
+            "title": "Seq Id",
+            "type": "integer"
+          },
+          "thread_id": {
+            "minLength": 1,
+            "title": "Thread Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "event_id",
+          "seq_id",
+          "thread_id",
+          "run_id",
+          "occurred_at",
+          "payload"
+        ],
+        "title": "WorkflowAgentOutputEvent",
+        "type": "object"
+      },
+      "WorkflowFailure": {
+        "additionalProperties": false,
+        "description": "Safe, stable failure details exposed by the owning runtime.",
+        "properties": {
+          "activity_id": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Activity Id"
+          },
+          "code": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Code",
+            "type": "string"
+          },
+          "message": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Message",
+            "type": "string"
+          },
+          "owner": {
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Owner",
+            "type": "string"
+          },
+          "retryable": {
+            "title": "Retryable",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "code",
+          "owner",
+          "retryable",
+          "message"
+        ],
+        "title": "WorkflowFailure",
+        "type": "object"
+      },
+      "WorkflowInteraction": {
+        "additionalProperties": false,
+        "properties": {
+          "identity": {
+            "$ref": "#/components/schemas/InteractionIdentity"
+          },
+          "kind": {
+            "const": "ticker_selection",
+            "title": "Kind",
+            "type": "string"
+          },
+          "request": {
+            "$ref": "#/components/schemas/TickerSelectionRequest"
+          },
+          "response": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TickerSelectionResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "enum": [
+              "pending",
+              "responded",
+              "cancelled"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "identity",
+          "kind",
+          "status",
+          "request"
+        ],
+        "title": "WorkflowInteraction",
+        "type": "object"
+      },
+      "WorkflowInteractionEvent": {
+        "additionalProperties": false,
+        "properties": {
+          "event_id": {
+            "minLength": 1,
+            "title": "Event Id",
+            "type": "string"
+          },
+          "event_name": {
+            "const": "workflow.interaction",
+            "default": "workflow.interaction",
+            "title": "Event Name",
+            "type": "string"
+          },
+          "event_version": {
+            "const": "v1",
+            "default": "v1",
+            "title": "Event Version",
+            "type": "string"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/WorkflowInteraction"
+          },
+          "run_id": {
+            "minLength": 1,
+            "title": "Run Id",
+            "type": "string"
+          },
+          "seq_id": {
+            "minimum": 1.0,
+            "title": "Seq Id",
+            "type": "integer"
+          },
+          "thread_id": {
+            "minLength": 1,
+            "title": "Thread Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "event_id",
+          "seq_id",
+          "thread_id",
+          "run_id",
+          "occurred_at",
+          "payload"
+        ],
+        "title": "WorkflowInteractionEvent",
+        "type": "object"
+      },
+      "WorkflowSnapshot": {
+        "additionalProperties": false,
+        "properties": {
+          "active_activities": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/Activity"
+            },
+            "title": "Active Activities",
+            "type": "array"
+          },
+          "completed_outputs": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/WorkflowAgentOutput"
+            },
+            "title": "Completed Outputs",
+            "type": "array"
+          },
+          "cursor": {
+            "minimum": 0.0,
+            "title": "Cursor",
+            "type": "integer"
+          },
+          "failure": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WorkflowFailure"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "pending_interactions": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/WorkflowInteraction"
+            },
+            "title": "Pending Interactions",
+            "type": "array"
+          },
+          "recent_activities": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/Activity"
+            },
+            "title": "Recent Activities",
+            "type": "array"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "run_status": {
+            "enum": [
+              "queued",
+              "running",
+              "waiting",
+              "completed",
+              "failed",
+              "cancelled",
+              "unknown"
+            ],
+            "title": "Run Status",
+            "type": "string"
+          },
+          "thread_id": {
+            "title": "Thread Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "thread_id",
+          "run_id",
+          "run_status",
+          "cursor"
+        ],
+        "title": "WorkflowSnapshot",
+        "type": "object"
+      },
       "src__llm_provider__interface__contracts__ProviderKeyCreateRequest": {
         "properties": {
           "api_key": {
@@ -8849,6 +9898,23 @@
             "schema": {
               "title": "Artifact Id",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "run_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Run Id"
             }
           }
         ],
@@ -9081,6 +10147,138 @@
         "summary": "Register",
         "tags": [
           "Authentication"
+        ]
+      }
+    },
+    "/api/v1/dashboard/capabilities": {
+      "get": {
+        "description": "Requires authentication. Reports readiness checks performed by the backend for its analysis runtime, database, and configured downstream services. Unconfigured services are unknown, while failed configured probes are unavailable. This is observed service health, not a frontend inference or a claim that every agent is healthy. The backend reports its runtime and database checks; an empty capabilities list means no checks were reported.",
+        "operationId": "capabilities_api_v1_dashboard_capabilities_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardCapabilities"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Read observed backend service capabilities",
+        "tags": [
+          "Dashboard"
+        ]
+      }
+    },
+    "/api/v1/dashboard/market-movers": {
+      "get": {
+        "description": "Requires authentication. Reads Yahoo Finance most-active quotes. Fresh means every returned quote has a provider timestamp no more than 24 hours old. Old or untimestamped quotes, and a last-good snapshot served after refresh failure, are marked stale. If no usable snapshot exists, the endpoint returns unavailable with an empty items list and a stable non-sensitive error_code.",
+        "operationId": "market_movers_api_v1_dashboard_market_movers_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 3,
+              "maximum": 10,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MarketMoversResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Read authenticated market movers",
+        "tags": [
+          "Dashboard"
+        ]
+      }
+    },
+    "/api/v1/dashboard/recent-analyses": {
+      "get": {
+        "description": "Reads persisted analysis runtime history for the authenticated account only. Each item is one exact thread/run pair and can be reopened as that historical workspace snapshot. Pages use a stable descending started_at, thread_id, and run_id order; an empty account returns an empty items list and no cursor. Run timestamps and optional labels come from persisted runtime records and input data; missing values remain null.",
+        "operationId": "recent_analyses_api_v1_dashboard_recent_analyses_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 10,
+              "maximum": 50,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "next_cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 512,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Next Cursor"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecentAnalysesResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List the authenticated account's recent analysis runs",
+        "tags": [
+          "Dashboard"
         ]
       }
     },
@@ -10084,7 +11282,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowSnapshot"
+                }
               }
             },
             "description": "Successful Response"
@@ -10118,13 +11318,32 @@
               "title": "Thread Id",
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "run_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Run Id"
+            }
           }
         ],
         "responses": {
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowSnapshot"
+                }
               }
             },
             "description": "Successful Response"
@@ -10191,11 +11410,35 @@
         "responses": {
           "200": {
             "content": {
-              "application/json": {
-                "schema": {}
+              "text/event-stream": {
+                "schema": {
+                  "description": "SSE frames with JSON workflow event payloads.",
+                  "type": "string",
+                  "x-workflow-event-payload": {
+                    "discriminator": {
+                      "mapping": {
+                        "workflow.activity": "#/components/schemas/ActivityEvent",
+                        "workflow.agent_output": "#/components/schemas/WorkflowAgentOutputEvent",
+                        "workflow.interaction": "#/components/schemas/WorkflowInteractionEvent"
+                      },
+                      "propertyName": "event_name"
+                    },
+                    "oneOf": [
+                      {
+                        "$ref": "#/components/schemas/ActivityEvent"
+                      },
+                      {
+                        "$ref": "#/components/schemas/WorkflowInteractionEvent"
+                      },
+                      {
+                        "$ref": "#/components/schemas/WorkflowAgentOutputEvent"
+                      }
+                    ]
+                  }
+                }
               }
             },
-            "description": "Successful Response"
+            "description": "The response is a text/event-stream. Each data frame contains one workflow event envelope."
           },
           "422": {
             "content": {

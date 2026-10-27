@@ -33,7 +33,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     useEffect(() => {
-        void refresh();
+        let active = true;
+        void authApi.getCurrentUser()
+            .then((nextUser) => {
+                if (active) setUser(nextUser);
+            })
+            .catch(() => {
+                if (active) setUser(null);
+            })
+            .finally(() => {
+                if (active) setLoading(false);
+            });
+
+        return () => {
+            active = false;
+        };
     }, []);
 
     const value = useMemo<AuthContextValue>(

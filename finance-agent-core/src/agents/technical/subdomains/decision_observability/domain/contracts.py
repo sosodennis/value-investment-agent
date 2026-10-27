@@ -146,6 +146,7 @@ class TechnicalMonitoringEventDetail:
     mae: float | None
     realized_volatility: float | None
     data_quality_flags: tuple[str, ...]
+    run_id: str | None = None
 
 
 @dataclass(frozen=True)

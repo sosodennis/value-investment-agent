@@ -17,6 +17,13 @@ Use this skill before changing Compose configuration, starting or building a sta
 - Do not print or paste resolved Compose configuration when it contains secrets. Use `config --quiet` for validation.
 - Bind-mount source files only when the development workflow needs live host edits. Keep database files and large caches in Docker-managed volumes because Docker Desktop file sharing adds overhead.
 
+### Model artifacts and runtime caches
+
+- Inspect model-related `Dockerfile` steps and entrypoints together. A baked path such as `/opt/hf-cache-baked` plus a mounted runtime path such as `/opt/hf-cache` stores the same model twice when the entrypoint seeds the mount.
+- Choose one artifact owner per stack. For pinned, offline models, prefer an image-only default: point `HF_HOME`, `HF_HUB_CACHE`, and any library-specific cache variables at the baked path and omit the model volume. This keeps startup deterministic and avoids a second copy in a named volume or writable container layer.
+- Keep writable model caches in a separately named, explicitly selected Compose override. Document that this mode intentionally duplicates baked artifacts and is for workflows that need runtime downloads or persistence across image replacement.
+- When assessing storage, measure image layers and volume contents independently. Use `docker history` or `docker image inspect`, `docker volume inspect`, and `docker system df -v`; removing a volume declaration does not save space if an entrypoint still copies the baked cache into a writable path.
+
 ## Isolate each worktree
 
 Docker Compose uses a project name to group and name a stack's containers, networks, and default named volumes. On a shared Docker engine, give each concurrently running worktree a unique project name. Include the repository, developer or agent, and worktree in the name. Use lowercase letters, digits, dashes, or underscores, and start with a letter or digit.

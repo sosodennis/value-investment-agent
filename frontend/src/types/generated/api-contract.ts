@@ -89,6 +89,66 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/dashboard/capabilities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read observed backend service capabilities
+         * @description Requires authentication. Reports readiness checks performed by the backend for its analysis runtime, database, and configured downstream services. Unconfigured services are unknown, while failed configured probes are unavailable. This is observed service health, not a frontend inference or a claim that every agent is healthy. The backend reports its runtime and database checks; an empty capabilities list means no checks were reported.
+         */
+        get: operations["capabilities_api_v1_dashboard_capabilities_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/dashboard/market-movers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read authenticated market movers
+         * @description Requires authentication. Reads Yahoo Finance most-active quotes. Fresh means every returned quote has a provider timestamp no more than 24 hours old. Old or untimestamped quotes, and a last-good snapshot served after refresh failure, are marked stale. If no usable snapshot exists, the endpoint returns unavailable with an empty items list and a stable non-sensitive error_code.
+         */
+        get: operations["market_movers_api_v1_dashboard_market_movers_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/dashboard/recent-analyses": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the authenticated account's recent analysis runs
+         * @description Reads persisted analysis runtime history for the authenticated account only. Each item is one exact thread/run pair and can be reopened as that historical workspace snapshot. Pages use a stable descending started_at, thread_id, and run_id order; an empty account returns an empty items list and no cursor. Run timestamps and optional labels come from persisted runtime records and input data; missing values remain null.
+         */
+        get: operations["recent_analyses_api_v1_dashboard_recent_analyses_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/llm/provider-keys": {
         parameters: {
             query?: never;
@@ -461,6 +521,64 @@ export interface components {
             /** Summary */
             summary: string;
         };
+        /** Activity */
+        Activity: {
+            /** Activity Id */
+            activity_id: string;
+            /** Attempt */
+            attempt: number;
+            failure?: components["schemas"]["WorkflowFailure"] | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "phase" | "node" | "tool" | "subgraph";
+            /** Label */
+            label: string;
+            /** Parent Activity Id */
+            parent_activity_id?: string | null;
+            /** Progress */
+            progress?: number | null;
+            /** Run Id */
+            run_id: string;
+            /** Scope Path */
+            scope_path: string[];
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "queued" | "running" | "waiting" | "completed" | "failed" | "cancelled" | "skipped";
+            /** Thread Id */
+            thread_id: string;
+        };
+        /** ActivityEvent */
+        ActivityEvent: {
+            /** Event Id */
+            event_id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            event_name: "workflow.activity";
+            /**
+             * Event Version
+             * @default v2
+             * @constant
+             */
+            event_version: "v2";
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            payload: components["schemas"]["Activity"];
+            /** Run Id */
+            run_id: string;
+            /** Seq Id */
+            seq_id: number;
+            /** Thread Id */
+            thread_id: string;
+        };
         /** AlertReadoutItemModel */
         AlertReadoutItemModel: {
             /** Code */
@@ -573,6 +691,35 @@ export interface components {
             /** Verification Report Id */
             verification_report_id?: string | null;
         };
+        /**
+         * CapabilityItem
+         * @description One observed backend or downstream service readiness check.
+         */
+        CapabilityItem: {
+            /**
+             * Checked At
+             * Format: date-time
+             * @description UTC time when the backend performed this readiness check.
+             */
+            checked_at: string;
+            /**
+             * Detail
+             * @description Stable, non-sensitive diagnostic code; never includes credentials or probe URLs.
+             */
+            detail?: string | null;
+            /**
+             * Id
+             * @description Stable identifier of the runtime, database, or configured downstream service.
+             */
+            id: string;
+            /**
+             * Source
+             * @description Probe implementation or dependency that owns this status.
+             */
+            source: string;
+            /** @description Observed result of this capability's readiness probe. */
+            status: components["schemas"]["DashboardStatus"];
+        };
         /** ConfidenceCalibrationModel */
         ConfidenceCalibrationModel: {
             /** Calibration Applied */
@@ -595,6 +742,31 @@ export interface components {
             /** Reason Codes */
             reason_codes?: string[] | null;
         };
+        /**
+         * DashboardCapabilities
+         * @description Backend-observed service readiness; it is not a claim about every agent.
+         */
+        DashboardCapabilities: {
+            /**
+             * Capabilities
+             * @description Observed runtime, database, and configured downstream service checks; an empty list means no checks were reported.
+             */
+            capabilities: components["schemas"]["CapabilityItem"][];
+            /**
+             * Checked At
+             * Format: date-time
+             * @description UTC time at which this readiness snapshot was collected.
+             */
+            checked_at: string;
+            /** @description Aggregate of the reported capability checks. */
+            status: components["schemas"]["DashboardStatus"];
+        };
+        /**
+         * DashboardStatus
+         * @description Observed readiness: operational, degraded, unavailable, or unresolved.
+         * @enum {string}
+         */
+        DashboardStatus: "operational" | "degraded" | "unavailable" | "unknown";
         /** DebateArtifactModel */
         DebateArtifactModel: {
             /** Alpha */
@@ -949,6 +1121,17 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /** InteractionIdentity */
+        InteractionIdentity: {
+            /** Activity Id */
+            activity_id: string;
+            /** Interaction Id */
+            interaction_id: string;
+            /** Run Id */
+            run_id: string;
+            /** Thread Id */
+            thread_id: string;
+        };
         /** KeyFactModel */
         KeyFactModel: {
             /** Citation */
@@ -983,6 +1166,85 @@ export interface components {
             email: string;
             /** Password */
             password: string;
+        };
+        /**
+         * MarketMoverItem
+         * @description A quote row returned by the configured market-data provider.
+         */
+        MarketMoverItem: {
+            /**
+             * Change Absolute
+             * @description Absolute regular-market price change supplied by Yahoo Finance.
+             */
+            change_absolute: number;
+            /**
+             * Change Percent
+             * @description Percentage regular-market price change supplied by Yahoo Finance.
+             */
+            change_percent: number;
+            /**
+             * Currency
+             * @description Provider currency code, or null when Yahoo Finance omits it.
+             */
+            currency?: string | null;
+            /**
+             * Market State
+             * @description Provider market state, or null when Yahoo Finance omits it.
+             */
+            market_state?: string | null;
+            /**
+             * Name
+             * @description Provider company name, falling back to the ticker symbol.
+             */
+            name: string;
+            /**
+             * Price
+             * @description Latest regular-market price supplied by Yahoo Finance.
+             */
+            price: number;
+            /**
+             * Quote Time
+             * @description Provider quote timestamp; missing timestamps make the response stale.
+             */
+            quote_time?: string | null;
+            /**
+             * Symbol
+             * @description Ticker symbol supplied by Yahoo Finance.
+             */
+            symbol: string;
+        };
+        /**
+         * MarketMoversResponse
+         * @description Authenticated market-data snapshot with explicit freshness and failure state.
+         */
+        MarketMoversResponse: {
+            /**
+             * Error Code
+             * @description Stable, non-sensitive refresh or freshness reason; null when the response is fresh.
+             */
+            error_code?: string | null;
+            /**
+             * Fetched At
+             * @description Backend fetch time for the returned snapshot, or the original fetch time when serving cached data; null when no quote snapshot is available.
+             */
+            fetched_at?: string | null;
+            /**
+             * Items
+             * @description Yahoo Finance most-active quotes, or an empty list when no usable quote rows are available.
+             */
+            items?: components["schemas"]["MarketMoverItem"][];
+            /**
+             * Source
+             * @description Market-data provider that supplied the quote rows.
+             * @default yahoo_finance
+             */
+            source: string;
+            /**
+             * Status
+             * @description Fresh means all quote timestamps are within 24 hours; stale means quotes are old or a cached last-good response is served after refresh failure; unavailable means no usable quote rows are available.
+             * @enum {string}
+             */
+            status: "fresh" | "stale" | "unavailable";
         };
         /** ModelOptionResponse */
         ModelOptionResponse: {
@@ -1371,6 +1633,82 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /**
+         * RecentAnalysesResponse
+         * @description Stable, account-scoped page of persisted analysis runs.
+         */
+        RecentAnalysesResponse: {
+            /**
+             * Fetched At
+             * Format: date-time
+             * @description UTC time when the backend read this page.
+             */
+            fetched_at: string;
+            /**
+             * Items
+             * @description Runs owned by the authenticated account, ordered by started_at descending with null timestamps last, then thread_id and run_id descending; empty when the account has no matching runs.
+             */
+            items?: components["schemas"]["RecentAnalysisItem"][];
+            /**
+             * Next Cursor
+             * @description Opaque cursor for the next page in the same deterministic order; null when there are no more runs.
+             */
+            next_cursor?: string | null;
+            /**
+             * Source
+             * @description Persisted run-history capability that owns these records.
+             * @default analysis_runtime
+             * @constant
+             */
+            source: "analysis_runtime";
+        };
+        /**
+         * RecentAnalysisItem
+         * @description A single run owned by the authenticated account, including historical runs.
+         */
+        RecentAnalysisItem: {
+            /**
+             * Company Name
+             * @description Company name explicitly persisted in this run's input data; null when it was not persisted.
+             */
+            company_name?: string | null;
+            /**
+             * Run Id
+             * @description Exact workflow run identifier used with thread_id to reopen this historical run.
+             */
+            run_id: string;
+            /**
+             * Started At
+             * @description Start time recorded by analysis runtime; null when the runtime has no start time.
+             */
+            started_at?: string | null;
+            /**
+             * Status
+             * @description Latest status recorded for this exact run by analysis runtime.
+             * @enum {string}
+             */
+            status: "queued" | "running" | "waiting" | "completed" | "failed" | "cancelled" | "unknown";
+            /**
+             * Summary
+             * @description Summary explicitly persisted in this run's input data; null when it was not persisted.
+             */
+            summary?: string | null;
+            /**
+             * Thread Id
+             * @description Runtime thread identifier used with run_id to reopen this exact workspace snapshot.
+             */
+            thread_id: string;
+            /**
+             * Ticker
+             * @description Ticker explicitly persisted in this run's input data; null when it was not persisted.
+             */
+            ticker?: string | null;
+            /**
+             * Updated At
+             * @description Last update time recorded by analysis runtime; null when unavailable.
+             */
+            updated_at?: string | null;
+        };
         /** RegimeSummaryModel */
         RegimeSummaryModel: {
             /** Average Confidence */
@@ -1389,10 +1727,7 @@ export interface components {
         };
         /** ResumeRequest */
         ResumeRequest: {
-            /** Activity Id */
-            activity_id: string;
-            /** Interaction Id */
-            interaction_id: string;
+            identity: components["schemas"]["InteractionIdentity"];
             response: components["schemas"]["TickerSelectionResponse"];
         };
         /** RunRequest */
@@ -2309,6 +2644,8 @@ export interface components {
             reliability_level?: string | null;
             /** Resolved At */
             resolved_at?: string | null;
+            /** Run Id */
+            run_id?: string | null;
             /** Run Type */
             run_type: string;
             /** Source Artifact Refs */
@@ -2725,6 +3062,33 @@ export interface components {
             /** Wfe Ratio */
             wfe_ratio?: number | null;
         };
+        /** TickerCandidate */
+        TickerCandidate: {
+            /** Confidence */
+            confidence: number;
+            /** Exchange */
+            exchange?: string | null;
+            /** Name */
+            name: string;
+            /** Symbol */
+            symbol: string;
+            /** Type */
+            type?: string | null;
+        };
+        /** TickerSelectionRequest */
+        TickerSelectionRequest: {
+            /** Candidates */
+            candidates: components["schemas"]["TickerCandidate"][];
+            /** Description */
+            description: string;
+            /** Title */
+            title: string;
+            /**
+             * Type
+             * @constant
+             */
+            type: "ticker_selection";
+        };
         /** TickerSelectionResponse */
         TickerSelectionResponse: {
             /** Selected Symbol */
@@ -2781,6 +3145,158 @@ export interface components {
             val?: number | null;
             /** Value Area Coverage */
             value_area_coverage?: number | null;
+        };
+        /** WorkflowActivityIdentity */
+        WorkflowActivityIdentity: {
+            /** Activity Id */
+            activity_id: string;
+            /** Run Id */
+            run_id: string;
+            /** Thread Id */
+            thread_id: string;
+        };
+        /** WorkflowAgentOutput */
+        WorkflowAgentOutput: {
+            /** Agent Id */
+            agent_id: string;
+            /** Artifact Id */
+            artifact_id?: string | null;
+            /** Artifact Type */
+            artifact_type?: string | null;
+            identity: components["schemas"]["WorkflowActivityIdentity"];
+            /** Output Kind */
+            output_kind: string;
+            /** Output Version */
+            output_version: string;
+            /** Preview */
+            preview?: {
+                [key: string]: unknown;
+            } | null;
+            /** Summary */
+            summary: string;
+        };
+        /** WorkflowAgentOutputEvent */
+        WorkflowAgentOutputEvent: {
+            /** Event Id */
+            event_id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            event_name: "workflow.agent_output";
+            /**
+             * Event Version
+             * @default v1
+             * @constant
+             */
+            event_version: "v1";
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            payload: components["schemas"]["WorkflowAgentOutput"];
+            /** Run Id */
+            run_id: string;
+            /** Seq Id */
+            seq_id: number;
+            /** Thread Id */
+            thread_id: string;
+        };
+        /**
+         * WorkflowFailure
+         * @description Safe, stable failure details exposed by the owning runtime.
+         */
+        WorkflowFailure: {
+            /** Activity Id */
+            activity_id?: string | null;
+            /** Code */
+            code: string;
+            /** Message */
+            message: string;
+            /** Owner */
+            owner: string;
+            /** Retryable */
+            retryable: boolean;
+        };
+        /** WorkflowInteraction */
+        WorkflowInteraction: {
+            identity: components["schemas"]["InteractionIdentity"];
+            /**
+             * Kind
+             * @constant
+             */
+            kind: "ticker_selection";
+            request: components["schemas"]["TickerSelectionRequest"];
+            response?: components["schemas"]["TickerSelectionResponse"] | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pending" | "responded" | "cancelled";
+        };
+        /** WorkflowInteractionEvent */
+        WorkflowInteractionEvent: {
+            /** Event Id */
+            event_id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            event_name: "workflow.interaction";
+            /**
+             * Event Version
+             * @default v1
+             * @constant
+             */
+            event_version: "v1";
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            payload: components["schemas"]["WorkflowInteraction"];
+            /** Run Id */
+            run_id: string;
+            /** Seq Id */
+            seq_id: number;
+            /** Thread Id */
+            thread_id: string;
+        };
+        /** WorkflowSnapshot */
+        WorkflowSnapshot: {
+            /**
+             * Active Activities
+             * @default []
+             */
+            active_activities: components["schemas"]["Activity"][];
+            /**
+             * Completed Outputs
+             * @default []
+             */
+            completed_outputs: components["schemas"]["WorkflowAgentOutput"][];
+            /** Cursor */
+            cursor: number;
+            failure?: components["schemas"]["WorkflowFailure"] | null;
+            /**
+             * Pending Interactions
+             * @default []
+             */
+            pending_interactions: components["schemas"]["WorkflowInteraction"][];
+            /**
+             * Recent Activities
+             * @default []
+             */
+            recent_activities: components["schemas"]["Activity"][];
+            /** Run Id */
+            run_id: string;
+            /**
+             * Run Status
+             * @enum {string}
+             */
+            run_status: "queued" | "running" | "waiting" | "completed" | "failed" | "cancelled" | "unknown";
+            /** Thread Id */
+            thread_id: string;
         };
         /** ProviderKeyCreateRequest */
         src__llm_provider__interface__contracts__ProviderKeyCreateRequest: {
@@ -2866,7 +3382,9 @@ export type $defs = Record<string, never>;
 export interface operations {
     get_artifact_api_v1_artifacts__artifact_id__get: {
         parameters: {
-            query?: never;
+            query?: {
+                run_id?: string | null;
+            };
             header?: never;
             path: {
                 artifact_id: string;
@@ -2986,6 +3504,89 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Principal"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    capabilities_api_v1_dashboard_capabilities_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DashboardCapabilities"];
+                };
+            };
+        };
+    };
+    market_movers_api_v1_dashboard_market_movers_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MarketMoversResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    recent_analyses_api_v1_dashboard_recent_analyses_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                next_cursor?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecentAnalysesResponse"];
                 };
             };
             /** @description Validation Error */
@@ -3549,7 +4150,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["WorkflowSnapshot"];
                 };
             };
             /** @description Validation Error */
@@ -3565,7 +4166,9 @@ export interface operations {
     };
     activity_snapshot_api_v1_threads__thread_id__activities_get: {
         parameters: {
-            query?: never;
+            query?: {
+                run_id?: string | null;
+            };
             header?: never;
             path: {
                 thread_id: string;
@@ -3580,7 +4183,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["WorkflowSnapshot"];
                 };
             };
             /** @description Validation Error */
@@ -3608,13 +4211,13 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Successful Response */
+            /** @description The response is a text/event-stream. Each data frame contains one workflow event envelope. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "text/event-stream": string;
                 };
             };
             /** @description Validation Error */

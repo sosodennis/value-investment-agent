@@ -61,17 +61,34 @@ def _validate_contract(
     Draft202012Validator.check_schema(schema)
 
     properties = _object(schema.get("properties"), f"{label}.schema.properties")
-    for field, expected in (("contract_version", version), ("event_name", event_name)):
+    for field, expected in (("event_name", event_name),):
         definition = _object(
             properties.get(field), f"{label}.schema.properties.{field}"
         )
         if definition.get("const") != expected:
             raise ValueError(f"{label}.schema {field} does not match manifest")
-        if fixture.get(field) != expected:
-            raise ValueError(f"{label}.fixture {field} does not match manifest")
+    if fixture.get("contract_version") != version:
+        raise ValueError(f"{label}.fixture contract_version does not match manifest")
+    if fixture.get("event_name") != event_name:
+        raise ValueError(f"{label}.fixture event_name does not match manifest")
 
     validator = Draft202012Validator(schema, format_checker=FormatChecker())
-    errors = sorted(validator.iter_errors(fixture), key=lambda error: list(error.path))
+    scenarios = fixture.get("scenarios")
+    if not isinstance(scenarios, list) or not scenarios:
+        raise ValueError(f"{label}.fixture.scenarios must be a non-empty array")
+    errors = []
+    for scenario_index, scenario in enumerate(scenarios):
+        scenario_object = _object(
+            scenario, f"{label}.fixture.scenarios[{scenario_index}]"
+        )
+        events = scenario_object.get("events")
+        if not isinstance(events, list) or not events:
+            raise ValueError(
+                f"{label}.fixture.scenarios[{scenario_index}].events must be a non-empty array"
+            )
+        for event in events:
+            errors.extend(validator.iter_errors(event))
+    errors.sort(key=lambda error: list(error.path))
     if errors:
         details = "\n".join(
             f"{label}.fixture/{'/'.join(map(str, error.path)) or '<root>'}: {error.message}"

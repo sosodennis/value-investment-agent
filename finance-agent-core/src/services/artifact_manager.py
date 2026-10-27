@@ -1,4 +1,7 @@
 import uuid
+from collections.abc import Mapping
+
+from sqlalchemy import select
 
 from src.interface.artifacts.artifact_envelope import (
     ArtifactEnvelope,
@@ -9,7 +12,7 @@ from src.interface.artifacts.artifact_envelope import (
 )
 
 from ..infrastructure.database import AsyncSessionLocal
-from ..infrastructure.models import Artifact
+from ..infrastructure.models import Artifact, WorkflowActivityEvent
 
 
 class ArtifactManager:
@@ -90,6 +93,160 @@ class ArtifactManager:
             return artifact
 
     @staticmethod
+    async def get_artifact_thread_id(artifact_id: str) -> str | None:
+        async with AsyncSessionLocal() as session:
+            return await session.scalar(
+                select(Artifact.thread_id).where(Artifact.id == artifact_id)
+            )
+
+    @staticmethod
+    async def get_agent_output_thread_id(
+        *, artifact_id: str, run_id: str
+    ) -> str | None:
+        async with AsyncSessionLocal() as session:
+            return await session.scalar(
+                select(WorkflowActivityEvent.thread_id)
+                .where(WorkflowActivityEvent.run_id == run_id)
+                .where(WorkflowActivityEvent.event_name == "workflow.agent_output")
+                .where(
+                    WorkflowActivityEvent.payload["artifact_id"].as_string()
+                    == artifact_id
+                )
+                .limit(1)
+            )
+
+    @staticmethod
+    async def get_referenced_artifact_thread_id(
+        *, artifact_id: str, run_id: str
+    ) -> str | None:
+        """Resolve a child artifact through a same-run agent output.
+
+        Some report producers persist their parent report and its supplementary
+        artifacts without an ``artifacts.thread_id``. The parent output event
+        is still the durable run boundary, so a child is accessible only when
+        its ID appears in the parent's explicit artifact-reference section.
+        """
+        return await ArtifactManager._find_referenced_artifact_thread_id(
+            artifact_id=artifact_id,
+            run_id=run_id,
+        )
+
+    @staticmethod
+    async def is_referenced_artifact_reference(
+        *, artifact_id: str, thread_id: str
+    ) -> bool:
+        """Report whether an artifact is referenced by an output in this thread.
+
+        The no-run guard must reject referenced children, while unrelated
+        artifacts in other threads must not affect this lookup.
+        """
+        return (
+            await ArtifactManager._find_referenced_artifact_thread_id(
+                artifact_id=artifact_id,
+                thread_id=thread_id,
+            )
+        ) is not None
+
+    @staticmethod
+    async def is_agent_output_reference_any_thread(*, artifact_id: str) -> bool:
+        async with AsyncSessionLocal() as session:
+            event_id = await session.scalar(
+                select(WorkflowActivityEvent.event_id)
+                .where(WorkflowActivityEvent.event_name == "workflow.agent_output")
+                .where(
+                    WorkflowActivityEvent.payload["artifact_id"].as_string()
+                    == artifact_id
+                )
+            )
+        return event_id is not None
+
+    @staticmethod
+    async def _find_referenced_artifact_thread_id(
+        *, artifact_id: str, run_id: str | None = None, thread_id: str | None = None
+    ) -> str | None:
+        async with AsyncSessionLocal() as session:
+            statement = select(WorkflowActivityEvent).where(
+                WorkflowActivityEvent.event_name == "workflow.agent_output"
+            )
+            if run_id is not None:
+                statement = statement.where(WorkflowActivityEvent.run_id == run_id)
+            if thread_id is not None:
+                statement = statement.where(
+                    WorkflowActivityEvent.thread_id == thread_id
+                )
+            output_events = (await session.scalars(statement)).all()
+            parent_ids = {
+                payload_artifact_id
+                for event in output_events
+                if isinstance(event.payload, Mapping)
+                and isinstance(
+                    payload_artifact_id := event.payload.get("artifact_id"), str
+                )
+                and payload_artifact_id != artifact_id
+            }
+            if not parent_ids:
+                return None
+
+            parent_artifacts = (
+                await session.scalars(
+                    select(Artifact).where(Artifact.id.in_(parent_ids))
+                )
+            ).all()
+            artifacts_by_id = {artifact.id: artifact for artifact in parent_artifacts}
+            for event in output_events:
+                if not isinstance(event.payload, Mapping):
+                    continue
+                parent_id = event.payload.get("artifact_id")
+                parent = artifacts_by_id.get(parent_id)
+                if parent is not None and _references_artifact(
+                    parent.data, artifact_id
+                ):
+                    return event.thread_id
+        return None
+
+    @staticmethod
+    async def is_agent_output_for_run(
+        *, artifact_id: str, thread_id: str, run_id: str
+    ) -> bool:
+        async with AsyncSessionLocal() as session:
+            event_id = await session.scalar(
+                select(WorkflowActivityEvent.event_id)
+                .where(WorkflowActivityEvent.thread_id == thread_id)
+                .where(WorkflowActivityEvent.run_id == run_id)
+                .where(WorkflowActivityEvent.event_name == "workflow.agent_output")
+                .where(
+                    WorkflowActivityEvent.payload["artifact_id"].as_string()
+                    == artifact_id
+                )
+            )
+        return event_id is not None
+
+    @staticmethod
+    async def is_referenced_artifact_for_run(
+        *, artifact_id: str, thread_id: str, run_id: str
+    ) -> bool:
+        return (
+            await ArtifactManager.get_referenced_artifact_thread_id(
+                artifact_id=artifact_id,
+                run_id=run_id,
+            )
+        ) == thread_id
+
+    @staticmethod
+    async def is_agent_output_reference(*, artifact_id: str, thread_id: str) -> bool:
+        async with AsyncSessionLocal() as session:
+            event_id = await session.scalar(
+                select(WorkflowActivityEvent.event_id)
+                .where(WorkflowActivityEvent.thread_id == thread_id)
+                .where(WorkflowActivityEvent.event_name == "workflow.agent_output")
+                .where(
+                    WorkflowActivityEvent.payload["artifact_id"].as_string()
+                    == artifact_id
+                )
+            )
+        return event_id is not None
+
+    @staticmethod
     async def get_artifact_envelope(artifact_id: str) -> ArtifactEnvelope | None:
         artifact = await ArtifactManager.get_artifact(artifact_id)
         if artifact is None:
@@ -112,3 +269,30 @@ class ArtifactManager:
 
 # Singleton instance
 artifact_manager = ArtifactManager()
+
+
+def _references_artifact(value: object, artifact_id: str) -> bool:
+    """Check only explicit artifact-reference fields in a stored payload."""
+    if isinstance(value, Mapping):
+        for key, nested in value.items():
+            if key == "artifact_refs":
+                if _contains_string(nested, artifact_id):
+                    return True
+            elif key == "artifact_id" or key.endswith("_artifact_id"):
+                if nested == artifact_id:
+                    return True
+            elif _references_artifact(nested, artifact_id):
+                return True
+    elif isinstance(value, list):
+        return any(_references_artifact(item, artifact_id) for item in value)
+    return False
+
+
+def _contains_string(value: object, target: str) -> bool:
+    if isinstance(value, str):
+        return value == target
+    if isinstance(value, Mapping):
+        return any(_contains_string(item, target) for item in value.values())
+    if isinstance(value, list):
+        return any(_contains_string(item, target) for item in value)
+    return False

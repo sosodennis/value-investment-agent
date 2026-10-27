@@ -177,10 +177,15 @@ does not reload the inference model.
 Rollback a backend-only issue by restoring the previous backend image and
 replacing only `backend`. Roll back an inference issue by restoring the
 previous inference image and replacing only the affected inference service.
-Keep the model artifact volumes so a rollback can start offline. Confirm
-`/readyz` is ready and the expected model revision is loaded before resuming
-traffic. Restore traffic through the existing workflow fallbacks while a
-service is unavailable; do not add repeated health probes or retry loops.
+The default image-baked mode needs no model volume for an offline rollback:
+restore the prior image, then confirm `/readyz` reports the expected model
+revision before resuming traffic. The optional writable-cache mode keeps its
+project-scoped model volumes across container replacement; those volumes are
+not a substitute for retaining the prior image. See
+[`model-artifact-cache.md`](model-artifact-cache.md) for ownership, startup,
+restart, and retired-worktree cleanup procedures. Restore traffic through the
+existing workflow fallbacks while a service is unavailable; do not add
+repeated health probes or retry loops.
 
 After saving and reviewing evidence, stop only the test project:
 

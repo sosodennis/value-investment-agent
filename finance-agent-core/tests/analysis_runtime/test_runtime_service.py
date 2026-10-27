@@ -9,16 +9,21 @@ from src.analysis_runtime.application.runtime_service import AnalysisRuntimeServ
 from src.analysis_runtime.domain.contracts import (
     Activity,
     ActivityEvent,
-    ActivityInterruption,
+    InteractionIdentity,
+    InteractionRequested,
     TickerCandidate,
     TickerSelectionRequest,
     TickerSelectionResponse,
+    WorkflowActivityIdentity,
+    WorkflowAgentOutput,
+    WorkflowAgentOutputEvent,
 )
 from src.analysis_runtime.domain.errors import (
     ActivityPersistenceError,
     InteractionNotAvailableError,
     InvalidInteractionResponseError,
     ReplayGapError,
+    RunNotFoundError,
     ThreadNotFoundError,
 )
 from src.analysis_runtime.infrastructure.memory_repository import (
@@ -73,10 +78,39 @@ class Runner:
         )
 
 
+class OutputRunner:
+    async def run(self, **kwargs):
+        yield WorkflowAgentOutput(
+            identity=WorkflowActivityIdentity(
+                thread_id=kwargs["thread_id"],
+                run_id=kwargs["run_id"],
+                activity_id="intent.extraction",
+            ),
+            agent_id="intent_extraction",
+            output_kind="intent_extraction.output",
+            output_version="v1",
+            summary="Resolved AAPL",
+            preview={"ticker": "AAPL"},
+            artifact_id="artifact-1",
+            artifact_type="intent_report",
+        )
+
+
 class FailingRunner:
     async def run(self, **kwargs):
         raise RuntimeError("runner failed")
         yield  # pragma: no cover
+
+
+class TypedProviderFailingRunner:
+    async def run(self, **kwargs):
+        raise _TypedProviderError()
+        yield  # pragma: no cover
+
+
+class _TypedProviderError(RuntimeError):
+    code = "schema_validation_failed"
+    retryable = False
 
 
 class InterruptingRunner:
@@ -86,7 +120,7 @@ class InterruptingRunner:
     async def run(self, **kwargs):
         self.calls.append(kwargs)
         if "interrupt_response" not in kwargs["input_data"]:
-            yield Activity(
+            activity = Activity(
                 activity_id="intent.clarifying",
                 thread_id=kwargs["thread_id"],
                 run_id=kwargs["run_id"],
@@ -95,21 +129,27 @@ class InterruptingRunner:
                 status="waiting",
                 label="Ticker Resolution",
                 attempt=1,
-                interruption=ActivityInterruption(
+            )
+            yield InteractionRequested(
+                activity=activity,
+                identity=InteractionIdentity(
+                    thread_id=kwargs["thread_id"],
+                    run_id=kwargs["run_id"],
+                    activity_id=activity.activity_id,
                     interaction_id="interaction-1",
-                    request=TickerSelectionRequest(
-                        type="ticker_selection",
-                        title="Ticker Resolution",
-                        description="Choose a company.",
-                        candidates=[
-                            TickerCandidate(
-                                symbol="AAPL", name="Apple Inc.", confidence=0.96
-                            ),
-                            TickerCandidate(
-                                symbol="APLE", name="Apple Hospitality", confidence=0.83
-                            ),
-                        ],
-                    ),
+                ),
+                request=TickerSelectionRequest(
+                    type="ticker_selection",
+                    title="Ticker Resolution",
+                    description="Choose a company.",
+                    candidates=[
+                        TickerCandidate(
+                            symbol="AAPL", name="Apple Inc.", confidence=0.96
+                        ),
+                        TickerCandidate(
+                            symbol="APLE", name="Apple Hospitality", confidence=0.83
+                        ),
+                    ],
                 ),
             )
             return
@@ -157,6 +197,41 @@ async def test_runtime_persists_before_publish_and_replays() -> None:
 
 
 @pytest.mark.asyncio
+async def test_runtime_persists_agent_output_for_replay_and_snapshot() -> None:
+    repository = InMemoryActivityRepository()
+    service = AnalysisRuntimeService(
+        repository=repository,
+        owner=Owner(),
+        runner=OutputRunner(),
+        hub=BoundedNotificationHub(queue_size=4),
+    )
+
+    run_id = await service.start(
+        principal_id="user",
+        thread_id="thread",
+        input_data={"message": "AAPL"},
+    )
+    await service._tasks["thread"]
+
+    replay = await service.replay(principal_id="user", thread_id="thread", after_seq=0)
+    output_events = [
+        event for event in replay.events if isinstance(event, WorkflowAgentOutputEvent)
+    ]
+    assert len(output_events) == 1
+    assert output_events[0].run_id == run_id
+    assert output_events[0].payload.artifact_id == "artifact-1"
+    assert output_events[0].payload.identity.run_id == run_id
+
+    snapshot = await service.snapshot(
+        principal_id="user", thread_id="thread", run_id=run_id
+    )
+    assert snapshot.run_status == "completed"
+    assert len(snapshot.completed_outputs) == 1
+    assert snapshot.completed_outputs[0].summary == "Resolved AAPL"
+    assert snapshot.completed_outputs[0].artifact_type == "intent_report"
+
+
+@pytest.mark.asyncio
 async def test_interrupt_waits_and_resumes_the_same_run_once() -> None:
     repository = InMemoryActivityRepository()
     runner = InterruptingRunner()
@@ -181,22 +256,19 @@ async def test_interrupt_waits_and_resumes_the_same_run_once() -> None:
     assert [item.activity_id for item in waiting.active_activities] == [
         "intent.clarifying"
     ]
-    assert waiting.active_activities[0].interruption is not None
-    assert waiting.active_activities[0].interruption.request.type == "ticker_selection"
+    assert waiting.pending_interactions[0].request.type == "ticker_selection"
     before_resume = await service.replay(
         principal_id="user", thread_id="thread", after_seq=0
     )
     assert all(
-        event.payload.activity_id != "workflow" for event in before_resume.events
+        not isinstance(event, ActivityEvent) or event.payload.activity_id != "workflow"
+        for event in before_resume.events
     )
 
     with pytest.raises(InvalidInteractionResponseError):
         await service.resume(
             principal_id="user",
-            thread_id="thread",
-            run_id=run_id,
-            activity_id="intent.clarifying",
-            interaction_id="interaction-1",
+            identity=waiting.pending_interactions[0].identity,
             response=TickerSelectionResponse(
                 type="ticker_selection", selected_symbol="MSFT"
             ),
@@ -205,10 +277,7 @@ async def test_interrupt_waits_and_resumes_the_same_run_once() -> None:
 
     resumed_run_id = await service.resume(
         principal_id="user",
-        thread_id="thread",
-        run_id=run_id,
-        activity_id="intent.clarifying",
-        interaction_id="interaction-1",
+        identity=waiting.pending_interactions[0].identity,
         response=TickerSelectionResponse(
             type="ticker_selection", selected_symbol="AAPL"
         ),
@@ -222,7 +291,8 @@ async def test_interrupt_waits_and_resumes_the_same_run_once() -> None:
     resumed_activity = next(
         event.payload
         for event in after_resume.events
-        if event.payload.activity_id == "intent.clarifying"
+        if isinstance(event, ActivityEvent)
+        and event.payload.activity_id == "intent.clarifying"
         and event.payload.status == "running"
     )
     assert resumed_activity.attempt == 2
@@ -235,10 +305,87 @@ async def test_interrupt_waits_and_resumes_the_same_run_once() -> None:
     with pytest.raises(InteractionNotAvailableError):
         await service.resume(
             principal_id="user",
-            thread_id="thread",
-            run_id=run_id,
-            activity_id="intent.clarifying",
-            interaction_id="interaction-1",
+            identity=waiting.pending_interactions[0].identity,
+            response=TickerSelectionResponse(
+                type="ticker_selection", selected_symbol="AAPL"
+            ),
+        )
+
+
+@pytest.mark.asyncio
+async def test_waiting_interaction_is_scoped_to_the_run_owner() -> None:
+    repository = InMemoryActivityRepository()
+    service = AnalysisRuntimeService(
+        repository=repository,
+        owner=Owner(),
+        runner=InterruptingRunner(),
+    )
+    run_id = await service.start(
+        principal_id="user", thread_id="thread", input_data={"message": "Apple"}
+    )
+    await asyncio.sleep(0)
+    await asyncio.sleep(0)
+    waiting = await service.snapshot(
+        principal_id="user", thread_id="thread", run_id=run_id
+    )
+    requested = waiting.pending_interactions[0]
+    replay = await repository.replay(thread_id="thread", after_seq=0, limit=20)
+    waiting_activity = next(
+        event.payload
+        for event in replay.events
+        if isinstance(event, ActivityEvent)
+        and event.payload.activity_id == requested.identity.activity_id
+    )
+    with pytest.raises(InteractionNotAvailableError):
+        await repository.record_waiting_interaction(
+            requested=InteractionRequested(
+                activity=waiting_activity,
+                identity=requested.identity,
+                request=requested.request,
+            ),
+            principal_id="other",
+            now=datetime.now(timezone.utc),
+        )
+
+
+@pytest.mark.asyncio
+async def test_cancel_waiting_run_closes_interaction_and_rejects_late_response() -> (
+    None
+):
+    repository = InMemoryActivityRepository()
+    service = AnalysisRuntimeService(
+        repository=repository,
+        owner=Owner(),
+        runner=InterruptingRunner(),
+    )
+    run_id = await service.start(
+        principal_id="user", thread_id="thread", input_data={"message": "Apple"}
+    )
+    await asyncio.sleep(0)
+    await asyncio.sleep(0)
+    waiting = await service.snapshot(
+        principal_id="user", thread_id="thread", run_id=run_id
+    )
+    interaction = waiting.pending_interactions[0]
+
+    await service.cancel(principal_id="user", thread_id="thread", run_id=run_id)
+
+    cancelled = await service.snapshot(
+        principal_id="user", thread_id="thread", run_id=run_id
+    )
+    assert cancelled.run_status == "cancelled"
+    assert cancelled.pending_interactions == ()
+    replay = await repository.replay(thread_id="thread", after_seq=0, limit=20)
+    latest_interaction = next(
+        event.payload
+        for event in reversed(replay.events)
+        if getattr(event, "event_name", None) == "workflow.interaction"
+    )
+    assert latest_interaction.status == "cancelled"
+    with pytest.raises(InteractionNotAvailableError):
+        await service.resume(
+            principal_id="user",
+            identity=interaction.identity,
             response=TickerSelectionResponse(
                 type="ticker_selection", selected_symbol="AAPL"
             ),
@@ -264,14 +411,10 @@ async def test_claimed_resume_recovers_after_runtime_restart() -> None:
     waiting = await service.snapshot(
         principal_id="user", thread_id="thread", run_id=run_id
     )
-    activity = waiting.active_activities[0]
-    assert activity.interruption is not None
+    interaction = waiting.pending_interactions[0]
 
-    await repository.claim_resume(
-        thread_id="thread",
-        run_id=run_id,
-        activity_id=activity.activity_id,
-        interaction_id=activity.interruption.interaction_id,
+    await repository.claim_interaction_response(
+        identity=interaction.identity,
         response=TickerSelectionResponse(
             type="ticker_selection", selected_symbol="AAPL"
         ),
@@ -294,6 +437,60 @@ async def test_claimed_resume_recovers_after_runtime_restart() -> None:
     }
     assert (await repository.get_run(thread_id="thread")).status == "completed"
     assert await repository.pending_resumes() == ()
+
+
+@pytest.mark.asyncio
+async def test_run_history_keeps_exact_runs_and_scopes_keyset_pages_to_principal() -> (
+    None
+):
+    repository = InMemoryActivityRepository()
+    service = AnalysisRuntimeService(
+        repository=repository, owner=Owner(), runner=Runner()
+    )
+
+    first_run = await service.start(
+        principal_id="user", thread_id="thread", input_data={"message": "AAPL"}
+    )
+    await service._tasks["thread"]
+    first_snapshot = await service.snapshot(
+        principal_id="user", thread_id="thread", run_id=first_run
+    )
+    second_run = await service.start(
+        principal_id="user", thread_id="thread", input_data={"message": "MSFT"}
+    )
+    await service._tasks["thread"]
+
+    first_record = await repository.get_run_history(
+        principal_id="user", thread_id="thread", run_id=first_run
+    )
+    assert first_record is not None
+    assert first_record.status == "completed"
+    assert first_record.input_data == {"message": "AAPL"}
+    assert first_record.started_at is not None
+    assert (
+        await service.snapshot(
+            principal_id="user", thread_id="thread", run_id=first_run
+        )
+    ).recent_activities == first_snapshot.recent_activities
+    with pytest.raises(RunNotFoundError):
+        await service.snapshot(
+            principal_id="other", thread_id="thread", run_id=first_run
+        )
+
+    page = await service.list_run_history(principal_id="user", limit=1)
+    assert [record.run_id for record in page.runs] == [second_run]
+    assert page.has_more is True
+    assert page.next_started_at is not None
+    next_page = await service.list_run_history(
+        principal_id="user",
+        limit=1,
+        before_started_at=page.next_started_at,
+        before_thread_id=page.next_thread_id,
+        before_run_id=page.next_run_id,
+    )
+    assert [record.run_id for record in next_page.runs] == [first_run]
+    assert next_page.has_more is False
+    assert (await service.list_run_history(principal_id="other", limit=10)).runs == ()
 
 
 @pytest.mark.asyncio
@@ -329,11 +526,55 @@ async def test_failed_run_publishes_terminal_activity() -> None:
     run_id = await service.start(
         principal_id="user", thread_id="thread", input_data={"message": "x"}
     )
-    await asyncio.sleep(0)
-    await asyncio.sleep(0)
+    await service._tasks["thread"]
     replay = await service.replay(principal_id="user", thread_id="thread", after_seq=0)
+    assert isinstance(replay.events[-1], ActivityEvent)
     assert replay.events[-1].payload.status == "failed"
     assert replay.events[-1].run_id == run_id
+
+    snapshot = await service.snapshot(
+        principal_id="user", thread_id="thread", run_id=run_id
+    )
+    assert snapshot.failure is not None
+    assert snapshot.failure.code == "workflow_runtime_error"
+    assert snapshot.failure.owner == "workflow.runtime"
+    assert snapshot.failure.retryable is False
+    assert snapshot.failure.message == (
+        "The workflow could not complete because an internal step failed."
+    )
+    assert snapshot.active_activities == ()
+    assert all(activity.status != "running" for activity in snapshot.recent_activities)
+
+
+@pytest.mark.asyncio
+async def test_typed_provider_failure_is_safe_and_replayed() -> None:
+    service = AnalysisRuntimeService(
+        repository=InMemoryActivityRepository(),
+        owner=Owner(),
+        runner=TypedProviderFailingRunner(),
+    )
+    run_id = await service.start(
+        principal_id="user", thread_id="thread", input_data={"message": "x"}
+    )
+    await service._tasks["thread"]
+
+    snapshot = await service.snapshot(
+        principal_id="user", thread_id="thread", run_id=run_id
+    )
+    replay = await service.replay(principal_id="user", thread_id="thread", after_seq=0)
+    failure = snapshot.failure
+    assert failure is not None
+    assert failure.model_dump() == {
+        "code": "schema_validation_failed",
+        "owner": "llm_provider",
+        "activity_id": None,
+        "retryable": False,
+        "message": "The provider returned data that did not match the workflow contract.",
+    }
+    terminal = replay.events[-1]
+    assert isinstance(terminal, ActivityEvent)
+    assert terminal.payload.failure == failure
+    assert "provider response" not in failure.message.lower()
 
 
 @pytest.mark.asyncio

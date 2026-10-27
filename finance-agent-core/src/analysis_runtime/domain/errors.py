@@ -28,6 +28,10 @@ class InvalidRunnerInterruptError(RuntimeErrorBase):
     code = "invalid_runner_interrupt"
 
 
+class InvalidRunnerOutputError(RuntimeErrorBase):
+    code = "invalid_runner_output"
+
+
 class InvalidCursorError(RuntimeErrorBase):
     code = "invalid_cursor"
 

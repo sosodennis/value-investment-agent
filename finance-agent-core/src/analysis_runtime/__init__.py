@@ -5,19 +5,24 @@ from .domain.contracts import (
     Activity,
     ActivityEvent,
     ActivityKind,
-    ActivitySnapshot,
     ActivityStatus,
     ReplayPage,
     RunStatus,
+    WorkflowEvent,
+    WorkflowFailure,
+    WorkflowSnapshot,
 )
 
 __all__ = [
     "Activity",
     "ActivityEvent",
     "ActivityKind",
-    "ActivitySnapshot",
+    "WorkflowSnapshot",
     "ActivityStatus",
     "AnalysisRuntimeService",
     "ReplayPage",
     "RunStatus",
+    "WorkflowEvent",
+    "WorkflowFailure",
+    "WorkflowSnapshot",
 ]

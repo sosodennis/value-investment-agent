@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from collections.abc import Callable
 from typing import Any
 
@@ -15,6 +16,7 @@ from src.analysis_runtime.infrastructure.notifications import (
 class FakeNotificationBus:
     def __init__(self) -> None:
         self.connections: list[FakeConnection] = []
+        self.notifications: list[tuple[str, str]] = []
 
     def connect(self) -> FakeConnection:
         connection = FakeConnection(self)
@@ -22,6 +24,7 @@ class FakeNotificationBus:
         return connection
 
     def notify(self, channel: str, payload: str) -> None:
+        self.notifications.append((channel, payload))
         for connection in tuple(self.connections):
             connection.emit(channel, payload)
 
@@ -77,21 +80,38 @@ def _event(*, thread_id: str = "thread-1", seq_id: int = 1) -> ActivityEvent:
 @pytest.mark.asyncio
 async def test_postgres_hubs_fan_out_to_subscribers_in_each_worker() -> None:
     bus = FakeNotificationBus()
-    first = PostgresNotificationHub(connect=lambda _dsn: _connected(bus))
-    second = PostgresNotificationHub(connect=lambda _dsn: _connected(bus))
+    event = _event()
+
+    async def load_event(event_id: str) -> ActivityEvent | None:
+        return event if event_id == event.event_id else None
+
+    first = PostgresNotificationHub(
+        connect=lambda _dsn: _connected(bus), load_event=load_event
+    )
+    second = PostgresNotificationHub(
+        connect=lambda _dsn: _connected(bus), load_event=load_event
+    )
     await first.start()
     await second.start()
     first_subscriber = await first.subscribe(thread_id="thread-1")
     second_subscriber = await second.subscribe(thread_id="thread-1")
 
-    event = _event()
     await first.publish(event)
 
+    assert len(bus.notifications) == 1
+    channel, payload = bus.notifications[0]
+    assert channel == "workflow_activity"
+    assert json.loads(payload) == {
+        "event_id": event.event_id,
+        "thread_id": event.thread_id,
+        "seq_id": event.seq_id,
+    }
     assert await asyncio.wait_for(first_subscriber.receive(), timeout=0.5) == event
     assert await asyncio.wait_for(second_subscriber.receive(), timeout=0.5) == event
 
     await first.close()
     await second.close()
+    assert all(connection.closed for connection in bus.connections)
 
 
 @pytest.mark.asyncio

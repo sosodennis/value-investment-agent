@@ -237,6 +237,65 @@ async def test_repository_fetch_monitoring_rows_returns_joined_truth_rows(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("workflow_run_id", ["run-observability-1", None])
+async def test_repository_event_detail_resolves_report_run_scope(
+    monkeypatch: pytest.MonkeyPatch,
+    workflow_run_id: str | None,
+) -> None:
+    event_model = TechnicalPredictionEvent(
+        event_id="event-detail-1",
+        agent_source="technical",
+        event_time=datetime(2026, 3, 10),
+        ticker="AAPL",
+        timeframe="1d",
+        horizon="5d",
+        direction="BULLISH_EXTENSION",
+        raw_score=0.8,
+        confidence=0.75,
+        reliability_level="HIGH",
+        logic_version="logic.v1",
+        feature_contract_version="feature.v1",
+        run_type="workflow",
+        full_report_artifact_id="report-detail-1",
+        source_artifact_refs={"feature_pack": "source-detail-1"},
+        context_payload={},
+    )
+
+    class _DetailResult:
+        def first(self) -> tuple[object, object | None]:
+            return event_model, None
+
+    class _FakeSession:
+        async def execute(self, _query: object) -> _DetailResult:
+            return _DetailResult()
+
+        async def scalar(self, _query: object) -> str | None:
+            return workflow_run_id
+
+    class _FakeSessionContext:
+        async def __aenter__(self) -> _FakeSession:
+            return _FakeSession()
+
+        async def __aexit__(self, exc_type, exc, tb) -> None:
+            return None
+
+    monkeypatch.setattr(
+        "src.agents.technical.subdomains.decision_observability.infrastructure.repository.AsyncSessionLocal",
+        lambda: _FakeSessionContext(),
+    )
+
+    detail = await SqlAlchemyTechnicalDecisionObservabilityRepository().fetch_monitoring_event_detail(
+        event_id="event-detail-1",
+        labeling_method_version="technical_outcome_labeling.v1",
+    )
+
+    assert detail is not None
+    assert detail.full_report_artifact_id == "report-detail-1"
+    assert detail.source_artifact_refs == {"feature_pack": "source-detail-1"}
+    assert detail.run_id == workflow_run_id
+
+
+@pytest.mark.asyncio
 async def test_runtime_load_monitoring_aggregates_from_repository_rows() -> None:
     @dataclass
     class _FakeRepository:

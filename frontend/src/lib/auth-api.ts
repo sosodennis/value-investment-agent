@@ -2,7 +2,7 @@ import type { components } from '@/types/generated/api-contract';
 import { parseApiErrorMessage } from '@/types/protocol';
 
 const API_URL = (
-    process.env.NEXT_PUBLIC_LANGGRAPH_URL || 'http://localhost:8000'
+    process.env.NEXT_PUBLIC_LANGGRAPH_URL || 'http://127.0.0.1:8000'
 ).replace(/\/+$/, '');
 const CSRF_COOKIE_NAME = 'app_csrf';
 const CSRF_HEADER_NAME = 'X-CSRF-Token';
@@ -35,7 +35,12 @@ function readCsrfCookie(): string | null {
         .find((entry) => entry.startsWith(cookiePrefix));
     if (!cookie) return null;
 
-    return decodeURIComponent(cookie.slice(cookiePrefix.length));
+    try {
+        const token = decodeURIComponent(cookie.slice(cookiePrefix.length));
+        return /^[A-Za-z0-9_-]+$/.test(token) ? token : null;
+    } catch {
+        return null;
+    }
 }
 
 export function csrfHeaders(): Record<string, string> {
