@@ -4,6 +4,8 @@ from collections.abc import Mapping
 from unittest.mock import patch
 
 import pytest
+from langgraph.errors import GraphInterrupt
+from langgraph.types import Interrupt
 from pydantic import BaseModel, Field
 
 from src.agents.fundamental.application.workflow_orchestrator.orchestrator import (
@@ -1218,6 +1220,49 @@ async def test_invalid_valuation_approval_contract_fails_closed() -> None:
 
     assert calculator_calls == 0
     assert result.update["workflow_activity_updates"]["calculation"] == "error"
+
+
+@pytest.mark.asyncio
+async def test_langgraph_valuation_approval_interrupt_is_not_converted_to_error() -> (
+    None
+):
+    orchestrator = _build_orchestrator()
+    interrupt = GraphInterrupt(
+        [
+            Interrupt(
+                value={
+                    "type": "valuation_approval",
+                    "contract_version": "v1",
+                    "ticker": "GOOG",
+                    "model_type": "dcf_growth",
+                    "title": "Review valuation assumptions",
+                    "description": "Approve before calculation.",
+                    "parameters": {"terminal_growth": 0.025},
+                    "audit_messages": [],
+                }
+            )
+        ]
+    )
+
+    def _raise_approval(_request: Mapping[str, object]) -> Mapping[str, object]:
+        raise interrupt
+
+    with pytest.raises(GraphInterrupt) as raised:
+        await orchestrator.run_valuation(
+            _build_state(),
+            request_approval_fn=_raise_approval,
+            build_params_fn=lambda _model_type,
+            _ticker,
+            _reports,
+            _forward_signals: _build_params_result(),
+            get_model_runtime_fn=lambda _model_type: {
+                "schema": _ValuationParams,
+                "calculator": lambda _params: {"intrinsic_value": 123.0},
+                "auditor": lambda _params: _AuditResult(True, []),
+            },
+        )
+
+    assert raised.value is interrupt
 
 
 @pytest.mark.asyncio

@@ -49,6 +49,7 @@ from src.llm_provider.entrypoint import (
     CompletionRequest,
     CompletionResult,
     LLMProviderPort,
+    LLMRequestClass,
     ModelRoute,
 )
 from src.shared.kernel.tools.logger import get_logger, log_event
@@ -56,6 +57,7 @@ from src.shared.kernel.tools.logger import get_logger, log_event
 logger = get_logger(__name__)
 
 MAX_CHAR_HISTORY = PROMPT_MAX_CHAR_HISTORY
+DEBATE_LLM_TIMEOUT_SECONDS = 180.0
 
 
 async def extract_debate_facts(
@@ -370,7 +372,8 @@ async def _complete_debate_messages(
         route=route,
         request_id=f"{operation.replace('.', '-')}-{uuid4().hex}",
         operation=operation,
-        timeout_seconds=60.0,
+        request_class=LLMRequestClass.BACKGROUND,
+        timeout_seconds=DEBATE_LLM_TIMEOUT_SECONDS,
     )
     return await provider.acomplete(request)
 

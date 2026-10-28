@@ -452,6 +452,292 @@ async def test_runner_projects_versioned_valuation_approval_interrupt() -> None:
 
 
 @pytest.mark.asyncio
+async def test_runner_assigns_interrupt_to_event_callback_when_parallel_callbacks_are_active() -> (
+    None
+):
+    graph = _EventGraph(
+        [
+            {
+                "event": "on_chain_start",
+                "run_id": "news-node",
+                "parent_ids": [],
+                "metadata": _metadata(
+                    agent_id="financial_news_research",
+                    langgraph_node="news_agent",
+                    agent_scope="agent",
+                    agent_node="news_agent",
+                ),
+            },
+            {
+                "event": "on_chain_start",
+                "run_id": "calculation-node",
+                "parent_ids": [],
+                "metadata": _metadata(
+                    agent_id="fundamental_analysis",
+                    langgraph_node="calculation",
+                ),
+            },
+            {
+                "event": "on_chain_stream",
+                "run_id": "calculation-node",
+                "parent_ids": [],
+                "metadata": _metadata(
+                    agent_id="fundamental_analysis",
+                    langgraph_node="calculation",
+                ),
+                "data": {
+                    "chunk": {
+                        "__interrupt__": (
+                            Interrupt(
+                                id="approval-parallel-1",
+                                value={
+                                    "type": "valuation_approval",
+                                    "contract_version": "v1",
+                                    "ticker": "AAPL",
+                                    "model_type": "dcf_standard",
+                                    "title": "Review valuation assumptions",
+                                    "description": "Approve before deterministic calculation.",
+                                    "parameters": {"wacc": 0.09},
+                                    "audit_messages": [],
+                                },
+                            ),
+                        )
+                    }
+                },
+            },
+        ]
+    )
+
+    activities = [
+        item
+        async for item in LangGraphRunner(graph).run(
+            thread_id="parallel-interrupt-thread",
+            run_id="runtime-run-1",
+            input_data={"message": "Apple"},
+            principal_id="principal-1",
+        )
+    ]
+
+    waiting = activities[-1]
+    assert isinstance(waiting, InteractionRequested)
+    assert waiting.activity.activity_id == "langgraph:calculation-node"
+    assert waiting.activity.scope_path == ("fundamental_analysis", "calculation")
+
+
+@pytest.mark.asyncio
+async def test_runner_uses_nearest_active_parent_for_bubbled_parallel_interrupt() -> (
+    None
+):
+    graph = _EventGraph(
+        [
+            {
+                "event": "on_chain_start",
+                "run_id": "news-node",
+                "parent_ids": ["workflow-root"],
+                "metadata": _metadata(
+                    agent_id="financial_news_research",
+                    langgraph_node="news_agent",
+                    agent_scope="agent",
+                    agent_node="news_agent",
+                ),
+            },
+            {
+                "event": "on_chain_start",
+                "run_id": "calculation-node",
+                "parent_ids": ["workflow-root"],
+                "metadata": _metadata(
+                    agent_id="fundamental_analysis",
+                    langgraph_node="calculation",
+                ),
+            },
+            {
+                "event": "on_chain_stream",
+                "run_id": "nested-graph-stream",
+                "parent_ids": ["workflow-root", "calculation-node"],
+                "metadata": {"langgraph_checkpoint_ns": "nested"},
+                "data": {
+                    "chunk": {
+                        "__interrupt__": (
+                            Interrupt(
+                                id="approval-bubbled-parallel-1",
+                                value={
+                                    "type": "valuation_approval",
+                                    "contract_version": "v1",
+                                    "ticker": "AAPL",
+                                    "model_type": "dcf_standard",
+                                    "title": "Review valuation assumptions",
+                                    "description": "Approve before deterministic calculation.",
+                                    "parameters": {"wacc": 0.09},
+                                    "audit_messages": [],
+                                },
+                            ),
+                        )
+                    }
+                },
+            },
+        ]
+    )
+
+    activities = [
+        item
+        async for item in LangGraphRunner(graph).run(
+            thread_id="parallel-bubbled-interrupt-thread",
+            run_id="runtime-run-1",
+            input_data={"message": "Apple"},
+            principal_id="principal-1",
+        )
+    ]
+
+    waiting = activities[-1]
+    assert isinstance(waiting, InteractionRequested)
+    assert waiting.activity.activity_id == "langgraph:calculation-node"
+    assert waiting.activity.scope_path == ("fundamental_analysis", "calculation")
+
+
+@pytest.mark.asyncio
+async def test_runner_assigns_unscoped_interrupt_by_typed_owner_with_parallel_agents() -> (
+    None
+):
+    graph = _EventGraph(
+        [
+            {
+                "event": "on_chain_start",
+                "run_id": "news-node",
+                "parent_ids": [],
+                "metadata": _metadata(
+                    agent_id="financial_news_research",
+                    langgraph_node="news_agent",
+                    agent_scope="agent",
+                    agent_node="news_agent",
+                ),
+            },
+            {
+                "event": "on_chain_start",
+                "run_id": "calculation-node",
+                "parent_ids": [],
+                "metadata": _metadata(
+                    agent_id="fundamental_analysis",
+                    langgraph_node="calculation",
+                ),
+            },
+            {
+                "event": "on_chain_stream",
+                "run_id": "bubbled-calculation-stream",
+                "parent_ids": [],
+                "metadata": {"langgraph_checkpoint_ns": "nested"},
+                "data": {
+                    "chunk": {
+                        "__interrupt__": (
+                            Interrupt(
+                                id="approval-unscoped-parallel-1",
+                                value={
+                                    "type": "valuation_approval",
+                                    "contract_version": "v1",
+                                    "ticker": "AAPL",
+                                    "model_type": "dcf_standard",
+                                    "title": "Review valuation assumptions",
+                                    "description": "Approve before deterministic calculation.",
+                                    "parameters": {"wacc": 0.09},
+                                    "audit_messages": [],
+                                },
+                            ),
+                        )
+                    }
+                },
+            },
+        ]
+    )
+
+    activities = [
+        item
+        async for item in LangGraphRunner(graph).run(
+            thread_id="parallel-unscoped-interrupt-thread",
+            run_id="runtime-run-1",
+            input_data={"message": "Apple"},
+            principal_id="principal-1",
+        )
+    ]
+
+    waiting = activities[-1]
+    assert isinstance(waiting, InteractionRequested)
+    assert waiting.activity.activity_id == "langgraph:calculation-node"
+    assert waiting.activity.scope_path == ("fundamental_analysis", "calculation")
+
+
+@pytest.mark.asyncio
+async def test_runner_uses_interrupt_scope_when_inner_callback_id_is_not_active() -> (
+    None
+):
+    graph = _EventGraph(
+        [
+            {
+                "event": "on_chain_start",
+                "run_id": "news-node",
+                "parent_ids": [],
+                "metadata": _metadata(
+                    agent_id="financial_news_research",
+                    langgraph_node="news_agent",
+                    agent_scope="agent",
+                    agent_node="news_agent",
+                ),
+            },
+            {
+                "event": "on_chain_start",
+                "run_id": "calculation-node",
+                "parent_ids": [],
+                "metadata": _metadata(
+                    agent_id="fundamental_analysis",
+                    langgraph_node="calculation",
+                ),
+            },
+            {
+                "event": "on_chain_stream",
+                "run_id": "nested-graph-stream",
+                "parent_ids": [],
+                "metadata": _metadata(
+                    agent_id="fundamental_analysis",
+                    langgraph_node="calculation",
+                ),
+                "data": {
+                    "chunk": {
+                        "__interrupt__": (
+                            Interrupt(
+                                id="approval-nested-stream-1",
+                                value={
+                                    "type": "valuation_approval",
+                                    "contract_version": "v1",
+                                    "ticker": "AAPL",
+                                    "model_type": "dcf_standard",
+                                    "title": "Review valuation assumptions",
+                                    "description": "Approve before deterministic calculation.",
+                                    "parameters": {"wacc": 0.09},
+                                    "audit_messages": [],
+                                },
+                            ),
+                        )
+                    }
+                },
+            },
+        ]
+    )
+
+    activities = [
+        item
+        async for item in LangGraphRunner(graph).run(
+            thread_id="nested-interrupt-thread",
+            run_id="runtime-run-1",
+            input_data={"message": "Apple"},
+            principal_id="principal-1",
+        )
+    ]
+
+    waiting = activities[-1]
+    assert isinstance(waiting, InteractionRequested)
+    assert waiting.activity.activity_id == "langgraph:calculation-node"
+    assert waiting.activity.scope_path == ("fundamental_analysis", "calculation")
+
+
+@pytest.mark.asyncio
 async def test_runner_rejects_unsupported_interrupt_payload() -> None:
     graph = _EventGraph(
         [

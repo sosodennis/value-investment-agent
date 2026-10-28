@@ -5,6 +5,8 @@ import logging
 from collections.abc import Callable, Mapping
 from typing import Protocol
 
+from langgraph.errors import GraphInterrupt
+
 from src.agents.fundamental.application.workflow_orchestrator.services.valuation_completion_fields_service import (
     build_forward_signal_completion_fields,
     build_monte_carlo_completion_fields,
@@ -1897,6 +1899,10 @@ async def run_valuation_flow(
             )
 
         return FundamentalNodeResult(update=success_update, goto="END")
+    except GraphInterrupt:
+        # LangGraph owns interrupt suspension and must receive this exception
+        # unchanged so the runtime can project the typed approval request.
+        raise
     except Exception as exc:
         log_event(
             logger,

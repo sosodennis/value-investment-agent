@@ -149,18 +149,17 @@ const DebateOutputComponent: React.FC<DebateOutputProps> = ({
 
             <Card className="relative overflow-hidden p-4 sm:p-5">
                 <div className={`absolute inset-y-0 left-0 w-0.5 ${styles.accentBar}`} />
-                <div className="absolute top-0 right-0 p-4">
-                    <Badge variant="outline" className="max-w-40 whitespace-normal text-right">
-                        {conclusion?.risk_profile?.replace('_', ' ')}
-                    </Badge>
-                </div>
-
-                <div className="flex items-center justify-between mb-8">
-                    <div className="flex items-center gap-3">
+                <div className="flex flex-wrap items-start justify-between gap-3 mb-8">
+                    <div className="flex min-w-0 items-center gap-3">
                         <Shield size={18} className="text-warning" />
                         <h3 className="text-sm font-semibold text-muted-foreground uppercase">Investment Verdict</h3>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center justify-end gap-2">
+                        {conclusion?.risk_profile && (
+                            <Badge variant="outline" className="max-w-40 whitespace-normal break-words text-right">
+                                {conclusion.risk_profile.replaceAll('_', ' ')}
+                            </Badge>
+                        )}
                         <Badge variant={styles.badgeVariant}>{directionLabel}</Badge>
                         {conclusion?.data_quality_warning && (
                             <Badge variant="warning" className="gap-1">

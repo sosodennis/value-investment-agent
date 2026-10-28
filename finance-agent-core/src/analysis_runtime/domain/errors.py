@@ -1,3 +1,6 @@
+from collections.abc import Mapping
+
+
 class RuntimeErrorBase(Exception):
     """Base for errors that are safe to map at the HTTP boundary."""
 
@@ -26,6 +29,12 @@ class InvalidInteractionResponseError(RuntimeErrorBase):
 
 class InvalidRunnerInterruptError(RuntimeErrorBase):
     code = "invalid_runner_interrupt"
+
+    def __init__(
+        self, message: str, *, diagnostics: Mapping[str, object] | None = None
+    ) -> None:
+        self.diagnostics = dict(diagnostics or {})
+        super().__init__(message)
 
 
 class InvalidRunnerOutputError(RuntimeErrorBase):

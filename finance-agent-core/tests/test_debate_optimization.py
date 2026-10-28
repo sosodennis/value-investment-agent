@@ -2,12 +2,15 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from src.agents.debate.application.debate_service import execute_moderator_round
+from src.agents.debate.application.debate_service import (
+    DEBATE_LLM_TIMEOUT_SECONDS,
+    execute_moderator_round,
+)
 from src.agents.debate.application.dto import DebateSourceLoadIssue
 from src.agents.debate.application.report_service import PreparedDebateReports
 from src.agents.debate.application.wiring import get_debate_workflow_runner
 from src.agents.debate.workflow.nodes import build_debate_nodes
-from src.llm_provider.entrypoint import CompletionResult
+from src.llm_provider.entrypoint import CompletionResult, LLMRequestClass
 
 debate_runner = get_debate_workflow_runner()
 debate_nodes = build_debate_nodes(debate_runner)
@@ -155,6 +158,9 @@ async def test_moderator_history_exposes_its_round_number():
 
     assert result["history"][0].name == "Judge"
     assert result["history"][0].additional_kwargs["round_num"] == 2
+    completion = provider.acomplete.await_args.args[0]
+    assert completion.request_class is LLMRequestClass.BACKGROUND
+    assert completion.timeout_seconds == DEBATE_LLM_TIMEOUT_SECONDS
 
 
 @pytest.mark.asyncio

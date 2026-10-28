@@ -3,10 +3,11 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from langchain_core.messages import AIMessage
 
+from src.agents.debate.application.debate_service import DEBATE_LLM_TIMEOUT_SECONDS
 from src.agents.debate.application.wiring import get_debate_workflow_runner
 from src.agents.debate.workflow.graph import _retryable_provider_error
 from src.agents.debate.workflow.nodes import build_debate_nodes
-from src.llm_provider.entrypoint import LLMErrorCode, LLMProviderError
+from src.llm_provider.entrypoint import LLMErrorCode, LLMProviderError, LLMRequestClass
 
 debate_runner = get_debate_workflow_runner()
 debate_nodes = build_debate_nodes(debate_runner)
@@ -67,16 +68,20 @@ async def test_verdict_provider_errors_propagate_with_retryability(
         retryable=retryable,
         attempt=2,
     )
+    mock_complete_structured = AsyncMock(side_effect=error)
     with patch.object(
         debate_runner.orchestrator.llm_provider,
         "acomplete_structured",
-        new=AsyncMock(side_effect=error),
+        new=mock_complete_structured,
     ):
         with pytest.raises(LLMProviderError) as raised:
             await verdict_node(state)
 
     assert raised.value is error
     assert _retryable_provider_error(raised.value) is retryable
+    request = mock_complete_structured.await_args.args[0]
+    assert request.completion.request_class is LLMRequestClass.BACKGROUND
+    assert request.completion.timeout_seconds == DEBATE_LLM_TIMEOUT_SECONDS
 
 
 @pytest.mark.asyncio

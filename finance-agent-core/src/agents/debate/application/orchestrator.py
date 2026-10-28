@@ -15,6 +15,7 @@ from src.agents.debate.application.debate_history_service import (
     build_verdict_history_text,
 )
 from src.agents.debate.application.debate_service import (
+    DEBATE_LLM_TIMEOUT_SECONDS,
     MAX_CHAR_HISTORY,
     execute_bear_round,
     execute_bull_round,
@@ -47,6 +48,7 @@ from src.llm_provider.entrypoint import (
     ChatRole,
     CompletionRequest,
     LLMProviderPort,
+    LLMRequestClass,
     ModelRoute,
     StructuredRequest,
 )
@@ -619,7 +621,8 @@ class DebateOrchestrator:
                 route=self.llm_route,
                 request_id=f"debate-verdict-{uuid4().hex}",
                 operation="debate.verdict",
-                timeout_seconds=60.0,
+                request_class=LLMRequestClass.BACKGROUND,
+                timeout_seconds=DEBATE_LLM_TIMEOUT_SECONDS,
             )
             conclusion = await self.llm_provider.acomplete_structured(
                 StructuredRequest[DebateVerdictDraft](

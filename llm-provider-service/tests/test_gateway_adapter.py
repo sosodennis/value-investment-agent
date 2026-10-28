@@ -511,16 +511,57 @@ class _Answer(BaseModel):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("synchronous", [False, True])
-@pytest.mark.parametrize("content", ['{"count":42}', '{"count":"invalid"}', "{}"])
-async def test_structured_completion_validates_response_model(
+async def test_structured_completion_accepts_valid_response(
     synchronous: bool,
-    content: str,
 ) -> None:
+    requests: list[dict[str, object]] = []
+
     def handler(request: httpx.Request) -> httpx.Response:
-        assert (
-            json.loads(request.content)["response_format"]["json_schema"]["schema"]
-            == _Answer.model_json_schema()
+        payload = json.loads(request.content)
+        requests.append(payload)
+        assert payload["response_format"]["json_schema"]["schema"] == (
+            _Answer.model_json_schema()
         )
+        return httpx.Response(
+            200, json={"choices": [{"message": {"content": '{"count":42}'}}]}
+        )
+
+    with httpx.Client(
+        transport=httpx.MockTransport(handler), base_url="https://gateway.test/v1"
+    ) as client:
+        async with httpx.AsyncClient(
+            transport=httpx.MockTransport(handler), base_url="https://gateway.test/v1"
+        ) as async_client:
+            provider = LiteLLMGatewayProvider(
+                _config(), client=client, async_client=async_client
+            )
+            request = StructuredRequest(completion=_request(), response_schema=_Answer)
+            token = set_provider_principal(ProviderPrincipal(user_id="alice"))
+            try:
+                result = (
+                    provider.complete_structured(request)
+                    if synchronous
+                    else await provider.acomplete_structured(request)
+                )
+            finally:
+                reset_provider_principal(token)
+
+    assert result.count == 42
+    assert len(requests) == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("synchronous", [False, True])
+async def test_structured_completion_retries_once_with_validation_paths(
+    synchronous: bool,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    requests: list[tuple[dict[str, object], httpx.Headers]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        payload = json.loads(request.content)
+        requests.append((payload, request.headers))
+        content = '{"count":"invalid"}' if len(requests) == 1 else '{"count":42}'
         return httpx.Response(
             200, json={"choices": [{"message": {"content": content}}]}
         )
@@ -537,19 +578,83 @@ async def test_structured_completion_validates_response_model(
             request = StructuredRequest(completion=_request(), response_schema=_Answer)
             token = set_provider_principal(ProviderPrincipal(user_id="alice"))
             try:
-                if content == '{"count":42}':
-                    result = (
-                        provider.complete_structured(request)
-                        if synchronous
-                        else await provider.acomplete_structured(request)
-                    )
-                    assert result.count == 42
-                else:
-                    with pytest.raises(LLMProviderError) as raised:
-                        if synchronous:
-                            provider.complete_structured(request)
-                        else:
-                            await provider.acomplete_structured(request)
-                    assert raised.value.code == LLMErrorCode.SCHEMA_VALIDATION_FAILED
+                result = (
+                    provider.complete_structured(request)
+                    if synchronous
+                    else await provider.acomplete_structured(request)
+                )
             finally:
                 reset_provider_principal(token)
+
+    assert result.count == 42
+    assert len(requests) == 2
+    first_payload, first_headers = requests[0]
+    retry_payload, retry_headers = requests[1]
+    assert len(retry_payload["messages"]) == len(first_payload["messages"]) + 1
+    correction_message = retry_payload["messages"][-1]
+    assert correction_message["role"] == "user"
+    assert "count: int_parsing" in correction_message["content"]
+    assert retry_payload["response_format"] == first_payload["response_format"]
+    assert retry_headers["x-request-id"] == first_headers["x-request-id"]
+    assert retry_headers["idempotency-key"] == "idem-120:schema-correction:1"
+    validation_log = next(
+        record
+        for record in caplog.records
+        if record.getMessage() == "structured LLM response failed contract validation"
+    )
+    assert validation_log.request_id == request.completion.request_id
+    assert validation_log.response_schema == "_Answer"
+    assert validation_log.structured_attempt == 1
+    assert validation_log.will_retry is True
+    assert validation_log.validation_issues == [
+        {"path": "count", "type": "int_parsing"}
+    ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("synchronous", [False, True])
+async def test_structured_completion_keeps_contract_strict_after_retry(
+    synchronous: bool,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(
+            200, json={"choices": [{"message": {"content": '{"count":"invalid"}'}}]}
+        )
+
+    with httpx.Client(
+        transport=httpx.MockTransport(handler), base_url="https://gateway.test/v1"
+    ) as client:
+        async with httpx.AsyncClient(
+            transport=httpx.MockTransport(handler), base_url="https://gateway.test/v1"
+        ) as async_client:
+            provider = LiteLLMGatewayProvider(
+                _config(), client=client, async_client=async_client
+            )
+            request = StructuredRequest(completion=_request(), response_schema=_Answer)
+            token = set_provider_principal(ProviderPrincipal(user_id="alice"))
+            try:
+                with pytest.raises(LLMProviderError) as raised:
+                    if synchronous:
+                        provider.complete_structured(request)
+                    else:
+                        await provider.acomplete_structured(request)
+            finally:
+                reset_provider_principal(token)
+
+    assert raised.value.code == LLMErrorCode.SCHEMA_VALIDATION_FAILED
+    assert len(requests) == 2
+    validation_logs = [
+        record
+        for record in caplog.records
+        if record.getMessage() == "structured LLM response failed contract validation"
+    ]
+    assert [record.structured_attempt for record in validation_logs] == [1, 2]
+    assert [record.will_retry for record in validation_logs] == [True, False]
+    assert all(
+        all("input" not in issue for issue in record.validation_issues)
+        for record in validation_logs
+    )

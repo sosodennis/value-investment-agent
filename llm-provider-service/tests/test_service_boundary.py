@@ -645,11 +645,19 @@ async def test_structured_completion_preserves_schema_and_response_decoding(
         finally:
             await gateway.aclose()
 
-    assert len(requests) == 1
+    expected_requests = 1 if content.startswith("{") else 2
+    assert len(requests) == expected_requests
     assert (
         json.loads(requests[0].content)["response_format"]["json_schema"]["schema"]
         == schema
     )
+    if expected_requests == 2:
+        retry_payload = json.loads(requests[1].content)
+        assert retry_payload["response_format"]["json_schema"]["schema"] == schema
+        assert retry_payload["messages"][-1]["role"] == "user"
+        assert (
+            "Return exactly one JSON object" in retry_payload["messages"][-1]["content"]
+        )
     if content.startswith("{"):
         assert response.status_code == 200
         assert json.loads(response.json()["result"]["text"]) == json.loads(content)
