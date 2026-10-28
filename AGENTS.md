@@ -134,6 +134,12 @@ class TraceableField(BaseModel, Generic[T]):
 *   **Tool Usage**: Agents should rely on tools (e.g., `edgartools`, `yfinance`) rather than internal knowledge.
 *   **Error Handling**: Fail gracefully with explicit error messages in the Agent State.
 
+### **3. Issue and Verification Gates**
+
+*   When implementation encounters an engineering compromise against issue acceptance criteria, canonical contracts, security/ownership boundaries, or shared system architecture, immediately record it in a linked GitHub issue labeled `blocker`.
+*   Resolve the underlying design gap in the owning system layer. A workaround or UI-only concealment does not resolve a blocker.
+*   Do not mark blocked work VERIFIED, merge it, or close its issue until the actual diff, relevant tests, Docker health, and end-to-end behavior have been inspected and pass.
+
 ## **Part 3: Project Skill Routing**
 
 *   **Task tracking**: Use Codex's task plan/checklist for multi-step work. Do not add or use a separate task-management protocol or project-local task-tracking artifacts in this repository.
@@ -143,3 +149,8 @@ class TraceableField(BaseModel, Generic[T]):
 *   **Agent failures and regressions**: Use `agent-debug-review-playbook` when diagnosing failures, degraded paths, regressions, or agent-specific quality risks; use pstack's general debugging skills for other work.
 *   **Architecture compliance**: `architecture-standard-enforcer` is the single project entry point for checking agent architecture rules. The referenced architecture standard is the source of hard rules.
 *   **Skill upkeep after architecture changes**: After completing a change that materially changes agent layer topology, subdomain ownership, workflow/state contracts, runtime boundaries, or cross-agent responsibilities, run `architecture-skill-maintainer`. It checks all three project-specific skills and updates only the guidance made stale by the change. A design proposal without an implemented architecture change does not trigger this step.
+
+## **Part 4: Disposable Legacy Data During Refactors**
+
+*   During a large refactor or model/schema migration, optimize for the target architecture and the quality of the new data model. If disposable legacy data blocks the target model, delete the old records and rebuild them in the target shape; do not spend implementation time on compatibility migrations, aliases, backfills, or shims whose only purpose is preserving obsolete disposable data.
+*   Before deleting anything, verify that the data belongs to the disposable local/refactor environment, record the reset scope and rebuild source, and regenerate the canonical fixtures/seeds. Never delete production or explicitly retained staging data implicitly; if retained data cannot satisfy the target model, stop and record a linked `blocker` issue with an explicit reset decision and recovery evidence.
