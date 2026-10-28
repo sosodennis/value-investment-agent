@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 
 from src.agents.fundamental.application.workflow_orchestrator.dto import (
@@ -150,7 +150,12 @@ class FundamentalWorkflowRunner:
             select_valuation_model_fn=select_valuation_model,
         )
 
-    async def run_valuation(self, state: Mapping[str, object]) -> FundamentalNodeResult:
+    async def run_valuation(
+        self,
+        state: Mapping[str, object],
+        *,
+        request_approval: Callable[[Mapping[str, object]], object],
+    ) -> FundamentalNodeResult:
         market_snapshot_override: dict[str, object] | None = None
         intent_state = read_intent_state(state)
         if intent_state.resolved_ticker:
@@ -206,6 +211,7 @@ class FundamentalWorkflowRunner:
             state,
             build_params_fn=_build_params_with_market_data,
             get_model_runtime_fn=ValuationModelRegistry.get_model_runtime,
+            request_approval_fn=lambda payload: request_approval(payload),
         )
 
 

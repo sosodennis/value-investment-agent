@@ -14,6 +14,8 @@ from src.analysis_runtime.domain.contracts import (
     TickerCandidate,
     TickerSelectionRequest,
     TickerSelectionResponse,
+    ValuationApprovalRequest,
+    ValuationApprovalResponse,
     WorkflowActivityIdentity,
     WorkflowAgentOutput,
     WorkflowAgentOutputEvent,
@@ -163,6 +165,61 @@ class InterruptingRunner:
             status="running",
             label="Ticker Resolution",
             attempt=kwargs["input_data"]["resuming_attempt"] + 1,
+        )
+
+
+class ApprovalInterruptingRunner:
+    def __init__(self) -> None:
+        self.calls: list[dict[str, object]] = []
+        self.responses: list[dict[str, object]] = []
+
+    async def run(self, **kwargs):
+        self.calls.append(kwargs)
+        input_data = kwargs["input_data"]
+        if "interrupt_response" not in input_data:
+            activity = Activity(
+                activity_id="fundamental.calculation",
+                thread_id=kwargs["thread_id"],
+                run_id=kwargs["run_id"],
+                scope_path=("fundamental_analysis", "calculation"),
+                kind="node",
+                status="waiting",
+                label="Review valuation assumptions",
+                attempt=1,
+            )
+            yield InteractionRequested(
+                activity=activity,
+                identity=InteractionIdentity(
+                    thread_id=kwargs["thread_id"],
+                    run_id=kwargs["run_id"],
+                    activity_id=activity.activity_id,
+                    interaction_id="approval-interaction-1",
+                ),
+                request=ValuationApprovalRequest(
+                    type="valuation_approval",
+                    contract_version="v1",
+                    ticker="AAPL",
+                    model_type="dcf_growth",
+                    title="Review valuation assumptions",
+                    description="Approve to run the deterministic valuation.",
+                    parameters={"wacc": 0.09, "terminal_growth": 0.025},
+                    audit_messages=["PASS: assumptions are consistent"],
+                ),
+            )
+            return
+
+        response = input_data["interrupt_response"]
+        assert isinstance(response, dict)
+        self.responses.append(response)
+        yield Activity(
+            activity_id=input_data["resuming_activity_id"],
+            thread_id=kwargs["thread_id"],
+            run_id=kwargs["run_id"],
+            scope_path=tuple(input_data["resuming_scope_path"]),
+            kind="node",
+            status="completed",
+            label="Review valuation assumptions",
+            attempt=input_data["resuming_attempt"] + 1,
         )
 
 
@@ -435,6 +492,99 @@ async def test_claimed_resume_recovers_after_runtime_restart() -> None:
         "type": "ticker_selection",
         "selected_symbol": "AAPL",
     }
+    assert (await repository.get_run(thread_id="thread")).status == "completed"
+    assert await repository.pending_resumes() == ()
+
+
+@pytest.mark.asyncio
+async def test_versioned_approval_resumes_once_and_rejects_stale_duplicate() -> None:
+    repository = InMemoryActivityRepository()
+    runner = ApprovalInterruptingRunner()
+    service = AnalysisRuntimeService(
+        repository=repository,
+        owner=Owner(),
+        runner=runner,
+    )
+    run_id = await service.start(
+        principal_id="user", thread_id="thread", input_data={"message": "AAPL"}
+    )
+    await asyncio.sleep(0)
+    await asyncio.sleep(0)
+    waiting = await service.snapshot(
+        principal_id="user", thread_id="thread", run_id=run_id
+    )
+    interaction = waiting.pending_interactions[0]
+    assert interaction.kind == "valuation_approval"
+    assert interaction.request.contract_version == "v1"
+
+    with pytest.raises(InvalidInteractionResponseError):
+        await service.resume(
+            principal_id="user",
+            identity=interaction.identity,
+            response=TickerSelectionResponse(
+                type="ticker_selection", selected_symbol="AAPL"
+            ),
+        )
+    assert (
+        await service.snapshot(principal_id="user", thread_id="thread", run_id=run_id)
+    ).run_status == "waiting"
+
+    response = ValuationApprovalResponse(
+        type="valuation_approval", contract_version="v1", decision="approve"
+    )
+    assert (
+        await service.resume(
+            principal_id="user", identity=interaction.identity, response=response
+        )
+        == run_id
+    )
+    await service._tasks["thread"]
+    assert runner.responses == [response.model_dump(mode="json")]
+    assert (await repository.get_run(thread_id="thread")).status == "completed"
+    with pytest.raises(InteractionNotAvailableError):
+        await service.resume(
+            principal_id="user", identity=interaction.identity, response=response
+        )
+    assert len(runner.calls) == 2
+
+
+@pytest.mark.asyncio
+async def test_approval_resume_command_recovers_after_runtime_restart() -> None:
+    repository = InMemoryActivityRepository()
+    initial_runner = ApprovalInterruptingRunner()
+    service = AnalysisRuntimeService(
+        repository=repository,
+        owner=Owner(),
+        runner=initial_runner,
+    )
+    run_id = await service.start(
+        principal_id="user", thread_id="thread", input_data={"message": "AAPL"}
+    )
+    await asyncio.sleep(0)
+    await asyncio.sleep(0)
+    waiting = await service.snapshot(
+        principal_id="user", thread_id="thread", run_id=run_id
+    )
+    interaction = waiting.pending_interactions[0]
+    response = ValuationApprovalResponse(
+        type="valuation_approval", contract_version="v1", decision="reject"
+    )
+    await repository.claim_interaction_response(
+        identity=interaction.identity,
+        response=response,
+        principal_id="user",
+        now=datetime.now(timezone.utc),
+    )
+
+    recovered_runner = ApprovalInterruptingRunner()
+    restarted = AnalysisRuntimeService(
+        repository=repository,
+        owner=Owner(),
+        runner=recovered_runner,
+    )
+    assert await restarted.recover_pending_resumes() == 1
+    await restarted._tasks["thread"]
+    assert recovered_runner.responses == [response.model_dump(mode="json")]
     assert (await repository.get_run(thread_id="thread")).status == "completed"
     assert await repository.pending_resumes() == ()
 

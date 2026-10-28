@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Annotated, Literal, TypeAlias
 
-from pydantic import BeforeValidator
+from pydantic import BeforeValidator, Field
 
 from src.shared.artifacts.model_shared import (
     symbol,
@@ -114,6 +114,14 @@ def _parse_debate_rounds(value: object) -> int:
     return int(to_number(value, "debate.debate_rounds"))
 
 
+def _parse_history_round_num(value: object) -> int | None:
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+        raise TypeError("debate history.round_num must be a positive integer or null")
+    return value
+
+
 def _parse_optional_debate_number(value: object) -> float | None:
     return to_optional_number(value, "debate.optional_number")
 
@@ -167,6 +175,10 @@ SupportingFactors: TypeAlias = Annotated[
     BeforeValidator(_parse_supporting_factors),
 ]
 DebateRounds: TypeAlias = Annotated[int, BeforeValidator(_parse_debate_rounds)]
+HistoryRoundNum: TypeAlias = Annotated[
+    Annotated[int, Field(ge=1)] | None,
+    BeforeValidator(_parse_history_round_num),
+]
 OptionalDebateNumber: TypeAlias = Annotated[
     float | None,
     BeforeValidator(_parse_optional_debate_number),

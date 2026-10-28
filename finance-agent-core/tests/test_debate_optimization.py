@@ -1,7 +1,8 @@
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from src.agents.debate.application.debate_service import execute_moderator_round
 from src.agents.debate.application.dto import DebateSourceLoadIssue
 from src.agents.debate.application.report_service import PreparedDebateReports
 from src.agents.debate.application.wiring import get_debate_workflow_runner
@@ -114,10 +115,46 @@ async def test_agent_uses_cached_reports():
             ),
         ),
     ):
-        await r1_bull_node(state)
+        command = await r1_bull_node(state)
 
         # Should NOT call prepare_debate_reports if cache exists
         mock_prepare.assert_not_called()
+        assert command.update["history"][0].additional_kwargs["round_num"] == 1
+
+
+@pytest.mark.asyncio
+async def test_moderator_history_exposes_its_round_number():
+    state = {
+        "intent_extraction": {"resolved_ticker": "AAPL"},
+        "history": [],
+        "bull_thesis": "Revenue growth remains durable.",
+        "bear_thesis": "Valuation limits upside.",
+        "context_summary_text": "Cached debate context.",
+        "facts_registry_text": "Cached evidence.",
+    }
+    provider = MagicMock()
+    provider.acomplete = AsyncMock(
+        return_value=CompletionResult(
+            request_id="test-moderator-round",
+            text="The bear case raises a material valuation risk.",
+            model="openrouter/auto",
+        )
+    )
+    detector = MagicMock()
+    detector.check_consensus.return_value = (0.2, False)
+
+    result = await execute_moderator_round(
+        state=state,
+        round_num=2,
+        system_prompt_template="{ticker}\n{facts_registry}\n{context_summary}",
+        llm_provider=provider,
+        llm_route=debate_runner.orchestrator.llm_route,
+        detector=detector,
+        source_reader=debate_runner.orchestrator.source_reader,
+    )
+
+    assert result["history"][0].name == "Judge"
+    assert result["history"][0].additional_kwargs["round_num"] == 2
 
 
 @pytest.mark.asyncio

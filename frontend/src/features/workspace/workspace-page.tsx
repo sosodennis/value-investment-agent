@@ -6,7 +6,7 @@ import { useAgent } from '@/hooks/useAgent';
 import { AGENT_CONFIGS } from '@/config/agents';
 import type { AgentInfo, AgentStatus, StandardAgentOutput } from '@/types/agents';
 import { WorkspaceOutputPanel } from './workspace-output-panel';
-import type { ConnectionState, TickerSelectionResponse, WorkflowInteraction } from '@/features/workflow';
+import type { ConnectionState, InteractionResponse, ValuationApprovalResponse, WorkflowInteraction } from '@/features/workflow';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -110,7 +110,7 @@ export function WorkspacePage({ assistantId = 'agent', initialTicker = null, ini
                         <TabsList aria-label="Workspace views" className="mb-4 h-auto w-full justify-start overflow-x-auto rounded-none border-b bg-transparent p-0">
                             {reportTabs.map((tab) => <TabsTrigger key={tab.id} value={tab.id} className="min-h-10 shrink-0 rounded-none border-b-2 border-transparent px-3 data-[state=active]:border-primary data-[state=active]:bg-transparent">{tab.label}</TabsTrigger>)}
                         </TabsList>
-                        <TabsContent value="activity"><ActivityPanel workflow={agent.workflow} onResumeInteraction={agent.submitCommand} isSubmitting={agent.isLoading} /></TabsContent>
+                        <TabsContent value="activity"><ActivityPanel workflow={agent.workflow} onResumeInteraction={agent.submitCommand} isSubmitting={agent.isSubmittingInteraction} /></TabsContent>
                         {reportTabs.filter((item): item is { id: Exclude<ReportTab, 'activity'>; label: string } => item.id !== 'activity').map((item) => <TabsContent key={item.id} value={item.id}><ReportPanel tab={item.id} outputs={agent.agentOutputs} statuses={agent.agentStatuses} ticker={ticker} /></TabsContent>)}
                     </Tabs>
                 </section>
@@ -134,7 +134,7 @@ function ConnectionBadge({ state }: { state: ConnectionState }) {
 
 function ActivityPanel({ workflow, onResumeInteraction, isSubmitting }: {
     workflow: ReturnType<typeof useAgent>['workflow'];
-    onResumeInteraction: (interaction: WorkflowInteraction, response: TickerSelectionResponse) => Promise<void>;
+    onResumeInteraction: (interaction: WorkflowInteraction, response: InteractionResponse) => Promise<void>;
     isSubmitting: boolean;
 }) {
     if (!workflow) return <div className="grid min-h-48 place-items-center border-y text-sm text-muted-foreground"><p>No workflow activity is available yet.</p></div>;
@@ -145,22 +145,38 @@ function ActivityPanel({ workflow, onResumeInteraction, isSubmitting }: {
         {workflow.runStatus === 'failed' && <Alert variant="destructive" role="alert"><CircleAlert className="size-4" /><AlertTitle>Run failed</AlertTitle><AlertDescription><span className="block">{workflow.failure?.message ?? activities.find((item) => item.status === 'failed')?.label ?? 'The workflow ended with a failure.'}</span>{workflow.failure && <span className="mt-1 block text-xs">Code: {workflow.failure.code} · {workflow.failure.retryable ? 'Retry may succeed' : 'Retry is not expected to change the result'}</span>}</AlertDescription></Alert>}
         {workflow.runStatus === 'cancelled' && <Alert variant="warning"><AlertTitle>Run cancelled</AlertTitle><AlertDescription>The workflow was cancelled and its current run has ended.</AlertDescription></Alert>}
         {workflow.runStatus === 'completed' && <Alert variant="success"><AlertTitle>Run completed</AlertTitle><AlertDescription>Agent activity has finished. Select a report tab to inspect available results.</AlertDescription></Alert>}
-        {pendingInteractions.map((item) => <TickerSelectionPrompt key={item.identity.interaction_id} interaction={item} disabled={isSubmitting} onSubmit={onResumeInteraction} />)}
         {activities.length === 0 ? <div className="border-y py-8 text-sm text-muted-foreground">No recent activity was returned for this run.</div> : <ol className="divide-y border-y" aria-label="Workflow activity">
-            {activities.map((item) => <li key={`${item.activity_id}:${item.attempt}:${item.status}`} className="grid grid-cols-[1.25rem_minmax(0,1fr)_auto] gap-3 py-3" style={{ paddingLeft: `${Math.min(3, Math.max(0, item.scope_path.length - 1)) * 12}px` }}>
-                <Activity aria-hidden="true" className={`mt-0.5 size-4 ${item.status === 'failed' ? 'text-destructive' : item.status === 'completed' ? 'text-success' : 'text-primary'}`} />
-                <div className="min-w-0"><p className="text-sm font-medium">{item.label}</p><p className="mt-0.5 truncate text-xs text-muted-foreground">{item.scope_path.join(' / ')} · {item.kind} · attempt {item.attempt}</p>{item.progress !== undefined && item.progress !== null && <div className="mt-2 flex items-center gap-2"><progress className="h-1.5 flex-1 accent-primary" max={100} value={item.progress} aria-label={`${item.label} progress`} /><span className="w-10 text-right text-xs tabular-nums text-muted-foreground">{item.progress}%</span></div>}</div>
-                <Badge variant={item.status === 'failed' ? 'destructive' : item.status === 'completed' ? 'success' : item.status === 'waiting' ? 'warning' : 'outline'}>{item.status}</Badge>
-            </li>)}
+            {activities.map((item) => {
+                const activityInteractions = pendingInteractions.filter((interaction) => interaction.identity.activity_id === item.activity_id);
+                return <li key={`${item.activity_id}:${item.attempt}:${item.status}`} className="grid grid-cols-[1.25rem_minmax(0,1fr)_auto] gap-3 py-3" style={{ paddingLeft: `${Math.min(3, Math.max(0, item.scope_path.length - 1)) * 12}px` }}>
+                    <Activity aria-hidden="true" className={`mt-0.5 size-4 ${item.status === 'failed' ? 'text-destructive' : item.status === 'completed' ? 'text-success' : 'text-primary'}`} />
+                    <div className="min-w-0"><p className="text-sm font-medium">{item.label}</p><p className="mt-0.5 truncate text-xs text-muted-foreground">{item.scope_path.join(' / ')} · {item.kind} · attempt {item.attempt}</p>{item.progress !== undefined && item.progress !== null && <div className="mt-2 flex items-center gap-2"><progress className="h-1.5 flex-1 accent-primary" max={100} value={item.progress} aria-label={`${item.label} progress`} /><span className="w-10 text-right text-xs tabular-nums text-muted-foreground">{item.progress}%</span></div>}
+                        {activityInteractions.map((interaction) => <PendingInteractionPrompt key={interaction.identity.interaction_id} interaction={interaction} disabled={isSubmitting} onSubmit={onResumeInteraction} />)}
+                    </div>
+                    <Badge variant={item.status === 'failed' ? 'destructive' : item.status === 'completed' ? 'success' : item.status === 'waiting' ? 'warning' : 'outline'}>{item.status}</Badge>
+                </li>;
+            })}
         </ol>}
+        {pendingInteractions.filter((interaction) => !activities.some((item) => item.activity_id === interaction.identity.activity_id)).map((interaction) => <PendingInteractionPrompt key={interaction.identity.interaction_id} interaction={interaction} disabled={isSubmitting} onSubmit={onResumeInteraction} />)}
         <p className="text-xs text-muted-foreground">Connection {connectionLabels[workflow.connection]} · activity cursor {workflow.cursor}</p>
     </div>;
 }
 
-function TickerSelectionPrompt({ interaction, disabled, onSubmit }: {
+function PendingInteractionPrompt({ interaction, disabled, onSubmit }: {
     interaction: WorkflowInteraction;
     disabled: boolean;
-    onSubmit: (interaction: WorkflowInteraction, response: TickerSelectionResponse) => Promise<void>;
+    onSubmit: (interaction: WorkflowInteraction, response: InteractionResponse) => Promise<void>;
+}) {
+    if (interaction.kind === 'ticker_selection') {
+        return <TickerSelectionPrompt interaction={interaction} disabled={disabled} onSubmit={onSubmit} />;
+    }
+    return <ValuationApprovalPrompt interaction={interaction} disabled={disabled} onSubmit={onSubmit} />;
+}
+
+function TickerSelectionPrompt({ interaction, disabled, onSubmit }: {
+    interaction: Extract<WorkflowInteraction, { kind: 'ticker_selection' }>;
+    disabled: boolean;
+    onSubmit: (interaction: WorkflowInteraction, response: InteractionResponse) => Promise<void>;
 }) {
     const [selectedSymbol, setSelectedSymbol] = useState('');
     const { request } = interaction;
@@ -192,6 +208,43 @@ function TickerSelectionPrompt({ interaction, disabled, onSubmit }: {
             </form>
         </CardContent>
     </Card>;
+}
+
+function ValuationApprovalPrompt({ interaction, disabled, onSubmit }: {
+    interaction: Extract<WorkflowInteraction, { kind: 'valuation_approval' }>;
+    disabled: boolean;
+    onSubmit: (interaction: WorkflowInteraction, response: InteractionResponse) => Promise<void>;
+}) {
+    const { request } = interaction;
+    const respond = (decision: ValuationApprovalResponse['decision']) => {
+        void onSubmit(interaction, {
+            type: 'valuation_approval',
+            contract_version: request.contract_version,
+            decision,
+        });
+    };
+    return <Alert variant="warning" role="alert" className="mt-3">
+        <CircleAlert className="size-4" />
+        <AlertTitle>{request.title}</AlertTitle>
+        <div className="col-start-2 grid gap-3 text-sm opacity-90">
+            <p>{request.description}</p>
+            <p className="font-medium text-foreground">{request.ticker} · {request.model_type}</p>
+            <details className="text-sm">
+                <summary className="cursor-pointer font-medium">Validated parameters ({Object.keys(request.parameters).length})</summary>
+                <dl className="mt-2 grid gap-x-4 gap-y-1 border-l pl-3 sm:grid-cols-[minmax(9rem,auto)_minmax(0,1fr)]">
+                    {Object.entries(request.parameters).map(([name, value]) => <div key={name} className="contents">
+                        <dt className="break-words text-muted-foreground">{name}</dt>
+                        <dd className="break-all tabular-nums">{typeof value === 'string' ? value : JSON.stringify(value)}</dd>
+                    </div>)}
+                </dl>
+            </details>
+            {request.audit_messages.length > 0 && <div><p className="text-sm font-medium text-foreground">Audit</p><ul className="mt-1 grid gap-1">{request.audit_messages.map((message, index) => <li key={`${index}:${message}`} className="break-words text-sm">{message}</li>)}</ul></div>}
+            <div className="flex flex-wrap gap-2">
+                <Button type="button" disabled={disabled} onClick={() => respond('approve')}>Approve valuation</Button>
+                <Button type="button" variant="outline" disabled={disabled} onClick={() => respond('reject')}>Reject calculation</Button>
+            </div>
+        </div>
+    </Alert>;
 }
 
 export function ReportPanel({ tab, outputs, statuses, ticker }: { tab: Exclude<ReportTab, 'activity'>; outputs: Record<string, StandardAgentOutput | null>; statuses: Record<string, AgentStatus>; ticker: string }) {

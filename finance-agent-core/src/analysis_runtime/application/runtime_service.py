@@ -18,9 +18,9 @@ from src.analysis_runtime.domain.contracts import (
     AnalysisRunPage,
     InteractionIdentity,
     InteractionRequested,
+    InteractionResponse,
     ReplayPage,
     RunStatus,
-    TickerSelectionResponse,
     WorkflowAgentOutput,
     WorkflowAgentOutputEvent,
     WorkflowEvent,
@@ -133,7 +133,7 @@ class AnalysisRuntimeService:
         *,
         principal_id: str,
         identity: InteractionIdentity,
-        response: TickerSelectionResponse,
+        response: InteractionResponse,
     ) -> str:
         await self._check_owner(principal_id=principal_id, thread_id=identity.thread_id)
         task = self._tasks.get(identity.thread_id)

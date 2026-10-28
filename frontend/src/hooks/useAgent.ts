@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { clientLogger } from '@/lib/logger';
 import type { AgentStatus, StandardAgentOutput } from '@/types/agents';
 import { buildArtifactUrl } from '@/features/artifacts/api';
-import { applyWorkflowEvent, boundedReconnectDelay, cancelWorkflowRun, consumeWorkflowEvents, createWorkflowActivityState, getActivitySnapshot, resumeWorkflowRun, startWorkflowRun, type TickerSelectionResponse, type WorkflowActivitySnapshot, type WorkflowInteraction } from '@/features/workflow';
+import { applyWorkflowEvent, boundedReconnectDelay, cancelWorkflowRun, consumeWorkflowEvents, createWorkflowActivityState, getActivitySnapshot, resumeWorkflowRun, startWorkflowRun, type InteractionId, type InteractionResponse, type WorkflowActivitySnapshot, type WorkflowInteraction } from '@/features/workflow';
 import { useAgentReducer } from './useAgentReducer';
 
 const makeThreadId = () => `thread_${Date.now()}`;
@@ -22,8 +22,10 @@ export function useAgent(assistantId = 'agent') {
     void assistantId;
     const { state, initSession, setRun, hydrateWorkflow, processWorkflowEvent, setConnection, addUserMessage, setError, reset } = useAgentReducer();
     const [isLoading, setIsLoading] = useState(false);
+    const [submittingInteractionId, setSubmittingInteractionId] = useState<InteractionId | null>(null);
     const [hasMore] = useState(false);
     const abortRef = useRef<AbortController | null>(null);
+    const submittingInteractionRef = useRef<InteractionId | null>(null);
 
     useEffect(() => () => abortRef.current?.abort(), []);
 
@@ -75,6 +77,8 @@ export function useAgent(assistantId = 'agent') {
     }, [hydrateWorkflow, processWorkflowEvent, setConnection]);
 
     const sendMessage = useCallback(async (content: string, newSession = false) => {
+        submittingInteractionRef.current = null;
+        setSubmittingInteractionId(null);
         setIsLoading(true);
         const threadId = newSession || !state.threadId ? makeThreadId() : state.threadId;
         if (threadId !== state.threadId) initSession(threadId);
@@ -89,7 +93,7 @@ export function useAgent(assistantId = 'agent') {
         } catch (error) { setError(toError(error, 'Failed to start workflow run.')); } finally { setIsLoading(false); }
     }, [addUserMessage, attachStream, hydrateWorkflow, initSession, setError, setRun, state.threadId]);
 
-    const submitCommand = useCallback(async (interaction: WorkflowInteraction, response: TickerSelectionResponse) => {
+    const submitCommand = useCallback(async (interaction: WorkflowInteraction, response: InteractionResponse) => {
         const currentInteraction = state.workflow?.interactions.get(interaction.identity.interaction_id);
         if (
             !state.threadId
@@ -102,7 +106,13 @@ export function useAgent(assistantId = 'agent') {
             setError('The workflow interaction is no longer available.');
             return;
         }
-        const text = `Selected ${response.selected_symbol}`;
+        const interactionId = currentInteraction.identity.interaction_id;
+        if (submittingInteractionRef.current === interactionId) return;
+        submittingInteractionRef.current = interactionId;
+        setSubmittingInteractionId(interactionId);
+        const text = response.type === 'ticker_selection'
+            ? `Selected ${response.selected_symbol}`
+            : response.decision === 'approve' ? 'Approved valuation' : 'Rejected valuation';
         addUserMessage({ id: `user_${Date.now()}`, role: 'user', content: text, type: 'text' });
         setIsLoading(true);
         try {
@@ -114,12 +124,20 @@ export function useAgent(assistantId = 'agent') {
             const snapshot = await getActivitySnapshot(state.threadId, { runId: run.run_id });
             hydrateWorkflow(snapshot);
             await attachStream(state.threadId, snapshot, run.run_id);
-        } catch (error) { setError(toError(error, 'Failed to resume workflow run.')); } finally { setIsLoading(false); }
+        } catch (error) { setError(toError(error, 'Failed to resume workflow run.')); } finally {
+            if (submittingInteractionRef.current === interactionId) {
+                submittingInteractionRef.current = null;
+                setSubmittingInteractionId(null);
+            }
+            setIsLoading(false);
+        }
     }, [addUserMessage, attachStream, hydrateWorkflow, setError, setRun, state.runId, state.threadId, state.workflow]);
 
     const loadHistory = useCallback(async (threadId: string, expectedRunId: string) => {
         abortRef.current?.abort();
         abortRef.current = null;
+        submittingInteractionRef.current = null;
+        setSubmittingInteractionId(null);
         reset();
         setConnection('disconnected');
         setIsLoading(true);
@@ -142,6 +160,8 @@ export function useAgent(assistantId = 'agent') {
     }, [hydrateWorkflow, setConnection, setError, state.runId, state.threadId]);
 
     const activeActivities = state.workflow ? [...state.workflow.active.values()] : [];
+    const isSubmittingInteraction = submittingInteractionId !== null
+        && state.workflow?.interactions.get(submittingInteractionId)?.status === 'pending';
     const agentStatuses: Record<string, AgentStatus> = {};
     for (const activity of activeActivities) {
         const id = activity.scope_path[0] ?? activity.activity_id;
@@ -169,6 +189,7 @@ export function useAgent(assistantId = 'agent') {
         submitCommand,
         loadHistory,
         isLoading,
+        isSubmittingInteraction,
         error: state.error,
         threadId: state.threadId,
         runId: state.runId,

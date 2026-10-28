@@ -15,6 +15,8 @@ from src.analysis_runtime.domain.contracts import (
     TickerCandidate,
     TickerSelectionRequest,
     TickerSelectionResponse,
+    ValuationApprovalRequest,
+    ValuationApprovalResponse,
     WorkflowInteractionEvent,
 )
 from src.analysis_runtime.domain.errors import (
@@ -166,6 +168,107 @@ async def test_sql_resume_claim_is_atomic_and_validates_candidate() -> None:
                 delete(WorkflowRunHistory).where(
                     WorkflowRunHistory.thread_id == thread_id
                 )
+            )
+            await session.commit()
+
+
+@pytest.mark.asyncio
+async def test_sql_approval_response_is_versioned_and_restart_recoverable() -> None:
+    await init_db()
+    thread_id = f"approval-resume-test-{uuid.uuid4()}"
+    run_id = str(uuid.uuid4())
+    activity_id = "fundamental.calculation"
+    now = datetime.now(timezone.utc)
+    repository = SqlAlchemyActivityRepository()
+    identity = InteractionIdentity(
+        thread_id=thread_id,
+        run_id=run_id,
+        activity_id=activity_id,
+        interaction_id=str(uuid.uuid4()),
+    )
+    requested = InteractionRequested(
+        activity=Activity(
+            activity_id=activity_id,
+            thread_id=thread_id,
+            run_id=run_id,
+            scope_path=("fundamental_analysis", "calculation"),
+            kind="node",
+            status="waiting",
+            label="Review valuation assumptions",
+            attempt=1,
+        ),
+        identity=identity,
+        request=ValuationApprovalRequest(
+            type="valuation_approval",
+            contract_version="v1",
+            ticker="AAPL",
+            model_type="dcf_growth",
+            title="Review valuation assumptions",
+            description="Approve before calculation.",
+            parameters={"wacc": 0.09},
+            audit_messages=["PASS: parameter set is valid"],
+        ),
+    )
+    await repository.set_run(
+        thread_id=thread_id,
+        run_id=run_id,
+        status="running",
+        now=now,
+        principal_id="user-1",
+    )
+    await repository.record_waiting_interaction(
+        requested=requested, principal_id="user-1", now=now
+    )
+
+    response = ValuationApprovalResponse(
+        type="valuation_approval", contract_version="v1", decision="reject"
+    )
+    try:
+        with pytest.raises(InvalidInteractionResponseError):
+            await repository.claim_interaction_response(
+                identity=identity,
+                response=TickerSelectionResponse(
+                    type="ticker_selection", selected_symbol="AAPL"
+                ),
+                principal_id="user-1",
+                now=now,
+            )
+        claimed = await repository.claim_interaction_response(
+            identity=identity,
+            response=response,
+            principal_id="user-1",
+            now=now,
+        )
+        assert claimed.response == response
+        pending = await repository.pending_resumes()
+        assert len(pending) == 1
+        assert pending[0].identity == identity
+        assert pending[0].response == response
+        assert pending[0].response.decision == "reject"
+    finally:
+        async with AsyncSessionLocal() as session:
+            await session.execute(
+                delete(WorkflowActivityEvent).where(
+                    WorkflowActivityEvent.thread_id == thread_id
+                )
+            )
+            await session.execute(
+                delete(WorkflowActivityCursor).where(
+                    WorkflowActivityCursor.thread_id == thread_id
+                )
+            )
+            await session.execute(
+                delete(WorkflowRunResume).where(
+                    WorkflowRunResume.thread_id == thread_id
+                )
+            )
+            await session.execute(
+                delete(WorkflowRunHistory).where(
+                    WorkflowRunHistory.thread_id == thread_id
+                )
+            )
+            await session.execute(
+                delete(WorkflowRun).where(WorkflowRun.thread_id == thread_id)
             )
             await session.commit()
 

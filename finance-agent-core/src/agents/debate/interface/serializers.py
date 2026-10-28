@@ -23,6 +23,16 @@ class DebateSourceDataLike(Protocol):
     technical_payload: JSONObject | None
 
 
+def _serialize_history_message(message: HistoryMessageLike) -> JSONObject:
+    payload = message.model_dump(mode="json")
+    additional_kwargs = payload.get("additional_kwargs")
+    if isinstance(additional_kwargs, Mapping):
+        round_num = additional_kwargs.get("round_num")
+        if round_num is not None:
+            payload["round_num"] = round_num
+    return payload
+
+
 def build_compressed_report_payload(
     *,
     ticker: str | None,
@@ -58,6 +68,6 @@ def build_final_report_payload(
         {
             **conclusion_data,
             "facts": [fact.model_dump(mode="json") for fact in valid_facts],
-            "history": [msg.model_dump(mode="json") for msg in history],
+            "history": [_serialize_history_message(msg) for msg in history],
         }
     )

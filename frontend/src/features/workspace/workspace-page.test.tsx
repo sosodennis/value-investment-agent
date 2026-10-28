@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
     createWorkflowActivityState,
@@ -85,10 +85,47 @@ const waitingInteraction = [...waitingWorkflow.interactions.values()].find(
 );
 if (!waitingInteraction) throw new Error('Ticker selection fixture failed to parse.');
 
+const approvalActivity = {
+    activity_id: 'fundamental.calculation',
+    thread_id: 'thread-1',
+    run_id: 'run-1',
+    scope_path: ['fundamental_analysis', 'calculation'],
+    kind: 'node',
+    status: 'waiting',
+    label: 'Review valuation assumptions',
+    attempt: 1,
+};
+const approvalInteraction = {
+    identity: {
+        thread_id: 'thread-1',
+        run_id: 'run-1',
+        activity_id: 'fundamental.calculation',
+        interaction_id: 'approval-1',
+    },
+    kind: 'valuation_approval',
+    status: 'pending',
+    request: {
+        type: 'valuation_approval',
+        contract_version: 'v1',
+        ticker: 'AAPL',
+        model_type: 'dcf_growth',
+        title: 'Review valuation assumptions',
+        description: 'Approve before deterministic calculation.',
+        parameters: { wacc: 0.09, terminal_growth: 0.025 },
+        audit_messages: ['PASS: assumptions are consistent'],
+    },
+};
+const approvalWorkflow = workflowState({
+    run_status: 'waiting',
+    active_activities: [approvalActivity],
+    recent_activities: [approvalActivity],
+    pending_interactions: [approvalInteraction],
+});
+
 function defaultHook(overrides: Record<string, unknown> = {}) {
     return {
         messages: [], sendMessage: hook.sendMessage, submitCommand: hook.submitCommand,
-        loadHistory: hook.loadHistory, isLoading: false, error: null, threadId: null,
+        loadHistory: hook.loadHistory, isLoading: false, isSubmittingInteraction: false, error: null, threadId: null,
         runId: null, connectionState: 'disconnected', cancelRun: hook.cancelRun,
         hasMore: false, agentStatuses: {}, agentOutputs: {}, workflow: null,
         activeActivities: [], ...overrides,
@@ -132,6 +169,34 @@ describe('WorkspacePage', () => {
         hook.value = defaultHook({ workflow: workflowState({ run_status: 'cancelled' }) });
         rerender(<WorkspacePage />);
         screen.getByText('Run cancelled');
+    });
+
+    it('shows versioned approval inline in the waiting activity and preserves it across report navigation', () => {
+        hook.value = defaultHook({
+            workflow: approvalWorkflow,
+            threadId: 'thread-1',
+            runId: 'run-1',
+        });
+        render(<WorkspacePage />);
+
+        const activityItems = within(screen.getByRole('list', { name: 'Workflow activity' })).getAllByRole('listitem');
+        const activityItem = activityItems[0];
+        if (!activityItem) throw new Error('Waiting activity row was not rendered.');
+        expect(within(activityItem).getAllByText('Review valuation assumptions').length).toBeGreaterThanOrEqual(2);
+        expect(within(activityItem).getByText('AAPL · dcf_growth')).toBeTruthy();
+        expect(within(activityItem).getByText('PASS: assumptions are consistent')).toBeTruthy();
+        expect(within(activityItem).getByText('Validated parameters (2)')).toBeTruthy();
+        expect(within(activityItem).getByRole('button', { name: 'Approve valuation' })).toBeTruthy();
+        expect(screen.queryByRole('dialog')).toBeNull();
+
+        fireEvent.click(screen.getByRole('tab', { name: 'Fundamental' }));
+        fireEvent.click(screen.getByRole('tab', { name: 'Activity' }));
+        expect(screen.getByRole('button', { name: 'Approve valuation' })).toBeTruthy();
+        fireEvent.click(screen.getByRole('button', { name: 'Approve valuation' }));
+        expect(hook.submitCommand).toHaveBeenCalledWith(
+            expect.objectContaining({ kind: 'valuation_approval' }),
+            { type: 'valuation_approval', contract_version: 'v1', decision: 'approve' },
+        );
     });
 
     it('renders safe typed failure provenance for a failed run', () => {
@@ -201,16 +266,31 @@ describe('WorkspacePage', () => {
             unobserve() {}
             disconnect() {}
         });
-        hook.value = defaultHook({ workflow: waitingWorkflow });
+        hook.value = defaultHook({ workflow: waitingWorkflow, isLoading: true });
         render(<WorkspacePage />);
 
-        fireEvent.click(screen.getByRole('radio', { name: /AAPL Apple Inc\./ }));
+        const aaplOption = screen.getByRole('radio', { name: /AAPL Apple Inc\./ });
+        expect(aaplOption.hasAttribute('disabled')).toBe(false);
+        fireEvent.click(aaplOption);
         fireEvent.click(screen.getByRole('button', { name: 'Continue with AAPL' }));
 
         expect(hook.submitCommand).toHaveBeenCalledWith(waitingInteraction, {
             type: 'ticker_selection',
             selected_symbol: 'AAPL',
         });
+    });
+
+    it('disables a pending ticker interaction only while its response is submitting', () => {
+        vi.stubGlobal('ResizeObserver', class {
+            observe() {}
+            unobserve() {}
+            disconnect() {}
+        });
+        hook.value = defaultHook({ workflow: waitingWorkflow, isLoading: true, isSubmittingInteraction: true });
+        render(<WorkspacePage />);
+
+        expect(screen.getByRole('radio', { name: /AAPL Apple Inc\./ }).hasAttribute('disabled')).toBe(true);
+        expect(screen.getByRole('button', { name: 'Continue with selected company' }).hasAttribute('disabled')).toBe(true);
     });
 
     it('shows waiting as unavailable when the snapshot has no pending interaction', () => {

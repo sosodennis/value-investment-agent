@@ -240,10 +240,89 @@ describe('artifact parsers', () => {
             primary_risk: 'Valuation',
             supporting_factors: ['Margin expansion'],
             debate_rounds: 3,
+            history: [
+                {
+                    name: 'GrowthHunter',
+                    role: 'ai',
+                    content: 'Round three bull argument',
+                    round_num: 3,
+                },
+            ],
         });
 
         expect(parsed.final_verdict).toBe('LONG');
         expect(parsed.debate_rounds).toBe(3);
+        expect(parsed.history?.[0]?.round_num).toBe(3);
+    });
+
+    it.each([0, 1.5, true, '2'])(
+        'rejects invalid debate history round number %s',
+        (roundNum) => {
+            expect(() =>
+                parseDebateArtifact({
+                    scenario_analysis: {
+                        bull_case: {
+                            probability: 40,
+                            outcome_description: 'Upside',
+                            price_implication: 'MODERATE_UP',
+                        },
+                        bear_case: {
+                            probability: 20,
+                            outcome_description: 'Downside',
+                            price_implication: 'MODERATE_DOWN',
+                        },
+                        base_case: {
+                            probability: 40,
+                            outcome_description: 'Flat',
+                            price_implication: 'FLAT',
+                        },
+                    },
+                    risk_profile: 'GROWTH_TECH',
+                    final_verdict: 'LONG',
+                    winning_thesis: 'Execution quality',
+                    primary_catalyst: 'AI demand',
+                    primary_risk: 'Valuation',
+                    supporting_factors: ['Margin expansion'],
+                    debate_rounds: 3,
+                    history: [{ content: 'Invalid round', round_num: roundNum }],
+                })
+            ).toThrow();
+        }
+    );
+
+    it('keeps legacy debate history without a round number', () => {
+        const parsed = parseDebateArtifact({
+            scenario_analysis: {
+                bull_case: {
+                    probability: 40,
+                    outcome_description: 'Upside',
+                    price_implication: 'MODERATE_UP',
+                },
+                bear_case: {
+                    probability: 20,
+                    outcome_description: 'Downside',
+                    price_implication: 'MODERATE_DOWN',
+                },
+                base_case: {
+                    probability: 40,
+                    outcome_description: 'Flat',
+                    price_implication: 'FLAT',
+                },
+            },
+            risk_profile: 'GROWTH_TECH',
+            final_verdict: 'LONG',
+            winning_thesis: 'Execution quality',
+            primary_catalyst: 'AI demand',
+            primary_risk: 'Valuation',
+            supporting_factors: ['Margin expansion'],
+            debate_rounds: 3,
+            history: [{ name: 'GrowthHunter', content: 'Legacy argument' }],
+        });
+
+        expect(parsed.history?.[0]).toEqual({
+            name: 'GrowthHunter',
+            content: 'Legacy argument',
+        });
     });
 
     it('accepts nullable optional fields in debate artifact', () => {

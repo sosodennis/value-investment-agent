@@ -19,6 +19,7 @@ from src.analysis_runtime.domain.contracts import (
     InteractionIdentity,
     InteractionRequested,
     TickerSelectionRequest,
+    ValuationApprovalRequest,
     WorkflowActivityIdentity,
     WorkflowAgentOutput,
 )
@@ -418,23 +419,27 @@ class LangGraphRunner(GraphRunner):
         if not isinstance(interrupt, LangGraphInterrupt):
             raise InvalidRunnerInterruptError("interrupt stream has an invalid request")
         value = interrupt.value
-        if not isinstance(value, Mapping) or value.get("type") != "ticker_selection":
-            raise InvalidRunnerInterruptError("unsupported interrupt request type")
-
-        candidates = value.get("candidates")
-        reason = value.get("reason")
+        if not isinstance(value, Mapping):
+            raise InvalidRunnerInterruptError("interrupt request must be an object")
         try:
-            request = TickerSelectionRequest.model_validate(
-                {
-                    "type": "ticker_selection",
-                    "title": "Ticker Resolution",
-                    "description": reason,
-                    "candidates": candidates,
-                }
-            )
+            if value.get("type") == "ticker_selection":
+                request = TickerSelectionRequest.model_validate(
+                    {
+                        "type": "ticker_selection",
+                        "title": "Ticker Resolution",
+                        "description": value.get("reason"),
+                        "candidates": value.get("candidates"),
+                    }
+                )
+            elif value.get("type") == "valuation_approval":
+                request = ValuationApprovalRequest.model_validate(value)
+            else:
+                raise InvalidRunnerInterruptError("unsupported interrupt request type")
+        except InvalidRunnerInterruptError:
+            raise
         except Exception as exc:
             raise InvalidRunnerInterruptError(
-                "ticker selection interrupt has an invalid payload"
+                "interrupt request has an invalid payload"
             ) from exc
 
         scoped_callbacks = [
@@ -446,11 +451,32 @@ class LangGraphRunner(GraphRunner):
             raise InvalidRunnerInterruptError(
                 "interrupt has no active application activity"
             )
-        deepest_scope_size = max(len(callback[1]) for _, callback in scoped_callbacks)
+
+        def callback_depth(
+            callback: tuple[Mapping[str, object], tuple[str, ...], str | None],
+        ) -> int:
+            depth = 0
+            parent_activity_id = callback[2]
+            visited: set[str] = set()
+            while parent_activity_id is not None:
+                parent_callback_id = parent_activity_id.removeprefix("langgraph:")
+                if (
+                    parent_callback_id not in active_callbacks
+                    or parent_callback_id in visited
+                ):
+                    break
+                visited.add(parent_callback_id)
+                depth += 1
+                parent_activity_id = active_callbacks[parent_callback_id][2]
+            return depth
+
+        deepest_callback_depth = max(
+            callback_depth(callback) for _, callback in scoped_callbacks
+        )
         deepest_callbacks = [
             (callback_id, callback)
             for callback_id, callback in scoped_callbacks
-            if len(callback[1]) == deepest_scope_size
+            if callback_depth(callback) == deepest_callback_depth
         ]
         if len({callback[1] for _, callback in deepest_callbacks}) > 1:
             raise InvalidRunnerInterruptError(

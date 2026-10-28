@@ -39,6 +39,30 @@ const interaction = (status: string = 'pending') => ({
     ...(status === 'responded' ? { response: { type: 'ticker_selection', selected_symbol: 'AAPL' } } : {}),
 });
 
+const approvalInteraction = (status: string = 'pending') => ({
+    identity: {
+        thread_id: 'thread-1',
+        run_id: 'run-1',
+        activity_id: 'fundamental.calculation',
+        interaction_id: 'approval-1',
+    },
+    kind: 'valuation_approval',
+    status,
+    request: {
+        type: 'valuation_approval',
+        contract_version: 'v1',
+        ticker: 'AAPL',
+        model_type: 'dcf_growth',
+        title: 'Review valuation assumptions',
+        description: 'Approve before deterministic calculation.',
+        parameters: { wacc: 0.09, terminal_growth: 0.025 },
+        audit_messages: ['PASS: assumptions are consistent'],
+    },
+    ...(status === 'responded' ? {
+        response: { type: 'valuation_approval', contract_version: 'v1', decision: 'approve' },
+    } : {}),
+});
+
 const activityEvent = (seqId: number, payload = activity(), eventId = `event-${seqId}`) => ({
     event_id: eventId,
     seq_id: seqId,
@@ -50,7 +74,7 @@ const activityEvent = (seqId: number, payload = activity(), eventId = `event-${s
     payload,
 });
 
-const interactionEvent = (seqId: number, payload = interaction()) => ({
+const interactionEvent = (seqId: number, payload: unknown = interaction()) => ({
     event_id: `event-${seqId}`,
     seq_id: seqId,
     event_version: 'v1',
@@ -128,6 +152,36 @@ describe('workflow event boundary', () => {
         expect(state.runStatus).toBe('completed');
         expect(state.active.size).toBe(1);
         expect(applyWorkflowEvent(state, completeDelta)).toBe(state);
+    });
+
+    it('parses and retains the versioned valuation approval through snapshot and response events', () => {
+        const pending = approvalInteraction();
+        const state = createWorkflowActivityState(parseWorkflowActivitySnapshot(snapshot({
+            run_status: 'waiting',
+            active_activities: [{ ...activity('waiting', 'fundamental.calculation'), scope_path: ['fundamental_analysis', 'calculation'] }],
+            recent_activities: [{ ...activity('waiting', 'fundamental.calculation'), scope_path: ['fundamental_analysis', 'calculation'] }],
+            pending_interactions: [pending],
+        })));
+        const parsed = [...state.interactions.values()][0];
+        expect(parsed?.kind).toBe('valuation_approval');
+        if (parsed?.kind !== 'valuation_approval') throw new Error('Approval interaction did not parse.');
+        expect(parsed.request.contract_version).toBe('v1');
+        expect(parsed.request.parameters.terminal_growth).toBe(0.025);
+
+        const responded = parseWorkflowEvent(interactionEvent(1, approvalInteraction('responded')));
+        if (responded.event_name !== 'workflow.interaction' || responded.payload.kind !== 'valuation_approval') {
+            throw new Error('Approval response event did not parse.');
+        }
+        if (responded.payload.status !== 'responded' || !responded.payload.response) throw new Error('Approval response was not present.');
+        expect(responded.payload.response.decision).toBe('approve');
+        expect(() => parseWorkflowEvent(interactionEvent(1, {
+            ...pending,
+            request: { ...pending.request, contract_version: 'v2' },
+        }))).toThrow(/contract_version/);
+        expect(() => parseWorkflowEvent(interactionEvent(1, {
+            ...pending,
+            kind: 'ticker_selection',
+        }))).toThrow(/request type/);
     });
 
     it('hydrates an exact run snapshot and rejects mismatched pending interactions', () => {

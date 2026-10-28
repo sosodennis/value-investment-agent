@@ -67,6 +67,56 @@ class TickerSelectionResponse(BaseModel):
     selected_symbol: str = Field(min_length=1, max_length=32)
 
 
+class ValuationApprovalRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["valuation_approval"]
+    contract_version: Literal["v1"]
+    ticker: str = Field(min_length=1, max_length=32)
+    model_type: str = Field(min_length=1, max_length=120)
+    title: str = Field(min_length=1, max_length=160)
+    description: str = Field(min_length=1, max_length=500)
+    parameters: dict[str, object]
+    audit_messages: list[str] = Field(max_length=100)
+
+    @model_validator(mode="after")
+    def bound_parameters(self) -> ValuationApprovalRequest:
+        try:
+            size = len(
+                json.dumps(
+                    self.parameters,
+                    ensure_ascii=False,
+                    allow_nan=False,
+                    separators=(",", ":"),
+                ).encode("utf-8")
+            )
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                "approval parameters must contain finite JSON values"
+            ) from exc
+        if size > MAX_AGENT_OUTPUT_PREVIEW_BYTES:
+            raise ValueError("approval parameters exceed 16 KiB")
+        return self
+
+
+class ValuationApprovalResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["valuation_approval"]
+    contract_version: Literal["v1"]
+    decision: Literal["approve", "reject"]
+
+
+InteractionRequest = Annotated[
+    TickerSelectionRequest | ValuationApprovalRequest,
+    Field(discriminator="type"),
+]
+InteractionResponse = Annotated[
+    TickerSelectionResponse | ValuationApprovalResponse,
+    Field(discriminator="type"),
+]
+
+
 class WorkflowActivityIdentity(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -106,7 +156,7 @@ class InteractionRequested(BaseModel):
 
     activity: Activity
     identity: InteractionIdentity
-    request: TickerSelectionRequest
+    request: InteractionRequest
 
     @model_validator(mode="after")
     def validate_identity(self) -> InteractionRequested:
@@ -129,19 +179,27 @@ class WorkflowInteraction(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     identity: InteractionIdentity
-    kind: Literal["ticker_selection"]
+    kind: Literal["ticker_selection", "valuation_approval"]
     status: Literal["pending", "responded", "cancelled"]
-    request: TickerSelectionRequest
-    response: TickerSelectionResponse | None = None
+    request: InteractionRequest
+    response: InteractionResponse | None = None
 
     @model_validator(mode="after")
     def validate_lifecycle(self) -> WorkflowInteraction:
         if (self.status == "responded") != (self.response is not None):
             raise ValueError("only a responded interaction may carry a response")
-        if self.response is not None and self.response.selected_symbol not in {
-            candidate.symbol for candidate in self.request.candidates
-        }:
-            raise ValueError("response must select one of the stored candidates")
+        if self.kind != self.request.type:
+            raise ValueError("interaction kind must match its request type")
+        if self.response is not None:
+            if self.response.type != self.request.type:
+                raise ValueError("response type must match its request type")
+            if (
+                isinstance(self.request, TickerSelectionRequest)
+                and isinstance(self.response, TickerSelectionResponse)
+                and self.response.selected_symbol
+                not in {candidate.symbol for candidate in self.request.candidates}
+            ):
+                raise ValueError("response must select one of the stored candidates")
         return self
 
 
@@ -254,7 +312,7 @@ class PendingResume(BaseModel):
 
     identity: InteractionIdentity
     principal_id: str
-    response: TickerSelectionResponse
+    response: InteractionResponse
     scope_path: tuple[str, ...] = Field(min_length=1)
     attempt: int = Field(ge=1)
 
@@ -263,7 +321,7 @@ class ClaimedInteractionResume(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     identity: InteractionIdentity
-    response: TickerSelectionResponse
+    response: InteractionResponse
     scope_path: tuple[str, ...] = Field(min_length=1)
     attempt: int = Field(ge=1)
     events: tuple[WorkflowEvent, ...]

@@ -32,8 +32,13 @@ class _FakeWorkflowAdapter:
         del state
         return self._result("run_model_selection", "calculation")
 
-    async def run_valuation(self, state: Mapping[str, object]) -> WorkflowNodeResult:
-        del state
+    async def run_valuation(
+        self,
+        state: Mapping[str, object],
+        *,
+        request_approval,
+    ) -> WorkflowNodeResult:
+        del state, request_approval
         return self._result("run_valuation", "END")
 
 

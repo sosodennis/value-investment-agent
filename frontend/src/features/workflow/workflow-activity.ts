@@ -23,7 +23,6 @@ export type EventId = Brand<string, 'EventId'>;
 
 type ContractActivity = components['schemas']['Activity'];
 type ContractActivityEvent = components['schemas']['ActivityEvent'];
-type ContractInteraction = components['schemas']['WorkflowInteraction'];
 type ContractInteractionEvent = components['schemas']['WorkflowInteractionEvent'];
 type ContractAgentOutput = components['schemas']['WorkflowAgentOutput'];
 type ContractAgentOutputEvent = components['schemas']['WorkflowAgentOutputEvent'];
@@ -35,6 +34,9 @@ export type ActivityKind = ContractActivity['kind'];
 export type TickerCandidate = components['schemas']['TickerCandidate'];
 export type TickerSelectionRequest = components['schemas']['TickerSelectionRequest'];
 export type TickerSelectionResponse = components['schemas']['TickerSelectionResponse'];
+export type ValuationApprovalRequest = components['schemas']['ValuationApprovalRequest'];
+export type ValuationApprovalResponse = components['schemas']['ValuationApprovalResponse'];
+export type InteractionResponse = TickerSelectionResponse | ValuationApprovalResponse;
 export type WorkflowRunStatus = ContractSnapshot['run_status'];
 export type WorkflowFailure = ContractFailure;
 export type ConnectionState = 'disconnected' | 'connecting' | 'connected' | 'reconnecting' | 'closed';
@@ -52,9 +54,21 @@ export type InteractionIdentity = Omit<components['schemas']['InteractionIdentit
     interaction_id: InteractionId;
 };
 
-export type WorkflowInteraction = Omit<ContractInteraction, 'identity'> & {
-    identity: InteractionIdentity;
-};
+type InteractionLifecycle<Response> =
+    | { status: 'pending' | 'cancelled'; response?: never }
+    | { status: 'responded'; response: Response };
+
+export type WorkflowInteraction =
+    | ({
+        identity: InteractionIdentity;
+        kind: 'ticker_selection';
+        request: TickerSelectionRequest;
+    } & InteractionLifecycle<TickerSelectionResponse>)
+    | ({
+        identity: InteractionIdentity;
+        kind: 'valuation_approval';
+        request: ValuationApprovalRequest;
+    } & InteractionLifecycle<ValuationApprovalResponse>);
 
 export type WorkflowAgentOutput = Omit<ContractAgentOutput, 'identity'> & {
     identity: Omit<components['schemas']['WorkflowActivityIdentity'], 'activity_id' | 'thread_id' | 'run_id'> & {
@@ -244,6 +258,54 @@ function parseTickerResponse(value: unknown, context: string): TickerSelectionRe
     };
 }
 
+function isJsonValue(value: unknown): boolean {
+    if (value === null || typeof value === 'string' || typeof value === 'boolean') return true;
+    if (typeof value === 'number') return Number.isFinite(value);
+    if (Array.isArray(value)) return value.every(isJsonValue);
+    if (!isUnknownRecord(value)) return false;
+    return Object.values(value).every(isJsonValue);
+}
+
+function parseValuationApprovalRequest(value: unknown, context: string): ValuationApprovalRequest {
+    const input = record(value, context);
+    onlyKeys(input, [
+        'type', 'contract_version', 'ticker', 'model_type', 'title', 'description',
+        'parameters', 'audit_messages',
+    ], context);
+    const parameters = record(input.parameters, `${context}.parameters`);
+    const serializedParameters = JSON.stringify(parameters);
+    if (
+        !isJsonValue(parameters)
+        || serializedParameters === undefined
+        || new TextEncoder().encode(serializedParameters).byteLength > 16 * 1024
+    ) {
+        throw new TypeError(`${context}.parameters must be finite JSON no larger than 16 KiB.`);
+    }
+    if (!Array.isArray(input.audit_messages) || input.audit_messages.length > 100) {
+        throw new TypeError(`${context}.audit_messages must contain at most 100 messages.`);
+    }
+    return {
+        type: oneOf(input.type, ['valuation_approval'], `${context}.type`),
+        contract_version: oneOf(input.contract_version, ['v1'], `${context}.contract_version`),
+        ticker: string(input.ticker, `${context}.ticker`),
+        model_type: string(input.model_type, `${context}.model_type`),
+        title: string(input.title, `${context}.title`),
+        description: string(input.description, `${context}.description`),
+        parameters,
+        audit_messages: input.audit_messages.map((item, index) => string(item, `${context}.audit_messages[${index}]`)),
+    };
+}
+
+function parseValuationApprovalResponse(value: unknown, context: string): ValuationApprovalResponse {
+    const input = record(value, context);
+    onlyKeys(input, ['type', 'contract_version', 'decision'], context);
+    return {
+        type: oneOf(input.type, ['valuation_approval'], `${context}.type`),
+        contract_version: oneOf(input.contract_version, ['v1'], `${context}.contract_version`),
+        decision: oneOf(input.decision, ['approve', 'reject'], `${context}.decision`),
+    };
+}
+
 function parseWorkflowFailure(value: unknown, context: string): WorkflowFailure {
     const input = record(value, context);
     onlyKeys(input, ['code', 'owner', 'activity_id', 'retryable', 'message'], context);
@@ -307,25 +369,36 @@ function parseInteractionIdentity(value: unknown, context: string): InteractionI
 function parseWorkflowInteraction(value: unknown, context: string): WorkflowInteraction {
     const input = record(value, context);
     onlyKeys(input, ['identity', 'kind', 'status', 'request', 'response'], context);
-    const request = parseTickerRequest(input.request, `${context}.request`);
     const status = oneOf(input.status, ['pending', 'responded', 'cancelled'], `${context}.status`);
-    const response = input.response === undefined || input.response === null
-        ? input.response
-        : parseTickerResponse(input.response, `${context}.response`);
-    if ((status === 'responded') !== (response !== undefined && response !== null)) {
+    const hasResponse = input.response !== undefined && input.response !== null;
+    if (status === 'responded' && !hasResponse) {
         throw new TypeError(`${context} response is only valid for a responded interaction.`);
     }
-    if (response && !request.candidates.some((candidate) => candidate.symbol === response.selected_symbol)) {
-        throw new TypeError(`${context}.response must select a stored candidate.`);
+    if (status !== 'responded' && hasResponse) {
+        throw new TypeError(`${context} response is only valid for a responded interaction.`);
     }
-    const interaction: WorkflowInteraction = {
-        identity: parseInteractionIdentity(input.identity, `${context}.identity`),
-        kind: oneOf(input.kind, ['ticker_selection'], `${context}.kind`),
-        status,
-        request,
-    };
-    if (response !== undefined) interaction.response = response;
-    return interaction;
+    const identity = parseInteractionIdentity(input.identity, `${context}.identity`);
+    const kind = oneOf(input.kind, ['ticker_selection', 'valuation_approval'], `${context}.kind`);
+    const rawRequest = record(input.request, `${context}.request`);
+    if (rawRequest.type !== kind) throw new TypeError(`${context}.kind must match its request type.`);
+    if (kind === 'ticker_selection') {
+        const request = parseTickerRequest(input.request, `${context}.request`);
+        if (status !== 'responded') return { identity, kind, status, request };
+        const response = parseTickerResponse(input.response, `${context}.response`);
+        if (response.type !== kind) throw new TypeError(`${context}.response type must match its request.`);
+        if (!request.candidates.some((candidate) => candidate.symbol === response.selected_symbol)) {
+            throw new TypeError(`${context}.response must select a stored candidate.`);
+        }
+        return { identity, kind, status: 'responded', request, response };
+    }
+
+    const request = parseValuationApprovalRequest(input.request, `${context}.request`);
+    if (status !== 'responded') return { identity, kind, status, request };
+    const response = parseValuationApprovalResponse(input.response, `${context}.response`);
+    if (response.type !== kind || response.contract_version !== request.contract_version) {
+        throw new TypeError(`${context}.response contract must match its request.`);
+    }
+    return { identity, kind, status: 'responded', request, response };
 }
 
 function parseOutputIdentity(value: unknown, context: string): WorkflowAgentOutput['identity'] {

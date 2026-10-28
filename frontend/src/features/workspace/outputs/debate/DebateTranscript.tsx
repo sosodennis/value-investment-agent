@@ -1,203 +1,233 @@
-
-import React from 'react';
 import ReactMarkdown from 'react-markdown';
-import { TrendingUp, TrendingDown, Gavel, Database, Newspaper, BarChart4, ShieldCheck } from 'lucide-react';
+import { BarChart4, Database, Gavel, Newspaper, ShieldCheck, TrendingDown, TrendingUp } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader } from '@/components/ui/card';
-
-interface Message {
-    name?: string;
-    role?: string; // 'system' | 'human' | 'ai'
-    content: string;
-}
+import type { DebateHistoryMessage } from '@/types/agents/debate';
+import { groupDebateHistoryByRound, type DebateSpeaker } from './debate-transcript-model';
 
 interface DebateTranscriptProps {
-    history: Message[];
+    history: DebateHistoryMessage[];
 }
 
-const SourceBadge = ({
-    source,
-    type = 'source',
-    onClick,
-}: {
+type SourceBadgeProps = {
     source: string;
     type?: 'source' | 'fact';
-    onClick?: () => void;
-}) => {
-    let variant: 'default' | 'success' | 'warning' | 'outline' = 'outline';
-    let icon = <ShieldCheck className="w-2.5 h-2.5" />;
+    onFactSelect?: (factId: string) => void;
+};
 
-    if (type === 'fact') {
-        if (source.startsWith('F')) {
-            variant = 'success';
-            icon = <Database className="w-2.5 h-2.5" />;
-        } else if (source.startsWith('N')) {
-            variant = 'default';
-            icon = <Newspaper className="w-2.5 h-2.5" />;
-        } else if (source.startsWith('T')) {
-            variant = 'warning';
-            icon = <BarChart4 className="w-2.5 h-2.5" />;
-        }
-    } else if (source.includes('Financials') || source.includes('SEC')) {
-        variant = 'success';
-        icon = <Database className="w-2.5 h-2.5" />;
-    } else if (source.includes('News')) {
-        variant = 'default';
-        icon = <Newspaper className="w-2.5 h-2.5" />;
-    } else if (source.includes('Technicals')) {
-        variant = 'warning';
-        icon = <BarChart4 className="w-2.5 h-2.5" />;
-    }
+function SourceBadge({ source, type = 'source', onFactSelect }: SourceBadgeProps) {
+    const icon = type === 'fact' ? <FactIcon factId={source} /> : <SourceIcon source={source} />;
+    const variant = type === 'fact' ? factBadgeVariant(source) : 'outline';
+    const sourceBadge = (
+        <Badge variant={variant} className="mx-1 inline-flex align-middle gap-1">
+            {icon}
+            {source}
+        </Badge>
+    );
 
-    const badge = <Badge variant={variant} className="mx-1 inline-flex align-middle gap-1">{icon}{source}</Badge>;
-    return type === 'fact' && onClick ? (
+    if (type !== 'fact' || !onFactSelect) return sourceBadge;
+
+    return (
         <Button
             type="button"
             variant="ghost"
             size="sm"
-            className="h-auto min-h-0 rounded-md p-0 align-middle"
-            onClick={onClick}
+            className="h-auto min-h-0 rounded p-0 align-middle"
+            onClick={() => onFactSelect(source)}
             aria-label={`Show evidence ${source}`}
         >
-            {badge}
+            {sourceBadge}
         </Button>
-    ) : badge;
-};
+    );
+}
 
-// Helper: Convert [Source: X] tags to Markdown image syntax
-// This allows ReactMarkdown to parse them as images, which we then intercept
-const preprocessMarkdown = (content: string) => {
-    // Regex matches [Source: X] possibly wrapped in backticks
-    let processed = content.replace(/[`]?\[Source:\s*([^\]]+)\][`]?/g, (_, source) => {
-        return `![SOURCE:${source}](badge)`;
-    });
+function SourceIcon({ source }: { source: string }) {
+    if (source.includes('Financial') || source.includes('SEC')) return <Database aria-hidden="true" className="size-3" />;
+    if (source.includes('News')) return <Newspaper aria-hidden="true" className="size-3" />;
+    if (source.includes('Technical')) return <BarChart4 aria-hidden="true" className="size-3" />;
+    return <ShieldCheck aria-hidden="true" className="size-3" />;
+}
 
-    // Regex matches [Fact: X] possibly wrapped in backticks
-    processed = processed.replace(/[`]?\[Fact:\s*([^\]]+)\][`]?/g, (_, factId) => {
-        return `![FACT:${factId}](badge)`;
-    });
+function FactIcon({ factId }: { factId: string }) {
+    if (factId.startsWith('F')) return <Database aria-hidden="true" className="size-3" />;
+    if (factId.startsWith('N')) return <Newspaper aria-hidden="true" className="size-3" />;
+    if (factId.startsWith('T')) return <BarChart4 aria-hidden="true" className="size-3" />;
+    return <ShieldCheck aria-hidden="true" className="size-3" />;
+}
 
-    return processed;
-};
+function factBadgeVariant(source: string): 'success' | 'default' | 'warning' | 'outline' {
+    if (source.startsWith('F')) return 'success';
+    if (source.startsWith('N')) return 'default';
+    if (source.startsWith('T')) return 'warning';
+    return 'outline';
+}
 
-export const DebateTranscript: React.FC<DebateTranscriptProps> = ({ history }) => {
-    if (!history || history.length === 0) return null;
-    const visibleMessages = history.filter((message) => message.role !== 'system');
+function preprocessMarkdown(content: string) {
+    return content
+        .replace(/[`]?\[Source:\s*([^\]]+)\][`]?/g, (_, source: string) => `![SOURCE:${source}](badge)`)
+        .replace(/[`]?\[Fact:\s*([^\]]+)\][`]?/g, (_, factId: string) => `![FACT:${factId}](badge)`);
+}
 
-    const scrollToFact = (factId: string) => {
-        const el = document.getElementById(`fact-${factId}`);
-        if (!el) return;
-        el.scrollIntoView({ behavior: "smooth", block: "center" });
-        el.classList.add('ring-2', 'ring-primary/60');
-        window.setTimeout(() => {
-            el.classList.remove('ring-2', 'ring-primary/60');
-        }, 1400);
-    };
+function getSpeaker(name: string | undefined): DebateSpeaker | undefined {
+    if (name === 'GrowthHunter') return 'bull';
+    if (name === 'ForensicAccountant') return 'bear';
+    if (name === 'Judge') return 'moderator';
+    return undefined;
+}
+
+function scrollToFact(factId: string) {
+    const target = document.getElementById(`fact-${factId}`);
+    if (!target) return;
+
+    const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+    target.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'center' });
+    target.focus({ preventScroll: true });
+}
+
+function MessageBody({ message }: { message: DebateHistoryMessage }) {
+    return (
+        <div className="min-w-0 break-words text-sm leading-6 text-foreground">
+            <ReactMarkdown
+                components={{
+                    p: ({ children }) => <p className="mb-3 last:mb-0" >{children}</p>,
+                    strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+                    em: ({ children }) => <em className="italic">{children}</em>,
+                    h1: ({ children }) => <h4 className="mb-2 mt-4 text-base font-semibold first:mt-0">{children}</h4>,
+                    h2: ({ children }) => <h5 className="mb-2 mt-4 text-sm font-semibold first:mt-0">{children}</h5>,
+                    ul: ({ children }) => <ul className="mb-3 list-disc space-y-1 pl-5 last:mb-0">{children}</ul>,
+                    ol: ({ children }) => <ol className="mb-3 list-decimal space-y-1 pl-5 last:mb-0">{children}</ol>,
+                    li: ({ children }) => <li>{children}</li>,
+                    blockquote: ({ children }) => <blockquote className="my-3 border-l-2 border-border pl-3 text-muted-foreground">{children}</blockquote>,
+                    code: ({ children }) => <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">{children}</code>,
+                    img: ({ src, alt }) => {
+                        if (src !== 'badge' || !alt) return null;
+                        if (alt.startsWith('SOURCE:')) return <SourceBadge source={alt.slice('SOURCE:'.length)} />;
+                        if (alt.startsWith('FACT:')) {
+                            return <SourceBadge source={alt.slice('FACT:'.length)} type="fact" onFactSelect={scrollToFact} />;
+                        }
+                        return null;
+                    },
+                }}
+            >
+                {preprocessMarkdown(message.content)}
+            </ReactMarkdown>
+        </div>
+    );
+}
+
+function RoundRoleCard({ speaker, messages }: { speaker: DebateSpeaker; messages: DebateHistoryMessage[] }) {
+    const presentation = {
+        bull: { label: 'Bull case', icon: TrendingUp, tone: 'text-success' },
+        bear: { label: 'Bear case', icon: TrendingDown, tone: 'text-destructive' },
+        moderator: { label: 'Moderator review', icon: Gavel, tone: 'text-primary' },
+    }[speaker];
+    const SpeakerIcon = presentation.icon;
 
     return (
-        <Card className="mt-4 overflow-hidden">
-            <CardHeader className="flex-row items-center justify-between gap-3 bg-muted/40 p-4">
-                <div className="flex items-center gap-3">
-                    <Gavel aria-hidden="true" className="size-4 text-primary" />
-                    <h3 className="text-base font-semibold">Debate transcript</h3>
+        <article aria-label={presentation.label} className="min-w-0 rounded-md border bg-card p-4">
+            <header className="mb-3 flex items-center gap-2">
+                <SpeakerIcon aria-hidden="true" className={`size-4 ${presentation.tone}`} />
+                <h4 className={`text-sm font-semibold ${presentation.tone}`}>{presentation.label}</h4>
+            </header>
+            {messages.length > 0 ? (
+                <div className="space-y-4">
+                    {messages.map((message, index) => (
+                        <div key={`${message.round_num ?? 'legacy'}-${message.name ?? 'agent'}-${index}`}>
+                            {message.role && <p className="mb-2 text-xs text-muted-foreground">{message.role}</p>}
+                            <MessageBody message={message} />
+                        </div>
+                    ))}
                 </div>
-                <Badge variant="outline">{visibleMessages.length} messages</Badge>
-            </CardHeader>
-
-            <CardContent className="max-h-[600px] overflow-y-auto bg-background p-4 sm:p-5">
-                <div className="space-y-10 relative">
-                    {visibleMessages.map((msg, idx) => {
-                        const isBull = msg.name === 'GrowthHunter';
-                        const isBear = msg.name === 'ForensicAccountant';
-                        const isJudge = msg.name === 'Judge';
-
-                        let avatarIcon = <div className="w-full h-full bg-muted" />;
-                        const nameDisplay = msg.name || 'Agent';
-                        let roleColor = "text-muted-foreground";
-                        let ringColor = "border-border/30";
-                        let accentBorder = 'border-l-border/40';
-
-                        if (isBull) {
-                            avatarIcon = <TrendingUp className="w-4 h-4 text-success " />;
-                            roleColor = "text-success";
-                            ringColor = "border-success/30";
-                            accentBorder = 'border-l-success/50';
-                        } else if (isBear) {
-                            avatarIcon = <TrendingDown className="w-4 h-4 text-destructive" />;
-                            roleColor = "text-destructive";
-                            ringColor = "border-destructive/30";
-                            accentBorder = 'border-l-destructive/50';
-                        } else if (isJudge) {
-                            avatarIcon = <Gavel className="w-4 h-4 text-primary" />;
-                            roleColor = "text-primary";
-                            ringColor = "border-primary/30";
-                            accentBorder = 'border-l-primary/50';
-                        }
-
-                        return (
-                            <div
-                                key={idx}
-                                className="flex gap-6 group relative "
-                                style={{ animationDelay: `${idx * 0.1}s` }}
-                            >
-                                <div className={`z-10 w-9 h-9 rounded-full border-2 ${ringColor} bg-background flex items-center justify-center shrink-0  transition-transform duration-300 group-hover:scale-110`}>
-                                    {avatarIcon}
-                                </div>
-                                <div className="flex flex-col gap-2 w-full min-w-0">
-                                    <div className="flex items-center gap-3">
-                                        <span className={`text-[10px] font-black uppercase tracking-[0.2em] ${roleColor} flex items-center gap-2`}>
-                                            {nameDisplay}
-                                            <span className="w-1 h-1 rounded-full bg-muted" />
-                                            <span className="text-muted-foreground font-medium tracking-normal lowercase">{msg.role}</span>
-                                        </span>
-                                        <div className="h-px bg-muted/50 flex-grow" />
-                                    </div>
-                                    <div className={`p-5 rounded-lg border border-border/10 border-l-2 bg-muted/50 transition duration-300 group-hover:border-border/30 ${accentBorder}`}>
-                                        <div className="text-[14px] leading-relaxed text-muted-foreground font-sans tracking-tight break-words">
-                                            <ReactMarkdown
-                                                components={{
-                                                    p: (props) => <p className="mb-4 last:mb-0" {...props} />,
-                                                    strong: (props) => <strong className="font-bold text-foreground tracking-tight" {...props} />,
-                                                    em: (props) => <em className="italic text-muted-foreground border-b border-border/30 pb-0.5" {...props} />,
-                                                    h1: (props) => <h1 className="text-lg font-black text-foreground mt-6 mb-3 uppercase tracking-wider flex items-center gap-2 before:content-[''] before:w-1 before:h-4 before:bg-primary" {...props} />,
-                                                    h2: (props) => <h2 className="text-base font-bold text-foreground mt-5 mb-2 border-b border-border/30 pb-1" {...props} />,
-                                                    ul: (props) => <ul className="space-y-2 mb-4 list-none pl-1" {...props} />,
-                                                    li: (props) => (
-                                                        <li className="relative pl-5 mb-3 leading-relaxed before:content-['›'] before:absolute before:left-0 before:top-0 before:text-primary before:font-bold before:text-lg before:leading-none" {...props} />
-                                                    ),
-                                                    blockquote: (props) => (
-                                                        <blockquote className="border-l-2 border-border/50 pl-4 py-1 my-4 italic text-muted-foreground bg-white/2 rounded-r" {...props} />
-                                                    ),
-                                                    code: (props) => (
-                                                        <code className="bg-background px-1.5 py-0.5 rounded font-mono text-[13px] text-primary border border-border/30" {...props} />
-                                                    ),
-                                                    // Intercept images to render badges
-                                                    img: ({ src, alt }) => {
-                                                        if (src === 'badge') {
-                                                            if (alt?.startsWith('SOURCE:')) {
-                                                                const sourceName = alt.replace('SOURCE:', '');
-                                                                return <SourceBadge source={sourceName} />;
-                                                            }
-                                                            if (alt?.startsWith('FACT:')) {
-                                                                const factId = alt.replace('FACT:', '');
-                                                                return <SourceBadge source={factId} type="fact" onClick={() => scrollToFact(factId)} />;
-                                                            }
-                                                        }
-                                                        return null;
-                                                    }
-                                                }}
-                                            >
-                                                {preprocessMarkdown(msg.content)}
-                                            </ReactMarkdown>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        );
-                    })}
-                </div>
-            </CardContent>
-        </Card>
+            ) : (
+                <p className="text-sm text-muted-foreground">
+                    No {speaker === 'moderator' ? 'moderator review' : `${speaker} argument`} was recorded for this round.
+                </p>
+            )}
+        </article>
     );
-};
+}
+
+function TranscriptMessage({ message, index }: { message: DebateHistoryMessage; index: number }) {
+    const speaker = getSpeaker(message.name);
+    const label = speaker === 'bull'
+        ? 'Bull'
+        : speaker === 'bear'
+          ? 'Bear'
+          : speaker === 'moderator'
+            ? 'Moderator'
+            : message.name || 'Agent';
+    const SpeakerIcon = speaker === 'bull' ? TrendingUp : speaker === 'bear' ? TrendingDown : Gavel;
+    const tone = speaker === 'bull'
+        ? 'text-success'
+        : speaker === 'bear'
+          ? 'text-destructive'
+          : speaker === 'moderator'
+            ? 'text-primary'
+            : 'text-muted-foreground';
+
+    return (
+        <article aria-label={`${label} transcript message ${index + 1}`} className="grid min-w-0 grid-cols-[1rem_minmax(0,1fr)] gap-3 border-b py-4 last:border-b-0">
+            <SpeakerIcon aria-hidden="true" className={`mt-1 size-4 ${tone}`} />
+            <div className="min-w-0">
+                <header className="mb-2 flex flex-wrap items-center gap-2">
+                    <h4 className={`text-sm font-semibold ${tone}`}>{label}</h4>
+                    {message.role && <Badge variant="outline">{message.role}</Badge>}
+                </header>
+                <MessageBody message={message} />
+            </div>
+        </article>
+    );
+}
+
+export function DebateTranscript({ history }: DebateTranscriptProps) {
+    const visibleMessages = history.filter((message) => message.role !== 'system');
+    if (visibleMessages.length === 0) return null;
+
+    const { rounds, unsequenced } = groupDebateHistoryByRound(visibleMessages);
+    const hasRoundData = rounds.length > 0;
+
+    return (
+        <section className="mt-6 min-w-0" aria-labelledby="debate-transcript-title">
+            <header className="mb-4 flex flex-wrap items-center justify-between gap-3 border-y py-3">
+                <div className="flex items-center gap-2">
+                    <Gavel aria-hidden="true" className="size-4 text-primary" />
+                    <h3 id="debate-transcript-title" className="text-base font-semibold">
+                        {hasRoundData ? 'Debate rounds' : 'Debate transcript'}
+                    </h3>
+                </div>
+                <Badge variant="outline">
+                    {hasRoundData ? `${rounds.length} rounds` : `${visibleMessages.length} messages`}
+                </Badge>
+            </header>
+
+            {hasRoundData ? (
+                <div className="space-y-5">
+                    {rounds.map((round) => (
+                        <section key={round.roundNum} aria-label={`Round ${round.roundNum}`} className="min-w-0 space-y-3">
+                            <h4 className="text-sm font-semibold tabular-nums">Round {round.roundNum}</h4>
+                            <div className="grid min-w-0 grid-cols-1 gap-3 lg:grid-cols-2">
+                        <RoundRoleCard speaker="bull" messages={round.bull} />
+                        <RoundRoleCard speaker="bear" messages={round.bear} />
+                            </div>
+                    {round.moderator.length > 0 && (
+                        <RoundRoleCard speaker="moderator" messages={round.moderator} />
+                    )}
+                        </section>
+                    ))}
+                    {unsequenced.length > 0 && (
+                        <section aria-label="Additional transcript entries" className="border-t pt-4">
+                            <h4 className="mb-2 text-sm font-semibold">Additional transcript entries</h4>
+                            <div>
+                                {unsequenced.map((message, index) => <TranscriptMessage key={index} message={message} index={index} />)}
+                            </div>
+                        </section>
+                    )}
+                </div>
+            ) : (
+                <div aria-label="Debate transcript messages">
+                    {visibleMessages.map((message, index) => <TranscriptMessage key={index} message={message} index={index} />)}
+                </div>
+            )}
+        </section>
+    );
+}

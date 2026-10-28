@@ -14,10 +14,12 @@ from src.analysis_runtime.domain.contracts import (
     ClaimedInteractionResume,
     InteractionIdentity,
     InteractionRequested,
+    InteractionResponse,
     PendingResume,
     ReplayPage,
     RunStatus,
     RunStatusRecord,
+    TickerSelectionRequest,
     TickerSelectionResponse,
     WorkflowAgentOutput,
     WorkflowAgentOutputEvent,
@@ -362,7 +364,7 @@ class InMemoryActivityRepository:
         self,
         *,
         identity: InteractionIdentity,
-        response: TickerSelectionResponse,
+        response: InteractionResponse,
         principal_id: str,
         now: datetime,
     ) -> ClaimedInteractionResume:
@@ -404,12 +406,20 @@ class InMemoryActivityRepository:
                 raise InteractionNotAvailableError(
                     "interaction is stale or unavailable"
                 )
-            if response.selected_symbol not in {
-                candidate.symbol for candidate in interaction.request.candidates
-            }:
+            if response.type != interaction.request.type:
                 raise InvalidInteractionResponseError(
-                    "selected symbol is not one of the available candidates"
+                    "response type does not match the pending interaction"
                 )
+            if isinstance(interaction.request, TickerSelectionRequest):
+                if not isinstance(response, TickerSelectionResponse) or (
+                    response.selected_symbol
+                    not in {
+                        candidate.symbol for candidate in interaction.request.candidates
+                    }
+                ):
+                    raise InvalidInteractionResponseError(
+                        "selected symbol is not one of the available candidates"
+                    )
             responded = interaction.model_copy(
                 update={"status": "responded", "response": response}
             )

@@ -174,7 +174,13 @@ async def execute_bull_round(
     log_llm_response("BULL_AGENT", round_num, response_text)
 
     return {
-        "history": [AIMessage(content=response_text, name="GrowthHunter")],
+        "history": [
+            AIMessage(
+                content=response_text,
+                name="GrowthHunter",
+                additional_kwargs={"round_num": round_num},
+            )
+        ],
         "bull_thesis": response_text,
     }
 
@@ -233,7 +239,13 @@ async def execute_bear_round(
     log_llm_response("BEAR_AGENT", round_num, response_text)
 
     return {
-        "history": [AIMessage(content=response_text, name="ForensicAccountant")],
+        "history": [
+            AIMessage(
+                content=response_text,
+                name="ForensicAccountant",
+                additional_kwargs={"round_num": round_num},
+            )
+        ],
         "bear_thesis": response_text,
     }
 
@@ -335,7 +347,13 @@ async def execute_moderator_round(
     log_llm_response("MODERATOR_CRITIQUE", round_num, response_text)
 
     return {
-        "history": [AIMessage(content=response_text, name="Judge")],
+        "history": [
+            AIMessage(
+                content=response_text,
+                name="Judge",
+                additional_kwargs={"round_num": round_num},
+            )
+        ],
         "current_round": round_num,
     }
 

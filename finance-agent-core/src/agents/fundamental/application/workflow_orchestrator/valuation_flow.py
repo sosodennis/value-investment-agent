@@ -17,7 +17,8 @@ from src.agents.fundamental.application.workflow_orchestrator.services.valuation
     resolve_valuation_execution_context,
 )
 from src.agents.fundamental.application.workflow_orchestrator.services.valuation_execution_result_service import (
-    execute_valuation_calculation,
+    calculate_prepared_valuation,
+    prepare_valuation_calculation,
 )
 from src.agents.fundamental.application.workflow_orchestrator.services.valuation_replay_contracts import (
     INTERNAL_REPLAY_MARKET_SNAPSHOT_KEY,
@@ -1471,6 +1472,7 @@ async def run_valuation_flow(
         ParamBuildResult,
     ],
     get_model_runtime_fn: Callable[[str], object | None],
+    request_approval_fn: Callable[[JSONObject], object],
 ) -> FundamentalNodeResult:
     log_event(
         logger,
@@ -1553,12 +1555,12 @@ async def run_valuation_flow(
                 ticker=ticker_raw,
             )
 
-        execution_result = await _offload_valuation_compute(
-            execute_valuation_calculation,
+        prepared = await _offload_valuation_compute(
+            prepare_valuation_calculation,
             context=execution_context,
             build_params_fn=_build_params_with_missing_policy,
         )
-        build_result = execution_result.build_result
+        build_result = prepared.build_result
         base_metadata = (
             build_result.metadata
             if isinstance(build_result.metadata, Mapping)
@@ -1568,8 +1570,8 @@ async def run_valuation_flow(
         external_metadata = _strip_internal_metadata(base_metadata)
         build_metadata = _build_metadata_with_audit(
             base_metadata=external_metadata,
-            audit_passed=execution_result.audit_passed,
-            audit_messages=execution_result.audit_messages,
+            audit_passed=prepared.audit_passed,
+            audit_messages=prepared.audit_messages,
         )
 
         _log_build_result_policy_events(
@@ -1627,7 +1629,7 @@ async def run_valuation_flow(
                 goto="END",
             )
 
-        if execution_result.audit_error:
+        if prepared.audit_error:
             log_event(
                 logger,
                 event="fundamental_valuation_audit_failed",
@@ -1637,9 +1639,9 @@ async def run_valuation_flow(
                 fields={
                     "ticker": ticker,
                     "model_type": model_type,
-                    "error": execution_result.audit_error,
-                    "audit_message_count": len(execution_result.audit_messages),
-                    "audit_messages": execution_result.audit_messages,
+                    "error": prepared.audit_error,
+                    "audit_message_count": len(prepared.audit_messages),
+                    "audit_messages": prepared.audit_messages,
                 },
             )
             log_event(
@@ -1653,22 +1655,16 @@ async def run_valuation_flow(
                     "status": "error",
                     "is_degraded": True,
                     "error_code": "FUNDAMENTAL_VALUATION_AUDIT_FAILED",
-                    "audit_message_count": len(execution_result.audit_messages),
+                    "audit_message_count": len(prepared.audit_messages),
                 },
             )
             return FundamentalNodeResult(
-                update=runtime.build_valuation_error_update(
-                    execution_result.audit_error
-                ),
+                update=runtime.build_valuation_error_update(prepared.audit_error),
                 goto="END",
             )
 
         audit_warn_count = len(
-            [
-                item
-                for item in execution_result.audit_messages
-                if item.startswith("WARN:")
-            ]
+            [item for item in prepared.audit_messages if item.startswith("WARN:")]
         )
         if audit_warn_count > 0:
             log_event(
@@ -1681,10 +1677,59 @@ async def run_valuation_flow(
                     "ticker": ticker,
                     "model_type": model_type,
                     "audit_warn_count": audit_warn_count,
-                    "audit_message_count": len(execution_result.audit_messages),
-                    "audit_messages": execution_result.audit_messages,
+                    "audit_message_count": len(prepared.audit_messages),
+                    "audit_messages": prepared.audit_messages,
                 },
             )
+
+        if prepared.params_dump is None or prepared.audit_passed is not True:
+            raise RuntimeError("audited valuation parameters are unavailable")
+
+        approval_request: JSONObject = {
+            "type": "valuation_approval",
+            "contract_version": "v1",
+            "ticker": ticker or "UNKNOWN",
+            "model_type": model_type,
+            "title": "Review valuation assumptions",
+            "description": (
+                "The model and parameter set passed validation. Approve to run "
+                "the deterministic valuation, or reject to stop before calculation."
+            ),
+            "parameters": prepared.params_dump,
+            "audit_messages": prepared.audit_messages,
+        }
+        approval_response = request_approval_fn(approval_request)
+        if (
+            not isinstance(approval_response, Mapping)
+            or approval_response.get("type") != "valuation_approval"
+            or approval_response.get("contract_version") != "v1"
+            or approval_response.get("decision") not in {"approve", "reject"}
+            or set(approval_response) != {"type", "contract_version", "decision"}
+        ):
+            raise ValueError("valuation approval response has an invalid contract")
+        if approval_response["decision"] == "reject":
+            log_event(
+                logger,
+                event="fundamental_valuation_approval_rejected",
+                message="user rejected valuation before deterministic calculation",
+                fields={"ticker": ticker, "model_type": model_type},
+            )
+            return FundamentalNodeResult(
+                update={
+                    "fundamental_analysis": {
+                        "valuation_status": "approval_rejected",
+                    },
+                    "active_activity_id": "calculation",
+                    "workflow_activity_updates": {"calculation": "done"},
+                },
+                goto="END",
+            )
+
+        execution_result = await _offload_valuation_compute(
+            calculate_prepared_valuation,
+            context=execution_context,
+            prepared=prepared,
+        )
 
         if execution_result.calculation_error:
             log_event(

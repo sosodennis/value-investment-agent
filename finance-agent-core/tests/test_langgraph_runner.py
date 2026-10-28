@@ -391,6 +391,67 @@ async def test_runner_projects_typed_interrupt_and_stops_at_suspension() -> None
 
 
 @pytest.mark.asyncio
+async def test_runner_projects_versioned_valuation_approval_interrupt() -> None:
+    graph = _EventGraph(
+        [
+            {
+                "event": "on_chain_start",
+                "run_id": "calculation-node",
+                "parent_ids": [],
+                "metadata": _metadata(
+                    agent_id="fundamental_analysis",
+                    langgraph_node="calculation",
+                ),
+            },
+            {
+                "event": "on_chain_stream",
+                "run_id": "calculation-node",
+                "parent_ids": [],
+                "metadata": _metadata(
+                    agent_id="fundamental_analysis",
+                    langgraph_node="calculation",
+                ),
+                "data": {
+                    "chunk": {
+                        "__interrupt__": (
+                            Interrupt(
+                                id="approval-1",
+                                value={
+                                    "type": "valuation_approval",
+                                    "contract_version": "v1",
+                                    "ticker": "AAPL",
+                                    "model_type": "dcf_growth",
+                                    "title": "Review valuation assumptions",
+                                    "description": "Approve before deterministic calculation.",
+                                    "parameters": {"wacc": 0.09},
+                                    "audit_messages": ["PASS: parameters are valid"],
+                                },
+                            ),
+                        )
+                    }
+                },
+            },
+        ]
+    )
+
+    activities = [
+        item
+        async for item in LangGraphRunner(graph).run(
+            thread_id="thread-1",
+            run_id="runtime-run-1",
+            input_data={"message": "Apple"},
+            principal_id="principal-1",
+        )
+    ]
+
+    assert isinstance(activities[-1], InteractionRequested)
+    waiting = activities[-1]
+    assert waiting.request.type == "valuation_approval"
+    assert waiting.request.contract_version == "v1"
+    assert waiting.request.parameters == {"wacc": 0.09}
+
+
+@pytest.mark.asyncio
 async def test_runner_rejects_unsupported_interrupt_payload() -> None:
     graph = _EventGraph(
         [
@@ -485,3 +546,64 @@ async def test_runner_uses_pinned_langgraph_stream_for_wait_and_resume() -> None
     assert resumed_activity.status == "completed"
     assert resumed_activity.attempt == waiting.activity.attempt + 1
     assert all(not isinstance(item, InteractionRequested) for item in resumed)
+
+
+@pytest.mark.asyncio
+async def test_runner_assigns_bubbled_interrupt_to_nested_agent_node() -> None:
+    class State(TypedDict, total=False):
+        selected: str
+
+    async def clarify(state: State) -> dict[str, object]:
+        selection = interrupt(
+            {
+                "type": "ticker_selection",
+                "reason": "Choose the intended company.",
+                "candidates": [
+                    {"symbol": "AAPL", "name": "Apple Inc.", "confidence": 0.96},
+                    {
+                        "symbol": "AAPL.TO",
+                        "name": "Apple Canada",
+                        "confidence": 0.62,
+                    },
+                ],
+            }
+        )
+        return {"selected": selection["selected_symbol"]}
+
+    child_builder = StateGraph(State)
+    child_builder.add_node("clarifying", clarify)
+    child_builder.add_edge(START, "clarifying")
+    child_builder.add_edge("clarifying", END)
+
+    root_builder = StateGraph(State)
+    root_builder.add_node(
+        "intent_agent",
+        child_builder.compile(),
+        metadata={
+            "agent_id": "intent_extraction",
+            "agent_scope": "agent",
+            "agent_node": "intent_agent",
+        },
+    )
+    root_builder.add_edge(START, "intent_agent")
+    root_builder.add_edge("intent_agent", END)
+    runner = LangGraphRunner(root_builder.compile(checkpointer=MemorySaver()))
+
+    activities = [
+        item
+        async for item in runner.run(
+            thread_id="nested-interrupt-thread",
+            run_id="runtime-run-1",
+            input_data={"message": "AAPL"},
+            principal_id="principal-1",
+        )
+    ]
+
+    waiting = activities[-1]
+    assert isinstance(waiting, InteractionRequested)
+    assert waiting.activity.status == "waiting"
+    assert waiting.activity.scope_path == ("intent_extraction", "clarifying")
+    assert [candidate.symbol for candidate in waiting.request.candidates] == [
+        "AAPL",
+        "AAPL.TO",
+    ]
