@@ -208,10 +208,12 @@ class FundamentalOrchestrator:
             ParamBuildResult,
         ],
         get_model_runtime_fn: Callable[[str], object | None],
+        request_approval_fn: Callable[[JSONObject], object],
     ) -> FundamentalNodeResult:
         return await run_valuation_flow(
             self,
             state,
             build_params_fn=build_params_fn,
             get_model_runtime_fn=get_model_runtime_fn,
+            request_approval_fn=request_approval_fn,
         )

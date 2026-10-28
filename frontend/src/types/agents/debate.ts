@@ -6,6 +6,7 @@ export interface DebateHistoryMessage {
     name?: string;
     role?: string;
     content: string;
+    round_num?: number;
 }
 
 export interface EvidenceFact {

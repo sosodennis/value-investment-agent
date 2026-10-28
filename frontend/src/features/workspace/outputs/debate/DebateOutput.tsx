@@ -135,7 +135,7 @@ const DebateOutputComponent: React.FC<DebateOutputProps> = ({
             <div className="flex items-center justify-between mb-6 px-2">
                 <div className="flex items-center gap-3">
                     <Gavel size={18} className="text-warning" />
-                    <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-[0.2em]">Debate Council</h3>
+                    <h3 className="text-sm font-semibold text-muted-foreground uppercase">Debate Council</h3>
                 </div>
                 <div className="flex items-center gap-2">
                     {isReferenceLoading && (
@@ -149,18 +149,17 @@ const DebateOutputComponent: React.FC<DebateOutputProps> = ({
 
             <Card className="relative overflow-hidden p-4 sm:p-5">
                 <div className={`absolute inset-y-0 left-0 w-0.5 ${styles.accentBar}`} />
-                <div className="absolute top-0 right-0 p-4">
-                    <Badge variant="outline" className="max-w-40 whitespace-normal text-right">
-                        {conclusion?.risk_profile?.replace('_', ' ')}
-                    </Badge>
-                </div>
-
-                <div className="flex items-center justify-between mb-8">
-                    <div className="flex items-center gap-3">
+                <div className="flex flex-wrap items-start justify-between gap-3 mb-8">
+                    <div className="flex min-w-0 items-center gap-3">
                         <Shield size={18} className="text-warning" />
-                        <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-[0.2em]">Investment Verdict</h3>
+                        <h3 className="text-sm font-semibold text-muted-foreground uppercase">Investment Verdict</h3>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center justify-end gap-2">
+                        {conclusion?.risk_profile && (
+                            <Badge variant="outline" className="max-w-40 whitespace-normal break-words text-right">
+                                {conclusion.risk_profile.replaceAll('_', ' ')}
+                            </Badge>
+                        )}
                         <Badge variant={styles.badgeVariant}>{directionLabel}</Badge>
                         {conclusion?.data_quality_warning && (
                             <Badge variant="warning" className="gap-1">
@@ -175,12 +174,12 @@ const DebateOutputComponent: React.FC<DebateOutputProps> = ({
                         <div className="rounded-lg border border-border/10 bg-muted/50 p-4 relative">
                             <div className="absolute inset-y-0 left-0 w-0.5 bg-warning/70" />
                             <div className="flex items-center justify-between mb-1">
-                                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.2em]">Reward/Risk Ratio</span>
+                                <span className="text-xs font-semibold text-muted-foreground uppercase">Reward/Risk Ratio</span>
                                 <span className="text-warning font-black text-xl">
                                     {conclusion?.rr_ratio !== undefined ? `${conclusion.rr_ratio.toFixed(2)}x` : 'Not reported'}
                                 </span>
                             </div>
-                            <div className="text-[8px] text-muted-foreground uppercase tracking-widest font-mono">
+                            <div className="text-xs text-muted-foreground uppercase font-mono">
                                 {isPreviewOnly ? 'ASYMMETRY CALC_PENDING' : 'WTD_UPSIDE vs WTD_DOWNSIDE'}
                             </div>
                         </div>
@@ -188,12 +187,12 @@ const DebateOutputComponent: React.FC<DebateOutputProps> = ({
                         <div className="rounded-lg border border-border/10 bg-muted/50 p-4 relative">
                             <div className="absolute inset-y-0 left-0 w-0.5 bg-primary/70" />
                             <div className="flex items-center justify-between mb-1">
-                                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.2em]">Edge (Alpha)</span>
+                                <span className="text-xs font-semibold text-muted-foreground uppercase">Edge (Alpha)</span>
                                 <span className={`${conclusion?.alpha === undefined ? 'text-muted-foreground' : conclusion.alpha > 0 ? 'text-success' : conclusion.alpha < 0 ? 'text-destructive' : 'text-foreground'} font-semibold text-xl tabular-nums`}>
                                     {conclusion?.alpha !== undefined ? (conclusion.alpha * 100).toFixed(1) + '%' : 'N/A'}
                                 </span>
                             </div>
-                            <div className="text-[8px] text-muted-foreground uppercase tracking-widest font-mono">
+                            <div className="text-xs text-muted-foreground uppercase font-mono">
                                 {isPreviewOnly ? 'Preview value' : conclusion?.risk_free_benchmark !== undefined ? `vs ${(conclusion.risk_free_benchmark * 400).toFixed(1)}% benchmark` : 'Benchmark not reported'}
                             </div>
                         </div>
@@ -203,19 +202,19 @@ const DebateOutputComponent: React.FC<DebateOutputProps> = ({
                         <div className="rounded-lg border border-border/10 bg-muted/50 p-5">
                             <div className="flex items-center gap-3 mb-3">
                                 <Zap size={14} className="text-warning" />
-                                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.2em]">Verdict Summary (Simulation)</span>
+                                <span className="text-xs font-semibold text-muted-foreground uppercase">Verdict Summary (Simulation)</span>
                             </div>
                             <p className="text-sm text-muted-foreground italic leading-relaxed font-serif">
                                 &quot;{previewData?.verdict_display || 'Calculating probability cases…'}&quot;
                             </p>
-                            <p className="text-[9px] text-muted-foreground mt-3 font-mono">
+                            <p className="text-xs text-muted-foreground mt-3 font-mono">
                                 {previewData?.debate_rounds_display}
                             </p>
                         </div>
                     ) : (
                         <div className="space-y-4">
                             <div className="space-y-2">
-                                <div className="flex justify-between text-[10px] font-black uppercase tracking-widest">
+                                <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-sm font-semibold uppercase">
                                     <span className="text-success flex items-center gap-1.5">
                                         <div className="w-1.5 h-1.5 rounded-full bg-success" />
                                         Bull Case ({scenarios?.bull_case?.price_implication})
@@ -225,11 +224,11 @@ const DebateOutputComponent: React.FC<DebateOutputProps> = ({
                                 <div className="h-1.5 w-full bg-card rounded-full overflow-hidden border border-border/20">
                                     <div className="h-full bg-success " style={{ width: `${scenarios?.bull_case?.probability}%` }} />
                                 </div>
-                                <p className="text-[10px] text-muted-foreground leading-relaxed italic">&quot;{scenarios?.bull_case?.outcome_description}&quot;</p>
+                                <p className="text-sm text-muted-foreground leading-relaxed italic">&quot;{scenarios?.bull_case?.outcome_description}&quot;</p>
                             </div>
 
                             <div className="space-y-2 opacity-80">
-                                <div className="flex justify-between text-[10px] font-black uppercase tracking-widest">
+                                <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-sm font-semibold uppercase">
                                     <span className="text-muted-foreground flex items-center gap-1.5">
                                         <div className="w-1.5 h-1.5 rounded-full bg-muted" />
                                         Base Case (Neutral)
@@ -239,11 +238,11 @@ const DebateOutputComponent: React.FC<DebateOutputProps> = ({
                                 <div className="h-1 w-full bg-card rounded-full overflow-hidden border border-border/20">
                                     <div className="h-full bg-muted" style={{ width: `${scenarios?.base_case?.probability}%` }} />
                                 </div>
-                                <p className="text-[10px] text-muted-foreground leading-relaxed italic">&quot;{scenarios?.base_case?.outcome_description}&quot;</p>
+                                <p className="text-sm text-muted-foreground leading-relaxed italic">&quot;{scenarios?.base_case?.outcome_description}&quot;</p>
                             </div>
 
                             <div className="space-y-2">
-                                <div className="flex justify-between text-[10px] font-black uppercase tracking-widest">
+                                <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-sm font-semibold uppercase">
                                     <span className="text-destructive flex items-center gap-1.5">
                                         <div className="w-1.5 h-1.5 rounded-full bg-destructive" />
                                         Bear Case ({scenarios?.bear_case?.price_implication})
@@ -253,7 +252,7 @@ const DebateOutputComponent: React.FC<DebateOutputProps> = ({
                                 <div className="h-1.5 w-full bg-card rounded-full overflow-hidden border border-border/20">
                                     <div className="h-full bg-destructive " style={{ width: `${scenarios?.bear_case?.probability}%` }} />
                                 </div>
-                                <p className="text-[10px] text-destructive leading-relaxed italic">&quot;{scenarios?.bear_case?.outcome_description}&quot;</p>
+                                <p className="text-sm text-destructive leading-relaxed italic">&quot;{scenarios?.bear_case?.outcome_description}&quot;</p>
                             </div>
                         </div>
                     )}
@@ -282,9 +281,9 @@ const DebateOutputComponent: React.FC<DebateOutputProps> = ({
                         <div className="p-2 rounded-lg bg-success/10 border border-success/20">
                             <CheckCircle2 size={16} className="text-success" />
                         </div>
-                        <h4 className="text-[10px] font-bold text-success uppercase tracking-[0.2em]">Dominant Thesis</h4>
+                        <h4 className="text-sm font-semibold text-success uppercase">Dominant Thesis</h4>
                     </div>
-                    <p className="text-base text-foreground leading-relaxed font-black tracking-tight relative z-10 italic">
+                    <p className="text-base text-foreground leading-relaxed font-semibold relative z-10 italic">
                         &quot;{isPreviewOnly ? previewData?.thesis_display : artifactData?.winning_thesis}&quot;
                     </p>
                 </Card>
@@ -295,7 +294,7 @@ const DebateOutputComponent: React.FC<DebateOutputProps> = ({
                             <div className="p-2 rounded-lg bg-primary/10 border border-primary/20">
                                 <Target size={16} className="text-primary" />
                             </div>
-                            <h4 className="text-[10px] font-bold text-primary uppercase tracking-[0.2em]">Primary Catalyst</h4>
+                            <h4 className="text-sm font-semibold text-primary uppercase">Primary Catalyst</h4>
                         </div>
                         <p className="text-sm text-muted-foreground leading-relaxed">
                             {isPreviewOnly ? previewData?.catalyst_display : artifactData?.primary_catalyst}
@@ -307,7 +306,7 @@ const DebateOutputComponent: React.FC<DebateOutputProps> = ({
                             <div className="p-2 rounded-lg bg-destructive/10 border border-destructive/20">
                                 <AlertTriangle size={16} className="text-destructive" />
                             </div>
-                            <h4 className="text-[10px] font-bold text-destructive uppercase tracking-[0.2em]">Risk Vectors</h4>
+                            <h4 className="text-sm font-semibold text-destructive uppercase">Risk Vectors</h4>
                         </div>
                         <p className="text-sm text-muted-foreground leading-relaxed font-medium">
                             {isPreviewOnly ? previewData?.risk_display : artifactData?.primary_risk}
@@ -319,7 +318,7 @@ const DebateOutputComponent: React.FC<DebateOutputProps> = ({
             <Card className="p-4">
                 <div className="flex items-center gap-2 mb-6">
                     <Info size={14} className="text-muted-foreground" />
-                    <h4 className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.2em]">Supporting Audit Factors</h4>
+                    <h4 className="text-sm font-semibold text-muted-foreground uppercase">Supporting Audit Factors</h4>
                 </div>
                 <div className="space-y-3">
                     {conclusion?.supporting_factors?.map((factor: string, i: number) => (
@@ -329,7 +328,7 @@ const DebateOutputComponent: React.FC<DebateOutputProps> = ({
                         </div>
                     ))}
                     {(!conclusion?.supporting_factors || conclusion.supporting_factors.length === 0) && (
-                        <p className="text-[10px] text-muted-foreground italic">No Secondary Factors Recorded</p>
+                        <p className="text-xs text-muted-foreground italic">No Secondary Factors Recorded</p>
                     )}
                 </div>
             </Card>

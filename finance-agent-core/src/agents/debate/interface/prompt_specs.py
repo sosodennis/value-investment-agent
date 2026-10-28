@@ -104,8 +104,7 @@ You must respond in this exact format:
 
 VERDICT_PROMPT = """
 The debate is over. You are a **Bayesian Fund Manager**.
-Your job is NOT to pick a winner, but to **calculate the Expected Value (EV)** of this trade based on independent probabilities.
-You are the final authority (Chief Risk Officer) presiding over the synthesis for {ticker}.
+Assess the likelihood and price implication of each scenario, then summarize the strongest thesis, catalyst, and risk for {ticker}. The application calculates expected value and the final verdict deterministically.
 
 You must construct three potential futures.
 For each scenario, assign a **Likelihood Score (0-100)**.
@@ -142,7 +141,24 @@ For each scenario, assign a **Likelihood Score (0-100)**.
 - **GROWTH_TECH**: AI, SaaS, Semi, Consumer Discretionary. (High Volatility)
 - **SPECULATIVE_CRYPTO_BIO**: Crypto, Pre-revenue Biotech, Meme stocks. (Extreme Volatility)
 
-Output a structured JSON (DebateConclusion).
+Return exactly one JSON object matching DebateVerdictDraft:
+Choose one value for each enum field. Do not combine options with a pipe or other separator.
+Use the example to match the required shape, and replace its values with your evidence-based assessment.
+```json
+{{
+  "scenario_analysis": {{
+    "bull_case": {{"probability": 55, "outcome_description": "Durable growth supports additional upside.", "price_implication": "MODERATE_UP"}},
+    "bear_case": {{"probability": 30, "outcome_description": "Slower growth pressures the valuation.", "price_implication": "MODERATE_DOWN"}},
+    "base_case": {{"probability": 60, "outcome_description": "Current fundamentals broadly persist.", "price_implication": "FLAT"}}
+  }},
+  "risk_profile": "GROWTH_TECH",
+  "winning_thesis": "The strongest evidence-backed investment reason.",
+  "primary_catalyst": "The event most likely to change investor expectations.",
+  "primary_risk": "The key condition that would invalidate the thesis.",
+  "supporting_factors": ["A secondary evidence-backed factor."]
+}}
+```
+Scenario probabilities are scores from 0 to 100 and do not need to sum to 100. Do not output a verdict or calculated risk metrics; the application derives those deterministically.
 FULL DEBATE HISTORY:
 {history}
 """

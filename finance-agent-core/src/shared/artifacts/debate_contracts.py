@@ -21,6 +21,7 @@ from .debate_types import (
     EvidenceSourceWeight,
     HistoryContent,
     HistoryOptionalText,
+    HistoryRoundNum,
     OptionalDebateNumber,
     OptionalDebateText,
     ScenarioOutcomeDescription,
@@ -44,6 +45,7 @@ class DebateHistoryMessageModel(BaseModel):
     name: HistoryOptionalText = None
     role: HistoryOptionalText = None
     content: HistoryContent
+    round_num: HistoryRoundNum = None
 
 
 class EvidenceFactModel(BaseModel):

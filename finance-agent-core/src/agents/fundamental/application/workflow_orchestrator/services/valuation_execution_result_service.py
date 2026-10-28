@@ -28,6 +28,16 @@ class ValuationExecutionResult:
     audit_error: str | None
 
 
+@dataclass(frozen=True)
+class PreparedValuationExecution:
+    build_result: ParamBuildResult
+    params_dump: JSONObject | None
+    params_object: object | None
+    audit_passed: bool | None
+    audit_messages: list[str]
+    audit_error: str | None
+
+
 def _parse_audit_messages(raw: object) -> list[str]:
     if not isinstance(raw, list | tuple):
         raise TypeError("valuation auditor result.messages must be a list of strings")
@@ -63,14 +73,14 @@ def _build_audit_failure_message(
     return f"Valuation audit failed for {model_type}: {detail}"
 
 
-def execute_valuation_calculation(
+def prepare_valuation_calculation(
     *,
     context: ValuationExecutionContext,
     build_params_fn: Callable[
         [str, str | None, list[JSONObject], list[ForwardSignalPayload] | None],
         ParamBuildResult,
     ],
-) -> ValuationExecutionResult:
+) -> PreparedValuationExecution:
     build_result = build_params_fn(
         context.model_type,
         context.ticker,
@@ -79,11 +89,10 @@ def execute_valuation_calculation(
     )
 
     if build_result.missing:
-        return ValuationExecutionResult(
+        return PreparedValuationExecution(
             build_result=build_result,
             params_dump=None,
-            calculation_metrics=None,
-            calculation_error=None,
+            params_object=None,
             audit_passed=None,
             audit_messages=[],
             audit_error=None,
@@ -93,7 +102,6 @@ def execute_valuation_calculation(
     params_dict["trace_inputs"] = build_result.trace_inputs
 
     schema = context.model_runtime.schema
-    calculator = context.model_runtime.calculator
     auditor = context.model_runtime.auditor
     params_obj = schema(**params_dict)
     params_dump = params_obj.model_dump(mode="json")
@@ -104,22 +112,20 @@ def execute_valuation_calculation(
         audit_result_raw = auditor(params_obj)
         audit_passed, audit_messages = _parse_audit_result(audit_result_raw)
     except Exception as exc:
-        return ValuationExecutionResult(
+        return PreparedValuationExecution(
             build_result=build_result,
             params_dump=params_dump,
-            calculation_metrics=None,
-            calculation_error=None,
+            params_object=params_obj,
             audit_passed=False,
             audit_messages=[],
             audit_error=f"Valuation audit execution failed for {context.model_type}: {str(exc)}",
         )
 
     if not audit_passed:
-        return ValuationExecutionResult(
+        return PreparedValuationExecution(
             build_result=build_result,
             params_dump=params_dump,
-            calculation_metrics=None,
-            calculation_error=None,
+            params_object=params_obj,
             audit_passed=False,
             audit_messages=audit_messages,
             audit_error=_build_audit_failure_message(
@@ -128,19 +134,67 @@ def execute_valuation_calculation(
             ),
         )
 
+    return PreparedValuationExecution(
+        build_result=build_result,
+        params_dump=params_dump,
+        params_object=params_obj,
+        audit_passed=True,
+        audit_messages=audit_messages,
+        audit_error=None,
+    )
+
+
+def calculate_prepared_valuation(
+    *,
+    context: ValuationExecutionContext,
+    prepared: PreparedValuationExecution,
+) -> ValuationExecutionResult:
+    if (
+        prepared.params_object is None
+        or prepared.params_dump is None
+        or prepared.audit_passed is not True
+        or prepared.audit_error is not None
+    ):
+        raise ValueError("valuation parameters must pass audit before calculation")
+
     calculation_metrics = parse_calculation_metrics(
-        calculator(params_obj),
+        context.model_runtime.calculator(prepared.params_object),
         context=f"{context.model_type} valuation calculation result",
     )
     raw_error = calculation_metrics.get("error")
     calculation_error = raw_error if isinstance(raw_error, str) and raw_error else None
 
     return ValuationExecutionResult(
-        build_result=build_result,
-        params_dump=params_dump,
+        build_result=prepared.build_result,
+        params_dump=prepared.params_dump,
         calculation_metrics=calculation_metrics,
         calculation_error=calculation_error,
-        audit_passed=True,
-        audit_messages=audit_messages,
+        audit_passed=prepared.audit_passed,
+        audit_messages=prepared.audit_messages,
         audit_error=None,
     )
+
+
+def execute_valuation_calculation(
+    *,
+    context: ValuationExecutionContext,
+    build_params_fn: Callable[
+        [str, str | None, list[JSONObject], list[ForwardSignalPayload] | None],
+        ParamBuildResult,
+    ],
+) -> ValuationExecutionResult:
+    prepared = prepare_valuation_calculation(
+        context=context,
+        build_params_fn=build_params_fn,
+    )
+    if prepared.build_result.missing or prepared.audit_error is not None:
+        return ValuationExecutionResult(
+            build_result=prepared.build_result,
+            params_dump=prepared.params_dump,
+            calculation_metrics=None,
+            calculation_error=None,
+            audit_passed=prepared.audit_passed,
+            audit_messages=prepared.audit_messages,
+            audit_error=prepared.audit_error,
+        )
+    return calculate_prepared_valuation(context=context, prepared=prepared)

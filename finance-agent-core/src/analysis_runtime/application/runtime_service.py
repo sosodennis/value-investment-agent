@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import uuid
 from collections.abc import Mapping
 from datetime import datetime, timezone
@@ -18,9 +19,9 @@ from src.analysis_runtime.domain.contracts import (
     AnalysisRunPage,
     InteractionIdentity,
     InteractionRequested,
+    InteractionResponse,
     ReplayPage,
     RunStatus,
-    TickerSelectionResponse,
     WorkflowAgentOutput,
     WorkflowAgentOutputEvent,
     WorkflowEvent,
@@ -45,6 +46,7 @@ _SAFE_FAILURE_MESSAGES = {
     "authentication_failed": "The provider authentication configuration is unavailable.",
     "invalid_runner_interrupt": "The workflow produced an invalid interaction request.",
 }
+logger = logging.getLogger(__name__)
 
 
 def _failure_from_exception(
@@ -133,7 +135,7 @@ class AnalysisRuntimeService:
         *,
         principal_id: str,
         identity: InteractionIdentity,
-        response: TickerSelectionResponse,
+        response: InteractionResponse,
     ) -> str:
         await self._check_owner(principal_id=principal_id, thread_id=identity.thread_id)
         task = self._tasks.get(identity.thread_id)
@@ -403,6 +405,16 @@ class AnalysisRuntimeService:
         except asyncio.CancelledError:
             raise
         except Exception as exc:
+            if getattr(exc, "code", None) == "invalid_runner_interrupt":
+                logger.exception(
+                    "workflow runner rejected an interrupt",
+                    extra={
+                        "thread_id": thread_id,
+                        "run_id": run_id,
+                        "activity_id": current_activity_id,
+                        "interrupt_diagnostics": getattr(exc, "diagnostics", {}),
+                    },
+                )
             failure = _failure_from_exception(exc, activity_id=current_activity_id)
             await self._emit_terminal(
                 thread_id=thread_id,

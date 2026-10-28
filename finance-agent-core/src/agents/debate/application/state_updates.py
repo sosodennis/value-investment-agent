@@ -13,7 +13,13 @@ def build_debate_success_update(
         "status": "success",
         "final_verdict": conclusion_data.get("decision")
         or conclusion_data.get("final_verdict"),
-        "kelly_confidence": conclusion_data.get("kelly_confidence"),
+        "kelly_confidence": conclusion_data.get("kelly_confidence")
+        if isinstance(conclusion_data.get("kelly_confidence"), int | float)
+        else (
+            float(conclusion_data["conviction"]) / 100
+            if isinstance(conclusion_data.get("conviction"), int | float)
+            else None
+        ),
         "winning_thesis": conclusion_data.get("winning_thesis"),
         "primary_catalyst": conclusion_data.get("primary_catalyst"),
         "primary_risk": conclusion_data.get("primary_risk"),

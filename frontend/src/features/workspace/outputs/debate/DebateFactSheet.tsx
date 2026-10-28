@@ -45,7 +45,8 @@ const FactItem = ({ fact }: { fact: EvidenceFact }) => {
         <Card
             id={`fact-${fact.fact_id}`}
             data-fact-id={fact.fact_id}
-            className="group scroll-mt-6 p-4 transition-colors hover:bg-muted/30"
+            tabIndex={-1}
+            className="group scroll-mt-6 p-4 transition-colors hover:bg-muted/30 focus:outline-none focus:ring-2 focus:ring-ring"
         >
             <div className="flex items-start justify-between gap-4">
                 <div className="flex flex-col gap-2 flex-grow min-w-0">
@@ -57,7 +58,7 @@ const FactItem = ({ fact }: { fact: EvidenceFact }) => {
                         <Badge variant="outline">
                             {fact.source_weight}
                         </Badge>
-                        <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-mono">
+                        <span className="text-xs text-muted-foreground font-mono">
                             {fact.period || 'CURRENT'}
                         </span>
                     </div>
@@ -79,7 +80,7 @@ const FactItem = ({ fact }: { fact: EvidenceFact }) => {
                             <summary className="cursor-pointer rounded-sm px-2 py-1 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
                                 Provenance
                             </summary>
-                            <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap break-words rounded-md bg-muted p-2 font-mono text-[11px]">
+                            <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap break-words rounded-md bg-muted p-2 font-mono text-xs">
                                 {JSON.stringify(fact.provenance, null, 2)}
                             </pre>
                         </details>

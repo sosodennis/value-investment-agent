@@ -19,6 +19,7 @@ from src.analysis_runtime.domain.contracts import (
     InteractionIdentity,
     InteractionRequested,
     TickerSelectionRequest,
+    ValuationApprovalRequest,
     WorkflowActivityIdentity,
     WorkflowAgentOutput,
 )
@@ -418,43 +419,174 @@ class LangGraphRunner(GraphRunner):
         if not isinstance(interrupt, LangGraphInterrupt):
             raise InvalidRunnerInterruptError("interrupt stream has an invalid request")
         value = interrupt.value
-        if not isinstance(value, Mapping) or value.get("type") != "ticker_selection":
-            raise InvalidRunnerInterruptError("unsupported interrupt request type")
-
-        candidates = value.get("candidates")
-        reason = value.get("reason")
+        if not isinstance(value, Mapping):
+            raise InvalidRunnerInterruptError("interrupt request must be an object")
         try:
-            request = TickerSelectionRequest.model_validate(
-                {
-                    "type": "ticker_selection",
-                    "title": "Ticker Resolution",
-                    "description": reason,
-                    "candidates": candidates,
-                }
-            )
+            if value.get("type") == "ticker_selection":
+                request = TickerSelectionRequest.model_validate(
+                    {
+                        "type": "ticker_selection",
+                        "title": "Ticker Resolution",
+                        "description": value.get("reason"),
+                        "candidates": value.get("candidates"),
+                    }
+                )
+            elif value.get("type") == "valuation_approval":
+                request = ValuationApprovalRequest.model_validate(value)
+            else:
+                raise InvalidRunnerInterruptError("unsupported interrupt request type")
+        except InvalidRunnerInterruptError:
+            raise
         except Exception as exc:
             raise InvalidRunnerInterruptError(
-                "ticker selection interrupt has an invalid payload"
+                "interrupt request has an invalid payload"
             ) from exc
 
+        interrupt_callback_id = _callback_id(raw.get("run_id"))
+        interrupt_owner = (
+            "intent_extraction"
+            if request.type == "ticker_selection"
+            else "fundamental_analysis"
+        )
         scoped_callbacks = [
             (callback_id, callback)
             for callback_id, callback in active_callbacks.items()
             if callback[1]
         ]
-        if not scoped_callbacks:
-            raise InvalidRunnerInterruptError(
-                "interrupt has no active application activity"
-            )
-        deepest_scope_size = max(len(callback[1]) for _, callback in scoped_callbacks)
-        deepest_callbacks = [
+        typed_owner_callbacks = [
             (callback_id, callback)
             for callback_id, callback in scoped_callbacks
-            if len(callback[1]) == deepest_scope_size
+            if callback[1][0] == interrupt_owner
+        ]
+        owner_callbacks = typed_owner_callbacks or (
+            scoped_callbacks if len(scoped_callbacks) == 1 else []
+        )
+        direct_callback = next(
+            (
+                (callback_id, callback)
+                for callback_id, callback in owner_callbacks
+                if callback_id == interrupt_callback_id
+            ),
+            None,
+        )
+        raw_parent_ids = raw.get("parent_ids")
+        parent_callbacks = []
+        if isinstance(raw_parent_ids, list | tuple):
+            for parent_id in raw_parent_ids:
+                normalized_parent_id = _callback_id(parent_id)
+                if normalized_parent_id is None:
+                    continue
+                callback = active_callbacks.get(normalized_parent_id)
+                if (
+                    callback is not None
+                    and callback[1]
+                    and callback[1][0] == interrupt_owner
+                ):
+                    parent_callbacks.append((normalized_parent_id, callback))
+        interrupt_metadata = raw.get("metadata")
+        interrupt_metadata_map = (
+            interrupt_metadata if isinstance(interrupt_metadata, Mapping) else {}
+        )
+        interrupt_scope = _activity_scope(interrupt_metadata_map)
+        scope_callbacks = [
+            (callback_id, callback)
+            for callback_id, callback in owner_callbacks
+            if interrupt_scope
+            and (
+                callback[1] == interrupt_scope
+                or callback[1][-len(interrupt_scope) :] == interrupt_scope
+            )
+        ]
+        if direct_callback is not None:
+            selected_callbacks = [direct_callback]
+        elif parent_callbacks:
+            # Stream events can bubble an interrupt from a nested graph whose
+            # run_id is not an activity callback. The nearest active parent is
+            # the authoritative owner when unrelated graph branches are active.
+            selected_callbacks = [parent_callbacks[-1]]
+        elif scope_callbacks:
+            selected_callbacks = scope_callbacks
+        elif owner_callbacks:
+            selected_callbacks = owner_callbacks
+        else:
+            diagnostics = {
+                "interrupt_run_id": interrupt_callback_id,
+                "interrupt_parent_ids": [
+                    value for value in raw_parent_ids if isinstance(value, str | UUID)
+                ][:20]
+                if isinstance(raw_parent_ids, list | tuple)
+                else [],
+                "interrupt_scope": list(interrupt_scope),
+                "interrupt_owner": interrupt_owner,
+                "candidate_callback_ids": [
+                    callback_id for callback_id, _ in scoped_callbacks
+                ][:20],
+                "candidate_scopes": [
+                    {"callback_id": callback_id, "scope": list(callback[1])}
+                    for callback_id, callback in scoped_callbacks[:20]
+                ],
+            }
+            raise InvalidRunnerInterruptError(
+                "interrupt has no active application activity",
+                diagnostics=diagnostics,
+            )
+
+        def callback_depth(
+            callback: tuple[Mapping[str, object], tuple[str, ...], str | None],
+        ) -> int:
+            depth = 0
+            parent_activity_id = callback[2]
+            visited: set[str] = set()
+            while parent_activity_id is not None:
+                parent_callback_id = parent_activity_id.removeprefix("langgraph:")
+                if (
+                    parent_callback_id not in active_callbacks
+                    or parent_callback_id in visited
+                ):
+                    break
+                visited.add(parent_callback_id)
+                depth += 1
+                parent_activity_id = active_callbacks[parent_callback_id][2]
+            return depth
+
+        deepest_scope_depth = max(
+            len(callback[1]) for _, callback in selected_callbacks
+        )
+        most_specific_callbacks = [
+            (callback_id, callback)
+            for callback_id, callback in selected_callbacks
+            if len(callback[1]) == deepest_scope_depth
+        ]
+        deepest_callback_depth = max(
+            callback_depth(callback) for _, callback in most_specific_callbacks
+        )
+        deepest_callbacks = [
+            (callback_id, callback)
+            for callback_id, callback in most_specific_callbacks
+            if callback_depth(callback) == deepest_callback_depth
         ]
         if len({callback[1] for _, callback in deepest_callbacks}) > 1:
             raise InvalidRunnerInterruptError(
-                "interrupt cannot be assigned to one active application activity"
+                "interrupt cannot be assigned to one active application activity",
+                diagnostics={
+                    "interrupt_run_id": interrupt_callback_id,
+                    "interrupt_parent_ids": [
+                        value
+                        for value in raw_parent_ids
+                        if isinstance(value, str | UUID)
+                    ][:20]
+                    if isinstance(raw_parent_ids, list | tuple)
+                    else [],
+                    "interrupt_scope": list(interrupt_scope),
+                    "interrupt_owner": interrupt_owner,
+                    "candidate_callback_ids": [
+                        callback_id for callback_id, _ in deepest_callbacks
+                    ][:20],
+                    "candidate_scopes": [
+                        {"callback_id": callback_id, "scope": list(callback[1])}
+                        for callback_id, callback in deepest_callbacks[:20]
+                    ],
+                },
             )
         callback_run_id, (metadata_map, scope_path, parent_activity_id) = (
             deepest_callbacks[-1]

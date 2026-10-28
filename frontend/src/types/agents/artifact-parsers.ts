@@ -1621,6 +1621,16 @@ const parseDebateHistoryMessage = (
     };
     if (typeof name === 'string') item.name = name;
     if (typeof role === 'string') item.role = role;
+    const roundNum = parseNullableOptionalNumber(
+        record.round_num,
+        `${context}.round_num`
+    );
+    if (roundNum !== undefined) {
+        if (!Number.isInteger(roundNum) || roundNum < 1) {
+            throw new TypeError(`${context}.round_num must be a positive integer.`);
+        }
+        item.round_num = roundNum;
+    }
     return item;
 };
 

@@ -7,9 +7,15 @@ from src.shared.kernel.types import JSONObject
 def project_debate_preview(ctx: JSONObject) -> JSONObject:
     verdict = str(ctx.get("final_verdict", "NEUTRAL"))
     confidence_raw = ctx.get("kelly_confidence")
-    confidence = (
-        float(confidence_raw) if isinstance(confidence_raw, int | float) else None
-    )
+    if isinstance(confidence_raw, int | float):
+        confidence = float(confidence_raw)
+    else:
+        conviction_raw = ctx.get("conviction")
+        confidence = (
+            float(conviction_raw) / 100
+            if isinstance(conviction_raw, int | float)
+            else None
+        )
 
     return {
         "verdict": verdict,

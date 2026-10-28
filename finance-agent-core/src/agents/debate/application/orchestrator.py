@@ -15,6 +15,7 @@ from src.agents.debate.application.debate_history_service import (
     build_verdict_history_text,
 )
 from src.agents.debate.application.debate_service import (
+    DEBATE_LLM_TIMEOUT_SECONDS,
     MAX_CHAR_HISTORY,
     execute_bear_round,
     execute_bull_round,
@@ -36,7 +37,7 @@ from src.agents.debate.application.prompt_runtime import (
 from src.agents.debate.application.report_service import prepare_debate_reports
 from src.agents.debate.application.state_readers import resolved_ticker_from_state
 from src.agents.debate.application.state_updates import build_debate_success_update
-from src.agents.debate.domain.entities import DebateConclusion, EvidenceFact
+from src.agents.debate.domain.entities import DebateVerdictDraft, EvidenceFact
 from src.agents.debate.domain.pragmatic_verdict_policy import (
     calculate_pragmatic_verdict,
 )
@@ -47,6 +48,7 @@ from src.llm_provider.entrypoint import (
     ChatRole,
     CompletionRequest,
     LLMProviderPort,
+    LLMRequestClass,
     ModelRoute,
     StructuredRequest,
 )
@@ -351,7 +353,11 @@ class DebateOrchestrator:
             return DebateNodeResult(
                 update={
                     "history": [
-                        AIMessage(content=f"[SYSTEM] {error_msg}", name="GrowthHunter")
+                        AIMessage(
+                            content=f"[SYSTEM] {error_msg}",
+                            name="GrowthHunter",
+                            additional_kwargs={"round_num": round_num},
+                        )
                     ],
                     "bull_thesis": "[ARGUMENT MISSING]",
                     "workflow_activity_updates": error_progress,
@@ -442,7 +448,9 @@ class DebateOrchestrator:
                 update={
                     "history": [
                         AIMessage(
-                            content=f"[SYSTEM] {error_msg}", name="ForensicAccountant"
+                            content=f"[SYSTEM] {error_msg}",
+                            name="ForensicAccountant",
+                            additional_kwargs={"round_num": round_num},
                         )
                     ],
                     "bear_thesis": "[ARGUMENT MISSING]",
@@ -542,7 +550,11 @@ class DebateOrchestrator:
             return DebateNodeResult(
                 update={
                     "history": [
-                        AIMessage(content=f"[SYSTEM] {error_msg}", name="Judge")
+                        AIMessage(
+                            content=f"[SYSTEM] {error_msg}",
+                            name="Judge",
+                            additional_kwargs={"round_num": round_num},
+                        )
                     ],
                     "debate": {"current_round": round_num},
                     "workflow_activity_updates": error_progress,
@@ -609,12 +621,13 @@ class DebateOrchestrator:
                 route=self.llm_route,
                 request_id=f"debate-verdict-{uuid4().hex}",
                 operation="debate.verdict",
-                timeout_seconds=60.0,
+                request_class=LLMRequestClass.BACKGROUND,
+                timeout_seconds=DEBATE_LLM_TIMEOUT_SECONDS,
             )
             conclusion = await self.llm_provider.acomplete_structured(
-                StructuredRequest[DebateConclusion](
+                StructuredRequest[DebateVerdictDraft](
                     completion=conclusion_request,
-                    response_schema=DebateConclusion,
+                    response_schema=DebateVerdictDraft,
                 )
             )
             conclusion_data = conclusion.model_dump(mode="json")
@@ -684,19 +697,7 @@ class DebateOrchestrator:
                 error_code="DEBATE_VERDICT_FAILED",
                 fields={"ticker": ticker, "exception": exc_text},
             )
-            return DebateNodeResult(
-                update={
-                    "workflow_activity_updates": {"verdict": "error"},
-                    "error_logs": [
-                        {
-                            "node": "verdict",
-                            "error": f"Verdict generation failed: {exc_text}",
-                            "severity": "error",
-                        }
-                    ],
-                },
-                goto="END",
-            )
+            raise
 
     @staticmethod
     def _compress_reports(reports: JSONObject) -> str:

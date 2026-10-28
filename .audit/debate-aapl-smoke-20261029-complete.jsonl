@@ -1,0 +1,11 @@
+{"check":"health","status":"VERIFIED","thread_id":"aapl-debate-contract-20261028195114-90086","run_id":"","detail":"http_200"}
+{"check":"register","status":"VERIFIED","thread_id":"aapl-debate-contract-20261028195114-90086","run_id":"","detail":"http_409"}
+{"check":"login","status":"VERIFIED","thread_id":"aapl-debate-contract-20261028195114-90086","run_id":"","detail":"http_200"}
+{"check":"provider_keys","status":"VERIFIED","thread_id":"aapl-debate-contract-20261028195114-90086","run_id":"","detail":"[{\"id\":\"8a5dd523-d454-4cc7-9b46-a356070a3cf4\",\"label\":\"full-refactor-staging-primary\",\"status\":\"available\"},{\"id\":\"d1244acc-ad8f-4831-afd2-960aac9fcc73\",\"label\":\"full-refactor-staging-secondary\",\"status\":\"available\"}]"}
+{"check":"run_start","status":"VERIFIED","thread_id":"aapl-debate-contract-20261028195114-90086","run_id":"baae809a-fe1d-4a6d-8f54-96097dedcac0","detail":"http_202"}
+{"check":"resume_ticker_selection","status":"VERIFIED","thread_id":"aapl-debate-contract-20261028195114-90086","run_id":"baae809a-fe1d-4a6d-8f54-96097dedcac0","detail":"http_202"}
+{"check":"completion","status":"NOT_VERIFIED","thread_id":"aapl-debate-contract-20261028195114-90086","run_id":"baae809a-fe1d-4a6d-8f54-96097dedcac0","detail":"status_failed"}
+{"check":"artifact","status":"VERIFIED","thread_id":"aapl-debate-contract-20261028195114-90086","run_id":"baae809a-fe1d-4a6d-8f54-96097dedcac0","artifact_id":"3eb337f7-f747-4de2-814d-31f20a3491ac","artifact_type":"unknown"}
+{"check":"artifact","status":"VERIFIED","thread_id":"aapl-debate-contract-20261028195114-90086","run_id":"baae809a-fe1d-4a6d-8f54-96097dedcac0","artifact_id":"b25be6e5-1814-4512-9af7-0519ce1def8f","artifact_type":"unknown"}
+{"check":"artifact","status":"VERIFIED","thread_id":"aapl-debate-contract-20261028195114-90086","run_id":"baae809a-fe1d-4a6d-8f54-96097dedcac0","artifact_id":"d65e7b91-ba32-4826-88d7-bd702d3f673c","artifact_type":"unknown"}
+{"check":"artifacts","status":"NOT_VERIFIED","thread_id":"aapl-debate-contract-20261028195114-90086","run_id":"baae809a-fe1d-4a6d-8f54-96097dedcac0","detail":"count_3"}

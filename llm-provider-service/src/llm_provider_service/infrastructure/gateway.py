@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import math
 import os
 import random
@@ -20,6 +21,7 @@ from pydantic import BaseModel, ValidationError
 from src.llm_provider_service.application.context import get_provider_principal
 from src.llm_provider_service.domain.contracts import (
     ChatMessage,
+    ChatRole,
     CompletionRequest,
     CompletionResult,
     LLMAttempt,
@@ -38,6 +40,8 @@ from src.llm_provider_service.domain.routes import UserScopedRouteResolver
 from .telemetry import LLMProviderTelemetry
 
 _ResponseModel = TypeVar("_ResponseModel", bound=BaseModel)
+_logger = logging.getLogger(__name__)
+_STRUCTURED_SCHEMA_RETRY_LIMIT = 1
 _RETRYABLE_STATUS_CODES = frozenset({408, 429, 500, 502, 503, 504})
 _MAX_ERROR_TEXT = 500
 _MAX_RETRY_ATTEMPTS = 3
@@ -47,6 +51,12 @@ _SAFE_DEPLOYMENT_ID_PATTERN = re.compile(
     r"(?:[0-9]{1,20}|deployment-[A-Za-z0-9_-]{1,64}|"
     r"[0-9a-fA-F]{8}-(?:[0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12})"
 )
+
+
+class _StructuredResponseValidationError(ValueError):
+    def __init__(self, validation_issues: list[dict[str, str]]) -> None:
+        self.validation_issues = validation_issues
+        super().__init__("structured response did not match the requested schema")
 
 
 def _env_int(name: str, default: int, *, minimum: int) -> int:
@@ -366,8 +376,7 @@ class LiteLLMGatewayProvider:
             update={"metadata": {**request.completion.metadata, "structured": "true"}}
         )
         try:
-            result = self._complete(completion, response_schema=request.response_schema)
-            decoded = self._decode_structured_response(result, request)
+            result, decoded = self._complete_structured_with_retry(completion, request)
         except LLMProviderError as exc:
             self.telemetry.failed(request.completion, exc, started_at=started_at)
             raise
@@ -474,15 +483,142 @@ class LiteLLMGatewayProvider:
             update={"metadata": {**request.completion.metadata, "structured": "true"}}
         )
         try:
-            result = await self._acomplete(
-                completion, response_schema=request.response_schema
+            result, decoded = await self._acomplete_structured_with_retry(
+                completion, request
             )
-            decoded = self._decode_structured_response(result, request)
         except LLMProviderError as exc:
             self.telemetry.failed(request.completion, exc, started_at=started_at)
             raise
         self.telemetry.succeeded(request.completion, result, started_at=started_at)
         return decoded
+
+    def _complete_structured_with_retry(
+        self,
+        completion: CompletionRequest,
+        request: StructuredRequest[_ResponseModel],
+    ) -> tuple[CompletionResult, _ResponseModel]:
+        attempt_completion = completion
+        for structured_attempt in range(1, _STRUCTURED_SCHEMA_RETRY_LIMIT + 2):
+            result = self._complete(
+                attempt_completion, response_schema=request.response_schema
+            )
+            try:
+                return result, self._decode_structured_response(result, request)
+            except _StructuredResponseValidationError as exc:
+                should_retry = structured_attempt <= _STRUCTURED_SCHEMA_RETRY_LIMIT
+                self._log_structured_validation_failure(
+                    request,
+                    exc.validation_issues,
+                    structured_attempt=structured_attempt,
+                    will_retry=should_retry,
+                )
+                if not should_retry:
+                    raise self._structured_validation_error(result, request) from exc
+                attempt_completion = self._structured_correction_completion(
+                    completion,
+                    exc.validation_issues,
+                    retry_number=structured_attempt,
+                )
+        raise RuntimeError("structured response retry loop reached unreachable state")
+
+    async def _acomplete_structured_with_retry(
+        self,
+        completion: CompletionRequest,
+        request: StructuredRequest[_ResponseModel],
+    ) -> tuple[CompletionResult, _ResponseModel]:
+        attempt_completion = completion
+        for structured_attempt in range(1, _STRUCTURED_SCHEMA_RETRY_LIMIT + 2):
+            result = await self._acomplete(
+                attempt_completion, response_schema=request.response_schema
+            )
+            try:
+                return result, self._decode_structured_response(result, request)
+            except _StructuredResponseValidationError as exc:
+                should_retry = structured_attempt <= _STRUCTURED_SCHEMA_RETRY_LIMIT
+                self._log_structured_validation_failure(
+                    request,
+                    exc.validation_issues,
+                    structured_attempt=structured_attempt,
+                    will_retry=should_retry,
+                )
+                if not should_retry:
+                    raise self._structured_validation_error(result, request) from exc
+                attempt_completion = self._structured_correction_completion(
+                    completion,
+                    exc.validation_issues,
+                    retry_number=structured_attempt,
+                )
+        raise RuntimeError("structured response retry loop reached unreachable state")
+
+    @staticmethod
+    def _structured_correction_completion(
+        completion: CompletionRequest,
+        validation_issues: list[dict[str, str]],
+        *,
+        retry_number: int,
+    ) -> CompletionRequest:
+        issue_summary = "\n".join(
+            f"- {issue['path']}: {issue['type']}" for issue in validation_issues
+        )
+        correction_message = ChatMessage(
+            role=ChatRole.USER,
+            content=(
+                "Regenerate the response from the original conversation and satisfy "
+                "the requested JSON schema. The previous response failed validation "
+                "at these paths:\n"
+                f"{issue_summary}\n"
+                "Return exactly one JSON object with no markdown or commentary."
+            ),
+        )
+        idempotency_key = (
+            f"{completion.idempotency_key}:schema-correction:{retry_number}"
+            if completion.idempotency_key is not None
+            else None
+        )
+        return completion.model_copy(
+            update={
+                "messages": (*completion.messages, correction_message),
+                "idempotency_key": idempotency_key,
+            }
+        )
+
+    def _log_structured_validation_failure(
+        self,
+        request: StructuredRequest[_ResponseModel],
+        validation_issues: list[dict[str, str]],
+        *,
+        structured_attempt: int,
+        will_retry: bool,
+    ) -> None:
+        _logger.warning(
+            "structured LLM response failed contract validation",
+            extra={
+                "error_code": LLMErrorCode.SCHEMA_VALIDATION_FAILED.value,
+                "request_id": request.completion.request_id,
+                "operation": request.completion.operation,
+                "response_schema": request.response_schema.__name__,
+                "structured_attempt": structured_attempt,
+                "will_retry": will_retry,
+                "validation_issues": validation_issues,
+            },
+        )
+
+    def _structured_validation_error(
+        self,
+        result: CompletionResult,
+        request: StructuredRequest[_ResponseModel],
+    ) -> LLMProviderError:
+        return LLMProviderError(
+            code=LLMErrorCode.SCHEMA_VALIDATION_FAILED,
+            provider=self.provider_name,
+            model=result.model,
+            request_id=request.completion.request_id,
+            reason="gateway response did not match the requested schema",
+            retryable=False,
+            attempt=result.attempt,
+            attribution=result.attribution,
+            attempts=result.attempts,
+        )
 
     def _decode_structured_response(
         self,
@@ -493,17 +629,21 @@ class LiteLLMGatewayProvider:
             decoded: object = json.loads(result.text)
             return request.response_schema.model_validate(decoded)
         except (JSONDecodeError, TypeError, ValidationError) as exc:
-            raise LLMProviderError(
-                code=LLMErrorCode.SCHEMA_VALIDATION_FAILED,
-                provider=self.provider_name,
-                model=result.model,
-                request_id=request.completion.request_id,
-                reason="gateway response did not match the requested schema",
-                retryable=False,
-                attempt=result.attempt,
-                attribution=result.attribution,
-                attempts=result.attempts,
-            ) from exc
+            validation_issues = (
+                [
+                    {
+                        "path": ".".join(str(part)[:80] for part in issue["loc"]),
+                        "type": issue["type"],
+                    }
+                    for issue in exc.errors(
+                        include_input=False,
+                        include_url=False,
+                    )[:20]
+                ]
+                if isinstance(exc, ValidationError)
+                else [{"path": "$", "type": "invalid_json"}]
+            )
+            raise _StructuredResponseValidationError(validation_issues) from exc
 
     def stream(self, request: CompletionRequest) -> Iterator[StreamEvent]:
         started_at = self.telemetry.started(request, stream=True)

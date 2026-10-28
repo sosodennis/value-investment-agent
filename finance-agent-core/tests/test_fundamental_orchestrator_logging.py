@@ -4,6 +4,8 @@ from collections.abc import Mapping
 from unittest.mock import patch
 
 import pytest
+from langgraph.errors import GraphInterrupt
+from langgraph.types import Interrupt
 from pydantic import BaseModel, Field
 
 from src.agents.fundamental.application.workflow_orchestrator.orchestrator import (
@@ -177,6 +179,14 @@ def _build_orchestrator(
     )
 
 
+def _approve_valuation(_request: Mapping[str, object]) -> Mapping[str, object]:
+    return {
+        "type": "valuation_approval",
+        "contract_version": "v1",
+        "decision": "approve",
+    }
+
+
 def _build_orchestrator_with_port(port: object) -> FundamentalOrchestrator:
     def _build_progress_artifact(
         summary: str, preview: JSONObject
@@ -307,6 +317,7 @@ async def test_run_valuation_logs_mc_completion_fields_from_diagnostics() -> Non
     ) as mock_log:
         result = await orchestrator.run_valuation(
             _build_state(),
+            request_approval_fn=_approve_valuation,
             build_params_fn=lambda _model_type,
             _ticker,
             _reports,
@@ -348,6 +359,7 @@ async def test_run_valuation_logs_mc_completion_defaults_when_diagnostics_missin
     ) as mock_log:
         result = await orchestrator.run_valuation(
             _build_state(),
+            request_approval_fn=_approve_valuation,
             build_params_fn=lambda _model_type,
             _ticker,
             _reports,
@@ -389,6 +401,7 @@ async def test_run_valuation_logs_forward_signal_completion_fields() -> None:
     ) as mock_log:
         result = await orchestrator.run_valuation(
             _build_state(),
+            request_approval_fn=_approve_valuation,
             build_params_fn=lambda _model_type,
             _ticker,
             _reports,
@@ -431,6 +444,7 @@ async def test_run_valuation_logs_parameter_source_completion_fields() -> None:
     ) as mock_log:
         result = await orchestrator.run_valuation(
             _build_state(),
+            request_approval_fn=_approve_valuation,
             build_params_fn=lambda _model_type,
             _ticker,
             _reports,
@@ -521,6 +535,7 @@ async def test_run_valuation_does_not_mark_scope_mismatch_degraded_when_resolved
     ) as mock_log:
         result = await orchestrator.run_valuation(
             _build_state(),
+            request_approval_fn=_approve_valuation,
             build_params_fn=lambda _model_type,
             _ticker,
             _reports,
@@ -577,6 +592,7 @@ async def test_run_valuation_marks_completion_as_degraded_when_market_data_is_st
     ) as mock_log:
         result = await orchestrator.run_valuation(
             _build_state(),
+            request_approval_fn=_approve_valuation,
             build_params_fn=lambda _model_type,
             _ticker,
             _reports,
@@ -630,6 +646,7 @@ async def test_run_valuation_marks_completion_as_degraded_when_target_consensus_
     ) as mock_log:
         result = await orchestrator.run_valuation(
             _build_state(),
+            request_approval_fn=_approve_valuation,
             build_params_fn=lambda _model_type,
             _ticker,
             _reports,
@@ -745,6 +762,7 @@ async def test_run_valuation_logs_effective_inputs_in_metrics_snapshot() -> None
     ) as mock_log:
         result = await orchestrator.run_valuation(
             _build_state(),
+            request_approval_fn=_approve_valuation,
             build_params_fn=lambda _model_type,
             _ticker,
             _reports,
@@ -880,6 +898,7 @@ async def test_run_valuation_passes_forward_signals_from_financial_reports_artif
 
     await orchestrator.run_valuation(
         _build_state(),
+        request_approval_fn=_approve_valuation,
         build_params_fn=lambda _model_type, _ticker, _reports, _forward_signals: (
             captured.update({"forward_signals": _forward_signals})
             or _build_params_result()
@@ -907,6 +926,7 @@ async def test_run_valuation_stops_on_audit_failure_before_calculator() -> None:
     ) as mock_log:
         result = await orchestrator.run_valuation(
             _build_state(),
+            request_approval_fn=_approve_valuation,
             build_params_fn=lambda _model_type,
             _ticker,
             _reports,
@@ -1004,6 +1024,7 @@ async def test_run_valuation_blocks_when_xbrl_quality_gate_is_blocking() -> None
     ) as mock_log:
         result = await orchestrator.run_valuation(
             state,
+            request_approval_fn=_approve_valuation,
             build_params_fn=lambda _model_type, _ticker, _reports, _forward_signals: (
                 _ for _ in ()
             ).throw(
@@ -1054,6 +1075,7 @@ async def test_run_valuation_warn_only_missing_inputs_continue_when_quality_gate
     ) as mock_log:
         result = await orchestrator.run_valuation(
             state,
+            request_approval_fn=_approve_valuation,
             build_params_fn=lambda _model_type,
             _ticker,
             _reports,
@@ -1103,6 +1125,7 @@ async def test_run_valuation_offloads_execution_calculation_to_thread() -> None:
     ):
         result = await orchestrator.run_valuation(
             _build_state(),
+            request_approval_fn=_approve_valuation,
             build_params_fn=lambda _model_type,
             _ticker,
             _reports,
@@ -1115,7 +1138,131 @@ async def test_run_valuation_offloads_execution_calculation_to_thread() -> None:
         )
 
     assert result.goto == "END"
-    assert "execute_valuation_calculation" in offloaded_calls
+    assert offloaded_calls == [
+        "prepare_valuation_calculation",
+        "calculate_prepared_valuation",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_rejected_valuation_approval_never_calls_calculator() -> None:
+    orchestrator = _build_orchestrator()
+    calculator_calls = 0
+    approval_requests: list[Mapping[str, object]] = []
+
+    def _calculator(_params: _ValuationParams) -> Mapping[str, object]:
+        nonlocal calculator_calls
+        calculator_calls += 1
+        return {"intrinsic_value": 123.0}
+
+    def _reject_valuation(request: Mapping[str, object]) -> Mapping[str, object]:
+        approval_requests.append(request)
+        return {
+            "type": "valuation_approval",
+            "contract_version": "v1",
+            "decision": "reject",
+        }
+
+    result = await orchestrator.run_valuation(
+        _build_state(),
+        request_approval_fn=_reject_valuation,
+        build_params_fn=lambda _model_type, _ticker, _reports, _forward_signals: (
+            _build_params_result(params={"terminal_growth": 0.025})
+        ),
+        get_model_runtime_fn=lambda _model_type: {
+            "schema": _ValuationParams,
+            "calculator": _calculator,
+            "auditor": lambda _params: _AuditResult(
+                True, ["PASS: assumptions are consistent"]
+            ),
+        },
+    )
+
+    assert result.goto == "END"
+    assert calculator_calls == 0
+    assert len(approval_requests) == 1
+    assert approval_requests[0]["type"] == "valuation_approval"
+    assert approval_requests[0]["contract_version"] == "v1"
+    assert approval_requests[0]["ticker"] == "GOOG"
+    assert approval_requests[0]["model_type"] == "dcf_growth"
+    assert approval_requests[0]["parameters"]["terminal_growth"] == 0.025
+    assert (
+        result.update["fundamental_analysis"]["valuation_status"] == "approval_rejected"
+    )
+
+
+@pytest.mark.asyncio
+async def test_invalid_valuation_approval_contract_fails_closed() -> None:
+    orchestrator = _build_orchestrator()
+    calculator_calls = 0
+
+    def _calculator(_params: _ValuationParams) -> Mapping[str, object]:
+        nonlocal calculator_calls
+        calculator_calls += 1
+        return {"intrinsic_value": 123.0}
+
+    result = await orchestrator.run_valuation(
+        _build_state(),
+        request_approval_fn=lambda _request: {
+            "type": "valuation_approval",
+            "contract_version": "v2",
+            "decision": "approve",
+        },
+        build_params_fn=lambda _model_type, _ticker, _reports, _forward_signals: (
+            _build_params_result()
+        ),
+        get_model_runtime_fn=lambda _model_type: {
+            "schema": _ValuationParams,
+            "calculator": _calculator,
+            "auditor": lambda _params: _AuditResult(True, []),
+        },
+    )
+
+    assert calculator_calls == 0
+    assert result.update["workflow_activity_updates"]["calculation"] == "error"
+
+
+@pytest.mark.asyncio
+async def test_langgraph_valuation_approval_interrupt_is_not_converted_to_error() -> (
+    None
+):
+    orchestrator = _build_orchestrator()
+    interrupt = GraphInterrupt(
+        [
+            Interrupt(
+                value={
+                    "type": "valuation_approval",
+                    "contract_version": "v1",
+                    "ticker": "GOOG",
+                    "model_type": "dcf_growth",
+                    "title": "Review valuation assumptions",
+                    "description": "Approve before calculation.",
+                    "parameters": {"terminal_growth": 0.025},
+                    "audit_messages": [],
+                }
+            )
+        ]
+    )
+
+    def _raise_approval(_request: Mapping[str, object]) -> Mapping[str, object]:
+        raise interrupt
+
+    with pytest.raises(GraphInterrupt) as raised:
+        await orchestrator.run_valuation(
+            _build_state(),
+            request_approval_fn=_raise_approval,
+            build_params_fn=lambda _model_type,
+            _ticker,
+            _reports,
+            _forward_signals: _build_params_result(),
+            get_model_runtime_fn=lambda _model_type: {
+                "schema": _ValuationParams,
+                "calculator": lambda _params: {"intrinsic_value": 123.0},
+                "auditor": lambda _params: _AuditResult(True, []),
+            },
+        )
+
+    assert raised.value is interrupt
 
 
 @pytest.mark.asyncio
@@ -1125,6 +1272,7 @@ async def test_run_valuation_saves_snapshot_and_rewrites_reference() -> None:
 
     result = await orchestrator.run_valuation(
         _build_state(),
+        request_approval_fn=_approve_valuation,
         build_params_fn=lambda _model_type,
         _ticker,
         _reports,
@@ -1182,6 +1330,7 @@ async def test_run_valuation_keeps_success_when_snapshot_save_fails() -> None:
 
     result = await orchestrator.run_valuation(
         _build_state(),
+        request_approval_fn=_approve_valuation,
         build_params_fn=lambda _model_type,
         _ticker,
         _reports,

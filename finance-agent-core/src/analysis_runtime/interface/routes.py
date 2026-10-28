@@ -11,7 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from src.analysis_runtime.application.runtime_service import AnalysisRuntimeService
 from src.analysis_runtime.domain.contracts import (
     InteractionIdentity,
-    TickerSelectionResponse,
+    InteractionResponse,
     WorkflowEvent,
     WorkflowSnapshot,
 )
@@ -48,7 +48,7 @@ class ResumeRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     identity: InteractionIdentity
-    response: TickerSelectionResponse
+    response: InteractionResponse
 
 
 class RunResponse(BaseModel):

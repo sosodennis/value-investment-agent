@@ -23,6 +23,11 @@ const streamResponse = (event: unknown) => {
     return new Response(body, { status: 200, headers: { 'Content-Type': 'text/event-stream' } });
 };
 
+const openStreamResponse = () => new Response(new ReadableStream<Uint8Array>(), {
+    status: 200,
+    headers: { 'Content-Type': 'text/event-stream' },
+});
+
 describe('useAgent workflow runtime', () => {
     const fetchMock = vi.fn();
     beforeEach(() => vi.stubGlobal('fetch', fetchMock));
@@ -119,6 +124,59 @@ describe('useAgent workflow runtime', () => {
             /\/api\/v1\/threads\/thread_[^/]+\/activities\?run_id=started-run$/,
         );
         expect(result.current.error).toBeNull();
+    });
+
+    it('tracks a pending interaction submission independently from the run stream', async () => {
+        const pendingInteraction = {
+            identity: {
+                thread_id: 'thread_1', run_id: 'run_1',
+                activity_id: 'intent.clarifying', interaction_id: 'interaction_1',
+            },
+            kind: 'ticker_selection',
+            status: 'pending',
+            request: {
+                type: 'ticker_selection',
+                title: 'Choose a company',
+                description: 'Select the intended company.',
+                candidates: [{ symbol: 'AAPL', name: 'Apple Inc.', confidence: 0.99 }],
+            },
+        };
+        const waitingActivity = activity({
+            activity_id: 'intent.clarifying', status: 'waiting', label: 'Choose a company',
+        });
+        const waitingSnapshot = snapshot({
+            run_status: 'waiting', cursor: 1,
+            active_activities: [waitingActivity],
+            recent_activities: [waitingActivity],
+            pending_interactions: [pendingInteraction],
+        });
+        fetchMock
+            .mockResolvedValueOnce(new Response(JSON.stringify(waitingSnapshot), { status: 200 }))
+            .mockResolvedValueOnce(openStreamResponse())
+            .mockResolvedValueOnce(new Response(JSON.stringify({
+                thread_id: 'thread_1', run_id: 'run_1', status: 'started',
+            }), { status: 202 }))
+            .mockResolvedValueOnce(new Response(JSON.stringify(waitingSnapshot), { status: 200 }))
+            .mockResolvedValueOnce(openStreamResponse());
+        const { result, unmount } = renderHook(() => useAgent());
+
+        act(() => { void result.current.loadHistory('thread_1', 'run_1'); });
+        await waitFor(() => expect(result.current.workflow?.runStatus).toBe('waiting'));
+        expect(result.current.isLoading).toBe(true);
+        expect(result.current.isSubmittingInteraction).toBe(false);
+
+        const interaction = [...(result.current.workflow?.interactions.values() ?? [])][0];
+        if (!interaction) throw new Error('Pending ticker interaction fixture failed to parse.');
+        act(() => {
+            void result.current.submitCommand(interaction, {
+                type: 'ticker_selection', selected_symbol: 'AAPL',
+            });
+        });
+        await waitFor(() => expect(result.current.isSubmittingInteraction).toBe(true));
+        expect(result.current.isLoading).toBe(true);
+        expect(fetchMock).toHaveBeenCalledTimes(5);
+
+        unmount();
     });
 
     it('requests and renders the exact older run from a history link', async () => {

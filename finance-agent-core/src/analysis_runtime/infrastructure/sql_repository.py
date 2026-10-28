@@ -16,10 +16,12 @@ from src.analysis_runtime.domain.contracts import (
     ClaimedInteractionResume,
     InteractionIdentity,
     InteractionRequested,
+    InteractionResponse,
     PendingResume,
     ReplayPage,
     RunStatus,
     RunStatusRecord,
+    TickerSelectionRequest,
     TickerSelectionResponse,
     WorkflowAgentOutput,
     WorkflowAgentOutputEvent,
@@ -471,7 +473,7 @@ class SqlAlchemyActivityRepository:
         self,
         *,
         identity: InteractionIdentity,
-        response: TickerSelectionResponse,
+        response: InteractionResponse,
         principal_id: str,
         now: datetime,
     ) -> ClaimedInteractionResume:
@@ -538,12 +540,18 @@ class SqlAlchemyActivityRepository:
                 raise InteractionNotAvailableError(
                     "interaction is stale or unavailable"
                 )
-            if response.selected_symbol not in {
-                item.symbol for item in interaction.request.candidates
-            }:
+            if response.type != interaction.request.type:
                 raise InvalidInteractionResponseError(
-                    "selected symbol is not one of the available candidates"
+                    "response type does not match the pending interaction"
                 )
+            if isinstance(interaction.request, TickerSelectionRequest):
+                if not isinstance(response, TickerSelectionResponse) or (
+                    response.selected_symbol
+                    not in {item.symbol for item in interaction.request.candidates}
+                ):
+                    raise InvalidInteractionResponseError(
+                        "selected symbol is not one of the available candidates"
+                    )
             history = await session.get(
                 WorkflowRunHistory,
                 (identity.thread_id, identity.run_id),
@@ -747,7 +755,7 @@ class SqlAlchemyActivityRepository:
                     interaction is None
                     or interaction.status != "responded"
                     or interaction.response
-                    != TickerSelectionResponse.model_validate(row.response)
+                    != TypeAdapter(InteractionResponse).validate_python(row.response)
                     or activity is None
                     or activity.status != "running"
                 ):
@@ -758,7 +766,9 @@ class SqlAlchemyActivityRepository:
                         principal_id=row.principal_id,
                         scope_path=activity.scope_path,
                         attempt=activity.attempt,
-                        response=TickerSelectionResponse.model_validate(row.response),
+                        response=TypeAdapter(InteractionResponse).validate_python(
+                            row.response
+                        ),
                     )
                 )
             return tuple(pending)

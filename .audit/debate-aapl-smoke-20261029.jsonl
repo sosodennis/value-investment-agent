@@ -1,0 +1,7 @@
+{"check":"health","status":"VERIFIED","backend_origin":"http://127.0.0.1:8530","thread_id":"refactor-smoke-20261028173144-53051","request_id":"","latency_ms":0,"attempts":1,"error_code":""}
+{"check":"register","status":"VERIFIED","backend_origin":"http://127.0.0.1:8530","thread_id":"refactor-smoke-20261028173144-53051","request_id":"","latency_ms":0,"attempts":1,"error_code":""}
+{"check":"login","status":"VERIFIED","backend_origin":"http://127.0.0.1:8530","thread_id":"refactor-smoke-20261028173144-53051","request_id":"","latency_ms":0,"attempts":1,"error_code":""}
+{"check":"key_full-refactor-staging-primary","status":"VERIFIED","backend_origin":"http://127.0.0.1:8530","thread_id":"refactor-smoke-20261028173144-53051","request_id":"","latency_ms":2000,"attempts":1,"error_code":""}
+{"check":"key_full-refactor-staging-secondary","status":"VERIFIED","backend_origin":"http://127.0.0.1:8530","thread_id":"refactor-smoke-20261028173144-53051","request_id":"","latency_ms":2000,"attempts":1,"error_code":""}
+{"check":"completion_start","status":"VERIFIED","backend_origin":"http://127.0.0.1:8530","thread_id":"refactor-smoke-20261028173144-53051","request_id":"","latency_ms":0,"attempts":1,"error_code":""}
+{"check":"completion","status":"NOT_VERIFIED","backend_origin":"http://127.0.0.1:8530","thread_id":"refactor-smoke-20261028173144-53051","request_id":"","latency_ms":0,"attempts":1,"error_code":"missing_output_artifact_reference"}
