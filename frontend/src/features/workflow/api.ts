@@ -95,14 +95,19 @@ export async function consumeWorkflowEvents(
     signal: AbortSignal,
     onEvent: (event: WorkflowEvent) => boolean | void,
     runId?: string,
+    onConnected?: () => void,
 ): Promise<void> {
     const url = new URL(`${API_URL}/api/v1/threads/${encodeURIComponent(threadId)}/events`);
     url.searchParams.set('after_seq', String(afterSeq));
     if (runId) url.searchParams.set('run_id', runId);
     const response = await fetch(url.toString(), { credentials: 'include', signal, headers: { Accept: 'text/event-stream' } });
     if (!response.ok) throw await readError(response, 'Workflow event stream');
+    if (!response.headers.get('content-type')?.toLowerCase().startsWith('text/event-stream')) {
+        throw new TypeError('Workflow event stream response must use text/event-stream.');
+    }
     const reader = response.body?.getReader();
     if (!reader) throw new Error('Workflow event stream has no response body.');
+    onConnected?.();
     const decoder = new TextDecoder();
     let buffer = '';
     try {

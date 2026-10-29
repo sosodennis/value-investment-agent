@@ -6,7 +6,7 @@ import { useAgent } from '@/hooks/useAgent';
 import { AGENT_CONFIGS } from '@/config/agents';
 import type { AgentInfo, AgentStatus, StandardAgentOutput } from '@/types/agents';
 import { WorkspaceOutputPanel } from './workspace-output-panel';
-import type { ConnectionState, InteractionResponse, ValuationApprovalResponse, WorkflowInteraction } from '@/features/workflow';
+import type { ConnectionState, InteractionResponse, ValuationApprovalResponse, WorkflowActivity, WorkflowInteraction } from '@/features/workflow';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -110,7 +110,7 @@ export function WorkspacePage({ assistantId = 'agent', initialTicker = null, ini
                         <TabsList aria-label="Workspace views" className="mb-4 h-auto w-full justify-start overflow-x-auto rounded-none border-b bg-transparent p-0">
                             {reportTabs.map((tab) => <TabsTrigger key={tab.id} value={tab.id} className="min-h-10 shrink-0 rounded-none border-b-2 border-transparent px-3 data-[state=active]:border-primary data-[state=active]:bg-transparent">{tab.label}</TabsTrigger>)}
                         </TabsList>
-                        <TabsContent value="activity"><ActivityPanel workflow={agent.workflow} onResumeInteraction={agent.submitCommand} isSubmitting={agent.isSubmittingInteraction} /></TabsContent>
+                        <TabsContent value="activity"><ActivityPanel workflow={agent.workflow} connectionState={agent.connectionState} onResumeInteraction={agent.submitCommand} isSubmitting={agent.isSubmittingInteraction} /></TabsContent>
                         {reportTabs.filter((item): item is { id: Exclude<ReportTab, 'activity'>; label: string } => item.id !== 'activity').map((item) => <TabsContent key={item.id} value={item.id}><ReportPanel tab={item.id} outputs={agent.agentOutputs} statuses={agent.agentStatuses} ticker={ticker} /></TabsContent>)}
                     </Tabs>
                 </section>
@@ -132,13 +132,14 @@ function ConnectionBadge({ state }: { state: ConnectionState }) {
     return <Badge variant={state === 'connected' ? 'success' : state === 'reconnecting' ? 'warning' : 'outline'}><Icon className={`mr-1 size-3 ${state === 'connecting' || state === 'reconnecting' ? 'animate-spin' : ''}`} />{connectionLabels[state]}</Badge>;
 }
 
-function ActivityPanel({ workflow, onResumeInteraction, isSubmitting }: {
+function ActivityPanel({ workflow, connectionState, onResumeInteraction, isSubmitting }: {
     workflow: ReturnType<typeof useAgent>['workflow'];
+    connectionState: ConnectionState;
     onResumeInteraction: (interaction: WorkflowInteraction, response: InteractionResponse) => Promise<void>;
     isSubmitting: boolean;
 }) {
     if (!workflow) return <div className="grid min-h-48 place-items-center border-y text-sm text-muted-foreground"><p>No workflow activity is available yet.</p></div>;
-    const activities = [...workflow.recent].reverse();
+    const activities = activityRowsForDisplay(workflow.recent);
     const pendingInteractions = [...workflow.interactions.values()].filter((item) => item.status === 'pending');
     return <div className="grid gap-4">
         {workflow.runStatus === 'waiting' && pendingInteractions.length === 0 && <Alert variant="warning"><CircleAlert className="size-4" /><AlertTitle>Workflow is waiting</AlertTitle><AlertDescription>The workflow is waiting for an interaction request that is not available in this activity snapshot.</AlertDescription></Alert>}
@@ -150,7 +151,7 @@ function ActivityPanel({ workflow, onResumeInteraction, isSubmitting }: {
                 const activityInteractions = pendingInteractions.filter((interaction) => interaction.identity.activity_id === item.activity_id);
                 return <li key={`${item.activity_id}:${item.attempt}:${item.status}`} className="grid grid-cols-[1.25rem_minmax(0,1fr)_auto] gap-3 py-3" style={{ paddingLeft: `${Math.min(3, Math.max(0, item.scope_path.length - 1)) * 12}px` }}>
                     <Activity aria-hidden="true" className={`mt-0.5 size-4 ${item.status === 'failed' ? 'text-destructive' : item.status === 'completed' ? 'text-success' : 'text-primary'}`} />
-                    <div className="min-w-0"><p className="text-sm font-medium">{item.label}</p><p className="mt-0.5 truncate text-xs text-muted-foreground">{item.scope_path.join(' / ')} · {item.kind} · attempt {item.attempt}</p>{item.progress !== undefined && item.progress !== null && <div className="mt-2 flex items-center gap-2"><progress className="h-1.5 flex-1 accent-primary" max={100} value={item.progress} aria-label={`${item.label} progress`} /><span className="w-10 text-right text-xs tabular-nums text-muted-foreground">{item.progress}%</span></div>}
+                    <div className="min-w-0"><p className="text-sm font-medium">{item.label}</p><p className="mt-0.5 truncate text-xs text-muted-foreground">{item.scope_path.join(' / ')} · {item.kind}</p>{item.progress !== undefined && item.progress !== null && <div className="mt-2 flex items-center gap-2"><progress className="h-1.5 flex-1 accent-primary" max={100} value={item.progress} aria-label={`${item.label} progress`} /><span className="w-10 text-right text-xs tabular-nums text-muted-foreground">{item.progress}%</span></div>}
                         {activityInteractions.map((interaction) => <PendingInteractionPrompt key={interaction.identity.interaction_id} interaction={interaction} disabled={isSubmitting} onSubmit={onResumeInteraction} />)}
                     </div>
                     <Badge variant={item.status === 'failed' ? 'destructive' : item.status === 'completed' ? 'success' : item.status === 'waiting' ? 'warning' : 'outline'}>{item.status}</Badge>
@@ -158,8 +159,35 @@ function ActivityPanel({ workflow, onResumeInteraction, isSubmitting }: {
             })}
         </ol>}
         {pendingInteractions.filter((interaction) => !activities.some((item) => item.activity_id === interaction.identity.activity_id)).map((interaction) => <PendingInteractionPrompt key={interaction.identity.interaction_id} interaction={interaction} disabled={isSubmitting} onSubmit={onResumeInteraction} />)}
-        <p className="text-xs text-muted-foreground">Connection {connectionLabels[workflow.connection]} · activity cursor {workflow.cursor}</p>
+        <p className="text-xs text-muted-foreground">Connection {connectionLabels[connectionState]} · activity cursor {workflow.cursor}</p>
     </div>;
+}
+
+function activityRowsForDisplay(recent: WorkflowActivity[]): WorkflowActivity[] {
+    const latestById = new Map<string, WorkflowActivity>();
+    for (const activity of recent) {
+        if (!latestById.has(activity.activity_id)) latestById.set(activity.activity_id, activity);
+    }
+    const latest = [...latestById.values()];
+    const byId = new Map<string, WorkflowActivity>();
+    for (const activity of latest) byId.set(activity.activity_id, activity);
+    const redundantWrapperIds = new Set<string>();
+
+    for (const child of latest) {
+        if (!child.parent_activity_id) continue;
+        const parent = byId.get(child.parent_activity_id);
+        if (
+            parent
+            && parent.kind === child.kind
+            && parent.label === child.label
+            && parent.scope_path.length === child.scope_path.length
+            && parent.scope_path.every((part, index) => part === child.scope_path[index])
+        ) {
+            redundantWrapperIds.add(parent.activity_id);
+        }
+    }
+
+    return latest.filter((activity) => !redundantWrapperIds.has(activity.activity_id));
 }
 
 function PendingInteractionPrompt({ interaction, disabled, onSubmit }: {

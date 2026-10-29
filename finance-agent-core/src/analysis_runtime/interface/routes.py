@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import asyncio
 import json
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Mapping
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
+from starlette.background import BackgroundTask
 
 from src.analysis_runtime.application.runtime_service import AnalysisRuntimeService
 from src.analysis_runtime.domain.contracts import (
@@ -36,6 +37,27 @@ router = APIRouter(prefix="/api/v1/threads", tags=["Analysis runtime"])
 
 class WorkflowEventStreamResponse(StreamingResponse):
     media_type = "text/event-stream"
+
+    def __init__(
+        self,
+        content: AsyncIterator[str],
+        status_code: int = 200,
+        headers: Mapping[str, str] | None = None,
+        media_type: str | None = None,
+        background: BackgroundTask | None = None,
+    ) -> None:
+        stream_headers = {
+            "Cache-Control": "no-cache, no-transform",
+            "X-Accel-Buffering": "no",
+        }
+        stream_headers.update(headers or {})
+        super().__init__(
+            content,
+            status_code=status_code,
+            headers=stream_headers,
+            media_type=media_type or self.media_type,
+            background=background,
+        )
 
 
 class RunRequest(BaseModel):
@@ -272,6 +294,4 @@ async def activity_events(
 
     return WorkflowEventStreamResponse(
         stream(),
-        media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )

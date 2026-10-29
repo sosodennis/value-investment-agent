@@ -48,11 +48,10 @@ export function useAgent(assistantId = 'agent') {
                     projection = next;
                     cursor = next.cursor;
                     processWorkflowEvent(event);
-                    setConnection('connected');
                     return event.event_name === 'workflow.activity'
                         && event.payload.activity_id === 'workflow'
                         && ['completed', 'failed', 'cancelled'].includes(event.payload.status);
-                }, expectedRunId);
+                }, expectedRunId, () => setConnection('connected'));
                 if (controller.signal.aborted) return;
                 snapshot = await getActivitySnapshot(threadId, { runId: expectedRunId, signal: controller.signal });
                 if (snapshot.run_id !== expectedRunId) throw new TypeError('activity snapshot run identity mismatch.');
@@ -89,6 +88,7 @@ export function useAgent(assistantId = 'agent') {
             const snapshot = await getActivitySnapshot(threadId, { runId: run.run_id });
             if (snapshot.run_id !== run.run_id) throw new TypeError('activity snapshot run identity mismatch.');
             hydrateWorkflow(snapshot);
+            setIsLoading(false);
             await attachStream(threadId, snapshot, run.run_id);
         } catch (error) { setError(toError(error, 'Failed to start workflow run.')); } finally { setIsLoading(false); }
     }, [addUserMessage, attachStream, hydrateWorkflow, initSession, setError, setRun, state.threadId]);
@@ -123,6 +123,7 @@ export function useAgent(assistantId = 'agent') {
             setRun(run.run_id);
             const snapshot = await getActivitySnapshot(state.threadId, { runId: run.run_id });
             hydrateWorkflow(snapshot);
+            setIsLoading(false);
             await attachStream(state.threadId, snapshot, run.run_id);
         } catch (error) { setError(toError(error, 'Failed to resume workflow run.')); } finally {
             if (submittingInteractionRef.current === interactionId) {
@@ -144,6 +145,7 @@ export function useAgent(assistantId = 'agent') {
         try {
             const snapshot = await getActivitySnapshot(threadId, { runId: expectedRunId });
             hydrateWorkflow(snapshot);
+            setIsLoading(false);
             if (snapshot.run_status === 'running' || snapshot.run_status === 'waiting' || snapshot.run_status === 'queued') await attachStream(threadId, snapshot, snapshot.run_id);
         } catch (error) { setError(toError(error, 'Failed to load workflow snapshot.')); } finally { setIsLoading(false); }
     }, [attachStream, hydrateWorkflow, reset, setConnection, setError]);

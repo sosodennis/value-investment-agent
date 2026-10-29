@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import json
+from types import SimpleNamespace
+
 import httpx
 import pytest
 from fastapi import FastAPI
@@ -16,7 +19,13 @@ from src.analysis_runtime.domain.contracts import (
 from src.analysis_runtime.infrastructure.memory_repository import (
     InMemoryActivityRepository,
 )
-from src.analysis_runtime.interface.routes import ResumeRequest, RunRequest, router
+from src.analysis_runtime.interface.routes import (
+    ResumeRequest,
+    RunRequest,
+    WorkflowEventStreamResponse,
+    activity_events,
+    router,
+)
 from src.auth.entrypoint import require_current_user_mutation
 from src.auth.interface.contracts import Principal
 from src.auth.interface.dependencies import require_current_user
@@ -60,6 +69,17 @@ def test_resume_request_requires_full_interaction_identity() -> None:
         activity_id="intent.clarifying",
         interaction_id="interaction-1",
     )
+
+
+def test_event_stream_response_disables_transforming_and_buffering() -> None:
+    async def stream():
+        yield ": heartbeat\n\n"
+
+    response = WorkflowEventStreamResponse(stream())
+
+    assert response.headers["content-type"] == "text/event-stream; charset=utf-8"
+    assert response.headers["cache-control"] == "no-cache, no-transform"
+    assert response.headers["x-accel-buffering"] == "no"
 
 
 class Owner:
@@ -162,6 +182,46 @@ async def test_activities_route_loads_an_exact_historical_run_after_rerun() -> N
     assert old_snapshot.json()["run_status"] == "completed"
     assert latest_snapshot.status_code == 200
     assert latest_snapshot.json()["run_id"] == second_run
+
+
+@pytest.mark.asyncio
+async def test_event_route_streams_replayed_workflow_events_without_transform_headers() -> (
+    None
+):
+    app = FastAPI()
+    service = AnalysisRuntimeService(
+        repository=InMemoryActivityRepository(), owner=Owner(), runner=Runner()
+    )
+    app.state.analysis_runtime = service
+    run_id = await service.start(
+        principal_id="user-1",
+        thread_id="thread-1",
+        input_data={"message": "AAPL"},
+    )
+    await service._tasks["thread-1"]
+
+    response = await activity_events(
+        thread_id="thread-1",
+        request=SimpleNamespace(app=app),
+        principal=Principal(
+            user_id="user-1", subject="user-1", email="user@example.test"
+        ),
+        after_seq=0,
+        run_id=run_id,
+    )
+
+    try:
+        frame = await anext(response.body_iterator)
+    finally:
+        await response.body_iterator.aclose()
+
+    assert response.headers["cache-control"] == "no-cache, no-transform"
+    assert "content-encoding" not in response.headers
+    assert frame.startswith("id: 1\nevent: workflow.activity\ndata: ")
+    payload = json.loads(frame.split("data: ", maxsplit=1)[1])
+    assert payload["thread_id"] == "thread-1"
+    assert payload["run_id"] == run_id
+    assert payload["event_name"] == "workflow.activity"
 
 
 @pytest.mark.asyncio

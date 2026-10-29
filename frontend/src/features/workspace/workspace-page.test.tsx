@@ -149,6 +149,93 @@ describe('WorkspacePage', () => {
         expect(screen.getByText('Running')).toBeTruthy();
     });
 
+    it('keeps backend retry and resume attempt counts out of user-facing activity', () => {
+        hook.value = defaultHook({
+            workflow: workflowState({
+                recent_activities: [{
+                    activity_id: 'fundamental_analysis',
+                    thread_id: 'thread-1',
+                    run_id: 'run-1',
+                    scope_path: ['fundamental_analysis'],
+                    kind: 'node',
+                    status: 'running',
+                    label: 'Loading financial reports',
+                    attempt: 4,
+                }],
+            }),
+        });
+        render(<WorkspacePage />);
+
+        expect(screen.getByText('Loading financial reports')).toBeTruthy();
+        expect(screen.queryByText(/attempt\s+4/i)).toBeNull();
+    });
+
+    it('shows the live SSE connection state beside the activity cursor', () => {
+        hook.value = defaultHook({
+            workflow: workflowState(),
+            connectionState: 'connected',
+        });
+        render(<WorkspacePage />);
+
+        expect(screen.getByText('Connection Live · activity cursor 4')).toBeTruthy();
+    });
+
+    it('shows one latest row for nested callbacks representing the same workflow step', () => {
+        hook.value = defaultHook({
+            workflow: workflowState({
+                recent_activities: [
+                    {
+                        activity_id: 'extraction-child',
+                        parent_activity_id: 'extraction-parent',
+                        thread_id: 'thread-1',
+                        run_id: 'run-1',
+                        scope_path: ['intent_extraction', 'extraction'],
+                        kind: 'node',
+                        status: 'completed',
+                        label: 'Extracting company intent',
+                        attempt: 1,
+                    },
+                    {
+                        activity_id: 'extraction-parent',
+                        thread_id: 'thread-1',
+                        run_id: 'run-1',
+                        scope_path: ['intent_extraction', 'extraction'],
+                        kind: 'node',
+                        status: 'completed',
+                        label: 'Extracting company intent',
+                        attempt: 1,
+                    },
+                    {
+                        activity_id: 'extraction-child',
+                        parent_activity_id: 'extraction-parent',
+                        thread_id: 'thread-1',
+                        run_id: 'run-1',
+                        scope_path: ['intent_extraction', 'extraction'],
+                        kind: 'node',
+                        status: 'running',
+                        label: 'Extracting company intent',
+                        attempt: 1,
+                    },
+                    {
+                        activity_id: 'extraction-parent',
+                        thread_id: 'thread-1',
+                        run_id: 'run-1',
+                        scope_path: ['intent_extraction', 'extraction'],
+                        kind: 'node',
+                        status: 'running',
+                        label: 'Extracting company intent',
+                        attempt: 1,
+                    },
+                ],
+            }),
+        });
+        render(<WorkspacePage />);
+
+        const activityList = within(screen.getByRole('list', { name: 'Workflow activity' }));
+        expect(activityList.getAllByText('Extracting company intent')).toHaveLength(1);
+        expect(activityList.getByText('completed')).toBeTruthy();
+    });
+
     it('shows actionable failure details and cancellation state', () => {
         hook.value = defaultHook({
             error: 'Analysis Service unavailable (HTTP 503).',

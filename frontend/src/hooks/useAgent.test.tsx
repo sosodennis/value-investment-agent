@@ -162,7 +162,7 @@ describe('useAgent workflow runtime', () => {
 
         act(() => { void result.current.loadHistory('thread_1', 'run_1'); });
         await waitFor(() => expect(result.current.workflow?.runStatus).toBe('waiting'));
-        expect(result.current.isLoading).toBe(true);
+        expect(result.current.isLoading).toBe(false);
         expect(result.current.isSubmittingInteraction).toBe(false);
 
         const interaction = [...(result.current.workflow?.interactions.values() ?? [])][0];
@@ -173,7 +173,7 @@ describe('useAgent workflow runtime', () => {
             });
         });
         await waitFor(() => expect(result.current.isSubmittingInteraction).toBe(true));
-        expect(result.current.isLoading).toBe(true);
+        expect(result.current.isLoading).toBe(false);
         expect(fetchMock).toHaveBeenCalledTimes(5);
 
         unmount();

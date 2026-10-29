@@ -207,8 +207,8 @@ services:
       - SEC_TEXT_DEBUG_RETRIEVAL_SENTENCES_LIMIT=3
       - SEC_TEXT_DEBUG_RETRIEVAL_SENTENCE_CHARS=220
       - APP_ENV=${APP_ENV:-development}
-      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-http://127.0.0.1:3000,http://localhost:3000,http://127.0.0.1:3001,http://localhost:3001}
-      - LOCAL_ADMIN_ALLOWED_ORIGINS=${LOCAL_ADMIN_ALLOWED_ORIGINS:-http://127.0.0.1:3000,http://localhost:3000,http://127.0.0.1:3001,http://localhost:3001}
+      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-http://127.0.0.1:3000,http://localhost:3000,http://127.0.0.1:3001,http://localhost:3001,http://127.0.0.1:${FRONTEND_HOST_PORT:-3000},http://localhost:${FRONTEND_HOST_PORT:-3000}}
+      - LOCAL_ADMIN_ALLOWED_ORIGINS=${LOCAL_ADMIN_ALLOWED_ORIGINS:-http://127.0.0.1:3000,http://localhost:3000,http://127.0.0.1:3001,http://localhost:3001,http://127.0.0.1:${FRONTEND_HOST_PORT:-3000},http://localhost:${FRONTEND_HOST_PORT:-3000}}
       - FRED_API_KEY=${FRED_API_KEY}
       # Add other necessary env vars here
     ports:
@@ -393,10 +393,10 @@ services:
       context: ./frontend
       dockerfile: Dockerfile        # <- Change to Dockerfile.dev for development
       args:
-        NEXT_PUBLIC_LANGGRAPH_URL: ${NEXT_PUBLIC_LANGGRAPH_URL:-http://127.0.0.1:8000}
+        NEXT_PUBLIC_LANGGRAPH_URL: ${NEXT_PUBLIC_LANGGRAPH_URL:-http://127.0.0.1:${BACKEND_HOST_PORT:-8000}}
     platform: linux/arm64
     environment:
-      - NEXT_PUBLIC_LANGGRAPH_URL=${NEXT_PUBLIC_LANGGRAPH_URL:-http://127.0.0.1:8000}
+      - NEXT_PUBLIC_LANGGRAPH_URL=${NEXT_PUBLIC_LANGGRAPH_URL:-http://127.0.0.1:${BACKEND_HOST_PORT:-8000}}
     ports:
       - "127.0.0.1:${FRONTEND_HOST_PORT:-3000}:3000"
     depends_on:
