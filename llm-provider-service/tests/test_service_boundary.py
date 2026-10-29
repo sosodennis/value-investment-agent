@@ -18,6 +18,7 @@ from src.llm_provider_service.domain.contracts import (
     StreamEvent,
     Usage,
 )
+from src.llm_provider_service.domain.errors import ProviderSettingsError
 from src.llm_provider_service.domain.routes import DEFAULT_MODEL_ALIAS
 from src.llm_provider_service.infrastructure.gateway import (
     LiteLLMGatewayConfig,
@@ -70,6 +71,7 @@ class _Settings:
         self.secrets: list[str] = []
         self.list_delay = 0.0
         self.settings_delay = 0.0
+        self.replacement_error_code: str | None = None
 
     async def list_keys(self, *, user_id: str):
         if self.list_delay:
@@ -109,6 +111,12 @@ class _Settings:
             last_used_at=None,
             replacement_retire_at=None,
         )
+
+    async def replace_key(self, *, user_id: str, key_id: str, key: str, label: str):
+        _ = (user_id, key_id, key, label)
+        if self.replacement_error_code is None:
+            raise AssertionError("replacement error code must be configured")
+        raise ProviderSettingsError(self.replacement_error_code)
 
     async def test_key(self, *, user_id: str, key_id: str) -> bool:
         if self.owners.get(key_id) != user_id:
@@ -214,6 +222,50 @@ async def test_provider_service_does_not_expose_internal_lifecycle_operations(
 
     assert sync.status_code == 404
     assert cleanup.status_code == 404
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("error_code", "expected_status"),
+    [
+        ("replacement_must_differ", 400),
+        ("replacement_in_progress", 409),
+    ],
+)
+async def test_provider_key_replacement_errors_have_client_statuses(
+    client,
+    monkeypatch: pytest.MonkeyPatch,
+    error_code: str,
+    expected_status: int,
+) -> None:
+    http, _, settings = client
+    settings.replacement_error_code = error_code
+    frozen_now = datetime(2026, 1, 1, tzinfo=UTC)
+
+    class FrozenDateTime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return cls(2026, 1, 1, tzinfo=tz)
+
+    monkeypatch.setattr(service, "datetime", FrozenDateTime)
+    try:
+        response = await http.post(
+            "/v1/provider-keys/replace",
+            headers={"Authorization": "Bearer service-secret"},
+            json={
+                "context": _context(deadline=frozen_now + timedelta(seconds=10)),
+                "input": {
+                    "key_id": "key-a",
+                    "api_key": "sk-replacement-key-that-is-long-enough",
+                    "label": "primary",
+                },
+            },
+        )
+    finally:
+        await http.aclose()
+
+    assert response.status_code == expected_status
+    assert response.json()["error"]["code"] == error_code
 
 
 @pytest.mark.asyncio

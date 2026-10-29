@@ -25,6 +25,18 @@ from src.llm_provider.domain.provider_models import ManagedProviderKey, OpenRout
 _Model = TypeVar("_Model", bound=BaseModel)
 _Value = TypeVar("_Value")
 
+_SETTINGS_ERROR_STATUSES = {
+    "not_found": 404,
+    "invalid_key": 400,
+    "invalid_key_id": 400,
+    "model_not_free": 400,
+    "request_rejected": 400,
+    "replacement_must_differ": 400,
+    "already_owned": 409,
+    "replacement_in_progress": 409,
+    "rate_limited": 429,
+}
+
 
 class _CompletionEnvelope(BaseModel):
     result: CompletionResult
@@ -376,9 +388,20 @@ class LLMProviderServiceSettingsClient:
         except httpx.TransportError:
             raise ProviderSettingsError("provider_unavailable") from None
         if response.status_code >= 400:
-            raise ProviderSettingsError(
-                "not_found" if response.status_code == 404 else "provider_unavailable"
-            )
+            if response.status_code == 404:
+                raise ProviderSettingsError("not_found") from None
+            try:
+                body = response.json()
+                error = body.get("error", {}) if isinstance(body, dict) else {}
+                code = error.get("code") if isinstance(error, dict) else None
+            except (ValueError, TypeError):
+                code = None
+            if (
+                isinstance(code, str)
+                and _SETTINGS_ERROR_STATUSES.get(code) == response.status_code
+            ):
+                raise ProviderSettingsError(code) from None
+            raise ProviderSettingsError("provider_unavailable") from None
         try:
             return _SettingsEnvelope.model_validate_json(response.content).result
         except ValidationError:

@@ -11,6 +11,7 @@ from src.llm_provider_service.application.settings_service import (
     ProviderSettingsService,
 )
 from src.llm_provider_service.domain.errors import ProviderSettingsError
+from src.llm_provider_service.domain.key_metadata import key_fingerprint
 from src.llm_provider_service.domain.provider_models import ManagedProviderKey
 
 
@@ -164,3 +165,26 @@ async def test_concurrent_replacements_have_one_winner() -> None:
         == 1
     )
     assert gateway.grace_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_replacement_rejects_the_current_key_without_mutating_gateway() -> None:
+    gateway = _Gateway()
+    same_key = "same-openrouter-key"
+    gateway.keys[0] = replace(gateway.keys[0], fingerprint=key_fingerprint(same_key))
+    service = ProviderSettingsService(
+        gateway=gateway,
+        ownership=_Ownership(),
+        settings=_Settings(),
+        catalog=_Catalog(),
+        validate_key=_validate_key,
+    )
+
+    with pytest.raises(ProviderSettingsError) as caught:
+        await service.replace_key(
+            user_id="alice", key_id="old-key", key=same_key, label="same"
+        )
+
+    assert caught.value.code == "replacement_must_differ"
+    assert len(gateway.keys) == 1
+    assert gateway.grace_calls == 0

@@ -31,6 +31,7 @@ class _Service:
         )
         self.calls: list[tuple[str, object]] = []
         self.test_result = True
+        self.replacement_error_code = "replacement_must_differ"
 
     async def list_keys(self, *, user_id: str):
         self.calls.append(("list_keys", user_id))
@@ -39,6 +40,10 @@ class _Service:
     async def add_key(self, *, user_id: str, key: str, label: str):
         self.calls.append(("add_key", (user_id, key, label)))
         return self.key
+
+    async def replace_key(self, *, user_id: str, key_id: str, key: str, label: str):
+        self.calls.append(("replace_key", (user_id, key_id, key, label)))
+        raise ProviderSettingsError(self.replacement_error_code)
 
     async def test_key(self, *, user_id: str, key_id: str):
         self.calls.append(("test_key", (user_id, key_id)))
@@ -122,6 +127,35 @@ async def test_provider_key_route_preserves_failed_test_result() -> None:
         "passed": False,
         "status": "unavailable",
     }
+
+
+@pytest.mark.asyncio
+async def test_replacement_error_is_actionable_at_the_public_api() -> None:
+    service = _Service()
+    async with _client(service) as client:
+        response = await client.post(
+            "/api/v1/llm/provider-keys/managed-a/replace",
+            json={"api_key": "same-key-material-over-twenty", "label": "primary"},
+        )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == (
+        "replacement key must differ from the current key"
+    )
+
+
+@pytest.mark.asyncio
+async def test_replacement_in_progress_is_a_conflict_at_the_public_api() -> None:
+    service = _Service()
+    service.replacement_error_code = "replacement_in_progress"
+    async with _client(service) as client:
+        response = await client.post(
+            "/api/v1/llm/provider-keys/managed-a/replace",
+            json={"api_key": "new-key-material-over-twenty", "label": "primary"},
+        )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "a key replacement is already in progress"
 
 
 @pytest.mark.asyncio

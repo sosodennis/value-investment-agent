@@ -217,6 +217,53 @@ async def test_settings_calls_map_transport_errors_without_leaking_details(
         await client.aclose()
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("status", "error_code", "expected_code"),
+    [
+        (400, "replacement_must_differ", "replacement_must_differ"),
+        (409, "replacement_in_progress", "replacement_in_progress"),
+        (502, "replacement_must_differ", "provider_unavailable"),
+        (400, "unexpected_internal_detail", "provider_unavailable"),
+    ],
+)
+async def test_settings_client_preserves_only_status_matched_known_error_codes(
+    status: int,
+    error_code: str,
+    expected_code: str,
+) -> None:
+    client = LLMProviderServiceSettingsClient(
+        base_url="http://provider.test", token="private-token"
+    )
+    await client._client.aclose()
+    client._client = httpx.AsyncClient(
+        transport=httpx.MockTransport(
+            lambda request: httpx.Response(
+                status,
+                json={
+                    "error": {
+                        "code": error_code,
+                        "message": "private upstream details",
+                    }
+                },
+            )
+        )
+    )
+    try:
+        with pytest.raises(ProviderSettingsError) as caught:
+            await client.replace_key(
+                user_id="alice",
+                key_id="managed-a",
+                key="replacement-key",
+                label="primary",
+            )
+    finally:
+        await client.aclose()
+
+    assert caught.value.code == expected_code
+    assert "private upstream details" not in str(caught.value)
+
+
 class _BlockingTransport(httpx.AsyncBaseTransport):
     def __init__(self) -> None:
         self.started = asyncio.Event()
