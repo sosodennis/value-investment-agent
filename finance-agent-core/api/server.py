@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 from contextlib import asynccontextmanager
 
 import uvicorn
@@ -27,6 +26,7 @@ from src.dashboard.infrastructure import (
 from src.dashboard.routes import router as dashboard_router
 from src.infrastructure.migrations import assert_migrations_complete
 from src.interface.artifacts.routes import router as artifact_router
+from src.interface.origins import frontend_origins
 from src.llm_provider.entrypoint import (
     close_llm_provider,
     llm_settings_router,
@@ -52,13 +52,7 @@ class OwnedThreadPort(OwnerPort):
 
 
 def _cors_origins() -> list[str]:
-    configured = os.getenv("CORS_ALLOWED_ORIGINS", "")
-    return [
-        item.strip().rstrip("/") for item in configured.split(",") if item.strip()
-    ] or [
-        "http://127.0.0.1:3000",
-        "http://localhost:3000",
-    ]
+    return list(frontend_origins())
 
 
 @asynccontextmanager

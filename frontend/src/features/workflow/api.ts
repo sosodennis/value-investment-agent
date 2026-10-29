@@ -7,8 +7,6 @@ import {
     type WorkflowActivitySnapshot,
 } from './workflow-activity';
 
-const API_URL = (process.env.NEXT_PUBLIC_LANGGRAPH_URL || 'http://localhost:8000').replace(/\/+$/, '');
-
 type StartRunRequest = components['schemas']['RunRequest'];
 type StartRunResponse = operations['start_run_api_v1_threads__thread_id__runs_post']['responses'][202]['content']['application/json'];
 type ResumeRunRequest = components['schemas']['ResumeRequest'];
@@ -44,9 +42,11 @@ export async function getActivitySnapshot(
     threadId: string,
     options: { runId?: string; signal?: AbortSignal } = {},
 ): Promise<WorkflowActivitySnapshot> {
-    const url = new URL(`${API_URL}/api/v1/threads/${encodeURIComponent(threadId)}/activities`);
-    if (options.runId) url.searchParams.set('run_id', options.runId);
-    const response = await fetch(url.toString(), { credentials: 'include', signal: options.signal });
+    const query = new URLSearchParams();
+    if (options.runId) query.set('run_id', options.runId);
+    const queryString = query.toString();
+    const url = `/api/v1/threads/${encodeURIComponent(threadId)}/activities${queryString ? `?${queryString}` : ''}`;
+    const response = await fetch(url, { credentials: 'include', signal: options.signal });
     if (!response.ok) throw await readError(response, 'Activity snapshot');
     const payload: unknown = await response.json();
     const snapshot = parseWorkflowActivitySnapshot(payload);
@@ -56,7 +56,7 @@ export async function getActivitySnapshot(
 }
 
 export async function startWorkflowRun(threadId: string, request: StartRunRequest): Promise<WorkflowRun> {
-    const response = await fetch(`${API_URL}/api/v1/threads/${encodeURIComponent(threadId)}/runs`, {
+    const response = await fetch(`/api/v1/threads/${encodeURIComponent(threadId)}/runs`, {
         method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json', ...csrfHeaders() }, body: JSON.stringify(request),
     });
     if (!response.ok) throw await readError(response, 'Start run');
@@ -66,7 +66,7 @@ export async function startWorkflowRun(threadId: string, request: StartRunReques
 }
 
 export async function cancelWorkflowRun(threadId: string, runId: string): Promise<void> {
-    const response = await fetch(`${API_URL}/api/v1/threads/${encodeURIComponent(threadId)}/runs/${encodeURIComponent(runId)}/cancel`, {
+    const response = await fetch(`/api/v1/threads/${encodeURIComponent(threadId)}/runs/${encodeURIComponent(runId)}/cancel`, {
         method: 'POST', credentials: 'include', headers: csrfHeaders(),
     });
     if (!response.ok) throw await readError(response, 'Cancel run');
@@ -77,7 +77,7 @@ export async function resumeWorkflowRun(
     runId: string,
     request: ResumeRunRequest,
 ): Promise<WorkflowRun> {
-    const response = await fetch(`${API_URL}/api/v1/threads/${encodeURIComponent(threadId)}/runs/${encodeURIComponent(runId)}/resume`, {
+    const response = await fetch(`/api/v1/threads/${encodeURIComponent(threadId)}/runs/${encodeURIComponent(runId)}/resume`, {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json', ...csrfHeaders() },
@@ -97,10 +97,10 @@ export async function consumeWorkflowEvents(
     runId?: string,
     onConnected?: () => void,
 ): Promise<void> {
-    const url = new URL(`${API_URL}/api/v1/threads/${encodeURIComponent(threadId)}/events`);
-    url.searchParams.set('after_seq', String(afterSeq));
-    if (runId) url.searchParams.set('run_id', runId);
-    const response = await fetch(url.toString(), { credentials: 'include', signal, headers: { Accept: 'text/event-stream' } });
+    const query = new URLSearchParams({ after_seq: String(afterSeq) });
+    if (runId) query.set('run_id', runId);
+    const url = `/api/v1/threads/${encodeURIComponent(threadId)}/events?${query.toString()}`;
+    const response = await fetch(url, { credentials: 'include', signal, headers: { Accept: 'text/event-stream' } });
     if (!response.ok) throw await readError(response, 'Workflow event stream');
     if (!response.headers.get('content-type')?.toLowerCase().startsWith('text/event-stream')) {
         throw new TypeError('Workflow event stream response must use text/event-stream.');

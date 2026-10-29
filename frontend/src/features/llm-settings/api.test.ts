@@ -24,7 +24,7 @@ describe('replaceLlmProviderKey', () => {
         });
 
         expect(fetchMock).toHaveBeenCalledWith(
-            'http://localhost:8000/api/v1/llm/provider-keys/managed%2Fone/replace',
+            '/api/v1/llm/provider-keys/managed%2Fone/replace',
             expect.objectContaining({
                 method: 'POST',
                 credentials: 'include',

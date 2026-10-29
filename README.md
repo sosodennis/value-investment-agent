@@ -140,9 +140,15 @@ docker compose --profile llm-gateway up --build
 
 Access the application:
 *   **Frontend**: [http://localhost:3000](http://localhost:3000)
-*   **Backend API**: [http://localhost:8000](http://localhost:8000)
+*   **Backend API**: [http://localhost:8000](http://localhost:8000) (direct API access)
 *   **API Documentation**: [http://localhost:8000/docs](http://localhost:8000/docs)
 *   **LLM settings**: [http://localhost:3000/settings/llm](http://localhost:3000/settings/llm)
+
+Browser requests use the frontend's same-origin `/api/v1` proxy. Set
+`FRONTEND_HOST_PORT` when changing the published frontend port; Compose derives
+both `localhost` and `127.0.0.1` origins from that value for backend CORS and
+local-admin checks. Set `FRONTEND_ALLOWED_ORIGINS` only when serving the UI from
+additional origins. Direct backend clients still need an explicit CORS origin.
 
 Open the LLM settings page, add one or more OpenRouter keys, and select a
 free model. The backend sends all application requests through the internal
@@ -180,9 +186,16 @@ The frontend uses `npm`.
 
 ```bash
 cd frontend
-npm install
-npm run dev
+npm ci
+BACKEND_INTERNAL_URL=http://127.0.0.1:8000 npm run dev
 ```
+
+`BACKEND_INTERNAL_URL` is the backend address reachable from the Next.js
+server. The browser always calls the frontend's same-origin `/api/v1` proxy.
+For a backend on port `18080`, set `BACKEND_INTERNAL_URL=http://127.0.0.1:18080`.
+Set `FRONTEND_ALLOWED_ORIGINS` in the backend environment to the browser-facing
+frontend origins when using a custom frontend port; Compose derives this from
+`FRONTEND_HOST_PORT` by default.
 
 ## 🧭 Development Guidelines
 The two canonical engineering guides are:

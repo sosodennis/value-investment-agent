@@ -1,8 +1,6 @@
 import { parseApiErrorMessage } from '@/types/protocol';
 import { parseCapabilities, parseMarketMovers, parseRecentAnalyses } from './home-parsers';
 
-const API_URL = (process.env.NEXT_PUBLIC_LANGGRAPH_URL || 'http://localhost:8000').replace(/\/+$/, '');
-
 export class HomeApiError extends Error {
     constructor(message: string, readonly status?: number, readonly recoverable = false) {
         super(message);
@@ -22,7 +20,7 @@ async function readError(response: Response, resource: string): Promise<HomeApiE
 async function getResource<T>(path: string, label: string, parse: (value: unknown) => T): Promise<T> {
     let response: Response;
     try {
-        response = await fetch(`${API_URL}${path}`, {
+        response = await fetch(path, {
             credentials: 'include',
             headers: { Accept: 'application/json' },
         });

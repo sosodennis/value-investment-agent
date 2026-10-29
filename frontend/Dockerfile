@@ -24,8 +24,8 @@ RUN npm ci
 # Build the application
 # This creates .next/standalone with minimal footprint
 ENV NEXT_TELEMETRY_DISABLED=1
-ARG NEXT_PUBLIC_LANGGRAPH_URL=http://127.0.0.1:8000
-ENV NEXT_PUBLIC_LANGGRAPH_URL=${NEXT_PUBLIC_LANGGRAPH_URL}
+ARG BACKEND_INTERNAL_URL=http://backend:8000
+ENV BACKEND_INTERNAL_URL=${BACKEND_INTERNAL_URL}
 RUN npm run build
 
 # ==========================================
@@ -56,9 +56,9 @@ USER nextjs
 # Expose the port
 EXPOSE 3000
 
-# Report the standalone server's HTTP readiness to Docker.
+# Report backend proxy readiness; unauthenticated /me should return 401.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD node -e "fetch('http://127.0.0.1:3000/login').then(r => process.exit(r.status < 500 ? 0 : 1)).catch(() => process.exit(1))"
+  CMD node -e "fetch('http://127.0.0.1:3000/api/v1/auth/me').then(r => process.exit(r.status === 200 || r.status === 401 ? 0 : 1)).catch(() => process.exit(1))"
 
 # Set hostname for container
 ENV HOSTNAME="0.0.0.0"

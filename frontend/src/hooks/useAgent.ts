@@ -114,7 +114,6 @@ export function useAgent(assistantId = 'agent') {
             ? `Selected ${response.selected_symbol}`
             : response.decision === 'approve' ? 'Approved valuation' : 'Rejected valuation';
         addUserMessage({ id: `user_${Date.now()}`, role: 'user', content: text, type: 'text' });
-        setIsLoading(true);
         try {
             const run = await resumeWorkflowRun(state.threadId, state.runId, {
                 identity: currentInteraction.identity,

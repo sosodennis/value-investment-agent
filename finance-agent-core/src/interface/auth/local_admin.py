@@ -16,6 +16,8 @@ from fastapi import HTTPException, Request, Response
 from itsdangerous import BadData, URLSafeTimedSerializer
 from pydantic import BaseModel
 
+from src.interface.origins import frontend_origins
+
 LOCAL_ADMIN_COOKIE: Final[str] = "local_admin_session"
 LOCAL_ADMIN_SUBJECT: Final[str] = "local-admin"
 LOCAL_ADMIN_ROLE: Final[str] = "platform_admin"
@@ -42,18 +44,7 @@ def _environment() -> str:
 
 
 def _allowed_origins() -> frozenset[str]:
-    configured = os.getenv("LOCAL_ADMIN_ALLOWED_ORIGINS", "").strip()
-    values = (
-        configured.split(",")
-        if configured
-        else [
-            "http://127.0.0.1:3000",
-            "http://localhost:3000",
-            "http://127.0.0.1:3001",
-            "http://localhost:3001",
-        ]
-    )
-    return frozenset(value.strip().rstrip("/") for value in values if value.strip())
+    return frozenset(frontend_origins())
 
 
 def settings() -> LocalAdminSettings:

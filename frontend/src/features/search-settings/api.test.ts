@@ -13,7 +13,7 @@ describe('Search settings API boundary', () => {
 
         const result = await getSearchSettings();
 
-        expect(fetchMock).toHaveBeenCalledWith('http://localhost:8000/api/v1/search/settings', expect.objectContaining({ credentials: 'include' }));
+        expect(fetchMock).toHaveBeenCalledWith('/api/v1/search/settings', expect.objectContaining({ credentials: 'include' }));
         expect(result.settings.providers[0]?.provider).toBe('ddgs');
     });
 

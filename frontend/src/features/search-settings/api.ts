@@ -1,7 +1,5 @@
 import { csrfHeaders } from '@/lib/auth-api';
 
-const API_URL = process.env.NEXT_PUBLIC_LANGGRAPH_URL || 'http://localhost:8000';
-
 export type SearchProvider = {
     provider: string;
     operations: ('web' | 'news')[];
@@ -122,7 +120,7 @@ function parseMutation(value: unknown): SearchKeyMutation {
     return { id: string(item.id, 'search_key_mutation.id'), provider: string(item.provider, 'search_key_mutation.provider'), tested: bool(item.tested, 'search_key_mutation.tested'), active: bool(item.active, 'search_key_mutation.active'), suffix: string(item.suffix, 'search_key_mutation.suffix'), fingerprint: string(item.fingerprint, 'search_key_mutation.fingerprint') };
 }
 async function request<T>(path: string, decode: (value: unknown) => T, init?: RequestInit): Promise<T> {
-    const response = await fetch(`${API_URL}${path}`, {
+    const response = await fetch(path, {
         ...init, credentials: 'include',
         headers: { 'Content-Type': 'application/json', ...csrfHeaders(), ...init?.headers },
     });

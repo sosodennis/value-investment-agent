@@ -67,8 +67,9 @@ For local development, the backend still exposes a loopback-only local-admin
 session for diagnostics, but provider settings require a signed-in user session
 and are scoped to that user's gateway pool. Set `APP_ENV=production` to disable
 the local diagnostics session. Keep
-`CORS_ALLOWED_ORIGINS` and `LOCAL_ADMIN_ALLOWED_ORIGINS` restricted to the
-actual frontend origins when using a non-default port.
+`FRONTEND_ALLOWED_ORIGINS` set to the actual frontend origins when using a
+non-default port. Compose passes this one allowlist to both CORS and local-admin
+origin checks.
 
 The logical route is `openrouter-default`; authenticated users resolve it to
 `openrouter-user-<sha256(user_id)[:20]>`. Each tested key for one user is

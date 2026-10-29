@@ -1,9 +1,6 @@
 import type { components } from '@/types/generated/api-contract';
 import { parseApiErrorMessage } from '@/types/protocol';
 
-const API_URL = (
-    process.env.NEXT_PUBLIC_LANGGRAPH_URL || 'http://127.0.0.1:8000'
-).replace(/\/+$/, '');
 const CSRF_COOKIE_NAME = 'app_csrf';
 const CSRF_HEADER_NAME = 'X-CSRF-Token';
 
@@ -97,7 +94,7 @@ async function request<T>(
         headers.set(name, value);
     }
 
-    const response = await fetch(`${API_URL}${path}`, {
+    const response = await fetch(path, {
         ...init,
         credentials: 'include',
         headers,

@@ -9,6 +9,7 @@ Root `AGENTS.md` contains finance-domain constraints, agent skill routing, and r
 - [Frontend engineering guide](frontend-guideline.md)
 - [Frontend UI design guide](frontend-ui-guideline.md) supplements the frontend guide with visual and component rules.
 - [Backend engineering guide](backend-guideline.md)
+- [Issue and worktree lifecycle](issue-worktree-lifecycle.md) defines parent integration branches, child issue merges, verification, and cleanup.
 
 ## Specialized architecture rules
 

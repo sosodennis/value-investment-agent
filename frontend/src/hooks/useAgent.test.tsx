@@ -88,7 +88,7 @@ describe('useAgent workflow runtime', () => {
         await waitFor(() => expect(result.current.agentOutputs.fundamental_analysis?.summary).toBe('AAPL report ready'));
         expect(result.current.agentOutputs.fundamental_analysis?.reference).toEqual({
             artifact_id: 'artifact-1',
-            download_url: 'http://localhost:8000/api/v1/artifacts/artifact-1?run_id=run_1',
+            download_url: '/api/v1/artifacts/artifact-1?run_id=run_1',
             type: 'financial_reports',
         });
     });
@@ -192,7 +192,7 @@ describe('useAgent workflow runtime', () => {
         await waitFor(() => expect(result.current.workflow?.runId).toBe('older-run'));
         expect(result.current.error).toBeNull();
         expect(String(fetchMock.mock.calls[0]?.[0])).toBe(
-            'http://localhost:8000/api/v1/threads/thread_1/activities?run_id=older-run'
+            '/api/v1/threads/thread_1/activities?run_id=older-run'
         );
     });
 
@@ -220,10 +220,10 @@ describe('useAgent workflow runtime', () => {
         await waitFor(() => expect(result.current.workflow?.runStatus).toBe('completed'));
         expect(result.current.workflow?.runId).toBe('older-run');
         expect(String(fetchMock.mock.calls[1]?.[0])).toBe(
-            'http://localhost:8000/api/v1/threads/thread_1/events?after_seq=1&run_id=older-run'
+            '/api/v1/threads/thread_1/events?after_seq=1&run_id=older-run'
         );
         expect(String(fetchMock.mock.calls[2]?.[0])).toBe(
-            'http://localhost:8000/api/v1/threads/thread_1/activities?run_id=older-run'
+            '/api/v1/threads/thread_1/activities?run_id=older-run'
         );
     });
 

@@ -44,7 +44,7 @@ describe('useArtifact', () => {
         renderHook(() => useArtifact(reference, (value) => value, 'test.artifact'), { wrapper });
 
         await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
-        expect(fetchMock.mock.calls[0]?.[0]).toBe(reference.download_url);
+        expect(fetchMock.mock.calls[0]?.[0]).toBe('/api/v1/artifacts/artifact-1?run_id=run-1');
         expect(fetchMock.mock.calls[0]?.[1]).toEqual({ credentials: 'include' });
     });
 

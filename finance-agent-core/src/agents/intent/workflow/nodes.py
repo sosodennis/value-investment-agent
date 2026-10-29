@@ -66,6 +66,7 @@ def build_intent_nodes(orchestrator: IntentOrchestrator) -> dict[str, IntentNode
         resolution_update = orchestrator.build_clarification_resolution_update(
             user_input=user_input,
             candidates_raw=candidates_raw,
+            interrupt_payload_dump=interrupt_payload_dump,
         )
         if resolution_update is not None:
             intent_ctx_raw = resolution_update.get("intent_extraction")

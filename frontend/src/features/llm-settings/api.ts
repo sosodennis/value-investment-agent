@@ -2,8 +2,6 @@ import type { components } from '@/types/generated/api-contract';
 import { parseApiErrorMessage } from '@/types/protocol';
 import { csrfHeaders } from '@/lib/auth-api';
 
-const API_URL = process.env.NEXT_PUBLIC_LANGGRAPH_URL || 'http://localhost:8000';
-
 export type LlmProviderKey =
     components['schemas']['src__llm_provider__interface__contracts__ProviderKeyResponse'];
 export type LlmProviderKeyTestResult =
@@ -133,7 +131,7 @@ async function request<T>(
     decode: (payload: unknown) => T,
     init?: RequestInit
 ): Promise<T> {
-    const response = await fetch(`${API_URL}${path}`, {
+    const response = await fetch(path, {
         ...init,
         credentials: 'include',
         headers: {

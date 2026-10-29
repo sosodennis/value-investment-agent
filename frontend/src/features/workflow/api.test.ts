@@ -21,7 +21,7 @@ describe('workflow API', () => {
 
         expect(snapshot.run_id).toBe('run/2');
         expect(String(fetchMock.mock.calls[0]?.[0])).toBe(
-            'http://localhost:8000/api/v1/threads/thread%2F1/activities?run_id=run%2F2'
+            '/api/v1/threads/thread%2F1/activities?run_id=run%2F2'
         );
     });
 
@@ -59,7 +59,7 @@ describe('workflow API', () => {
         await getActivitySnapshot('thread-1');
 
         expect(String(fetchMock.mock.calls[0]?.[0])).toBe(
-            'http://localhost:8000/api/v1/threads/thread-1/activities'
+            '/api/v1/threads/thread-1/activities'
         );
     });
 
