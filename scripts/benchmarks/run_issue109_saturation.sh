@@ -34,7 +34,7 @@ COMPOSE=(
   docker compose
   --project-name "$PROJECT"
   -f docker-compose.yml
-  -f docker-compose.issue109-offline.yml
+  -f compose/verification/docker-compose.issue109-offline.yml
 )
 
 WORKLOAD_REPORT="$OUTPUT_DIR/$OPERATION-saturation.json"

@@ -19,8 +19,8 @@ produced deadline errors at concurrency eight and twelve. Of two queue-two
 saturation probes, one had two deadline failures; five queue-one runs had no
 deadline failures and rejected excess work as `OVERLOADED`. These are observed
 results for the tested host and workload, not a guarantee for other deployment
-conditions. Raw alternating runs and saturation evidence are in
-`reports/issue-109/`.
+conditions. Raw alternating runs and saturation evidence are generated locally
+under the ignored `reports/issue-109/` directory by the verification runbook.
 
 Run one model process per operation and replica. Each process owns its model copy. Start with one News worker and one FLS worker per 10-core host. Do not add worker processes until the service reruns the benchmark after setting a deliberate PyTorch thread count.
 
@@ -43,7 +43,7 @@ The current API process therefore holds shared model state and rebuilds all warm
 
 ## Measurements
 
-The repeatable harnesses are `scripts/benchmarks/finbert_workload.py`, `scripts/benchmarks/fls_workload.py`, and `scripts/benchmarks/model_inventory.py`. Raw JSON is in `reports/issue-106/`. The container measurements used image `via-llm-stage-backend:latest`, image ID `sha256:ba6dac071a004c6a85e9bc66164a2f0ce0b2c30594d50be8686aaeaf6ea0ec72`, Python `3.11.17`, Linux arm64, offline Hugging Face cache, and the current branch mounted at `/work`.
+The repeatable harnesses are `scripts/benchmarks/finbert_workload.py`, `scripts/benchmarks/fls_workload.py`, and `scripts/benchmarks/model_inventory.py`. They write raw JSON to the ignored `reports/issue-106/` directory when run. The container measurements used image `via-llm-stage-backend:latest`, image ID `sha256:ba6dac071a004c6a85e9bc66164a2f0ce0b2c30594d50be8686aaeaf6ea0ec72`, Python `3.11.17`, Linux arm64, offline Hugging Face cache, and the current branch mounted at `/work`.
 
 The News benchmark ran five fresh containers. Each run loaded the model once, issued eight sequential calls, then issued eight calls at each concurrency level with four distinct texts. The median and range were:
 
@@ -163,7 +163,7 @@ Current workflow fallbacks remain explicit during migration. News treats `MODEL_
 
 ## Capacity and operations
 
-Use one bounded queue per operation. News uses four in-flight requests and four queued requests. FLS uses two in-flight requests and one queued request, based on the #109 deadline and saturation measurements. Return `OVERLOADED` as soon as the queue is full. Do not allow an unbounded semaphore waiter list. See `reports/issue-109/verification-summary.md` for the measurement ranges and queue-size probe results.
+Use one bounded queue per operation. News uses four in-flight requests and four queued requests. FLS uses two in-flight requests and one queued request, based on the #109 deadline and saturation measurements. Return `OVERLOADED` as soon as the queue is full. Do not allow an unbounded semaphore waiter list. See the [model inference rollout runbook](runbooks/model-inference-rollout.md) for the verification procedure and measurement summary.
 
 The worker count is a memory calculation. For each operation, reserve one full model process per worker and multiply the measured per-process reservation by the worker count. Keep at least 25 percent host memory for the backend, OS, and non-model work. A ten-core host starts with one News worker and one FLS worker. Scaling a model to two workers roughly duplicates its model memory even when the artifact is read from a shared cache.
 

@@ -1,1 +1,0 @@
-{"available": true, "elapsed_ms": 312.284, "error": null, "flagged": true, "inference_ms": null, "load_ms": null, "model": "sentence-transformers/all-MiniLM-L6-v2 (fastembed)", "rss_peak_mib": 216.051, "similarity": 1.0, "workload": "sycophancy_embedding"}

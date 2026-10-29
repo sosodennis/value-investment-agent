@@ -1,1 +1,0 @@
-{"available": true, "details": {"batches": 1, "enabled": true, "inference_ms": 401.783, "loaded": true, "model_load_ms": 8239.09}, "elapsed_ms": 8640.941, "error": null, "inference_ms": 401.783, "load_ms": 8239.09, "model": "yiyanghkust/finbert-fls", "rss_peak_mib": 821.426, "workload": "sec_fls"}

@@ -1,1 +1,0 @@
-{"available": false, "details": {"error": "dependency model unavailable", "loaded": false, "model": null}, "elapsed_ms": 1467.358, "error": null, "inference_ms": null, "load_ms": null, "model": "en_core_web_sm", "rss_peak_mib": 334.688, "workload": "dependency_matcher"}

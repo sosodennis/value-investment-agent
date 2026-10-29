@@ -1,1 +1,0 @@
-2026-10-26T06:56:35Z	blocker-169	Moved bounded migration onto clean-port	The migration no longer runs as unbounded startup reconstruction; verify real migration tests before closing.	commit 541af76; finance-agent-core/tests/infrastructure/test_run_history_migration.py	pending

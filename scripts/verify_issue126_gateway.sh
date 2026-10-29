@@ -18,7 +18,7 @@ COMPOSE=(
   --project-name "$PROJECT"
   -f docker-compose.yml
   -f docker-compose.production.yml
-  -f docker-compose.issue126-verification.yml
+  -f compose/verification/docker-compose.issue126-verification.yml
 )
 
 cleanup() {

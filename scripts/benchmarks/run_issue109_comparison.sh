@@ -17,7 +17,7 @@ COMPOSE=(
   docker compose
   -p "$PROJECT"
   -f docker-compose.yml
-  -f docker-compose.issue109-offline.yml
+  -f compose/verification/docker-compose.issue109-offline.yml
 )
 
 if ! [[ "$RUNS" =~ ^[1-9][0-9]*$ ]]; then

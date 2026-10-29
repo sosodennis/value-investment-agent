@@ -1,1 +1,0 @@
-{"available": true, "details": {"error": null, "loaded": true, "model": "core_web_sm"}, "elapsed_ms": 4429.301, "error": null, "inference_ms": null, "load_ms": null, "model": "en_core_web_sm", "rss_peak_mib": 433.82, "workload": "dependency_matcher"}

@@ -23,7 +23,7 @@ COMPOSE=(
   docker compose
   --project-name "$PROJECT"
   -f docker-compose.yml
-  -f docker-compose.issue109-offline.yml
+  -f compose/verification/docker-compose.issue109-offline.yml
 )
 
 if ! command -v jq >/dev/null 2>&1; then

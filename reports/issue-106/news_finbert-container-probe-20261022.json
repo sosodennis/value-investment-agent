@@ -1,1 +1,0 @@
-{"available": true, "device": "cpu", "error": null, "inference_ms": null, "load_ms": 9908.799, "model": "project-aps/finbert-finetune", "rss_peak_mib": 478.258, "workload": "news_finbert"}

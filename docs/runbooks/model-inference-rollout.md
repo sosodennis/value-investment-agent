@@ -5,9 +5,10 @@ backend and inference services have separate Compose lifecycles. Runtime model
 loading uses the artifact baked into each image; service startup does not need
 Hugging Face registry access.
 
-Issue #109's measurements, recommended limits, cold-first-call results, and
-raw evidence index are in
-[`reports/issue-109/verification-summary.md`](../../reports/issue-109/verification-summary.md).
+Issue #109's measurements, recommended limits, and cold-first-call results are
+summarized in the [model inference contract](../issue-106-model-inference-contract.md).
+The raw evidence index is generated locally under the ignored `reports/issue-109/`
+directory when this runbook is executed.
 
 ## Preflight
 
@@ -50,7 +51,7 @@ temporary client container on the same Compose network:
 ```bash
 PROJECT=value-investment-agent-issue109-dennis
 COMPOSE=(docker compose -p "$PROJECT" \
-  -f docker-compose.yml -f docker-compose.issue109-offline.yml)
+  -f docker-compose.yml -f compose/verification/docker-compose.issue109-offline.yml)
 
 "${COMPOSE[@]}" run --no-deps --rm -T \
   -v "$PWD/scripts/benchmarks:/benchmarks:ro" \
@@ -104,7 +105,7 @@ docker run --rm --network none \
 
 Run five alternating baseline/service repetitions for each operation using
 the helper. It saves every raw output and image/container identity into a new
-directory under `reports/issue-109/`:
+directory under the ignored `reports/issue-109/` path:
 
 ```bash
 ISSUE109_COMPOSE_PROJECT="$PROJECT" \
@@ -136,7 +137,7 @@ scripts/benchmarks/run_issue109_saturation.sh fls
 
 Compare the highest sampled memory with the 1.5 GiB cgroup cap and compare the
 measured latency, throughput, output validity, and error counts with the raw
-issue #106 reports in `reports/issue-106/`. The service request path adds HTTP
+issue #106 outputs in the local ignored `reports/issue-106/` directory. The service request path adds HTTP
 and queue time, so report the measured result without presenting it as a
 model-only comparison.
 
@@ -191,7 +192,7 @@ After saving and reviewing evidence, stop only the test project:
 
 ```bash
 docker compose -p "$PROJECT" -f docker-compose.yml \
-  -f docker-compose.issue109-offline.yml down
+  -f compose/verification/docker-compose.issue109-offline.yml down
 ```
 
 This keeps its named volumes. Do not pass `--volumes` until the saved artifacts
