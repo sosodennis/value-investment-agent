@@ -282,6 +282,7 @@ class LangGraphRunner(GraphRunner):
             active_callbacks: dict[
                 str, tuple[Mapping[str, object], tuple[str, ...], str | None]
             ] = {}
+            suppressed_callbacks: set[str] = set()
             resumed_activity_started = False
             suspended = False
             async for raw in self._graph.astream_events(
@@ -323,6 +324,54 @@ class LangGraphRunner(GraphRunner):
                     continue
                 callback_metadata[callback_run_id] = metadata_map
 
+                event_family, status = _LIFECYCLE_EVENTS[event_name]
+                parent_ids = raw.get("parent_ids")
+                parent_callback_id = None
+                if isinstance(parent_ids, list | tuple):
+                    parent_callback_id = next(
+                        (
+                            normalized_parent_id
+                            for parent_id in reversed(parent_ids)
+                            if (normalized_parent_id := _callback_id(parent_id))
+                            in active_callbacks
+                        ),
+                        None,
+                    )
+                parent_callback = (
+                    active_callbacks.get(parent_callback_id)
+                    if parent_callback_id is not None
+                    else None
+                )
+
+                if callback_run_id in suppressed_callbacks:
+                    if event_name in {"on_chain_end", "on_chain_error"}:
+                        suppressed_callbacks.discard(callback_run_id)
+                    if event_name == "on_chain_end":
+                        output = _completed_agent_output(
+                            raw,
+                            metadata_map,
+                            thread_id=thread_id,
+                            run_id=run_id,
+                            activity_id=(
+                                f"langgraph:{parent_callback_id}"
+                                if parent_callback_id is not None
+                                else f"langgraph:{callback_run_id}"
+                            ),
+                            scope_path=scope_path,
+                        )
+                        if output is not None:
+                            yield output
+                    continue
+
+                if (
+                    event_family == "chain"
+                    and event_name == "on_chain_start"
+                    and parent_callback is not None
+                    and parent_callback[1] == scope_path
+                ):
+                    suppressed_callbacks.add(callback_run_id)
+                    continue
+
                 is_resumed_activity = (
                     not resumed_activity_started
                     and resuming_activity_id is not None
@@ -338,16 +387,24 @@ class LangGraphRunner(GraphRunner):
                     if is_resumed_activity
                     else _activity_attempt(metadata_map)
                 )
-                parent_activity_id = None
-                parent_ids = raw.get("parent_ids")
+                visible_parent_id = None
                 if isinstance(parent_ids, list | tuple):
-                    for parent_id in reversed(parent_ids):
-                        normalized_parent_id = _callback_id(parent_id)
-                        if normalized_parent_id is not None:
-                            parent_activity_id = f"langgraph:{normalized_parent_id}"
-                            break
+                    visible_parent_id = next(
+                        (
+                            normalized_parent_id
+                            for parent_id in reversed(parent_ids)
+                            if (normalized_parent_id := _callback_id(parent_id))
+                            is not None
+                            and normalized_parent_id not in suppressed_callbacks
+                        ),
+                        None,
+                    )
+                parent_activity_id = (
+                    f"langgraph:{visible_parent_id}"
+                    if visible_parent_id is not None
+                    else None
+                )
 
-                event_family, status = _LIFECYCLE_EVENTS[event_name]
                 if event_family == "chain" and event_name == "on_chain_start":
                     active_callbacks[callback_run_id] = (
                         metadata_map,

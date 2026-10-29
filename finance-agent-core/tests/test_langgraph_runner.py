@@ -131,6 +131,154 @@ async def test_runner_uses_callback_ids_and_parent_ids_for_repeated_invocations(
 
 
 @pytest.mark.asyncio
+async def test_runner_collapses_same_scope_wrappers_and_keeps_children_under_visible_parent() -> (
+    None
+):
+    events = [
+        {
+            "event": "on_chain_start",
+            "run_id": "agent-wrapper",
+            "parent_ids": [],
+            "metadata": _metadata(
+                agent_id="intent_extraction",
+                langgraph_node="intent_agent",
+                agent_node="intent_agent",
+                agent_scope="agent",
+            ),
+        },
+        {
+            "event": "on_chain_start",
+            "run_id": "agent-wrapper-child",
+            "parent_ids": ["agent-wrapper"],
+            "metadata": _metadata(
+                agent_id="intent_extraction",
+                langgraph_node="intent_agent",
+                agent_node="intent_agent",
+                agent_scope="agent",
+            ),
+        },
+        {
+            "event": "on_chain_start",
+            "run_id": "extraction-node",
+            "parent_ids": ["agent-wrapper", "agent-wrapper-child"],
+            "metadata": _metadata(
+                agent_id="intent_extraction", langgraph_node="extraction"
+            ),
+        },
+        {
+            "event": "on_chain_end",
+            "run_id": "extraction-node",
+            "parent_ids": ["agent-wrapper", "agent-wrapper-child"],
+            "metadata": _metadata(
+                agent_id="intent_extraction", langgraph_node="extraction"
+            ),
+        },
+        {
+            "event": "on_chain_end",
+            "run_id": "agent-wrapper-child",
+            "parent_ids": ["agent-wrapper"],
+            "metadata": _metadata(
+                agent_id="intent_extraction",
+                langgraph_node="intent_agent",
+                agent_node="intent_agent",
+                agent_scope="agent",
+            ),
+        },
+        {
+            "event": "on_chain_end",
+            "run_id": "agent-wrapper",
+            "parent_ids": [],
+            "metadata": _metadata(
+                agent_id="intent_extraction",
+                langgraph_node="intent_agent",
+                agent_node="intent_agent",
+                agent_scope="agent",
+            ),
+        },
+    ]
+
+    activities = await _run(events)
+
+    assert [activity.activity_id for activity in activities] == [
+        "langgraph:agent-wrapper",
+        "langgraph:extraction-node",
+        "langgraph:extraction-node",
+        "langgraph:agent-wrapper",
+    ]
+    assert activities[1].parent_activity_id == "langgraph:agent-wrapper"
+    assert activities[2].status == "completed"
+
+
+@pytest.mark.asyncio
+async def test_runner_assigns_interrupt_to_visible_parent_of_same_scope_wrapper() -> (
+    None
+):
+    graph = _EventGraph(
+        [
+            {
+                "event": "on_chain_start",
+                "run_id": "clarifying-parent",
+                "parent_ids": [],
+                "metadata": _metadata(
+                    agent_id="intent_extraction", langgraph_node="clarifying"
+                ),
+            },
+            {
+                "event": "on_chain_start",
+                "run_id": "clarifying-wrapper",
+                "parent_ids": ["clarifying-parent"],
+                "metadata": _metadata(
+                    agent_id="intent_extraction", langgraph_node="clarifying"
+                ),
+            },
+            {
+                "event": "on_chain_stream",
+                "run_id": "clarifying-stream",
+                "parent_ids": ["clarifying-parent", "clarifying-wrapper"],
+                "metadata": _metadata(
+                    agent_id="intent_extraction", langgraph_node="clarifying"
+                ),
+                "data": {
+                    "chunk": {
+                        "__interrupt__": (
+                            Interrupt(
+                                id="interaction-wrapper-1",
+                                value={
+                                    "type": "ticker_selection",
+                                    "reason": "Choose the intended company.",
+                                    "candidates": [
+                                        {
+                                            "symbol": "AAPL",
+                                            "name": "Apple Inc.",
+                                            "confidence": 0.99,
+                                        }
+                                    ],
+                                },
+                            ),
+                        )
+                    }
+                },
+            },
+        ]
+    )
+
+    projected = [
+        item
+        async for item in LangGraphRunner(graph).run(
+            thread_id="thread-1",
+            run_id="runtime-run-1",
+            input_data={"message": "Apple"},
+            principal_id="principal-1",
+        )
+    ]
+
+    assert len(projected) == 2
+    assert isinstance(projected[0], Activity)
+    assert isinstance(projected[1], InteractionRequested)
+    assert projected[1].activity.activity_id == projected[0].activity_id
+
+
+@pytest.mark.asyncio
 async def test_runner_scopes_authenticated_principal_for_internal_service_clients() -> (
     None
 ):
