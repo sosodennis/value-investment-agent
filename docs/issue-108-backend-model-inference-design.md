@@ -1,5 +1,10 @@
 # Backend model inference design
 
+Status: Historical design record. Issues #108 and #109 are complete; use the
+[current inference boundary](issue-121-inference-boundary.md) and
+[rollout runbook](runbooks/model-inference-rollout.md) for current contracts and
+operations.
+
 ## Problem
 
 Issue #108 moves News sentiment and SEC forward-looking-statement (FLS)
@@ -111,9 +116,10 @@ availability error; the two completed candidates were cross-judged.
 
 The reviewer flagged two checks for implementation: 32 is the service-side
 model batch size while one backend logical request may contain up to 120
-sentences, and the #107 service must be verified to observe cancelled client
-requests. The design uses a single 120-sentence FLS request where the caller
-cache permits it, leaving 32-sentence model batches inside the service.
+sentences, and the #107 service had to observe cancelled client requests.
+Issue #109 later closed the service and cancellation verification. The design
+uses a single 120-sentence FLS request where the caller cache permits it,
+leaving 32-sentence model batches inside the service.
 
 ## Tradeoffs accepted
 
@@ -136,30 +142,26 @@ cache permits it, leaving 32-sentence model batches inside the service.
 - Separate News and Fundamental clients would duplicate the same auth,
   correlation, response validation, deadline, and retry policy.
 
-## Implementation reconciliation
+## Historical implementation reconciliation
 
-Implementation must update this document when a shared contract or ownership
-decision changes. A local adapter detail may change if the public outcomes and
-single-deadline invariant remain intact; any new retry outcome or changed
-fallback needs to be recorded before the next caller migration.
+This section records the original design rule for the #108 implementation. The
+current service contract is maintained in the inference boundary and rollout
+documentation linked above.
 
-## Open questions and risks
+## Historical questions and risks
 
-- The #107 service currently labels every `DEADLINE_EXCEEDED` response
-  retryable, while the contract only permits retry before inference starts.
-  The backend will remain conservative; issue #109 must verify the effect and
-  record whether the service needs an explicit admission marker.
-- Cancellation propagation to queued and active server work must be verified
-  against the real #107 service in issue #109.
+- The original design flagged `DEADLINE_EXCEEDED` admission semantics and
+  cancellation propagation for #107/#109 verification. Those issues are now
+  closed; the delivered behavior is covered by the service and client tests.
 
 ## Implementation status
 
 The typed facade, shared HTTP boundary, News/FLS/direction caller migration,
-and removal of backend FinBERT loading and warmup are implemented in issue
-#108. The backend still declares `torch`, `transformers`, and
+and removal of backend FinBERT loading and warmup were implemented in #108 and
+verified through #109. The backend still declares `torch`, `transformers`, and
 `sentence-transformers` because the SEC dense retriever loads
 `all-MiniLM-L6-v2` through `SentenceTransformer`. The FinBERT weights and
 FinBERT inference path are no longer part of the backend image. Removing the
 shared ML dependencies requires a separate dense-retriever migration or an
-explicitly accepted sparse-only mode. Independent service lifecycle and runtime
-verification remain in issue #109.
+explicitly accepted sparse-only mode. These measurements and decisions are a
+historical record; current runtime behavior is covered by the linked docs.

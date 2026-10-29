@@ -1,8 +1,17 @@
 # Root workflow entrypoint migration
 
+Status: Historical design and validation record. The migration was completed
+under #37 and the later activity contract cutover under #147.
+
 ## Problem
 
-The root workflow composes five agent graphs through temporary `application/subgraph.py` bridges and initializes the Postgres checkpointer in the same function that assembles graph topology. Three public entrypoints require injected dependencies, so root cannot yet use those public contracts. The migration must preserve the existing fan-out, join, debate handoff, interrupt response, and OpenAPI schema while removing the bridges and old root-node adapters.
+At the start of the migration, the root workflow composed five agent graphs
+through temporary `application/subgraph.py` bridges and initialized the
+Postgres checkpointer in the same function that assembled graph topology.
+Three public entrypoints required injected dependencies, so root could not use
+those public contracts. The migration had to preserve the fan-out, join,
+debate handoff, interrupt response, and OpenAPI schema while removing the
+bridges and old root-node adapters.
 
 ## Usage
 
@@ -56,11 +65,17 @@ No separate alternative was grafted. Candidate B's explicit non-null builder par
 
 The root composer preserves the existing node names, metadata, reducers, and edge topology. `get_graph()` owns default child graph construction and the Postgres saver lifecycle. Each public agent builder selects its own wiring when no runner or ports are injected. At the time of this migration, the API imported `InterruptValue` from the intent entrypoint; the #147 cutover replaces that message contract with a runtime-owned typed activity interruption.
 
-All in-repository callers now use agent-owned workflow builders. The five `application/subgraph.py` bridges, the obsolete root node wrappers, and their guard exceptions have been removed. Issue #37 owns the generated action report and regenerates it after this migration lands.
+The migration completed with all in-repository callers using agent-owned
+workflow builders. The five `application/subgraph.py` bridges, obsolete root
+node wrappers, and their guard exceptions were removed. Issue #37 completed the
+generated action report update.
 
 ## Risks
 
-The repository cannot show whether consumers outside the checkout import the removed compatibility modules. In-repository imports are clean. External callers must move to the public agent entrypoints or workflow contracts.
+At the time of migration, the repository could not show whether consumers
+outside the checkout imported the removed compatibility modules. In-repository
+imports were clean; external callers needed to move to the public agent
+entrypoints or workflow contracts.
 
 ## Validation
 

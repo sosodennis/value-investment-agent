@@ -1,7 +1,7 @@
 # RFC: Technical Strategy Master Roadmap
 
 Date: 2026-03-19
-Status: Draft
+Status: Archived proposal. This plan is not the current project roadmap.
 Owner: Codex working notes for project direction alignment
 
 ## Purpose
@@ -20,16 +20,16 @@ This file should be treated as the top-level roadmap document for the current te
 
 For the executive synthesis and decision memo version of the current direction discussion, read:
 
-- [project-advancement-report-2026-03.md](/Users/denniswong/Desktop/Project/value-investment-agent/docs/rfc/project-advancement-report-2026-03.md)
+- [project-advancement-report-2026-03.md](project-advancement-report-2026-03.md)
 
 ## Canonical Reading Order
 
 Read the RFCs in this order:
 
-1. [project-advancement-report-2026-03.md](/Users/denniswong/Desktop/Project/value-investment-agent/docs/rfc/project-advancement-report-2026-03.md)
-2. [technical-strategy-master-roadmap.md](/Users/denniswong/Desktop/Project/value-investment-agent/docs/rfc/technical-strategy-master-roadmap.md)
-3. [technical-quant-feature-priorities-free-data.md](/Users/denniswong/Desktop/Project/value-investment-agent/docs/rfc/technical-quant-feature-priorities-free-data.md)
-4. [calibration-upgrade-roadmap-and-roi.md](/Users/denniswong/Desktop/Project/value-investment-agent/docs/rfc/calibration-upgrade-roadmap-and-roi.md)
+1. [project-advancement-report-2026-03.md](project-advancement-report-2026-03.md)
+2. [technical-strategy-master-roadmap.md](technical-strategy-master-roadmap.md)
+3. [technical-quant-feature-priorities-free-data.md](technical-quant-feature-priorities-free-data.md)
+4. [calibration-upgrade-roadmap-and-roi.md](calibration-upgrade-roadmap-and-roi.md)
 
 Why this order:
 
@@ -42,7 +42,7 @@ Quant-roadmap decisions are upstream of calibration-roadmap decisions.
 
 ### 1. Master roadmap
 
-- [technical-strategy-master-roadmap.md](/Users/denniswong/Desktop/Project/value-investment-agent/docs/rfc/technical-strategy-master-roadmap.md)
+- [technical-strategy-master-roadmap.md](technical-strategy-master-roadmap.md)
 - Role: single-entry document and strategy alignment layer
 - Use it when:
   - deciding project direction,
@@ -52,7 +52,7 @@ Quant-roadmap decisions are upstream of calibration-roadmap decisions.
 
 ### 0. Executive decision report
 
-- [project-advancement-report-2026-03.md](/Users/denniswong/Desktop/Project/value-investment-agent/docs/rfc/project-advancement-report-2026-03.md)
+- [project-advancement-report-2026-03.md](project-advancement-report-2026-03.md)
 - Role: executive synthesis and decision memo
 - Use it when:
   - aligning stakeholders quickly,
@@ -61,7 +61,7 @@ Quant-roadmap decisions are upstream of calibration-roadmap decisions.
 
 ### 2. Quant feature RFC
 
-- [technical-quant-feature-priorities-free-data.md](/Users/denniswong/Desktop/Project/value-investment-agent/docs/rfc/technical-quant-feature-priorities-free-data.md)
+- [technical-quant-feature-priorities-free-data.md](technical-quant-feature-priorities-free-data.md)
 - Role: domain expansion and feature-prioritization RFC
 - Canonical owner for:
   - which technical quant families to add,
@@ -72,7 +72,7 @@ Quant-roadmap decisions are upstream of calibration-roadmap decisions.
 
 ### 3. Calibration RFC
 
-- [calibration-upgrade-roadmap-and-roi.md](/Users/denniswong/Desktop/Project/value-investment-agent/docs/rfc/calibration-upgrade-roadmap-and-roi.md)
+- [calibration-upgrade-roadmap-and-roi.md](calibration-upgrade-roadmap-and-roi.md)
 - Role: calibration maturity and upgrade RFC
 - Canonical owner for:
   - what calibration means in this codebase,

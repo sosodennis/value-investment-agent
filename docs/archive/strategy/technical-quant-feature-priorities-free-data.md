@@ -1,14 +1,14 @@
 # RFC: Technical Quant Feature Priorities Under Free-Data Constraints
 
 Date: 2026-03-18
-Status: Supporting Annex
+Status: Archived proposal. This plan is not a current project commitment.
 Owner: Codex working notes for future technical roadmap planning
 
 ## Document Role
 
 This file is a **supporting annex** to the master roadmap:
 
-- [technical-strategy-master-roadmap.md](/Users/denniswong/Desktop/Project/value-investment-agent/docs/rfc/technical-strategy-master-roadmap.md)
+- [technical-strategy-master-roadmap.md](technical-strategy-master-roadmap.md)
 
 Primary purpose:
 
@@ -23,10 +23,10 @@ Dependency note:
 
 Read order:
 
-1. [project-advancement-report-2026-03.md](/Users/denniswong/Desktop/Project/value-investment-agent/docs/rfc/project-advancement-report-2026-03.md)
-2. [technical-strategy-master-roadmap.md](/Users/denniswong/Desktop/Project/value-investment-agent/docs/rfc/technical-strategy-master-roadmap.md)
-3. [technical-quant-feature-priorities-free-data.md](/Users/denniswong/Desktop/Project/value-investment-agent/docs/rfc/technical-quant-feature-priorities-free-data.md)
-4. [calibration-upgrade-roadmap-and-roi.md](/Users/denniswong/Desktop/Project/value-investment-agent/docs/rfc/calibration-upgrade-roadmap-and-roi.md)
+1. [project-advancement-report-2026-03.md](project-advancement-report-2026-03.md)
+2. [technical-strategy-master-roadmap.md](technical-strategy-master-roadmap.md)
+3. [technical-quant-feature-priorities-free-data.md](technical-quant-feature-priorities-free-data.md)
+4. [calibration-upgrade-roadmap-and-roi.md](calibration-upgrade-roadmap-and-roi.md)
 
 ## Summary
 

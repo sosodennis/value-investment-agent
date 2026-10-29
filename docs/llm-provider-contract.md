@@ -19,6 +19,14 @@ from the browser. A user can list, test, add, and delete only deployments
 claimed by that user. The development-only loopback local-admin endpoint still
 exists for local diagnostics, but it does not authorize provider settings.
 
+The authenticated `/stream` API binds the session-derived principal to a
+`ContextVar` for each workflow request. The compiled graph stays shared and
+does not store a user id in agent wiring. The gateway requires a principal by
+default through `LLM_GATEWAY_REQUIRE_PRINCIPAL`. A missing principal returns
+the non-retryable `provider_context_missing` error. The provider adapter
+resolves the user's opaque gateway route for each completion or stream; browser
+input never supplies a deployment id, route alias, or OpenRouter key.
+
 The model picker remains a global free-model policy for the MVP. It is updated
 only by an authenticated session and is synchronized into managed deployments
 by the backend. Platform-admin roles, tenant delegation, Vault, and other
@@ -77,16 +85,20 @@ bounded and its terminal errors are non-retryable after exhaustion. For the
 simplified MVP, LiteLLM owns credential selection among database-backed
 deployments registered under an opaque per-user route alias; router retry and
 cooldown settings apply to that user's model group. A separate fallback alias
-is not part of the MVP, and staging must still verify selection and recovery
-behavior. The project adapter does not receive, rotate, or persist OpenRouter
-keys. A larger key pool and delegated roles remain follow-up work under #90.
+is not part of the MVP. Production rollout still requires disposable-key
+selection and recovery checks in the [gateway rollout runbook](runbooks/llm-gateway-rollout.md).
+The project adapter does not receive, rotate, or persist OpenRouter keys.
+Multi-key user pools and key health tracking were delivered under #90;
+delegated roles and secret-manager integrations remain outside the MVP.
 LiteLLM cools a deployment after its first retryable failure. The setting
 `allowed_fails: 0` sets this threshold, and `cooldown_time: 30` keeps the
 deployment unavailable for 30 seconds. Redis shares cooldown state between
 Router processes. The pinned-image contract test verifies cross-process
 cooldown and recovery against fake upstreams. Full proxy HTTP requests, backend
 concurrency, real OpenRouter behavior, and broader failure-injection evidence
-remain open under #91 and #97.
+were tracked by #91 and #97. Those issues are closed; this contract describes
+the delivered MVP boundary. Any new production rollout gate should be tracked
+as a new issue.
 
 The application constructs one shared gateway provider. Local development also
 uses the gateway. It does not create a direct OpenRouter or OpenAI client.

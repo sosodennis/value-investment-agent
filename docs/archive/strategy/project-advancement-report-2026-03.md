@@ -1,29 +1,29 @@
 # RFC: Project Advancement Report 2026-03
 
 Date: 2026-03-19
-Status: Draft
+Status: Archived proposal. This report is not the current project direction.
 Owner: Codex strategic synthesis
 
 ## Purpose
 
-This document is the strategy synthesis report for the current project direction discussion.
+This document records the strategy discussion held in March 2026.
 
-It consolidates:
+At the time, it consolidated:
 
-- the current RFC set under `docs/rfc`,
+- the proposal set under `docs/rfc`,
 - the recent third-party architecture discussion,
 - and external validation of enterprise-style practices.
 
-Its purpose is to reduce directional ambiguity and give the project a single clear advancement recommendation.
+The report aimed to give that discussion one recommendation.
 
 ## Inputs Reviewed
 
 Primary local inputs:
 
-- [technical-strategy-master-roadmap.md](/Users/denniswong/Desktop/Project/value-investment-agent/docs/rfc/technical-strategy-master-roadmap.md)
-- [technical-quant-feature-priorities-free-data.md](/Users/denniswong/Desktop/Project/value-investment-agent/docs/rfc/technical-quant-feature-priorities-free-data.md)
-- [calibration-upgrade-roadmap-and-roi.md](/Users/denniswong/Desktop/Project/value-investment-agent/docs/rfc/calibration-upgrade-roadmap-and-roi.md)
-- [Free-Data-Quant-Feature-Prioritization.md](/Users/denniswong/Downloads/Free-Data-Quant-Feature-Prioritization.md)
+- [technical-strategy-master-roadmap.md](technical-strategy-master-roadmap.md)
+- [technical-quant-feature-priorities-free-data.md](technical-quant-feature-priorities-free-data.md)
+- [calibration-upgrade-roadmap-and-roi.md](calibration-upgrade-roadmap-and-roi.md)
+- `Free-Data-Quant-Feature-Prioritization.md` (local source not included in this repository)
 
 External validation references included:
 
@@ -403,9 +403,9 @@ This document is the top-level strategy synthesis for the current expansion deba
 
 Recommended follow-on reading:
 
-1. [technical-strategy-master-roadmap.md](/Users/denniswong/Desktop/Project/value-investment-agent/docs/rfc/technical-strategy-master-roadmap.md)
-2. [technical-quant-feature-priorities-free-data.md](/Users/denniswong/Desktop/Project/value-investment-agent/docs/rfc/technical-quant-feature-priorities-free-data.md)
-3. [calibration-upgrade-roadmap-and-roi.md](/Users/denniswong/Desktop/Project/value-investment-agent/docs/rfc/calibration-upgrade-roadmap-and-roi.md)
+1. [technical-strategy-master-roadmap.md](technical-strategy-master-roadmap.md)
+2. [technical-quant-feature-priorities-free-data.md](technical-quant-feature-priorities-free-data.md)
+3. [calibration-upgrade-roadmap-and-roi.md](calibration-upgrade-roadmap-and-roi.md)
 
 Interpretation:
 

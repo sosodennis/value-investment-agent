@@ -30,6 +30,12 @@ Root `AGENTS.md` contains finance-domain constraints, agent skill routing, and r
 - [Discussion #130: frontend architecture and UI foundation](https://github.com/sosodennis/value-investment-agent/discussions/130)
 - [Discussion #131: SSE transport and recovery](https://github.com/sosodennis/value-investment-agent/discussions/131)
 - [Discussion #140: backend guidelines, module boundaries, and SSE](https://github.com/sosodennis/value-investment-agent/discussions/140)
-- Accepted architecture decisions include the [Analysis Workspace runtime durability ADR](analysis-workspace-runtime-durability-adr-2026-03-21.md), its [detailed companion](analysis-workspace-runtime-durability-detailed-adr-2026-03-21.md), and the [observability backbone ADR](technical-decision-observability-backbone-adr-2026-03-21.md). Research and audit reports live in [`research-paper/`](research-paper/) and the curated documents under [`docs/reports/`](reports/). Raw benchmark outputs are generated locally under the ignored root `reports/` directory when a verification script is run.
+- Accepted architecture decisions include the [Analysis Workspace runtime durability ADR](analysis-workspace-runtime-durability-adr-2026-03-21.md), its [detailed companion](analysis-workspace-runtime-durability-detailed-adr-2026-03-21.md), and the [observability backbone ADR](technical-decision-observability-backbone-adr-2026-03-21.md).
+- Research and audit reports live in [`research-paper/`](research-paper/) and [`reports/`](reports/). Verification scripts write raw benchmark outputs to the ignored root `reports/` directory.
 
 ADRs record decisions for a specific system change. Contracts describe a service or data boundary. Reports record evidence and a dated code review. These references do not create a competing general coding standard.
+
+## Archived documents
+
+- [Root workflow entrypoint migration](archive/root-workflow-entrypoint-migration-2026-10-25.md) records the completed migration and its validation.
+- [2026-03 technical strategy proposals](archive/strategy/technical-strategy-master-roadmap.md) and their supporting [quant priorities](archive/strategy/technical-quant-feature-priorities-free-data.md), [calibration roadmap](archive/strategy/calibration-upgrade-roadmap-and-roi.md), and [project advancement report](archive/strategy/project-advancement-report-2026-03.md) are historical proposals, not current project commitments.

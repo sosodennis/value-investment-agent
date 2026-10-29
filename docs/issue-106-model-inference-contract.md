@@ -1,6 +1,12 @@
 # Model inference inventory and contract
 
-This document records the current backend workload and the proposed private inference service contract for issue #106. It is a reference for the service owner and backend caller owners. It does not implement the service or migrate callers.
+Status: Historical workload inventory and design record for completed issues
+#106 through #109. The accepted service boundary is in
+[issue-121-inference-boundary.md](issue-121-inference-boundary.md); operational
+instructions are in the [rollout runbook](runbooks/model-inference-rollout.md).
+
+This document preserves the workload analysis, measurements, and design
+decisions that led to the private model inference service.
 
 ## Decision summary
 
@@ -77,9 +83,9 @@ The inventory probe found these artifacts in the baked image:
 
 The same probes in the host `uv` environment found only News FinBERT available. FLS, dense retrieval, and FastEmbed reported missing local artifacts. The host result is retained in the raw JSON to show why a cache-complete image is required for a meaningful service benchmark.
 
-Image build and runtime cache seeding are separate from process loading. The existing image contains about `2.2 GiB` of baked cache. A direct entrypoint seed into a fresh container failed with `No space left on device` after about `5.03 s`, before model loading. The full branch-specific Compose build did not produce an image because the dependency layer was still being rebuilt. Therefore the container workload numbers are valid for the current code mounted into the existing cache-complete arm64 runtime, while the cache-seed and full Compose startup gates remain open.
+Image build and runtime cache seeding are separate from process loading. During this benchmark, the existing image contained about `2.2 GiB` of baked cache. A direct entrypoint seed into a fresh container failed with `No space left on device` after about `5.03 s`, before model loading. The branch-specific Compose build had not finished its dependency layer, so it produced no image. These results describe the #106 benchmark setup; they do not describe the later image-baked service startup verified under #109.
 
-The measured limiter is CPU inference and PyTorch thread contention. News gains only about one third more throughput from c4 to c8 while p95 rises from `148 ms` to `216 ms`. FLS gains only `1.2 RPS` from c2 to c4 while p95 rises from `354 ms` to `596 ms` and RSS reaches `1.06 GiB`. The benchmark checks counted errors and validated non-empty labels or selected predictions. It did not measure network transport because the current backend has no inference service endpoint.
+The measured limiter is CPU inference and PyTorch thread contention. News gains only about one third more throughput from c4 to c8 while p95 rises from `148 ms` to `216 ms`. FLS gains only `1.2 RPS` from c2 to c4 while p95 rises from `354 ms` to `596 ms` and RSS reaches `1.06 GiB`. The benchmark checks counted errors and validated non-empty labels or selected predictions. It did not measure network transport because the #107 inference endpoint was not part of this benchmark.
 
 ## HTTP contract
 
@@ -159,7 +165,7 @@ Queued cancellation removes the request immediately. Running cancellation is coo
 
 The backend uses one retry at most. It retries `MODEL_NOT_READY`, `OVERLOADED`, and `UNAVAILABLE` when `retryable` is true. It waits for the server's `retry_after_ms`, capped at 500 ms, and uses a fresh deadline budget. It does not retry `INVALID_ARGUMENT`, `UNAUTHENTICATED`, `CANCELLED`, or `INFERENCE_FAILED`. The backend keeps the same `X-Request-ID` across the retry. The service deduplicates an active request ID and may return a completed response from a short 60-second idempotency cache. This prevents a timeout from creating unbounded duplicate compute.
 
-Current workflow fallbacks remain explicit during migration. News treats `MODEL_NOT_READY`, `UNAVAILABLE`, `DEADLINE_EXCEEDED`, and `INFERENCE_FAILED` as no FinBERT result and uses its basic LLM chain. SEC FLS uses the lexical filter for the same model errors. The service must not return a fabricated neutral label or an empty successful prediction for those cases.
+The original contract specified these workflow fallbacks during migration. News treats `MODEL_NOT_READY`, `UNAVAILABLE`, `DEADLINE_EXCEEDED`, and `INFERENCE_FAILED` as no FinBERT result and uses its basic LLM chain. SEC FLS uses the lexical filter for the same model errors. The service must not return a fabricated neutral label or an empty successful prediction for those cases.
 
 ## Capacity and operations
 
@@ -188,6 +194,8 @@ The future vertical slice belongs at `finance-agent-core/src/model_inference/`:
 
 News and Fundamental depend on the port in `model_inference.entrypoint` or a shared application contract. They do not depend on `FastAPI`, HTTP status codes, queue internals, or model identifiers. A backend rebuild can then restart its caller process while the inference service keeps its model cache and readiness state. The deployment platform is intentionally unspecified; the boundary is a private versioned HTTP service, and the platform must provide the artifact cache, memory limits, and service-token transport.
 
-## Scope fence
+## Original scope fence
 
-This change adds documentation, benchmark harnesses, raw measurements, and the decision trail for issue #106. It does not implement `model_inference`, change existing callers, or modify the work assigned to issues #107 through #109.
+At the time, issue #106 added documentation, benchmark harnesses, raw
+measurements, and the decision trail. Issues #107 through #109 subsequently
+implemented and verified the service and backend migration.

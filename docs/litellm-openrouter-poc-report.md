@@ -7,7 +7,7 @@ Date: 2026-10-22
 This POC validates the isolated LiteLLM service, its database-backed deployment
 metadata, and the project adapter boundary. The production data plane now
 resolves `openrouter-default` to an opaque per-user alias (see
-`docs/rfc/llm-provider-contract.md`); this POC does not reintroduce a global
+`docs/llm-provider-contract.md`); this POC does not reintroduce a global
 shared pool.
 
 ## Reproduction
@@ -46,16 +46,14 @@ API.
 
 ## Decision
 
-**Go for the isolated MVP gateway; no-go for production rollout yet.** The
-pinned service, database-backed deployment metadata, and shared Redis
-coordination are adequate for the current per-user MVP. Compose now supports
-multiple LiteLLM workers through `LLM_GATEWAY_WORKERS` and configures both Router
-cooldown state and proxy-wide coordination Redis. #91 owns the policy contract;
-#97 owns the final multi-worker and rollout gate, including live failure
-injection with disposable credentials.
+**Go for the isolated MVP gateway.** This is the decision recorded at the time
+of the POC, not a current production approval. The pinned service,
+database-backed deployment metadata, and shared Redis coordination were
+adequate for the per-user MVP. The Compose configuration supported multiple
+LiteLLM workers through `LLM_GATEWAY_WORKERS` and configured both Router
+cooldown state and proxy-wide coordination Redis. Issues #91 and #97 are
+closed, while the runbook still requires disposable-key evidence before
+production approval.
 
-The remaining live staging evidence is explicit rather than implied: disposable
-real keys must still prove successful selection across requests, 401/429
-cooldown and replacement, pre-first-byte stream fallback, post-first-byte
-terminal errors, and behavior after gateway/Postgres degradation. No live key
-is committed or required for unit and configuration verification.
+The POC's live staging evidence was limited to the observations above. No
+credentials or live provider responses are committed as durable fixtures.

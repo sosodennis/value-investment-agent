@@ -1,6 +1,7 @@
 # Full-Stack Refactor Baseline
 
 Date: 2026-10-24
+Status: Historical baseline snapshot; not current worktree or Docker state.
 Canonical instruction: `.audit/architect-full-stack-refactor-instruction-2026-10-24.md`
 
 ## Repository
@@ -22,12 +23,12 @@ Canonical instruction: `.audit/architect-full-stack-refactor-instruction-2026-10
 
 All worktrees were created from the baseline SHA before implementation:
 
-| Owner | Branch | Worktree | Compose project | Backend port | Frontend port |
+| Owner | Branch | Checkout | Compose project | Backend port | Frontend port |
 | --- | --- | --- | --- | ---: | ---: |
-| Engineer A | `codex/refactor-contract-a` | `/Users/denniswong/.codex/worktrees/refactor-contract-a/value-investment-agent` | `via-refactor-contract-a` | 8200 | 3200 |
-| Engineer B | `codex/refactor-backend-b` | `/Users/denniswong/.codex/worktrees/refactor-backend-b/value-investment-agent` | `via-refactor-backend-b` | 8300 | 3300 |
-| Engineer C | `codex/refactor-frontend-c` | `/Users/denniswong/.codex/worktrees/refactor-frontend-c/value-investment-agent` | `via-refactor-frontend-c` | 8400 | 3400 |
-| Integration | `codex/refactor-integration` | `/Users/denniswong/.codex/worktrees/refactor-integration/value-investment-agent` | `via-refactor-integration` | 8500 | 3500 |
+| Engineer A | `codex/refactor-contract-a` | Isolated worktree | `via-refactor-contract-a` | 8200 | 3200 |
+| Engineer B | `codex/refactor-backend-b` | Isolated worktree | `via-refactor-backend-b` | 8300 | 3300 |
+| Engineer C | `codex/refactor-frontend-c` | Isolated worktree | `via-refactor-frontend-c` | 8400 | 3400 |
+| Integration | `codex/refactor-integration` | Isolated worktree | `via-refactor-integration` | 8500 | 3500 |
 
 Each project must use project-scoped volumes/networks, explicit host-port overrides, and no fixed `container_name`. `BACKEND_HOST_PORT` is the source for any local staging backend origin; `STAGING_BASE_URL` is not required.
 

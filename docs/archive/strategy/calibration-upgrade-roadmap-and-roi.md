@@ -1,14 +1,14 @@
 # RFC: Calibration Upgrade Roadmap, Complexity, and ROI
 
 Date: 2026-03-18
-Status: Supporting Annex
+Status: Archived proposal. This plan is not a current project commitment.
 Owner: Codex working notes for future implementation planning
 
 ## Document Role
 
 This file is a **supporting annex** to the master roadmap:
 
-- [technical-strategy-master-roadmap.md](/Users/denniswong/Desktop/Project/value-investment-agent/docs/rfc/technical-strategy-master-roadmap.md)
+- [technical-strategy-master-roadmap.md](technical-strategy-master-roadmap.md)
 
 Primary purpose:
 
@@ -22,9 +22,9 @@ Dependency note:
 
 Read order:
 
-1. [technical-strategy-master-roadmap.md](/Users/denniswong/Desktop/Project/value-investment-agent/docs/rfc/technical-strategy-master-roadmap.md)
-2. [technical-quant-feature-priorities-free-data.md](/Users/denniswong/Desktop/Project/value-investment-agent/docs/rfc/technical-quant-feature-priorities-free-data.md)
-3. [calibration-upgrade-roadmap-and-roi.md](/Users/denniswong/Desktop/Project/value-investment-agent/docs/rfc/calibration-upgrade-roadmap-and-roi.md)
+1. [technical-strategy-master-roadmap.md](technical-strategy-master-roadmap.md)
+2. [technical-quant-feature-priorities-free-data.md](technical-quant-feature-priorities-free-data.md)
+3. [calibration-upgrade-roadmap-and-roi.md](calibration-upgrade-roadmap-and-roi.md)
 
 ## Summary
 
@@ -53,9 +53,9 @@ Technical calibration is primarily a score-to-confidence style calibration.
 
 Current local implementation:
 
-- [`technical_direction_calibration_service.py`](/Users/denniswong/Desktop/Project/value-investment-agent/finance-agent-core/src/agents/technical/subdomains/calibration/domain/policies/technical_direction_calibration_service.py)
-- [`run_fusion_compute_use_case.py`](/Users/denniswong/Desktop/Project/value-investment-agent/finance-agent-core/src/agents/technical/application/use_cases/run_fusion_compute_use_case.py)
-- [`fitting_service.py`](/Users/denniswong/Desktop/Project/value-investment-agent/finance-agent-core/src/agents/technical/subdomains/calibration/domain/fitting_service.py)
+- [`technical_direction_calibration_service.py`](../../../finance-agent-core/src/agents/technical/subdomains/calibration/domain/policies/technical_direction_calibration_service.py)
+- [`run_fusion_compute_use_case.py`](../../../finance-agent-core/src/agents/technical/application/use_cases/run_fusion_compute_use_case.py)
+- [`fitting_service.py`](../../../finance-agent-core/src/agents/technical/subdomains/calibration/domain/fitting_service.py)
 
 What it tries to answer:
 
@@ -67,9 +67,9 @@ Fundamental calibration is primarily an impact or parameter-adjustment calibrati
 
 Current local implementation:
 
-- [`forward_signal_calibration_service.py`](/Users/denniswong/Desktop/Project/value-investment-agent/finance-agent-core/src/agents/fundamental/subdomains/forward_signals/domain/policies/forward_signal_calibration_service.py)
-- [`forward_signal_adjustment_service.py`](/Users/denniswong/Desktop/Project/value-investment-agent/finance-agent-core/src/agents/fundamental/subdomains/core_valuation/domain/parameterization/forward_signal_adjustment_service.py)
-- [`dataset_builder_service.py`](/Users/denniswong/Desktop/Project/value-investment-agent/finance-agent-core/src/agents/fundamental/subdomains/forward_signals/domain/calibration/dataset_builder_service.py)
+- [`forward_signal_calibration_service.py`](../../../finance-agent-core/src/agents/fundamental/subdomains/forward_signals/domain/policies/forward_signal_calibration_service.py)
+- [`forward_signal_adjustment_service.py`](../../../finance-agent-core/src/agents/fundamental/subdomains/core_valuation/domain/parameterization/forward_signal_adjustment_service.py)
+- [`dataset_builder_service.py`](../../../finance-agent-core/src/agents/fundamental/subdomains/forward_signals/domain/calibration/dataset_builder_service.py)
 
 What it tries to answer:
 

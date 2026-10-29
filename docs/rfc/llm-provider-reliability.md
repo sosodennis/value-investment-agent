@@ -30,7 +30,8 @@ LiteLLM stores each cooldown with a Redis TTL. After the TTL expires, the
 deployment can receive requests again. The router does not guarantee a single
 half-open probe across workers, so several requests can reach a recovering
 deployment at once. A pinned-image contract test with fake upstreams proves
-cross-process cooldown sharing and recovery after expiry. Staging with
-disposable OpenRouter keys must still verify real provider behavior before
-#91/#97 can close. No process-local round-robin state replaces LiteLLM's shared
-cooldown state.
+cross-process cooldown sharing and recovery after expiry. Issues #91 and #97
+are closed. The [gateway rollout runbook](../runbooks/llm-gateway-rollout.md)
+records the remaining disposable-key evidence required before production
+approval. No process-local round-robin state replaces LiteLLM's shared cooldown
+state.
