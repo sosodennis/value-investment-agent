@@ -7,6 +7,7 @@ Root `AGENTS.md` contains finance-domain constraints, agent skill routing, and r
 ## Canonical guides
 
 - [Frontend engineering guide](frontend-guideline.md)
+- [Frontend UI design guide](frontend-ui-guideline.md) supplements the frontend guide with visual and component rules.
 - [Backend engineering guide](backend-guideline.md)
 
 ## Specialized architecture rules

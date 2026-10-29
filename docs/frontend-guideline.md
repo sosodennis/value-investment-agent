@@ -70,6 +70,15 @@ Use names that state the operation and owner. Keep request state separate when o
 - Disable duplicate submissions while a mutation is pending. Preserve the previous successful result when a refresh fails.
 - Represent workflow status with a discriminated union when states have different data or allowed actions. Avoid optional-field bags that permit contradictory combinations.
 
+### Human-required workflow interactions
+
+- Show a required interaction inline in its waiting activity step or owning agent section. Do not use a modal or auto-dismissing toast as the default interruption surface.
+- Keep the warning visible until the backend confirms a response or cancellation. Navigating to another report must not dismiss or resolve a pending interaction.
+- State the decision needed, why the workflow is paused, and the typed context needed to decide. Put detailed evidence in the workspace evidence inspector when it needs more room.
+- Drive prompts and actions only from a parsed pending interaction and its identity. Do not infer approval from an activity label or run status. If the request is absent, show that the run is waiting without fabricating controls.
+- Use warning state for a required decision and error state for a failure. Keep actions beside the request, disable duplicate submission, and show completion only after backend confirmation.
+- Compose the interaction from source-owned shadcn primitives in the feature that owns the workflow. Treat AI Elements as reference patterns, not a second runtime UI kit.
+
 ## 6. Keep SSE parsing and recovery in the feature boundary
 
 The supported transport is browser to FastAPI. Do not add a Next.js Route Handler only to proxy SSE. The current fetch-based reader must parse SSE framing before a feature parser validates the event payload.

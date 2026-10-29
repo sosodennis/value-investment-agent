@@ -190,6 +190,7 @@ The two canonical engineering guides are:
 *   [`docs/README.md`](docs/README.md) (documentation index)
 *   [`docs/backend-guideline.md`](docs/backend-guideline.md)
 *   [`docs/frontend-guideline.md`](docs/frontend-guideline.md)
+*   [`docs/frontend-ui-guideline.md`](docs/frontend-ui-guideline.md)
 
 Agent graph and dependency rules are defined in the [Agent Architecture Standard](.agents/skills/architecture-standard-enforcer/references/cross-agent-architecture-standard.md).
 
