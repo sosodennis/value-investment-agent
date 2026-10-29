@@ -669,7 +669,9 @@ async def test_replay_gap_is_typed() -> None:
 
 
 @pytest.mark.asyncio
-async def test_failed_run_publishes_terminal_activity() -> None:
+async def test_failed_run_publishes_terminal_activity(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     service = AnalysisRuntimeService(
         repository=InMemoryActivityRepository(), owner=Owner(), runner=FailingRunner()
     )
@@ -692,6 +694,16 @@ async def test_failed_run_publishes_terminal_activity() -> None:
     assert snapshot.failure.message == (
         "The workflow could not complete because an internal step failed."
     )
+    failure_log = next(
+        record
+        for record in caplog.records
+        if record.message == "workflow execution failed"
+    )
+    assert failure_log.thread_id == "thread"
+    assert failure_log.run_id == run_id
+    assert failure_log.exception_type == "RuntimeError"
+    assert failure_log.error_code == "workflow_runtime_error"
+    assert "runner failed" not in failure_log.message
     assert snapshot.active_activities == ()
     assert all(activity.status != "running" for activity in snapshot.recent_activities)
 

@@ -416,6 +416,16 @@ class AnalysisRuntimeService:
                     },
                 )
             failure = _failure_from_exception(exc, activity_id=current_activity_id)
+            logger.error(
+                "workflow execution failed",
+                extra={
+                    "thread_id": thread_id,
+                    "run_id": run_id,
+                    "activity_id": current_activity_id,
+                    "exception_type": type(exc).__name__,
+                    "error_code": failure.code,
+                },
+            )
             await self._emit_terminal(
                 thread_id=thread_id,
                 run_id=run_id,
