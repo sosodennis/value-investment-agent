@@ -13,6 +13,7 @@ All UI and component recommendations in [Discussion #130](https://github.com/sos
 - Keep existing paths until a feature change needs them. Move a feature as one reviewable unit and remove its old imports in the same change.
 - Treat the frontend as one Next.js application. Do not add another UI kit or split npm packages without a demonstrated ownership or deployment need.
 - Keep charts specialized to their job. The current project uses Recharts for general charts and Lightweight Charts for financial price series.
+- Keep Recharts tick label sizes explicit where its SVG renderer needs fixed dimensions. Lightweight Charts uses a fixed 11px canvas label size as a renderer constraint. Read chart colors from semantic tokens in both renderers.
 
 `/workspace` owns Fundamental, Technical, News, and Debate output views. They are workspace views, not separate routes. Keep page routing separate from that domain distinction.
 
@@ -40,7 +41,7 @@ When a contract changes, update the backend schema, generated OpenAPI, parser, v
 
 - Use shadcn/ui as the shared component foundation. Add source-owned primitives under `src/components/ui/` and keep feature-specific combinations in their feature.
 - Use shadcn AI Elements patterns for chat, plans, task progress, tool activity, sources, and confirmation when those patterns fit the workflow. Adapt their examples to this project's typed view models and API/SSE contracts.
-- Apply the Professional Matte design through semantic tokens. Do not introduce new direct color palettes or component-specific design systems. See [`docs/ui/stitch/DESIGN.md`](ui/stitch/DESIGN.md).
+- Apply the Professional Matte design through semantic tokens. Do not introduce new direct color palettes or component-specific design systems. See [`frontend-ui-guideline.md`](frontend-ui-guideline.md).
 - Use clear semantic tokens for surface, text, border, action, success, warning, and error states. Components must not depend on a particular theme's raw color name.
 - Use `BeuiSelect` only while migrating existing code. New option pickers use the shadcn Combobox pattern. Replace the old picker when its feature is next changed.
 - Use semantic HTML, visible focus states, and labels for inputs. Formal accessibility audits are not a release gate, but controls must remain usable with a keyboard and understandable from their labels.

@@ -15,24 +15,29 @@ import {
     UTCTimestamp,
 } from 'lightweight-charts';
 import { CrosshairSyncState } from './useCrosshairSync';
-import { TECHNICAL_PALETTE } from '../technicalPalette';
+import {
+    resolveChartColor,
+    useChartTheme,
+    type ChartColorRole,
+    type ChartValueColorRole,
+} from '@/lib/chart-theme';
 
 export type IndicatorLinePoint = { time: UTCTimestamp; value: number } | { time: UTCTimestamp };
 export type IndicatorHistogramPoint =
-    | { time: UTCTimestamp; value: number; color?: string }
+    | { time: UTCTimestamp; value: number; color?: ChartValueColorRole }
     | { time: UTCTimestamp };
 
 export interface IndicatorLineSeries {
     id: string;
     data: IndicatorLinePoint[];
-    color: string;
+    color: ChartColorRole;
     lineWidth?: 1 | 2 | 3 | 4;
 }
 
 export interface IndicatorHistogramSeries {
     id: string;
     data: IndicatorHistogramPoint[];
-    color?: string;
+    color?: ChartColorRole;
     priceFormat?: {
         type: 'volume' | 'price' | 'custom';
         precision?: number;
@@ -45,14 +50,26 @@ export interface IndicatorHistogramSeries {
 
 export interface IndicatorPriceLine {
     price: number;
-    color: string;
+    color: ChartColorRole;
     title?: string;
     style?: 'solid' | 'dashed';
-    axisLabelColor?: string;
-    axisLabelTextColor?: string;
+    axisLabelColor?: ChartColorRole;
+    axisLabelTextColor?: ChartColorRole;
 }
 
 type VisibleTimeRange = IRange<Time>;
+type HistogramChartSeriesGroup = Record<'default' | ChartValueColorRole, ISeriesApi<'Histogram'>>;
+
+const histogramDataForRole = (
+    data: IndicatorHistogramPoint[],
+    role: 'default' | ChartValueColorRole
+): IndicatorHistogramPoint[] => data.map((point) => {
+    if (!('value' in point)) return point;
+    const matchesRole = role === 'default'
+        ? point.color === undefined
+        : point.color === role;
+    return matchesRole ? { time: point.time, value: point.value } : { time: point.time };
+});
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
     typeof value === 'object' && value !== null;
@@ -136,10 +153,13 @@ export const TechnicalIndicatorChart: React.FC<TechnicalIndicatorChartProps> = (
     syncId,
     syncState,
 }) => {
+    const chartTheme = useChartTheme();
     const containerRef = useRef<HTMLDivElement | null>(null);
+    const chartThemeRef = useRef(chartTheme);
     const chartRef = useRef<IChartApi | null>(null);
     const lineSeriesRef = useRef<ISeriesApi<'Line'>[]>([]);
-    const histogramSeriesRef = useRef<ISeriesApi<'Histogram'>[]>([]);
+    const histogramSeriesRef = useRef<HistogramChartSeriesGroup[]>([]);
+    const histogramRoleByTimeRef = useRef(new Map<UTCTimestamp, ChartValueColorRole | 'default'>());
     const priceLinesRef = useRef<ReturnType<ISeriesApi<'Line'>['createPriceLine']>[]>([]);
     const isSyncingRef = useRef(false);
     const lastEmittedRef = useRef<{ time: UTCTimestamp | null; pointKey: string } | null>(null);
@@ -188,6 +208,10 @@ export const TechnicalIndicatorChart: React.FC<TechnicalIndicatorChartProps> = (
     }, [syncState.activeCrosshairSourceId]);
 
     useEffect(() => {
+        chartThemeRef.current = chartTheme;
+    }, [chartTheme]);
+
+    useEffect(() => {
         const container = containerRef.current;
         if (!container) return undefined;
 
@@ -196,19 +220,19 @@ export const TechnicalIndicatorChart: React.FC<TechnicalIndicatorChartProps> = (
             height,
             layout: {
                 background: { type: ColorType.Solid, color: 'transparent' },
-                textColor: TECHNICAL_PALETTE.axisText,
+                textColor: chartThemeRef.current?.axisText ?? 'transparent',
                 fontSize: 11,
-                fontFamily: 'ui-sans-serif, system-ui, -apple-system, sans-serif',
+                fontFamily: chartThemeRef.current?.fontFamily ?? window.getComputedStyle(document.body).fontFamily,
                 attributionLogo: false,
             },
             grid: {
-                vertLines: { color: TECHNICAL_PALETTE.gridLineSoft },
-                horzLines: { color: TECHNICAL_PALETTE.gridLineSoft },
+                vertLines: { color: chartThemeRef.current?.gridLineSoft ?? 'transparent' },
+                horzLines: { color: chartThemeRef.current?.gridLineSoft ?? 'transparent' },
             },
             crosshair: { mode: CrosshairMode.Normal },
-            rightPriceScale: { borderColor: TECHNICAL_PALETTE.axisBorder },
+            rightPriceScale: { borderColor: chartThemeRef.current?.axisBorder ?? 'transparent' },
             timeScale: {
-                borderColor: TECHNICAL_PALETTE.axisBorder,
+                borderColor: chartThemeRef.current?.axisBorder ?? 'transparent',
                 rightOffset: 0,
                 barSpacing: 6,
                 fixLeftEdge: true,
@@ -229,16 +253,24 @@ export const TechnicalIndicatorChart: React.FC<TechnicalIndicatorChartProps> = (
 
         const lineSeries = Array.from({ length: lines.length }, () =>
             chart.addSeries(LineSeries, {
-                color: TECHNICAL_PALETTE.indicatorDefault,
+                color: chartThemeRef.current?.seriesPrimary ?? 'transparent',
                 lineWidth: 2,
             })
         );
-        const histogramSeries = Array.from({ length: histograms.length }, () =>
-            chart.addSeries(HistogramSeries, {
-                color: TECHNICAL_PALETTE.histogram,
+        const histogramSeries = Array.from({ length: histograms.length }, () => ({
+            default: chart.addSeries(HistogramSeries, {
+                color: chartThemeRef.current?.seriesNeutralMuted ?? 'transparent',
                 priceScaleId: '',
-            })
-        );
+            }),
+            seriesUpMuted: chart.addSeries(HistogramSeries, {
+                color: chartThemeRef.current?.seriesUpMuted ?? 'transparent',
+                priceScaleId: '',
+            }),
+            seriesDownMuted: chart.addSeries(HistogramSeries, {
+                color: chartThemeRef.current?.seriesDownMuted ?? 'transparent',
+                priceScaleId: '',
+            }),
+        }));
 
         chartRef.current = chart;
         lineSeriesRef.current = lineSeries;
@@ -256,18 +288,18 @@ export const TechnicalIndicatorChart: React.FC<TechnicalIndicatorChartProps> = (
                 isSyncingRef.current = false;
                 return;
             }
-            const anchorSeries =
-                lineSeriesRef.current[0] ?? histogramSeriesRef.current[0] ?? null;
-            if (!param || !param.time || !param.seriesData || !anchorSeries || !param.point) {
-                return;
-            }
-            if (!param.seriesData.get(anchorSeries)) {
+            if (!param || !param.time || !param.seriesData || !param.point) {
                 return;
             }
             const normalized = normalizeTime(param.time);
             if (normalized === null) {
                 return;
             }
+            const role = histogramRoleByTimeRef.current.get(normalized) ?? 'default';
+            const anchorSeries = lineSeriesRef.current[0]
+                ?? histogramSeriesRef.current[0]?.[role]
+                ?? null;
+            if (!anchorSeries || !param.seriesData.get(anchorSeries)) return;
             const bounds = containerRef.current?.getBoundingClientRect();
             if (!bounds) return;
             const point = {
@@ -338,6 +370,7 @@ export const TechnicalIndicatorChart: React.FC<TechnicalIndicatorChartProps> = (
             chartRef.current = null;
             lineSeriesRef.current = [];
             histogramSeriesRef.current = [];
+            histogramRoleByTimeRef.current.clear();
             priceLinesRef.current = [];
         };
     }, [
@@ -357,22 +390,40 @@ export const TechnicalIndicatorChart: React.FC<TechnicalIndicatorChartProps> = (
             const line = lines[index];
             if (!line) return;
             series.applyOptions({
-                color: line.color,
+                color: chartThemeRef.current
+                    ? resolveChartColor(chartThemeRef.current, line.color)
+                    : 'transparent',
                 lineWidth: line.lineWidth ?? 2,
             });
             series.setData(line.data ?? []);
         });
-        histogramSeriesRef.current.forEach((series, index) => {
+        histogramSeriesRef.current.forEach((seriesGroup, index) => {
             const histogram = histograms[index];
             if (!histogram) return;
-            series.applyOptions({
-                color: histogram.color ?? TECHNICAL_PALETTE.histogram,
+            const commonOptions = {
+                color: histogram.color && chartThemeRef.current
+                    ? resolveChartColor(chartThemeRef.current, histogram.color)
+                    : chartThemeRef.current?.seriesNeutralMuted ?? 'transparent',
                 priceFormat: histogram.priceFormat,
                 lastValueVisible: histogram.lastValueVisible,
                 priceLineVisible: histogram.priceLineVisible,
-            });
-            series.setData(histogram.data ?? []);
+            };
+            seriesGroup.default.applyOptions(commonOptions);
+            seriesGroup.seriesUpMuted.applyOptions(commonOptions);
+            seriesGroup.seriesDownMuted.applyOptions(commonOptions);
+            seriesGroup.default.setData(histogramDataForRole(histogram.data, 'default'));
+            seriesGroup.seriesUpMuted.setData(histogramDataForRole(histogram.data, 'seriesUpMuted'));
+            seriesGroup.seriesDownMuted.setData(histogramDataForRole(histogram.data, 'seriesDownMuted'));
         });
+        const firstHistogram = histograms[0];
+        histogramRoleByTimeRef.current = new Map(
+            firstHistogram?.data
+                .filter((point): point is Extract<IndicatorHistogramPoint, { value: number }> => 'value' in point)
+                .map((point): [UTCTimestamp, ChartValueColorRole | 'default'] => [
+                    point.time,
+                    point.color ?? 'default',
+                ]) ?? []
+        );
         if (hasData && !hasDataRef.current) {
             chartRef.current.timeScale().fitContent();
             hasDataRef.current = true;
@@ -380,6 +431,40 @@ export const TechnicalIndicatorChart: React.FC<TechnicalIndicatorChartProps> = (
             hasDataRef.current = false;
         }
     }, [lines, histograms, hasData]);
+
+    useEffect(() => {
+        if (!chartTheme || !chartRef.current) return;
+        chartRef.current.applyOptions({
+            layout: { textColor: chartTheme.axisText, fontFamily: chartTheme.fontFamily },
+            grid: {
+                vertLines: { color: chartTheme.gridLineSoft },
+                horzLines: { color: chartTheme.gridLineSoft },
+            },
+            rightPriceScale: { borderColor: chartTheme.axisBorder },
+            timeScale: { borderColor: chartTheme.axisBorder },
+        });
+        lineSeriesRef.current.forEach((series, index) => {
+            const line = lines[index];
+            if (line) series.applyOptions({ color: resolveChartColor(chartTheme, line.color) });
+        });
+        histogramSeriesRef.current.forEach((seriesGroup, index) => {
+            const histogram = histograms[index];
+            if (!histogram) return;
+            const commonOptions = {
+                priceFormat: histogram.priceFormat,
+                lastValueVisible: histogram.lastValueVisible,
+                priceLineVisible: histogram.priceLineVisible,
+            };
+            seriesGroup.default.applyOptions({
+                ...commonOptions,
+                color: histogram.color
+                    ? resolveChartColor(chartTheme, histogram.color)
+                    : chartTheme.seriesNeutralMuted,
+            });
+            seriesGroup.seriesUpMuted.applyOptions({ ...commonOptions, color: chartTheme.seriesUpMuted });
+            seriesGroup.seriesDownMuted.applyOptions({ ...commonOptions, color: chartTheme.seriesDownMuted });
+        });
+    }, [chartTheme, lines, histograms]);
 
     useEffect(() => {
         if (!chartRef.current) return;
@@ -398,16 +483,15 @@ export const TechnicalIndicatorChart: React.FC<TechnicalIndicatorChartProps> = (
             top: histogramScaleMargins?.top ?? 0.7,
             bottom: histogramScaleMargins?.bottom ?? 0,
         };
-        histogramSeriesRef.current.forEach((series) => {
-            series.priceScale().applyOptions({ scaleMargins: margins });
+        histogramSeriesRef.current.forEach((seriesGroup) => {
+            seriesGroup.default.priceScale().applyOptions({ scaleMargins: margins });
+            seriesGroup.seriesUpMuted.priceScale().applyOptions({ scaleMargins: margins });
+            seriesGroup.seriesDownMuted.priceScale().applyOptions({ scaleMargins: margins });
         });
     }, [histogramScaleMargins]);
 
     useEffect(() => {
         if (!chartRef.current) return;
-        const anchorSeries =
-            lineSeriesRef.current[0] ?? histogramSeriesRef.current[0] ?? null;
-        if (!anchorSeries) return;
         if (syncState.activeCrosshairSourceId === syncId) return;
         if (!syncState.crosshairTime) {
             isSyncingRef.current = true;
@@ -416,6 +500,11 @@ export const TechnicalIndicatorChart: React.FC<TechnicalIndicatorChartProps> = (
         }
         const snapped = findNearestTime(primarySeriesTimes, syncState.crosshairTime);
         if (snapped === null) return;
+        const histogramRole = histogramRoleByTimeRef.current.get(snapped) ?? 'default';
+        const anchorSeries = lineSeriesRef.current[0]
+            ?? histogramSeriesRef.current[0]?.[histogramRole]
+            ?? null;
+        if (!anchorSeries) return;
         const price = primarySeriesMap.get(snapped);
         if (price === undefined) {
             return;
@@ -439,15 +528,19 @@ export const TechnicalIndicatorChart: React.FC<TechnicalIndicatorChartProps> = (
         priceLinesRef.current = priceLines.map((line) =>
             series.createPriceLine({
                 price: line.price,
-                color: line.color,
+                color: chartTheme ? resolveChartColor(chartTheme, line.color) : 'transparent',
                 lineStyle: resolveLineStyle(line.style),
                 axisLabelVisible: true,
                 title: line.title ?? '',
-                axisLabelColor: line.axisLabelColor,
-                axisLabelTextColor: line.axisLabelTextColor,
+                axisLabelColor: chartTheme && line.axisLabelColor
+                    ? resolveChartColor(chartTheme, line.axisLabelColor)
+                    : undefined,
+                axisLabelTextColor: chartTheme && line.axisLabelTextColor
+                    ? resolveChartColor(chartTheme, line.axisLabelTextColor)
+                    : undefined,
             })
         );
-    }, [priceLines]);
+    }, [priceLines, chartTheme]);
 
     return (
         <div className="w-full">

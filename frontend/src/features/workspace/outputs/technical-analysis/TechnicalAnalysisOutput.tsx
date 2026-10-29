@@ -57,6 +57,11 @@ import {
 } from './charts/TechnicalIndicatorChart';
 import { useCrosshairSync } from './charts/useCrosshairSync';
 import {
+    chartColorCssVariable,
+    type ChartColorRole,
+    type ChartValueColorRole,
+} from '@/lib/chart-theme';
+import {
     buildMomentumSummaryLine,
     describeIndicatorHighlight,
     formatAlertLifecycleLabel,
@@ -306,31 +311,31 @@ const formatContributionValue = (value: number | null | undefined) => {
 
 const tonePalette: Record<
     IndicatorTone,
-    { badge: string; value: string; spark: string; glow: string }
+    { badge: string; value: string; spark: ChartColorRole; glow: string }
 > = {
     positive: {
         badge: 'bg-success/20 border-success/40 text-success',
         value: 'text-success',
         spark: TECHNICAL_PALETTE.sparkPositive,
-        glow: '[text-shadow:0_0_15px_rgba(25,128,56,0.5)]',
+        glow: '[text-shadow:0_0_15px_var(--chart-series-up-muted)]',
     },
     neutral: {
         badge: 'bg-muted border-border/30 text-muted-foreground',
         value: 'text-muted-foreground',
         spark: TECHNICAL_PALETTE.sparkNeutral,
-        glow: '[text-shadow:0_0_15px_rgba(148,163,184,0.5)]',
+        glow: '[text-shadow:0_0_15px_var(--chart-series-neutral-muted)]',
     },
     warning: {
         badge: 'bg-warning/20 border-warning/40 text-warning',
         value: 'text-warning',
         spark: TECHNICAL_PALETTE.sparkWarning,
-        glow: '[text-shadow:0_0_15px_rgba(241,194,27,0.5)]',
+        glow: '[text-shadow:0_0_15px_var(--chart-series-warning)]',
     },
     danger: {
         badge: 'bg-destructive/20 border-destructive/40 text-destructive',
         value: 'text-destructive',
         spark: TECHNICAL_PALETTE.sparkDanger,
-        glow: '[text-shadow:0_0_15px_rgba(218,30,40,0.5)]',
+        glow: '[text-shadow:0_0_15px_var(--chart-series-down-muted)]',
     },
 };
 
@@ -416,7 +421,7 @@ const alignLineSeriesToTimes = (
 };
 
 const alignHistogramSeriesToTimes = (
-    series: { time: CandlestickDatum['time']; value: number; color?: string }[],
+    series: { time: CandlestickDatum['time']; value: number; color?: ChartValueColorRole }[],
     times: CandlestickDatum['time'][]
 ) => {
     if (times.length === 0) return series;
@@ -788,8 +793,8 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                     value: volume,
                     color:
                         close >= open
-                            ? 'rgba(25, 128, 56, 0.45)'
-                            : 'rgba(250, 77, 86, 0.45)',
+                            ? TECHNICAL_PALETTE.oversoldLabel
+                            : TECHNICAL_PALETTE.overboughtLabel,
                 });
             }
         });
@@ -933,8 +938,8 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                 value: point.value,
                 color:
                     point.value >= 0
-                        ? 'rgba(25, 128, 56, 0.45)'
-                        : 'rgba(250, 77, 86, 0.45)',
+                        ? TECHNICAL_PALETTE.oversoldLabel
+                        : TECHNICAL_PALETTE.overboughtLabel,
             }));
     }, [indicatorFrame]);
     const fdSeries = useMemo(() => {
@@ -1167,7 +1172,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                 price: 70,
                 color: TECHNICAL_PALETTE.overbought,
                 axisLabelColor: TECHNICAL_PALETTE.overboughtLabel,
-                axisLabelTextColor: TECHNICAL_PALETTE.axisLabelText,
+                axisLabelTextColor: TECHNICAL_PALETTE.axisTextStrong,
                 title: 'Overbought',
                 style: 'dashed',
             },
@@ -1175,7 +1180,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                 price: 30,
                 color: TECHNICAL_PALETTE.oversold,
                 axisLabelColor: TECHNICAL_PALETTE.oversoldLabel,
-                axisLabelTextColor: TECHNICAL_PALETTE.axisLabelText,
+                axisLabelTextColor: TECHNICAL_PALETTE.axisTextStrong,
                 title: 'Oversold',
                 style: 'dashed',
             },
@@ -1188,7 +1193,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                 price: 0,
                 color: TECHNICAL_PALETTE.neutralLine,
                 axisLabelColor: TECHNICAL_PALETTE.neutralLabel,
-                axisLabelTextColor: TECHNICAL_PALETTE.axisLabelText,
+                axisLabelTextColor: TECHNICAL_PALETTE.axisTextStrong,
                 title: 'Zero',
                 style: 'dashed',
             },
@@ -1201,7 +1206,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                 price: 2,
                 color: TECHNICAL_PALETTE.overbought,
                 axisLabelColor: TECHNICAL_PALETTE.overboughtLabel,
-                axisLabelTextColor: TECHNICAL_PALETTE.axisLabelText,
+                axisLabelTextColor: TECHNICAL_PALETTE.axisTextStrong,
                 title: '+2',
                 style: 'dashed',
             },
@@ -1209,7 +1214,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                 price: -2,
                 color: TECHNICAL_PALETTE.oversold,
                 axisLabelColor: TECHNICAL_PALETTE.oversoldLabel,
-                axisLabelTextColor: TECHNICAL_PALETTE.axisLabelText,
+                axisLabelTextColor: TECHNICAL_PALETTE.axisTextStrong,
                 title: '-2',
                 style: 'dashed',
             },
@@ -2379,7 +2384,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                                                 <polyline
                                                                     points={rsiSparkline}
                                                                     fill="none"
-                                                                    stroke={tonePalette[momentumRsiDescriptor.tone].spark}
+                                                                    stroke={chartColorCssVariable(tonePalette[momentumRsiDescriptor.tone].spark)}
                                                                     strokeWidth={2}
                                                                 />
                                                             </svg>
@@ -2428,7 +2433,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                                                 <polyline
                                                                     points={fdSparkline}
                                                                     fill="none"
-                                                                    stroke={tonePalette[momentumFdDescriptor.tone].spark}
+                                                                    stroke={chartColorCssVariable(tonePalette[momentumFdDescriptor.tone].spark)}
                                                                     strokeWidth={2}
                                                                 />
                                                             </svg>
@@ -2490,7 +2495,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                                             <polyline
                                                                 points={macdSparkline}
                                                                 fill="none"
-                                                                stroke={tonePalette[macdTone.tone].spark}
+                                                            stroke={chartColorCssVariable(tonePalette[macdTone.tone].spark)}
                                                                 strokeWidth={2}
                                                             />
                                                         </svg>
@@ -2567,7 +2572,7 @@ const TechnicalAnalysisOutputComponent: React.FC<TechnicalAnalysisOutputProps> =
                                                     <span key={overlay.id} className="inline-flex items-center gap-1">
                                                         <span
                                                             className="h-2 w-2 rounded-full"
-                                                            style={{ backgroundColor: overlay.color }}
+                                                            style={{ backgroundColor: chartColorCssVariable(overlay.color) }}
                                                         />
                                                         {overlay.id}
                                                     </span>
