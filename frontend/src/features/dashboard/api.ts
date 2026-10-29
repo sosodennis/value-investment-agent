@@ -1,8 +1,6 @@
 import type { components, operations } from '@/types/generated/api-contract';
 import { parseApiErrorMessage } from '@/types/protocol';
 
-const API_URL = (process.env.NEXT_PUBLIC_LANGGRAPH_URL || 'http://localhost:8000').replace(/\/+$/, '');
-
 type RecentAnalysesWire = components['schemas']['RecentAnalysesResponse'];
 type RecentAnalysisWire = components['schemas']['RecentAnalysisItem'];
 type MarketMoversWire = components['schemas']['MarketMoversResponse'];
@@ -176,7 +174,7 @@ export function parseDashboardCapabilities(value: unknown): DashboardCapabilitie
 }
 
 async function request<T>(path: string, parse: (payload: unknown) => T): Promise<T> {
-    const response = await fetch(`${API_URL}${path}`, {
+    const response = await fetch(path, {
         credentials: 'include',
         headers: { Accept: 'application/json' },
     });

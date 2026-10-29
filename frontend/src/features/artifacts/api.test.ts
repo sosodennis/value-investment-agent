@@ -8,7 +8,7 @@ import {
 describe('artifact API URLs', () => {
     it('encodes artifact IDs as one path segment', () => {
         expect(buildArtifactUrl('report /?1')).toBe(
-            'http://localhost:8000/api/v1/artifacts/report%20%2F%3F1'
+            '/api/v1/artifacts/report%20%2F%3F1'
         );
     });
 
@@ -27,6 +27,11 @@ describe('artifact API URLs', () => {
         expect(
             buildArtifactReferenceUrl('/api/v1/artifacts/report-1?run_id=run-1')
         ).toBe('/api/v1/artifacts/report-1?run_id=run-1');
+    });
+
+    it('keeps legacy backend artifact references on the same origin', () => {
+        expect(buildArtifactReferenceUrl('http://127.0.0.1:8000/api/v1/artifacts/report-1?run_id=run-2'))
+            .toBe('/api/v1/artifacts/report-1?run_id=run-2');
     });
 
     it('reads the run scope from relative and absolute artifact references', () => {

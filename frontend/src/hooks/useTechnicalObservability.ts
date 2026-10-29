@@ -17,8 +17,6 @@ import {
 } from '@/types/technical-observability';
 import { parseApiErrorMessage } from '@/types/protocol';
 
-const API_URL = process.env.NEXT_PUBLIC_LANGGRAPH_URL || 'http://localhost:8000';
-
 const readErrorMessage = async (response: Response): Promise<string> => {
     try {
         const raw: unknown = await response.json();
@@ -64,9 +62,9 @@ export function useTechnicalObservability(
     filters: TechnicalObservabilityFilters
 ) {
     const baseParams = buildTechnicalObservabilitySearchParams(filters).toString();
-    const aggregatesUrl = `${API_URL}/api/v1/observability/monitoring/aggregates?${baseParams}`;
-    const rowsUrl = `${API_URL}/api/v1/observability/monitoring/rows?${baseParams}`;
-    const calibrationUrl = `${API_URL}/api/v1/observability/calibration/direction-readiness?${baseParams}`;
+    const aggregatesUrl = `/api/v1/observability/monitoring/aggregates?${baseParams}`;
+    const rowsUrl = `/api/v1/observability/monitoring/rows?${baseParams}`;
+    const calibrationUrl = `/api/v1/observability/calibration/direction-readiness?${baseParams}`;
 
     const fetchAggregates = useCallback(
         (url: string) =>
@@ -152,7 +150,7 @@ export function useTechnicalObservabilityEventDetail(
     const url =
         eventId === null
             ? null
-            : `${API_URL}/api/v1/observability/monitoring/events/${encodeURIComponent(eventId)}?${buildTechnicalObservabilitySearchParams(
+            : `/api/v1/observability/monitoring/events/${encodeURIComponent(eventId)}?${buildTechnicalObservabilitySearchParams(
                   {
                       tickers: [],
                       agentSources: [],

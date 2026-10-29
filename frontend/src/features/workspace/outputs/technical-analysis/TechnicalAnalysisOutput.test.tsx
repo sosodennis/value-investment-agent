@@ -270,7 +270,7 @@ describe('TechnicalAnalysisOutput', () => {
             .find((target) => target && typeof target === 'object' && 'artifact_id' in target && target.artifact_id === 'feature-1');
         expect(featurePackTarget).toMatchObject({
             artifact_id: 'feature-1',
-            download_url: 'http://localhost:8000/api/v1/artifacts/feature-1?run_id=run-technical-1',
+            download_url: '/api/v1/artifacts/feature-1?run_id=run-technical-1',
         });
         screen.getByText('Feature pack temporarily unavailable.');
         fireEvent.click(screen.getByRole('button', { name: 'Retry' }));

@@ -146,9 +146,9 @@ describe('TechnicalObservabilityPage', () => {
         screen.getByRole('columnheader', { name: 'Forward return' });
         fireEvent.click(screen.getByRole('button', { name: 'Open event evt-1' }));
         const reportLink = await screen.findByRole('link', { name: /Full report:/ });
-        expect(reportLink.getAttribute('href')).toBe('http://localhost:8000/api/v1/artifacts/artifact%20%2F%3F1?run_id=run-observability-1');
+        expect(reportLink.getAttribute('href')).toBe('/api/v1/artifacts/artifact%20%2F%3F1?run_id=run-observability-1');
         const sourceLink = screen.getByRole('link', { name: /feature pack: source-2/ });
-        expect(sourceLink.getAttribute('href')).toBe('http://localhost:8000/api/v1/artifacts/source-2?run_id=run-observability-1');
+        expect(sourceLink.getAttribute('href')).toBe('/api/v1/artifacts/source-2?run_id=run-observability-1');
         expect(screen.getAllByText('80.00%').length).toBeGreaterThanOrEqual(1);
         expect(screen.getByText((_content, element) => element?.tagName === 'DD' && element.textContent?.includes('"close": 200') === true)).toBeTruthy();
         expect(mocks.detail).toHaveBeenLastCalledWith('evt-1', 'technical_outcome_labeling.v1');
