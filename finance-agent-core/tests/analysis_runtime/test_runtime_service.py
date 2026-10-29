@@ -703,6 +703,11 @@ async def test_failed_run_publishes_terminal_activity(
     assert failure_log.run_id == run_id
     assert failure_log.exception_type == "RuntimeError"
     assert failure_log.error_code == "workflow_runtime_error"
+    assert failure_log.exception_frames
+    assert all(
+        set(frame) == {"file", "line", "function"}
+        for frame in failure_log.exception_frames
+    )
     assert "runner failed" not in failure_log.message
     assert snapshot.active_activities == ()
     assert all(activity.status != "running" for activity in snapshot.recent_activities)

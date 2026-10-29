@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import traceback
 import uuid
 from collections.abc import Mapping
 from datetime import datetime, timezone
@@ -424,6 +425,14 @@ class AnalysisRuntimeService:
                     "activity_id": current_activity_id,
                     "exception_type": type(exc).__name__,
                     "error_code": failure.code,
+                    "exception_frames": tuple(
+                        {
+                            "file": frame.filename,
+                            "line": frame.lineno,
+                            "function": frame.name,
+                        }
+                        for frame in traceback.extract_tb(exc.__traceback__)[-8:]
+                    ),
                 },
             )
             await self._emit_terminal(
