@@ -238,7 +238,7 @@ export const TechnicalAnalysisSupplementarySection: React.FC<TechnicalAnalysisSu
     <section className="space-y-4">
         <div className="flex items-center gap-2">
             <Layers size={14} className="text-primary opacity-70" />
-            <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.2em]">Other</span>
+            <span className="text-xs font-bold text-muted-foreground uppercase tracking-[0.2em]">Other</span>
         </div>
 
         {alertsId && (
@@ -252,7 +252,7 @@ export const TechnicalAnalysisSupplementarySection: React.FC<TechnicalAnalysisSu
                 >
                     <div className="flex items-center gap-2">
                         <Bell size={14} className="text-muted-foreground" />
-                        <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.2em]">Alert Signals</span>
+                        <span className="text-xs font-bold text-muted-foreground uppercase tracking-[0.2em]">Alert Signals</span>
                     </div>
                     <div className="flex items-center gap-4">
                         {showAlerts && isAlertsLoadingState && (
@@ -263,7 +263,7 @@ export const TechnicalAnalysisSupplementarySection: React.FC<TechnicalAnalysisSu
                             />
                         )}
                         {alertsSummary && (
-                            <div className="flex items-center gap-2 text-[9px] font-bold uppercase text-muted-foreground">
+                            <div className="flex items-center gap-2 text-xs font-bold uppercase text-muted-foreground">
                                 <span>Total {alertsSummary.total}</span>
                                 <span className="text-destructive">C {alertsSummary.severityCounts.critical}</span>
                                 <span className="text-warning">W {alertsSummary.severityCounts.warning}</span>
@@ -296,25 +296,25 @@ export const TechnicalAnalysisSupplementarySection: React.FC<TechnicalAnalysisSu
                                 <>
                                     <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                                         <div className="bg-muted/50 p-4 rounded-lg border border-border/20">
-                                            <div className="text-[9px] font-bold text-muted-foreground uppercase mb-1">Total Alerts</div>
+                                            <div className="text-xs font-bold text-muted-foreground uppercase mb-1">Total Alerts</div>
                                             <div className="text-lg font-black text-foreground">{alertsSummary.total}</div>
                                         </div>
                                         <div className="bg-muted/50 p-4 rounded-lg border border-border/20">
-                                            <div className="text-[9px] font-bold text-muted-foreground uppercase mb-1">Critical</div>
+                                            <div className="text-xs font-bold text-muted-foreground uppercase mb-1">Critical</div>
                                             <div className="text-lg font-black text-destructive">{alertsSummary.severityCounts.critical}</div>
                                         </div>
                                         <div className="bg-muted/50 p-4 rounded-lg border border-border/20">
-                                            <div className="text-[9px] font-bold text-muted-foreground uppercase mb-1">Warning</div>
+                                            <div className="text-xs font-bold text-muted-foreground uppercase mb-1">Warning</div>
                                             <div className="text-lg font-black text-warning">{alertsSummary.severityCounts.warning}</div>
                                         </div>
                                         <div className="bg-muted/50 p-4 rounded-lg border border-border/20">
-                                            <div className="text-[9px] font-bold text-muted-foreground uppercase mb-1">Info</div>
+                                            <div className="text-xs font-bold text-muted-foreground uppercase mb-1">Info</div>
                                             <div className="text-lg font-black text-foreground">{alertsSummary.severityCounts.info}</div>
                                         </div>
                                     </div>
 
                                     {alertsSummary.generatedAt && (
-                                        <div className="text-[10px] text-muted-foreground">
+                                        <div className="text-xs text-muted-foreground">
                                             Generated at {alertsSummary.generatedAt}
                                         </div>
                                     )}
@@ -322,7 +322,7 @@ export const TechnicalAnalysisSupplementarySection: React.FC<TechnicalAnalysisSu
                                     {alertsData.degraded_reasons && alertsData.degraded_reasons.length > 0 && (
                                         <div className="flex flex-wrap gap-2">
                                             {alertsData.degraded_reasons.map((reason) => (
-                                                <span key={reason} className="px-3 py-1 bg-destructive/10 border border-destructive/20 rounded-full text-[10px] font-bold text-destructive uppercase tracking-wider">
+                                                <span key={reason} className="px-3 py-1 bg-destructive/10 border border-destructive/20 rounded-full text-xs font-bold text-destructive uppercase tracking-wider">
                                                     {reason.replace('_', ' ')}
                                                 </span>
                                             ))}
@@ -340,7 +340,7 @@ export const TechnicalAnalysisSupplementarySection: React.FC<TechnicalAnalysisSu
                                                     >
                                                         <div className="flex items-start justify-between gap-4">
                                                             <div>
-                                                                <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-muted-foreground mb-1">
+                                                                <div className="text-xs font-bold uppercase tracking-[0.2em] text-muted-foreground mb-1">
                                                                     {alert.timeframe.toUpperCase()} · {formatLabel(alert.code)}
                                                                 </div>
                                                                 <div className="text-sm font-black text-foreground">{alert.title}</div>
@@ -351,12 +351,12 @@ export const TechnicalAnalysisSupplementarySection: React.FC<TechnicalAnalysisSu
                                                                 )}
                                                             </div>
                                                             <span
-                                                                className={`px-2.5 py-1 rounded-full border text-[9px] font-black uppercase tracking-[0.2em] ${tone.badge}`}
+                                                                className={`px-2.5 py-1 rounded-full border text-xs font-black uppercase tracking-[0.2em] ${tone.badge}`}
                                                             >
                                                                 {tone.label}
                                                             </span>
                                                         </div>
-                                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-[10px] text-muted-foreground">
+                                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs text-muted-foreground">
                                                             {alert.value !== null && alert.value !== undefined && (
                                                                 <div>
                                                                     Value: {formatIndicatorValue(alert.value)}
@@ -411,7 +411,7 @@ export const TechnicalAnalysisSupplementarySection: React.FC<TechnicalAnalysisSu
                 >
                     <div className="flex items-center gap-2">
                         <Layers size={14} className="text-muted-foreground" />
-                        <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.2em]">Feature Pack</span>
+                        <span className="text-xs font-bold text-muted-foreground uppercase tracking-[0.2em]">Feature Pack</span>
                     </div>
                     <div className="flex items-center gap-4">
                         {showFeaturePack && isFeaturePackLoading && (
@@ -447,15 +447,15 @@ export const TechnicalAnalysisSupplementarySection: React.FC<TechnicalAnalysisSu
                                 <>
                                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                         <div className="bg-muted/50 p-4 rounded-lg border border-border/20">
-                                            <div className="text-[9px] font-bold text-muted-foreground uppercase mb-1">Timeframes</div>
+                                            <div className="text-xs font-bold text-muted-foreground uppercase mb-1">Timeframes</div>
                                             <div className="text-lg font-black text-foreground">{featurePackSummary.summaries.length}</div>
                                         </div>
                                         <div className="bg-muted/50 p-4 rounded-lg border border-border/20">
-                                            <div className="text-[9px] font-bold text-muted-foreground uppercase mb-1">Classic Indicators</div>
+                                            <div className="text-xs font-bold text-muted-foreground uppercase mb-1">Classic Indicators</div>
                                             <div className="text-lg font-black text-foreground">{featurePackSummary.classicTotal}</div>
                                         </div>
                                         <div className="bg-muted/50 p-4 rounded-lg border border-border/20">
-                                            <div className="text-[9px] font-bold text-muted-foreground uppercase mb-1">Quant Features</div>
+                                            <div className="text-xs font-bold text-muted-foreground uppercase mb-1">Quant Features</div>
                                             <div className="text-lg font-black text-foreground">{featurePackSummary.quantTotal}</div>
                                         </div>
                                     </div>
@@ -463,7 +463,7 @@ export const TechnicalAnalysisSupplementarySection: React.FC<TechnicalAnalysisSu
                                     {featurePackData.degraded_reasons && featurePackData.degraded_reasons.length > 0 && (
                                         <div className="flex flex-wrap gap-2">
                                             {featurePackData.degraded_reasons.map((reason) => (
-                                                <span key={reason} className="px-3 py-1 bg-destructive/10 border border-destructive/20 rounded-full text-[10px] font-bold text-destructive uppercase tracking-wider">
+                                                <span key={reason} className="px-3 py-1 bg-destructive/10 border border-destructive/20 rounded-full text-xs font-bold text-destructive uppercase tracking-wider">
                                                     {reason.replace('_', ' ')}
                                                 </span>
                                             ))}
@@ -477,16 +477,16 @@ export const TechnicalAnalysisSupplementarySection: React.FC<TechnicalAnalysisSu
                                                     <div className="text-xs font-black uppercase tracking-[0.2em] text-muted-foreground">
                                                         {formatLabel(frame.timeframe)}
                                                     </div>
-                                                    <div className="text-[10px] text-muted-foreground font-bold uppercase">
+                                                    <div className="text-xs text-muted-foreground font-bold uppercase">
                                                         Classic {frame.classicCount} · Quant {frame.quantCount}
                                                     </div>
                                                 </div>
                                                 <div>
-                                                    <div className="text-[9px] font-bold text-muted-foreground uppercase mb-2">Classic Highlights</div>
+                                                    <div className="text-xs font-bold text-muted-foreground uppercase mb-2">Classic Highlights</div>
                                                     {renderIndicatorHighlights(frame.classicHighlights)}
                                                 </div>
                                                 <div>
-                                                    <div className="text-[9px] font-bold text-muted-foreground uppercase mb-2">Quant Highlights</div>
+                                                    <div className="text-xs font-bold text-muted-foreground uppercase mb-2">Quant Highlights</div>
                                                     {renderIndicatorHighlights(frame.quantHighlights)}
                                                 </div>
                                             </div>
@@ -511,7 +511,7 @@ export const TechnicalAnalysisSupplementarySection: React.FC<TechnicalAnalysisSu
                 >
                     <div className="flex items-center gap-2">
                         <Layers size={14} className="text-muted-foreground" />
-                        <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.2em]">Pattern Pack</span>
+                        <span className="text-xs font-bold text-muted-foreground uppercase tracking-[0.2em]">Pattern Pack</span>
                     </div>
                     <div className="flex items-center gap-4">
                         {showPatternPack && isPatternPackLoading && (
@@ -547,15 +547,15 @@ export const TechnicalAnalysisSupplementarySection: React.FC<TechnicalAnalysisSu
                                 <>
                                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                         <div className="bg-muted/50 p-4 rounded-lg border border-border/20">
-                                            <div className="text-[9px] font-bold text-muted-foreground uppercase mb-1">Timeframes</div>
+                                            <div className="text-xs font-bold text-muted-foreground uppercase mb-1">Timeframes</div>
                                             <div className="text-lg font-black text-foreground">{patternPackSummary.summaries.length}</div>
                                         </div>
                                         <div className="bg-muted/50 p-4 rounded-lg border border-border/20">
-                                            <div className="text-[9px] font-bold text-muted-foreground uppercase mb-1">Levels</div>
+                                            <div className="text-xs font-bold text-muted-foreground uppercase mb-1">Levels</div>
                                             <div className="text-lg font-black text-foreground">{patternPackSummary.totalLevels}</div>
                                         </div>
                                         <div className="bg-muted/50 p-4 rounded-lg border border-border/20">
-                                            <div className="text-[9px] font-bold text-muted-foreground uppercase mb-1">Flags</div>
+                                            <div className="text-xs font-bold text-muted-foreground uppercase mb-1">Flags</div>
                                             <div className="text-lg font-black text-foreground">{patternPackSummary.totalFlags}</div>
                                         </div>
                                     </div>
@@ -563,7 +563,7 @@ export const TechnicalAnalysisSupplementarySection: React.FC<TechnicalAnalysisSu
                                     {patternPackData.degraded_reasons && patternPackData.degraded_reasons.length > 0 && (
                                         <div className="flex flex-wrap gap-2">
                                             {patternPackData.degraded_reasons.map((reason) => (
-                                                <span key={reason} className="px-3 py-1 bg-destructive/10 border border-destructive/20 rounded-full text-[10px] font-bold text-destructive uppercase tracking-wider">
+                                                <span key={reason} className="px-3 py-1 bg-destructive/10 border border-destructive/20 rounded-full text-xs font-bold text-destructive uppercase tracking-wider">
                                                     {reason.replace('_', ' ')}
                                                 </span>
                                             ))}
@@ -577,20 +577,20 @@ export const TechnicalAnalysisSupplementarySection: React.FC<TechnicalAnalysisSu
                                                     <div className="text-xs font-black uppercase tracking-[0.2em] text-muted-foreground">
                                                         {formatLabel(frame.timeframe)}
                                                     </div>
-                                                    <div className="text-[10px] text-muted-foreground font-bold uppercase">
+                                                    <div className="text-xs text-muted-foreground font-bold uppercase">
                                                         Supports {frame.supportCount} · Resist {frame.resistanceCount} · Flags {frame.flagCount}
                                                     </div>
                                                 </div>
 
                                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                                     <div>
-                                                        <div className="text-[9px] font-bold text-muted-foreground uppercase mb-2">Support Levels</div>
+                                                        <div className="text-xs font-bold text-muted-foreground uppercase mb-2">Support Levels</div>
                                                         {frame.supportLevels.length > 0 ? (
                                                             <div className="space-y-2">
                                                                 {frame.supportLevels.map((level, idx) => (
                                                                     <div key={`${frame.timeframe}-support-${idx}`} className="flex items-center justify-between text-xs text-foreground">
                                                                         <span>{level.label ? formatLabel(level.label) : 'Support'} @ {formatPrice(level.price)}</span>
-                                                                        <span className="text-[10px] text-muted-foreground">
+                                                                        <span className="text-xs text-muted-foreground">
                                                                             {level.strength !== null && level.strength !== undefined ? `Strength ${level.strength.toFixed(2)}` : 'Strength n/a'}
                                                                         </span>
                                                                     </div>
@@ -601,13 +601,13 @@ export const TechnicalAnalysisSupplementarySection: React.FC<TechnicalAnalysisSu
                                                         )}
                                                     </div>
                                                     <div>
-                                                        <div className="text-[9px] font-bold text-muted-foreground uppercase mb-2">Resistance Levels</div>
+                                                        <div className="text-xs font-bold text-muted-foreground uppercase mb-2">Resistance Levels</div>
                                                         {frame.resistanceLevels.length > 0 ? (
                                                             <div className="space-y-2">
                                                                 {frame.resistanceLevels.map((level, idx) => (
                                                                     <div key={`${frame.timeframe}-resistance-${idx}`} className="flex items-center justify-between text-xs text-foreground">
                                                                         <span>{level.label ? formatLabel(level.label) : 'Resistance'} @ {formatPrice(level.price)}</span>
-                                                                        <span className="text-[10px] text-muted-foreground">
+                                                                        <span className="text-xs text-muted-foreground">
                                                                             {level.strength !== null && level.strength !== undefined ? `Strength ${level.strength.toFixed(2)}` : 'Strength n/a'}
                                                                         </span>
                                                                     </div>
@@ -621,11 +621,11 @@ export const TechnicalAnalysisSupplementarySection: React.FC<TechnicalAnalysisSu
 
                                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                                     <div>
-                                                        <div className="text-[9px] font-bold text-muted-foreground uppercase mb-2">Breakouts</div>
+                                                        <div className="text-xs font-bold text-muted-foreground uppercase mb-2">Breakouts</div>
                                                         {frame.breakoutFlags.length > 0 ? (
                                                             <div className="flex flex-wrap gap-2">
                                                                 {frame.breakoutFlags.map((flag, idx) => (
-                                                                    <span key={`${frame.timeframe}-breakout-${idx}`} className="px-2.5 py-1 bg-card border border-border/20 rounded-full text-[10px] font-bold text-foreground uppercase tracking-wide">
+                                                                    <span key={`${frame.timeframe}-breakout-${idx}`} className="px-2.5 py-1 bg-card border border-border/20 rounded-full text-xs font-bold text-foreground uppercase tracking-wide">
                                                                         {flag.name} {flag.confidence !== null && flag.confidence !== undefined ? `(${flag.confidence.toFixed(2)})` : ''}
                                                                     </span>
                                                                 ))}
@@ -635,11 +635,11 @@ export const TechnicalAnalysisSupplementarySection: React.FC<TechnicalAnalysisSu
                                                         )}
                                                     </div>
                                                     <div>
-                                                        <div className="text-[9px] font-bold text-muted-foreground uppercase mb-2">Trendlines</div>
+                                                        <div className="text-xs font-bold text-muted-foreground uppercase mb-2">Trendlines</div>
                                                         {frame.trendFlags.length > 0 ? (
                                                             <div className="flex flex-wrap gap-2">
                                                                 {frame.trendFlags.map((flag, idx) => (
-                                                                    <span key={`${frame.timeframe}-trend-${idx}`} className="px-2.5 py-1 bg-card border border-border/20 rounded-full text-[10px] font-bold text-foreground uppercase tracking-wide">
+                                                                    <span key={`${frame.timeframe}-trend-${idx}`} className="px-2.5 py-1 bg-card border border-border/20 rounded-full text-xs font-bold text-foreground uppercase tracking-wide">
                                                                         {flag.name} {flag.confidence !== null && flag.confidence !== undefined ? `(${flag.confidence.toFixed(2)})` : ''}
                                                                     </span>
                                                                 ))}
@@ -671,7 +671,7 @@ export const TechnicalAnalysisSupplementarySection: React.FC<TechnicalAnalysisSu
                 >
                     <div className="flex items-center gap-2">
                         <Layers size={14} className="text-muted-foreground" />
-                        <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.2em]">Fusion Report</span>
+                        <span className="text-xs font-bold text-muted-foreground uppercase tracking-[0.2em]">Fusion Report</span>
                     </div>
                     <div className="flex items-center gap-4">
                         {showFusionReport &&
@@ -715,29 +715,29 @@ export const TechnicalAnalysisSupplementarySection: React.FC<TechnicalAnalysisSu
                                 <>
                                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                         <div className="bg-muted/50 p-4 rounded-lg border border-border/20">
-                                            <div className="text-[9px] font-bold text-muted-foreground uppercase mb-1">Timeframes</div>
+                                            <div className="text-xs font-bold text-muted-foreground uppercase mb-1">Timeframes</div>
                                             <div className="text-lg font-black text-foreground">{fusionReportSummary?.totalFrames ?? 0}</div>
                                         </div>
                                         <div className="bg-muted/50 p-4 rounded-lg border border-border/20">
-                                            <div className="text-[9px] font-bold text-muted-foreground uppercase mb-1">Conflicts</div>
+                                            <div className="text-xs font-bold text-muted-foreground uppercase mb-1">Conflicts</div>
                                             <div className="text-lg font-black text-foreground">{fusionReportData.conflict_reasons?.length ?? 0}</div>
                                         </div>
                                         <div className="bg-muted/50 p-4 rounded-lg border border-border/20">
-                                            <div className="text-[9px] font-bold text-muted-foreground uppercase mb-1">Signal Strength</div>
+                                            <div className="text-xs font-bold text-muted-foreground uppercase mb-1">Signal Strength</div>
                                             <div className="text-lg font-black text-foreground">
                                                 {fusionReportData.signal_strength_effective !== undefined &&
                                                     fusionReportData.signal_strength_effective !== null
                                                     ? formatConfidence(fusionReportData.signal_strength_effective)
                                                     : fusionConfidenceDisplay}
                                             </div>
-                                            <div className="text-[9px] text-muted-foreground uppercase tracking-[0.2em] mt-1">{fusionConfidenceLabel}</div>
+                                            <div className="text-xs text-muted-foreground uppercase tracking-[0.2em] mt-1">{fusionConfidenceLabel}</div>
                                             {fusionReportData.confidence_eligibility?.eligible === false && (
-                                                <div className="text-[9px] text-muted-foreground uppercase tracking-[0.2em] mt-1">
+                                                <div className="text-xs text-muted-foreground uppercase tracking-[0.2em] mt-1">
                                                     Not Probability-Rated
                                                 </div>
                                             )}
                                             {fusionRawDisplay && (
-                                                <div className="text-[9px] text-muted-foreground uppercase tracking-[0.2em] mt-1">
+                                                <div className="text-xs text-muted-foreground uppercase tracking-[0.2em] mt-1">
                                                     Raw {fusionRawDisplay}
                                                 </div>
                                             )}
@@ -747,7 +747,7 @@ export const TechnicalAnalysisSupplementarySection: React.FC<TechnicalAnalysisSu
                                     {fusionReportData.degraded_reasons && fusionReportData.degraded_reasons.length > 0 && (
                                         <div className="flex flex-wrap gap-2">
                                             {fusionReportData.degraded_reasons.map((reason) => (
-                                                <span key={reason} className="px-3 py-1 bg-destructive/10 border border-destructive/20 rounded-full text-[10px] font-bold text-destructive uppercase tracking-wider">
+                                                <span key={reason} className="px-3 py-1 bg-destructive/10 border border-destructive/20 rounded-full text-xs font-bold text-destructive uppercase tracking-wider">
                                                     {reason.replace('_', ' ')}
                                                 </span>
                                             ))}
@@ -757,7 +757,7 @@ export const TechnicalAnalysisSupplementarySection: React.FC<TechnicalAnalysisSu
                                     {fusionReportData.conflict_reasons && fusionReportData.conflict_reasons.length > 0 && (
                                         <div className="flex flex-wrap gap-2">
                                             {fusionReportData.conflict_reasons.map((reason) => (
-                                                <span key={reason} className="px-3 py-1 bg-warning/10 border border-warning/20 rounded-full text-[10px] font-bold text-warning uppercase tracking-wider">
+                                                <span key={reason} className="px-3 py-1 bg-warning/10 border border-warning/20 rounded-full text-xs font-bold text-warning uppercase tracking-wider">
                                                     {reason.replace('_', ' ')}
                                                 </span>
                                             ))}
@@ -772,25 +772,25 @@ export const TechnicalAnalysisSupplementarySection: React.FC<TechnicalAnalysisSu
                                                         <div className="text-xs font-black uppercase tracking-[0.2em] text-muted-foreground">
                                                             {formatLabel(entry.timeframe)}
                                                         </div>
-                                                        <div className="text-[10px] text-muted-foreground font-bold uppercase">
+                                                        <div className="text-xs text-muted-foreground font-bold uppercase">
                                                             Classic · Quant · Pattern
                                                         </div>
                                                     </div>
                                                     <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                                                         <div className="bg-muted/50 p-3 rounded-lg border border-border/20">
-                                                            <div className="text-[9px] text-muted-foreground font-bold uppercase mb-1">Classic</div>
+                                                            <div className="text-xs text-muted-foreground font-bold uppercase mb-1">Classic</div>
                                                             <div className="text-sm font-black text-foreground">{formatLabel(entry.classic)}</div>
-                                                            <div className="text-[10px] text-muted-foreground">Score {entry.classicScore !== null ? entry.classicScore.toFixed(2) : 'n/a'}</div>
+                                                            <div className="text-xs text-muted-foreground">Score {entry.classicScore !== null ? entry.classicScore.toFixed(2) : 'n/a'}</div>
                                                         </div>
                                                         <div className="bg-muted/50 p-3 rounded-lg border border-border/20">
-                                                            <div className="text-[9px] text-muted-foreground font-bold uppercase mb-1">Quant</div>
+                                                            <div className="text-xs text-muted-foreground font-bold uppercase mb-1">Quant</div>
                                                             <div className="text-sm font-black text-foreground">{formatLabel(entry.quant)}</div>
-                                                            <div className="text-[10px] text-muted-foreground">Score {entry.quantScore !== null ? entry.quantScore.toFixed(2) : 'n/a'}</div>
+                                                            <div className="text-xs text-muted-foreground">Score {entry.quantScore !== null ? entry.quantScore.toFixed(2) : 'n/a'}</div>
                                                         </div>
                                                         <div className="bg-muted/50 p-3 rounded-lg border border-border/20">
-                                                            <div className="text-[9px] text-muted-foreground font-bold uppercase mb-1">Pattern</div>
+                                                            <div className="text-xs text-muted-foreground font-bold uppercase mb-1">Pattern</div>
                                                             <div className="text-sm font-black text-foreground">{formatLabel(entry.pattern)}</div>
-                                                            <div className="text-[10px] text-muted-foreground">Score {entry.patternScore !== null ? entry.patternScore.toFixed(2) : 'n/a'}</div>
+                                                            <div className="text-xs text-muted-foreground">Score {entry.patternScore !== null ? entry.patternScore.toFixed(2) : 'n/a'}</div>
                                                         </div>
                                                     </div>
                                                 </div>
@@ -801,10 +801,10 @@ export const TechnicalAnalysisSupplementarySection: React.FC<TechnicalAnalysisSu
                                 {directionScorecardData && scorecardSummary && scorecardSummary.entries.length > 0 && (
                                     <div className="space-y-4">
                                         <div className="flex items-center justify-between">
-                                            <div className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground">
+                                            <div className="text-xs font-black uppercase tracking-[0.2em] text-muted-foreground">
                                                 Direction Scorecard
                                             </div>
-                                            <div className="text-[10px] text-muted-foreground font-bold uppercase">
+                                            <div className="text-xs text-muted-foreground font-bold uppercase">
                                                 Model {scorecardSummary.modelVersion ?? 'n/a'} · Neutral {scorecardSummary.neutralThreshold.toFixed(2)}
                                             </div>
                                         </div>
@@ -815,27 +815,27 @@ export const TechnicalAnalysisSupplementarySection: React.FC<TechnicalAnalysisSu
                                                         <div className="text-xs font-black uppercase tracking-[0.2em] text-muted-foreground">
                                                             {formatLabel(timeframe)}
                                                         </div>
-                                                        <div className="text-[10px] text-muted-foreground font-bold uppercase">
+                                                        <div className="text-xs text-muted-foreground font-bold uppercase">
                                                             Total {formatContributionValue(frame.total_score)}
                                                         </div>
                                                     </div>
                                                     <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                                                         <div className="bg-muted/50 p-3 rounded-lg border border-border/20 space-y-2">
-                                                            <div className="text-[9px] text-muted-foreground font-bold uppercase">Classic</div>
+                                                            <div className="text-xs text-muted-foreground font-bold uppercase">Classic</div>
                                                             <div className="text-sm font-black text-foreground">{formatLabel(frame.classic_label)}</div>
-                                                            <div className="text-[10px] text-muted-foreground">Score {frame.classic_score.toFixed(2)}</div>
+                                                            <div className="text-xs text-muted-foreground">Score {frame.classic_score.toFixed(2)}</div>
                                                             {renderScorecardContributions(frame.contributions?.classic ?? [])}
                                                         </div>
                                                         <div className="bg-muted/50 p-3 rounded-lg border border-border/20 space-y-2">
-                                                            <div className="text-[9px] text-muted-foreground font-bold uppercase">Quant</div>
+                                                            <div className="text-xs text-muted-foreground font-bold uppercase">Quant</div>
                                                             <div className="text-sm font-black text-foreground">{formatLabel(frame.quant_label)}</div>
-                                                            <div className="text-[10px] text-muted-foreground">Score {frame.quant_score.toFixed(2)}</div>
+                                                            <div className="text-xs text-muted-foreground">Score {frame.quant_score.toFixed(2)}</div>
                                                             {renderScorecardContributions(frame.contributions?.quant ?? [])}
                                                         </div>
                                                         <div className="bg-muted/50 p-3 rounded-lg border border-border/20 space-y-2">
-                                                            <div className="text-[9px] text-muted-foreground font-bold uppercase">Pattern</div>
+                                                            <div className="text-xs text-muted-foreground font-bold uppercase">Pattern</div>
                                                             <div className="text-sm font-black text-foreground">{formatLabel(frame.pattern_label)}</div>
-                                                            <div className="text-[10px] text-muted-foreground">Score {frame.pattern_score.toFixed(2)}</div>
+                                                            <div className="text-xs text-muted-foreground">Score {frame.pattern_score.toFixed(2)}</div>
                                                             {renderScorecardContributions(frame.contributions?.pattern ?? [])}
                                                         </div>
                                                     </div>
@@ -871,7 +871,7 @@ export const TechnicalAnalysisSupplementarySection: React.FC<TechnicalAnalysisSu
                 >
                     <div className="flex items-center gap-2">
                         <Layers size={14} className="text-muted-foreground" />
-                        <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.2em]">Verification &amp; Baseline</span>
+                        <span className="text-xs font-bold text-muted-foreground uppercase tracking-[0.2em]">Verification &amp; Baseline</span>
                     </div>
                     <div className="flex items-center gap-4">
                         {showVerificationReport && isVerificationReportLoading && (
@@ -907,15 +907,15 @@ export const TechnicalAnalysisSupplementarySection: React.FC<TechnicalAnalysisSu
                                 <>
                                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                         <div className="bg-muted/50 p-4 rounded-lg border border-border/20">
-                                            <div className="text-[9px] font-bold text-muted-foreground uppercase mb-1">Baseline Gates</div>
+                                            <div className="text-xs font-bold text-muted-foreground uppercase mb-1">Baseline Gates</div>
                                             <div className="text-lg font-black text-foreground">{verificationSummary?.gatesCount ?? 0}</div>
                                         </div>
                                         <div className="bg-muted/50 p-4 rounded-lg border border-border/20">
-                                            <div className="text-[9px] font-bold text-muted-foreground uppercase mb-1">Robustness Flags</div>
+                                            <div className="text-xs font-bold text-muted-foreground uppercase mb-1">Robustness Flags</div>
                                             <div className="text-lg font-black text-foreground">{verificationSummary?.flagsCount ?? 0}</div>
                                         </div>
                                         <div className="bg-muted/50 p-4 rounded-lg border border-border/20">
-                                            <div className="text-[9px] font-bold text-muted-foreground uppercase mb-1">As Of</div>
+                                            <div className="text-xs font-bold text-muted-foreground uppercase mb-1">As Of</div>
                                             <div className="text-lg font-black text-foreground">{verificationReportData.as_of}</div>
                                         </div>
                                     </div>
@@ -923,7 +923,7 @@ export const TechnicalAnalysisSupplementarySection: React.FC<TechnicalAnalysisSu
                                     {verificationReportData.degraded_reasons && verificationReportData.degraded_reasons.length > 0 && (
                                         <div className="flex flex-wrap gap-2">
                                             {verificationReportData.degraded_reasons.map((reason) => (
-                                                <span key={reason} className="px-3 py-1 bg-destructive/10 border border-destructive/20 rounded-full text-[10px] font-bold text-destructive uppercase tracking-wider">
+                                                <span key={reason} className="px-3 py-1 bg-destructive/10 border border-destructive/20 rounded-full text-xs font-bold text-destructive uppercase tracking-wider">
                                                     {reason.replace('_', ' ')}
                                                 </span>
                                             ))}
@@ -933,7 +933,7 @@ export const TechnicalAnalysisSupplementarySection: React.FC<TechnicalAnalysisSu
                                     {verificationReportData.robustness_flags && verificationReportData.robustness_flags.length > 0 && (
                                         <div className="flex flex-wrap gap-2">
                                             {verificationReportData.robustness_flags.map((flag) => (
-                                                <span key={flag} className="px-3 py-1 bg-warning/10 border border-warning/20 rounded-full text-[10px] font-bold text-warning uppercase tracking-wider">
+                                                <span key={flag} className="px-3 py-1 bg-warning/10 border border-warning/20 rounded-full text-xs font-bold text-warning uppercase tracking-wider">
                                                     {flag.replace('_', ' ')}
                                                 </span>
                                             ))}
@@ -942,7 +942,7 @@ export const TechnicalAnalysisSupplementarySection: React.FC<TechnicalAnalysisSu
 
                                     {verificationReportData.backtest_summary && (
                                         <div className="bg-muted/50 p-5 rounded-lg border border-border/20 space-y-3">
-                                            <div className="text-[9px] font-bold text-muted-foreground uppercase">Backtest Summary</div>
+                                            <div className="text-xs font-bold text-muted-foreground uppercase">Backtest Summary</div>
                                             <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs text-foreground">
                                                 <div>Win Rate: {verificationReportData.backtest_summary.win_rate ?? 'n/a'}</div>
                                                 <div>Profit Factor: {verificationReportData.backtest_summary.profit_factor ?? 'n/a'}</div>
@@ -955,7 +955,7 @@ export const TechnicalAnalysisSupplementarySection: React.FC<TechnicalAnalysisSu
 
                                     {verificationReportData.wfa_summary && (
                                         <div className="bg-muted/50 p-5 rounded-lg border border-border/20 space-y-3">
-                                            <div className="text-[9px] font-bold text-muted-foreground uppercase">Walk-Forward Summary</div>
+                                            <div className="text-xs font-bold text-muted-foreground uppercase">Walk-Forward Summary</div>
                                             <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs text-foreground">
                                                 <div>WFA Sharpe: {verificationReportData.wfa_summary.wfa_sharpe ?? 'n/a'}</div>
                                                 <div>WFE Ratio: {verificationReportData.wfa_summary.wfe_ratio ?? 'n/a'}</div>
@@ -967,11 +967,11 @@ export const TechnicalAnalysisSupplementarySection: React.FC<TechnicalAnalysisSu
 
                                     {verificationReportData.baseline_gates && Object.keys(verificationReportData.baseline_gates).length > 0 && (
                                         <div className="bg-muted/50 p-5 rounded-lg border border-border/20">
-                                            <div className="text-[9px] font-bold text-muted-foreground uppercase mb-3">Baseline Gates</div>
+                                            <div className="text-xs font-bold text-muted-foreground uppercase mb-3">Baseline Gates</div>
                                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs text-foreground">
                                                 {Object.entries(verificationReportData.baseline_gates).map(([key, value]) => (
                                                     <div key={key} className="flex items-center justify-between bg-card border border-border/20 rounded-lg px-3 py-2">
-                                                        <span className="font-bold uppercase text-[9px] text-muted-foreground">{formatLabel(key)}</span>
+                                                        <span className="font-bold uppercase text-xs text-muted-foreground">{formatLabel(key)}</span>
                                                         <span>{typeof value === 'boolean' ? (value ? 'PASS' : 'FAIL') : String(value)}</span>
                                                     </div>
                                                 ))}
@@ -995,7 +995,7 @@ export const TechnicalAnalysisSupplementarySection: React.FC<TechnicalAnalysisSu
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {artifactEntries.map(([key, value]) => (
                         <div key={key} className="bg-muted/50 p-4 rounded-lg border border-border/20">
-                            <div className="text-[9px] font-bold text-muted-foreground uppercase mb-1">
+                            <div className="text-xs font-bold text-muted-foreground uppercase mb-1">
                                 {formatArtifactLabel(key)} ID
                             </div>
                             <div className="text-sm font-mono font-bold text-foreground">{formatArtifactId(value)}</div>

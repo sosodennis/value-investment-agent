@@ -102,18 +102,18 @@ const NewsResearchCardComponent: React.FC<NewsResearchCardProps> = ({ item }) =>
             <div className="flex justify-between items-start mb-4">
                 <div className="flex flex-col gap-1">
                     <div className="flex items-center gap-2">
-                        <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.2em]">
+                        <span className="text-xs font-bold text-muted-foreground uppercase tracking-[0.2em]">
                             {item.source.name}
                         </span>
                         {renderReliability(item.source.reliability_score)}
                         <div className="w-1 h-1 bg-border/60 rounded-full" />
-                        <div className="flex items-center gap-1 text-[9px] text-muted-foreground font-medium">
+                        <div className="flex items-center gap-1 text-xs text-muted-foreground font-medium">
                             <Calendar size={10} />
                             {formatDate(item.published_at)}
                         </div>
                     </div>
                     {item.source.author && (
-                        <span className="text-[9px] text-muted-foreground/80 font-medium">By {item.source.author}</span>
+                        <span className="text-xs text-muted-foreground/80 font-medium">By {item.source.author}</span>
                     )}
                 </div>
 
@@ -170,10 +170,10 @@ const NewsResearchCardComponent: React.FC<NewsResearchCardProps> = ({ item }) =>
                     <div className="flex items-center justify-between border-b border-border/20 pb-3 mb-4">
                         <div className="flex items-center gap-2">
                             <Info size={12} className="text-primary" />
-                            <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.2em]">AI Evidence Extraction</span>
+                            <span className="text-xs font-bold text-muted-foreground uppercase tracking-[0.2em]">AI Evidence Extraction</span>
                         </div>
                         <div className="flex items-center gap-2">
-                            <span className="text-[9px] text-muted-foreground font-bold uppercase">Impact</span>
+                            <span className="text-xs text-muted-foreground font-bold uppercase">Impact</span>
                             <Badge variant={getImpactVariant(item.analysis.impact_level)}>{item.analysis.impact_level}</Badge>
                         </div>
                     </div>
@@ -183,8 +183,8 @@ const NewsResearchCardComponent: React.FC<NewsResearchCardProps> = ({ item }) =>
                         <div className="flex items-start gap-2 mb-4 pb-4 border-b border-border/20">
                             <AlertCircle size={12} className="text-warning mt-0.5 shrink-0" />
                             <div>
-                                <div className="text-[9px] text-muted-foreground font-bold uppercase tracking-tight">Core Event Identified</div>
-                                <div className="text-[11px] text-foreground font-medium">{item.analysis.key_event}</div>
+                                <div className="text-xs text-muted-foreground font-bold uppercase tracking-tight">Core Event Identified</div>
+                                <div className="text-xs text-foreground font-medium">{item.analysis.key_event}</div>
                             </div>
                         </div>
                     )}
@@ -202,7 +202,7 @@ const NewsResearchCardComponent: React.FC<NewsResearchCardProps> = ({ item }) =>
                     )}
 
                     {/* Reasoning Footer */}
-                    <div className="text-[10px] text-muted-foreground leading-relaxed opacity-80 pt-2">
+                    <div className="text-xs text-muted-foreground leading-relaxed opacity-80 pt-2">
                         <span className="font-bold uppercase tracking-tighter text-muted-foreground mr-1">Analyst Reasoning:</span>
                         {item.analysis.reasoning}
                     </div>
@@ -255,7 +255,7 @@ const KeyEvidenceSection: React.FC<{ facts: KeyFact[] }> = ({ facts }) => {
                 </div>
             </div>
             {fact.citation && (
-                <div className="text-[8px] text-muted-foreground/70 pl-5 border-t border-border/20 pt-1 mt-1 truncate">
+                <div className="text-xs text-muted-foreground/70 pl-5 border-t border-border/20 pt-1 mt-1 truncate">
                     Source: {fact.citation}
                 </div>
             )}
@@ -264,7 +264,7 @@ const KeyEvidenceSection: React.FC<{ facts: KeyFact[] }> = ({ facts }) => {
 
     return (
         <div className="space-y-3 mb-4">
-            <div className="text-[9px] text-muted-foreground font-bold uppercase tracking-[0.2em] flex items-center gap-1.5">
+            <div className="text-xs text-muted-foreground font-bold uppercase tracking-[0.2em] flex items-center gap-1.5">
                 <BarChart3 size={10} className="text-border" />
                 Key Evidence
                 <span className="text-border">({facts.length})</span>

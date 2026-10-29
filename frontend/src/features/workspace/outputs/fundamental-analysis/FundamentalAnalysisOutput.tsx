@@ -657,7 +657,7 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
                 <div className="space-y-4 ">
                     {valuationScore !== undefined && (
                         <Card className="flex flex-wrap items-center justify-between gap-3 p-4">
-                            <span className="text-[10px] text-muted-foreground mb-2 block uppercase tracking-tighter">Analyst Valuation Score</span>
+                            <span className="text-xs text-muted-foreground mb-2 block uppercase tracking-tighter">Analyst Valuation Score</span>
                             <div className="flex items-center gap-3">
                                 <div className="h-1 w-24 bg-muted rounded-full overflow-hidden">
                                     <div
@@ -676,7 +676,7 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
                         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                             {Object.entries(previewKeyMetrics).map(([label, value]) => (
                                 <Card key={label} className="p-4">
-                                    <div className="text-[10px] text-muted-foreground mb-2 block uppercase tracking-tighter group-hover:text-muted-foreground transition-colors">{label}</div>
+                                    <div className="text-xs text-muted-foreground mb-2 block uppercase tracking-tighter group-hover:text-muted-foreground transition-colors">{label}</div>
                                     <div className="text-lg font-black text-foreground tabular-nums tracking-tight">
                                         {typeof value === 'string' ? value : String(value)}
                                     </div>
@@ -692,7 +692,7 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
                                     key={card.label}
                                     className="p-4"
                                 >
-                                    <div className="text-[10px] text-muted-foreground mb-2 block uppercase tracking-tighter">{card.label}</div>
+                                    <div className="text-xs text-muted-foreground mb-2 block uppercase tracking-tighter">{card.label}</div>
                                     <div
                                         className={`text-xl font-black ${
                                             card.unavailable
@@ -723,7 +723,7 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
                                     {assumptionBreakdown && (
                                         <div className="flex flex-wrap items-start justify-between gap-3">
                                             <div className="flex items-center gap-2">
-                                                <span className="text-[10px] text-muted-foreground mb-2 block uppercase tracking-tighter">Assumption Breakdown</span>
+                                                <span className="text-xs text-muted-foreground mb-2 block uppercase tracking-tighter">Assumption Breakdown</span>
                                                 {assumptionRiskBadge && (
                                                 <Badge variant={assumptionRiskLevel === 'high' ? 'destructive' : assumptionRiskLevel === 'medium' ? 'warning' : 'success'}>
                                                         {assumptionRiskBadge.label}
@@ -744,11 +744,11 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
                                                     aria-label={`${item.label}: ${item.value}`}
                                                     className="rounded-lg border border-border/20 bg-muted/50 px-2 py-1"
                                                 >
-                                                    <div className="text-[10px] text-muted-foreground uppercase tracking-wider">
+                                                    <div className="text-xs text-muted-foreground uppercase tracking-wider">
                                                         {item.label}
                                                     </div>
                                                     <div
-                                                        className={`text-[11px] font-semibold ${item.tone ?? 'text-foreground'}`}
+                                                        className={`text-xs font-semibold ${item.tone ?? 'text-foreground'}`}
                                                     >
                                                         {item.value}
                                                     </div>
@@ -758,7 +758,7 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
                                     )}
                                     {assumptionHighlights.length > 0 && (
                                         <div className="rounded-lg border border-border/20 bg-muted/50 p-3 space-y-2">
-                                            <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                                            <div className="text-xs uppercase tracking-wider text-muted-foreground">
                                                 Assumption Highlights
                                             </div>
                                             <div className="space-y-2">
@@ -771,7 +771,7 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
                                                     </div>
                                                 ))}
                                                 {assumptionHighlightsOverflow > 0 && (
-                                                    <div className="text-[11px] text-muted-foreground">
+                                                    <div className="text-xs text-muted-foreground">
                                                         +{assumptionHighlightsOverflow} more assumptions
                                                     </div>
                                                 )}
@@ -783,48 +783,48 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
                                             {hasMonteCarloSummary && (
                                                 <div className="rounded-lg border border-border/20 bg-muted/50 p-3 space-y-2">
                                                     <div className="flex items-center justify-between">
-                                                        <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                                                        <div className="text-xs uppercase tracking-wider text-muted-foreground">
                                                             Monte Carlo
                                                         </div>
                                                         {mcSamplerType && (
-                                                            <span className="text-[11px] text-muted-foreground">
+                                                            <span className="text-xs text-muted-foreground">
                                                                 Sampler: {mcSamplerType}
                                                             </span>
                                                         )}
                                                     </div>
                                                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                                                         {mcConfiguredIterations !== undefined && (
-                                                            <div className="text-[11px] text-foreground bg-muted rounded px-2 py-1">
+                                                            <div className="text-xs text-foreground bg-muted rounded px-2 py-1">
                                                                 Configured: {Math.round(mcConfiguredIterations)}
                                                             </div>
                                                         )}
                                                         {mcExecutedIterations !== undefined && (
-                                                            <div className="text-[11px] text-foreground bg-muted rounded px-2 py-1">
+                                                            <div className="text-xs text-foreground bg-muted rounded px-2 py-1">
                                                                 Executed: {Math.round(mcExecutedIterations)}
                                                             </div>
                                                         )}
                                                         {mcEffectiveWindow !== undefined && (
-                                                            <div className="text-[11px] text-foreground bg-muted rounded px-2 py-1">
+                                                            <div className="text-xs text-foreground bg-muted rounded px-2 py-1">
                                                                 Window: {Math.round(mcEffectiveWindow)}
                                                             </div>
                                                         )}
                                                         {mcStoppedEarly !== undefined && (
-                                                            <div className="text-[11px] text-foreground bg-muted rounded px-2 py-1">
+                                                            <div className="text-xs text-foreground bg-muted rounded px-2 py-1">
                                                                 Early Stop: {mcStoppedEarly ? 'Yes' : 'No'}
                                                             </div>
                                                         )}
                                                         {mcPsdRepaired !== undefined && (
-                                                            <div className="text-[11px] text-foreground bg-muted rounded px-2 py-1">
+                                                            <div className="text-xs text-foreground bg-muted rounded px-2 py-1">
                                                                 PSD Repair: {mcPsdRepaired ? 'Yes' : 'No'}
                                                             </div>
                                                         )}
                                                         {mcConverged !== undefined && (
-                                                            <div className="text-[11px] text-foreground bg-muted rounded px-2 py-1">
+                                                            <div className="text-xs text-foreground bg-muted rounded px-2 py-1">
                                                                 Converged: {mcConverged ? 'Yes' : 'No'}
                                                             </div>
                                                         )}
                                                         {mcMedianDelta !== undefined && (
-                                                            <div className="text-[11px] text-foreground bg-muted rounded px-2 py-1">
+                                                            <div className="text-xs text-foreground bg-muted rounded px-2 py-1">
                                                                 Median Δ: {(mcMedianDelta * 100).toFixed(2)}%
                                                                 {mcTolerance !== undefined
                                                                     ? ` / ${(mcTolerance * 100).toFixed(2)}% tol`
@@ -840,27 +840,27 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
                                                 forwardSignalMappingVersion ||
                                                 typeof forwardSignalCalibrationApplied === 'boolean') && (
                                                 <div className="rounded-lg border border-border/20 bg-muted/50 p-3 space-y-2">
-                                                    <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                                                    <div className="text-xs uppercase tracking-wider text-muted-foreground">
                                                         Forward Signal Policy
                                                     </div>
                                                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                                                         {typeof forwardSignalSummary?.signals_total === 'number' && (
-                                                            <div className="text-[11px] text-foreground bg-muted rounded px-2 py-1">
+                                                            <div className="text-xs text-foreground bg-muted rounded px-2 py-1">
                                                                 Signals: {Math.round(forwardSignalSummary.signals_total)}
                                                             </div>
                                                         )}
                                                         {typeof forwardSignalSummary?.signals_accepted === 'number' && (
-                                                            <div className="text-[11px] text-success bg-muted rounded px-2 py-1">
+                                                            <div className="text-xs text-success bg-muted rounded px-2 py-1">
                                                                 Accepted: {Math.round(forwardSignalSummary.signals_accepted)}
                                                             </div>
                                                         )}
                                                         {typeof forwardSignalSummary?.signals_rejected === 'number' && (
-                                                            <div className="text-[11px] text-destructive bg-muted rounded px-2 py-1">
+                                                            <div className="text-xs text-destructive bg-muted rounded px-2 py-1">
                                                                 Rejected: {Math.round(forwardSignalSummary.signals_rejected)}
                                                             </div>
                                                         )}
                                                         {typeof forwardSignalEvidenceCount === 'number' && (
-                                                            <div className="text-[11px] text-foreground bg-muted rounded px-2 py-1">
+                                                            <div className="text-xs text-foreground bg-muted rounded px-2 py-1">
                                                                 Evidence: {Math.round(forwardSignalEvidenceCount)}
                                                             </div>
                                                         )}
@@ -869,12 +869,12 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
                                                         typeof forwardSignalSummary?.margin_adjustment_basis_points === 'number') && (
                                                         <div className="flex flex-wrap gap-2">
                                                             {typeof forwardSignalSummary?.growth_adjustment_basis_points === 'number' && (
-                                                                <span className="rounded border border-primary/30 bg-primary/10 px-2 py-0.5 text-[11px] text-primary">
+                                                                <span className="rounded border border-primary/30 bg-primary/10 px-2 py-0.5 text-xs text-primary">
                                                                     Growth adjustment: {formatSignedBasisPoints(forwardSignalSummary.growth_adjustment_basis_points)}
                                                                 </span>
                                                             )}
                                                             {typeof forwardSignalSummary?.margin_adjustment_basis_points === 'number' && (
-                                                                <span className="rounded border border-primary/30 bg-primary/10 px-2 py-0.5 text-[11px] text-primary">
+                                                                <span className="rounded border border-primary/30 bg-primary/10 px-2 py-0.5 text-xs text-primary">
                                                                     Margin adjustment: {formatSignedBasisPoints(forwardSignalSummary.margin_adjustment_basis_points)}
                                                                 </span>
                                                             )}
@@ -886,7 +886,7 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
                                                         <div className="flex flex-wrap items-center gap-2">
                                                             {forwardSignalRiskLevel && (
                                                                 <span
-                                                                    className={`rounded border border-border/10 px-2 py-0.5 text-[11px] ${
+                                                                    className={`rounded border border-border/10 px-2 py-0.5 text-xs ${
                                                                         forwardSignalRiskLevel === 'high'
                                                                             ? 'bg-destructive/10 text-destructive'
                                                                             : forwardSignalRiskLevel === 'medium'
@@ -900,25 +900,25 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
                                                             {forwardSignalSourcePreview.map((source) => (
                                                                 <span
                                                                     key={source}
-                                                                    className="rounded bg-muted px-2 py-0.5 text-[11px] break-all max-w-full min-w-0"
+                                                                    className="rounded bg-muted px-2 py-0.5 text-xs break-all max-w-full min-w-0"
                                                                 >
                                                                     Source: {source}
                                                                 </span>
                                                             ))}
                                                             {forwardSignalSourceOverflow > 0 && (
-                                                                <span className="rounded bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
+                                                                <span className="rounded bg-muted px-2 py-0.5 text-xs text-muted-foreground">
                                                                     +{forwardSignalSourceOverflow} sources
                                                                 </span>
                                                             )}
                                                             {typeof forwardSignalCalibrationApplied === 'boolean' && (
-                                                                <span className="rounded border border-primary/30 bg-primary/10 px-2 py-0.5 text-[11px] text-primary">
+                                                                <span className="rounded border border-primary/30 bg-primary/10 px-2 py-0.5 text-xs text-primary">
                                                                     Calibration: {forwardSignalCalibrationApplied ? 'Applied' : 'Bypassed'}
                                                                 </span>
                                                             )}
                                                         </div>
                                                     )}
                                                     {forwardSignalMappingVersion && (
-                                                        <div className="text-[11px] text-muted-foreground break-all">
+                                                        <div className="text-xs text-muted-foreground break-all">
                                                             Mapping:{' '}
                                                             <span className="text-foreground">
                                                                 {forwardSignalMappingVersion}
@@ -929,27 +929,27 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
                                             )}
                                             {sensitivitySummary && (
                                                 <div className="rounded-lg border border-border/20 bg-muted/50 p-3 space-y-2">
-                                                    <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                                                    <div className="text-xs uppercase tracking-wider text-muted-foreground">
                                                         Sensitivity (One-Way)
                                                     </div>
                                                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                                                         {typeof sensitivitySummary.enabled === 'boolean' && (
-                                                            <div className="text-[11px] text-foreground bg-muted rounded px-2 py-1">
+                                                            <div className="text-xs text-foreground bg-muted rounded px-2 py-1">
                                                                 Enabled: {sensitivitySummary.enabled ? 'Yes' : 'No'}
                                                             </div>
                                                         )}
                                                         {typeof sensitivitySummary.scenario_count === 'number' && (
-                                                            <div className="text-[11px] text-foreground bg-muted rounded px-2 py-1">
+                                                            <div className="text-xs text-foreground bg-muted rounded px-2 py-1">
                                                                 Scenarios: {Math.round(sensitivitySummary.scenario_count)}
                                                             </div>
                                                         )}
                                                         {typeof sensitivitySummary.max_upside_delta_pct === 'number' && (
-                                                            <div className="text-[11px] text-success bg-muted rounded px-2 py-1">
+                                                            <div className="text-xs text-success bg-muted rounded px-2 py-1">
                                                                 Max Upside: {formatPercent(sensitivitySummary.max_upside_delta_pct)}
                                                             </div>
                                                         )}
                                                         {typeof sensitivitySummary.max_downside_delta_pct === 'number' && (
-                                                            <div className="text-[11px] text-destructive bg-muted rounded px-2 py-1">
+                                                            <div className="text-xs text-destructive bg-muted rounded px-2 py-1">
                                                                 Max Downside: {formatPercent(sensitivitySummary.max_downside_delta_pct)}
                                                             </div>
                                                         )}
@@ -959,7 +959,7 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
                                                             {sensitivityTopDriversPreview.map((driver, index) => (
                                                                 <span
                                                                     key={`${driver.shock_dimension ?? 'driver'}-${driver.shock_value_bp ?? index}-${index}`}
-                                                                    className="rounded border border-primary/30 bg-primary/10 px-2 py-0.5 text-[11px] text-primary"
+                                                                    className="rounded border border-primary/30 bg-primary/10 px-2 py-0.5 text-xs text-primary"
                                                                 >
                                                                     {(driver.shock_dimension ?? 'driver').replace(/_/g, ' ')}{' '}
                                                                     {typeof driver.shock_value_bp === 'number'
@@ -971,7 +971,7 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
                                                                 </span>
                                                             ))}
                                                             {sensitivityTopDriversOverflow > 0 && (
-                                                                <span className="rounded bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
+                                                                <span className="rounded bg-muted px-2 py-0.5 text-xs text-muted-foreground">
                                                                     +{sensitivityTopDriversOverflow} drivers
                                                                 </span>
                                                             )}
@@ -992,34 +992,34 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
                                                     aria-label="Growth / Anchor Policy"
                                                     className="rounded-lg border border-border/20 bg-muted/50 p-3 space-y-2"
                                                 >
-                                                    <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                                                    <div className="text-xs uppercase tracking-wider text-muted-foreground">
                                                         Growth / Anchor Policy
                                                     </div>
                                                     <div className="flex flex-wrap gap-2">
                                                         {growthConsensusPolicyLabel && (
-                                                            <span className="rounded border border-primary/30 bg-primary/10 px-2 py-0.5 text-[11px] text-primary">
+                                                            <span className="rounded border border-primary/30 bg-primary/10 px-2 py-0.5 text-xs text-primary">
                                                                 Consensus: {growthConsensusPolicyLabel}
                                                             </span>
                                                         )}
                                                         {growthConsensusHorizon && (
-                                                            <span className="rounded border border-primary/30 bg-primary/10 px-2 py-0.5 text-[11px] text-primary">
+                                                            <span className="rounded border border-primary/30 bg-primary/10 px-2 py-0.5 text-xs text-primary">
                                                                 Horizon: {growthConsensusHorizon}
                                                             </span>
                                                         )}
                                                         {terminalAnchorPolicyLabel && (
-                                                            <span className="rounded border border-warning/30 bg-warning/10 px-2 py-0.5 text-[11px] text-warning">
+                                                            <span className="rounded border border-warning/30 bg-warning/10 px-2 py-0.5 text-xs text-warning">
                                                                 Terminal Anchor: {terminalAnchorPolicyLabel}
                                                             </span>
                                                         )}
                                                         {typeof terminalAnchorStaleFallback === 'boolean' && (
-                                                            <span className="rounded border border-warning/30 bg-warning/10 px-2 py-0.5 text-[11px] text-warning">
+                                                            <span className="rounded border border-warning/30 bg-warning/10 px-2 py-0.5 text-xs text-warning">
                                                                 Stale Fallback: {terminalAnchorStaleFallback ? 'Yes' : 'No'}
                                                             </span>
                                                         )}
                                                     </div>
                                                     {(forwardSignalMappingVersion ||
                                                         typeof forwardSignalCalibrationApplied === 'boolean') && (
-                                                        <div className="text-[11px] text-muted-foreground">
+                                                        <div className="text-xs text-muted-foreground">
                                                             {typeof forwardSignalCalibrationApplied === 'boolean' && (
                                                                 <span>
                                                                     Calibration:{' '}
@@ -1045,7 +1045,7 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
                                             )}
                                             {(hasBaseGrowthGuardrail || hasBaseMarginGuardrail) && (
                                                 <div className="rounded-lg border border-border/20 bg-muted/50 p-3 space-y-2">
-                                                    <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                                                    <div className="text-xs uppercase tracking-wider text-muted-foreground">
                                                         Base Assumption Guardrail
                                                     </div>
                                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
@@ -1053,18 +1053,18 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
                                                             <div
                                                                 role="group"
                                                                 aria-label="Growth base assumption guardrail"
-                                                                className="rounded border border-primary/30 bg-primary/10 px-2 py-2 text-[11px] text-primary space-y-1 min-w-0"
+                                                                className="rounded border border-primary/30 bg-primary/10 px-2 py-2 text-xs text-primary space-y-1 min-w-0"
                                                             >
                                                                 <div className="flex flex-wrap items-center justify-between gap-2">
                                                                     <span className="font-semibold">Growth</span>
                                                                     {typeof baseGrowthGuardrailApplied === 'boolean' && (
-                                                                        <span className="text-[10px] uppercase tracking-wider">
+                                                                        <span className="text-xs uppercase tracking-wider">
                                                                             {baseGrowthGuardrailApplied ? 'Applied' : 'Bypassed'}
                                                                         </span>
                                                                     )}
                                                                 </div>
                                                                 {baseGrowthGuardrailVersion && (
-                                                                    <div className="text-[10px] text-primary break-all">
+                                                                    <div className="text-xs text-primary break-all">
                                                                         Version: {baseGrowthGuardrailVersion}
                                                                     </div>
                                                                 )}
@@ -1083,7 +1083,7 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
                                                                     )}
                                                                 </div>
                                                                 {baseGrowthReasonsPreview.length > 0 && (
-                                                                    <div className="text-[10px] text-primary break-all">
+                                                                    <div className="text-xs text-primary break-all">
                                                                         Reasons: {baseGrowthReasonsPreview.join(', ')}
                                                                         {baseGrowthReasonsOverflow > 0
                                                                             ? ` +${baseGrowthReasonsOverflow}`
@@ -1096,18 +1096,18 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
                                                             <div
                                                                 role="group"
                                                                 aria-label="Margin base assumption guardrail"
-                                                                className="rounded border border-warning/30 bg-warning/10 px-2 py-2 text-[11px] text-warning space-y-1 min-w-0"
+                                                                className="rounded border border-warning/30 bg-warning/10 px-2 py-2 text-xs text-warning space-y-1 min-w-0"
                                                             >
                                                                 <div className="flex flex-wrap items-center justify-between gap-2">
                                                                     <span className="font-semibold">Margin</span>
                                                                     {typeof baseMarginGuardrailApplied === 'boolean' && (
-                                                                        <span className="text-[10px] uppercase tracking-wider">
+                                                                        <span className="text-xs uppercase tracking-wider">
                                                                             {baseMarginGuardrailApplied ? 'Applied' : 'Bypassed'}
                                                                         </span>
                                                                     )}
                                                                 </div>
                                                                 {baseMarginGuardrailVersion && (
-                                                                    <div className="text-[10px] text-warning break-all">
+                                                                    <div className="text-xs text-warning break-all">
                                                                         Version: {baseMarginGuardrailVersion}
                                                                     </div>
                                                                 )}
@@ -1126,7 +1126,7 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
                                                                     )}
                                                                 </div>
                                                                 {baseMarginReasonsPreview.length > 0 && (
-                                                                    <div className="text-[10px] text-warning break-all">
+                                                                    <div className="text-xs text-warning break-all">
                                                                         Reasons: {baseMarginReasonsPreview.join(', ')}
                                                                         {baseMarginReasonsOverflow > 0
                                                                             ? ` +${baseMarginReasonsOverflow}`
@@ -1140,20 +1140,20 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
                                             )}
                                             {dataQualityFlagsPreview.length > 0 && (
                                                 <div className="rounded-lg border border-border/20 bg-muted/50 p-3 space-y-2">
-                                                    <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                                                    <div className="text-xs uppercase tracking-wider text-muted-foreground">
                                                         Data Quality Flags
                                                     </div>
                                                     <div className="flex flex-wrap gap-2">
                                                         {dataQualityFlagsPreview.map((flag) => (
                                                             <span
                                                                 key={flag}
-                                                                className="rounded border border-destructive/30 bg-destructive/10 px-2 py-0.5 text-[11px] text-destructive break-all max-w-full min-w-0"
+                                                                className="rounded border border-destructive/30 bg-destructive/10 px-2 py-0.5 text-xs text-destructive break-all max-w-full min-w-0"
                                                             >
                                                                 {flag}
                                                             </span>
                                                         ))}
                                                         {dataQualityFlagsOverflow > 0 && (
-                                                            <span className="rounded bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
+                                                            <span className="rounded bg-muted px-2 py-0.5 text-xs text-muted-foreground">
                                                                 +{dataQualityFlagsOverflow} more
                                                             </span>
                                                         )}
@@ -1168,10 +1168,10 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
                             {dataFreshness && (
                                 <div className="bg-card p-5 rounded-lg border border-border/10 space-y-4">
                                     <div className="flex items-center justify-between">
-                                        <span className="text-[10px] text-muted-foreground mb-2 block uppercase tracking-tighter">Data Freshness</span>
+                                        <span className="text-xs text-muted-foreground mb-2 block uppercase tracking-tighter">Data Freshness</span>
                                         {dataFreshness.time_alignment?.status && (
                                             <span
-                                                className={`rounded border px-2 py-0.5 text-[11px] font-semibold ${
+                                                className={`rounded border px-2 py-0.5 text-xs font-semibold ${
                                                     dataFreshness.time_alignment.status === 'high_risk' ||
                                                     dataFreshness.time_alignment.status === 'warning'
                                                         ? 'border-destructive/40 bg-destructive/10 text-destructive'
@@ -1189,7 +1189,7 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
                                                     key={item.label}
                                                     className="rounded-lg border border-border/20 bg-muted/50 px-3 py-2"
                                                 >
-                                                    <div className="text-[10px] text-muted-foreground uppercase tracking-wider">
+                                                    <div className="text-xs text-muted-foreground uppercase tracking-wider">
                                                         {item.label}
                                                     </div>
                                                     <div className="text-sm font-semibold text-foreground break-all">
@@ -1236,7 +1236,7 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
             {forwardSignals.length > 0 && (
                 <div className="bg-card p-5 rounded-lg border border-border/10 space-y-4 flex flex-col">
                     <div className="flex items-center justify-between">
-                        <span className="text-[10px] text-muted-foreground mb-2 block uppercase tracking-tighter">Forward Signals</span>
+                        <span className="text-xs text-muted-foreground mb-2 block uppercase tracking-tighter">Forward Signals</span>
                         <span className="text-xs text-muted-foreground">
                             {forwardSignals.length} extracted signals
                         </span>
@@ -1253,7 +1253,7 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
                                             {formatSignalMetric(signal.metric)}
                                         </span>
                                         <span
-                                            className={`rounded border px-2 py-0.5 text-[11px] ${
+                                            className={`rounded border px-2 py-0.5 text-xs ${
                                                 signal.direction === 'up'
                                                     ? 'border-success/40 bg-success/10 text-success'
                                                     : signal.direction === 'down'
@@ -1263,7 +1263,7 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
                                         >
                                             {signal.direction.toUpperCase()}
                                         </span>
-                                        <span className="rounded border border-primary/30 bg-primary/10 px-2 py-0.5 text-[11px] text-primary">
+                                        <span className="rounded border border-primary/30 bg-primary/10 px-2 py-0.5 text-xs text-primary">
                                             Source: {signal.source_type}
                                         </span>
                                     </div>
@@ -1303,7 +1303,7 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
                                                         {canExpand && (
                                                             <button
                                                                 type="button"
-                                                                className="mt-1 text-[11px] text-primary hover:text-primary underline"
+                                                                className="mt-1 text-xs text-primary hover:text-primary underline"
                                                                 onClick={() =>
                                                                     setExpandedEvidenceRows((current) => ({
                                                                         ...current,
@@ -1315,7 +1315,7 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
                                                             </button>
                                                         )}
                                                         {(item.doc_type || item.period) && (
-                                                            <div className="mt-1 text-[11px] text-muted-foreground">
+                                                            <div className="mt-1 text-xs text-muted-foreground">
                                                                 {[item.doc_type, item.period]
                                                                     .filter(Boolean)
                                                                     .join(' · ')}
@@ -1325,7 +1325,7 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
                                                     <td className="px-3 py-2 whitespace-nowrap">
                                                         {formatSignalDate(item.filing_date)}
                                                     </td>
-                                                    <td className="px-3 py-2 whitespace-nowrap font-mono text-[11px]">
+                                                    <td className="px-3 py-2 whitespace-nowrap font-mono text-xs">
                                                         {item.accession_number ?? 'N/A'}
                                                     </td>
                                                     <td className="px-3 py-2 whitespace-nowrap">

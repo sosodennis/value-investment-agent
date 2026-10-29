@@ -115,16 +115,16 @@ const AINewsSummaryComponent: React.FC<AINewsSummaryProps> = ({ output }) => {
 
                     {/* HERO: Evidence Distribution - Main Visual */}
                     <div className="space-y-3 mb-6">
-                        <div className="flex justify-between items-center text-[11px] font-bold uppercase tracking-wider">
+                        <div className="flex justify-between items-center text-xs font-bold uppercase tracking-wider">
                             <span className="text-foreground">Evidence Distribution</span>
                             {isPreview && (
-                                <span className="text-primary text-[10px]">{previewArticleCountDisplay || 'Loading…'}</span>
+                                <span className="text-primary text-xs">{previewArticleCountDisplay || 'Loading…'}</span>
                             )}
                             {!isPreview && decidedCount > 0 && bearFactsCount === 0 && (
-                                <span className="text-success text-[10px]">⚠️ No Bearish Evidence Found</span>
+                                <span className="text-success text-xs">⚠️ No Bearish Evidence Found</span>
                             )}
                             {!isPreview && decidedCount > 0 && bullFactsCount === 0 && (
-                                <span className="text-destructive text-[10px]">⚠️ No Bullish Evidence Found</span>
+                                <span className="text-destructive text-xs">⚠️ No Bullish Evidence Found</span>
                             )}
                         </div>
 
@@ -166,7 +166,7 @@ const AINewsSummaryComponent: React.FC<AINewsSummaryProps> = ({ output }) => {
                         </div>
 
                         {/* Legend */}
-                        <div className="flex justify-center gap-6 text-[9px] font-bold uppercase tracking-wider text-muted-foreground">
+                        <div className="flex justify-center gap-6 text-xs font-bold uppercase tracking-wider text-muted-foreground">
                             <div className="flex items-center gap-1.5">
                                 <div className="w-3 h-3 rounded bg-success" />
                                 <span>Bullish ({bullFactsCount})</span>
@@ -184,7 +184,7 @@ const AINewsSummaryComponent: React.FC<AINewsSummaryProps> = ({ output }) => {
 
                     {/* Supplementary: Average Intensity */}
                     <div className="pt-4 border-t border-border/20 space-y-2">
-                        <div className="flex justify-between items-center text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                        <div className="flex justify-between items-center text-xs font-bold uppercase tracking-wider text-muted-foreground">
                             <span>Average Intensity</span>
                             <span className="text-foreground">
                                 {isPreview ? (previewSentimentDisplay || 'PREVIEW MODE') : (
@@ -200,7 +200,7 @@ const AINewsSummaryComponent: React.FC<AINewsSummaryProps> = ({ output }) => {
                                 style={{ width: `${scorePercentage}%` }}
                             />
                         </div>
-                        <div className="flex justify-between text-[8px] text-muted-foreground font-bold uppercase tracking-tighter">
+                        <div className="flex justify-between text-xs text-muted-foreground font-bold uppercase tracking-tighter">
                             <span>Bearish (-1.0)</span>
                             <span>Neutral (0.0)</span>
                             <span>Bullish (+1.0)</span>
@@ -219,21 +219,21 @@ const AINewsSummaryComponent: React.FC<AINewsSummaryProps> = ({ output }) => {
                         <div className="flex justify-between items-center border-b border-border/20 pb-3">
                             <div className="flex items-center gap-2">
                                 <Database size={12} className="text-muted-foreground" />
-                                <span className="text-[11px] text-muted-foreground font-medium uppercase tracking-tighter">Total Evidence</span>
+                                <span className="text-xs text-muted-foreground font-medium uppercase tracking-tighter">Total Evidence</span>
                             </div>
                             <span className="text-xs font-bold text-foreground">{allFacts.length}</span>
                         </div>
                         <div className="flex justify-between items-center border-b border-border/20 pb-3">
                             <div className="flex items-center gap-2">
                                 <BarChart3 size={12} className="text-primary" />
-                                <span className="text-[11px] text-muted-foreground font-medium uppercase tracking-tighter">Quantitative</span>
+                                <span className="text-xs text-muted-foreground font-medium uppercase tracking-tighter">Quantitative</span>
                             </div>
                             <span className="text-xs font-bold text-primary">{quantFactsCount}</span>
                         </div>
                         <div className="flex justify-between items-center border-b border-border/20 pb-3">
                             <div className="flex items-center gap-2">
                                 <ShieldCheck size={12} className="text-success" />
-                                <span className="text-[11px] text-muted-foreground font-medium uppercase tracking-tighter">Source Reliability</span>
+                                <span className="text-xs text-muted-foreground font-medium uppercase tracking-tighter">Source Reliability</span>
                             </div>
                             <span className="text-xs font-semibold text-foreground">
                                 {averageSourceReliability === null ? 'Not reported' : `${(averageSourceReliability * 100).toFixed(0)}% average`}
@@ -279,7 +279,7 @@ const AINewsSummaryComponent: React.FC<AINewsSummaryProps> = ({ output }) => {
                                     {cat === 'financials' && <BarChart3 size={10} className="text-primary" />}
                                     {cat === 'trusted_news' && <ShieldCheck size={10} className="text-warning" />}
                                     {cat === 'analyst_opinion' && <MessageSquare size={10} className="text-warning" />}
-                                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-tighter">
+                                    <span className="text-xs font-bold text-muted-foreground uppercase tracking-tighter">
                                         {cat.replace('_', ' ')}
                                     </span>
                                 </div>

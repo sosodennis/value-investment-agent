@@ -424,7 +424,7 @@ export const ValuationDistributionSection: React.FC<ValuationDistributionSection
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                     <ChartArea size={16} className="text-primary" />
-                    <span className="text-[10px] text-muted-foreground uppercase tracking-tighter">Valuation Distribution</span>
+                    <span className="text-xs text-muted-foreground uppercase tracking-tighter">Valuation Distribution</span>
                 </div>
                 <div className="flex items-center gap-4">
                     {distributionSummary?.median !== undefined && (
@@ -464,7 +464,7 @@ export const ValuationDistributionSection: React.FC<ValuationDistributionSection
                                 className={`block w-4 border-t ${legendItem.lineThicknessClassName ?? ''} ${legendItem.lineClassName}`}
                                 aria-hidden="true"
                             />
-                            <span className="text-[11px] text-muted-foreground">
+                            <span className="text-xs text-muted-foreground">
                                 {legendItem.label}: {formatCurrency(legendItem.value)}
                             </span>
                         </div>
@@ -479,17 +479,17 @@ export const ValuationDistributionSection: React.FC<ValuationDistributionSection
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                     {scenarioCards.map((scenario) => (
                         <Card key={scenario.key} className="p-4">
-                            <div className="text-[10px] text-muted-foreground mb-2 block uppercase tracking-tighter">{scenario.label}</div>
+                            <div className="text-xs text-muted-foreground mb-2 block uppercase tracking-tighter">{scenario.label}</div>
                             <div className="text-lg font-black text-foreground tabular-nums tracking-tight">
                                 {formatCurrency(scenario.price)}
                             </div>
                             {scenario.key === 'bear' && bandStatus === 'undervalued_high' && bandDeviationText && (
-                                <div className="mt-1 text-[11px] text-success">
+                                <div className="mt-1 text-xs text-success">
                                     Current is {bandDeviationText}
                                 </div>
                             )}
                             {scenario.key === 'bull' && bandStatus === 'overvalued_high' && bandDeviationText && (
-                                <div className="mt-1 text-[11px] text-destructive">
+                                <div className="mt-1 text-xs text-destructive">
                                     Current is {bandDeviationText}
                                 </div>
                             )}
@@ -679,7 +679,7 @@ export const ValuationDistributionSection: React.FC<ValuationDistributionSection
                         mcCorrPearsonMaeText !== undefined ||
                         mcCorrSpearmanMaeText !== undefined)) ||
                 mcAsOf) && (
-                <div className="text-[11px] text-muted-foreground">
+                <div className="text-xs text-muted-foreground">
                     {mcExecutedIterations !== undefined && (
                         <span>
                             MC runs: {Math.round(mcExecutedIterations)}

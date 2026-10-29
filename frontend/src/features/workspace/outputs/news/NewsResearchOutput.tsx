@@ -128,7 +128,7 @@ const NewsResearchOutputComponent: React.FC<NewsResearchOutputProps> = ({
             <div className="space-y-4">
                 <div className="flex items-center gap-3 mb-4">
                     <TrendingUp size={16} className="text-primary" />
-                    <h3 className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.2em]">Article Breakdown</h3>
+                    <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-[0.2em]">Article Breakdown</h3>
                 </div>
 
                 {artifactData?.news_items && artifactData.news_items.length > 0 ? (
@@ -140,7 +140,7 @@ const NewsResearchOutputComponent: React.FC<NewsResearchOutputProps> = ({
                 ) : isPreviewOnly && previewData?.top_headlines ? (
                     <div className="space-y-4">
                         <Card className="space-y-3 bg-muted/50 p-5">
-                            <h4 className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.2em] mb-3">Recent Headlines (Preview)</h4>
+                            <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-[0.2em] mb-3">Recent Headlines (Preview)</h4>
                             <div className="space-y-2">
                                 {previewData.top_headlines.map((headline: string, i: number) => (
                                     <div key={i} className="flex gap-2 text-xs text-muted-foreground">
