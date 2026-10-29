@@ -343,7 +343,7 @@ export default function LlmSettingsPage() {
                     {!isLoadingModels && !catalogError && models.length === 0 ? <EmptyState className="min-h-24 items-start text-left" title="No free models available" description="The provider catalogue returned no free models." /> : null}
                 </section>
 
-                <div className="grid gap-7 lg:grid-cols-[minmax(16rem,0.8fr)_minmax(0,1.2fr)]">
+                <div className="grid gap-7 lg:grid-cols-[minmax(16rem,0.7fr)_minmax(0,1.3fr)]">
                     <form onSubmit={(event) => void handleAddKey(event)} className="grid content-start gap-5 border-b border-border py-6 lg:border-b-0 lg:border-r lg:pr-7" aria-labelledby="add-key-heading">
                         <div>
                             <h2 id="add-key-heading" className="font-semibold">{replacementCandidate ? `Replace ${replacementCandidate.label}` : 'Add a provider key'}</h2>

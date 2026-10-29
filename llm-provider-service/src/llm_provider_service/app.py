@@ -55,6 +55,18 @@ from src.shared.internal_services import (
     authenticate_internal_request,
 )
 
+_PROVIDER_KEY_ERROR_STATUSES = {
+    "not_found": 404,
+    "invalid_key": 400,
+    "invalid_key_id": 400,
+    "model_not_free": 400,
+    "request_rejected": 400,
+    "replacement_must_differ": 400,
+    "already_owned": 409,
+    "replacement_in_progress": 409,
+    "rate_limited": 429,
+}
+
 
 def _token() -> str | None:
     return os.getenv("LLM_PROVIDER_SERVICE_TOKEN") or None
@@ -508,13 +520,7 @@ async def provider_keys(action: str, request: Request) -> JSONResponse:
             correlation_id, "invalid_context", "request context is invalid", 400
         )
     except ProviderSettingsError as exc:
-        status = (
-            404
-            if exc.code == "not_found"
-            else 400
-            if exc.code.startswith("invalid")
-            else 502
-        )
+        status = _PROVIDER_KEY_ERROR_STATUSES.get(exc.code, 502)
         return _error(correlation_id, exc.code, "provider-key operation failed", status)
     except TimeoutError:
         return _error(

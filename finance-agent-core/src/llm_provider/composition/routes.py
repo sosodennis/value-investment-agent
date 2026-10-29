@@ -54,10 +54,18 @@ def _raise_http_error(error: ProviderSettingsError) -> None:
     if code == "invalid_key_id":
         raise HTTPException(status_code=400, detail="invalid managed key id") from error
     if code == "replacement_must_differ":
-        raise HTTPException(status_code=400, detail=code) from error
+        raise HTTPException(
+            status_code=400,
+            detail="replacement key must differ from the current key",
+        ) from error
     if code == "already_owned":
         raise HTTPException(
             status_code=409, detail="managed key is already owned"
+        ) from error
+    if code == "replacement_in_progress":
+        raise HTTPException(
+            status_code=409,
+            detail="a key replacement is already in progress",
         ) from error
     if code in {"invalid_key", "model_not_free", "request_rejected"}:
         raise HTTPException(status_code=400, detail=code) from error

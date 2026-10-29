@@ -24,6 +24,16 @@ const existingKey = {
     created_at: '2026-10-21T00:00:00Z',
 };
 
+function deferred<T>() {
+    let resolvePromise: (value: T) => void = () => {
+        throw new Error('deferred promise was not initialized');
+    };
+    const promise = new Promise<T>((resolve) => {
+        resolvePromise = resolve;
+    });
+    return { promise, resolve: (value: T) => resolvePromise(value) };
+}
+
 vi.mock('@/features/llm-settings/api', () => ({
     ...api,
     LlmSettingsApiError: class LlmSettingsApiError extends Error {
@@ -74,6 +84,16 @@ describe('LLM settings', () => {
     });
 
     it('loads the signed-in settings session and clears the one-time key after adding', async () => {
+        const pendingAdd = deferred<{
+            id: string;
+            label: string;
+            suffix: string;
+            fingerprint: string;
+            created_at: string;
+            status: string;
+            failure_count: number;
+        }>();
+        api.addLlmProviderKey.mockReturnValue(pendingAdd.promise);
         render(<LlmSettingsPage />);
         await waitFor(() => expect(api.listLlmProviderKeys).toHaveBeenCalledWith());
 
@@ -84,6 +104,18 @@ describe('LLM settings', () => {
             target: { value: 'sk-or-v1-test-openrouter-secret' },
         });
         fireEvent.click(screen.getByRole('button', { name: 'Test and add key' }));
+        const pendingButton = screen.getByRole('button', { name: 'Testing and adding...' });
+        expect(pendingButton.hasAttribute('disabled')).toBe(true);
+
+        pendingAdd.resolve({
+            id: 'managed-1',
+            label: 'Primary key',
+            suffix: 'cdef',
+            fingerprint: 'f00dbabe1234',
+            created_at: '2026-10-21T00:00:00Z',
+            status: 'healthy',
+            failure_count: 0,
+        });
 
         await screen.findByText('Primary key');
         screen.getByText('Healthy');
@@ -120,15 +152,16 @@ describe('LLM settings', () => {
     });
 
     it('tests a configured key and reports the result', async () => {
+        const pendingTest = deferred<{ id: string; passed: boolean; status: 'healthy' }>();
         api.listLlmProviderKeys.mockResolvedValue([existingKey]);
-        api.testLlmProviderKey.mockResolvedValue({
-            id: existingKey.id,
-            passed: true,
-            status: 'healthy',
-        });
+        api.testLlmProviderKey.mockReturnValue(pendingTest.promise);
         render(<LlmSettingsPage />);
         await screen.findByText(existingKey.label);
         fireEvent.click(screen.getByRole('button', { name: 'Test' }));
+        const pendingButton = screen.getByRole('button', { name: 'Testing...' });
+        expect(pendingButton.hasAttribute('disabled')).toBe(true);
+
+        pendingTest.resolve({ id: existingKey.id, passed: true, status: 'healthy' });
 
         await screen.findByText('Primary key is healthy.');
         expect(api.testLlmProviderKey).toHaveBeenCalledWith(existingKey.id);
@@ -151,8 +184,9 @@ describe('LLM settings', () => {
     });
 
     it('deletes a configured key only after explicit dialog confirmation', async () => {
+        const pendingDelete = deferred<void>();
         api.listLlmProviderKeys.mockResolvedValue([existingKey]);
-        api.deleteLlmProviderKey.mockResolvedValue(undefined);
+        api.deleteLlmProviderKey.mockReturnValue(pendingDelete.promise);
         render(<LlmSettingsPage />);
         await screen.findByText(existingKey.label);
         fireEvent.click(screen.getByRole('button', { name: 'Delete Primary key' }));
@@ -160,6 +194,9 @@ describe('LLM settings', () => {
         expect(api.deleteLlmProviderKey).not.toHaveBeenCalled();
         expect(screen.getByRole('alertdialog').textContent).toContain('Delete Primary key?');
         fireEvent.click(screen.getByRole('button', { name: 'Delete key' }));
+        expect(screen.getByRole('button', { name: 'Delete Primary key' }).hasAttribute('disabled')).toBe(true);
+
+        pendingDelete.resolve(undefined);
 
         await screen.findByText('Primary key was deleted.');
         expect(api.deleteLlmProviderKey).toHaveBeenCalledWith(existingKey.id);
@@ -167,12 +204,17 @@ describe('LLM settings', () => {
     });
 
     it('tests and replaces a configured key in place', async () => {
+        const pendingReplacement = deferred<{
+            id: string;
+            label: string;
+            suffix: string;
+            fingerprint: string;
+            created_at: string;
+            status: string;
+            failure_count: number;
+        }>();
         api.listLlmProviderKeys.mockResolvedValue([existingKey]);
-        api.replaceLlmProviderKey.mockResolvedValue({
-            ...existingKey,
-            suffix: '9876',
-            status: 'healthy',
-        });
+        api.replaceLlmProviderKey.mockReturnValue(pendingReplacement.promise);
         render(<LlmSettingsPage />);
         await screen.findByText(existingKey.label);
 
@@ -182,6 +224,16 @@ describe('LLM settings', () => {
             target: { value: 'sk-or-v1-replacement-secret' },
         });
         fireEvent.click(screen.getByRole('button', { name: 'Test and replace key' }));
+        const pendingButton = screen.getByRole('button', { name: 'Testing and replacing...' });
+        expect(pendingButton.hasAttribute('disabled')).toBe(true);
+        expect(screen.getByLabelText('OpenRouter API key').hasAttribute('disabled')).toBe(true);
+
+        pendingReplacement.resolve({
+            ...existingKey,
+            suffix: '9876',
+            status: 'healthy',
+            failure_count: 0,
+        });
 
         await screen.findByText(/passed its test and replaced Primary key/);
         expect(api.replaceLlmProviderKey).toHaveBeenCalledWith(existingKey.id, {
@@ -190,6 +242,26 @@ describe('LLM settings', () => {
         });
         expect(screen.getByText('sk-or-••••9876')).toBeTruthy();
         expect(screen.queryByDisplayValue('sk-or-v1-replacement-secret')).toBeNull();
+    });
+
+    it('shows an actionable error and keeps the current key when replacement is rejected', async () => {
+        api.listLlmProviderKeys.mockResolvedValue([existingKey]);
+        api.replaceLlmProviderKey.mockRejectedValue(new LlmSettingsApiError(
+            'replacement key must differ from the current key',
+            400,
+        ));
+        render(<LlmSettingsPage />);
+        await screen.findByText(existingKey.label);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Replace' }));
+        fireEvent.change(screen.getByLabelText('OpenRouter API key'), {
+            target: { value: 'sk-or-v1-same-replacement-key' },
+        });
+        fireEvent.click(screen.getByRole('button', { name: 'Test and replace key' }));
+
+        await screen.findByText('replacement key must differ from the current key');
+        expect(screen.getByText(existingKey.label)).toBeTruthy();
+        expect(screen.queryByText(/passed its test and replaced/)).toBeNull();
     });
 
     it('updates the global model policy from the free model picker', async () => {
@@ -220,7 +292,7 @@ describe('LLM settings', () => {
                 },
             ],
         });
-        api.updateLlmSettings.mockResolvedValue({
+        const updatedSettings = {
             selected_model: 'provider/example:free',
             default_model: 'openrouter/free',
             models: [
@@ -237,12 +309,18 @@ describe('LLM settings', () => {
                     context_length: 8192,
                 },
             ],
-        });
+        };
+        const pendingSave = deferred<typeof updatedSettings>();
+        api.updateLlmSettings.mockReturnValue(pendingSave.promise);
 
         render(<LlmSettingsPage />);
         const picker = await screen.findByRole('combobox', { name: 'Default OpenRouter model' });
         fireEvent.click(picker);
         fireEvent.click(await screen.findByRole('option', { name: /Example Free Model/ }));
+        expect(screen.getByText('Saving model')).toBeTruthy();
+        expect(picker.hasAttribute('disabled')).toBe(true);
+
+        pendingSave.resolve(updatedSettings);
 
         await waitFor(() => expect(api.updateLlmSettings).toHaveBeenCalledWith('provider/example:free'));
         await screen.findByText('Default model changed to provider/example:free.');
