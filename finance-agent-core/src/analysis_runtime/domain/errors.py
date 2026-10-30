@@ -15,6 +15,26 @@ class RunNotFoundError(RuntimeErrorBase):
     code = "run_not_found"
 
 
+class RetryNotAvailableError(RuntimeErrorBase):
+    code = "retry_not_available"
+
+
+class RetryAlreadyActiveError(RuntimeErrorBase):
+    code = "retry_already_active"
+
+
+class RetryIdempotencyConflictError(RuntimeErrorBase):
+    code = "retry_idempotency_conflict"
+
+
+class InvalidCheckpointError(RuntimeErrorBase):
+    code = "invalid_checkpoint"
+
+
+class InvalidRetryTransitionError(RuntimeErrorBase):
+    code = "invalid_retry_transition"
+
+
 class RunAlreadyActiveError(RuntimeErrorBase):
     code = "run_already_active"
 

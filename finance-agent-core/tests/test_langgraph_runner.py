@@ -133,6 +133,35 @@ async def test_runner_uses_callback_ids_and_parent_ids_for_repeated_invocations(
 
 
 @pytest.mark.asyncio
+async def test_runner_passes_explicit_retry_checkpoint_identity() -> None:
+    graph = _EventGraph([])
+    runner = LangGraphRunner(graph)
+    checkpoint = {
+        "namespace": "workflow:thread-1:run:source",
+        "checkpoint_id": "checkpoint-42",
+        "activity_id": "debate.verdict",
+    }
+    items = [
+        item
+        async for item in runner.run(
+            thread_id="thread-1",
+            run_id="retry-run-1",
+            input_data={"retry": {"checkpoint": checkpoint}},
+            principal_id="principal-1",
+        )
+    ]
+    assert items == []
+    assert graph.calls[0][0] is None
+    assert graph.calls[0][1] == {
+        "configurable": {
+            "thread_id": "thread-1",
+            "checkpoint_ns": checkpoint["namespace"],
+            "checkpoint_id": checkpoint["checkpoint_id"],
+        }
+    }
+
+
+@pytest.mark.asyncio
 async def test_runner_collapses_same_scope_wrappers_and_keeps_children_under_visible_parent() -> (
     None
 ):

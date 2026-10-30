@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
-from sqlalchemy import and_, case, delete, func, select, tuple_, union
+from sqlalchemy import and_, case, delete, func, select, text, tuple_, union
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import aliased
 
@@ -18,6 +18,7 @@ from src.infrastructure.models import (
 )
 
 HISTORY_MIGRATION_ID = "20261025_workflow_run_history_v1"
+RETRY_SCHEMA_MIGRATION_ID = "20261030_workflow_retry_schema_v1"
 DEFAULT_BATCH_SIZE = 200
 MAX_BATCH_SIZE = 500
 _TERMINAL_STATUSES = ("completed", "failed", "cancelled")
@@ -27,6 +28,55 @@ _TERMINAL_STATUSES = ("completed", "failed", "cancelled")
 class MigrationResult:
     completed: bool
     batches_processed: int
+
+
+async def run_retry_schema_migration() -> None:
+    """Add retry columns/table without rewriting immutable run history."""
+    statements = (
+        "ALTER TABLE workflow_run_history ADD COLUMN IF NOT EXISTS source_run_id VARCHAR",
+        "ALTER TABLE workflow_run_history ADD COLUMN IF NOT EXISTS retry_operation_id VARCHAR",
+        "ALTER TABLE workflow_run_history ADD COLUMN IF NOT EXISTS attempt INTEGER NOT NULL DEFAULT 1",
+        "ALTER TABLE workflow_run_history ADD COLUMN IF NOT EXISTS checkpoint JSON",
+        "ALTER TABLE artifacts ADD COLUMN IF NOT EXISTS dedupe_key VARCHAR",
+        """
+        CREATE TABLE IF NOT EXISTS workflow_retry_operations (
+            operation_id VARCHAR PRIMARY KEY,
+            thread_id VARCHAR NOT NULL,
+            source_run_id VARCHAR NOT NULL,
+            target_run_id VARCHAR NOT NULL UNIQUE,
+            principal_id VARCHAR NOT NULL,
+            idempotency_key VARCHAR NOT NULL,
+            request_hash VARCHAR NOT NULL,
+            checkpoint JSON NOT NULL,
+            attempt INTEGER NOT NULL,
+            status VARCHAR NOT NULL,
+            outcome VARCHAR,
+            created_at TIMESTAMP NOT NULL,
+            updated_at TIMESTAMP NOT NULL,
+            ended_at TIMESTAMP
+        )
+        """,
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_workflow_retry_principal_idempotency ON workflow_retry_operations (principal_id, idempotency_key)",
+        "CREATE INDEX IF NOT EXISTS idx_workflow_retry_source ON workflow_retry_operations (thread_id, source_run_id)",
+        "CREATE INDEX IF NOT EXISTS idx_workflow_run_history_retry_operation ON workflow_run_history (retry_operation_id)",
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_artifacts_dedupe_key ON artifacts (dedupe_key) WHERE dedupe_key IS NOT NULL",
+    )
+    async with AsyncSessionLocal() as session:
+        async with session.begin():
+            for statement in statements:
+                await session.execute(text(statement))
+            await session.execute(
+                pg_insert(DatabaseMigration)
+                .values(
+                    migration_id=RETRY_SCHEMA_MIGRATION_ID,
+                    initialized_at=_utcnow_naive(),
+                    completed_at=_utcnow_naive(),
+                )
+                .on_conflict_do_update(
+                    index_elements=["migration_id"],
+                    set_={"completed_at": _utcnow_naive()},
+                )
+            )
 
 
 async def run_history_migration(

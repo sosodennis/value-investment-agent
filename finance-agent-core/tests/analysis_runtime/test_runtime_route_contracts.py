@@ -104,6 +104,29 @@ class Runner:
         )
 
 
+class RetryableRunner:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def run(self, **kwargs):
+        self.calls += 1
+        if self.calls == 1:
+            error = RuntimeError("provider rate limited")
+            error.code = "rate_limited"
+            error.retryable = True
+            raise error
+        yield Activity(
+            activity_id="debate.verdict",
+            thread_id=kwargs["thread_id"],
+            run_id=kwargs["run_id"],
+            scope_path=("debate", "verdict"),
+            kind="node",
+            status="completed",
+            label="Debate verdict",
+            attempt=kwargs["input_data"]["retry"]["attempt"],
+        )
+
+
 class InterruptingRunner:
     async def run(self, **kwargs):
         activity = Activity(
@@ -249,7 +272,9 @@ async def test_http_interaction_snapshot_resume_and_completion_contract() -> Non
         )
         assert started.status_code == 202
         run_id = started.json()["run_id"]
-        await service._tasks["thread-1"]
+        task = service._tasks.get("thread-1")
+        if task is not None:
+            await task
 
         waiting = await client.get(
             f"/api/v1/threads/thread-1/activities?run_id={run_id}"
@@ -276,7 +301,9 @@ async def test_http_interaction_snapshot_resume_and_completion_contract() -> Non
         )
         assert resumed.status_code == 202
         assert resumed.json()["run_id"] == run_id
-        await service._tasks["thread-1"]
+        task = service._tasks.get("thread-1")
+        if task is not None:
+            await task
 
         completed = await client.get(
             f"/api/v1/threads/thread-1/activities?run_id={run_id}"
@@ -290,3 +317,85 @@ async def test_http_interaction_snapshot_resume_and_completion_contract() -> Non
     assert "completed_outputs" in snapshot_schema["properties"]
     assert "WorkflowInteractionEvent" in openapi["components"]["schemas"]
     assert "WorkflowAgentOutputEvent" in openapi["components"]["schemas"]
+
+
+@pytest.mark.asyncio
+async def test_authenticated_retry_endpoint_requires_key_and_returns_same_attempt() -> (
+    None
+):
+    app = FastAPI()
+    app.include_router(router)
+    app.dependency_overrides[require_current_user] = lambda: Principal(
+        user_id="user-1", subject="user-1", email="user@example.test"
+    )
+    app.dependency_overrides[require_current_user_mutation] = lambda: Principal(
+        user_id="user-1", subject="user-1", email="user@example.test"
+    )
+    runner = RetryableRunner()
+    service = AnalysisRuntimeService(
+        repository=InMemoryActivityRepository(), owner=Owner(), runner=runner
+    )
+    app.state.analysis_runtime = service
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://testserver"
+    ) as client:
+        started = await client.post(
+            "/api/v1/threads/thread-1/runs", json={"message": "AAPL"}
+        )
+        source_run_id = started.json()["run_id"]
+        task = service._tasks.get("thread-1")
+        if task is not None:
+            await task
+        source = (
+            await client.get(
+                f"/api/v1/threads/thread-1/activities?run_id={source_run_id}"
+            )
+        ).json()
+        checkpoint = source["failure"]["checkpoint"]
+        path = f"/api/v1/threads/thread-1/runs/{source_run_id}/retry"
+        missing_key = await client.post(
+            path,
+            json={"contract_version": "v1", "checkpoint": checkpoint},
+        )
+        first = await client.post(
+            path,
+            headers={"Idempotency-Key": "retry-http-1"},
+            json={"contract_version": "v1", "checkpoint": checkpoint},
+        )
+        duplicate = await client.post(
+            path,
+            headers={"Idempotency-Key": "retry-http-1"},
+            json={"contract_version": "v1", "checkpoint": checkpoint},
+        )
+        task = service._tasks.get("thread-1")
+        if task is not None:
+            await task
+
+    assert missing_key.status_code == 422
+    assert first.status_code == duplicate.status_code == 202
+    first_payload = first.json()
+    duplicate_payload = duplicate.json()
+    for key in (
+        "thread_id",
+        "run_id",
+        "retry_operation_id",
+        "source_run_id",
+        "checkpoint",
+        "attempt",
+    ):
+        assert first_payload[key] == duplicate_payload[key]
+    assert first_payload["source_run_id"] == source_run_id
+    assert first_payload["run_id"] != source_run_id
+    assert first_payload["checkpoint"] == checkpoint
+    assert runner.calls == 2
+    operation_schema = app.openapi()["components"]["schemas"]["RetryResponse"]
+    assert "retry_operation_id" in operation_schema["properties"]
+    snapshot_schema = app.openapi()["components"]["schemas"]["WorkflowSnapshot"]
+    public_retry_schema = app.openapi()["components"]["schemas"]["RetryOperationView"]
+    assert snapshot_schema["properties"]["retry_operation"]["anyOf"][0][
+        "$ref"
+    ].endswith("/RetryOperationView")
+    assert not {"principal_id", "idempotency_key", "request_hash"}.intersection(
+        public_retry_schema["properties"]
+    )

@@ -28,6 +28,7 @@ type ContractAgentOutput = components['schemas']['WorkflowAgentOutput'];
 type ContractAgentOutputEvent = components['schemas']['WorkflowAgentOutputEvent'];
 type ContractFailure = components['schemas']['WorkflowFailure'];
 type ContractSnapshot = components['schemas']['WorkflowSnapshot'];
+type ContractRetryOperation = components['schemas']['RetryOperationView'];
 
 export type ActivityStatus = ContractActivity['status'];
 export type ActivityKind = ContractActivity['kind'];
@@ -39,6 +40,7 @@ export type ValuationApprovalResponse = components['schemas']['ValuationApproval
 export type InteractionResponse = TickerSelectionResponse | ValuationApprovalResponse;
 export type WorkflowRunStatus = ContractSnapshot['run_status'];
 export type WorkflowFailure = ContractFailure;
+export type CheckpointIdentity = components['schemas']['CheckpointIdentity'];
 export type ConnectionState = 'disconnected' | 'connecting' | 'connected' | 'reconnecting' | 'closed';
 
 export type WorkflowActivity = Omit<ContractActivity, 'activity_id' | 'thread_id' | 'run_id'> & {
@@ -158,6 +160,11 @@ function string(value: unknown, context: string): string {
     return value;
 }
 
+function stringIncludingEmpty(value: unknown, context: string): string {
+    if (typeof value !== 'string') throw new TypeError(`${context} must be a string.`);
+    return value;
+}
+
 function isThreadId(value: unknown): value is ThreadId {
     return isNonEmptyString(value);
 }
@@ -220,6 +227,42 @@ function oneOf<const Values extends readonly string[]>(
 function nullableString(value: unknown, context: string): string | null {
     if (value === null) return null;
     return string(value, context);
+}
+
+function parseCheckpointIdentity(value: unknown, context: string): CheckpointIdentity {
+    const input = record(value, context);
+    onlyKeys(input, ['namespace', 'checkpoint_id', 'activity_id'], context);
+    return {
+        namespace: input.namespace === undefined
+            ? ''
+            : stringIncludingEmpty(input.namespace, `${context}.namespace`),
+        checkpoint_id: string(input.checkpoint_id, `${context}.checkpoint_id`),
+        activity_id: input.activity_id === undefined || input.activity_id === null
+            ? null
+            : string(input.activity_id, `${context}.activity_id`),
+    };
+}
+
+function parseRetryOperation(value: unknown, context: string): ContractRetryOperation {
+    const input = record(value, context);
+    onlyKeys(input, [
+        'operation_id', 'thread_id', 'source_run_id', 'target_run_id', 'checkpoint', 'attempt', 'status', 'outcome',
+        'created_at', 'updated_at', 'ended_at',
+    ], context);
+    const status = oneOf(input.status, ['queued', 'running', 'completed', 'failed', 'cancelled'], `${context}.status`);
+    return {
+        operation_id: string(input.operation_id, `${context}.operation_id`),
+        thread_id: string(input.thread_id, `${context}.thread_id`),
+        source_run_id: string(input.source_run_id, `${context}.source_run_id`),
+        target_run_id: string(input.target_run_id, `${context}.target_run_id`),
+        checkpoint: parseCheckpointIdentity(input.checkpoint, `${context}.checkpoint`),
+        attempt: integer(input.attempt, `${context}.attempt`, 1),
+        status,
+        outcome: input.outcome === undefined || input.outcome === null ? null : string(input.outcome, `${context}.outcome`),
+        created_at: string(input.created_at, `${context}.created_at`),
+        updated_at: string(input.updated_at, `${context}.updated_at`),
+        ended_at: input.ended_at === undefined || input.ended_at === null ? null : string(input.ended_at, `${context}.ended_at`),
+    };
 }
 
 function parseCandidate(value: unknown, context: string): TickerCandidate {
@@ -308,8 +351,11 @@ function parseValuationApprovalResponse(value: unknown, context: string): Valuat
 
 function parseWorkflowFailure(value: unknown, context: string): WorkflowFailure {
     const input = record(value, context);
-    onlyKeys(input, ['code', 'owner', 'activity_id', 'retryable', 'message'], context);
-    return {
+    onlyKeys(input, ['code', 'owner', 'activity_id', 'retryable', 'message', 'checkpoint'], context);
+    const checkpoint = input.checkpoint === undefined || input.checkpoint === null
+        ? null
+        : parseCheckpointIdentity(input.checkpoint, `${context}.checkpoint`);
+    const failure: WorkflowFailure = {
         code: string(input.code, `${context}.code`),
         owner: string(input.owner, `${context}.owner`),
         activity_id: input.activity_id === undefined || input.activity_id === null
@@ -320,6 +366,8 @@ function parseWorkflowFailure(value: unknown, context: string): WorkflowFailure 
             : (() => { throw new TypeError(`${context}.retryable must be a boolean.`); })(),
         message: string(input.message, `${context}.message`),
     };
+    if (input.checkpoint !== undefined) failure.checkpoint = checkpoint;
+    return failure;
 }
 
 export function parseWorkflowActivity(value: unknown, context = 'activity'): WorkflowActivity {
@@ -537,7 +585,7 @@ export function parseWorkflowActivitySnapshot(value: unknown, context = 'workflo
     const input = record(value, context);
     onlyKeys(input, [
         'thread_id', 'run_id', 'run_status', 'cursor', 'active_activities', 'recent_activities',
-        'pending_interactions', 'completed_outputs', 'failure',
+        'pending_interactions', 'completed_outputs', 'failure', 'retry_operation',
     ], context);
     const threadId = identifier(input.thread_id, `${context}.thread_id`, isThreadId);
     const runId = identifier(input.run_id, `${context}.run_id`, isRunId);
@@ -580,6 +628,9 @@ export function parseWorkflowActivitySnapshot(value: unknown, context = 'workflo
         pending_interactions: pendingInteractions,
         completed_outputs: completedOutputs,
         failure,
+        retry_operation: input.retry_operation === undefined || input.retry_operation === null
+            ? null
+            : parseRetryOperation(input.retry_operation, `${context}.retry_operation`),
     };
 }
 

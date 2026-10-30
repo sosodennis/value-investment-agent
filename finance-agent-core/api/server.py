@@ -59,12 +59,15 @@ def _cors_origins() -> list[str]:
 async def lifespan(app: FastAPI):
     await assert_migrations_complete()
     graph = await get_graph()
-    app.state.analysis_runtime = AnalysisRuntimeService(
+    runtime = AnalysisRuntimeService(
         repository=SqlAlchemyActivityRepository(),
         owner=OwnedThreadPort(),
         runner=LangGraphRunner(graph),
         hub=BoundedNotificationHub(),
     )
+    app.state.analysis_runtime = runtime
+    await runtime.recover_pending_resumes()
+    await runtime.recover_pending_retries()
     app.state.market_movers_service = MarketMoversService(YahooMarketMoversProvider())
     app.state.readiness_provider = HttpReadinessProvider()
     try:
@@ -85,7 +88,7 @@ app.add_middleware(
     allow_origins=_cors_origins(),
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
-    allow_headers=["Content-Type", "X-CSRF-Token", "X-Request-ID"],
+    allow_headers=["Content-Type", "X-CSRF-Token", "X-Request-ID", "Idempotency-Key"],
 )
 app.include_router(auth_router)
 app.include_router(provider_keys_router)

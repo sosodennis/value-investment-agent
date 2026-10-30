@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import asyncio
 import os
+import time
 from collections.abc import AsyncIterator, Iterator
 from datetime import UTC, datetime, timedelta
+from email.utils import parsedate_to_datetime
 from typing import NoReturn, TypeVar
 from uuid import uuid4
 
@@ -87,6 +90,26 @@ def _context(*, user_id: str, seconds: float) -> dict[str, object]:
         "contract_version": "internal.v1",
         "deadline_at": _deadline(seconds).isoformat().replace("+00:00", "Z"),
     }
+
+
+def _retry_after_seconds(response: httpx.Response) -> float | None:
+    """Parse RFC 9110 Retry-After and cap provider-controlled sleep time."""
+    raw = response.headers.get("Retry-After")
+    if not raw:
+        return None
+    try:
+        delay = float(raw.strip())
+    except ValueError:
+        try:
+            parsed = parsedate_to_datetime(raw)
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=UTC)
+            delay = (parsed - datetime.now(UTC)).total_seconds()
+        except (TypeError, ValueError, OverflowError):
+            return None
+    if delay < 0:
+        return 0.0
+    return min(delay, 60.0)
 
 
 def _raise_provider_transport_error(
@@ -184,9 +207,9 @@ class LLMProviderServiceClient(LLMProviderPort):
             _malformed(request)
 
     @classmethod
-    def _raise_response(
+    def _response_error(
         cls, response: httpx.Response, request: CompletionRequest
-    ) -> None:
+    ) -> LLMProviderError:
         try:
             body = response.json()
             error = body.get("error", {}) if isinstance(body, dict) else {}
@@ -205,7 +228,7 @@ class LLMProviderServiceClient(LLMProviderPort):
             error_code = LLMErrorCode(code)
         except ValueError:
             error_code = LLMErrorCode.UPSTREAM_UNAVAILABLE
-        raise LLMProviderError(
+        return LLMProviderError(
             code=error_code,
             provider="llm-provider-service",
             model=request.route.alias,
@@ -213,7 +236,28 @@ class LLMProviderServiceClient(LLMProviderPort):
             reason="LLM provider service request failed",
             retryable=retryable,
             http_status=response.status_code,
+            retry_after_seconds=(
+                _retry_after_seconds(response) if response.status_code == 429 else None
+            ),
         )
+
+    @classmethod
+    def _raise_response(
+        cls, response: httpx.Response, request: CompletionRequest
+    ) -> None:
+        error = cls._response_error(response, request)
+        if error.retryable and error.retry_after_seconds:
+            time.sleep(error.retry_after_seconds)
+        raise error
+
+    @classmethod
+    async def _raise_response_async(
+        cls, response: httpx.Response, request: CompletionRequest
+    ) -> None:
+        error = cls._response_error(response, request)
+        if error.retryable and error.retry_after_seconds:
+            await asyncio.sleep(error.retry_after_seconds)
+        raise error
 
     def _post(
         self,
@@ -266,7 +310,7 @@ class LLMProviderServiceClient(LLMProviderPort):
     async def acomplete(self, request: CompletionRequest) -> CompletionResult:
         response = await self._apost(request)
         if response.status_code >= 400:
-            self._raise_response(response, request)
+            await self._raise_response_async(response, request)
         return self._result(response, request)
 
     def complete_structured(self, request: StructuredRequest[_Model]) -> _Model:
@@ -285,7 +329,7 @@ class LLMProviderServiceClient(LLMProviderPort):
             response_schema=request.response_schema.model_json_schema(),
         )
         if response.status_code >= 400:
-            self._raise_response(response, request.completion)
+            await self._raise_response_async(response, request.completion)
         result = self._result(response, request.completion)
         return self._structured_result(request, result)
 
@@ -348,7 +392,7 @@ class LLMProviderServiceClient(LLMProviderPort):
             ) as response:
                 if response.status_code >= 400:
                     await response.aread()
-                    self._raise_response(response, request)
+                    await self._raise_response_async(response, request)
                 async for line in response.aiter_lines():
                     if line.startswith("data: "):
                         yield self._event(line, request)

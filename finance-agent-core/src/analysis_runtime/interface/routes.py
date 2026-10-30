@@ -4,23 +4,30 @@ import asyncio
 import json
 from collections.abc import AsyncIterator, Mapping
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 from starlette.background import BackgroundTask
 
 from src.analysis_runtime.application.runtime_service import AnalysisRuntimeService
 from src.analysis_runtime.domain.contracts import (
+    CheckpointIdentity,
     InteractionIdentity,
     InteractionResponse,
+    RetryCommand,
     WorkflowEvent,
     WorkflowSnapshot,
 )
 from src.analysis_runtime.domain.errors import (
     InteractionNotAvailableError,
+    InvalidCheckpointError,
     InvalidCursorError,
     InvalidInteractionResponseError,
+    InvalidRetryTransitionError,
     ReplayGapError,
+    RetryAlreadyActiveError,
+    RetryIdempotencyConflictError,
+    RetryNotAvailableError,
     RunAlreadyActiveError,
     RunNotFoundError,
     SubscriberOverloadedError,
@@ -79,6 +86,16 @@ class RunResponse(BaseModel):
     status: str = "started"
 
 
+class RetryResponse(BaseModel):
+    thread_id: str
+    run_id: str
+    status: str
+    retry_operation_id: str
+    source_run_id: str
+    checkpoint: CheckpointIdentity
+    attempt: int
+
+
 def _runtime(request: Request) -> AnalysisRuntimeService:
     service = getattr(request.app.state, "analysis_runtime", None)
     if service is None:
@@ -92,11 +109,17 @@ def _map_error(exc: Exception) -> HTTPException:
     if isinstance(
         exc,
         RunAlreadyActiveError
+        | RetryAlreadyActiveError
+        | RetryIdempotencyConflictError
+        | RetryNotAvailableError
+        | InvalidRetryTransitionError
         | InteractionNotAvailableError
         | SubscriberOverloadedError,
     ):
         return HTTPException(status_code=409, detail=exc.code)
     if isinstance(exc, InvalidInteractionResponseError):
+        return HTTPException(status_code=422, detail=exc.code)
+    if isinstance(exc, InvalidCheckpointError):
         return HTTPException(status_code=422, detail=exc.code)
     if isinstance(exc, ReplayGapError):
         return HTTPException(
@@ -149,6 +172,40 @@ async def resume_run(
     except Exception as exc:
         raise _map_error(exc) from exc
     return RunResponse(thread_id=thread_id, run_id=resumed_run_id, status="resumed")
+
+
+@router.post(
+    "/{thread_id}/runs/{run_id}/retry",
+    response_model=RetryResponse,
+    status_code=202,
+)
+async def retry_run(
+    thread_id: str,
+    run_id: str,
+    body: RetryCommand,
+    request: Request,
+    idempotency_key: str = Header(..., alias="Idempotency-Key", min_length=1),
+    principal: Principal = Depends(require_current_user_mutation),
+) -> RetryResponse:
+    try:
+        operation = await _runtime(request).retry(
+            principal_id=principal.user_id,
+            thread_id=thread_id,
+            source_run_id=run_id,
+            checkpoint=body.checkpoint,
+            idempotency_key=idempotency_key,
+        )
+    except Exception as exc:
+        raise _map_error(exc) from exc
+    return RetryResponse(
+        thread_id=operation.thread_id,
+        run_id=operation.target_run_id,
+        status=operation.status,
+        retry_operation_id=operation.operation_id,
+        source_run_id=operation.source_run_id,
+        checkpoint=operation.checkpoint,
+        attempt=operation.attempt,
+    )
 
 
 @router.post("/{thread_id}/runs/{run_id}/cancel", status_code=204)

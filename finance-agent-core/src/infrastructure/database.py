@@ -46,6 +46,7 @@ async def init_db():
             LlmSetting,
             WorkflowActivityCursor,
             WorkflowActivityEvent,
+            WorkflowRetryOperation,
             WorkflowRun,
             WorkflowRunHistory,
             WorkflowRunResume,

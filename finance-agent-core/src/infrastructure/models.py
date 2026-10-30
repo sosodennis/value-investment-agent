@@ -78,6 +78,7 @@ class Artifact(Base):
     thread_id = Column(String, nullable=True, index=True)  # Optional thread association
     type = Column(String, nullable=False)  # e.g., "news_items", "financial_statements"
     data = Column(JSON, nullable=False)  # The actual artifact payload
+    dedupe_key = Column(String, nullable=True, unique=True, index=True)
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
 
     def to_dict(self):
@@ -267,6 +268,10 @@ class WorkflowRunHistory(Base):
     updated_at = Column(DateTime, nullable=True)
     ended_at = Column(DateTime, nullable=True)
     input_data = Column(JSON, nullable=True)
+    source_run_id = Column(String, nullable=True, index=True)
+    retry_operation_id = Column(String, nullable=True, index=True)
+    attempt = Column(Integer, nullable=False, default=1)
+    checkpoint = Column(JSON, nullable=True)
 
     __table_args__ = (
         Index(
@@ -276,6 +281,34 @@ class WorkflowRunHistory(Base):
             "thread_id",
             "run_id",
         ),
+    )
+
+
+class WorkflowRetryOperation(Base):
+    __tablename__ = "workflow_retry_operations"
+
+    operation_id = Column(String, primary_key=True)
+    thread_id = Column(String, nullable=False, index=True)
+    source_run_id = Column(String, nullable=False, index=True)
+    target_run_id = Column(String, nullable=False, unique=True, index=True)
+    principal_id = Column(String, nullable=False, index=True)
+    idempotency_key = Column(String, nullable=False)
+    request_hash = Column(String, nullable=False)
+    checkpoint = Column(JSON, nullable=False)
+    attempt = Column(Integer, nullable=False)
+    status = Column(String, nullable=False, index=True)
+    outcome = Column(String, nullable=True)
+    created_at = Column(DateTime, nullable=False)
+    updated_at = Column(DateTime, nullable=False)
+    ended_at = Column(DateTime, nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "principal_id",
+            "idempotency_key",
+            name="uq_workflow_retry_principal_idempotency",
+        ),
+        Index("idx_workflow_retry_source", "thread_id", "source_run_id"),
     )
 
 

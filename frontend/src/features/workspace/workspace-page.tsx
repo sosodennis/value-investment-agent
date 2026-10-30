@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
-import { Activity, CircleAlert, Loader2, Menu, Play, Square, Wifi, WifiOff } from 'lucide-react';
+import { Activity, CircleAlert, Loader2, Menu, Play, RotateCcw, Square, Wifi, WifiOff } from 'lucide-react';
 import { useAgent } from '@/hooks/useAgent';
 import { AGENT_CONFIGS } from '@/config/agents';
 import type { AgentInfo, AgentStatus, StandardAgentOutput } from '@/types/agents';
@@ -135,7 +135,7 @@ export function WorkspacePage({ assistantId = 'agent', initialTicker = null, ini
                         <TabsList aria-label="Workspace views" className="mb-4 h-auto w-full justify-start overflow-x-auto rounded-none border-b bg-transparent p-0">
                             {reportTabs.map((tab) => <TabsTrigger key={tab.id} value={tab.id} className="min-h-10 shrink-0 rounded-none border-b-2 border-transparent px-3 data-[state=active]:border-primary data-[state=active]:bg-transparent">{tab.label}</TabsTrigger>)}
                         </TabsList>
-                        <TabsContent value="activity"><ActivityPanel workflow={agent.workflow} connectionState={agent.connectionState} onResumeInteraction={agent.submitCommand} isSubmitting={agent.isSubmittingInteraction} /></TabsContent>
+                        <TabsContent value="activity"><ActivityPanel workflow={agent.workflow} connectionState={agent.connectionState} onResumeInteraction={agent.submitCommand} isSubmitting={agent.isSubmittingInteraction} onRetry={agent.retryRun} isRetrying={isLoading} /></TabsContent>
                         {reportTabs.filter((item): item is { id: Exclude<ReportTab, 'activity'>; label: string } => item.id !== 'activity').map((item) => <TabsContent key={item.id} value={item.id}><ReportPanel tab={item.id} outputs={agent.agentOutputs} statuses={agent.agentStatuses} ticker={ticker} onSelectEvidence={setSelectedEvidence} selectedEvidenceId={selectedEvidence?.id} /></TabsContent>)}
                     </Tabs>
                         </section>
@@ -163,18 +163,20 @@ function ConnectionBadge({ state }: { state: ConnectionState }) {
     return <Badge variant={state === 'connected' ? 'success' : state === 'reconnecting' ? 'warning' : 'outline'}><Icon className={`mr-1 size-3 ${state === 'connecting' || state === 'reconnecting' ? 'animate-spin' : ''}`} />{connectionLabels[state]}</Badge>;
 }
 
-function ActivityPanel({ workflow, connectionState, onResumeInteraction, isSubmitting }: {
+function ActivityPanel({ workflow, connectionState, onResumeInteraction, isSubmitting, onRetry, isRetrying }: {
     workflow: ReturnType<typeof useAgent>['workflow'];
     connectionState: ConnectionState;
     onResumeInteraction: (interaction: WorkflowInteraction, response: InteractionResponse) => Promise<void>;
     isSubmitting: boolean;
+    onRetry: () => Promise<void>;
+    isRetrying: boolean;
 }) {
     if (!workflow) return <div className="grid min-h-48 place-items-center border-y text-sm text-muted-foreground"><p>No workflow activity is available yet.</p></div>;
     const activities = activityRowsForDisplay(workflow.recent);
     const pendingInteractions = [...workflow.interactions.values()].filter((item) => item.status === 'pending');
     return <div className="grid gap-4">
         {workflow.runStatus === 'waiting' && pendingInteractions.length === 0 && <Alert variant="warning"><CircleAlert className="size-4" /><AlertTitle>Workflow is waiting</AlertTitle><AlertDescription>The workflow is waiting for an interaction request that is not available in this activity snapshot.</AlertDescription></Alert>}
-        {workflow.runStatus === 'failed' && <Alert variant="destructive" role="alert"><CircleAlert className="size-4" /><AlertTitle>Run failed</AlertTitle><AlertDescription><span className="block">{workflow.failure?.message ?? activities.find((item) => item.status === 'failed')?.label ?? 'The workflow ended with a failure.'}</span>{workflow.failure && <span className="mt-1 block text-xs">Code: {workflow.failure.code} · {workflow.failure.retryable ? 'Retry may succeed' : 'Retry is not expected to change the result'}</span>}</AlertDescription></Alert>}
+        {workflow.runStatus === 'failed' && <Alert variant="destructive" role="alert"><CircleAlert className="size-4" /><AlertTitle>Run failed</AlertTitle><AlertDescription><span className="block">{workflow.failure?.message ?? activities.find((item) => item.status === 'failed')?.label ?? 'The workflow ended with a failure.'}</span>{workflow.failure && <span className="mt-1 block text-xs">Code: {workflow.failure.code} · {workflow.failure.retryable ? 'Retry may succeed' : 'Retry is not expected to change the result'}</span>}{workflow.failure?.retryable && workflow.failure.checkpoint && <Button type="button" size="sm" variant="outline" className="mt-3" disabled={isRetrying} onClick={() => void onRetry()}><RotateCcw className={isRetrying ? 'animate-spin' : undefined} />{isRetrying ? 'Retrying…' : 'Retry from checkpoint'}</Button>}</AlertDescription></Alert>}
         {workflow.runStatus === 'cancelled' && <Alert variant="warning"><AlertTitle>Run cancelled</AlertTitle><AlertDescription>The workflow was cancelled and its current run has ended.</AlertDescription></Alert>}
         {workflow.runStatus === 'completed' && <Alert variant="success"><AlertTitle>Run completed</AlertTitle><AlertDescription>Agent activity has finished. Select a report tab to inspect available results.</AlertDescription></Alert>}
         {activities.length === 0 ? <div className="border-y py-8 text-sm text-muted-foreground">No recent activity was returned for this run.</div> : <ol className="divide-y border-y" aria-label="Workflow activity">

@@ -244,7 +244,8 @@ class _LogContextFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
         context = get_log_context()
         for key in _CONTEXT_KEYS:
-            setattr(record, key, context.get(key))
+            if not getattr(record, key, None):
+                setattr(record, key, context.get(key))
         record.service = os.getenv("LOG_SERVICE", _DEFAULT_SERVICE)
         record.environment = os.getenv("APP_ENV", _DEFAULT_ENV)
         return True

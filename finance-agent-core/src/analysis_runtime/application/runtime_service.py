@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import json
 import logging
 import traceback
 import uuid
@@ -18,10 +20,12 @@ from src.analysis_runtime.domain.contracts import (
     Activity,
     ActivityEvent,
     AnalysisRunPage,
+    CheckpointIdentity,
     InteractionIdentity,
     InteractionRequested,
     InteractionResponse,
     ReplayPage,
+    RetryOperation,
     RunStatus,
     WorkflowAgentOutput,
     WorkflowAgentOutputEvent,
@@ -31,6 +35,7 @@ from src.analysis_runtime.domain.contracts import (
 )
 from src.analysis_runtime.domain.errors import (
     ActivityPersistenceError,
+    RetryNotAvailableError,
     RunAlreadyActiveError,
     RunNotFoundError,
     ThreadNotFoundError,
@@ -48,16 +53,19 @@ _SAFE_FAILURE_MESSAGES = {
     "invalid_runner_interrupt": "The workflow produced an invalid interaction request.",
 }
 logger = logging.getLogger(__name__)
+_RETRY_LEASE_SECONDS = 300.0
+_RETRY_HEARTBEAT_SECONDS = 30.0
 
 
 def _failure_from_exception(
-    error: Exception, *, activity_id: str | None
+    error: Exception, *, activity_id: str | None, checkpoint: CheckpointIdentity | None
 ) -> WorkflowFailure:
     raw_code = getattr(error, "code", None)
     code = getattr(raw_code, "value", raw_code)
     code = code if isinstance(code, str) and code else "workflow_runtime_error"
-    owner = "llm_provider" if hasattr(error, "retryable") else "workflow.runtime"
-    retryable = bool(getattr(error, "retryable", False))
+    retryability = getattr(error, "retryable", None)
+    owner = "llm_provider" if retryability is not None else "workflow.runtime"
+    retryable = bool(retryability)
     return WorkflowFailure(
         code=code,
         owner=owner,
@@ -66,6 +74,7 @@ def _failure_from_exception(
         message=_SAFE_FAILURE_MESSAGES.get(
             code, "The workflow could not complete because an internal step failed."
         ),
+        checkpoint=checkpoint if retryable else None,
     )
 
 
@@ -131,6 +140,63 @@ class AnalysisRuntimeService:
         self._tasks[thread_id] = task
         return selected_run_id
 
+    async def retry(
+        self,
+        *,
+        principal_id: str,
+        thread_id: str,
+        source_run_id: str,
+        checkpoint: CheckpointIdentity,
+        idempotency_key: str,
+    ) -> RetryOperation:
+        if not idempotency_key.strip():
+            raise RetryNotAvailableError("Idempotency-Key is required")
+        await self._check_owner(principal_id=principal_id, thread_id=thread_id)
+        request_hash = hashlib.sha256(
+            json.dumps(
+                {
+                    "contract_version": "v1",
+                    "thread_id": thread_id,
+                    "source_run_id": source_run_id,
+                    "checkpoint": checkpoint.model_dump(mode="json"),
+                },
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8")
+        ).hexdigest()
+        operation, _ = await self.repository.begin_retry(
+            principal_id=principal_id,
+            thread_id=thread_id,
+            source_run_id=source_run_id,
+            checkpoint=checkpoint,
+            idempotency_key=idempotency_key.strip(),
+            request_hash=request_hash,
+            now=datetime.now(timezone.utc),
+        )
+        claimed = await self.repository.claim_retry(
+            operation_id=operation.operation_id,
+            now=datetime.now(timezone.utc),
+            lease_seconds=_RETRY_LEASE_SECONDS,
+        )
+        task = self._tasks.get(thread_id)
+        if claimed is not None and (task is None or task.done()):
+            self._tasks[thread_id] = asyncio.create_task(
+                self._execute(
+                    principal_id=principal_id,
+                    thread_id=thread_id,
+                    run_id=claimed.target_run_id,
+                    input_data={
+                        "retry": {
+                            "operation_id": claimed.operation_id,
+                            "source_run_id": claimed.source_run_id,
+                            "checkpoint": claimed.checkpoint.model_dump(mode="json"),
+                            "attempt": claimed.attempt,
+                        }
+                    },
+                )
+            )
+        return claimed or operation
+
     async def resume(
         self,
         *,
@@ -187,6 +253,40 @@ class AnalysisRuntimeService:
                     thread_id=thread_id,
                     run_id=item.identity.run_id,
                     input_data=resume_input,
+                )
+            )
+            recovered += 1
+        return recovered
+
+    async def recover_pending_retries(self) -> int:
+        """Restart queued/running retry commands after a process restart."""
+        recovered = 0
+        for operation in await self.repository.pending_retries(
+            now=datetime.now(timezone.utc), lease_seconds=_RETRY_LEASE_SECONDS
+        ):
+            task = self._tasks.get(operation.thread_id)
+            if task and not task.done():
+                continue
+            claimed = await self.repository.claim_retry(
+                operation_id=operation.operation_id,
+                now=datetime.now(timezone.utc),
+                lease_seconds=_RETRY_LEASE_SECONDS,
+            )
+            if claimed is None:
+                continue
+            self._tasks[operation.thread_id] = asyncio.create_task(
+                self._execute(
+                    principal_id=claimed.principal_id,
+                    thread_id=claimed.thread_id,
+                    run_id=claimed.target_run_id,
+                    input_data={
+                        "retry": {
+                            "operation_id": claimed.operation_id,
+                            "source_run_id": claimed.source_run_id,
+                            "checkpoint": claimed.checkpoint.model_dump(mode="json"),
+                            "attempt": claimed.attempt,
+                        }
+                    },
                 )
             )
             recovered += 1
@@ -308,6 +408,16 @@ class AnalysisRuntimeService:
         run_id: str,
         input_data: Mapping[str, object],
     ) -> None:
+        retry_input = input_data.get("retry")
+        retry_operation_id = (
+            retry_input.get("operation_id")
+            if isinstance(retry_input, Mapping)
+            and isinstance(retry_input.get("operation_id"), str)
+            else None
+        )
+        heartbeat: asyncio.Task[None] | None = None
+        if retry_operation_id is not None:
+            heartbeat = asyncio.create_task(self._retry_heartbeat(retry_operation_id))
         try:
             await self.repository.set_run(
                 thread_id=thread_id,
@@ -416,7 +526,23 @@ class AnalysisRuntimeService:
                         "interrupt_diagnostics": getattr(exc, "diagnostics", {}),
                     },
                 )
-            failure = _failure_from_exception(exc, activity_id=current_activity_id)
+            checkpoint_value = getattr(exc, "checkpoint", None)
+            checkpoint = (
+                checkpoint_value
+                if isinstance(checkpoint_value, CheckpointIdentity)
+                else CheckpointIdentity(
+                    namespace="",
+                    checkpoint_id=f"runtime:{run_id}:{current_activity_id or 'workflow'}",
+                    activity_id=current_activity_id,
+                )
+            )
+            if checkpoint.activity_id is None and current_activity_id is not None:
+                checkpoint = checkpoint.model_copy(
+                    update={"activity_id": current_activity_id}
+                )
+            failure = _failure_from_exception(
+                exc, activity_id=current_activity_id, checkpoint=checkpoint
+            )
             logger.error(
                 "workflow execution failed",
                 extra={
@@ -449,8 +575,38 @@ class AnalysisRuntimeService:
                 now=datetime.now(timezone.utc),
                 principal_id=principal_id,
             )
+            if retry_operation_id is not None:
+                await self.repository.set_retry_status(
+                    operation_id=retry_operation_id,
+                    status="failed",
+                    now=datetime.now(timezone.utc),
+                    outcome=failure.code,
+                )
+        else:
+            if retry_operation_id is not None:
+                await self.repository.set_retry_status(
+                    operation_id=retry_operation_id,
+                    status="completed",
+                    now=datetime.now(timezone.utc),
+                    outcome="completed",
+                )
         finally:
+            if heartbeat is not None:
+                heartbeat.cancel()
+                await asyncio.gather(heartbeat, return_exceptions=True)
             self._tasks.pop(thread_id, None)
+
+    async def _retry_heartbeat(self, operation_id: str) -> None:
+        try:
+            while True:
+                await asyncio.sleep(_RETRY_HEARTBEAT_SECONDS)
+                await self.repository.set_retry_status(
+                    operation_id=operation_id,
+                    status="running",
+                    now=datetime.now(timezone.utc),
+                )
+        except asyncio.CancelledError:
+            raise
 
     async def _emit_terminal(
         self,

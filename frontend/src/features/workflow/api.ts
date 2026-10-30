@@ -5,12 +5,14 @@ import {
     parseWorkflowActivitySnapshot,
     type WorkflowEvent,
     type WorkflowActivitySnapshot,
+    type CheckpointIdentity,
 } from './workflow-activity';
 
 type StartRunRequest = components['schemas']['RunRequest'];
 type StartRunResponse = operations['start_run_api_v1_threads__thread_id__runs_post']['responses'][202]['content']['application/json'];
 type ResumeRunRequest = components['schemas']['ResumeRequest'];
 type ResumeRunResponse = operations['resume_run_api_v1_threads__thread_id__runs__run_id__resume_post']['responses'][202]['content']['application/json'];
+type RetryRunResponse = operations['retry_run_api_v1_threads__thread_id__runs__run_id__retry_post']['responses'][202]['content']['application/json'];
 
 export interface WorkflowRun {
     thread_id: string;
@@ -86,6 +88,28 @@ export async function resumeWorkflowRun(
     if (!response.ok) throw await readError(response, 'Resume run');
     const run = parseRunResponse(await response.json()) as ResumeRunResponse;
     if (run.thread_id !== threadId || run.run_id !== runId) throw new TypeError('resume response run identity mismatch.');
+    return run;
+}
+
+export async function retryWorkflowRun(
+    threadId: string,
+    runId: string,
+    checkpoint: CheckpointIdentity,
+    idempotencyKey: string,
+): Promise<WorkflowRun> {
+    const response = await fetch(`/api/v1/threads/${encodeURIComponent(threadId)}/runs/${encodeURIComponent(runId)}/retry`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+            'Content-Type': 'application/json',
+            'Idempotency-Key': idempotencyKey,
+            ...csrfHeaders(),
+        },
+        body: JSON.stringify({ contract_version: 'v1', checkpoint }),
+    });
+    if (!response.ok) throw await readError(response, 'Retry run');
+    const run = parseRunResponse(await response.json()) as RetryRunResponse;
+    if (run.thread_id !== threadId || !run.run_id || run.run_id === runId) throw new TypeError('retry response run identity mismatch.');
     return run;
 }
 
