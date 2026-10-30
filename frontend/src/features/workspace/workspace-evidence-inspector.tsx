@@ -76,10 +76,7 @@ function appendFinancialReportEvidence(
     const report = preview.financial_reports[0];
     if (!isRecord(report) || !isRecord(report.base)) return;
 
-    const periodField = isTraceableField(report.base.period_end_date) ? report.base.period_end_date : undefined;
-    const period = periodField?.value === null || periodField?.value === undefined
-        ? undefined
-        : String(periodField.value);
+    const period = getFinancialReportPeriod(report.base);
     const fields = Object.entries(report.base).filter(([key]) => key !== 'period_end_date');
     for (const [key, value] of fields) {
         if (items.length >= 12 || !isTraceableField(value) || value.value === null) continue;
@@ -95,6 +92,16 @@ function appendFinancialReportEvidence(
             formula: expression,
         });
     }
+}
+
+function getFinancialReportPeriod(base: UnknownRecord): string | undefined {
+    const periodEndDate = isTraceableField(base.period_end_date) ? base.period_end_date.value : undefined;
+    if (periodEndDate !== undefined && periodEndDate !== null) return String(periodEndDate);
+
+    const fiscalYear = isTraceableField(base.fiscal_year) ? base.fiscal_year.value : undefined;
+    if (fiscalYear === undefined || fiscalYear === null) return undefined;
+    const fiscalPeriod = isTraceableField(base.fiscal_period) ? base.fiscal_period.value : undefined;
+    return `${String(fiscalYear)}${fiscalPeriod !== undefined && fiscalPeriod !== null ? ` (${String(fiscalPeriod)})` : ''}`;
 }
 
 export function EvidenceInspector({
