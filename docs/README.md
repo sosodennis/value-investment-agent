@@ -15,7 +15,7 @@ Root `AGENTS.md` contains finance-domain constraints, agent skill routing, and r
 
 - [Agent Architecture Standard](../.agents/skills/architecture-standard-enforcer/references/cross-agent-architecture-standard.md) defines hard dependency and graph rules for agent work.
 - [Cross-agent refactor playbook](../finance-agent-core/docs/standards/refactor_lessons_and_cross_agent_playbook.md) records implementation lessons and review steps. It does not replace the standard.
-- [Professional Matte design](ui/stitch/DESIGN.md) describes the product's visual direction. The frontend guide explains how it maps to UI components and tokens.
+- [Frontend UI design guide](frontend-ui-guideline.md) describes the product's visual direction and semantic token usage.
 
 ## Contracts and service references
 

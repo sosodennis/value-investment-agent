@@ -3,7 +3,7 @@ import { WorkspacePageClient } from './WorkspacePageClient';
 
 export default function WorkspacePage() {
     return (
-        <Suspense fallback={<div className="min-h-screen w-full bg-slate-950" />}>
+        <Suspense fallback={<div className="min-h-screen w-full bg-background" />}>
             <WorkspacePageClient />
         </Suspense>
     );
