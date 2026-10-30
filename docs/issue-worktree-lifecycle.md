@@ -1,50 +1,45 @@
 # Issue and worktree lifecycle
 
-Use short-lived issue branches as the default. Create one parent integration branch and worktree only when a parent issue contains changes that must be tested and merged together. A permanent integration branch for every parent would add another long-lived branch, increase merge conflicts, and delay feedback. Keep `main` buildable and integrate small changes often.
+Use one short-lived issue branch and worktree per active change. Send completed work to `main` through a pull request. Create a parent integration branch only when its child changes cannot be merged safely on their own. Issue hierarchy does not require branch hierarchy.
 
-An issue hierarchy does not require a branch hierarchy. A parent issue can group child issues whose pull requests each target `main`. Prefer that path when each child can land safely on its own. Use a parent integration branch when intermediate child changes would leave the product or a shared contract in an invalid state. Use feature flags, expand-and-contract migrations, or branch-by-abstraction when they let you land safe increments on `main`.
+Keep issues open until their accepted change is on `main`. Use labels or project fields to show work in progress. Do not use a closed issue to mean "merged into an integration branch" or "ready for release".
 
-## Deliver one issue directly to `main`
+## Deliver an issue to `main`
 
-1. Confirm that the issue has a clear outcome and acceptance criteria.
+1. Define a user-visible outcome and testable acceptance criteria in the issue. Split unrelated outcomes into separate issues.
 2. Fetch `origin` and create a short-lived issue branch and worktree from `origin/main`.
-3. Keep the change within the issue. Link a new design or ownership gap to a separate issue labeled `blocker` before adding a workaround.
-4. Run the relevant tests and checks. Inspect the complete diff against the issue criteria.
-5. Open a pull request to `main`. Link the issue and use `Closes #<issue>` when the pull request satisfies its acceptance criteria.
-6. Merge after review, required checks, and any real-application acceptance pass.
-7. Confirm that `main` contains the change and GitHub closed the issue. Remove the merged branch and worktree.
+3. Keep the diff within the issue. Record a separate issue labeled `blocker` when the change exposes a gap in a shared contract, security boundary, ownership rule, or architecture. Do not hide the gap with a workaround.
+4. Run the checks that cover the changed behavior. Inspect the full diff against the issue criteria.
+5. Open a pull request targeting `main`. Link the issue. Use `Closes #<issue>` in the pull request description only when merging that pull request completes the issue's acceptance criteria.
+6. Merge after the required checks and review pass. Run browser or service acceptance when the issue changes a user workflow or deployment behavior.
+7. Verify the merge commit on `main`, record the evidence, and confirm GitHub closed the issue. Then remove the worktree and branch.
 
-Example:
+Use `Refs #<issue>` in commits and in pull requests that do not close the issue. Do not put `Closes`, `Fixes`, or `Resolves` in commits that may later reach `main` before the issue is complete. GitHub applies closing keywords in commit messages when those commits reach the default branch.
 
 ```sh
 git fetch origin
 git worktree add -b codex/issue-<id>-<short-name> ../value-investment-agent-issue-<id> origin/main
 ```
 
-## Coordinate a parent issue through an integration branch
+## Coordinate work that must land together
 
-Use this flow only when the parent acceptance criteria require the child changes to land together. Create one parent integration branch and keep one dedicated integration worktree checked out on that branch. Give each active child branch its own temporary worktree so work does not overwrite the integration checkout.
+Use a parent integration branch only when intermediate child changes would break a shared contract, leave the product unusable, or fail required integration checks. First consider a feature flag, a compatible migration, or branch-by-abstraction so safe increments can land on `main`.
 
-1. Create a parent issue with one bounded outcome, explicit final acceptance criteria, and linked GitHub sub-issues.
-2. Create `codex/issue-<parent>-integration` from the latest `origin/main`. Create a dedicated worktree for that branch.
-3. Record the branch, worktree path, Compose project name, child issues, acceptance commands, and expected cleanup in the parent issue.
-4. Create each child branch from the latest integration branch commit. Give it a temporary worktree while the issue is active.
-5. Keep each child change within its issue. Run the child checks and inspect the full diff before requesting integration.
-6. Open a pull request from the child branch to the parent integration branch. Link the child issue and parent issue. Do not use `Closes #<child>` on this pull request.
-7. Merge one child pull request at a time. After each merge, update the integration worktree and run the checks affected by the new code.
-8. Close the child issue only after the integration branch contains the change and the child acceptance criteria pass. Apply an `integrated` label or project status so readers can distinguish this from work already merged to `main`. Record the pull request, merge commit, and verification in the child issue.
-9. Delete the merged child branch and retire its temporary worktree. Stop its uniquely named Compose project. Keep its volumes unless their data is disposable or backed up.
-10. Open a pull request from the integration branch to `main` as soon as it is useful for review. Keep it draft until parent acceptance passes. Refresh it from `origin/main` before final verification.
-11. Merge the parent pull request only after all child issues are integrated and the parent acceptance criteria pass. Use `Closes #<parent>` in this pull request.
-12. Confirm that the merge commit is on `main` and GitHub closed the parent issue. Delete the integration branch and retire its worktree and Compose project.
+1. Give the parent one bounded outcome, final acceptance criteria, and linked GitHub sub-issues.
+2. Create `codex/issue-<parent>-integration` from the latest `origin/main`. Use one dedicated integration worktree.
+3. Record the integration branch, worktree path, Compose project name, child issues, acceptance commands, and cleanup plan in the parent issue.
+4. Create each child branch from the current integration branch commit. Give each active child its own temporary worktree.
+5. Open child pull requests against the integration branch. Link the child and parent issues. Use `Refs #<child>` and do not use a closing keyword.
+6. Merge child pull requests serially. After each merge, update the integration worktree and run the checks affected by that change.
+7. Mark each child `integrated` after its changes and child acceptance checks pass on the integration branch. Keep the child issue open. Record the child PR, integration commit, and check results.
+8. Open the parent pull request to `main` as soon as it is useful for review. Keep it in draft while parent acceptance remains incomplete.
+9. Refresh the integration branch from `origin/main`. Run parent acceptance against the resulting commit. Record the exact commit SHA and results.
+10. Merge the parent pull request only after every child and parent acceptance criterion passes. Use closing keywords for the parent and all completed child issues in the PR description. Confirm that GitHub closed those issues.
+11. Remove the integration worktree, local branch, and Compose project after confirming that the worktree has no uncommitted changes.
 
-GitHub only interprets closing keywords for pull requests that target the default branch. It ignores those keywords for child pull requests targeting the integration branch. Link child issues to their pull requests manually through the issue or pull request Development panel. Close child issues explicitly after integration checks pass.
+GitHub ignores closing keywords on pull requests that target a branch other than the default branch. Link integration pull requests to issues through GitHub's Development panel. Do not close child issues at integration time; the `integrated` label records that intermediate state.
 
-Closing a child issue at this stage means "integrated into the parent branch." It does not mean "merged to `main`" or "released." Keep the parent open until its pull request merges to `main`. If the acceptance criteria include deployment, keep the parent open until deployment is verified.
-
-Keep the integration branch short-lived. Merge the latest `origin/main` into it before child merges and final acceptance. Merge completed child pull requests promptly instead of waiting for every child. If several child changes must wait together or the integration phase lasts days, split the work and land safe increments on `main` behind a feature flag or through a compatible migration.
-
-Example:
+Keep the integration branch short-lived. Synchronize it with `origin/main` at least once per workday and merge completed child pull requests promptly. If integration work lasts more than five working days, split it and land safe changes on `main`, or record a blocker with the remaining dependency and a revised integration plan.
 
 ```sh
 git fetch origin
@@ -54,32 +49,46 @@ git worktree add -b codex/issue-<child>-<short-name> ../value-investment-agent-i
 
 ## Keep parallel work safe
 
-Start child branches from the current integration commit, not from an older child branch. Parallelize only when the changes do not conflict over files, APIs, schemas, migrations, or shared runtime data. Merge pull requests serially. Before merging each pull request, update its child branch from the latest integration branch and rerun affected checks. Rebase a private child branch. Merge the integration branch into a child branch when others depend on its published history.
+Start child branches from the latest integration commit, not from another child branch. Parallelize only when the changes do not overlap in files, APIs, schemas, migrations, or mutable test data. Merge pull requests serially. Update each child branch from the current integration branch and rerun affected checks before merging it.
 
-Keep one Git branch checked out in one worktree at a time. Give every active worktree a unique Compose project name and published host ports. Do not start a full stack in every worktree unless the task needs it.
+Check out a branch in only one worktree at a time. Give every active worktree a unique Compose project name and unique published host ports. Include the repository and issue or worktree identifier in the project name. Do not start a full stack in every worktree unless the checks need it.
 
-## Require these checks before merging
+## Require evidence before merge
 
-- The pull request diff matches its issue scope and acceptance criteria.
-- Relevant tests, type checks, lint, contract checks, and security checks pass.
-- Docker services required by the acceptance criteria are healthy.
-- Browser acceptance exercises the real route and user action when the change affects a user workflow. Mocked tests alone do not prove end-to-end behavior.
-- A schema or migration change has an explicit upgrade and rollback or recovery plan.
-- A blocker is resolved in its owning layer. Do not mark blocked work verified or merge it around the blocker.
+The pull request author records evidence that matches the change. Include:
 
-Protect `main` from direct pushes and force pushes. Require the repository's relevant automated checks before merge. Use a merge queue when multiple pull requests may land concurrently and the repository has that feature enabled. Delete merged remote branches automatically when the repository setting is available.
+- Issue number, pull request, source branch, target branch, and verified commit SHA.
+- Exact commands run and their exit codes. Identify checks that did not run.
+- Docker Compose project name and required service health for containerized acceptance.
+- Browser route, viewport, actions, observed result, and relevant run or artifact identity for user workflow acceptance.
+- Migration upgrade and recovery steps when the change alters persisted data.
+- Known failures, degradation, and unverified criteria. Do not report partial acceptance as complete.
 
-Review the age of open branches and pull requests during backlog cleanup. A growing count of stale branches or integration pull requests signals that issues are too broad, child changes are waiting too long, or branch cleanup is incomplete.
+Run tests that exercise behavior at the layer that owns it. Run type checks, lint, contract checks, and security checks that cover the diff. Verify required Docker services are healthy. For browser workflows, exercise the real route and user action; mocked tests do not establish end-to-end behavior. Resolve blockers in their owning layer before marking work `VERIFIED`, merging it, or closing its issue.
+
+Verify the exact commit that will merge. If the pull request changes after a check, rerun affected checks. Do not reuse evidence from an older commit. If a required acceptance criterion needs deployment, track deployment as a separate release or rollout issue unless deployment is explicitly part of the issue's outcome.
+
+## Protect `main` and keep CI usable
+
+Configure a GitHub ruleset for `main` that requires pull requests and the repository's passing contract checks. Block force pushes and deletion. Apply the rules to administrators where the repository plan supports it. Protect the default branch before relying on this document as a merge gate.
+
+Enable automatic deletion of merged head branches. Do not require a human approval count that the active maintainers cannot satisfy. Use CODEOWNERS only for paths with an available, accountable reviewer.
+
+Use a merge queue only when the repository owner and GitHub plan support it, concurrent merges justify it, and every required CI workflow handles the `merge_group` event. A queue without merge-group checks cannot report the required statuses.
+
+Keep required status-check names unique across workflows. Keep required PR checks fast enough for the project's change size. Run deployment or expensive release gates separately unless their results are required for every change.
+
+Review open pull requests, integration branches, and stale branches during backlog cleanup. Flag branches that exceed five working days, pull requests with no recent progress, and issues whose acceptance criteria changed. Close abandoned work with a reason and preserve its recoverable changes before deleting resources.
 
 ## Retire branches, worktrees, and Compose resources
 
-After a pull request merges, verify the merge target and confirm that no uncommitted work remains in the worktree. Then remove the worktree and local branch. Confirm that the remote branch was deleted automatically or delete it after verifying the merge. Run `git worktree prune` only to remove stale Git metadata for paths that no longer exist.
+After merge, verify the pull request target, merge commit, clean worktree status, and issue state. Remove the worktree before deleting its local branch. Confirm that GitHub deleted the remote branch or delete it after verifying the merge. Run `git worktree prune` only to remove metadata for paths that no longer exist.
 
-If a merged change breaks `main`, use a revert pull request to restore the last known good behavior. Do not rewrite shared `main` history. Keep the issue open or reopen it if its acceptance criteria no longer hold. Record the regression and follow-up issue in the revert pull request.
+For cancelled or abandoned work, do not delete a dirty worktree until you identify its owner and preserve needed changes as a commit, patch, or bundle. Check `git worktree list --porcelain` and the worktree status first. Do not force-remove a worktree to bypass uncommitted changes or a lock.
 
-Stop the matching Compose project with `docker compose -p <project> down`. Compose keeps named volumes by default. Before removing a volume, inspect its project label and contents. Delete it only when it contains disposable local data or a verified backup exists. Never use a global Docker prune command for issue cleanup.
+Stop only the matching Compose project with `docker compose -p <project> down`. Inspect its project labels, named volumes, bind mounts, and contents before removing data. Keep named volumes unless their data is disposable or a verified backup exists. Never run a global Docker prune command for issue cleanup.
 
-Do not delete branches or worktrees for unmerged issues. For cancelled work, preserve any uncommitted changes that the owner needs before retiring the checkout. Never remove a user's active checkout or shared project data as a side effect of closing an issue.
+After merging a change that causes a regression, open a revert pull request to restore the last known good behavior. Do not rewrite shared `main` history. Reopen the issue if its acceptance criteria no longer hold. Record the regression, affected commit, recovery action, and follow-up issue. For data migrations, follow the documented recovery plan rather than assuming a code revert restores data.
 
 ## Name branches and worktrees
 
@@ -89,20 +98,23 @@ Do not delete branches or worktrees for unmerged issues. For cancelled work, pre
 | Parent integration branch | `codex/issue-<parent>-integration` |
 | Parent integration worktree | `../value-investment-agent-issue-<parent>-integration` |
 | Child worktree | `../value-investment-agent-issue-<child>-<short-name>` |
-| Compose project | `via-<parent-or-issue>-<child-or-integration>` |
+| Compose project | `value-investment-agent-<issue-or-parent>-<worktree>` |
 
-Use [Docker development](../.agents/skills/docker-development/SKILL.md) when you start, test, or retire a Compose project. Keep task checklists in GitHub issues or Codex. Do not add a separate project-local task tracker.
+Use [Docker development](../.agents/skills/docker-development/SKILL.md) when you start, test, or retire a Compose project. Keep task checklists in GitHub issues or Codex. Do not add a project-local task tracker.
 
-## Record decisions and evidence
+## Record issue state and evidence
 
-The parent issue records its child issue links, integration branch and worktree, final pull request, merge commit, acceptance results, and cleanup. Each child issue records its pull request, integration merge commit, relevant test results, and cleanup. Keep credentials, provider keys, session cookies, and other secrets out of issues and pull requests.
+Use `integrated` to show that a child change passed on a parent integration branch. Use `VERIFIED` only after the full acceptance criteria pass against the commit being delivered to `main`. Close the issue only when its defined outcome is complete on `main`; use a separate rollout issue when release or deployment remains.
+
+The parent issue records its child links, integration branch and worktree, final pull request, merge commit, verification evidence, and cleanup. Each child issue records its pull request, integration commit, acceptance evidence, and cleanup. Keep credentials, provider keys, session cookies, and personal data out of issues and pull requests.
 
 ## References
 
-- [GitHub Flow](https://docs.github.com/en/get-started/using-github/github-flow) recommends descriptive branches, reviewable changes, pull requests, and deleting branches after merge.
-- [GitHub sub-issues](https://docs.github.com/en/issues/tracking-your-work-with-issues/using-issues/adding-sub-issues) provide a built-in parent and child issue hierarchy.
-- [Linking a pull request to an issue](https://docs.github.com/en/issues/tracking-your-work-with-issues/using-issues/linking-a-pull-request-to-an-issue) documents that closing keywords only work when the pull request targets the default branch.
-- [Protected branches](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches/about-protected-branches) documents required reviews, checks, merge queues, and push restrictions.
-- [Deleting and restoring branches in a pull request](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-branches-in-your-repository/deleting-and-restoring-branches-in-a-pull-request) documents when GitHub allows branch deletion and restoration.
-- [DORA trunk-based development](https://dora.dev/capabilities/trunk-based-development/) recommends small batches, frequent merges, and avoiding long integration phases.
-- [Git worktree](https://git-scm.com/docs/git-worktree) documents linked worktree creation, removal, and stale metadata cleanup.
+- [GitHub Flow](https://docs.github.com/en/get-started/using-github/github-flow) describes short-lived branches, pull requests, review, and branch cleanup.
+- [GitHub sub-issues](https://docs.github.com/en/issues/tracking-your-work-with-issues/using-issues/adding-sub-issues) provide parent and child issue links.
+- [Linking a pull request to an issue](https://docs.github.com/en/issues/tracking-your-work-with-issues/using-issues/linking-a-pull-request-to-an-issue) documents closing keywords and default-branch behavior.
+- [Protected branches](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches/about-protected-branches) documents required reviews, status checks, and push restrictions.
+- [Managing a merge queue](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/configuring-pull-request-merges/managing-a-merge-queue) documents plan eligibility and `merge_group` checks.
+- [Automatic branch deletion](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/configuring-pull-request-merges/managing-the-automatic-deletion-of-branches) describes merged-branch cleanup.
+- [DORA trunk-based development](https://dora.dev/capabilities/trunk-based-development/) recommends small batches, frequent merges, and short-lived branches.
+- [Git worktree](https://git-scm.com/docs/git-worktree) documents linked worktree creation, removal, locking, and pruning.

@@ -520,19 +520,19 @@ export const ValuationDistributionSection: React.FC<ValuationDistributionSection
                         <AreaChart data={distributionChartData}>
                             <defs>
                                 <linearGradient id="valuationDensity" x1="0" y1="0" x2="0" y2="1">
-                                    <stop offset="5%" stopColor="#22d3ee" stopOpacity={0.55} />
-                                    <stop offset="95%" stopColor="#22d3ee" stopOpacity={0.05} />
+                                    <stop offset="5%" stopColor="var(--chart-series-primary)" stopOpacity={0.55} />
+                                    <stop offset="95%" stopColor="var(--chart-series-primary)" stopOpacity={0.05} />
                                 </linearGradient>
                             </defs>
                             <CartesianGrid
-                                stroke="rgba(148,163,184,0.12)"
+                                stroke="var(--chart-grid-soft)"
                                 strokeDasharray="3 3"
                                 vertical={false}
                             />
                             <XAxis
                                 type="number"
                                 dataKey="x"
-                                tick={{ fill: '#94a3b8', fontSize: 11 }}
+                                tick={{ fill: 'var(--chart-axis)', fontSize: 11 }}
                                 tickFormatter={(value) => `$${Number(value).toFixed(0)}`}
                                 tickCount={9}
                                 minTickGap={24}
@@ -555,55 +555,49 @@ export const ValuationDistributionSection: React.FC<ValuationDistributionSection
                             {typeof distributionSummary?.percentile_5 === 'number' && (
                                 <ReferenceLine
                                     x={distributionSummary.percentile_5}
-                                    stroke="#f43f5e"
+                                    stroke="var(--chart-series-down)"
                                     strokeDasharray="4 4"
                                 />
                             )}
                             {typeof distributionSummary?.median === 'number' && (
                                 <ReferenceLine
                                     x={distributionSummary.median}
-                                    stroke="#10b981"
+                                    stroke="var(--chart-series-up)"
                                     strokeDasharray="4 4"
                                 />
                             )}
                             {typeof confidenceLeft === 'number' && (
                                 <ReferenceLine
                                     x={confidenceLeft}
-                                    stroke="#34d399"
+                                    stroke="var(--chart-series-up-muted)"
                                     strokeDasharray="3 3"
                                 />
                             )}
                             {typeof confidenceRight === 'number' && (
                                 <ReferenceLine
                                     x={confidenceRight}
-                                    stroke="#34d399"
+                                    stroke="var(--chart-series-up-muted)"
                                     strokeDasharray="3 3"
                                 />
                             )}
                             {typeof distributionSummary?.percentile_95 === 'number' && (
                                 <ReferenceLine
                                     x={distributionSummary.percentile_95}
-                                    stroke="#22d3ee"
+                                    stroke="var(--chart-series-primary)"
                                     strokeDasharray="4 4"
                                 />
                             )}
                             {typeof currentPriceAnchor === 'number' && (
                                 <ReferenceLine
                                     x={currentPriceAnchor}
-                                    stroke="#fb7185"
+                                    stroke="var(--chart-series-down)"
                                     strokeWidth={2.5}
                                     strokeDasharray="6 4"
                                     ifOverflow="extendDomain"
                                 />
                             )}
                             <Tooltip
-                                contentStyle={{
-                                    background: 'rgba(2, 6, 23, 0.95)',
-                                    border: '1px solid rgba(34, 211, 238, 0.35)',
-                                    borderRadius: 8,
-                                    color: '#e2e8f0',
-                                }}
-                                cursor={{ stroke: 'rgba(34, 211, 238, 0.35)', strokeDasharray: '4 4' }}
+                                cursor={{ stroke: 'var(--chart-tooltip-border)', strokeDasharray: '4 4' }}
                                 content={({ active, payload }) => {
                                     const hoveredPrice = readPayloadX(payload?.[0]?.payload);
                                     if (!active || typeof hoveredPrice !== 'number') return null;
@@ -616,32 +610,20 @@ export const ValuationDistributionSection: React.FC<ValuationDistributionSection
                                         .sort((left, right) => left.distance - right.distance);
                                     return (
                                         <div
-                                            style={{
-                                                background: 'rgba(2, 6, 23, 0.95)',
-                                                border: '1px solid rgba(34, 211, 238, 0.35)',
-                                                borderRadius: 8,
-                                                color: '#e2e8f0',
-                                                padding: '10px 12px',
-                                                minWidth: 210,
-                                            }}
+                                            className="min-w-[210px] rounded-lg border border-chart-tooltip-border bg-chart-tooltip-background px-3 py-2 text-chart-tooltip-foreground shadow-lg"
                                         >
-                                            <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 6 }}>
+                                            <div className="mb-1.5 text-xs font-bold">
                                                 Hover Price: {formatCurrency(hoveredPrice)}
                                             </div>
                                             {matchedReferences.length > 0 && (
-                                                <div style={{ display: 'grid', gap: 3 }}>
+                                                <div className="grid gap-1">
                                                     {matchedReferences.map((row) => (
                                                         <div
                                                             key={row.key}
-                                                            style={{
-                                                                display: 'flex',
-                                                                justifyContent: 'space-between',
-                                                                gap: 8,
-                                                                fontSize: 11,
-                                                            }}
+                                                            className="flex justify-between gap-2 text-[11px]"
                                                         >
-                                                            <span style={{ color: '#94a3b8' }}>{row.label}</span>
-                                                            <span style={{ color: '#e2e8f0' }}>
+                                                            <span className="text-chart-tooltip-muted">{row.label}</span>
+                                                            <span className="text-chart-tooltip-foreground">
                                                                 {formatCurrency(row.value)}
                                                             </span>
                                                         </div>
@@ -655,7 +637,7 @@ export const ValuationDistributionSection: React.FC<ValuationDistributionSection
                             <Area
                                 type="monotone"
                                 dataKey="density"
-                                stroke="#22d3ee"
+                                stroke="var(--chart-series-primary)"
                                 fill="url(#valuationDensity)"
                                 strokeWidth={2}
                                 dot={false}

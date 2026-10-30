@@ -16,7 +16,12 @@ import {
     UTCTimestamp,
 } from 'lightweight-charts';
 import { CrosshairSyncState } from './useCrosshairSync';
-import { TECHNICAL_PALETTE } from '../technicalPalette';
+import {
+    resolveChartColor,
+    useChartTheme,
+    type ChartColorRole,
+    type ChartValueColorRole,
+} from '@/lib/chart-theme';
 
 export interface CandlestickDatum {
     time: UTCTimestamp;
@@ -29,13 +34,13 @@ export interface CandlestickDatum {
 export interface VolumeDatum {
     time: UTCTimestamp;
     value: number;
-    color?: string;
+    color?: ChartValueColorRole;
 }
 
 export interface OverlayLineSeries {
     id: string;
     data: { time: UTCTimestamp; value: number }[];
-    color: string;
+    color: ChartColorRole;
     lineWidth?: 1 | 2 | 3 | 4;
     lineStyle?: 'solid' | 'dashed';
 }
@@ -54,6 +59,18 @@ interface TechnicalCandlestickChartProps {
 
 const DEFAULT_HEIGHT = 320;
 type VisibleTimeRange = IRange<Time>;
+type VolumeChartSeriesGroup = Record<'default' | ChartValueColorRole, ISeriesApi<'Histogram'>>;
+type VolumeChartPoint = { time: UTCTimestamp; value: number } | { time: UTCTimestamp };
+
+const volumeDataForRole = (
+    data: VolumeDatum[],
+    role: 'default' | ChartValueColorRole
+): VolumeChartPoint[] => data.map((point) => {
+    const matchesRole = role === 'default'
+        ? point.color === undefined
+        : point.color === role;
+    return matchesRole ? { time: point.time, value: point.value } : { time: point.time };
+});
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
     typeof value === 'object' && value !== null;
@@ -119,10 +136,12 @@ export const TechnicalCandlestickChart: React.FC<TechnicalCandlestickChartProps>
     syncId,
     syncState,
 }) => {
+    const chartTheme = useChartTheme();
     const containerRef = useRef<HTMLDivElement | null>(null);
+    const chartThemeRef = useRef(chartTheme);
     const chartRef = useRef<IChartApi | null>(null);
     const candleSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
-    const volumeSeriesRef = useRef<ISeriesApi<'Histogram'> | null>(null);
+    const volumeSeriesRef = useRef<VolumeChartSeriesGroup | null>(null);
     const overlaySeriesRef = useRef<ISeriesApi<'Line'>[]>([]);
     const isSyncingRef = useRef(false);
     const lastEmittedRef = useRef<{ time: UTCTimestamp | null; pointKey: string } | null>(null);
@@ -154,6 +173,10 @@ export const TechnicalCandlestickChart: React.FC<TechnicalCandlestickChartProps>
     }, [syncState.activeCrosshairSourceId]);
 
     useEffect(() => {
+        chartThemeRef.current = chartTheme;
+    }, [chartTheme]);
+
+    useEffect(() => {
         const container = containerRef.current;
         if (!container) return undefined;
 
@@ -162,23 +185,23 @@ export const TechnicalCandlestickChart: React.FC<TechnicalCandlestickChartProps>
             height,
             layout: {
                 background: { type: ColorType.Solid, color: 'transparent' },
-                textColor: TECHNICAL_PALETTE.axisText,
+                textColor: chartThemeRef.current?.axisText ?? 'transparent',
                 fontSize: 11,
-                fontFamily: 'ui-sans-serif, system-ui, -apple-system, sans-serif',
+                fontFamily: chartThemeRef.current?.fontFamily ?? window.getComputedStyle(document.body).fontFamily,
                 attributionLogo: false,
             },
             grid: {
-                vertLines: { color: TECHNICAL_PALETTE.gridLineSoft },
-                horzLines: { color: TECHNICAL_PALETTE.gridLineSoft },
+                vertLines: { color: chartThemeRef.current?.gridLineSoft ?? 'transparent' },
+                horzLines: { color: chartThemeRef.current?.gridLineSoft ?? 'transparent' },
             },
             crosshair: {
                 mode: CrosshairMode.Normal,
             },
             rightPriceScale: {
-                borderColor: TECHNICAL_PALETTE.axisBorder,
+                borderColor: chartThemeRef.current?.axisBorder ?? 'transparent',
             },
             timeScale: {
-                borderColor: TECHNICAL_PALETTE.axisBorder,
+                borderColor: chartThemeRef.current?.axisBorder ?? 'transparent',
                 rightOffset: 0,
                 barSpacing: 6,
                 fixLeftEdge: true,
@@ -198,22 +221,40 @@ export const TechnicalCandlestickChart: React.FC<TechnicalCandlestickChartProps>
         });
 
         const candleSeries = chart.addSeries(CandlestickSeries, {
-            upColor: TECHNICAL_PALETTE.candleUp,
-            downColor: TECHNICAL_PALETTE.candleDown,
-            wickUpColor: TECHNICAL_PALETTE.candleUp,
-            wickDownColor: TECHNICAL_PALETTE.candleDown,
+            upColor: chartThemeRef.current?.seriesUp ?? 'transparent',
+            downColor: chartThemeRef.current?.seriesDown ?? 'transparent',
+            wickUpColor: chartThemeRef.current?.seriesUp ?? 'transparent',
+            wickDownColor: chartThemeRef.current?.seriesDown ?? 'transparent',
             borderVisible: false,
         });
 
         const volumeSeries = showVolume
-            ? chart.addSeries(HistogramSeries, {
-                  color: TECHNICAL_PALETTE.volume,
-                  priceScaleId: '',
-                  priceFormat: { type: 'volume' },
-              })
+            ? {
+                  default: chart.addSeries(HistogramSeries, {
+                      color: chartThemeRef.current?.seriesNeutralMuted ?? 'transparent',
+                      priceScaleId: '',
+                      priceFormat: { type: 'volume' },
+                  }),
+                  seriesUpMuted: chart.addSeries(HistogramSeries, {
+                      color: chartThemeRef.current?.seriesUpMuted ?? 'transparent',
+                      priceScaleId: '',
+                      priceFormat: { type: 'volume' },
+                  }),
+                  seriesDownMuted: chart.addSeries(HistogramSeries, {
+                      color: chartThemeRef.current?.seriesDownMuted ?? 'transparent',
+                      priceScaleId: '',
+                      priceFormat: { type: 'volume' },
+                  }),
+              }
             : null;
         if (volumeSeries) {
-            volumeSeries.priceScale().applyOptions({
+            volumeSeries.default.priceScale().applyOptions({
+                scaleMargins: { top: 0.8, bottom: 0 },
+            });
+            volumeSeries.seriesUpMuted.priceScale().applyOptions({
+                scaleMargins: { top: 0.8, bottom: 0 },
+            });
+            volumeSeries.seriesDownMuted.priceScale().applyOptions({
                 scaleMargins: { top: 0.8, bottom: 0 },
             });
         }
@@ -332,7 +373,9 @@ export const TechnicalCandlestickChart: React.FC<TechnicalCandlestickChartProps>
         if (!chartRef.current || !candleSeriesRef.current) return;
         candleSeriesRef.current.setData(candles);
         if (volumeSeriesRef.current) {
-            volumeSeriesRef.current.setData(volumes);
+            volumeSeriesRef.current.default.setData(volumeDataForRole(volumes, 'default'));
+            volumeSeriesRef.current.seriesUpMuted.setData(volumeDataForRole(volumes, 'seriesUpMuted'));
+            volumeSeriesRef.current.seriesDownMuted.setData(volumeDataForRole(volumes, 'seriesDownMuted'));
         }
         if (candles.length > 0 && !hasDataRef.current) {
             chartRef.current.timeScale().fitContent();
@@ -343,12 +386,40 @@ export const TechnicalCandlestickChart: React.FC<TechnicalCandlestickChartProps>
     }, [candles, volumes]);
 
     useEffect(() => {
+        if (!chartTheme || !chartRef.current) return;
+        chartRef.current.applyOptions({
+            layout: { textColor: chartTheme.axisText, fontFamily: chartTheme.fontFamily },
+            grid: {
+                vertLines: { color: chartTheme.gridLineSoft },
+                horzLines: { color: chartTheme.gridLineSoft },
+            },
+            rightPriceScale: { borderColor: chartTheme.axisBorder },
+            timeScale: { borderColor: chartTheme.axisBorder },
+        });
+        candleSeriesRef.current?.applyOptions({
+            upColor: chartTheme.seriesUp,
+            downColor: chartTheme.seriesDown,
+            wickUpColor: chartTheme.seriesUp,
+            wickDownColor: chartTheme.seriesDown,
+        });
+        volumeSeriesRef.current?.default.applyOptions({ color: chartTheme.seriesNeutralMuted });
+        volumeSeriesRef.current?.seriesUpMuted.applyOptions({ color: chartTheme.seriesUpMuted });
+        volumeSeriesRef.current?.seriesDownMuted.applyOptions({ color: chartTheme.seriesDownMuted });
+        overlaySeriesRef.current.forEach((series, index) => {
+            const overlay = overlays[index];
+            if (overlay) series.applyOptions({ color: resolveChartColor(chartTheme, overlay.color) });
+        });
+    }, [chartTheme, overlays]);
+
+    useEffect(() => {
         if (!chartRef.current) return;
         const chart = chartRef.current;
         overlaySeriesRef.current.forEach((series) => chart.removeSeries(series));
         overlaySeriesRef.current = overlays.map((overlay) =>
             chart.addSeries(LineSeries, {
-                color: overlay.color,
+                color: chartThemeRef.current
+                    ? resolveChartColor(chartThemeRef.current, overlay.color)
+                    : 'transparent',
                 lineWidth: overlay.lineWidth ?? 1,
                 lineStyle: overlay.lineStyle === 'dashed' ? LineStyle.Dashed : LineStyle.Solid,
                 priceLineVisible: false,

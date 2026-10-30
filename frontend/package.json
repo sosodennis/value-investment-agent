@@ -10,7 +10,8 @@
     "generate:api-contract": "openapi-typescript ../contracts/openapi.json -o src/types/generated/api-contract.ts",
     "sync:api-contract": "bash ../scripts/generate-contracts.sh",
     "typecheck": "tsc --noEmit",
-    "test": "vitest"
+    "test": "vitest",
+    "check:contrast": "node scripts/check-theme-contrast.mjs"
   },
   "dependencies": {
     "@radix-ui/react-alert-dialog": "^1.2.1",
