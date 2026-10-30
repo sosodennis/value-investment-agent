@@ -18,6 +18,9 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import type { WorkspaceRouteIntent } from './workspace-route-intent';
+import { ResizableGroup, ResizableHandle, ResizablePanel } from '@/components/ui/resizable';
+import { EvidenceInspector, EvidenceInspectorTrigger, buildEvidenceItems, type EvidenceSelection } from './workspace-evidence-inspector';
+import { adaptAgentOutput } from '@/types/agents/output-adapter';
 
 type WorkspacePageProps = { assistantId?: string; initialTicker?: string | null; initialPrompt?: string | null; autoStart?: boolean; routeIntent?: WorkspaceRouteIntent };
 const NEW_ANALYSIS_INTENT: WorkspaceRouteIntent = { kind: 'new-analysis' };
@@ -41,6 +44,7 @@ export function WorkspacePage({ assistantId = 'agent', initialTicker = null, ini
     const [ticker, setTicker] = useState(initialTicker?.toUpperCase() ?? '');
     const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
     const [activeTab, setActiveTab] = useState<ReportTab>('activity');
+    const [selectedEvidence, setSelectedEvidence] = useState<EvidenceSelection | null>(null);
     const autoStarted = useRef(false);
     const agents: AgentInfo[] = useMemo(() => AGENT_CONFIGS.map((config) => ({
         id: config.id,
@@ -56,6 +60,19 @@ export function WorkspacePage({ assistantId = 'agent', initialTicker = null, ini
     const historyThreadId = routeIntent.kind === 'exact-run' ? routeIntent.threadId : null;
     const historyRunId = routeIntent.kind === 'exact-run' ? routeIntent.runId : null;
     const isHistoryRoute = routeIntent.kind !== 'new-analysis';
+    const evidenceAgent = useMemo(() => {
+        const agentId = activeTab === 'activity' ? selectedAgentId ?? preferredAgentId : activeTab;
+        return agents.find((item) => item.id === agentId) ?? null;
+    }, [activeTab, agents, preferredAgentId, selectedAgentId]);
+    const evidenceItems = useMemo(() => {
+        if (!evidenceAgent) return [];
+        const output = agent.agentOutputs[evidenceAgent.id] ?? null;
+        if (!output) return [];
+        return buildEvidenceItems(
+            evidenceAgent,
+            adaptAgentOutput(evidenceAgent.id, output, `workspace_evidence.${evidenceAgent.id}`),
+        );
+    }, [agent.agentOutputs, evidenceAgent]);
 
     useEffect(() => {
         if (!historyThreadId || !historyRunId) return;
@@ -84,7 +101,10 @@ export function WorkspacePage({ assistantId = 'agent', initialTicker = null, ini
         <main className="mx-auto grid min-h-[calc(100dvh-3.5rem)] w-full max-w-[1600px] grid-rows-[auto_auto_1fr] text-foreground">
             <header className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3 sm:px-6">
                 <div className="flex min-w-0 items-center gap-3">
-                    <Sheet><SheetTrigger asChild><Button variant="outline" size="icon" className="min-[1440px]:hidden" aria-label="Open agent list"><Menu /></Button></SheetTrigger><SheetContent side="left" className="w-[min(22rem,90vw)] p-0"><SheetHeader className="border-b px-4 py-4"><SheetTitle>Analysis agents</SheetTitle></SheetHeader>{roster}</SheetContent></Sheet>
+                    <div className="flex items-center gap-2 min-[1440px]:hidden">
+                        <Sheet><SheetTrigger asChild><Button variant="outline" size="icon" aria-label="Open agent list"><Menu /></Button></SheetTrigger><SheetContent side="left" className="w-[min(22rem,90vw)] p-0"><SheetHeader className="border-b px-4 py-4"><SheetTitle>Analysis agents</SheetTitle></SheetHeader>{roster}</SheetContent></Sheet>
+                        <Sheet><SheetTrigger asChild><EvidenceInspectorTrigger /></SheetTrigger><SheetContent side="right" className="w-[min(24rem,94vw)] p-0"><EvidenceInspector items={evidenceItems} selected={selectedEvidence} onSelect={setSelectedEvidence} /></SheetContent></Sheet>
+                    </div>
                     <div className="min-w-0"><p className="text-xs text-muted-foreground">Analysis workspace</p><h1 className="truncate text-lg font-semibold">{routeIntent.kind === 'invalid-history' ? 'Analysis link unavailable' : ticker || agent.workflow ? ticker || 'Analysis run' : routeIntent.kind === 'exact-run' ? 'Analysis run' : 'New analysis'}</h1></div>
                 </div>
                 <div className="flex items-center gap-2">
@@ -99,9 +119,14 @@ export function WorkspacePage({ assistantId = 'agent', initialTicker = null, ini
                 {agent.threadId && <p className="ml-auto max-w-full truncate font-mono text-xs text-muted-foreground" title={agent.threadId}>Thread {agent.threadId}</p>}
             </form>}
 
-            <div className="grid min-h-0 min-[1440px]:grid-cols-[17rem_minmax(0,1fr)]">
-                <aside className="hidden border-r min-[1440px]:block" aria-label="Analysis agents">{roster}</aside>
-                <section className="min-w-0 px-4 py-5 sm:px-6">
+            <div className="min-h-0">
+                <ResizableGroup direction="horizontal" defaultSizes={[18, 58, 24]} minSizes={[15, 34, 18]} className="h-full min-h-[32rem]">
+                    <ResizablePanel index={0} className="hidden border-r min-[1440px]:block">
+                        <aside aria-label="Analysis agents">{roster}</aside>
+                    </ResizablePanel>
+                    <ResizableHandle index={0} className="hidden min-[1440px]:flex" />
+                    <ResizablePanel index={1} className="max-[1439px]:!flex-[1_1_100%]">
+                        <section className="min-w-0 px-4 py-5 sm:px-6">
                     {routeIntent.kind === 'invalid-history' && <Alert variant="destructive" role="alert" className="mb-4"><CircleAlert className="size-4" /><AlertTitle>History link is incomplete</AlertTitle><AlertDescription>This history link must include both a thread ID and a run ID. Return to dashboard history and open the run again.</AlertDescription></Alert>}
                     {agent.error && <Alert variant="destructive" role="alert" className="mb-4"><CircleAlert className="size-4" /><AlertTitle>{routeIntent.kind === 'exact-run' ? 'Selected analysis run could not be loaded' : 'Workflow request failed'}</AlertTitle><AlertDescription className="break-words">{routeIntent.kind === 'exact-run' && historyRunId ? `Run ${historyRunId} for thread ${historyThreadId} is unavailable. ` : ''}{agent.error}</AlertDescription></Alert>}
                     {routeIntent.kind === 'exact-run' && agent.isLoading && !agent.workflow && <p role="status" className="mb-4 text-sm text-muted-foreground">Loading selected analysis run {routeIntent.runId}…</p>}
@@ -111,9 +136,15 @@ export function WorkspacePage({ assistantId = 'agent', initialTicker = null, ini
                             {reportTabs.map((tab) => <TabsTrigger key={tab.id} value={tab.id} className="min-h-10 shrink-0 rounded-none border-b-2 border-transparent px-3 data-[state=active]:border-primary data-[state=active]:bg-transparent">{tab.label}</TabsTrigger>)}
                         </TabsList>
                         <TabsContent value="activity"><ActivityPanel workflow={agent.workflow} connectionState={agent.connectionState} onResumeInteraction={agent.submitCommand} isSubmitting={agent.isSubmittingInteraction} /></TabsContent>
-                        {reportTabs.filter((item): item is { id: Exclude<ReportTab, 'activity'>; label: string } => item.id !== 'activity').map((item) => <TabsContent key={item.id} value={item.id}><ReportPanel tab={item.id} outputs={agent.agentOutputs} statuses={agent.agentStatuses} ticker={ticker} /></TabsContent>)}
+                        {reportTabs.filter((item): item is { id: Exclude<ReportTab, 'activity'>; label: string } => item.id !== 'activity').map((item) => <TabsContent key={item.id} value={item.id}><ReportPanel tab={item.id} outputs={agent.agentOutputs} statuses={agent.agentStatuses} ticker={ticker} onSelectEvidence={setSelectedEvidence} selectedEvidenceId={selectedEvidence?.id} /></TabsContent>)}
                     </Tabs>
-                </section>
+                        </section>
+                    </ResizablePanel>
+                    <ResizableHandle index={1} className="hidden min-[1440px]:flex" />
+                    <ResizablePanel index={2} className="hidden border-l min-[1440px]:block">
+                        <EvidenceInspector items={evidenceItems} selected={selectedEvidence} onSelect={setSelectedEvidence} />
+                    </ResizablePanel>
+                </ResizableGroup>
             </div>
         </main>
     );
@@ -275,7 +306,7 @@ function ValuationApprovalPrompt({ interaction, disabled, onSubmit }: {
     </Alert>;
 }
 
-export function ReportPanel({ tab, outputs, statuses, ticker }: { tab: Exclude<ReportTab, 'activity'>; outputs: Record<string, StandardAgentOutput | null>; statuses: Record<string, AgentStatus>; ticker: string }) {
+export function ReportPanel({ tab, outputs, statuses, ticker, onSelectEvidence, selectedEvidenceId }: { tab: Exclude<ReportTab, 'activity'>; outputs: Record<string, StandardAgentOutput | null>; statuses: Record<string, AgentStatus>; ticker: string; onSelectEvidence?: (item: EvidenceSelection) => void; selectedEvidenceId?: string | null }) {
     const output = outputs[tab] ?? null;
     const config = AGENT_CONFIGS.find((item) => item.id === tab);
     const status = statuses[tab] ?? 'idle';
@@ -290,5 +321,5 @@ export function ReportPanel({ tab, outputs, statuses, ticker }: { tab: Exclude<R
         role: config.role,
         status,
     };
-    return <WorkspaceOutputPanel agent={agent} output={output} resolvedTicker={ticker || null} status={status} />;
+    return <WorkspaceOutputPanel agent={agent} output={output} resolvedTicker={ticker || null} status={status} onSelectEvidence={onSelectEvidence} selectedEvidenceId={selectedEvidenceId} />;
 }

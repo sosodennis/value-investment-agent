@@ -398,4 +398,46 @@ describe('WorkspacePage', () => {
         screen.getByText('Verdict Summary (Simulation)');
         screen.getByText(/Positive outlook/);
     });
+
+    it('keeps the desktop workbench resizable and exposes selected report evidence', () => {
+        const output: StandardAgentOutput = {
+            kind: 'debate.output', version: 'v1', summary: 'Evidence-backed debate.',
+            preview: { verdict_display: 'Positive outlook', thesis_display: '0.82' },
+            reference: { artifact_id: 'artifact-debate-1', download_url: '/api/v1/artifacts/artifact-debate-1', type: 'debate' },
+        };
+        hook.value = defaultHook({
+            agentOutputs: { debate: output },
+            agentStatuses: { debate: 'done' },
+            workflow: workflowState({ run_status: 'completed' }),
+        });
+        render(<WorkspacePage />);
+
+        expect(screen.getAllByRole('separator', { name: 'Resize workspace panel' })).toHaveLength(2);
+        fireEvent.click(screen.getByRole('tab', { name: 'Debate' }));
+        fireEvent.click(screen.getByRole('button', { name: /Verdict Display/i }));
+
+        expect(screen.getByRole('heading', { name: 'Evidence inspector' })).toBeTruthy();
+        expect(screen.getByText('Artifact artifact-debate-1')).toBeTruthy();
+        expect(screen.getByText('This exact run')).toBeTruthy();
+        fireEvent.click(screen.getByRole('tab', { name: 'Activity' }));
+        expect(screen.getAllByText('Positive outlook').length).toBeGreaterThanOrEqual(2);
+        expect(screen.getByText('Artifact artifact-debate-1')).toBeTruthy();
+    });
+
+    it('opens evidence details from the mobile evidence sheet', () => {
+        hook.value = defaultHook({
+            agentOutputs: {
+                debate: {
+                    kind: 'debate.output', version: 'v1', summary: 'Evidence-backed debate.',
+                    preview: { verdict_display: 'Positive outlook' },
+                },
+            },
+            agentStatuses: { debate: 'done' },
+        });
+        render(<WorkspacePage />);
+        fireEvent.click(screen.getByRole('button', { name: 'Evidence' }));
+        const dialog = screen.getByRole('dialog');
+        expect(dialog).toBeTruthy();
+        expect(within(dialog).getByText('Evidence inspector')).toBeTruthy();
+    });
 });

@@ -3,6 +3,8 @@ import {
     FinancialReport,
     TraceableField
 } from '@/types/agents/fundamental';
+import type { ArtifactReference } from '@/types/agents';
+import type { EvidenceSelection } from '../../workspace-evidence-inspector';
 import { Info } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import {
@@ -17,9 +19,11 @@ import {
 interface FinancialTableProps {
     reports: FinancialReport[];
     ticker: string;
+    artifactReference?: ArtifactReference | null;
+    onSelectEvidence?: (item: EvidenceSelection) => void;
 }
 
-const FinancialTableComponent: React.FC<FinancialTableProps> = ({ reports, ticker }) => {
+const FinancialTableComponent: React.FC<FinancialTableProps> = ({ reports, ticker, artifactReference, onSelectEvidence }) => {
     // Memoize sorted reports to prevent recalculation on every render
     const sortedReports = useMemo(() => {
         if (!reports || reports.length === 0) return [];
@@ -80,7 +84,7 @@ const FinancialTableComponent: React.FC<FinancialTableProps> = ({ reports, ticke
                 {sortedReports.map((r, i) => (
                     <TableCell key={i} className="text-right font-mono tabular-nums">
                         <div className="group relative inline-block">
-                            {formatter(accessor(r))}
+                            {renderEvidenceValue(label, formatter(accessor(r)), accessor(r), r, i)}
                             {accessor(r)?.provenance && (
                                 <div className="invisible group-hover:visible absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 rounded-md border border-border bg-popover p-2 text-left text-xs text-popover-foreground whitespace-pre-wrap break-words">
                                     {accessor(r)?.provenance?.concept ? `XBRL: ${accessor(r)?.provenance?.concept}` : ''}
@@ -92,6 +96,48 @@ const FinancialTableComponent: React.FC<FinancialTableProps> = ({ reports, ticke
                     </TableCell>
                 ))}
             </TableRow>
+        );
+    };
+
+    const renderEvidenceValue = (
+        label: string,
+        displayValue: string,
+        field: TraceableField | null | undefined,
+        report: FinancialReport,
+        index: number,
+    ) => {
+        if (!onSelectEvidence || !field || field.value === null || field.value === undefined) {
+            return displayValue;
+        }
+        const concept = field.provenance?.concept;
+        const expression = field.provenance?.expression;
+        const periodValue = report.base.period_end_date?.value;
+        const fiscalYear = report.base.fiscal_year?.value;
+        const fiscalPeriod = report.base.fiscal_period?.value;
+        const period = periodValue !== null && periodValue !== undefined
+            ? String(periodValue)
+            : fiscalYear !== null && fiscalYear !== undefined
+                ? `${String(fiscalYear)}${fiscalPeriod ? ` (${String(fiscalPeriod)})` : ''}`
+                : undefined;
+        const artifactId = artifactReference?.artifact_id;
+        return (
+            <button
+                type="button"
+                className="rounded-sm border-b border-dashed border-primary/50 text-primary underline-offset-2 hover:bg-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                aria-label={`Inspect ${label} evidence for ${period ?? `period ${index + 1}`}`}
+                onClick={() => onSelectEvidence({
+                    id: `fundamental:financial-report:${label}:${index}`,
+                    title: `Financial report · ${label}`,
+                    value: displayValue,
+                    source: concept ? `SEC XBRL concept ${concept}` : artifactId ? `Financial report artifact ${artifactId}` : 'Typed financial report',
+                    period,
+                    formula: expression,
+                    artifactId,
+                    artifactUrl: artifactReference?.download_url,
+                })}
+            >
+                {displayValue}
+            </button>
         );
     };
 
