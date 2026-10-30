@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { clientLogger } from '@/lib/logger';
 import type { AgentStatus, StandardAgentOutput } from '@/types/agents';
 import { buildArtifactUrl } from '@/features/artifacts/api';
-import { applyWorkflowEvent, boundedReconnectDelay, cancelWorkflowRun, consumeWorkflowEvents, createWorkflowActivityState, getActivitySnapshot, resumeWorkflowRun, startWorkflowRun, type InteractionId, type InteractionResponse, type WorkflowActivitySnapshot, type WorkflowInteraction } from '@/features/workflow';
+import { applyWorkflowEvent, boundedReconnectDelay, cancelWorkflowRun, consumeWorkflowEvents, createWorkflowActivityState, getActivitySnapshot, resumeWorkflowRun, retryWorkflowRun, startWorkflowRun, type InteractionId, type InteractionResponse, type WorkflowActivitySnapshot, type WorkflowInteraction } from '@/features/workflow';
 import { useAgentReducer } from './useAgentReducer';
 
 const makeThreadId = () => `thread_${Date.now()}`;
@@ -133,6 +133,31 @@ export function useAgent(assistantId = 'agent') {
         }
     }, [addUserMessage, attachStream, hydrateWorkflow, setError, setRun, state.runId, state.threadId, state.workflow]);
 
+    const retryRun = useCallback(async () => {
+        const failure = state.workflow?.failure;
+        if (!state.threadId || !state.runId || !failure?.retryable || !failure.checkpoint) {
+            setError('This workflow failure cannot be retried.');
+            return;
+        }
+        setIsLoading(true);
+        try {
+            const retry = await retryWorkflowRun(
+                state.threadId,
+                state.runId,
+                failure.checkpoint,
+                crypto.randomUUID(),
+            );
+            setRun(retry.run_id);
+            const snapshot = await getActivitySnapshot(state.threadId, { runId: retry.run_id });
+            hydrateWorkflow(snapshot);
+            await attachStream(state.threadId, snapshot, retry.run_id);
+        } catch (error) {
+            setError(toError(error, 'Failed to retry workflow run.'));
+        } finally {
+            setIsLoading(false);
+        }
+    }, [attachStream, hydrateWorkflow, setError, setRun, state.runId, state.threadId, state.workflow]);
+
     const loadHistory = useCallback(async (threadId: string, expectedRunId: string) => {
         abortRef.current?.abort();
         abortRef.current = null;
@@ -188,6 +213,7 @@ export function useAgent(assistantId = 'agent') {
         messages: state.messages,
         sendMessage,
         submitCommand,
+        retryRun,
         loadHistory,
         isLoading,
         isSubmittingInteraction,

@@ -10,7 +10,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from src.services.artifact_manager import artifact_manager
+from src.interface.artifacts.artifact_envelope import ArtifactEnvelope
+from src.services.artifact_manager import _artifact_content, artifact_manager
 
 
 @pytest.mark.anyio
@@ -323,3 +324,15 @@ async def test_get_artifact_data_validates_expected_kind():
         await artifact_manager.get_artifact_data(
             artifact_id, expected_kind="financial_reports"
         )
+
+
+def test_artifact_dedupe_content_ignores_run_generated_timestamp():
+    first = ArtifactEnvelope(
+        kind="news_items",
+        produced_by="news.fetch",
+        created_at="2026-10-30T10:00:00+00:00",
+        data={"ticker": "AAPL"},
+    )
+    replay = first.model_copy(update={"created_at": "2026-10-30T10:01:00+00:00"})
+
+    assert _artifact_content(first) == _artifact_content(replay)

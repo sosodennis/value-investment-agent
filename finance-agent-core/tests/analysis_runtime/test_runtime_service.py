@@ -24,7 +24,9 @@ from src.analysis_runtime.domain.errors import (
     ActivityPersistenceError,
     InteractionNotAvailableError,
     InvalidInteractionResponseError,
+    InvalidRetryTransitionError,
     ReplayGapError,
+    RetryIdempotencyConflictError,
     RunNotFoundError,
     ThreadNotFoundError,
 )
@@ -113,6 +115,29 @@ class TypedProviderFailingRunner:
 class _TypedProviderError(RuntimeError):
     code = "schema_validation_failed"
     retryable = False
+
+
+class RetryableRunner:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def run(self, **kwargs):
+        self.calls += 1
+        if self.calls == 1:
+            error = RuntimeError("temporary provider failure")
+            error.code = "rate_limited"
+            error.retryable = True
+            raise error
+        yield Activity(
+            activity_id="debate.verdict",
+            thread_id=kwargs["thread_id"],
+            run_id=kwargs["run_id"],
+            scope_path=("debate", "verdict"),
+            kind="node",
+            status="completed",
+            label="Debate verdict",
+            attempt=kwargs["input_data"]["retry"]["attempt"],
+        )
 
 
 class InterruptingRunner:
@@ -714,6 +739,73 @@ async def test_failed_run_publishes_terminal_activity(
 
 
 @pytest.mark.asyncio
+async def test_retry_creates_immutable_attempt_and_is_idempotent() -> None:
+    repository = InMemoryActivityRepository()
+    runner = RetryableRunner()
+    service = AnalysisRuntimeService(
+        repository=repository, owner=Owner(), runner=runner
+    )
+    source_run_id = await service.start(
+        principal_id="user", thread_id="thread", input_data={"message": "x"}
+    )
+    await service._tasks["thread"]
+    source = await service.snapshot(
+        principal_id="user", thread_id="thread", run_id=source_run_id
+    )
+    assert source.run_status == "failed"
+    assert source.failure is not None and source.failure.retryable
+    assert source.failure.checkpoint is not None
+
+    operation = await service.retry(
+        principal_id="user",
+        thread_id="thread",
+        source_run_id=source_run_id,
+        checkpoint=source.failure.checkpoint,
+        idempotency_key="retry-key-1",
+    )
+    duplicate = await service.retry(
+        principal_id="user",
+        thread_id="thread",
+        source_run_id=source_run_id,
+        checkpoint=source.failure.checkpoint,
+        idempotency_key="retry-key-1",
+    )
+    assert duplicate == operation
+    assert operation.target_run_id != source_run_id
+    await service._tasks["thread"]
+
+    target = await service.snapshot(
+        principal_id="user", thread_id="thread", run_id=operation.target_run_id
+    )
+    source_after = await service.snapshot(
+        principal_id="user", thread_id="thread", run_id=source_run_id
+    )
+    assert target.run_status == "completed"
+    assert target.retry_operation is not None
+    assert target.retry_operation.status == "completed"
+    assert source_after.run_status == "failed"
+    assert source_after.failure == source.failure
+    assert runner.calls == 2
+    with pytest.raises(InvalidRetryTransitionError):
+        await repository.set_retry_status(
+            operation_id=operation.operation_id,
+            status="running",
+            now=datetime.now(timezone.utc),
+        )
+
+    with pytest.raises(RetryIdempotencyConflictError):
+        await service.retry(
+            principal_id="user",
+            thread_id="thread",
+            source_run_id=source_run_id,
+            checkpoint=source.failure.checkpoint.model_copy(
+                update={"checkpoint_id": "different-checkpoint"}
+            ),
+            idempotency_key="retry-key-1",
+        )
+
+
+@pytest.mark.asyncio
 async def test_typed_provider_failure_is_safe_and_replayed() -> None:
     service = AnalysisRuntimeService(
         repository=InMemoryActivityRepository(),
@@ -737,6 +829,7 @@ async def test_typed_provider_failure_is_safe_and_replayed() -> None:
         "activity_id": None,
         "retryable": False,
         "message": "The provider returned data that did not match the workflow contract.",
+        "checkpoint": None,
     }
     terminal = replay.events[-1]
     assert isinstance(terminal, ActivityEvent)

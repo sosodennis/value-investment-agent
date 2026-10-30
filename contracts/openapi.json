@@ -756,6 +756,42 @@
         "title": "CapabilityItem",
         "type": "object"
       },
+      "CheckpointIdentity": {
+        "additionalProperties": false,
+        "description": "The exact durable graph boundary selected for a recovery attempt.",
+        "properties": {
+          "activity_id": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Activity Id"
+          },
+          "checkpoint_id": {
+            "maxLength": 240,
+            "minLength": 1,
+            "title": "Checkpoint Id",
+            "type": "string"
+          },
+          "namespace": {
+            "default": "",
+            "maxLength": 240,
+            "title": "Namespace",
+            "type": "string"
+          }
+        },
+        "required": [
+          "checkpoint_id"
+        ],
+        "title": "CheckpointIdentity",
+        "type": "object"
+      },
       "ConfidenceCalibrationModel": {
         "properties": {
           "calibration_applied": {
@@ -4167,6 +4203,160 @@
           "response"
         ],
         "title": "ResumeRequest",
+        "type": "object"
+      },
+      "RetryCommand": {
+        "additionalProperties": false,
+        "properties": {
+          "checkpoint": {
+            "$ref": "#/components/schemas/CheckpointIdentity"
+          },
+          "contract_version": {
+            "const": "v1",
+            "title": "Contract Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "contract_version",
+          "checkpoint"
+        ],
+        "title": "RetryCommand",
+        "type": "object"
+      },
+      "RetryOperationView": {
+        "additionalProperties": false,
+        "description": "Safe retry state projection for workflow snapshots.",
+        "properties": {
+          "attempt": {
+            "minimum": 1.0,
+            "title": "Attempt",
+            "type": "integer"
+          },
+          "checkpoint": {
+            "$ref": "#/components/schemas/CheckpointIdentity"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "ended_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ended At"
+          },
+          "operation_id": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Operation Id",
+            "type": "string"
+          },
+          "outcome": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outcome"
+          },
+          "source_run_id": {
+            "minLength": 1,
+            "title": "Source Run Id",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "queued",
+              "running",
+              "completed",
+              "failed",
+              "cancelled"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "target_run_id": {
+            "minLength": 1,
+            "title": "Target Run Id",
+            "type": "string"
+          },
+          "thread_id": {
+            "minLength": 1,
+            "title": "Thread Id",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "operation_id",
+          "thread_id",
+          "source_run_id",
+          "target_run_id",
+          "checkpoint",
+          "attempt",
+          "status",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "RetryOperationView",
+        "type": "object"
+      },
+      "RetryResponse": {
+        "properties": {
+          "attempt": {
+            "title": "Attempt",
+            "type": "integer"
+          },
+          "checkpoint": {
+            "$ref": "#/components/schemas/CheckpointIdentity"
+          },
+          "retry_operation_id": {
+            "title": "Retry Operation Id",
+            "type": "string"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "source_run_id": {
+            "title": "Source Run Id",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "thread_id": {
+            "title": "Thread Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "thread_id",
+          "run_id",
+          "status",
+          "retry_operation_id",
+          "source_run_id",
+          "checkpoint",
+          "attempt"
+        ],
+        "title": "RetryResponse",
         "type": "object"
       },
       "RunRequest": {
@@ -9590,6 +9780,16 @@
             ],
             "title": "Activity Id"
           },
+          "checkpoint": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CheckpointIdentity"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "code": {
             "maxLength": 120,
             "minLength": 1,
@@ -9802,6 +10002,16 @@
             },
             "title": "Recent Activities",
             "type": "array"
+          },
+          "retry_operation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RetryOperationView"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "run_id": {
             "title": "Run Id",
@@ -11763,6 +11973,77 @@
           }
         },
         "summary": "Resume Run",
+        "tags": [
+          "Analysis runtime"
+        ]
+      }
+    },
+    "/api/v1/threads/{thread_id}/runs/{run_id}/retry": {
+      "post": {
+        "operationId": "retry_run_api_v1_threads__thread_id__runs__run_id__retry_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "thread_id",
+            "required": true,
+            "schema": {
+              "title": "Thread Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "minLength": 1,
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RetryCommand"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RetryResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Retry Run",
         "tags": [
           "Analysis runtime"
         ]

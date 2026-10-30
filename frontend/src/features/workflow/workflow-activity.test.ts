@@ -248,4 +248,31 @@ describe('workflow event boundary', () => {
             failure: { ...failure, retryable: 'no' },
         }))).toThrow(/retryable/);
     });
+
+    it('accepts LangGraph root checkpoints with an empty namespace', () => {
+        const checkpoint = { namespace: '', checkpoint_id: 'checkpoint-1', activity_id: 'debate.verdict' };
+        const parsed = parseWorkflowActivitySnapshot(snapshot({
+            run_status: 'failed',
+            failure: {
+                code: 'rate_limited',
+                owner: 'llm_provider',
+                activity_id: 'debate.verdict',
+                retryable: true,
+                message: 'The provider rate limited this request.',
+                checkpoint,
+            },
+            recent_activities: [{
+                ...activity('failed', 'workflow'),
+                failure: {
+                    code: 'rate_limited',
+                    owner: 'llm_provider',
+                    activity_id: 'debate.verdict',
+                    retryable: true,
+                    message: 'The provider rate limited this request.',
+                    checkpoint,
+                },
+            }],
+        }));
+        expect(parsed.failure?.checkpoint?.namespace).toBe('');
+    });
 });

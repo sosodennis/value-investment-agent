@@ -10,12 +10,18 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.types import Command
 from langgraph.types import Interrupt as LangGraphInterrupt
 
+from src.analysis_runtime.application.execution_context import (
+    WorkflowExecutionContext,
+    reset_workflow_execution_context,
+    set_workflow_execution_context,
+)
 from src.analysis_runtime.application.ports import GraphRunner
 from src.analysis_runtime.domain.contracts import (
     MAX_AGENT_OUTPUT_PREVIEW_BYTES,
     Activity,
     ActivityKind,
     ActivityStatus,
+    CheckpointIdentity,
     InteractionIdentity,
     InteractionRequested,
     TickerSelectionRequest,
@@ -42,11 +48,13 @@ from src.shared.internal_services import (
 class EventGraph(Protocol):
     def astream_events(
         self,
-        input_data: Command[object] | dict[str, object],
+        input_data: Command[object] | dict[str, object] | None,
         config: RunnableConfig | None = None,
         *,
         version: Literal["v1", "v2"] = "v2",
     ) -> AsyncIterator[Mapping[str, object]]: ...
+
+    async def aget_state(self, config: RunnableConfig) -> object: ...
 
 
 _LIFECYCLE_EVENTS: dict[
@@ -253,6 +261,21 @@ class LangGraphRunner(GraphRunner):
         resuming_activity_id = input_data.get("resuming_activity_id")
         resuming_scope_path = input_data.get("resuming_scope_path")
         resuming_attempt = input_data.get("resuming_attempt")
+        retry_input = input_data.get("retry")
+        retry_checkpoint = (
+            retry_input.get("checkpoint") if isinstance(retry_input, Mapping) else None
+        )
+        source_run_id = (
+            retry_input.get("source_run_id")
+            if isinstance(retry_input, Mapping)
+            and isinstance(retry_input.get("source_run_id"), str)
+            else None
+        )
+        checkpoint = (
+            CheckpointIdentity.model_validate(retry_checkpoint)
+            if isinstance(retry_checkpoint, Mapping)
+            else None
+        )
         if isinstance(resuming_scope_path, list | tuple) and all(
             isinstance(part, str) for part in resuming_scope_path
         ):
@@ -263,7 +286,9 @@ class LangGraphRunner(GraphRunner):
             resuming_activity_id = None
         if not isinstance(resuming_attempt, int) or isinstance(resuming_attempt, bool):
             resuming_attempt = 0
-        if isinstance(message, str) and message:
+        if checkpoint is not None:
+            graph_input: Command[object] | dict[str, object] | None = None
+        elif isinstance(message, str) and message:
             graph_input: Command[object] | dict[str, object] = {
                 "messages": [HumanMessage(content=message)],
                 "user_query": message,
@@ -276,7 +301,10 @@ class LangGraphRunner(GraphRunner):
         event_stream = self._stream_events_with_principal(
             graph_input,
             thread_id=thread_id,
+            run_id=run_id,
             principal_id=principal_id,
+            checkpoint=checkpoint,
+            source_run_id=source_run_id,
         )
         try:
             callback_metadata: dict[str, Mapping[str, object]] = {}
@@ -443,23 +471,51 @@ class LangGraphRunner(GraphRunner):
                     "on_chain_error",
                 }:
                     active_callbacks.pop(callback_run_id, None)
+        except Exception as exc:
+            discovered = await self._discover_checkpoint(
+                thread_id=thread_id,
+                run_id=run_id,
+                checkpoint=checkpoint,
+            )
+            if discovered is not None:
+                exc.checkpoint = discovered
+            raise
         finally:
             await event_stream.aclose()
 
     async def _stream_events_with_principal(
         self,
-        graph_input: Command[object] | dict[str, object],
+        graph_input: Command[object] | dict[str, object] | None,
         *,
         thread_id: str,
+        run_id: str,
         principal_id: str,
+        checkpoint: CheckpointIdentity | None,
+        source_run_id: str | None,
     ) -> AsyncGenerator[Mapping[str, object], None]:
+        namespace = checkpoint.namespace if checkpoint is not None else ""
+        configurable: dict[str, object] = {
+            "thread_id": thread_id,
+        }
+        if namespace:
+            configurable["checkpoint_ns"] = namespace
+        if checkpoint is not None:
+            configurable["checkpoint_id"] = checkpoint.checkpoint_id
         event_iterator = self._graph.astream_events(
             graph_input,
-            config={"configurable": {"thread_id": thread_id}},
+            config={"configurable": configurable},
             version="v2",
         ).__aiter__()
         try:
             while True:
+                context_token = set_workflow_execution_context(
+                    WorkflowExecutionContext(
+                        thread_id=thread_id,
+                        run_id=run_id,
+                        source_run_id=source_run_id,
+                        checkpoint=checkpoint,
+                    )
+                )
                 provider_token = set_provider_principal(
                     ProviderPrincipal(user_id=principal_id)
                 )
@@ -476,11 +532,62 @@ class LangGraphRunner(GraphRunner):
                         reset_request_principal(request_token)
                 finally:
                     reset_provider_principal(provider_token)
+                    reset_workflow_execution_context(context_token)
                 yield raw
         finally:
             close = getattr(event_iterator, "aclose", None)
             if close is not None:
                 await close()
+
+    async def _discover_checkpoint(
+        self,
+        *,
+        thread_id: str,
+        run_id: str,
+        checkpoint: CheckpointIdentity | None,
+    ) -> CheckpointIdentity:
+        if checkpoint is not None:
+            return checkpoint
+        namespace = ""
+        getter = getattr(self._graph, "aget_state", None)
+        if getter is None:
+            return CheckpointIdentity(
+                namespace=namespace,
+                checkpoint_id=f"runtime:{thread_id}:latest",
+            )
+        config = {"configurable": {"thread_id": thread_id}}
+        try:
+            snapshot = await getter(config)
+        except Exception:
+            return CheckpointIdentity(
+                namespace=namespace,
+                checkpoint_id=f"runtime:{thread_id}:latest",
+            )
+        raw_config = getattr(snapshot, "config", None)
+        configurable = (
+            raw_config.get("configurable") if isinstance(raw_config, Mapping) else None
+        )
+        checkpoint_id = (
+            configurable.get("checkpoint_id")
+            if isinstance(configurable, Mapping)
+            else None
+        )
+        checkpoint_ns = (
+            configurable.get("checkpoint_ns")
+            if isinstance(configurable, Mapping)
+            else None
+        )
+        if isinstance(checkpoint_id, str) and checkpoint_id:
+            return CheckpointIdentity(
+                namespace=checkpoint_ns
+                if isinstance(checkpoint_ns, str) and checkpoint_ns
+                else namespace,
+                checkpoint_id=checkpoint_id,
+            )
+        return CheckpointIdentity(
+            namespace=namespace,
+            checkpoint_id=f"runtime:{thread_id}:latest",
+        )
 
     @staticmethod
     def _interrupt_activity(

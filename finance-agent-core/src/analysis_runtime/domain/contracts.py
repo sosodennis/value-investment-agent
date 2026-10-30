@@ -27,6 +27,24 @@ RunStatus = Literal[
     "cancelled",
     "unknown",
 ]
+RetryStatus = Literal["queued", "running", "completed", "failed", "cancelled"]
+_RETRY_TRANSITIONS: dict[RetryStatus, frozenset[RetryStatus]] = {
+    "queued": frozenset({"queued", "running", "cancelled"}),
+    "running": frozenset({"running", "completed", "failed", "cancelled"}),
+    "completed": frozenset({"completed"}),
+    "failed": frozenset({"failed"}),
+    "cancelled": frozenset({"cancelled"}),
+}
+
+
+class CheckpointIdentity(BaseModel):
+    """The exact durable graph boundary selected for a recovery attempt."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    namespace: str = Field(default="", max_length=240)
+    checkpoint_id: str = Field(min_length=1, max_length=240)
+    activity_id: str | None = Field(default=None, min_length=1, max_length=200)
 
 
 class WorkflowFailure(BaseModel):
@@ -39,6 +57,7 @@ class WorkflowFailure(BaseModel):
     activity_id: str | None = Field(default=None, min_length=1, max_length=200)
     retryable: bool
     message: str = Field(min_length=1, max_length=500)
+    checkpoint: CheckpointIdentity | None = None
 
 
 class TickerCandidate(BaseModel):
@@ -348,6 +367,10 @@ class AnalysisRunRecord(BaseModel):
     updated_at: datetime | None = None
     ended_at: datetime | None = None
     input_data: dict[str, object] | None = None
+    source_run_id: str | None = None
+    retry_operation_id: str | None = None
+    attempt: int = Field(default=1, ge=1)
+    checkpoint: CheckpointIdentity | None = None
 
 
 class AnalysisRunPage(BaseModel):
@@ -358,6 +381,63 @@ class AnalysisRunPage(BaseModel):
     next_started_at: datetime | None = None
     next_thread_id: str | None = None
     next_run_id: str | None = None
+
+
+class RetryOperation(BaseModel):
+    """Durable command record linking one immutable failure to one retry run."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    operation_id: str = Field(min_length=1, max_length=120)
+    thread_id: str = Field(min_length=1)
+    source_run_id: str = Field(min_length=1)
+    target_run_id: str = Field(min_length=1)
+    principal_id: str = Field(min_length=1)
+    idempotency_key: str = Field(min_length=1, max_length=200)
+    request_hash: str = Field(min_length=64, max_length=64)
+    checkpoint: CheckpointIdentity
+    attempt: int = Field(ge=1)
+    status: RetryStatus
+    outcome: str | None = Field(default=None, max_length=500)
+    created_at: datetime
+    updated_at: datetime
+    ended_at: datetime | None = None
+
+    def can_transition_to(self, status: str) -> bool:
+        return status in _RETRY_TRANSITIONS[self.status]
+
+
+class RetryOperationView(BaseModel):
+    """Safe retry state projection for workflow snapshots."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    operation_id: str = Field(min_length=1, max_length=120)
+    thread_id: str = Field(min_length=1)
+    source_run_id: str = Field(min_length=1)
+    target_run_id: str = Field(min_length=1)
+    checkpoint: CheckpointIdentity
+    attempt: int = Field(ge=1)
+    status: RetryStatus
+    outcome: str | None = Field(default=None, max_length=500)
+    created_at: datetime
+    updated_at: datetime
+    ended_at: datetime | None = None
+
+    @classmethod
+    def from_operation(cls, operation: RetryOperation) -> RetryOperationView:
+        return cls.model_validate(
+            operation.model_dump(
+                exclude={"principal_id", "idempotency_key", "request_hash"}
+            )
+        )
+
+
+class RetryCommand(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    contract_version: Literal["v1"]
+    checkpoint: CheckpointIdentity
 
 
 class WorkflowSnapshot(BaseModel):
@@ -372,6 +452,7 @@ class WorkflowSnapshot(BaseModel):
     pending_interactions: tuple[WorkflowInteraction, ...] = ()
     completed_outputs: tuple[WorkflowAgentOutput, ...] = ()
     failure: WorkflowFailure | None = None
+    retry_operation: RetryOperationView | None = None
 
 
 class ReplayPage(BaseModel):

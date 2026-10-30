@@ -130,6 +130,42 @@ def test_structured_remote_call_forwards_schema_and_does_not_retry() -> None:
     assert calls == 1
 
 
+def test_provider_429_honors_bounded_retry_after(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sleeps: list[float] = []
+    monkeypatch.setattr(
+        "src.llm_provider.infrastructure.remote_client.time.sleep", sleeps.append
+    )
+    client = LLMProviderServiceClient(
+        base_url="http://provider.test", token="internal-secret"
+    )
+    client._client.close()
+    client._client = httpx.Client(
+        transport=httpx.MockTransport(
+            lambda request: httpx.Response(
+                429,
+                headers={"Retry-After": "120"},
+                json={"error": {"code": "rate_limited", "retryable": True}},
+                request=request,
+            )
+        ),
+        timeout=None,
+    )
+    token = set_provider_principal(ProviderPrincipal(user_id="alice"))
+    try:
+        with pytest.raises(LLMProviderError) as caught:
+            client.complete(_request())
+    finally:
+        reset_provider_principal(token)
+        client._client.close()
+    assert caught.value.code is LLMErrorCode.RATE_LIMITED
+    assert caught.value.retryable is True
+    assert caught.value.http_status == 429
+    assert caught.value.retry_after_seconds == 60.0
+    assert sleeps == [60.0]
+
+
 def test_sync_provider_calls_map_transport_errors_without_leaking_details() -> None:
     client = _sync_client(httpx.ConnectError)
     token = set_provider_principal(ProviderPrincipal(user_id="alice"))

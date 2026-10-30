@@ -460,6 +460,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/threads/{thread_id}/runs/{run_id}/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Retry Run */
+        post: operations["retry_run_api_v1_threads__thread_id__runs__run_id__retry_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health": {
         parameters: {
             query?: never;
@@ -719,6 +736,21 @@ export interface components {
             source: string;
             /** @description Observed result of this capability's readiness probe. */
             status: components["schemas"]["DashboardStatus"];
+        };
+        /**
+         * CheckpointIdentity
+         * @description The exact durable graph boundary selected for a recovery attempt.
+         */
+        CheckpointIdentity: {
+            /** Activity Id */
+            activity_id?: string | null;
+            /** Checkpoint Id */
+            checkpoint_id: string;
+            /**
+             * Namespace
+             * @default
+             */
+            namespace: string;
         };
         /** ConfidenceCalibrationModel */
         ConfidenceCalibrationModel: {
@@ -1732,6 +1764,67 @@ export interface components {
             identity: components["schemas"]["InteractionIdentity"];
             /** Response */
             response: components["schemas"]["TickerSelectionResponse"] | components["schemas"]["ValuationApprovalResponse"];
+        };
+        /** RetryCommand */
+        RetryCommand: {
+            checkpoint: components["schemas"]["CheckpointIdentity"];
+            /**
+             * Contract Version
+             * @constant
+             */
+            contract_version: "v1";
+        };
+        /**
+         * RetryOperationView
+         * @description Safe retry state projection for workflow snapshots.
+         */
+        RetryOperationView: {
+            /** Attempt */
+            attempt: number;
+            checkpoint: components["schemas"]["CheckpointIdentity"];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Ended At */
+            ended_at?: string | null;
+            /** Operation Id */
+            operation_id: string;
+            /** Outcome */
+            outcome?: string | null;
+            /** Source Run Id */
+            source_run_id: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "queued" | "running" | "completed" | "failed" | "cancelled";
+            /** Target Run Id */
+            target_run_id: string;
+            /** Thread Id */
+            thread_id: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** RetryResponse */
+        RetryResponse: {
+            /** Attempt */
+            attempt: number;
+            checkpoint: components["schemas"]["CheckpointIdentity"];
+            /** Retry Operation Id */
+            retry_operation_id: string;
+            /** Run Id */
+            run_id: string;
+            /** Source Run Id */
+            source_run_id: string;
+            /** Status */
+            status: string;
+            /** Thread Id */
+            thread_id: string;
         };
         /** RunRequest */
         RunRequest: {
@@ -3258,6 +3351,7 @@ export interface components {
         WorkflowFailure: {
             /** Activity Id */
             activity_id?: string | null;
+            checkpoint?: components["schemas"]["CheckpointIdentity"] | null;
             /** Code */
             code: string;
             /** Message */
@@ -3338,6 +3432,7 @@ export interface components {
              * @default []
              */
             recent_activities: components["schemas"]["Activity"][];
+            retry_operation?: components["schemas"]["RetryOperationView"] | null;
             /** Run Id */
             run_id: string;
             /**
@@ -4369,6 +4464,44 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RunResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    retry_run_api_v1_threads__thread_id__runs__run_id__retry_post: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                thread_id: string;
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RetryCommand"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RetryResponse"];
                 };
             };
             /** @description Validation Error */

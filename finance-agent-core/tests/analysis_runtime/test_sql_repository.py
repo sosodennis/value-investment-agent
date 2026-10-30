@@ -3,13 +3,15 @@ from __future__ import annotations
 import asyncio
 import os
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from sqlalchemy import delete
 
 from src.analysis_runtime.domain.contracts import (
     Activity,
+    ActivityEvent,
+    CheckpointIdentity,
     InteractionIdentity,
     InteractionRequested,
     TickerCandidate,
@@ -17,6 +19,7 @@ from src.analysis_runtime.domain.contracts import (
     TickerSelectionResponse,
     ValuationApprovalRequest,
     ValuationApprovalResponse,
+    WorkflowFailure,
     WorkflowInteractionEvent,
 )
 from src.analysis_runtime.domain.errors import (
@@ -30,6 +33,7 @@ from src.infrastructure.database import AsyncSessionLocal, init_db
 from src.infrastructure.models import (
     WorkflowActivityCursor,
     WorkflowActivityEvent,
+    WorkflowRetryOperation,
     WorkflowRun,
     WorkflowRunHistory,
     WorkflowRunResume,
@@ -478,6 +482,129 @@ async def test_sql_response_and_cancel_race_preserves_one_consistent_lifecycle()
             await session.execute(
                 delete(WorkflowRunResume).where(
                     WorkflowRunResume.thread_id == thread_id
+                )
+            )
+            await session.execute(
+                delete(WorkflowRunHistory).where(
+                    WorkflowRunHistory.thread_id == thread_id
+                )
+            )
+            await session.execute(
+                delete(WorkflowRun).where(WorkflowRun.thread_id == thread_id)
+            )
+            await session.commit()
+
+
+@pytest.mark.asyncio
+async def test_sql_retry_claim_converges_and_recovers_after_lease_expiry() -> None:
+    await init_db()
+    thread_id = f"retry-claim-{uuid.uuid4()}"
+    source_run_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    checkpoint = CheckpointIdentity(
+        namespace="", checkpoint_id="checkpoint-1", activity_id="debate.verdict"
+    )
+    repository = SqlAlchemyActivityRepository()
+    await repository.set_run(
+        thread_id=thread_id,
+        run_id=source_run_id,
+        status="failed",
+        now=now,
+        principal_id="user-1",
+    )
+    failure_activity = Activity(
+        activity_id="workflow",
+        thread_id=thread_id,
+        run_id=source_run_id,
+        scope_path=("workflow",),
+        kind="phase",
+        status="failed",
+        label="Workflow failed",
+        attempt=1,
+        failure=WorkflowFailure(
+            code="rate_limited",
+            owner="llm_provider",
+            activity_id=checkpoint.activity_id,
+            retryable=True,
+            message="The provider temporarily rate limited this workflow.",
+            checkpoint=checkpoint,
+        ),
+    )
+    await repository.append_atomic(
+        ActivityEvent(
+            event_id=str(uuid.uuid4()),
+            seq_id=1,
+            thread_id=thread_id,
+            run_id=source_run_id,
+            occurred_at=now,
+            payload=failure_activity,
+        )
+    )
+
+    try:
+        results = await asyncio.gather(
+            repository.begin_retry(
+                principal_id="user-1",
+                thread_id=thread_id,
+                source_run_id=source_run_id,
+                checkpoint=checkpoint,
+                idempotency_key="retry-key",
+                request_hash="a" * 64,
+                now=now,
+            ),
+            repository.begin_retry(
+                principal_id="user-1",
+                thread_id=thread_id,
+                source_run_id=source_run_id,
+                checkpoint=checkpoint,
+                idempotency_key="retry-key",
+                request_hash="a" * 64,
+                now=now,
+            ),
+        )
+        operation = results[0][0]
+        assert results[1][0] == operation
+        assert results[0][1] or results[1][1] is False
+
+        claimed = await repository.claim_retry(
+            operation_id=operation.operation_id,
+            now=now,
+            lease_seconds=300,
+        )
+        assert claimed is not None and claimed.status == "running"
+        assert (
+            await repository.claim_retry(
+                operation_id=operation.operation_id,
+                now=now + timedelta(seconds=1),
+                lease_seconds=300,
+            )
+            is None
+        )
+        pending = await repository.pending_retries(
+            now=now + timedelta(seconds=301), lease_seconds=300
+        )
+        assert [item.operation_id for item in pending] == [operation.operation_id]
+        recovered = await repository.claim_retry(
+            operation_id=operation.operation_id,
+            now=now + timedelta(seconds=301),
+            lease_seconds=300,
+        )
+        assert recovered is not None and recovered.status == "running"
+    finally:
+        async with AsyncSessionLocal() as session:
+            await session.execute(
+                delete(WorkflowRetryOperation).where(
+                    WorkflowRetryOperation.thread_id == thread_id
+                )
+            )
+            await session.execute(
+                delete(WorkflowActivityEvent).where(
+                    WorkflowActivityEvent.thread_id == thread_id
+                )
+            )
+            await session.execute(
+                delete(WorkflowActivityCursor).where(
+                    WorkflowActivityCursor.thread_id == thread_id
                 )
             )
             await session.execute(

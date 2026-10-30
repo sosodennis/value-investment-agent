@@ -8,12 +8,14 @@ from src.analysis_runtime.domain.contracts import (
     Activity,
     AnalysisRunPage,
     AnalysisRunRecord,
+    CheckpointIdentity,
     ClaimedInteractionResume,
     InteractionIdentity,
     InteractionRequested,
     InteractionResponse,
     PendingResume,
     ReplayPage,
+    RetryOperation,
     RunStatus,
     RunStatusRecord,
     WorkflowAgentOutput,
@@ -110,6 +112,39 @@ class ActivityRepository(Protocol):
     ) -> tuple[WorkflowEvent, ...]: ...
 
     async def pending_resumes(self) -> tuple[PendingResume, ...]: ...
+
+    async def begin_retry(
+        self,
+        *,
+        principal_id: str,
+        thread_id: str,
+        source_run_id: str,
+        checkpoint: CheckpointIdentity,
+        idempotency_key: str,
+        request_hash: str,
+        now: datetime,
+    ) -> tuple[RetryOperation, bool]: ...
+
+    async def claim_retry(
+        self, *, operation_id: str, now: datetime, lease_seconds: float
+    ) -> RetryOperation | None: ...
+
+    async def set_retry_status(
+        self,
+        *,
+        operation_id: str,
+        status: str,
+        now: datetime,
+        outcome: str | None = None,
+    ) -> RetryOperation: ...
+
+    async def pending_retries(
+        self, *, now: datetime, lease_seconds: float
+    ) -> tuple[RetryOperation, ...]: ...
+
+    async def retry_for_run(
+        self, *, thread_id: str, run_id: str
+    ) -> RetryOperation | None: ...
 
 
 class RuntimeSubscriber(Protocol):

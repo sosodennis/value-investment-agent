@@ -1,8 +1,14 @@
+import hashlib
+import json
 import uuid
 from collections.abc import Mapping
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 
+from src.analysis_runtime.application.execution_context import (
+    get_workflow_execution_context,
+)
 from src.interface.artifacts.artifact_envelope import (
     ArtifactEnvelope,
     ArtifactPayload,
@@ -51,31 +57,73 @@ class ArtifactManager:
                 thread_id="thread_123"
             )
         """
-        artifact_id = str(uuid.uuid4())
         envelope = build_artifact_envelope(
             kind=artifact_type,
             produced_by=produced_by,
             data=data,
         )
+        context = get_workflow_execution_context()
+        dedupe_key = None
+        effective_thread_id = thread_id
+        if context is not None:
+            serialized_content = json.dumps(
+                _artifact_content(envelope),
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+            dedupe_key = _artifact_dedupe_key(
+                thread_id=context.thread_id,
+                source_run_id=context.source_run_id or context.run_id,
+                produced_by=produced_by,
+                artifact_type=artifact_type,
+                payload_hash=hashlib.sha256(
+                    serialized_content.encode("utf-8")
+                ).hexdigest(),
+            )
+            effective_thread_id = effective_thread_id or context.thread_id
 
         # Generate semantic key if prefix provided
         key = None
         if key_prefix:
-            key = f"{artifact_type}_{key_prefix}_{artifact_id[:8]}"
+            key = f"{artifact_type}_{key_prefix}"
 
         async with AsyncSessionLocal() as session:
+            if dedupe_key is not None:
+                existing = await session.scalar(
+                    select(Artifact)
+                    .where(Artifact.dedupe_key == dedupe_key)
+                    .with_for_update()
+                )
+                if existing is not None:
+                    if _artifact_content(existing.data) != _artifact_content(envelope):
+                        raise ValueError("artifact dedupe key has conflicting payload")
+                    return existing.id
             artifact = Artifact(
-                id=artifact_id,
+                id=str(uuid.uuid4()),
                 key=key,
-                thread_id=thread_id,
+                thread_id=effective_thread_id,
                 type=artifact_type,
                 data=envelope.model_dump(mode="json"),
+                dedupe_key=dedupe_key,
             )
             session.add(artifact)
-            await session.commit()
+            try:
+                await session.commit()
+            except IntegrityError:
+                await session.rollback()
+                if dedupe_key is None:
+                    raise
+                existing = await session.scalar(
+                    select(Artifact).where(Artifact.dedupe_key == dedupe_key)
+                )
+                if existing is None or _artifact_content(
+                    existing.data
+                ) != _artifact_content(envelope):
+                    raise
+                return existing.id
             await session.refresh(artifact)
 
-        return artifact_id
+        return artifact.id
 
     @staticmethod
     async def get_artifact(artifact_id: str) -> Artifact | None:
@@ -269,6 +317,45 @@ class ArtifactManager:
 
 # Singleton instance
 artifact_manager = ArtifactManager()
+
+
+def _artifact_dedupe_key(
+    *,
+    thread_id: str,
+    source_run_id: str,
+    produced_by: str,
+    artifact_type: str,
+    payload_hash: str,
+) -> str:
+    payload = {
+        "version": "workflow-artifact-v1",
+        "thread_id": thread_id,
+        "source_run_id": source_run_id,
+        "produced_by": produced_by,
+        "artifact_type": artifact_type,
+        "payload_hash": payload_hash,
+    }
+    return hashlib.sha256(
+        json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+
+
+def _artifact_content(
+    value: ArtifactEnvelope | Mapping[str, object],
+) -> dict[str, object]:
+    if isinstance(value, ArtifactEnvelope):
+        return {
+            "kind": value.kind,
+            "version": value.version,
+            "produced_by": value.produced_by,
+            "data": value.data,
+        }
+    return {
+        "kind": value.get("kind"),
+        "version": value.get("version"),
+        "produced_by": value.get("produced_by"),
+        "data": value.get("data"),
+    }
 
 
 def _references_artifact(value: object, artifact_id: str) -> bool:

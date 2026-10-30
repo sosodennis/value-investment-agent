@@ -40,6 +40,7 @@ export type {
     WorkflowActivitySnapshot,
     WorkflowActivityState,
     WorkflowRunStatus,
+    CheckpointIdentity,
     ThreadId,
     RunId,
 } from './workflow-activity';
@@ -48,6 +49,7 @@ export {
     consumeWorkflowEvents,
     getActivitySnapshot,
     resumeWorkflowRun,
+    retryWorkflowRun,
     startWorkflowRun,
 } from './api';
 export type { WorkflowRun } from './api';

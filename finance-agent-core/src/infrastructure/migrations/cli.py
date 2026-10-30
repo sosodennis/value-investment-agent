@@ -3,12 +3,16 @@ from __future__ import annotations
 import asyncio
 
 from src.infrastructure.database import engine, init_db
-from src.infrastructure.migrations import run_history_migration
+from src.infrastructure.migrations import (
+    run_history_migration,
+    run_retry_schema_migration,
+)
 
 
 async def _main() -> None:
     try:
         await init_db()
+        await run_retry_schema_migration()
         result = await run_history_migration()
         if not result.completed:
             raise RuntimeError("database migration did not complete")

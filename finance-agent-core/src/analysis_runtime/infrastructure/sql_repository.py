@@ -3,22 +3,26 @@ from __future__ import annotations
 import uuid
 from collections.abc import Mapping
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from pydantic import TypeAdapter
 from sqlalchemy import and_, func, or_, select
+from sqlalchemy.exc import IntegrityError
 
 from src.analysis_runtime.domain.contracts import (
     Activity,
     ActivityEvent,
     AnalysisRunPage,
     AnalysisRunRecord,
+    CheckpointIdentity,
     ClaimedInteractionResume,
     InteractionIdentity,
     InteractionRequested,
     InteractionResponse,
     PendingResume,
     ReplayPage,
+    RetryOperation,
+    RetryOperationView,
     RunStatus,
     RunStatusRecord,
     TickerSelectionRequest,
@@ -33,15 +37,21 @@ from src.analysis_runtime.domain.contracts import (
 from src.analysis_runtime.domain.errors import (
     ActivityPersistenceError,
     InteractionNotAvailableError,
+    InvalidCheckpointError,
     InvalidCursorError,
     InvalidInteractionResponseError,
+    InvalidRetryTransitionError,
     ReplayGapError,
+    RetryAlreadyActiveError,
+    RetryIdempotencyConflictError,
+    RetryNotAvailableError,
 )
 from src.auth.infrastructure.models import OwnedResourceModel
 from src.infrastructure.database import AsyncSessionLocal
 from src.infrastructure.models import (
     WorkflowActivityCursor,
     WorkflowActivityEvent,
+    WorkflowRetryOperation,
     WorkflowRun,
     WorkflowRunHistory,
     WorkflowRunResume,
@@ -186,6 +196,18 @@ class SqlAlchemyActivityRepository:
             ).all()
             history = await session.get(WorkflowRunHistory, (thread_id, run_id))
             cursor_row = await session.get(WorkflowActivityCursor, thread_id)
+            retry_row = await session.scalar(
+                select(WorkflowRetryOperation)
+                .where(WorkflowRetryOperation.thread_id == thread_id)
+                .where(
+                    or_(
+                        WorkflowRetryOperation.source_run_id == run_id,
+                        WorkflowRetryOperation.target_run_id == run_id,
+                    )
+                )
+                .order_by(WorkflowRetryOperation.created_at.desc())
+                .limit(1)
+            )
         events = tuple(self._to_event(row) for row in rows)
         latest: dict[str, ActivityEvent] = {}
         interactions: dict[str, WorkflowInteraction] = {}
@@ -238,6 +260,11 @@ class SqlAlchemyActivityRepository:
             ),
             completed_outputs=tuple(outputs.values()),
             failure=failure,
+            retry_operation=(
+                RetryOperationView.from_operation(self._retry_from_model(retry_row))
+                if retry_row
+                else None
+            ),
         )
 
     async def get_run_history(
@@ -773,6 +800,244 @@ class SqlAlchemyActivityRepository:
                 )
             return tuple(pending)
 
+    async def begin_retry(
+        self,
+        *,
+        principal_id: str,
+        thread_id: str,
+        source_run_id: str,
+        checkpoint: CheckpointIdentity,
+        idempotency_key: str,
+        request_hash: str,
+        now: datetime,
+    ) -> tuple[RetryOperation, bool]:
+        async with AsyncSessionLocal() as session:
+            existing = await session.scalar(
+                select(WorkflowRetryOperation)
+                .where(WorkflowRetryOperation.principal_id == principal_id)
+                .where(WorkflowRetryOperation.idempotency_key == idempotency_key)
+                .with_for_update()
+            )
+            if existing is not None:
+                if existing.request_hash != request_hash:
+                    raise RetryIdempotencyConflictError(
+                        "idempotency key was already used for another retry command"
+                    )
+                return self._retry_from_model(existing), False
+
+            source = await session.get(
+                WorkflowRunHistory, (thread_id, source_run_id), with_for_update=True
+            )
+            if source is None or source.principal_id != principal_id:
+                raise RetryNotAvailableError("source run was not found")
+            if source.status != "failed":
+                raise RetryNotAvailableError("only a failed run may be retried")
+            failure_row = await session.scalar(
+                select(WorkflowActivityEvent)
+                .where(WorkflowActivityEvent.thread_id == thread_id)
+                .where(WorkflowActivityEvent.run_id == source_run_id)
+                .where(WorkflowActivityEvent.event_name == "workflow.activity")
+                .where(
+                    WorkflowActivityEvent.payload["activity_id"].as_string()
+                    == "workflow"
+                )
+                .order_by(WorkflowActivityEvent.seq_id.desc())
+                .limit(1)
+            )
+            failure_event = self._to_event(failure_row) if failure_row else None
+            failure = (
+                failure_event.payload.failure
+                if isinstance(failure_event, ActivityEvent)
+                else None
+            )
+            if failure is None or not failure.retryable:
+                raise RetryNotAvailableError("source failure is not retryable")
+            if failure.checkpoint != checkpoint:
+                raise InvalidCheckpointError("checkpoint does not match the failed run")
+            current = await session.scalar(
+                select(WorkflowRun)
+                .where(WorkflowRun.thread_id == thread_id)
+                .with_for_update()
+            )
+            if current and current.status in {"queued", "running", "waiting"}:
+                existing = await session.scalar(
+                    select(WorkflowRetryOperation)
+                    .where(WorkflowRetryOperation.principal_id == principal_id)
+                    .where(WorkflowRetryOperation.idempotency_key == idempotency_key)
+                    .with_for_update()
+                )
+                if existing is not None:
+                    if existing.request_hash != request_hash:
+                        raise RetryIdempotencyConflictError(
+                            "idempotency key was already used for another retry command"
+                        )
+                    return self._retry_from_model(existing), False
+                raise RetryAlreadyActiveError("thread already has an active run")
+            attempt_row = await session.scalar(
+                select(func.max(WorkflowRetryOperation.attempt))
+                .where(WorkflowRetryOperation.thread_id == thread_id)
+                .where(WorkflowRetryOperation.source_run_id == source_run_id)
+            )
+            attempt = int(attempt_row or 0) + 1
+            target_run_id = str(uuid.uuid4())
+            operation = WorkflowRetryOperation(
+                operation_id=str(uuid.uuid4()),
+                thread_id=thread_id,
+                source_run_id=source_run_id,
+                target_run_id=target_run_id,
+                principal_id=principal_id,
+                idempotency_key=idempotency_key,
+                request_hash=request_hash,
+                checkpoint=checkpoint.model_dump(mode="json"),
+                attempt=attempt,
+                status="queued",
+                created_at=now.replace(tzinfo=None),
+                updated_at=now.replace(tzinfo=None),
+            )
+            session.add(operation)
+            if current is None:
+                current = WorkflowRun(
+                    thread_id=thread_id,
+                    run_id=target_run_id,
+                    status="queued",
+                    started_at=now.replace(tzinfo=None),
+                    updated_at=now.replace(tzinfo=None),
+                )
+                session.add(current)
+            else:
+                current.run_id = target_run_id
+                current.status = "queued"
+                current.started_at = now.replace(tzinfo=None)
+                current.updated_at = now.replace(tzinfo=None)
+                current.ended_at = None
+            session.add(
+                WorkflowRunHistory(
+                    thread_id=thread_id,
+                    run_id=target_run_id,
+                    principal_id=principal_id,
+                    status="queued",
+                    started_at=now.replace(tzinfo=None),
+                    updated_at=now.replace(tzinfo=None),
+                    input_data={
+                        "retry": {
+                            "source_run_id": source_run_id,
+                            "checkpoint": checkpoint.model_dump(mode="json"),
+                        }
+                    },
+                    source_run_id=source_run_id,
+                    retry_operation_id=operation.operation_id,
+                    attempt=attempt,
+                    checkpoint=checkpoint.model_dump(mode="json"),
+                )
+            )
+            try:
+                await session.commit()
+            except IntegrityError:
+                await session.rollback()
+                existing = await session.scalar(
+                    select(WorkflowRetryOperation)
+                    .where(WorkflowRetryOperation.principal_id == principal_id)
+                    .where(WorkflowRetryOperation.idempotency_key == idempotency_key)
+                )
+                if existing is not None and existing.request_hash == request_hash:
+                    return self._retry_from_model(existing), False
+                raise
+            return self._retry_from_model(operation), True
+
+    async def set_retry_status(
+        self,
+        *,
+        operation_id: str,
+        status: str,
+        now: datetime,
+        outcome: str | None = None,
+    ) -> RetryOperation:
+        async with AsyncSessionLocal() as session:
+            row = await session.get(
+                WorkflowRetryOperation, operation_id, with_for_update=True
+            )
+            if row is None:
+                raise RetryNotAvailableError("retry operation was not found")
+            operation = self._retry_from_model(row)
+            if not operation.can_transition_to(status):
+                raise InvalidRetryTransitionError(
+                    f"cannot transition retry from {operation.status} to {status}"
+                )
+            if (
+                row.status in {"completed", "failed", "cancelled"}
+                and status == "running"
+            ):
+                return self._retry_from_model(row)
+            row.status = status
+            row.outcome = outcome
+            row.updated_at = now.replace(tzinfo=None)
+            row.ended_at = (
+                now.replace(tzinfo=None)
+                if status in {"completed", "failed", "cancelled"}
+                else None
+            )
+            await session.commit()
+            return self._retry_from_model(row)
+
+    async def claim_retry(
+        self, *, operation_id: str, now: datetime, lease_seconds: float
+    ) -> RetryOperation | None:
+        cutoff = now.replace(tzinfo=None) - timedelta(seconds=lease_seconds)
+        async with AsyncSessionLocal() as session:
+            row = await session.get(
+                WorkflowRetryOperation, operation_id, with_for_update=True
+            )
+            if row is None or row.status in {"completed", "failed", "cancelled"}:
+                return None
+            if row.status == "running" and row.updated_at > cutoff:
+                return None
+            row.status = "running"
+            row.updated_at = now.replace(tzinfo=None)
+            row.ended_at = None
+            row.outcome = None
+            await session.commit()
+            return self._retry_from_model(row)
+
+    async def pending_retries(
+        self, *, now: datetime, lease_seconds: float
+    ) -> tuple[RetryOperation, ...]:
+        cutoff = now.replace(tzinfo=None) - timedelta(seconds=lease_seconds)
+        async with AsyncSessionLocal() as session:
+            rows = (
+                await session.scalars(
+                    select(WorkflowRetryOperation)
+                    .where(
+                        or_(
+                            WorkflowRetryOperation.status == "queued",
+                            and_(
+                                WorkflowRetryOperation.status == "running",
+                                WorkflowRetryOperation.updated_at <= cutoff,
+                            ),
+                        )
+                    )
+                    .order_by(WorkflowRetryOperation.created_at.asc())
+                )
+            ).all()
+        return tuple(self._retry_from_model(row) for row in rows)
+
+    async def retry_for_run(
+        self, *, thread_id: str, run_id: str
+    ) -> RetryOperation | None:
+        async with AsyncSessionLocal() as session:
+            row = await session.scalar(
+                select(WorkflowRetryOperation)
+                .where(WorkflowRetryOperation.thread_id == thread_id)
+                .where(
+                    or_(
+                        WorkflowRetryOperation.source_run_id == run_id,
+                        WorkflowRetryOperation.target_run_id == run_id,
+                    )
+                )
+                .order_by(WorkflowRetryOperation.created_at.desc())
+                .limit(1)
+            )
+        return self._retry_from_model(row) if row else None
+
     @staticmethod
     def _to_event(row: WorkflowActivityEvent) -> WorkflowEvent:
         return _EVENT_ADAPTER.validate_python(
@@ -880,4 +1145,31 @@ class SqlAlchemyActivityRepository:
             if row.ended_at
             else None,
             input_data=row.input_data,
+            source_run_id=row.source_run_id,
+            retry_operation_id=row.retry_operation_id,
+            attempt=row.attempt,
+            checkpoint=CheckpointIdentity.model_validate(row.checkpoint)
+            if row.checkpoint
+            else None,
+        )
+
+    @staticmethod
+    def _retry_from_model(row: WorkflowRetryOperation) -> RetryOperation:
+        return RetryOperation(
+            operation_id=row.operation_id,
+            thread_id=row.thread_id,
+            source_run_id=row.source_run_id,
+            target_run_id=row.target_run_id,
+            principal_id=row.principal_id,
+            idempotency_key=row.idempotency_key,
+            request_hash=row.request_hash,
+            checkpoint=CheckpointIdentity.model_validate(row.checkpoint),
+            attempt=row.attempt,
+            status=row.status,
+            outcome=row.outcome,
+            created_at=row.created_at.replace(tzinfo=timezone.utc),
+            updated_at=row.updated_at.replace(tzinfo=timezone.utc),
+            ended_at=row.ended_at.replace(tzinfo=timezone.utc)
+            if row.ended_at
+            else None,
         )

@@ -11,12 +11,15 @@ from src.analysis_runtime.domain.contracts import (
     ActivityEvent,
     AnalysisRunPage,
     AnalysisRunRecord,
+    CheckpointIdentity,
     ClaimedInteractionResume,
     InteractionIdentity,
     InteractionRequested,
     InteractionResponse,
     PendingResume,
     ReplayPage,
+    RetryOperation,
+    RetryOperationView,
     RunStatus,
     RunStatusRecord,
     TickerSelectionRequest,
@@ -31,9 +34,14 @@ from src.analysis_runtime.domain.contracts import (
 from src.analysis_runtime.domain.errors import (
     ActivityPersistenceError,
     InteractionNotAvailableError,
+    InvalidCheckpointError,
     InvalidCursorError,
     InvalidInteractionResponseError,
+    InvalidRetryTransitionError,
     ReplayGapError,
+    RetryAlreadyActiveError,
+    RetryIdempotencyConflictError,
+    RetryNotAvailableError,
 )
 
 
@@ -49,6 +57,8 @@ class InMemoryActivityRepository:
         self._pending_resumes: dict[str, PendingResume] = {}
         self._run_history: dict[tuple[str, str], AnalysisRunRecord] = {}
         self._run_owners: dict[tuple[str, str], str] = {}
+        self._retry_operations: dict[str, RetryOperation] = {}
+        self._retry_by_key: dict[tuple[str, str], str] = {}
         self._retention = replay_retention
 
     async def append_atomic(
@@ -187,6 +197,9 @@ class InMemoryActivityRepository:
                 ),
                 completed_outputs=tuple(outputs.values()),
                 failure=failure,
+                retry_operation=self._retry_view_for_run_unlocked(
+                    thread_id=thread_id, run_id=run_id
+                ),
             )
 
     async def get_run(self, *, thread_id: str) -> RunStatusRecord | None:
@@ -314,6 +327,16 @@ class InMemoryActivityRepository:
                         if input_data is not None
                         else None
                     ),
+                    source_run_id=previous_history.source_run_id
+                    if previous_history
+                    else None,
+                    retry_operation_id=previous_history.retry_operation_id
+                    if previous_history
+                    else None,
+                    attempt=previous_history.attempt if previous_history else 1,
+                    checkpoint=previous_history.checkpoint
+                    if previous_history
+                    else None,
                 )
             return record
 
@@ -514,6 +537,221 @@ class InMemoryActivityRepository:
     async def pending_resumes(self) -> tuple[PendingResume, ...]:
         async with self._lock:
             return tuple(self._pending_resumes.values())
+
+    async def begin_retry(
+        self,
+        *,
+        principal_id: str,
+        thread_id: str,
+        source_run_id: str,
+        checkpoint: CheckpointIdentity,
+        idempotency_key: str,
+        request_hash: str,
+        now: datetime,
+    ) -> tuple[RetryOperation, bool]:
+        async with self._lock:
+            existing_id = self._retry_by_key.get((principal_id, idempotency_key))
+            if existing_id is not None:
+                existing = self._retry_operations[existing_id]
+                if existing.request_hash != request_hash:
+                    raise RetryIdempotencyConflictError(
+                        "idempotency key was already used for another retry command"
+                    )
+                return existing, False
+            source = self._run_history.get((thread_id, source_run_id))
+            if (
+                source is None
+                or self._run_owners.get((thread_id, source_run_id)) != principal_id
+            ):
+                raise RetryNotAvailableError("source run was not found")
+            if source.status != "failed":
+                raise RetryNotAvailableError("only a failed run may be retried")
+            source_snapshot = await self._snapshot_unlocked(thread_id, source_run_id)
+            if source_snapshot.failure is None or not source_snapshot.failure.retryable:
+                raise RetryNotAvailableError("source failure is not retryable")
+            if source_snapshot.failure.checkpoint != checkpoint:
+                raise InvalidCheckpointError("checkpoint does not match the failed run")
+            current = self._runs.get(thread_id)
+            if current and current.status in {"queued", "running", "waiting"}:
+                raise RetryAlreadyActiveError("thread already has an active run")
+            attempt = 1 + max(
+                (
+                    operation.attempt
+                    for operation in self._retry_operations.values()
+                    if operation.thread_id == thread_id
+                    and operation.source_run_id == source_run_id
+                ),
+                default=0,
+            )
+            target_run_id = str(uuid.uuid4())
+            operation = RetryOperation(
+                operation_id=str(uuid.uuid4()),
+                thread_id=thread_id,
+                source_run_id=source_run_id,
+                target_run_id=target_run_id,
+                principal_id=principal_id,
+                idempotency_key=idempotency_key,
+                request_hash=request_hash,
+                checkpoint=checkpoint,
+                attempt=attempt,
+                status="queued",
+                created_at=now,
+                updated_at=now,
+            )
+            self._retry_operations[operation.operation_id] = operation
+            self._retry_by_key[(principal_id, idempotency_key)] = operation.operation_id
+            self._runs[thread_id] = RunStatusRecord(
+                thread_id=thread_id,
+                run_id=target_run_id,
+                status="queued",
+                started_at=now,
+                updated_at=now,
+            )
+            self._run_owners[(thread_id, target_run_id)] = principal_id
+            self._run_history[(thread_id, target_run_id)] = AnalysisRunRecord(
+                thread_id=thread_id,
+                run_id=target_run_id,
+                status="queued",
+                started_at=now,
+                updated_at=now,
+                input_data={
+                    "retry": {
+                        "source_run_id": source_run_id,
+                        "checkpoint": checkpoint.model_dump(mode="json"),
+                    }
+                },
+                source_run_id=source_run_id,
+                retry_operation_id=operation.operation_id,
+                attempt=attempt,
+                checkpoint=checkpoint,
+            )
+            return operation, True
+
+    async def set_retry_status(
+        self,
+        *,
+        operation_id: str,
+        status: str,
+        now: datetime,
+        outcome: str | None = None,
+    ) -> RetryOperation:
+        async with self._lock:
+            operation = self._retry_operations.get(operation_id)
+            if operation is None:
+                raise RetryNotAvailableError("retry operation was not found")
+            if not operation.can_transition_to(status):
+                raise InvalidRetryTransitionError(
+                    f"cannot transition retry from {operation.status} to {status}"
+                )
+            if (
+                operation.status in {"completed", "failed", "cancelled"}
+                and status == "running"
+            ):
+                return operation
+            ended_at = now if status in {"completed", "failed", "cancelled"} else None
+            updated = operation.model_copy(
+                update={
+                    "status": status,
+                    "updated_at": now,
+                    "ended_at": ended_at,
+                    "outcome": outcome,
+                }
+            )
+            self._retry_operations[operation_id] = updated
+            return updated
+
+    async def claim_retry(
+        self, *, operation_id: str, now: datetime, lease_seconds: float
+    ) -> RetryOperation | None:
+        async with self._lock:
+            operation = self._retry_operations.get(operation_id)
+            if operation is None or operation.status in {
+                "completed",
+                "failed",
+                "cancelled",
+            }:
+                return None
+            lease_expired = (
+                operation.status == "running"
+                and (now - operation.updated_at).total_seconds() >= lease_seconds
+            )
+            if operation.status == "running" and not lease_expired:
+                return None
+            claimed = operation.model_copy(
+                update={
+                    "status": "running",
+                    "updated_at": now,
+                    "ended_at": None,
+                    "outcome": None,
+                }
+            )
+            self._retry_operations[operation_id] = claimed
+            return claimed
+
+    async def pending_retries(
+        self, *, now: datetime, lease_seconds: float
+    ) -> tuple[RetryOperation, ...]:
+        async with self._lock:
+            return tuple(
+                operation
+                for operation in self._retry_operations.values()
+                if operation.status == "queued"
+                or (
+                    operation.status == "running"
+                    and (now - operation.updated_at).total_seconds() >= lease_seconds
+                )
+            )
+
+    async def retry_for_run(
+        self, *, thread_id: str, run_id: str
+    ) -> RetryOperation | None:
+        async with self._lock:
+            return self._retry_for_run_unlocked(thread_id=thread_id, run_id=run_id)
+
+    def _retry_for_run_unlocked(
+        self, *, thread_id: str, run_id: str
+    ) -> RetryOperation | None:
+        return next(
+            (
+                operation
+                for operation in self._retry_operations.values()
+                if operation.thread_id == thread_id
+                and (
+                    operation.source_run_id == run_id
+                    or operation.target_run_id == run_id
+                )
+            ),
+            None,
+        )
+
+    def _retry_view_for_run_unlocked(
+        self, *, thread_id: str, run_id: str
+    ) -> RetryOperationView | None:
+        operation = self._retry_for_run_unlocked(thread_id=thread_id, run_id=run_id)
+        return RetryOperationView.from_operation(operation) if operation else None
+
+    async def _snapshot_unlocked(self, thread_id: str, run_id: str) -> WorkflowSnapshot:
+        events = tuple(
+            event for event in self._events.get(thread_id, ()) if event.run_id == run_id
+        )
+        failure = next(
+            (
+                event.payload.failure
+                for event in reversed(events)
+                if isinstance(event, ActivityEvent)
+                and event.payload.activity_id == "workflow"
+                and event.payload.failure is not None
+            ),
+            None,
+        )
+        record = self._run_history.get((thread_id, run_id))
+        return WorkflowSnapshot(
+            thread_id=thread_id,
+            run_id=run_id,
+            run_status=record.status if record else "unknown",
+            cursor=self._cursors[thread_id],
+            failure=failure,
+        )
 
     def _create_events(
         self,
