@@ -64,4 +64,17 @@ describe('chart theme roles', () => {
     it('keeps role to CSS variable mapping closed', () => {
         expect(chartColorCssVariable('seriesDown')).toBe('var(--chart-series-down)');
     });
+
+    it('normalizes computed CSS Color 4 sRGB values for canvas renderers', () => {
+        const theme = parseChartTheme({
+            readToken: (token) => token,
+            resolveColor: (token) => token === '--chart-series-down-muted'
+                ? 'color(srgb 0.705882 0.137255 0.196078 / 0.45)'
+                : '#123456',
+            fontFamily: 'var(--font-inter)',
+        });
+
+        if (!theme) throw new Error('Expected all configured chart tokens to parse.');
+        expect(resolveChartColor(theme, 'seriesDownMuted')).toBe('rgba(180, 35, 50, 0.45)');
+    });
 });

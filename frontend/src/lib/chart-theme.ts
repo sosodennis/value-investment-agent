@@ -37,6 +37,27 @@ export type ChartTheme = Readonly<Record<ChartColorRole, string> & {
 
 type IncompleteChartTheme = Readonly<Record<ChartColorRole, string | null>>;
 
+const SRGB_COLOR_PATTERN = /^color\(srgb\s+([\d.+-]+)\s+([\d.+-]+)\s+([\d.+-]+)(?:\s*\/\s*([\d.+-]+%?))?\s*\)$/i;
+
+const clampUnit = (value: number): number => Math.min(1, Math.max(0, value));
+
+const parseAlpha = (value: string): number => {
+    const parsed = Number.parseFloat(value);
+    return clampUnit(value.endsWith('%') ? parsed / 100 : parsed);
+};
+
+const normalizeCanvasColor = (color: string): string => {
+    const match = color.match(SRGB_COLOR_PATTERN);
+    if (!match) return color;
+
+    const channels = match.slice(1, 4).map((channel) =>
+        Math.round(clampUnit(Number.parseFloat(channel)) * 255)
+    );
+    const rgb = channels.join(', ');
+    if (match[4] === undefined) return `rgb(${rgb})`;
+    return `rgba(${rgb}, ${parseAlpha(match[4])})`;
+};
+
 export interface ChartThemeParserInput {
     readToken: (token: string) => string;
     resolveColor: (token: string) => string;
@@ -56,7 +77,7 @@ export const parseChartTheme = ({
     const read = (role: ChartColorRole): string | null => {
         const token = CHART_THEME_TOKENS[role];
         if (!readToken(token).trim()) return null;
-        const color = resolveColor(token).trim();
+        const color = normalizeCanvasColor(resolveColor(token).trim());
         return color.length > 0 ? color : null;
     };
     const colors = {
