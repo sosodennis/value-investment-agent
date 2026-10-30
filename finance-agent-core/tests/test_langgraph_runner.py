@@ -1,4 +1,6 @@
+import asyncio
 from collections.abc import AsyncIterator, Mapping
+from contextvars import Context
 from typing import TypedDict
 
 import pytest
@@ -922,6 +924,12 @@ async def test_runner_uses_pinned_langgraph_stream_for_wait_and_resume() -> None
         selected: str
 
     async def clarify(state: State) -> dict[str, object]:
+        provider_principal = get_provider_principal()
+        request_principal = get_request_principal()
+        assert provider_principal is not None
+        assert provider_principal.user_id == "principal-1"
+        assert request_principal is not None
+        assert request_principal.subject_id == "principal-1"
         selection = interrupt(
             {
                 "type": "ticker_selection",
@@ -939,15 +947,23 @@ async def test_runner_uses_pinned_langgraph_stream_for_wait_and_resume() -> None
     builder.add_edge("clarifying", END)
     runner = LangGraphRunner(builder.compile(checkpointer=MemorySaver()))
 
-    first = [
-        item
-        async for item in runner.run(
-            thread_id="real-interrupt-thread",
-            run_id="runtime-run-1",
-            input_data={"message": "Apple"},
-            principal_id="principal-1",
-        )
-    ]
+    first_stream = runner.run(
+        thread_id="real-interrupt-thread",
+        run_id="runtime-run-1",
+        input_data={"message": "Apple"},
+        principal_id="principal-1",
+    )
+    consumer_context = Context()
+    first = []
+    while True:
+        item = await asyncio.create_task(anext(first_stream), context=consumer_context)
+        first.append(item)
+        if isinstance(item, InteractionRequested):
+            break
+    assert consumer_context.run(get_provider_principal) is None
+    assert consumer_context.run(get_request_principal) is None
+    await asyncio.create_task(first_stream.aclose(), context=Context())
+
     waiting = first[-1]
     assert isinstance(waiting, InteractionRequested)
     assert waiting.activity.status == "waiting"

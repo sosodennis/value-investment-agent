@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from collections.abc import AsyncIterator, Mapping
+from collections.abc import AsyncGenerator, AsyncIterator, Mapping
 from typing import Literal, Protocol
 from uuid import UUID
 
@@ -273,9 +273,10 @@ class LangGraphRunner(GraphRunner):
         else:
             graph_input = {}
 
-        provider_token = set_provider_principal(ProviderPrincipal(user_id=principal_id))
-        request_token = set_request_principal(
-            InternalPrincipal(subject_id=principal_id)
+        event_stream = self._stream_events_with_principal(
+            graph_input,
+            thread_id=thread_id,
+            principal_id=principal_id,
         )
         try:
             callback_metadata: dict[str, Mapping[str, object]] = {}
@@ -285,11 +286,7 @@ class LangGraphRunner(GraphRunner):
             suppressed_callbacks: set[str] = set()
             resumed_activity_started = False
             suspended = False
-            async for raw in self._graph.astream_events(
-                graph_input,
-                config={"configurable": {"thread_id": thread_id}},
-                version="v2",
-            ):
+            async for raw in event_stream:
                 if suspended:
                     continue
                 event_name = raw.get("event")
@@ -447,8 +444,43 @@ class LangGraphRunner(GraphRunner):
                 }:
                     active_callbacks.pop(callback_run_id, None)
         finally:
-            reset_request_principal(request_token)
-            reset_provider_principal(provider_token)
+            await event_stream.aclose()
+
+    async def _stream_events_with_principal(
+        self,
+        graph_input: Command[object] | dict[str, object],
+        *,
+        thread_id: str,
+        principal_id: str,
+    ) -> AsyncGenerator[Mapping[str, object], None]:
+        event_iterator = self._graph.astream_events(
+            graph_input,
+            config={"configurable": {"thread_id": thread_id}},
+            version="v2",
+        ).__aiter__()
+        try:
+            while True:
+                provider_token = set_provider_principal(
+                    ProviderPrincipal(user_id=principal_id)
+                )
+                try:
+                    request_token = set_request_principal(
+                        InternalPrincipal(subject_id=principal_id)
+                    )
+                    try:
+                        try:
+                            raw = await event_iterator.__anext__()
+                        except StopAsyncIteration:
+                            return
+                    finally:
+                        reset_request_principal(request_token)
+                finally:
+                    reset_provider_principal(provider_token)
+                yield raw
+        finally:
+            close = getattr(event_iterator, "aclose", None)
+            if close is not None:
+                await close()
 
     @staticmethod
     def _interrupt_activity(
