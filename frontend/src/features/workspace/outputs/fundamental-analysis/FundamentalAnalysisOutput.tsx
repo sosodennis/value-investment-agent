@@ -13,6 +13,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/empty-state';
+import type { EvidenceSelection } from '../../workspace-evidence-inspector';
 
 const MODEL_LABEL_BY_TYPE: Record<string, string> = {
     dcf_standard: 'DCF (Standard)',
@@ -34,13 +35,15 @@ export interface FundamentalAnalysisOutputProps {
     previewData: ParsedFinancialPreview | null;
     resolvedTicker: string | null | undefined;
     status: AgentStatus;
+    onSelectEvidence?: (item: EvidenceSelection) => void;
 }
 
 const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProps> = ({
     reference,
     previewData,
     resolvedTicker,
-    status
+    status,
+    onSelectEvidence,
 }) => {
     const {
         data: artifactData,
@@ -1355,6 +1358,8 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
                 <FinancialTable
                     reports={reports}
                     ticker={resolvedTicker || 'N/A'}
+                    artifactReference={reference}
+                    onSelectEvidence={onSelectEvidence}
                 />
             ) : isReferenceLoading ? (
                 <AgentLoadingState type="block" title="Loading financial reports…" />
