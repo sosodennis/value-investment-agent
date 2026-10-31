@@ -176,19 +176,6 @@ async def test_import_staging_is_encrypted_idempotent_owner_scoped_and_restartab
                 restarted._cipher.decrypt(deployed.encode("ascii")).decode() == api_key
             )
 
-            claimed_refresh = await restarted.claim_key_import_router_refreshes(
-                worker_id="router-refresh-worker"
-            )
-            assert claimed_refresh == [batch.id]
-            await restarted.mark_key_import_router_refreshed(
-                batch_id=batch.id, worker_id="router-refresh-worker"
-            )
-            assert (
-                await restarted.claim_key_import_router_refreshes(
-                    worker_id="second-router-worker"
-                )
-                == []
-            )
         finally:
             await _delete_user_data(restarted, user_id)
             await restarted.close()
@@ -261,9 +248,7 @@ async def test_two_workers_claim_all_items_of_a_hundred_key_batch_once() -> None
 
 
 @pytest.mark.asyncio
-async def test_concurrent_completion_reconciles_batch_and_allows_router_refresh() -> (
-    None
-):
+async def test_concurrent_completion_reconciles_batch_without_router_refresh() -> None:
     encryption_key = Fernet.generate_key().decode("ascii")
     user_id = f"import-complete-{uuid4()}"
     state_one = ProviderState(encryption_key=encryption_key)
@@ -297,10 +282,6 @@ async def test_concurrent_completion_reconciles_batch_and_allows_router_refresh(
         assert snapshot.status == "completed"
         assert snapshot.imported_count == 100
 
-        refreshes = await state_one.claim_key_import_router_refreshes(
-            worker_id="completion-refresh-worker"
-        )
-        assert batch.id in refreshes
         async with state_one._sessions() as session:
             stored_status = (
                 await session.execute(
@@ -314,20 +295,13 @@ async def test_concurrent_completion_reconciles_batch_and_allows_router_refresh(
                 )
             ).scalar_one()
         assert stored_status == "completed"
-        await state_one.mark_key_import_router_refreshed(
-            batch_id=batch.id, worker_id="completion-refresh-worker"
-        )
-        subsequent_refreshes = await state_two.claim_key_import_router_refreshes(
-            worker_id="duplicate-refresh-worker"
-        )
-        assert batch.id not in subsequent_refreshes
     finally:
         await _delete_user_data(state_one, user_id)
         await asyncio.gather(state_one.close(), state_two.close())
 
 
 @pytest.mark.asyncio
-async def test_retry_after_partial_success_refreshes_router_again() -> None:
+async def test_retry_after_partial_success_completes_without_router_refresh() -> None:
     encryption_key = Fernet.generate_key().decode("ascii")
     user_id = f"import-retry-{uuid4()}"
     state = ProviderState(encryption_key=encryption_key)
@@ -370,12 +344,6 @@ async def test_retry_after_partial_success_refreshes_router_again() -> None:
         assert failed.status == "completed_with_errors"
         assert failed.retryable_count == 1
 
-        assert await state.claim_key_import_router_refreshes(
-            worker_id="router-refresh-one"
-        ) == [batch.id]
-        await state.mark_key_import_router_refreshed(
-            batch_id=batch.id, worker_id="router-refresh-one"
-        )
         retried = await state.retry_key_import(user_id=user_id, batch_id=batch.id)
         assert retried is not None
         assert retried.status == "queued"
@@ -388,9 +356,6 @@ async def test_retry_after_partial_success_refreshes_router_again() -> None:
         assert await state.finish_import_success(
             item=retried_claim[0], model="openrouter/free"
         )
-        assert await state.claim_key_import_router_refreshes(
-            worker_id="router-refresh-two"
-        ) == [batch.id]
     finally:
         await _delete_user_data(state, user_id)
         await state.close()
