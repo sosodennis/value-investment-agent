@@ -23,6 +23,7 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { KeyImportPanel } from '@/features/llm-settings/key-import-panel';
 import {
     addLlmProviderKey,
     deleteLlmProviderKey,
@@ -344,34 +345,41 @@ export default function LlmSettingsPage() {
                 </section>
 
                 <div className="grid gap-7 lg:grid-cols-[minmax(16rem,0.7fr)_minmax(0,1.3fr)]">
-                    <form onSubmit={(event) => void handleAddKey(event)} className="grid content-start gap-5 border-b border-border py-6 lg:border-b-0 lg:border-r lg:pr-7" aria-labelledby="add-key-heading">
-                        <div>
-                            <h2 id="add-key-heading" className="font-semibold">{replacementCandidate ? `Replace ${replacementCandidate.label}` : 'Add a provider key'}</h2>
-                            <p className="mt-1 text-sm text-muted-foreground">The key is tested before it is stored.</p>
-                        </div>
-                        {replacementCandidate ? <Button type="button" variant="ghost" className="justify-self-start" disabled={isAddingKey} onClick={() => { setReplacementCandidate(null); setLabelOverride(''); labelDraftRef.current = ''; setApiKey(''); }}>Cancel replacement</Button> : null}
-                        <Field label="Label" htmlFor="key-label" description="Optional. Use a name you recognize.">
-                            <Input id="key-label" value={label} onFocus={() => {
-                                if (labelOverride === null && storedLabelDraft !== null) {
-                                    labelDraftRef.current = storedLabelDraft;
-                                    setLabelOverride(storedLabelDraft);
-                                    setStoredLabelDraft(null);
-                                }
-                            }} onChange={(event) => {
-                                const nextLabel = event.target.value;
-                                labelDraftRef.current = nextLabel;
-                                setLabelOverride(nextLabel);
-                                if (storedLabelDraft !== null) setStoredLabelDraft(null);
-                            }} placeholder="Primary research key" maxLength={80} disabled={isAddingKey} />
-                        </Field>
-                        <Field label="OpenRouter API key" htmlFor="openrouter-key">
-                            <Input id="openrouter-key" type="password" value={apiKey} onChange={(event) => setApiKey(event.target.value)} placeholder="sk-or-v1-..." minLength={20} maxLength={500} autoComplete="off" required disabled={isAddingKey} />
-                        </Field>
-                        <Button type="submit" disabled={isAddingKey || !authenticated || !apiKey}>
-                            {isAddingKey ? <LoaderCircle className="animate-spin" aria-hidden="true" /> : replacementCandidate ? <RefreshCw aria-hidden="true" /> : <Plus aria-hidden="true" />}
-                            {isAddingKey ? (replacementCandidate ? 'Testing and replacing...' : 'Testing and adding...') : replacementCandidate ? 'Test and replace key' : 'Test and add key'}
-                        </Button>
-                    </form>
+                    <div className="min-w-0 border-b border-border lg:border-b-0 lg:border-r lg:pr-7">
+                        <form onSubmit={(event) => void handleAddKey(event)} className="grid content-start gap-5 py-6" aria-labelledby="add-key-heading">
+                            <div>
+                                <h2 id="add-key-heading" className="font-semibold">{replacementCandidate ? `Replace ${replacementCandidate.label}` : 'Add a provider key'}</h2>
+                                <p className="mt-1 text-sm text-muted-foreground">The key is tested before it is stored.</p>
+                            </div>
+                            {replacementCandidate ? <Button type="button" variant="ghost" className="justify-self-start" disabled={isAddingKey} onClick={() => { setReplacementCandidate(null); setLabelOverride(''); labelDraftRef.current = ''; setApiKey(''); }}>Cancel replacement</Button> : null}
+                            <Field label="Label" htmlFor="key-label" description="Optional. Use a name you recognize.">
+                                <Input id="key-label" value={label} onFocus={() => {
+                                    if (labelOverride === null && storedLabelDraft !== null) {
+                                        labelDraftRef.current = storedLabelDraft;
+                                        setLabelOverride(storedLabelDraft);
+                                        setStoredLabelDraft(null);
+                                    }
+                                }} onChange={(event) => {
+                                    const nextLabel = event.target.value;
+                                    labelDraftRef.current = nextLabel;
+                                    setLabelOverride(nextLabel);
+                                    if (storedLabelDraft !== null) setStoredLabelDraft(null);
+                                }} placeholder="Primary research key" maxLength={80} disabled={isAddingKey} />
+                            </Field>
+                            <Field label="OpenRouter API key" htmlFor="openrouter-key">
+                                <Input id="openrouter-key" type="password" value={apiKey} onChange={(event) => setApiKey(event.target.value)} placeholder="sk-or-v1-..." minLength={20} maxLength={500} autoComplete="off" required disabled={isAddingKey} />
+                            </Field>
+                            <Button type="submit" disabled={isAddingKey || !authenticated || !apiKey}>
+                                {isAddingKey ? <LoaderCircle className="animate-spin" aria-hidden="true" /> : replacementCandidate ? <RefreshCw aria-hidden="true" /> : <Plus aria-hidden="true" />}
+                                {isAddingKey ? (replacementCandidate ? 'Testing and replacing...' : 'Testing and adding...') : replacementCandidate ? 'Test and replace key' : 'Test and add key'}
+                            </Button>
+                        </form>
+                        <KeyImportPanel
+                            authenticated={authenticated}
+                            onUnauthorized={redirectToLogin}
+                            onImportAccepted={() => void loadKeys(true)}
+                        />
+                    </div>
 
                     <section className="min-w-0 py-6" aria-labelledby="keys-heading">
                         <div className="flex items-center justify-between gap-3">

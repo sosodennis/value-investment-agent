@@ -41,6 +41,10 @@ class OwnershipPort(Protocol):
         self, *, user_id: str, key_id: str
     ) -> AbstractAsyncContextManager[None]: ...
 
+    def fingerprint_lock(
+        self, *, user_id: str, fingerprint: str
+    ) -> AbstractAsyncContextManager[None]: ...
+
     async def claim(
         self,
         *,

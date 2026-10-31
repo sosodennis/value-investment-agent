@@ -8,7 +8,10 @@ class ProviderSettingsError(RuntimeError):
 
 
 class OpenRouterKeyTestError(RuntimeError):
-    pass
+    def __init__(self, code: str, *, retry_after_seconds: float | None = None) -> None:
+        self.code = code
+        self.retry_after_seconds = retry_after_seconds
+        super().__init__(code)
 
 
 class OpenRouterModelsError(RuntimeError):

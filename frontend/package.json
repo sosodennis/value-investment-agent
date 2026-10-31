@@ -11,6 +11,7 @@
     "sync:api-contract": "bash ../scripts/generate-contracts.sh",
     "typecheck": "tsc --noEmit",
     "test": "vitest",
+    "test:e2e": "playwright test",
     "check:contrast": "node scripts/check-theme-contrast.mjs"
   },
   "dependencies": {
@@ -44,6 +45,7 @@
     "tailwind-merge": "^3.7.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.64.1",
     "@tailwindcss/postcss": "^4",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/react": "^16.3.1",

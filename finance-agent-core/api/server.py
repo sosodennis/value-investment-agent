@@ -6,8 +6,10 @@ from contextlib import asynccontextmanager
 
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
+from fastapi.responses import JSONResponse
 
 from src.analysis_runtime.application.ports import OwnerPort
 from src.analysis_runtime.application.runtime_service import AnalysisRuntimeService
@@ -83,6 +85,23 @@ app = FastAPI(
     version="3.0",
     lifespan=lifespan,
 )
+
+
+@app.exception_handler(RequestValidationError)
+async def request_validation_error_handler(
+    _request: Request, error: RequestValidationError
+) -> JSONResponse:
+    details = [
+        {
+            "type": str(issue.get("type", "validation_error")),
+            "loc": [str(part) for part in issue.get("loc", ())],
+            "msg": "Invalid request value.",
+        }
+        for issue in error.errors()
+    ]
+    return JSONResponse(status_code=422, content={"detail": details})
+
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins(),

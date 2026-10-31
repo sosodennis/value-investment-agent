@@ -905,6 +905,10 @@ class EmbeddedLiteLLMProvider:
         await self._publish_revision()
         return _managed(item)
 
+    async def refresh_after_key_import(self) -> None:
+        await self._refresh()
+        await self._publish_revision()
+
     async def update_model(self, model: str) -> None:
         await self._state.update_all_deployment_models(model)
         await self._refresh()

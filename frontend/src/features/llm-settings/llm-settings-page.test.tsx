@@ -6,10 +6,15 @@ import LlmSettingsPage from './llm-settings-page';
 
 const api = vi.hoisted(() => ({
     addLlmProviderKey: vi.fn(),
+    createLlmProviderKeyImport: vi.fn(),
     deleteLlmProviderKey: vi.fn(),
+    getLlmProviderKeyImport: vi.fn(),
     getLlmSettings: vi.fn(),
     listLlmProviderKeys: vi.fn(),
+    listLlmProviderKeyImports: vi.fn(),
+    previewLlmProviderKeyImport: vi.fn(),
     replaceLlmProviderKey: vi.fn(),
+    retryLlmProviderKeyImport: vi.fn(),
     testLlmProviderKey: vi.fn(),
     updateLlmSettings: vi.fn(),
 }));
@@ -62,6 +67,7 @@ describe('LLM settings', () => {
         vi.clearAllMocks();
         sessionStorage.clear();
         api.listLlmProviderKeys.mockResolvedValue([]);
+        api.listLlmProviderKeyImports.mockResolvedValue([]);
         api.getLlmSettings.mockResolvedValue({
             selected_model: 'openrouter/free',
             default_model: 'openrouter/free',
@@ -71,6 +77,13 @@ describe('LLM settings', () => {
                 description: 'Selects a free model.',
                 context_length: null,
             }],
+        });
+        api.previewLlmProviderKeyImport.mockResolvedValue({
+            file_type: 'txt',
+            row_count: 0,
+            unique_count: 0,
+            duplicate_count: 0,
+            issues: [],
         });
         api.addLlmProviderKey.mockResolvedValue({
             id: 'managed-1',

@@ -24,6 +24,9 @@ from src.llm_provider.domain.contracts import (
 )
 from src.llm_provider.domain.errors import ProviderSettingsError
 from src.llm_provider.domain.provider_models import ManagedProviderKey, OpenRouterModel
+from src.llm_provider.interface.contracts import (
+    ProviderKeyImportBatchResponse,
+)
 
 _Model = TypeVar("_Model", bound=BaseModel)
 _Value = TypeVar("_Value")
@@ -489,6 +492,50 @@ class LLMProviderServiceSettingsClient:
     async def delete_key(self, *, user_id: str, key_id: str) -> None:
         await self._call(
             "/v1/provider-keys/delete", {"key_id": key_id}, user_id=user_id
+        )
+
+    async def create_key_import(
+        self,
+        *,
+        user_id: str,
+        idempotency_key: str,
+        items: list[dict[str, object]],
+    ) -> ProviderKeyImportBatchResponse:
+        result = await self._call(
+            "/v1/provider-key-imports/create",
+            {"idempotency_key": idempotency_key, "items": items},
+            user_id=user_id,
+        )
+        return _settings_value(
+            TypeAdapter(ProviderKeyImportBatchResponse), result.get("import_batch")
+        )
+
+    async def list_key_imports(
+        self, *, user_id: str
+    ) -> list[ProviderKeyImportBatchResponse]:
+        result = await self._call("/v1/provider-key-imports/list", {}, user_id=user_id)
+        return _settings_value(
+            TypeAdapter(list[ProviderKeyImportBatchResponse]), result.get("imports")
+        )
+
+    async def get_key_import(
+        self, *, user_id: str, batch_id: str
+    ) -> ProviderKeyImportBatchResponse:
+        result = await self._call(
+            "/v1/provider-key-imports/get", {"batch_id": batch_id}, user_id=user_id
+        )
+        return _settings_value(
+            TypeAdapter(ProviderKeyImportBatchResponse), result.get("import_batch")
+        )
+
+    async def retry_key_import(
+        self, *, user_id: str, batch_id: str
+    ) -> ProviderKeyImportBatchResponse:
+        result = await self._call(
+            "/v1/provider-key-imports/retry", {"batch_id": batch_id}, user_id=user_id
+        )
+        return _settings_value(
+            TypeAdapter(ProviderKeyImportBatchResponse), result.get("import_batch")
         )
 
     async def selected_model_settings(

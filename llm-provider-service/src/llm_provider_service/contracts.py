@@ -109,6 +109,76 @@ class KeyMutationResult(StrictModel):
     key: KeySummary
 
 
+class KeyImportItemInput(StrictModel):
+    source_line: int = Field(ge=1)
+    label: str = Field(min_length=1, max_length=80)
+    api_key: SecretStr = Field(min_length=20, max_length=500)
+
+
+class KeyImportCreateInput(StrictModel):
+    idempotency_key: str = Field(min_length=16, max_length=128)
+    items: tuple[KeyImportItemInput, ...] = Field(min_length=1, max_length=500)
+
+
+class KeyImportBatchIdInput(StrictModel):
+    batch_id: str = Field(min_length=36, max_length=36)
+
+
+class KeyImportItemSummary(StrictModel):
+    source_line: int = Field(ge=1)
+    label: str
+    suffix: str | None = None
+    status: Literal[
+        "queued",
+        "validating",
+        "retry_wait",
+        "imported",
+        "duplicate",
+        "invalid",
+        "unavailable",
+        "expired",
+    ]
+    error_code: (
+        Literal[
+            "invalid_key",
+            "request_rejected",
+            "rate_limited",
+            "upstream_unavailable",
+            "worker_attempts_exhausted",
+            "staging_unavailable",
+            "already_owned",
+            "duplicate_in_batch",
+            "already_importing",
+            "retry_expired",
+        ]
+        | None
+    ) = None
+    attempts: int = Field(ge=0)
+    retryable: bool = False
+
+
+class KeyImportBatch(StrictModel):
+    id: str
+    status: Literal["queued", "processing", "completed", "completed_with_errors"]
+    total_count: int = Field(ge=0)
+    processed_count: int = Field(ge=0)
+    imported_count: int = Field(ge=0)
+    duplicate_count: int = Field(ge=0)
+    invalid_count: int = Field(ge=0)
+    retryable_count: int = Field(ge=0)
+    created_at: str
+    updated_at: str
+    items: tuple[KeyImportItemSummary, ...] = ()
+
+
+class KeyImportListResult(StrictModel):
+    imports: tuple[KeyImportBatch, ...]
+
+
+class KeyImportResult(StrictModel):
+    import_batch: KeyImportBatch
+
+
 class KeyDeleteResult(StrictModel):
     deleted: Literal[True] = True
 
