@@ -2,18 +2,34 @@ from __future__ import annotations
 
 import hmac
 import os
+from collections.abc import Awaitable, Callable
 from datetime import datetime
 
-from fastapi import HTTPException, Request, Response
+from fastapi import Depends, HTTPException, Request, Response
 
+from src.auth.application.authorization_service import AuthorizationService
+from src.auth.application.errors import AuthorizationDeniedError
 from src.auth.application.service import hash_secret
-from src.auth.application.wiring import get_auth_service
+from src.auth.application.wiring import (
+    get_auth_service,
+    get_authorization_service,
+)
+from src.auth.domain.authorization import (
+    AuthorizationContext,
+    AuthorizationFailureCode,
+    AuthorizationResource,
+    OrganizationPermission,
+)
 from src.auth.domain.entities import AuthenticatedContext
 from src.auth.interface.contracts import Principal
 
 SESSION_COOKIE_NAME = "app_session"
 CSRF_COOKIE_NAME = "app_csrf"
 CSRF_HEADER_NAME = "X-CSRF-Token"
+
+AuthorizationResourceFactory = Callable[
+    [Request, AuthenticatedContext], AuthorizationResource
+]
 
 
 def _is_production() -> bool:
@@ -40,6 +56,61 @@ async def current_context(request: Request) -> AuthenticatedContext:
 
 async def current_user(request: Request) -> AuthenticatedContext:
     return await current_context(request)
+
+
+def require_organization_permission(
+    permission: OrganizationPermission,
+    *,
+    resource_factory: AuthorizationResourceFactory | None = None,
+) -> Callable[..., Awaitable[AuthenticatedContext]]:
+    async def dependency(
+        request: Request,
+        context: AuthenticatedContext = Depends(current_context),
+    ) -> AuthenticatedContext:
+        resource = (
+            resource_factory(request, context)
+            if resource_factory is not None
+            else _default_authorization_resource(permission, context)
+        )
+        _require_permission(
+            service=get_authorization_service(),
+            context=context,
+            permission=permission,
+            resource=resource,
+        )
+        return context
+
+    return dependency
+
+
+def _require_permission(
+    *,
+    service: AuthorizationService,
+    context: AuthenticatedContext,
+    permission: OrganizationPermission,
+    resource: AuthorizationResource | None = None,
+) -> None:
+    try:
+        service.require(
+            context=AuthorizationContext.from_authenticated_context(context),
+            permission=permission,
+            resource=resource,
+        )
+    except AuthorizationDeniedError as exc:
+        status_code = (
+            404
+            if exc.code == AuthorizationFailureCode.RESOURCE_NOT_FOUND.value
+            else 403
+        )
+        raise HTTPException(status_code=status_code, detail=exc.code) from exc
+
+
+def _default_authorization_resource(
+    permission: OrganizationPermission, context: AuthenticatedContext
+) -> AuthorizationResource:
+    if permission is OrganizationPermission.ORGANIZATION_CREATE:
+        return AuthorizationResource()
+    return AuthorizationResource(organization_id=context.membership.organization_id)
 
 
 async def require_current_user(request: Request) -> Principal:

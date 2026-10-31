@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from src.auth.application.authorization_service import AuthorizationService
 from src.auth.application.ownership_service import OwnershipService
 from src.auth.application.service import AuthService
 from src.auth.infrastructure.passwords import Argon2PasswordHasher
@@ -13,6 +14,7 @@ from src.auth.infrastructure.repositories import (
 )
 
 _auth_service: AuthService | None = None
+_authorization_service: AuthorizationService | None = None
 _ownership_service: OwnershipService | None = None
 
 
@@ -35,7 +37,15 @@ def get_ownership_service() -> OwnershipService:
     return _ownership_service
 
 
+def get_authorization_service() -> AuthorizationService:
+    global _authorization_service
+    if _authorization_service is None:
+        _authorization_service = AuthorizationService()
+    return _authorization_service
+
+
 def reset_auth_wiring() -> None:
-    global _auth_service, _ownership_service
+    global _auth_service, _authorization_service, _ownership_service
     _auth_service = None
+    _authorization_service = None
     _ownership_service = None
