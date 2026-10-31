@@ -6,6 +6,7 @@ import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { ThemeProvider } from '@/components/theme-provider';
 import { AppShell } from '@/components/shell/app-shell';
 import { TooltipProvider } from '@/components/ui/tooltip';
+import { OrganizationProvider } from '@/features/organizations/organization-context';
 
 const geistSans = Geist({
     variable: '--font-geist-sans',
@@ -47,9 +48,11 @@ export default function RootLayout({
                 <AuthProvider>
                     <ThemeProvider>
                         <TooltipProvider>
-                            <ProtectedRoute>
-                                <AppShell>{children}</AppShell>
-                            </ProtectedRoute>
+                            <OrganizationProvider>
+                                <ProtectedRoute>
+                                    <AppShell>{children}</AppShell>
+                                </ProtectedRoute>
+                            </OrganizationProvider>
                         </TooltipProvider>
                     </ThemeProvider>
                 </AuthProvider>

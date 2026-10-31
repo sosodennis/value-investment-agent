@@ -8,6 +8,8 @@ const mocks = vi.hoisted(() => ({
     pathname: '/workspace',
     replace: vi.fn(),
     signOut: vi.fn(),
+    selectOrganization: vi.fn(),
+    refreshOrganizations: vi.fn(),
 }));
 
 vi.mock('next/navigation', () => ({
@@ -31,12 +33,44 @@ vi.mock('@/components/auth/AuthProvider', () => ({
     }),
 }));
 
+vi.mock('@/features/organizations/organization-context', () => ({
+    useOrganizationContext: () => ({
+        organizations: [
+            {
+                id: 'preview-organization',
+                name: 'Preview team',
+                createdAt: '2026-01-01T00:00:00Z',
+                membershipId: 'preview-membership',
+                role: 'owner',
+                status: 'active',
+            },
+        ],
+        activeOrganization: {
+            id: 'preview-organization',
+            name: 'Preview team',
+            createdAt: '2026-01-01T00:00:00Z',
+            membershipId: 'preview-membership',
+            role: 'owner',
+            status: 'active',
+        },
+        isLoading: false,
+        isSelecting: false,
+        selectingOrganizationId: null,
+        error: null,
+        refresh: mocks.refreshOrganizations,
+        selectOrganization: mocks.selectOrganization,
+        createOrganization: vi.fn(),
+    }),
+}));
+
 afterEach(() => {
     cleanup();
     vi.unstubAllGlobals();
     mocks.pathname = '/workspace';
     mocks.replace.mockReset();
     mocks.signOut.mockReset();
+    mocks.selectOrganization.mockReset();
+    mocks.refreshOrganizations.mockReset();
 });
 
 beforeEach(() => {

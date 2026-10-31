@@ -4,9 +4,11 @@ import * as React from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useTheme } from 'next-themes';
-import { LogOut, Menu, Moon, Sun, Laptop, Sparkles, UserRound } from 'lucide-react';
+import { Building2, LogOut, Menu, Moon, Sun, Laptop, RefreshCw, Sparkles, UserRound } from 'lucide-react';
 import { useAuth } from '@/components/auth/AuthProvider';
+import { useOrganizationContext } from '@/features/organizations/organization-context';
 import { Button } from '@/components/ui/button';
+import { Combobox } from '@/components/ui/combobox';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -100,6 +102,65 @@ function ThemeMenu() {
                 </DropdownMenuRadioGroup>
             </DropdownMenuContent>
         </DropdownMenu>
+    );
+}
+
+function OrganizationSwitcher() {
+    const {
+        organizations,
+        activeOrganization,
+        error,
+        isLoading,
+        isSelecting,
+        refresh,
+        selectOrganization,
+    } = useOrganizationContext();
+
+    if (isLoading && organizations.length === 0) {
+        return (
+            <div className="hidden min-w-0 items-center gap-2 text-sm text-muted-foreground sm:flex" role="status">
+                <Building2 aria-hidden="true" className="size-4 shrink-0" />
+                <span className="max-w-36 truncate">Loading organization...</span>
+            </div>
+        );
+    }
+
+    return (
+        <div className="flex min-w-0 items-center gap-2">
+            <Building2 aria-hidden="true" className="hidden size-4 shrink-0 text-muted-foreground sm:block" />
+            {organizations.length > 0 ? (
+                <Combobox
+                    value={activeOrganization?.id}
+                    onValueChange={(organizationId) => {
+                        if (organizationId) void selectOrganization(organizationId);
+                    }}
+                    options={organizations.map((organization) => ({
+                        value: organization.id,
+                        label: `${organization.name} (${organization.role})`,
+                        keywords: [organization.name, organization.role],
+                    }))}
+                    ariaLabel="Active organization"
+                    placeholder="Select organization"
+                    searchPlaceholder="Search organizations"
+                    emptyMessage="No organizations found."
+                    disabled={isLoading || isSelecting}
+                    className="h-9 w-36 max-w-[42vw] border-border/70 bg-background/70 text-xs sm:w-48 sm:text-sm"
+                />
+            ) : null}
+            {error ? (
+                <div className="hidden items-center gap-1 sm:flex" role="alert">
+                    <span className="max-w-40 truncate text-sm text-destructive">Organization unavailable</span>
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        aria-label="Retry organization context"
+                        onClick={() => void refresh()}
+                    >
+                        <RefreshCw aria-hidden="true" className="size-4" />
+                    </Button>
+                </div>
+            ) : null}
+        </div>
     );
 }
 
@@ -201,6 +262,7 @@ function AppHeader() {
                     </span>
                     <span className="truncate">FinanceAI Lab</span>
                 </Link>
+                {!isAuthPage && !loading ? <OrganizationSwitcher /> : null}
             </div>
             {!isAuthPage ? (
                 <div className="flex shrink-0 items-center gap-1">
