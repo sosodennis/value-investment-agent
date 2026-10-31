@@ -18,9 +18,9 @@
   annotations in the shared `finance-agent-core/src/shared/internal_services/contracts.py`.
 - PASS: `python3 scripts/architecture_guard.py`.
 - PASS: `git diff --check`.
-- PASS: `LITELLM_MASTER_KEY=compose-validation-only SEARCH_SERVICE_HOST_PORT=18003 docker compose -p value-investment-agent-issue122-codex-122 config --quiet`.
+- PASS: `LLM_PROVIDER_ENCRYPTION_KEY=JRNZ1-TpUwO-4trpfntsDM92mUvk3Oluu1MCsvZHpRU= SEARCH_SERVICE_HOST_PORT=18003 docker compose -p value-investment-agent-issue122-codex-122 config --quiet`.
 - PASS: the same isolated Compose configuration lists `search-service` among services and the current profiles.
-- PASS: `LITELLM_MASTER_KEY=compose-validation-only docker compose -p value-investment-agent-issue122-codex-122 build search-service`.
+- PASS: `LLM_PROVIDER_ENCRYPTION_KEY=JRNZ1-TpUwO-4trpfntsDM92mUvk3Oluu1MCsvZHpRU= docker compose -p value-investment-agent-issue122-codex-122 build search-service`.
 - PASS: container smoke test returned `{"status":"ok"}` from `GET /livez`; `GET /readyz` returned 503 while unconfigured. The container and project network were removed afterward.
 - PASS: commit hooks (`trim trailing whitespace`, `fix end of files`, YAML validation, large-file check, Ruff, and Ruff format).
 

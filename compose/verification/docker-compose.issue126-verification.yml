@@ -17,9 +17,6 @@ services:
     tmpfs:
       - /data
 
-  llm-gateway:
-    ports: []
-
   backend:
     ports: []
     image: ${ISSUE126_BACKEND_IMAGE:-value-investment-agent-backend:latest}

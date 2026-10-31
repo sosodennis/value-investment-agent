@@ -8,7 +8,7 @@ REPORT="${ISSUE126_REPORT:-reports/issue-126/deployment-${PROJECT}.jsonl}"
 HEALTH_TIMEOUT_SECONDS="${ISSUE126_HEALTH_TIMEOUT_SECONDS:-300}"
 KEEP_STACK="${ISSUE126_KEEP_STACK:-0}"
 
-export LITELLM_MASTER_KEY="${LITELLM_MASTER_KEY:-issue126-disposable-gateway-key}"
+export LLM_PROVIDER_ENCRYPTION_KEY="${LLM_PROVIDER_ENCRYPTION_KEY:-JRNZ1-TpUwO-4trpfntsDM92mUvk3Oluu1MCsvZHpRU=}"
 export LLM_PROVIDER_SERVICE_TOKEN="${LLM_PROVIDER_SERVICE_TOKEN:-issue126-disposable-provider-token}"
 export SEARCH_SERVICE_TOKEN="${SEARCH_SERVICE_TOKEN:-issue126-disposable-search-token}"
 export INFERENCE_SERVICE_TOKEN="${INFERENCE_SERVICE_TOKEN:-issue126-disposable-inference-token}"
@@ -203,4 +203,4 @@ else
 fi
 
 record focused-failure-coverage PASS "service suites cover overload, cancellation, malformed responses, ownership isolation, retry budgets, cooldowns, and redaction"
-echo "Issue #126 capability verification completed; LiteLLM gateway verification runs separately. Report: $REPORT"
+echo "Issue #126 capability verification completed with the embedded LLM provider runtime. Report: $REPORT"

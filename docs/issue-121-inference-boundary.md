@@ -67,7 +67,7 @@ copying a second implementation into the service.
 - Base SHA: `275035bce879dce8cd6d0e94af4c02cb2a919efc`.
 - Result SHA: recorded by the implementation commit referenced in the PR.
 - Verdict: PASS for focused service/client boundary checks. Compose validation is
-  BLOCKED by the shared root configuration requiring `LITELLM_MASTER_KEY`.
+  BLOCKED by the shared root configuration requiring `LLM_PROVIDER_ENCRYPTION_KEY`.
 - Backend ML dependencies: retained. The repository inventory still contains
   backend-owned embedding and spaCy workloads, so shared ML dependencies were
   not removed.
@@ -86,7 +86,7 @@ Validation evidence:
 - PASS: `python3 -m compileall -q model-inference-service/src`.
 - PASS: `python3 scripts/architecture_guard.py` (`no boundary violations`).
 - BLOCKED: `docker compose config --quiet` because the shared root Compose
-  requires `LITELLM_MASTER_KEY`; no Docker image or container was started.
+  requires `LLM_PROVIDER_ENCRYPTION_KEY`; no Docker image or container was started.
 - NOT RERUN: #109 deployment probes and #126 replica routing proof. This
   change does not alter model lifecycle or routing and #126 owns the routing
   proof.

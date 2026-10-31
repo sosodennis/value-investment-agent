@@ -7,10 +7,11 @@ keys, LiteLLM, HTTP clients, or provider SDK exception classes.
 
 ## MVP boundary
 
-OpenRouter is the only upstream provider, reached through the internal LiteLLM
-gateway at `https://openrouter.ai/api/v1`. LiteLLM implements the gateway and is
-replaceable behind this contract. Direct OpenAI fallback is not part of the
-production contract.
+OpenRouter is the current upstream provider, reached through the provider
+service's embedded LiteLLM Router at `https://openrouter.ai/api/v1`. LiteLLM is
+an internal runtime and is replaceable behind this contract. There is no
+separate HTTP gateway or provider fallback. Direct OpenAI fallback is not part
+of the production contract.
 
 Provider settings are user-scoped in the current delivery. Every settings
 request requires the shared `app_session` principal; the server derives the
@@ -21,8 +22,8 @@ exists for local diagnostics, but it does not authorize provider settings.
 
 The authenticated `/stream` API binds the session-derived principal to a
 `ContextVar` for each workflow request. The compiled graph stays shared and
-does not store a user id in agent wiring. The gateway requires a principal by
-default through `LLM_GATEWAY_REQUIRE_PRINCIPAL`. A missing principal returns
+does not store a user id in agent wiring. The provider runtime requires a
+principal. A missing principal returns
 the non-retryable `provider_context_missing` error. The provider adapter
 resolves the user's opaque gateway route for each completion or stream; browser
 input never supplies a deployment id, route alias, or OpenRouter key.
@@ -42,8 +43,8 @@ only normalized response data. `StreamEvent` uses `started`, `delta`, and
 `completed` events, with `error` reserved for a terminal provider failure.
 
 Structured output carries a Pydantic response schema in `StructuredRequest`. The adapter
-validates the response and returns the declared model; callers do not parse
-provider dictionaries.
+validates the response, performs one bounded correction request when the schema
+fails, and returns the declared model; callers do not parse provider dictionaries.
 
 ## Error and streaming rules
 
@@ -52,18 +53,15 @@ Adapters map SDK and HTTP failures to `LLMProviderError` and
 bounded partial output are available for application error mapping. Provider
 keys, prompts, raw provider errors, and SDK objects never cross this boundary.
 
-The application adapter retries gateway requests. Interactive requests default
+The application adapter retries provider requests. Interactive requests default
 to two attempts. Background requests default to three. A global cap limits both
-classes to three gateway requests. LiteLLM also retries a deployment once
-within each gateway request. The configured upstream-dispatch limits are four
-for interactive work and six for background work. `LLM_GATEWAY_MAX_ATTEMPTS`
-sets the global cap. `LLM_GATEWAY_MAX_ATTEMPTS_INTERACTIVE` and
-`LLM_GATEWAY_MAX_ATTEMPTS_BACKGROUND` set each class budget.
+classes to three provider requests. LiteLLM also retries a deployment once
+within each provider request. The configured upstream-dispatch limits are four
+for interactive work and six for background work. The provider runtime
+configuration sets the global cap and request-class budgets.
 
-Backoff starts at `1s`, stops at `8s`, and adds up to `0.25s` of jitter. Set
-`LLM_GATEWAY_BACKOFF_SECONDS`, `LLM_GATEWAY_MAX_BACKOFF_SECONDS`, and
-`LLM_GATEWAY_JITTER_SECONDS` to change it. The adapter honors a numeric or
-HTTP-date `Retry-After` header and caps the delay. It reduces upstream response
+Backoff starts at `1s` and stops at `8s`. The adapter honors a numeric
+`Retry-After` header and caps the delay. It reduces upstream response
 bodies to stable status-based reasons before returning errors. Invalid
 requests, policy rejections, schema failures, and cancellation are terminal.
 Transient timeout, rate-limit, and selected upstream failures may be retried.
@@ -77,40 +75,31 @@ Agent application services consume `LLMProviderPort` through typed completion
 and structured requests. LangGraph still owns workflow state and callbacks;
 model requests no longer depend on the LangChain chat-model compatibility API.
 
-The current HTTP adapter is `LiteLLMGatewayProvider`. It sends the project
-model alias to the gateway's `/v1/chat/completions` endpoint, translates
-OpenAI-compatible usage and tool-call data, sends Pydantic JSON Schema for
-structured requests, and adds request/idempotency headers. Its retry budget is
-bounded and its terminal errors are non-retryable after exhaustion. For the
-simplified MVP, LiteLLM owns credential selection among database-backed
-deployments registered under an opaque per-user route alias; router retry and
-cooldown settings apply to that user's model group. A separate fallback alias
-is not part of the MVP. Production rollout still requires disposable-key
-selection and recovery checks in the [gateway rollout runbook](runbooks/llm-gateway-rollout.md).
-The project adapter does not receive, rotate, or persist OpenRouter keys.
+The default runtime is `EmbeddedLiteLLMProvider`. It creates one long-lived
+LiteLLM Router per provider-service process, translates the project model alias
+to an opaque per-user route, and keeps router retry/cooldown state on shared
+Redis. Provider-owned PostgreSQL deployments store encrypted OpenRouter keys;
+the project adapter does not expose them to agents or the browser.
 Multi-key user pools and key health tracking were delivered under #90;
 delegated roles and secret-manager integrations remain outside the MVP.
 LiteLLM cools a deployment after its first retryable failure. The setting
 `allowed_fails: 0` sets this threshold, and `cooldown_time: 30` keeps the
 deployment unavailable for 30 seconds. Redis shares cooldown state between
-Router processes. The pinned-image contract test verifies cross-process
-cooldown and recovery against fake upstreams. Full proxy HTTP requests, backend
-concurrency, real OpenRouter behavior, and broader failure-injection evidence
-were tracked by #91 and #97. Those issues are closed; this contract describes
-the delivered MVP boundary. Any new production rollout gate should be tracked
-as a new issue.
+Router processes. Cross-process cooldown, real OpenRouter behavior, and broader
+failure-injection evidence remain acceptance gates for #189.
 
-The application constructs one shared gateway provider. Local development also
-uses the gateway. It does not create a direct OpenRouter or OpenAI client.
-The gateway model group is derived from the authenticated user id; its database
+The application constructs one shared provider runtime per process. Local and
+canonical Compose development use the embedded runtime. The model group is
+derived from the authenticated user id, while provider-owned encrypted
 deployments are the source of truth for that user's configured OpenRouter keys.
 
-The project database stores selected-model settings and key ownership metadata,
-not raw OpenRouter keys. The project backend sends submitted key material only
-to LiteLLM's internal model-management API. The pinned LiteLLM release encrypts
-stored credential values with its master key when `LITELLM_SALT_KEY` is unset;
-keep that master key stable while gateway deployments exist. Vault and cloud
-secret-manager integrations are deferred.
+The project database stores selected-model settings, ownership metadata, and
+provider-owned encrypted OpenRouter keys. The encryption key is supplied as
+`LLM_PROVIDER_ENCRYPTION_KEY` and must be backed up with the service database.
+Existing keys that remain only in an old LiteLLM database are not silently
+reset; #190 records the required explicit migration or re-key decision before
+those retained records can be retired.
+Vault and cloud secret-manager integrations are deferred.
 
 Basic telemetry records request outcome, attempt/retry counts, latency,
 time-to-first-token, stream interruption, and token usage in bounded counters

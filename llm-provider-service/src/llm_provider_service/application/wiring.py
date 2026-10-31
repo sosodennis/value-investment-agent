@@ -7,15 +7,12 @@ from src.llm_provider_service.application.ports import ModelCatalog
 from src.llm_provider_service.application.settings_service import (
     ProviderSettingsService,
 )
-from src.llm_provider_service.domain.contracts import LLMProviderPort
-from src.llm_provider_service.infrastructure.gateway import (
-    LiteLLMGatewayConfig,
-    LiteLLMGatewayProvider,
+from src.llm_provider_service.infrastructure.embedded_runtime import (
+    EmbeddedLiteLLMProvider,
 )
 from src.llm_provider_service.infrastructure.key_telemetry import (
     RedisProviderKeyTelemetry,
 )
-from src.llm_provider_service.infrastructure.litellm_admin import LiteLLMAdminClient
 from src.llm_provider_service.infrastructure.openrouter_key_test import (
     validate_openrouter_key,
 )
@@ -90,27 +87,24 @@ class _Catalog(ModelCatalog):
 
 class ProviderRuntime:
     def __init__(self) -> None:
-        self.state = ProviderState()
-        base_url = os.getenv("LLM_GATEWAY_BASE_URL", "http://localhost:4000").strip()
-        token = os.getenv("LLM_GATEWAY_API_KEY", "").strip()
-        headers = {"X-Title": os.getenv("OPENROUTER_X_TITLE", "Value Investment Agent")}
-        referer = os.getenv("OPENROUTER_HTTP_REFERER", "").strip()
-        if referer:
-            headers["HTTP-Referer"] = referer
-        self.admin = LiteLLMAdminClient(
-            base_url=base_url, admin_token=token, openrouter_headers=headers
-        )
+        encryption_key = os.getenv("LLM_PROVIDER_ENCRYPTION_KEY", "").strip()
+        if not encryption_key:
+            raise ValueError(
+                "LLM_PROVIDER_ENCRYPTION_KEY is required for the LLM provider service"
+            )
+        self.state = ProviderState(encryption_key=encryption_key)
         self.telemetry: RedisProviderKeyTelemetry | None = None
-        self.gateway: LLMProviderPort | None = None
+        self.provider: EmbeddedLiteLLMProvider | None = None
         self.settings: ProviderSettingsService | None = None
         self.ready = False
 
     async def start(self) -> None:
         await self.state.initialize()
         self.telemetry = RedisProviderKeyTelemetry()
-        self.gateway = LiteLLMGatewayProvider(LiteLLMGatewayConfig.from_env())
+        self.provider = EmbeddedLiteLLMProvider(self.state)
+        await self.provider.start()
         self.settings = ProviderSettingsService(
-            gateway=self.admin,
+            gateway=self.provider,
             ownership=_Ownership(self.state),
             settings=_Settings(self.state),
             catalog=_Catalog(),
@@ -121,9 +115,8 @@ class ProviderRuntime:
 
     async def close(self) -> None:
         self.ready = False
-        if self.gateway is not None:
-            await self.gateway.aclose()
-        await self.admin.close()
+        if self.provider is not None:
+            await self.provider.aclose()
         if self.telemetry is not None:
             await self.telemetry.close()
         await self.state.close()

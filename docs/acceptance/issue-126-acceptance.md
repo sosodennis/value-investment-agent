@@ -1,27 +1,26 @@
 # Issue 126 Acceptance Report
 
+> Superseded by issue #189. This historical report records the 2026-10-24
+> capability deployment experiment; its standalone LiteLLM gateway topology
+> and gateway verification commands are retired. The canonical topology now
+> runs the embedded LiteLLM runtime inside `llm-provider-service`.
+
 Date: 2026-10-24
 
 ## Result
 
-**PASS for the independent capability deployment gates.** The LLM Provider,
-Model Inference, and Search services ran as separate Compose services with two
-replicas each. Backend replacement and capability restarts were independent.
-LiteLLM gateway verification also passed after updating the pinned image to
-LiteLLM v1.106.2.
-
-The gateway and capability checks run as separate isolated Compose projects.
-The Docker VM has approximately 8.3 GB available and is shared by other
-worktrees; combining all replicas with LiteLLM caused an observed Docker OOM
-(`exit 137`). That resource-pressure experiment is retained as an environment
-finding, not a product pass/fail result.
+**Historical PASS for the independent capability deployment gates.** The LLM
+Provider, Model Inference, and Search services ran as separate Compose services
+with two replicas each. Backend replacement and capability restarts were
+independent. The standalone gateway experiment is no longer a supported
+runtime path and is not evidence for the current topology.
 
 ## Revisions
 
 - Baseline: `af25f9d634fcb98f2372dd4892e9d13110c92175` (`origin/main`)
 - Capability implementation: `da46e27210a134ecd244aba816f7d07afb079051`
 - Final verification tooling: `afde1da`; final reviewed registry pin: `35aaa1b`
-- LiteLLM image: `ghcr.io/berriai/litellm@sha256:7294b90f868c5c38c99b83021c7ba46f9b439e95f8e32964c925c7d2563a03f7` (`v1.106.2`, ARM64)
+- Historical LiteLLM image: `ghcr.io/berriai/litellm@sha256:7294b90f868c5c38c99b83021c7ba46f9b439e95f8e32964c925c7d2563a03f7` (`v1.106.2`, ARM64). The image was used by the retired gateway experiment.
 
 ## Verification matrix
 
@@ -38,8 +37,8 @@ finding, not a product pass/fail result.
 | Capability restart | PASS | LLM Provider and both inference operations become ready after independent restart |
 | Version skew | PASS | Previous Search image ran beside current replicas and passed `/readyz` |
 | Failure coverage | PASS | Focused suites cover overload, cancellation, malformed responses, ownership isolation, retry budgets, cooldowns, and redaction |
-| LiteLLM fresh database migration | PASS | v1.106.2 applied all Prisma migrations on a disposable `litellm` database |
-| LiteLLM liveness and auth | PASS | `/health/liveliness`, authenticated `/v1/models`, authenticated `/model/info`, and unauthenticated 401 probe |
+| Retired gateway database migration | HISTORICAL | v1.106.2 applied all Prisma migrations on a disposable `litellm` database |
+| Retired gateway liveness and auth | HISTORICAL | `/health/liveliness`, authenticated `/v1/models`, authenticated `/model/info`, and unauthenticated 401 probe |
 
 The capability run was executed with:
 
@@ -50,17 +49,9 @@ ISSUE126_HEALTH_TIMEOUT_SECONDS=420 \
 ./scripts/verify_capability_deployment.sh
 ```
 
-The gateway run was executed with:
-
-```bash
-ISSUE126_GATEWAY_COMPOSE_PROJECT=value-investment-agent-issue126-gateway-final \
-ISSUE126_HEALTH_TIMEOUT_SECONDS=420 \
-./scripts/verify_issue126_gateway.sh
-```
-
-Both runners use unique Compose project names and clean their own containers
-and networks on exit. They do not run global Docker pruning or remove shared
-volumes.
+The capability runner used a unique Compose project name and cleaned its own
+containers and networks on exit. It did not run global Docker pruning or
+remove shared volumes.
 
 ## Fixes made during acceptance
 
@@ -90,7 +81,5 @@ volumes.
 - #126 does not close the broader #118 or repository architecture epic #101.
   Those remain open for future capability inventory and architecture migration
   work.
-- The combined all-replica-plus-gateway run must be repeated on a Docker VM
-  with sufficient memory before treating that deployment shape as a supported
-  local profile. The isolated gateway and capability gates are independently
-  green.
+- Current embedded-runtime acceptance is tracked by #189, including provider
+  service replica checks, fault injection, and secret/tenant isolation.

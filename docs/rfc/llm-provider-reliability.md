@@ -1,6 +1,9 @@
 # LLM Provider Reliability Boundary
 
-Issue #91 splits reliability ownership at the gateway boundary:
+The reliability boundary is inside the independently deployed
+`llm-provider-service`, which owns the embedded LiteLLM Router runtime.
+
+Issue #91 splits reliability ownership at the provider-runtime boundary:
 
 - LiteLLM owns deployment candidate selection, per-deployment cooldown, and
   upstream key rotation inside the authenticated user pool.
@@ -21,17 +24,15 @@ delivered. A post-first-byte failure is returned as `stream_interrupted` with
 partial output/tool-call data and the attempt history. Before the first byte,
 transient status and transport errors may consume the bounded retry budget.
 
-The Compose POC delegates cooldown state to LiteLLM and configures both its
-Router Redis and proxy-wide `coordination_redis` with the shared Redis service.
-The latter keeps worker-shared auth/throttle and coordination state separate
-from response caching. `LLM_GATEWAY_WORKERS` can run multiple LiteLLM workers in
-one container; every worker uses the same Redis-backed cooldown and rate state.
+The embedded runtime delegates cooldown state to LiteLLM Router and configures
+its Redis coordination with the shared Redis service. A provider-service
+replica owns one long-lived Router; deployment revisions are persisted in
+PostgreSQL and reconciled through Redis so a second replica refreshes its
+model list after key/model mutations.
 LiteLLM stores each cooldown with a Redis TTL. After the TTL expires, the
 deployment can receive requests again. The router does not guarantee a single
 half-open probe across workers, so several requests can reach a recovering
-deployment at once. A pinned-image contract test with fake upstreams proves
-cross-process cooldown sharing and recovery after expiry. Issues #91 and #97
-are closed. The [gateway rollout runbook](../runbooks/llm-gateway-rollout.md)
-records the remaining disposable-key evidence required before production
-approval. No process-local round-robin state replaces LiteLLM's shared cooldown
+deployment at once. The embedded runtime must prove cross-process cooldown
+sharing and recovery after expiry with fake upstreams and two provider
+replicas. No process-local round-robin state replaces LiteLLM's shared cooldown
 state.

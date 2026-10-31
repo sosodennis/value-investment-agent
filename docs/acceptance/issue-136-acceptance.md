@@ -36,7 +36,7 @@
 - PASS: `cd frontend && npm run typecheck` and `npm run lint`.
 - PASS: the generated `contracts/search-service-openapi.json` matches the
   generator and includes the multi-key settings schema and set-enabled route.
-- PASS: `LITELLM_MASTER_KEY=compose-validation-only docker compose -p value-investment-agent-issue136 config --quiet`.
+- PASS: `LLM_PROVIDER_ENCRYPTION_KEY=JRNZ1-TpUwO-4trpfntsDM92mUvk3Oluu1MCsvZHpRU= docker compose -p value-investment-agent-issue136 config --quiet`.
 - PASS: isolated PostgreSQL container `value-investment-agent-issue136-postgres-1`
   reached a healthy state on host port `15436`.
 

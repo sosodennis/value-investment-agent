@@ -25,7 +25,7 @@
 - PASS: `cd search-service && MYPYPATH=../finance-agent-core uv run --with mypy mypy --strict --disable-error-code=valid-type src` (`8 source files`). The development dependency `asyncpg-stubs` provides checked asyncpg types; no import suppression is needed, and `_save_key` checks the optional `RETURNING` row.
 - PASS: `cd search-service && uv run python -m compileall -q src scripts`.
 - PASS: `python3 scripts/architecture_guard.py` and `git diff --check`.
-- PASS: `LITELLM_MASTER_KEY=compose-validation-only SEARCH_SERVICE_HOST_PORT=18083 POSTGRES_HOST_PORT=15432 docker compose -p value-investment-agent-issue123-search-runtime config --quiet`.
+- PASS: `LLM_PROVIDER_ENCRYPTION_KEY=JRNZ1-TpUwO-4trpfntsDM92mUvk3Oluu1MCsvZHpRU= SEARCH_SERVICE_HOST_PORT=18083 POSTGRES_HOST_PORT=15432 docker compose -p value-investment-agent-issue123-search-runtime config --quiet`.
 - PASS: Compose wires `SEARCH_SERVICE_URL` and the same `SEARCH_SERVICE_TOKEN` into the backend and Search Service; its readiness health check targets `readyz`. Verified with `docker compose ... config --format json | jq -e` asserting the URL, shared token, and readiness path. The check returned `true`.
 - PASS: the same isolated Compose project built and started `search-service`
   with `SEARCH_PROVIDER_ENCRYPTION_KEY` set to a disposable Fernet key.

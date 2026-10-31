@@ -68,7 +68,7 @@ jobs:
       - name: Validate Compose contract
         working-directory: .
         env:
-          LITELLM_MASTER_KEY: ci-contract-placeholder
+          LLM_PROVIDER_ENCRYPTION_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
         run: docker compose config --quiet
 
   llm-provider-service-contract-gate:
