@@ -316,12 +316,12 @@ async def test_http_selector_rejects_untrusted_organization_scope() -> None:
                     .values(status="suspended")
                 )
                 await session.commit()
+            listed = await client.get("/api/v1/organizations")
             recovered = await client.put(
                 "/api/v1/auth/session/organization",
                 json={"organization_id": recovery_org_id},
                 headers=headers,
             )
-            listed = await client.get("/api/v1/organizations")
 
         assert selected.status_code == 200
         assert selected.json()["organization_id"] == active_org_id
