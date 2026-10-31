@@ -104,6 +104,8 @@ async def test_legacy_backfill_is_bounded_resumable_and_concurrency_safe() -> No
             UserModel(
                 id=owner_id,
                 email=f"{owner_id}@example.test",
+                display_name="Migration Owner",
+                display_name_normalized="migration owner",
                 password_hash="test-only",
             )
         )

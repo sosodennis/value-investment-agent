@@ -24,7 +24,11 @@ from src.auth.domain.entities import (
     SessionRecord,
     UserRecord,
 )
-from src.auth.domain.policies import normalize_email, validate_password
+from src.auth.domain.policies import (
+    normalize_display_name,
+    normalize_email,
+    validate_password,
+)
 
 
 def hash_secret(value: str) -> str:
@@ -48,10 +52,11 @@ class AuthService:
         self._session_ttl = session_ttl
 
     async def register(
-        self, *, email: str, password: str, now: datetime
+        self, *, email: str, password: str, display_name: str, now: datetime
     ) -> AuthSession:
         normalized_email = normalize_email(email)
         validate_password(password)
+        normalized_display_name = normalize_display_name(display_name)
         if await self._users.get_by_email(normalized_email) is not None:
             raise RegistrationConflictError("email is already registered")
         password_hash = await asyncio.to_thread(self._password_hasher.hash, password)
@@ -59,6 +64,8 @@ class AuthService:
             registration = await self._users.create_with_default_organization(
                 email=normalized_email,
                 password_hash=password_hash,
+                display_name=normalized_display_name,
+                display_name_normalized=normalized_display_name.casefold(),
             )
         except RegistrationConflictError:
             raise

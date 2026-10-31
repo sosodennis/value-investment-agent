@@ -426,6 +426,23 @@ export interface paths {
         patch: operations["rename_organization_api_v1_organizations__organization_id__patch"];
         trace?: never;
     };
+    "/api/v1/organizations/{organization_id}/directory/users": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Search Directory Users */
+        get: operations["search_directory_users_api_v1_organizations__organization_id__directory_users_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/organizations/{organization_id}/leave": {
         parameters: {
             query?: never;
@@ -1117,6 +1134,20 @@ export interface components {
             degraded_reasons?: string[] | null;
             /** Is Degraded */
             is_degraded?: boolean | null;
+        };
+        /** DirectorySearchResponse */
+        DirectorySearchResponse: {
+            /** Items */
+            items: components["schemas"]["DirectoryUserResponse"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
+        /** DirectoryUserResponse */
+        DirectoryUserResponse: {
+            /** Display Name */
+            display_name: string;
+            /** User Id */
+            user_id: string;
         };
         /** EvidenceBreakoutSignalModel */
         EvidenceBreakoutSignalModel: {
@@ -2128,6 +2159,8 @@ export interface components {
         };
         /** RegisterRequest */
         RegisterRequest: {
+            /** Display Name */
+            display_name: string;
             /** Email */
             email: string;
             /** Password */
@@ -4762,6 +4795,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["OrganizationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    search_directory_users_api_v1_organizations__organization_id__directory_users_get: {
+        parameters: {
+            query?: {
+                q?: string;
+                limit?: number;
+                cursor?: string | null;
+            };
+            header?: never;
+            path: {
+                organization_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DirectorySearchResponse"];
                 };
             };
             /** @description Validation Error */

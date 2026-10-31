@@ -126,10 +126,14 @@ export function login(email: string, password: string): Promise<AuthUser> {
     });
 }
 
-export function register(email: string, password: string): Promise<AuthUser> {
+export function register(
+    email: string,
+    displayName: string,
+    password: string,
+): Promise<AuthUser> {
     return request('/api/v1/auth/register', parseAuthUser, {
         method: 'POST',
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email, display_name: displayName, password }),
     });
 }
 

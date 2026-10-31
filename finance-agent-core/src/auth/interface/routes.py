@@ -51,6 +51,7 @@ async def register(
         session = await get_auth_service().register(
             email=body.email,
             password=body.password,
+            display_name=body.display_name,
             now=datetime.utcnow(),
         )
     except RegistrationConflictError as exc:

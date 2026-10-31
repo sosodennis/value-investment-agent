@@ -35,13 +35,19 @@ class MemoryUsers:
         return self.users.get(user_id)
 
     async def create_with_default_organization(
-        self, *, email: str, password_hash: str
+        self,
+        *,
+        email: str,
+        password_hash: str,
+        display_name: str,
+        display_name_normalized: str,
     ) -> RegistrationRecord:
         user = UserRecord(
             id=f"user-{len(self.users) + 1}",
             email=email,
             password_hash=password_hash,
             created_at=datetime.utcnow(),
+            display_name=display_name,
         )
         organization = OrganizationRecord(
             id=f"organization-{len(self.organizations) + 1}",
@@ -185,9 +191,13 @@ async def test_register_login_and_logout_issue_and_revoke_opaque_session() -> No
     now = datetime(2026, 1, 1)
 
     registered = await service.register(
-        email=" User@Example.com ", password="password-1", now=now
+        email=" User@Example.com ",
+        password="password-1",
+        display_name="  Analyst   One ",
+        now=now,
     )
     assert registered.user.email == "user@example.com"
+    assert registered.user.display_name == "Analyst One"
     assert users.users[registered.user.id].password_hash == "argon2:password-1"
     assert registered.session_token not in {
         record.token_hash for record in sessions.sessions.values()
@@ -217,10 +227,18 @@ async def test_registration_conflict_and_invalid_login_are_safe() -> None:
         password_hasher=MemoryHasher(),
     )
     now = datetime.utcnow()
-    await service.register(email="user@example.com", password="password-1", now=now)
+    await service.register(
+        email="user@example.com",
+        password="password-1",
+        display_name="User One",
+        now=now,
+    )
     with pytest.raises(RegistrationConflictError):
         await service.register(
-            email=" USER@example.com ", password="password-2", now=now
+            email=" USER@example.com ",
+            password="password-2",
+            display_name="User Two",
+            now=now,
         )
     with pytest.raises(InvalidCredentialsError):
         await service.login(email="user@example.com", password="wrong-pass", now=now)
@@ -242,7 +260,10 @@ async def test_active_organization_selection_requires_active_membership() -> Non
     )
     now = datetime(2026, 1, 1)
     registered = await service.register(
-        email="owner@example.com", password="password-1", now=now
+        email="owner@example.com",
+        password="password-1",
+        display_name="Owner One",
+        now=now,
     )
     second_organization = OrganizationRecord(
         id="organization-second", name="Second", created_at=now
@@ -290,7 +311,10 @@ async def test_active_organization_selection_rejects_a_revocation_race() -> None
     )
     now = datetime(2026, 1, 1)
     registered = await service.register(
-        email="race@example.com", password="password-1", now=now
+        email="race@example.com",
+        password="password-1",
+        display_name="Race One",
+        now=now,
     )
 
     with pytest.raises(InvalidOrganizationContextError, match="authentication"):
@@ -313,7 +337,10 @@ async def test_actor_authentication_survives_an_invalid_active_membership() -> N
     )
     now = datetime(2026, 1, 1)
     registered = await service.register(
-        email="actor@example.com", password="password-1", now=now
+        email="actor@example.com",
+        password="password-1",
+        display_name="Actor One",
+        now=now,
     )
     membership = users.organizations[registered.active_organization_id].membership
     users.organizations[registered.active_organization_id] = OrganizationMembership(

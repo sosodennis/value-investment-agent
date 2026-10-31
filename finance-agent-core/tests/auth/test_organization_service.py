@@ -213,6 +213,7 @@ def _context(
         email=f"{user_id}@example.test",
         password_hash="unused",
         created_at=now,
+        display_name=user_id.replace("user-", "").replace("-", " ").title(),
     )
     membership = MembershipRecord(
         id=f"membership-{user_id}",
@@ -292,6 +293,7 @@ async def test_member_administration_enforces_roles_status_and_last_owner() -> N
         email="member@example.test",
         password_hash="unused",
         created_at=context.user.created_at,
+        display_name="Member",
     )
     repository.members[("organization-a", member_user.id)] = OrganizationMember(
         user=member_user,
@@ -369,6 +371,7 @@ async def test_member_cannot_mutate_and_owner_transfer_is_atomic_in_domain_port(
         email="target@example.test",
         password_hash="unused",
         created_at=owner.user.created_at,
+        display_name="Target",
     )
     repository.members[("organization-a", member.id)] = OrganizationMember(
         user=member,

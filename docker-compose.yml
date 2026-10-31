@@ -114,6 +114,7 @@ services:
       - LLM_PROVIDER_SERVICE_TOKEN=${LLM_PROVIDER_SERVICE_TOKEN:-}
       - SEARCH_SERVICE_URL=${SEARCH_SERVICE_URL:-http://search-service:8003}
       - SEARCH_SERVICE_TOKEN=${SEARCH_SERVICE_TOKEN:-local-development-only-token}
+      - DIRECTORY_CURSOR_SECRET=${DIRECTORY_CURSOR_SECRET:-local-development-only-directory-cursor-secret}
       - SEC_TEXT_DEPENDENCY_WARMUP=1
       - SEC_TEXT_DEPENDENCY_MODEL=en_core_web_sm
       - SEC_TEXT_DEBUG_RETRIEVAL_SENTENCES=1

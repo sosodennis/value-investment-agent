@@ -11,6 +11,19 @@ class UserRecord:
     email: str
     password_hash: str
     created_at: datetime
+    display_name: str
+
+
+@dataclass(frozen=True, slots=True)
+class DirectoryUser:
+    user_id: str
+    display_name: str
+
+
+@dataclass(frozen=True, slots=True)
+class DirectoryPage:
+    items: tuple[DirectoryUser, ...]
+    next_cursor: str | None
 
 
 class MembershipStatus(str, Enum):

@@ -41,9 +41,19 @@ class SqlAlchemyUserRepository:
         return self._to_record(model) if model else None
 
     async def create_with_default_organization(
-        self, *, email: str, password_hash: str
+        self,
+        *,
+        email: str,
+        password_hash: str,
+        display_name: str,
+        display_name_normalized: str,
     ) -> RegistrationRecord:
-        user_model = UserModel(email=email, password_hash=password_hash)
+        user_model = UserModel(
+            email=email,
+            display_name=display_name,
+            display_name_normalized=display_name_normalized,
+            password_hash=password_hash,
+        )
         organization_model = OrganizationModel(name="Personal organization")
         async with AsyncSessionLocal() as session:
             try:
@@ -76,6 +86,7 @@ class SqlAlchemyUserRepository:
             email=model.email,
             password_hash=model.password_hash,
             created_at=model.created_at,
+            display_name=model.display_name,
         )
 
     @staticmethod

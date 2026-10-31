@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import os
+
 from src.auth.application.authorization_service import AuthorizationService
+from src.auth.application.directory_service import DirectoryService
 from src.auth.application.organization_service import OrganizationService
 from src.auth.application.ownership_service import OwnershipService
 from src.auth.application.service import AuthService
+from src.auth.infrastructure.directory_repository import SqlAlchemyDirectoryRepository
 from src.auth.infrastructure.organization_repository import (
     SqlAlchemyOrganizationLifecycleRepository,
 )
@@ -21,6 +25,17 @@ _auth_service: AuthService | None = None
 _authorization_service: AuthorizationService | None = None
 _organization_service: OrganizationService | None = None
 _ownership_service: OwnershipService | None = None
+_directory_service: DirectoryService | None = None
+
+
+def _directory_cursor_secret() -> str:
+    configured = os.getenv("DIRECTORY_CURSOR_SECRET", "").strip()
+    if configured:
+        return configured
+    environment = os.getenv("APP_ENV", os.getenv("ENVIRONMENT", "production")).lower()
+    if environment in {"development", "dev", "test"}:
+        return "local-development-only-directory-cursor-secret"
+    raise RuntimeError("DIRECTORY_CURSOR_SECRET is required")
 
 
 def get_auth_service() -> AuthService:
@@ -60,13 +75,25 @@ def get_organization_service() -> OrganizationService:
     return _organization_service
 
 
+def get_directory_service() -> DirectoryService:
+    global _directory_service
+    if _directory_service is None:
+        _directory_service = DirectoryService(
+            repository=SqlAlchemyDirectoryRepository(),
+            cursor_secret=_directory_cursor_secret(),
+        )
+    return _directory_service
+
+
 def reset_auth_wiring() -> None:
     global \
         _auth_service, \
         _authorization_service, \
         _organization_service, \
-        _ownership_service
+        _ownership_service, \
+        _directory_service
     _auth_service = None
     _authorization_service = None
     _organization_service = None
     _ownership_service = None
+    _directory_service = None

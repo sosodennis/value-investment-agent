@@ -32,6 +32,7 @@ def _context() -> AuthenticatedContext:
         email="owner@example.test",
         password_hash="unused",
         created_at=now,
+        display_name="Owner",
     )
     membership = MembershipRecord(
         id="membership-owner",

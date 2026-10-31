@@ -411,6 +411,7 @@ class SqlAlchemyOrganizationLifecycleRepository:
             email=model.email,
             password_hash=model.password_hash,
             created_at=model.created_at,
+            display_name=model.display_name,
         )
 
     @staticmethod

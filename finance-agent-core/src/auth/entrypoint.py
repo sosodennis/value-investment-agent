@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from src.auth.application.wiring import (
     get_auth_service,
+    get_directory_service,
     get_organization_service,
     get_ownership_service,
 )
@@ -24,6 +25,7 @@ __all__ = [
     "organization_router",
     "clear_auth_cookies",
     "get_auth_service",
+    "get_directory_service",
     "get_organization_service",
     "get_ownership_service",
     "require_current_user",

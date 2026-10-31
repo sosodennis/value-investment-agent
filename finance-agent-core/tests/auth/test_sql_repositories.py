@@ -82,10 +82,16 @@ async def test_concurrent_registration_is_atomic_and_membership_is_unique() -> N
     try:
         results = await asyncio.gather(
             repository.create_with_default_organization(
-                email=email, password_hash="hash-a"
+                email=email,
+                password_hash="hash-a",
+                display_name="Concurrent A",
+                display_name_normalized="concurrent a",
             ),
             repository.create_with_default_organization(
-                email=email, password_hash="hash-b"
+                email=email,
+                password_hash="hash-b",
+                display_name="Concurrent B",
+                display_name_normalized="concurrent b",
             ),
             return_exceptions=True,
         )
@@ -169,7 +175,10 @@ async def test_only_active_membership_selects_context_and_revocation_invalidates
     now = datetime.utcnow()
     try:
         registered = await service.register(
-            email=email, password="correct-horse-battery", now=now
+            email=email,
+            password="correct-horse-battery",
+            display_name="Postgres User",
+            now=now,
         )
         active_org_id = str(uuid.uuid4())
         pending_org_id = str(uuid.uuid4())
@@ -253,7 +262,10 @@ async def test_http_selector_rejects_untrusted_organization_scope() -> None:
     now = datetime.utcnow()
     try:
         registered = await service.register(
-            email=email, password="correct-horse-battery", now=now
+            email=email,
+            password="correct-horse-battery",
+            display_name="Selector User",
+            now=now,
         )
         active_org_id = str(uuid.uuid4())
         foreign_org_id = str(uuid.uuid4())

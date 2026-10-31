@@ -83,10 +83,16 @@ async def test_lifecycle_repository_locks_owner_transfer_and_persists_events() -
     users = SqlAlchemyUserRepository()
     repository = SqlAlchemyOrganizationLifecycleRepository()
     owner = await users.create_with_default_organization(
-        email=owner_email, password_hash="hash"
+        email=owner_email,
+        password_hash="hash",
+        display_name="Owner One",
+        display_name_normalized="owner one",
     )
     target = await users.create_with_default_organization(
-        email=target_email, password_hash="hash"
+        email=target_email,
+        password_hash="hash",
+        display_name="Target One",
+        display_name_normalized="target one",
     )
     organization = await repository.create_organization(
         owner_user_id=owner.user.id,
@@ -215,10 +221,16 @@ async def _create_organization_fixture() -> (
     repository = SqlAlchemyOrganizationLifecycleRepository()
     now = datetime.utcnow()
     owner = await users.create_with_default_organization(
-        email=f"owner-{uuid.uuid4()}@example.test", password_hash="hash"
+        email=f"owner-{uuid.uuid4()}@example.test",
+        password_hash="hash",
+        display_name="Owner Two",
+        display_name_normalized="owner two",
     )
     target = await users.create_with_default_organization(
-        email=f"target-{uuid.uuid4()}@example.test", password_hash="hash"
+        email=f"target-{uuid.uuid4()}@example.test",
+        password_hash="hash",
+        display_name="Target Two",
+        display_name_normalized="target two",
     )
     organization = await repository.create_organization(
         owner_user_id=owner.user.id,
@@ -521,7 +533,10 @@ async def test_lifecycle_event_failure_rolls_back_the_membership_mutation() -> N
     repository = SqlAlchemyOrganizationLifecycleRepository()
     now = datetime.utcnow()
     owner = await users.create_with_default_organization(
-        email=f"owner-{uuid.uuid4()}@example.test", password_hash="hash"
+        email=f"owner-{uuid.uuid4()}@example.test",
+        password_hash="hash",
+        display_name="Owner Three",
+        display_name_normalized="owner three",
     )
     async with AsyncSessionLocal() as session:
         before = int(
@@ -744,10 +759,16 @@ async def test_organization_service_cannot_mutate_a_member_in_another_organizati
     repository = SqlAlchemyOrganizationLifecycleRepository()
     now = datetime.utcnow()
     first = await users.create_with_default_organization(
-        email=f"first-{uuid.uuid4()}@example.test", password_hash="hash"
+        email=f"first-{uuid.uuid4()}@example.test",
+        password_hash="hash",
+        display_name="First User",
+        display_name_normalized="first user",
     )
     second = await users.create_with_default_organization(
-        email=f"second-{uuid.uuid4()}@example.test", password_hash="hash"
+        email=f"second-{uuid.uuid4()}@example.test",
+        password_hash="hash",
+        display_name="Second User",
+        display_name_normalized="second user",
     )
     organization = await repository.create_organization(
         owner_user_id=first.user.id,
