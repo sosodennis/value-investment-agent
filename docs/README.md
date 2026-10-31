@@ -25,6 +25,7 @@ Root `AGENTS.md` contains finance-domain constraints, agent skill routing, and r
 - [Search Service contract](search-service-contract.md)
 - [Internal capability service contract](../finance-agent-core/src/shared/internal_services/README.md)
 - Service-specific deployment and operating instructions live in each service README and in [`runbooks/`](runbooks/).
+- [Local staging deployment](runbooks/staging-deployment.md) defines the dedicated `.env.staging` lifecycle, Compose commands, smoke acceptance, and maintenance rules.
 
 ## Decisions and research
 
