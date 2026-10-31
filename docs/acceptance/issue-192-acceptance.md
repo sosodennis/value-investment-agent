@@ -1,7 +1,7 @@
 # Issue 192 acceptance evidence
 
-Status: `PARTIAL`. Keep #192 open and the pull request in draft until every
-acceptance gate below is complete.
+Status: Acceptance evidence is complete for PR #193. Merging the PR closes #192.
+Key rotation and provider-service acceptance remain open in #194 and #189.
 
 ## Test data and reset scope
 
@@ -35,9 +35,9 @@ acceptance data.
 - Mocked-API Playwright flow imported 100 synthetic keys from each format and
   checked the format Popover at 390px and 1440px viewport widths.
 - A real OpenRouter check through the authenticated BFF and Provider Service
-  accepted the two keys configured in the local `.env` and rejected one
-  synthetic invalid key. The result was 2 imported and 1 invalid; response
-  bodies contained no raw key values.
+  accepted the two designated staging keys configured in the local `.env` and
+  rejected one synthetic invalid key. The result was 2 imported and 1 invalid;
+  response bodies contained no raw key values.
 - After the synthetic-only E2E reset, a real browser uploaded those same two
   staging keys and one synthetic invalid key through the authenticated UI.
   OpenRouter accepted both staging keys, the synthetic key failed on its own,
@@ -88,11 +88,14 @@ acceptance data.
 - `RUN_LLM_PROVIDER_POSTGRES_TESTS=1 POSTGRES_HOST=127.0.0.1 POSTGRES_PORT=55492 POSTGRES_DB=via_issue192_e2e POSTGRES_USER=postgres POSTGRES_PASSWORD="$(docker exec value-investment-agent-192-test-postgres-1 printenv POSTGRES_PASSWORD)" uv run --project llm-provider-service pytest llm-provider-service/tests` passed 47 tests.
 - `bash scripts/generate-contracts.sh` passed.
 
-## Remaining gates
+## Scope boundary
 
-- Confirm the dedicated low-limit staging credential required by issue #192's
-  staging acceptance gate. The two available `.env` keys were used for the
-  initial live check; their quota profile has not been confirmed here.
+- The staging check used the two designated `.env` keys through authenticated
+  `GET /api/v1/key` validation and one synthetic invalid key. No inference
+  request was sent. OpenRouter returned `is_free_tier=true` and no per-key
+  `limit` or `limit_remaining`, so this check does not claim a quota profile.
+- Key-scoped and global rate-limit behavior, key rotation, multi-replica health,
+  and the pinned LiteLLM SBOM/CVE review remain open in #194 and #189.
 - This worktree has no local `.env`, so Compose configuration validation could
   not run from this checkout. PostgreSQL tests used the existing isolated
   `value-investment-agent-192-test` service without restarting or removing it.
