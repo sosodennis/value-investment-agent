@@ -30,6 +30,10 @@ class MembershipInvariantError(AuthError):
     """A membership mutation would violate an organization invariant."""
 
 
+class OrganizationMutationConflictError(AuthError):
+    """The organization changed after the mutation authorization snapshot."""
+
+
 class AuthorizationDeniedError(AuthError):
     """A stable organization authorization decision denied the operation."""
 

@@ -22,7 +22,10 @@ from src.auth.domain.entities import (
     SessionRecord,
     UserRecord,
 )
-from src.auth.domain.events import OrganizationLifecycleEvent
+from src.auth.domain.events import (
+    OrganizationLifecycleEvent,
+    OrganizationLifecycleEventDraft,
+)
 
 
 class MemoryOrganizationRepository:
@@ -46,9 +49,15 @@ class MemoryOrganizationRepository:
                 user=actor, membership=owner
             )
         }
+        self.events: list[OrganizationLifecycleEvent] = []
 
     async def create_organization(
-        self, *, owner_user_id: str, name: str, now: datetime
+        self,
+        *,
+        owner_user_id: str,
+        name: str,
+        now: datetime,
+        event: OrganizationLifecycleEventDraft,
     ) -> OrganizationMembership:
         user = next(
             member.user
@@ -73,6 +82,7 @@ class MemoryOrganizationRepository:
         self.members[(organization.id, user.id)] = OrganizationMember(
             user=user, membership=membership
         )
+        self._record_event(organization.id, event)
         return OrganizationMembership(organization=organization, membership=membership)
 
     async def list_for_user(self, *, user_id: str) -> list[OrganizationMembership]:
@@ -92,10 +102,18 @@ class MemoryOrganizationRepository:
         return self.organizations.get(organization_id)
 
     async def rename_organization(
-        self, *, organization_id: str, name: str, now: datetime
+        self,
+        *,
+        organization_id: str,
+        name: str,
+        actor_user_id: str,
+        expected_actor: MembershipRecord,
+        now: datetime,
+        event: OrganizationLifecycleEventDraft,
     ) -> OrganizationRecord:
         organization = replace(self.organizations[organization_id], name=name)
         self.organizations[organization_id] = organization
+        self._record_event(organization_id, event)
         return organization
 
     async def list_members(self, *, organization_id: str) -> list[OrganizationMember]:
@@ -117,7 +135,10 @@ class MemoryOrganizationRepository:
         user_id: str,
         role: str | None,
         status: str | None,
+        expected_actor: MembershipRecord,
+        expected_target: MembershipRecord,
         now: datetime,
+        event: OrganizationLifecycleEventDraft,
     ) -> OrganizationMember:
         current = self.members[(organization_id, user_id)]
         membership = current.membership
@@ -128,6 +149,7 @@ class MemoryOrganizationRepository:
         membership = replace(membership, updated_at=now)
         updated = OrganizationMember(user=current.user, membership=membership)
         self.members[(organization_id, user_id)] = updated
+        self._record_event(organization_id, event)
         return updated
 
     async def transfer_ownership(
@@ -136,7 +158,10 @@ class MemoryOrganizationRepository:
         organization_id: str,
         current_owner_user_id: str,
         target_user_id: str,
+        expected_current_owner: MembershipRecord,
+        expected_target: MembershipRecord,
         now: datetime,
+        event: OrganizationLifecycleEventDraft,
     ) -> OrganizationMember:
         source = self.members[(organization_id, current_owner_user_id)]
         target = self.members[(organization_id, target_user_id)]
@@ -157,20 +182,22 @@ class MemoryOrganizationRepository:
             ),
         )
         self.members[(organization_id, target_user_id)] = updated
+        self._record_event(organization_id, event)
         return updated
 
-    async def append_event(self, event: OrganizationLifecycleEvent) -> None:
-        self.events.append(event)
-
-    events: list[OrganizationLifecycleEvent] = []
-
-
-class MemoryEvents:
-    def __init__(self) -> None:
-        self.events: list[OrganizationLifecycleEvent] = []
-
-    async def publish(self, event: OrganizationLifecycleEvent) -> None:
-        self.events.append(event)
+    def _record_event(
+        self, organization_id: str, event: OrganizationLifecycleEventDraft
+    ) -> None:
+        self.events.append(
+            OrganizationLifecycleEvent(
+                event_type=event.event_type,
+                organization_id=organization_id,
+                actor_user_id=event.actor_user_id,
+                target_user_id=event.target_user_id,
+                payload=event.payload,
+                occurred_at=event.occurred_at,
+            )
+        )
 
 
 def _context(
@@ -210,24 +237,22 @@ def _context(
 
 def _service(
     context: AuthenticatedContext,
-) -> tuple[OrganizationService, MemoryOrganizationRepository, MemoryEvents]:
+) -> tuple[OrganizationService, MemoryOrganizationRepository]:
     repository = MemoryOrganizationRepository(actor=context.user)
-    events = MemoryEvents()
+    repository.events = []
     return (
         OrganizationService(
             repository=repository,
             authorization=AuthorizationService(),
-            events=events,
         ),
         repository,
-        events,
     )
 
 
 @pytest.mark.asyncio
 async def test_create_rename_list_and_emit_lifecycle_events() -> None:
     context = _context()
-    service, repository, events = _service(context)
+    service, repository = _service(context)
     now = datetime(2026, 1, 2)
 
     created = await service.create_organization(context=context, name=" Beta ", now=now)
@@ -244,7 +269,7 @@ async def test_create_rename_list_and_emit_lifecycle_events() -> None:
         "organization-a",
         created.organization.id,
     }
-    assert [event.event_type.value for event in events.events] == [
+    assert [event.event_type.value for event in repository.events] == [
         "organization.created",
         "organization.renamed",
     ]
@@ -254,7 +279,7 @@ async def test_create_rename_list_and_emit_lifecycle_events() -> None:
 @pytest.mark.asyncio
 async def test_member_administration_enforces_roles_status_and_last_owner() -> None:
     context = _context()
-    service, repository, _events = _service(context)
+    service, repository = _service(context)
     member_user = UserRecord(
         id="user-member",
         email="member@example.test",
@@ -331,7 +356,7 @@ async def test_member_cannot_mutate_and_owner_transfer_is_atomic_in_domain_port(
     None
 ):
     owner = _context()
-    service, repository, _events = _service(owner)
+    service, repository = _service(owner)
     member = UserRecord(
         id="user-target",
         email="target@example.test",

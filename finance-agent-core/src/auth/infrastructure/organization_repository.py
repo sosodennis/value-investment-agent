@@ -9,6 +9,7 @@ from src.auth.application.errors import (
     InvalidMembershipTransitionError,
     MembershipInvariantError,
     MembershipNotFoundError,
+    OrganizationMutationConflictError,
     OrganizationNotFoundError,
 )
 from src.auth.domain.entities import (
@@ -20,7 +21,7 @@ from src.auth.domain.entities import (
     OrganizationRecord,
     UserRecord,
 )
-from src.auth.domain.events import OrganizationLifecycleEvent
+from src.auth.domain.events import OrganizationLifecycleEventDraft
 from src.auth.domain.membership_policy import is_allowed_membership_status_transition
 from src.auth.infrastructure.models import (
     MembershipModel,
@@ -33,7 +34,12 @@ from src.infrastructure.database import AsyncSessionLocal
 
 class SqlAlchemyOrganizationLifecycleRepository:
     async def create_organization(
-        self, *, owner_user_id: str, name: str, now: datetime
+        self,
+        *,
+        owner_user_id: str,
+        name: str,
+        now: datetime,
+        event: OrganizationLifecycleEventDraft,
     ) -> OrganizationMembership:
         async with AsyncSessionLocal() as session:
             async with session.begin():
@@ -53,6 +59,11 @@ class SqlAlchemyOrganizationLifecycleRepository:
                 )
                 session.add(membership)
                 await session.flush()
+                self._add_event(
+                    session,
+                    organization_id=organization.id,
+                    event=event,
+                )
             return OrganizationMembership(
                 organization=self._organization_record(organization),
                 membership=self._membership_record(membership),
@@ -87,7 +98,14 @@ class SqlAlchemyOrganizationLifecycleRepository:
         return self._organization_record(organization) if organization else None
 
     async def rename_organization(
-        self, *, organization_id: str, name: str, now: datetime
+        self,
+        *,
+        organization_id: str,
+        name: str,
+        actor_user_id: str,
+        expected_actor: MembershipRecord,
+        now: datetime,
+        event: OrganizationLifecycleEventDraft,
     ) -> OrganizationRecord:
         async with AsyncSessionLocal() as session:
             async with session.begin():
@@ -98,8 +116,19 @@ class SqlAlchemyOrganizationLifecycleRepository:
                 )
                 if organization is None:
                     raise OrganizationNotFoundError("organization not found")
+                actor = await self._lock_membership(
+                    session,
+                    organization_id=organization_id,
+                    user_id=actor_user_id,
+                )
+                self._assert_membership_snapshot(actor, expected_actor)
                 organization.name = name
                 await session.flush()
+                self._add_event(
+                    session,
+                    organization_id=organization_id,
+                    event=event,
+                )
             return self._organization_record(organization)
 
     async def list_members(self, *, organization_id: str) -> list[OrganizationMember]:
@@ -145,16 +174,26 @@ class SqlAlchemyOrganizationLifecycleRepository:
         user_id: str,
         role: str | None,
         status: str | None,
+        expected_actor: MembershipRecord,
+        expected_target: MembershipRecord,
         now: datetime,
+        event: OrganizationLifecycleEventDraft,
     ) -> OrganizationMember:
         async with AsyncSessionLocal() as session:
             async with session.begin():
                 organization = await self._lock_organization(
                     session, organization_id=organization_id
                 )
+                actor = await self._lock_membership(
+                    session,
+                    organization_id=organization_id,
+                    user_id=expected_actor.user_id,
+                )
                 membership = await self._lock_membership(
                     session, organization_id=organization_id, user_id=user_id
                 )
+                self._assert_membership_snapshot(actor, expected_actor)
+                self._assert_membership_snapshot(membership, expected_target)
                 user = await session.get(UserModel, user_id)
                 if user is None:
                     raise MembershipNotFoundError("membership not found")
@@ -171,6 +210,11 @@ class SqlAlchemyOrganizationLifecycleRepository:
                     membership.status = status
                 membership.updated_at = now
                 await session.flush()
+                self._add_event(
+                    session,
+                    organization_id=organization_id,
+                    event=event,
+                )
             return OrganizationMember(
                 user=self._user_record(user),
                 membership=self._membership_record(membership),
@@ -182,7 +226,10 @@ class SqlAlchemyOrganizationLifecycleRepository:
         organization_id: str,
         current_owner_user_id: str,
         target_user_id: str,
+        expected_current_owner: MembershipRecord,
+        expected_target: MembershipRecord,
         now: datetime,
+        event: OrganizationLifecycleEventDraft,
     ) -> OrganizationMember:
         async with AsyncSessionLocal() as session:
             async with session.begin():
@@ -195,6 +242,8 @@ class SqlAlchemyOrganizationLifecycleRepository:
                 target = await self._lock_membership(
                     session, organization_id=organization_id, user_id=target_user_id
                 )
+                self._assert_membership_snapshot(source, expected_current_owner)
+                self._assert_membership_snapshot(target, expected_target)
                 user = await session.get(UserModel, target_user_id)
                 if MembershipRole(source.role) is not MembershipRole.OWNER:
                     raise MembershipInvariantError("current member is not an owner")
@@ -207,6 +256,11 @@ class SqlAlchemyOrganizationLifecycleRepository:
                 source.updated_at = now
                 target.updated_at = now
                 await session.flush()
+                self._add_event(
+                    session,
+                    organization_id=organization_id,
+                    event=event,
+                )
             if user is None:
                 raise MembershipNotFoundError("membership not found")
             return OrganizationMember(
@@ -214,19 +268,38 @@ class SqlAlchemyOrganizationLifecycleRepository:
                 membership=self._membership_record(target),
             )
 
-    async def append_event(self, event: OrganizationLifecycleEvent) -> None:
-        async with AsyncSessionLocal() as session:
-            async with session.begin():
-                session.add(
-                    OrganizationLifecycleEventModel(
-                        event_type=event.event_type.value,
-                        organization_id=event.organization_id,
-                        actor_user_id=event.actor_user_id,
-                        target_user_id=event.target_user_id,
-                        payload=event.payload,
-                        occurred_at=event.occurred_at,
-                    )
-                )
+    @staticmethod
+    def _add_event(
+        session: AsyncSession,
+        *,
+        organization_id: str,
+        event: OrganizationLifecycleEventDraft,
+    ) -> None:
+        session.add(
+            OrganizationLifecycleEventModel(
+                event_type=event.event_type.value,
+                organization_id=organization_id,
+                actor_user_id=event.actor_user_id,
+                target_user_id=event.target_user_id,
+                payload=event.payload,
+                occurred_at=event.occurred_at,
+            )
+        )
+
+    @staticmethod
+    def _assert_membership_snapshot(
+        actual: MembershipModel, expected: MembershipRecord
+    ) -> None:
+        if (
+            actual.id != expected.id
+            or actual.organization_id != expected.organization_id
+            or actual.user_id != expected.user_id
+            or actual.role != expected.role.value
+            or actual.status != expected.status.value
+        ):
+            raise OrganizationMutationConflictError(
+                "organization membership changed; retry the operation"
+            )
 
     @staticmethod
     async def _lock_organization(
@@ -351,11 +424,3 @@ class SqlAlchemyOrganizationLifecycleRepository:
             created_at=model.created_at,
             updated_at=model.updated_at,
         )
-
-
-class SqlAlchemyOrganizationEventPublisher:
-    def __init__(self, repository: SqlAlchemyOrganizationLifecycleRepository) -> None:
-        self._repository = repository
-
-    async def publish(self, event: OrganizationLifecycleEvent) -> None:
-        await self._repository.append_event(event)

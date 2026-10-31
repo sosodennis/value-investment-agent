@@ -14,6 +14,15 @@ class OrganizationLifecycleEventType(str, Enum):
 
 
 @dataclass(frozen=True, slots=True)
+class OrganizationLifecycleEventDraft:
+    event_type: OrganizationLifecycleEventType
+    actor_user_id: str
+    target_user_id: str | None
+    payload: dict[str, str]
+    occurred_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
 class OrganizationLifecycleEvent:
     event_type: OrganizationLifecycleEventType
     organization_id: str

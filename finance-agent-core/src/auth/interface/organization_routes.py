@@ -10,6 +10,7 @@ from src.auth.application.errors import (
     InvalidMembershipTransitionError,
     MembershipInvariantError,
     MembershipNotFoundError,
+    OrganizationMutationConflictError,
     OrganizationNotFoundError,
 )
 from src.auth.application.wiring import get_organization_service
@@ -101,7 +102,12 @@ def _raise_http(error: Exception) -> None:
         ) from error
     if isinstance(error, OrganizationNotFoundError | MembershipNotFoundError):
         raise HTTPException(status_code=404, detail="not_found") from error
-    if isinstance(error, InvalidMembershipTransitionError | MembershipInvariantError):
+    if isinstance(
+        error,
+        InvalidMembershipTransitionError
+        | MembershipInvariantError
+        | OrganizationMutationConflictError,
+    ):
         raise HTTPException(status_code=409, detail=str(error)) from error
     if isinstance(error, AuthPolicyError):
         raise HTTPException(status_code=400, detail=str(error)) from error

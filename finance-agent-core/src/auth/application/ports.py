@@ -4,6 +4,7 @@ from datetime import datetime
 from typing import Protocol
 
 from src.auth.domain.entities import (
+    MembershipRecord,
     OrganizationMember,
     OrganizationMembership,
     OrganizationRecord,
@@ -11,7 +12,7 @@ from src.auth.domain.entities import (
     SessionRecord,
     UserRecord,
 )
-from src.auth.domain.events import OrganizationLifecycleEvent
+from src.auth.domain.events import OrganizationLifecycleEventDraft
 
 
 class UserRepository(Protocol):
@@ -36,7 +37,12 @@ class OrganizationRepository(Protocol):
 
 class OrganizationLifecycleRepository(Protocol):
     async def create_organization(
-        self, *, owner_user_id: str, name: str, now: datetime
+        self,
+        *,
+        owner_user_id: str,
+        name: str,
+        now: datetime,
+        event: OrganizationLifecycleEventDraft,
     ) -> OrganizationMembership: ...
 
     async def list_for_user(self, *, user_id: str) -> list[OrganizationMembership]: ...
@@ -46,7 +52,14 @@ class OrganizationLifecycleRepository(Protocol):
     ) -> OrganizationRecord | None: ...
 
     async def rename_organization(
-        self, *, organization_id: str, name: str, now: datetime
+        self,
+        *,
+        organization_id: str,
+        name: str,
+        actor_user_id: str,
+        expected_actor: MembershipRecord,
+        now: datetime,
+        event: OrganizationLifecycleEventDraft,
     ) -> OrganizationRecord: ...
 
     async def list_members(
@@ -64,7 +77,10 @@ class OrganizationLifecycleRepository(Protocol):
         user_id: str,
         role: str | None,
         status: str | None,
+        expected_actor: MembershipRecord,
+        expected_target: MembershipRecord,
         now: datetime,
+        event: OrganizationLifecycleEventDraft,
     ) -> OrganizationMember: ...
 
     async def transfer_ownership(
@@ -73,14 +89,11 @@ class OrganizationLifecycleRepository(Protocol):
         organization_id: str,
         current_owner_user_id: str,
         target_user_id: str,
+        expected_current_owner: MembershipRecord,
+        expected_target: MembershipRecord,
         now: datetime,
+        event: OrganizationLifecycleEventDraft,
     ) -> OrganizationMember: ...
-
-    async def append_event(self, event: OrganizationLifecycleEvent) -> None: ...
-
-
-class OrganizationEventPublisher(Protocol):
-    async def publish(self, event: OrganizationLifecycleEvent) -> None: ...
 
 
 class SessionRepository(Protocol):

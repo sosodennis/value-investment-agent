@@ -7,7 +7,6 @@ from src.auth.application.organization_service import OrganizationService
 from src.auth.application.ownership_service import OwnershipService
 from src.auth.application.service import AuthService
 from src.auth.infrastructure.organization_repository import (
-    SqlAlchemyOrganizationEventPublisher,
     SqlAlchemyOrganizationLifecycleRepository,
 )
 from src.auth.infrastructure.passwords import Argon2PasswordHasher
@@ -57,7 +56,6 @@ def get_organization_service() -> OrganizationService:
         _organization_service = OrganizationService(
             repository=repository,
             authorization=get_authorization_service(),
-            events=SqlAlchemyOrganizationEventPublisher(repository),
         )
     return _organization_service
 

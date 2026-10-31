@@ -10,7 +10,6 @@ from src.auth.application.errors import (
     OrganizationNotFoundError,
 )
 from src.auth.application.ports import (
-    OrganizationEventPublisher,
     OrganizationLifecycleRepository,
 )
 from src.auth.domain.authorization import (
@@ -27,7 +26,7 @@ from src.auth.domain.entities import (
     OrganizationRecord,
 )
 from src.auth.domain.events import (
-    OrganizationLifecycleEvent,
+    OrganizationLifecycleEventDraft,
     OrganizationLifecycleEventType,
 )
 from src.auth.domain.membership_policy import (
@@ -42,11 +41,9 @@ class OrganizationService:
         *,
         repository: OrganizationLifecycleRepository,
         authorization: AuthorizationService,
-        events: OrganizationEventPublisher,
     ) -> None:
         self._repository = repository
         self._authorization = authorization
-        self._events = events
 
     async def create_organization(
         self, *, context: AuthenticatedContext, name: str, now: datetime
@@ -56,18 +53,18 @@ class OrganizationService:
             permission=OrganizationPermission.ORGANIZATION_CREATE,
             resource=AuthorizationResource(),
         )
+        normalized_name = normalize_organization_name(name)
         organization = await self._repository.create_organization(
             owner_user_id=context.user.id,
-            name=normalize_organization_name(name),
+            name=normalized_name,
             now=now,
-        )
-        await self._publish(
-            event_type=OrganizationLifecycleEventType.ORGANIZATION_CREATED,
-            organization_id=organization.organization.id,
-            actor_user_id=context.user.id,
-            target_user_id=context.user.id,
-            payload={"name": organization.organization.name},
-            occurred_at=now,
+            event=OrganizationLifecycleEventDraft(
+                event_type=OrganizationLifecycleEventType.ORGANIZATION_CREATED,
+                actor_user_id=context.user.id,
+                target_user_id=context.user.id,
+                payload={"name": normalized_name},
+                occurred_at=now,
+            ),
         )
         return organization
 
@@ -106,18 +103,20 @@ class OrganizationService:
             permission=OrganizationPermission.ORGANIZATION_UPDATE,
             organization_id=organization_id,
         )
+        normalized_name = normalize_organization_name(name)
         organization = await self._repository.rename_organization(
             organization_id=organization_id,
-            name=normalize_organization_name(name),
-            now=now,
-        )
-        await self._publish(
-            event_type=OrganizationLifecycleEventType.ORGANIZATION_RENAMED,
-            organization_id=organization_id,
+            name=normalized_name,
             actor_user_id=context.user.id,
-            target_user_id=None,
-            payload={"name": organization.name},
-            occurred_at=now,
+            expected_actor=context.membership,
+            now=now,
+            event=OrganizationLifecycleEventDraft(
+                event_type=OrganizationLifecycleEventType.ORGANIZATION_RENAMED,
+                actor_user_id=context.user.id,
+                target_user_id=None,
+                payload={"name": normalized_name},
+                occurred_at=now,
+            ),
         )
         return organization
 
@@ -165,18 +164,19 @@ class OrganizationService:
             user_id=target_user_id,
             role=requested_role.value,
             status=None,
+            expected_actor=context.membership,
+            expected_target=target.membership,
             now=now,
-        )
-        await self._publish(
-            event_type=OrganizationLifecycleEventType.MEMBERSHIP_ROLE_CHANGED,
-            organization_id=organization_id,
-            actor_user_id=context.user.id,
-            target_user_id=target_user_id,
-            payload={
-                "from_role": target.membership.role.value,
-                "to_role": requested_role.value,
-            },
-            occurred_at=now,
+            event=OrganizationLifecycleEventDraft(
+                event_type=OrganizationLifecycleEventType.MEMBERSHIP_ROLE_CHANGED,
+                actor_user_id=context.user.id,
+                target_user_id=target_user_id,
+                payload={
+                    "from_role": target.membership.role.value,
+                    "to_role": requested_role.value,
+                },
+                occurred_at=now,
+            ),
         )
         return updated
 
@@ -217,18 +217,19 @@ class OrganizationService:
             user_id=target_user_id,
             role=None,
             status=requested_status.value,
+            expected_actor=context.membership,
+            expected_target=target.membership,
             now=now,
-        )
-        await self._publish(
-            event_type=OrganizationLifecycleEventType.MEMBERSHIP_STATUS_CHANGED,
-            organization_id=organization_id,
-            actor_user_id=context.user.id,
-            target_user_id=target_user_id,
-            payload={
-                "from_status": target.membership.status.value,
-                "to_status": requested_status.value,
-            },
-            occurred_at=now,
+            event=OrganizationLifecycleEventDraft(
+                event_type=OrganizationLifecycleEventType.MEMBERSHIP_STATUS_CHANGED,
+                actor_user_id=context.user.id,
+                target_user_id=target_user_id,
+                payload={
+                    "from_status": target.membership.status.value,
+                    "to_status": requested_status.value,
+                },
+                occurred_at=now,
+            ),
         )
         return updated
 
@@ -266,15 +267,16 @@ class OrganizationService:
             organization_id=organization_id,
             current_owner_user_id=context.user.id,
             target_user_id=target_user_id,
+            expected_current_owner=context.membership,
+            expected_target=target.membership,
             now=now,
-        )
-        await self._publish(
-            event_type=OrganizationLifecycleEventType.OWNERSHIP_TRANSFERRED,
-            organization_id=organization_id,
-            actor_user_id=context.user.id,
-            target_user_id=target_user_id,
-            payload={"from_owner_user_id": context.user.id},
-            occurred_at=now,
+            event=OrganizationLifecycleEventDraft(
+                event_type=OrganizationLifecycleEventType.OWNERSHIP_TRANSFERRED,
+                actor_user_id=context.user.id,
+                target_user_id=target_user_id,
+                payload={"from_owner_user_id": context.user.id},
+                occurred_at=now,
+            ),
         )
         return updated
 
@@ -303,15 +305,19 @@ class OrganizationService:
             user_id=context.user.id,
             role=None,
             status=MembershipStatus.REMOVED.value,
+            expected_actor=context.membership,
+            expected_target=target.membership,
             now=now,
-        )
-        await self._publish(
-            event_type=OrganizationLifecycleEventType.MEMBERSHIP_STATUS_CHANGED,
-            organization_id=organization_id,
-            actor_user_id=context.user.id,
-            target_user_id=context.user.id,
-            payload={"from_status": "active", "to_status": "removed"},
-            occurred_at=now,
+            event=OrganizationLifecycleEventDraft(
+                event_type=OrganizationLifecycleEventType.MEMBERSHIP_STATUS_CHANGED,
+                actor_user_id=context.user.id,
+                target_user_id=context.user.id,
+                payload={
+                    "from_status": target.membership.status.value,
+                    "to_status": "removed",
+                },
+                occurred_at=now,
+            ),
         )
         return updated
 
@@ -364,25 +370,4 @@ class OrganizationService:
             context=AuthorizationContext.from_authenticated_context(context),
             permission=permission,
             resource=resource,
-        )
-
-    async def _publish(
-        self,
-        *,
-        event_type: OrganizationLifecycleEventType,
-        organization_id: str,
-        actor_user_id: str,
-        target_user_id: str | None,
-        payload: dict[str, str],
-        occurred_at: datetime,
-    ) -> None:
-        await self._events.publish(
-            OrganizationLifecycleEvent(
-                event_type=event_type,
-                organization_id=organization_id,
-                actor_user_id=actor_user_id,
-                target_user_id=target_user_id,
-                payload=payload,
-                occurred_at=occurred_at,
-            )
         )
