@@ -4,6 +4,7 @@ from datetime import datetime
 from typing import Protocol
 
 from src.auth.domain.entities import (
+    DirectoryPage,
     MembershipRecord,
     OrganizationMember,
     OrganizationMembership,
@@ -21,8 +22,25 @@ class UserRepository(Protocol):
     async def get_by_id(self, user_id: str) -> UserRecord | None: ...
 
     async def create_with_default_organization(
-        self, *, email: str, password_hash: str
+        self,
+        *,
+        email: str,
+        password_hash: str,
+        display_name: str,
+        display_name_normalized: str,
     ) -> RegistrationRecord: ...
+
+
+class DirectoryRepository(Protocol):
+    async def search_users(
+        self,
+        *,
+        organization_id: str,
+        query: str,
+        limit: int,
+        cursor: tuple[str, str] | None,
+        include_external: bool,
+    ) -> DirectoryPage: ...
 
 
 class OrganizationRepository(Protocol):

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 
 from src.auth.application.errors import (
     AuthError,
@@ -12,8 +12,10 @@ from src.auth.application.errors import (
     MembershipNotFoundError,
     OrganizationMutationConflictError,
     OrganizationNotFoundError,
+    RateLimitExceeded,
 )
-from src.auth.application.wiring import get_organization_service
+from src.auth.application.rate_limit import rate_limiter
+from src.auth.application.wiring import get_directory_service, get_organization_service
 from src.auth.domain.authorization import AuthorizationResource, OrganizationPermission
 from src.auth.domain.entities import (
     AuthenticatedActorContext,
@@ -26,6 +28,8 @@ from src.auth.domain.entities import (
 )
 from src.auth.domain.policies import AuthPolicyError
 from src.auth.interface.contracts import (
+    DirectorySearchResponse,
+    DirectoryUserResponse,
     OrganizationCreateRequest,
     OrganizationMemberResponse,
     OrganizationOwnershipTransferRequest,
@@ -206,6 +210,50 @@ async def list_members(
         context=context, organization_id=organization_id
     )
     return [_member_response(member) for member in members]
+
+
+@router.get(
+    "/{organization_id}/directory/users",
+    response_model=DirectorySearchResponse,
+)
+async def search_directory_users(
+    organization_id: str,
+    q: str = Query(default="", max_length=80),
+    limit: int = Query(default=20, ge=1, le=50),
+    cursor: str | None = Query(default=None, max_length=2048),
+    context: AuthenticatedContext = Depends(
+        require_organization_permission(
+            OrganizationPermission.DIRECTORY_SEARCH,
+            resource_factory=_organization_resource,
+        )
+    ),
+) -> DirectorySearchResponse:
+    try:
+        await rate_limiter.check(
+            key=f"directory:{context.user.id}:{organization_id}",
+            limit=60,
+            window_seconds=300,
+        )
+        page = await get_directory_service().search_users(
+            context=context,
+            query=q,
+            limit=limit,
+            cursor=cursor,
+        )
+    except RateLimitExceeded as error:
+        raise HTTPException(status_code=429, detail=str(error)) from error
+    except AuthPolicyError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    return DirectorySearchResponse(
+        items=[
+            DirectoryUserResponse(
+                user_id=item.user_id,
+                display_name=item.display_name,
+            )
+            for item in page.items
+        ],
+        next_cursor=page.next_cursor,
+    )
 
 
 @router.patch(

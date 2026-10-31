@@ -255,6 +255,7 @@ def _authenticated_context(role: MembershipRole) -> AuthenticatedContext:
         email="actor@example.test",
         password_hash="unused",
         created_at=now,
+        display_name="Actor",
     )
     membership = MembershipRecord(
         id="membership-a",

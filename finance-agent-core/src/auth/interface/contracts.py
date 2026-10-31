@@ -32,6 +32,7 @@ class Principal(BaseModel):
 
 class RegisterRequest(BaseModel):
     email: str = Field(min_length=3, max_length=320)
+    display_name: str = Field(min_length=1, max_length=80)
     password: str = Field(min_length=8, max_length=200)
 
 
@@ -86,3 +87,17 @@ class OrganizationMemberResponse(BaseModel):
     status: Literal["pending", "active", "suspended", "removed"]
     created_at: datetime
     updated_at: datetime
+
+
+class DirectoryUserResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    user_id: str
+    display_name: str
+
+
+class DirectorySearchResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    items: list[DirectoryUserResponse]
+    next_cursor: str | None = None
