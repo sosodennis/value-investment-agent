@@ -33,11 +33,15 @@ the full acceptance run.
 
 ## Validate and start the stack
 
-Use one project name for every command. The ports in `.env.staging` must be
-free on the host.
+Use the `value-investment-agent-staging` project name from `.env.staging` for
+every command. The ports in `.env.staging` must be free on the host.
+
+If a port is in use, edit that `*_HOST_PORT` value. Keep all six host ports
+unique. Update `STAGING_BASE_URL` when you change `BACKEND_HOST_PORT`, and
+update `FRONTEND_ALLOWED_ORIGINS` when you change `FRONTEND_HOST_PORT`.
 
 ```bash
-PROJECT=value-investment-agent-issue198-staging
+PROJECT=value-investment-agent-staging
 docker compose --env-file .env.staging -p "$PROJECT" config --quiet
 docker compose --env-file .env.staging -p "$PROJECT" up -d --build
 ```
@@ -71,35 +75,43 @@ curl --fail --silent --show-error "$BACKEND_URL/health"
 
 ## Run staging acceptance
 
-Run the smoke test with the staging secret file and an ignored report path:
+Run the smoke test with the staging secret file and a temporary report path:
 
 ```bash
+REPORT=/tmp/value-investment-agent-staging-smoke.jsonl
+STAGING_KEY_IMPORT_FILE=/absolute/path/to/open-router-api-key.csv \
+STAGING_REQUIRE_LIVE_PROVIDER=1 \
 STAGING_SECRET_FILE=.env.staging \
-STAGING_SMOKE_REPORT=.audit/issue-198-staging.jsonl \
+STAGING_SMOKE_REPORT="$REPORT" \
 bash scripts/refactor_staging_smoke.sh
 ```
 
-The smoke test checks the backend health endpoint, creates or logs in to the
-staging account, imports both staging OpenRouter keys, polls asynchronous key
-import batches, and tests each stored key against the provider service. It
-then starts the AAPL workflow and waits for the required valuation approval
-checkpoint. The acceptance run must stop at that checkpoint. Do not approve
-the valuation and do not run the deterministic calculation during this
-infrastructure acceptance.
+The smoke test checks the backend health endpoint and creates or logs in to the
+staging account. With `STAGING_KEY_IMPORT_FILE` set, it imports the whole CSV
+as one asynchronous batch, requires every non-empty CSV row to be imported or
+reported as a duplicate with no invalid or retryable rows, and tests every
+labelled key against the live provider service. It then starts the AAPL
+workflow and waits for the required valuation approval checkpoint. The
+acceptance run must stop at that checkpoint. Do not approve the valuation and
+do not run the deterministic calculation during this infrastructure
+acceptance.
 
 Review the report for statuses and request metadata only. It must contain no
 raw provider key, password, token, Fernet key, or response body:
 
 ```bash
-jq -c . .audit/issue-198-staging.jsonl
-rg -n '(sk-|Bearer |password|token|Fernet|OPENROUTER)' \
-  .audit/issue-198-staging.jsonl
+jq -c . "$REPORT"
+docker compose --env-file .env.staging -p "$PROJECT" logs --no-color \
+  | python3 scripts/check_staging_secret_redaction.py \
+      --env-file .env.staging --file .env.staging.example \
+      --secret-value-file /absolute/path/to/open-router-api-key.csv \
+      --file "$REPORT" --stdin
 ```
 
-The second command must produce no output. Record the Compose project name,
-verified commit, command exit codes, service health, smoke report path, and
-known failures in the issue or acceptance document. Do not paste secret
-values, cookies, or complete response bodies into GitHub.
+The scan must pass. Record the Compose project name, verified commit, command
+exit codes, service health, smoke report path, and known failures in the issue
+or acceptance document. Do not paste secret values, cookies, or complete
+response bodies into GitHub.
 
 ## Stop and clean up
 
@@ -107,12 +119,16 @@ Stop only this staging project. The normal command keeps its named database
 and Redis volumes:
 
 ```bash
-PROJECT=value-investment-agent-issue198-staging
+PROJECT=value-investment-agent-staging
 docker compose --env-file .env.staging -p "$PROJECT" down
 ```
 
-Inspect the project and its volumes before deleting data. Remove volumes only
-when the staging data is disposable or a verified backup exists:
+Inspect the project and its volumes before deleting data. This local project's
+PostgreSQL volume contains only the staging test account, imported provider
+keys, workflow runs, and artifacts. Its Redis volume contains staging cache
+state. Deleting both removes that data; the checked-out source, `.env.staging`,
+and smoke test recreate the stack and its test records. Remove volumes only
+when you intend that reset or have a verified backup:
 
 ```bash
 docker compose --env-file .env.staging -p "$PROJECT" ps -a
