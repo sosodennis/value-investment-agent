@@ -7,9 +7,13 @@ and the use cases live in `OrganizationService`.
 ## Ownership and Context
 
 - Organization IDs and membership IDs are opaque server-generated identifiers.
-- The active organization comes from the authenticated session and verified
-  membership. A path organization ID is checked against that context before a
-  use case reads or mutates data.
+- Organization-scoped operations use the active organization from the
+  authenticated session and verified membership. Actor-scoped operations such
+  as creating an organization, selecting a new organization, and logout only
+  require a valid session and CSRF proof, so a suspended or removed active
+  membership cannot strand a user who still has another valid membership.
+- A path organization ID is checked against the active context before a use
+  case reads or mutates data.
 - Workflow runs, artifacts, history, and SSE resources remain user-owned.
 - Organization creation creates an owner membership atomically. Selecting an
   organization continues to use the authenticated session endpoint.

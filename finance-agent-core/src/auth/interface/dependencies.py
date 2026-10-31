@@ -20,7 +20,7 @@ from src.auth.domain.authorization import (
     AuthorizationResource,
     OrganizationPermission,
 )
-from src.auth.domain.entities import AuthenticatedContext
+from src.auth.domain.entities import AuthenticatedActorContext, AuthenticatedContext
 from src.auth.interface.contracts import Principal
 
 SESSION_COOKIE_NAME = "app_session"
@@ -143,6 +143,21 @@ async def require_current_context_mutation(request: Request) -> AuthenticatedCon
     if context is None or context.session.id != session.id:
         raise HTTPException(status_code=401, detail="authentication is required")
     return context
+
+
+async def require_current_actor_mutation(
+    request: Request,
+) -> AuthenticatedActorContext:
+    token = request.cookies.get(SESSION_COOKIE_NAME)
+    service = get_auth_service()
+    session = await service.authenticate_session(session_token=token or "", now=_now())
+    if session is None:
+        raise HTTPException(status_code=401, detail="authentication is required")
+    require_csrf(request, expected_hash=session.csrf_token_hash)
+    actor = await service.authenticate_actor(session_token=token or "", now=_now())
+    if actor is None or actor.session.id != session.id:
+        raise HTTPException(status_code=401, detail="authentication is required")
+    return actor
 
 
 async def require_current_user_mutation(request: Request) -> Principal:

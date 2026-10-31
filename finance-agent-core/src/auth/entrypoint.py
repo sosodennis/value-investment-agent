@@ -8,6 +8,7 @@ from src.auth.application.wiring import (
 from src.auth.interface.contracts import Principal
 from src.auth.interface.dependencies import (
     clear_auth_cookies,
+    require_current_actor_mutation,
     require_current_context_mutation,
     require_current_user,
     require_current_user_mutation,
@@ -25,6 +26,7 @@ __all__ = [
     "get_organization_service",
     "get_ownership_service",
     "require_current_user",
+    "require_current_actor_mutation",
     "require_current_context_mutation",
     "require_current_user_mutation",
     "set_auth_cookies",

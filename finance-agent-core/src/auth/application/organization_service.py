@@ -18,6 +18,7 @@ from src.auth.domain.authorization import (
     OrganizationPermission,
 )
 from src.auth.domain.entities import (
+    AuthenticatedActorContext,
     AuthenticatedContext,
     MembershipRole,
     MembershipStatus,
@@ -46,22 +47,22 @@ class OrganizationService:
         self._authorization = authorization
 
     async def create_organization(
-        self, *, context: AuthenticatedContext, name: str, now: datetime
+        self, *, actor: AuthenticatedActorContext, name: str, now: datetime
     ) -> OrganizationMembership:
         self._require(
-            context=context,
+            context=AuthorizationContext.from_actor_context(actor),
             permission=OrganizationPermission.ORGANIZATION_CREATE,
             resource=AuthorizationResource(),
         )
         normalized_name = normalize_organization_name(name)
         organization = await self._repository.create_organization(
-            owner_user_id=context.user.id,
+            owner_user_id=actor.user.id,
             name=normalized_name,
             now=now,
             event=OrganizationLifecycleEventDraft(
                 event_type=OrganizationLifecycleEventType.ORGANIZATION_CREATED,
-                actor_user_id=context.user.id,
-                target_user_id=context.user.id,
+                actor_user_id=actor.user.id,
+                target_user_id=actor.user.id,
                 payload={"name": normalized_name},
                 occurred_at=now,
             ),
@@ -362,12 +363,17 @@ class OrganizationService:
     def _require(
         self,
         *,
-        context: AuthenticatedContext,
+        context: AuthenticatedContext | AuthorizationContext,
         permission: OrganizationPermission,
         resource: AuthorizationResource,
     ) -> None:
+        authorization_context = (
+            context
+            if isinstance(context, AuthorizationContext)
+            else AuthorizationContext.from_authenticated_context(context)
+        )
         self._authorization.require(
-            context=AuthorizationContext.from_authenticated_context(context),
+            context=authorization_context,
             permission=permission,
             resource=resource,
         )

@@ -96,6 +96,12 @@ class AuthenticatedContext:
 
 
 @dataclass(frozen=True, slots=True)
+class AuthenticatedActorContext:
+    user: UserRecord
+    session: SessionRecord
+
+
+@dataclass(frozen=True, slots=True)
 class OwnedResource:
     resource_type: str
     resource_id: str

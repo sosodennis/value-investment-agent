@@ -7,7 +7,7 @@ from datetime import datetime
 
 import httpx
 import pytest
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.exc import IntegrityError
 
 from api.server import app
@@ -257,16 +257,30 @@ async def test_http_selector_rejects_untrusted_organization_scope() -> None:
         )
         active_org_id = str(uuid.uuid4())
         foreign_org_id = str(uuid.uuid4())
+        recovery_org_id = str(uuid.uuid4())
         async with AsyncSessionLocal() as session:
-            session.add(OrganizationModel(id=active_org_id, name="Active team"))
+            session.add_all(
+                [
+                    OrganizationModel(id=active_org_id, name="Active team"),
+                    OrganizationModel(id=recovery_org_id, name="Recovery team"),
+                ]
+            )
             await session.flush()
-            session.add(
-                MembershipModel(
-                    organization_id=active_org_id,
-                    user_id=registered.user.id,
-                    role="member",
-                    status="active",
-                )
+            session.add_all(
+                [
+                    MembershipModel(
+                        organization_id=active_org_id,
+                        user_id=registered.user.id,
+                        role="member",
+                        status="active",
+                    ),
+                    MembershipModel(
+                        organization_id=recovery_org_id,
+                        user_id=registered.user.id,
+                        role="member",
+                        status="active",
+                    ),
+                ]
             )
             session.add(OrganizationModel(id=foreign_org_id, name="Foreign team"))
             await session.commit()
@@ -294,10 +308,25 @@ async def test_http_selector_rejects_untrusted_organization_scope() -> None:
                 json={"organization_id": foreign_org_id},
                 headers=headers,
             )
+            async with AsyncSessionLocal() as session:
+                await session.execute(
+                    update(MembershipModel)
+                    .where(MembershipModel.organization_id == active_org_id)
+                    .where(MembershipModel.user_id == registered.user.id)
+                    .values(status="suspended")
+                )
+                await session.commit()
+            recovered = await client.put(
+                "/api/v1/auth/session/organization",
+                json={"organization_id": recovery_org_id},
+                headers=headers,
+            )
 
         assert selected.status_code == 200
         assert selected.json()["organization_id"] == active_org_id
         assert rejected.status_code == 404
+        assert recovered.status_code == 200
+        assert recovered.json()["organization_id"] == recovery_org_id
     finally:
         reset_auth_wiring()
         await _cleanup_user(email)

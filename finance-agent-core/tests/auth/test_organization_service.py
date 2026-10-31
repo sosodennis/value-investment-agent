@@ -12,6 +12,7 @@ from src.auth.application.errors import (
 )
 from src.auth.application.organization_service import OrganizationService
 from src.auth.domain.entities import (
+    AuthenticatedActorContext,
     AuthenticatedContext,
     MembershipRecord,
     MembershipRole,
@@ -255,7 +256,11 @@ async def test_create_rename_list_and_emit_lifecycle_events() -> None:
     service, repository = _service(context)
     now = datetime(2026, 1, 2)
 
-    created = await service.create_organization(context=context, name=" Beta ", now=now)
+    created = await service.create_organization(
+        actor=AuthenticatedActorContext(user=context.user, session=context.session),
+        name=" Beta ",
+        now=now,
+    )
     renamed = await service.rename_organization(
         context=context,
         organization_id="organization-a",

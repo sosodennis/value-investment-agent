@@ -16,6 +16,7 @@ from src.auth.application.errors import (
 from src.auth.application.wiring import get_organization_service
 from src.auth.domain.authorization import AuthorizationResource, OrganizationPermission
 from src.auth.domain.entities import (
+    AuthenticatedActorContext,
     AuthenticatedContext,
     MembershipRole,
     MembershipStatus,
@@ -35,6 +36,7 @@ from src.auth.interface.contracts import (
 )
 from src.auth.interface.dependencies import (
     current_context,
+    require_current_actor_mutation,
     require_current_context_mutation,
     require_organization_permission,
 )
@@ -119,16 +121,11 @@ def _raise_http(error: Exception) -> None:
 )
 async def create_organization(
     body: OrganizationCreateRequest,
-    context: AuthenticatedContext = Depends(
-        require_organization_permission(
-            OrganizationPermission.ORGANIZATION_CREATE,
-            context_dependency=require_current_context_mutation,
-        )
-    ),
+    actor: AuthenticatedActorContext = Depends(require_current_actor_mutation),
 ) -> OrganizationResponse:
     try:
         organization = await get_organization_service().create_organization(
-            context=context, name=body.name, now=datetime.utcnow()
+            actor=actor, name=body.name, now=datetime.utcnow()
         )
     except (AuthError, AuthPolicyError) as error:
         _raise_http(error)

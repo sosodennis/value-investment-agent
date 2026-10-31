@@ -7,6 +7,7 @@ import pytest
 from fastapi import FastAPI
 
 from src.auth.domain.entities import (
+    AuthenticatedActorContext,
     AuthenticatedContext,
     MembershipRecord,
     MembershipRole,
@@ -18,7 +19,7 @@ from src.auth.domain.entities import (
 )
 from src.auth.interface.dependencies import (
     current_context,
-    require_current_context_mutation,
+    require_current_actor_mutation,
 )
 from src.auth.interface.organization_routes import router
 
@@ -59,7 +60,7 @@ class StubOrganizationService:
         self.created = 0
 
     async def create_organization(
-        self, *, context: AuthenticatedContext, name: str, now: datetime
+        self, *, actor: AuthenticatedActorContext, name: str, now: datetime
     ) -> OrganizationMembership:
         self.created += 1
         organization = OrganizationRecord(
@@ -68,7 +69,7 @@ class StubOrganizationService:
         membership = MembershipRecord(
             id="membership-b",
             organization_id=organization.id,
-            user_id=context.user.id,
+            user_id=actor.user.id,
             role=MembershipRole.OWNER,
             status=MembershipStatus.ACTIVE,
             created_at=now,
@@ -97,7 +98,9 @@ async def test_organization_routes_bind_server_context_and_support_create(
     app = FastAPI()
     app.include_router(router)
     app.dependency_overrides[current_context] = lambda: context
-    app.dependency_overrides[require_current_context_mutation] = lambda: context
+    app.dependency_overrides[require_current_actor_mutation] = (
+        lambda: AuthenticatedActorContext(user=context.user, session=context.session)
+    )
 
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app), base_url="http://testserver"

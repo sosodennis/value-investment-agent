@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from enum import Enum
 
 from src.auth.domain.entities import (
+    AuthenticatedActorContext,
     AuthenticatedContext,
     MembershipRole,
     MembershipStatus,
@@ -61,6 +62,18 @@ class AuthorizationContext:
             membership_id=context.membership.id,
             role=context.membership.role,
             membership_status=context.membership.status,
+        )
+
+    @classmethod
+    def from_actor_context(
+        cls, context: AuthenticatedActorContext
+    ) -> AuthorizationContext:
+        return cls(
+            actor_user_id=context.user.id,
+            organization_id=None,
+            membership_id=None,
+            role=None,
+            membership_status=None,
         )
 
     @property
