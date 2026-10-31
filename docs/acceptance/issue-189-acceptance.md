@@ -94,15 +94,58 @@ The Provider Service does not extract user-supplied tar archives. The remaining
 49 findings are low severity. These dispositions are recorded for reviewer
 assessment; the Scout database itself still reports the findings.
 
+## Final delivered-commit verification
+
+The final delivered commit is `a087d7f96b4c8e546c08b7e48081ae21b0120467`
+(merge PR #199). The focused reliability suite was rerun against this exact
+commit:
+
+```text
+llm-provider-service/.venv/bin/pytest -q \
+  llm-provider-service/tests/test_reliability_policy.py \
+  llm-provider-service/tests/test_openrouter_key_test.py \
+  llm-provider-service/tests/test_embedded_runtime.py
+29 passed, 1 warning
+```
+
+The suite includes controlled key-scoped 429 rotation, global/shared 429
+same-key retry, `Retry-After`, bounded attempt/deadline handling, stream
+interruption, and Redis health behavior. The key-scoped test uses a controlled
+upstream response with `limit_source=openrouter_key_limit`; it does not depend
+on an unpredictable live quota event.
+
+The exact-commit local staging run used project
+`value-investment-agent-staging`, `.env.staging`, and the real
+`Downloads/open-router-api-key.csv`. The clean-volume run returned exit 0:
+
+- All required services were `running/healthy`; `backend-migrations` exited 0.
+- The asynchronous batch completed with `expected_5`, `imported_5`,
+  `duplicates_0`, `invalid_0`, and `retryable_0`.
+- `key1` through `key5` each passed a live provider health test.
+- The AAPL workflow reached the valuation approval checkpoint without running
+  the deterministic calculation.
+- The log/report redaction scan passed for generated secrets and all five real
+  key values.
+
+The report is `/tmp/value-investment-agent-staging-smoke-a087d7f-fresh.jsonl`.
+The provider image built by this run has local image ID
+`sha256:de76ad64e5995225648ac84bd804d32e50c6e84cb9d7295858f3407d60ad3fc5`.
+Docker Scout v1.23.1 indexed 231 packages and reported 0 critical, 1 high, 1
+medium, and 49 low findings; `--only-fixed` reported no fixable packages. The
+high zlib and disputed tar findings have the dispositions recorded above.
+
+The live 429 observed during the real-key probe was an OpenRouter shared-pool
+limit. Five keys do not prevent that class of 429: the runtime correctly
+honors `Retry-After` and retries the same deployment instead of rotating keys.
+The controlled test above proves the separate key-scoped path rotates to the
+next user-owned key. A real upstream key-scoped quota fault was not available,
+so the live probe does not claim to reproduce one.
+
 ## Remaining gate
 
-The repository has no configured GitHub deployment environment or recorded
-deployment. This evidence is from the local, isolated Compose project and real
-OpenRouter upstream. It does not claim to be staging evidence. The live 429 was
-an upstream shared-pool limit; a real key-scoped upstream fault was not
-available, although deterministic tests cover that classification and
-rotation path.
-
-Issue #189 explicitly requires staging evidence against the delivered commit.
-Keep the issue open and do not mark it `VERIFIED` until that staging evidence
-is recorded or the maintainer explicitly revises the criterion.
+The controlled fault injection, exact-commit staging run, tenant/key isolation
+and redaction checks, two-replica evidence, and pinned runtime SBOM/CVE review
+are now recorded. The local run does not certify hosted TLS or reverse-proxy
+behavior, and the optional scheduler was not started; neither is part of the
+provider-service acceptance boundary. Issue #189 is ready to close after this
+acceptance record is merged.
