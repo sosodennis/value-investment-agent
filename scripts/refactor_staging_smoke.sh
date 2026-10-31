@@ -16,6 +16,8 @@ TIMEOUT_SECONDS="${STAGING_SMOKE_TIMEOUT_SECONDS:-90}"
 COMPLETION_WAIT_SECONDS="${STAGING_COMPLETION_WAIT_SECONDS:-600}"
 COMPLETION_POLL_SECONDS="${STAGING_COMPLETION_POLL_SECONDS:-5}"
 RETRY_ATTEMPTS="${STAGING_SMOKE_RETRY_ATTEMPTS:-3}"
+KEY_IMPORT_WAIT_SECONDS="${STAGING_KEY_IMPORT_WAIT_SECONDS:-90}"
+KEY_IMPORT_POLL_SECONDS="${STAGING_KEY_IMPORT_POLL_SECONDS:-2}"
 THREAD_ID="refactor-smoke-$(date -u +%Y%m%d%H%M%S)-$$"
 
 for command in curl jq awk sed mktemp date; do
@@ -113,7 +115,7 @@ login() {
 }
 
 ensure_key() {
-  local label="$1" raw_key="${2:-}" key_id
+  local label="$1" raw_key="${2:-}" key_id batch_id import_status item_status import_error deadline
   request GET /api/v1/llm/provider-keys
   [[ "$REQUEST_CODE" == "200" ]] || { record key_list NOT_VERIFIED "$REQUEST_ID" "$REQUEST_LATENCY_MS" 1 "http_$REQUEST_CODE"; return 1; }
   key_id="$(jq -r --arg label "$label" '.[] | select(.label == $label) | .id' "$response_body" | head -n1)"
@@ -122,8 +124,39 @@ ensure_key() {
     local payload
     payload="$(jq -cn --arg key "$raw_key" --arg label "$label" '{api_key:$key,label:$label}')"
     request POST /api/v1/llm/provider-keys "$payload" "$CSRF_TOKEN"
-    [[ "$REQUEST_CODE" == "201" ]] || { record "key_$label" NOT_VERIFIED "$REQUEST_ID" "$REQUEST_LATENCY_MS" 1 "http_$REQUEST_CODE"; return 1; }
-    key_id="$(jq -r '.id // empty' "$response_body")"
+    [[ "$REQUEST_CODE" == "202" ]] || { record "key_import_$label" NOT_VERIFIED "$REQUEST_ID" "$REQUEST_LATENCY_MS" 1 "http_$REQUEST_CODE"; return 1; }
+    batch_id="$(jq -r '.id // empty' "$response_body")"
+    [[ -n "$batch_id" ]] || { record "key_import_$label" NOT_VERIFIED "$REQUEST_ID" "$REQUEST_LATENCY_MS" 1 missing_batch_id; return 1; }
+
+    deadline=$((SECONDS + KEY_IMPORT_WAIT_SECONDS))
+    while :; do
+      request GET "/api/v1/llm/provider-keys/imports/$batch_id"
+      if [[ "$REQUEST_CODE" != "200" ]]; then
+        record "key_import_$label" NOT_VERIFIED "$REQUEST_ID" "$REQUEST_LATENCY_MS" 1 "poll_http_$REQUEST_CODE"
+        return 1
+      fi
+      import_status="$(jq -r '.status // "unknown"' "$response_body")"
+      if [[ "$import_status" == "completed" || "$import_status" == "completed_with_errors" ]]; then
+        break
+      fi
+      if (( SECONDS >= deadline )); then
+        record "key_import_$label" NOT_VERIFIED "$REQUEST_ID" "$REQUEST_LATENCY_MS" 1 "import_timeout_${import_status}"
+        return 1
+      fi
+      sleep "$KEY_IMPORT_POLL_SECONDS"
+    done
+
+    item_status="$(jq -r '.items[0].status // "unknown"' "$response_body")"
+    if [[ "$import_status" != "completed" || "$item_status" != "imported" ]]; then
+      import_error="$(jq -r '.items[0].error_code // .items[0].status // "unknown"' "$response_body")"
+      record "key_import_$label" NOT_VERIFIED "$REQUEST_ID" "$REQUEST_LATENCY_MS" 1 "$import_error"
+      return 1
+    fi
+    record "key_import_$label" VERIFIED "$REQUEST_ID" "$REQUEST_LATENCY_MS"
+
+    request GET /api/v1/llm/provider-keys
+    [[ "$REQUEST_CODE" == "200" ]] || { record key_list NOT_VERIFIED "$REQUEST_ID" "$REQUEST_LATENCY_MS" 1 "http_$REQUEST_CODE"; return 1; }
+    key_id="$(jq -r --arg label "$label" '.[] | select(.label == $label) | .id' "$response_body" | head -n1)"
   fi
   [[ -n "$key_id" && "$key_id" != "null" ]] || { record "key_$label" NOT_VERIFIED "$REQUEST_ID" "$REQUEST_LATENCY_MS" 1 missing_key_id; return 1; }
   request POST "/api/v1/llm/provider-keys/$key_id/test" "" "$CSRF_TOKEN"
