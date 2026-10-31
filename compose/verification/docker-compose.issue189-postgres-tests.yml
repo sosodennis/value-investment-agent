@@ -1,0 +1,12 @@
+# Issue #189 integration tests use their own tmpfs database and local port.
+services:
+  postgres:
+    ports: !override
+      - "127.0.0.1:${ISSUE189_POSTGRES_TEST_PORT:-15591}:5432"
+    volumes: !override []
+    tmpfs:
+      - /var/lib/postgresql/data
+
+networks:
+  default:
+    internal: false

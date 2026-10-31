@@ -1,0 +1,21 @@
+# Issue #189 acceptance stack: disposable state, no published ports, and
+# outbound access for real OpenRouter key validation and inference.
+services:
+  postgres:
+    ports: !override []
+    volumes: !override []
+    tmpfs:
+      - /var/lib/postgresql/data
+
+  redis:
+    ports: !override []
+    volumes: !override []
+    tmpfs:
+      - /data
+
+  llm-provider-service:
+    ports: !override []
+
+networks:
+  default:
+    internal: false
