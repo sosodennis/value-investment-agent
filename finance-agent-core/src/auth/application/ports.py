@@ -3,7 +3,12 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Protocol
 
-from src.auth.domain.entities import SessionRecord, UserRecord
+from src.auth.domain.entities import (
+    OrganizationMembership,
+    RegistrationRecord,
+    SessionRecord,
+    UserRecord,
+)
 
 
 class UserRepository(Protocol):
@@ -11,7 +16,19 @@ class UserRepository(Protocol):
 
     async def get_by_id(self, user_id: str) -> UserRecord | None: ...
 
-    async def create(self, *, email: str, password_hash: str) -> UserRecord: ...
+    async def create_with_default_organization(
+        self, *, email: str, password_hash: str
+    ) -> RegistrationRecord: ...
+
+
+class OrganizationRepository(Protocol):
+    async def get_default_for_user(
+        self, user_id: str
+    ) -> OrganizationMembership | None: ...
+
+    async def get_membership(
+        self, *, user_id: str, organization_id: str
+    ) -> OrganizationMembership | None: ...
 
 
 class SessionRepository(Protocol):
@@ -19,6 +36,7 @@ class SessionRepository(Protocol):
         self,
         *,
         user_id: str,
+        active_organization_id: str,
         token_hash: str,
         csrf_token_hash: str,
         expires_at: datetime,
@@ -32,6 +50,10 @@ class SessionRepository(Protocol):
     ) -> SessionRecord | None: ...
 
     async def revoke(self, *, session_id: str, revoked_at: datetime) -> None: ...
+
+    async def set_active_organization(
+        self, *, session_id: str, organization_id: str, now: datetime
+    ) -> bool: ...
 
 
 class PasswordHasher(Protocol):

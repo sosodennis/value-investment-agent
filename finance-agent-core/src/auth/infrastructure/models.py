@@ -3,7 +3,14 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Index, String, UniqueConstraint
+from sqlalchemy import (
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Index,
+    String,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.infrastructure.database import Base
@@ -24,6 +31,61 @@ class UserModel(Base):
     )
 
 
+class OrganizationModel(Base):
+    __tablename__ = "auth_organizations"
+
+    id: Mapped[str] = mapped_column(
+        String, primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=datetime.utcnow
+    )
+
+
+class MembershipModel(Base):
+    __tablename__ = "auth_memberships"
+
+    id: Mapped[str] = mapped_column(
+        String, primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    organization_id: Mapped[str] = mapped_column(
+        String,
+        ForeignKey("auth_organizations.id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
+    user_id: Mapped[str] = mapped_column(
+        String,
+        ForeignKey("auth_users.id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
+    role: Mapped[str] = mapped_column(String(32), nullable=False, default="member")
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="active")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=datetime.utcnow
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=datetime.utcnow
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id", "user_id", name="uq_auth_membership_organization_user"
+        ),
+        CheckConstraint(
+            "role IN ('owner', 'admin', 'member')",
+            name="ck_auth_membership_role",
+        ),
+        CheckConstraint(
+            "status IN ('pending', 'active', 'suspended', 'removed')",
+            name="ck_auth_membership_status",
+        ),
+        Index("idx_auth_membership_user_status", "user_id", "status"),
+    )
+
+
 class SessionModel(Base):
     __tablename__ = "auth_sessions"
 
@@ -33,6 +95,12 @@ class SessionModel(Base):
     user_id: Mapped[str] = mapped_column(
         String,
         ForeignKey("auth_users.id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
+    active_organization_id: Mapped[str] = mapped_column(
+        String,
+        ForeignKey("auth_organizations.id", ondelete="RESTRICT"),
         index=True,
         nullable=False,
     )

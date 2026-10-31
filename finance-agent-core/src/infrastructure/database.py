@@ -33,6 +33,8 @@ async def init_db():
     async with engine.begin() as conn:
         # We'll import models here or at the top level to ensure they are registered
         from src.auth.infrastructure.models import (  # noqa: F401
+            MembershipModel,
+            OrganizationModel,
             OwnedResourceModel,
             SessionModel,
             UserModel,

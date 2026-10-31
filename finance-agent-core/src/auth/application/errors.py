@@ -10,5 +10,9 @@ class RegistrationConflictError(AuthError):
     """The normalized email is already registered."""
 
 
+class InvalidOrganizationContextError(AuthError):
+    """The active organization is missing or unavailable to the user."""
+
+
 class RateLimitExceeded(AuthError):
     """The request exceeded the endpoint rate limit."""

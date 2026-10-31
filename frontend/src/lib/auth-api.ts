@@ -54,7 +54,9 @@ function parseAuthUser(value: unknown): AuthUser {
         value.role !== 'user' ||
         typeof value.email !== 'string' ||
         typeof value.subject !== 'string' ||
-        typeof value.user_id !== 'string'
+        typeof value.user_id !== 'string' ||
+        typeof value.organization_id !== 'string' ||
+        typeof value.membership_id !== 'string'
     ) {
         throw new TypeError('auth response has an invalid principal.');
     }
@@ -65,6 +67,8 @@ function parseAuthUser(value: unknown): AuthUser {
         role: 'user',
         subject: value.subject,
         user_id: value.user_id,
+        organization_id: value.organization_id,
+        membership_id: value.membership_id,
     };
 }
 

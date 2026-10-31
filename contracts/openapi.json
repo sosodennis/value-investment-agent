@@ -3333,6 +3333,14 @@
             "title": "Email",
             "type": "string"
           },
+          "membership_id": {
+            "title": "Membership Id",
+            "type": "string"
+          },
+          "organization_id": {
+            "title": "Organization Id",
+            "type": "string"
+          },
           "role": {
             "const": "user",
             "default": "user",
@@ -3351,7 +3359,9 @@
         "required": [
           "user_id",
           "subject",
-          "email"
+          "email",
+          "organization_id",
+          "membership_id"
         ],
         "title": "Principal",
         "type": "object"
@@ -4730,6 +4740,21 @@
           "providers"
         ],
         "title": "SearchSettingsSnapshot",
+        "type": "object"
+      },
+      "SelectOrganizationRequest": {
+        "properties": {
+          "organization_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Organization Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "organization_id"
+        ],
+        "title": "SelectOrganizationRequest",
         "type": "object"
       },
       "SetupReliabilitySummaryModel": {
@@ -10720,6 +10745,47 @@
           }
         },
         "summary": "Register",
+        "tags": [
+          "Authentication"
+        ]
+      }
+    },
+    "/api/v1/auth/session/organization": {
+      "put": {
+        "operationId": "select_active_organization_api_v1_auth_session_organization_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SelectOrganizationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Principal"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Select Active Organization",
         "tags": [
           "Authentication"
         ]

@@ -84,7 +84,11 @@ class _Service:
 
 def _client(service: _Service) -> httpx.AsyncClient:
     principal = Principal(
-        user_id="user-a", subject="user-a", email="user-a@example.test"
+        user_id="user-a",
+        subject="user-a",
+        email="user-a@example.test",
+        organization_id="organization-a",
+        membership_id="membership-a",
     )
     app.dependency_overrides[require_current_user] = lambda: principal
     app.dependency_overrides[require_current_user_mutation] = lambda: principal

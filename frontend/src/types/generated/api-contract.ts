@@ -89,6 +89,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auth/session/organization": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Select Active Organization */
+        put: operations["select_active_organization_api_v1_auth_session_organization_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/dashboard/capabilities": {
         parameters: {
             query?: never;
@@ -1561,6 +1578,10 @@ export interface components {
             auth_type: "session";
             /** Email */
             email: string;
+            /** Membership Id */
+            membership_id: string;
+            /** Organization Id */
+            organization_id: string;
             /**
              * Role
              * @default user
@@ -2036,6 +2057,11 @@ export interface components {
         SearchSettingsSnapshot: {
             /** Providers */
             providers: components["schemas"]["ProviderSetting"][];
+        };
+        /** SelectOrganizationRequest */
+        SelectOrganizationRequest: {
+            /** Organization Id */
+            organization_id: string;
         };
         /** SetupReliabilitySummaryModel */
         SetupReliabilitySummaryModel: {
@@ -3790,6 +3816,39 @@ export interface operations {
         responses: {
             /** @description Successful Response */
             201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Principal"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    select_active_organization_api_v1_auth_session_organization_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SelectOrganizationRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -6,6 +6,7 @@ from src.auth.application.ownership_service import OwnershipService
 from src.auth.application.service import AuthService
 from src.auth.infrastructure.passwords import Argon2PasswordHasher
 from src.auth.infrastructure.repositories import (
+    SqlAlchemyOrganizationRepository,
     SqlAlchemyOwnershipRepository,
     SqlAlchemySessionRepository,
     SqlAlchemyUserRepository,
@@ -20,6 +21,7 @@ def get_auth_service() -> AuthService:
     if _auth_service is None:
         _auth_service = AuthService(
             users=SqlAlchemyUserRepository(),
+            organizations=SqlAlchemyOrganizationRepository(),
             sessions=SqlAlchemySessionRepository(),
             password_hasher=Argon2PasswordHasher(),
         )

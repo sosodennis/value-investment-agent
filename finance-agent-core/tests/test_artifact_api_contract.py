@@ -25,6 +25,8 @@ def authenticated_api(monkeypatch: pytest.MonkeyPatch) -> AsyncMock:
         user_id="test-user",
         subject="test-user",
         email="test@example.com",
+        organization_id="organization-test",
+        membership_id="membership-test",
     )
     ownership = AsyncMock()
     ownership.owns = AsyncMock(return_value=True)

@@ -7,13 +7,19 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from src.auth.application.errors import (
     AuthError,
     InvalidCredentialsError,
+    InvalidOrganizationContextError,
     RateLimitExceeded,
     RegistrationConflictError,
 )
 from src.auth.application.rate_limit import rate_limiter
 from src.auth.application.wiring import get_auth_service
 from src.auth.domain.policies import AuthPolicyError
-from src.auth.interface.contracts import LoginRequest, Principal, RegisterRequest
+from src.auth.interface.contracts import (
+    LoginRequest,
+    Principal,
+    RegisterRequest,
+    SelectOrganizationRequest,
+)
 from src.auth.interface.dependencies import (
     clear_auth_cookies,
     require_current_user,
@@ -53,6 +59,8 @@ async def register(
         raise HTTPException(status_code=429, detail=str(exc)) from exc
     except AuthPolicyError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except InvalidOrganizationContextError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     except AuthError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     set_auth_cookies(
@@ -61,7 +69,14 @@ async def register(
         csrf_token=session.csrf_token,
         max_age=SESSION_MAX_AGE_SECONDS,
     )
-    return Principal.from_user(session.user)
+    context = await get_auth_service().authenticate(
+        session_token=session.session_token, now=datetime.utcnow()
+    )
+    if context is None:
+        raise HTTPException(
+            status_code=500, detail="active organization is unavailable"
+        )
+    return Principal.from_context(context)
 
 
 @router.post("/login", response_model=Principal)
@@ -89,6 +104,8 @@ async def login(
         raise HTTPException(status_code=429, detail=str(exc)) from exc
     except AuthPolicyError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except InvalidOrganizationContextError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     except AuthError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     set_auth_cookies(
@@ -97,12 +114,39 @@ async def login(
         csrf_token=session.csrf_token,
         max_age=SESSION_MAX_AGE_SECONDS,
     )
-    return Principal.from_user(session.user)
+    context = await get_auth_service().authenticate(
+        session_token=session.session_token, now=datetime.utcnow()
+    )
+    if context is None:
+        raise HTTPException(
+            status_code=500, detail="active organization is unavailable"
+        )
+    return Principal.from_context(context)
 
 
 @router.get("/me", response_model=Principal)
 async def me(principal: Principal = Depends(require_current_user)) -> Principal:
     return principal
+
+
+@router.put("/session/organization", response_model=Principal)
+async def select_active_organization(
+    request: Request,
+    body: SelectOrganizationRequest,
+    _principal: Principal = Depends(require_current_user_mutation),
+) -> Principal:
+    token = request.cookies.get("app_session", "")
+    try:
+        context = await get_auth_service().select_active_organization(
+            session_token=token,
+            organization_id=body.organization_id,
+            now=datetime.utcnow(),
+        )
+    except InvalidOrganizationContextError as exc:
+        raise HTTPException(
+            status_code=404, detail="organization context not found"
+        ) from exc
+    return Principal.from_context(context)
 
 
 @router.post("/logout", status_code=204)

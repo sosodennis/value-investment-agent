@@ -23,6 +23,8 @@ vi.mock('@/components/auth/AuthProvider', () => ({
             role: 'user',
             subject: 'preview-user',
             user_id: 'preview-user',
+            organization_id: 'preview-organization',
+            membership_id: 'preview-membership',
         },
         loading: false,
         signOut: mocks.signOut,
