@@ -34,6 +34,7 @@ async def init_db():
         # We'll import models here or at the top level to ensure they are registered
         from src.auth.infrastructure.models import (  # noqa: F401
             MembershipModel,
+            OrganizationLifecycleEventModel,
             OrganizationModel,
             OwnedResourceModel,
             SessionModel,

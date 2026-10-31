@@ -26,6 +26,7 @@ Root `AGENTS.md` contains finance-domain constraints, agent skill routing, and r
 - [Internal capability service contract](../finance-agent-core/src/shared/internal_services/README.md)
 - Service-specific deployment and operating instructions live in each service README and in [`runbooks/`](runbooks/).
 - [`Organization authorization matrix`](runbooks/authorization-matrix.md) defines the server-side role, relationship, and failure contract for organization actions.
+- [`Organization lifecycle`](runbooks/organization-lifecycle.md) defines organization and membership operations, status transitions, ownership invariants, lifecycle events, and verification commands.
 - [Local staging deployment](runbooks/staging-deployment.md) defines the dedicated `.env.staging` lifecycle, Compose commands, smoke acceptance, and maintenance rules.
 
 ## Decisions and research
