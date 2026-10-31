@@ -110,7 +110,7 @@ class ProviderRuntime:
     async def start(self) -> None:
         await self.state.initialize()
         self.telemetry = RedisProviderKeyTelemetry()
-        self.provider = EmbeddedLiteLLMProvider(self.state)
+        self.provider = EmbeddedLiteLLMProvider(self.state, key_health=self.telemetry)
         await self.provider.start()
         self.settings = ProviderSettingsService(
             gateway=self.provider,

@@ -32,19 +32,27 @@ from src.llm_provider_service.domain.contracts import (
 )
 from src.llm_provider_service.domain.key_metadata import key_fingerprint, key_suffix
 from src.llm_provider_service.domain.provider_models import ManagedProviderKey
+from src.llm_provider_service.domain.reliability import (
+    AttemptBudget,
+    FailureCategory,
+    RetryBudgetExhausted,
+    UpstreamFailure,
+)
 from src.llm_provider_service.domain.routes import UserScopedRouteResolver
 from src.llm_provider_service.infrastructure.state import (
     ProviderDeployment,
     ProviderState,
 )
 
+from .key_telemetry import RedisProviderKeyTelemetry, _cooldown_expired
 from .telemetry import LLMProviderTelemetry
+from .upstream_errors import classify_exception
 
 _T = TypeVar("_T", bound=BaseModel)
-_OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
-_REVISION_KEY = "via:llm-provider:deployments:revision"
+_OPENROUTER_BASE_URL = os.getenv(
+    "OPENROUTER_API_BASE_URL", "https://openrouter.ai/api/v1"
+)
 _STRUCTURED_SCHEMA_RETRY_LIMIT = 1
-_RETRYABLE_STATUS_CODES = frozenset({408, 429, 500, 502, 503, 504})
 _MAX_RETRY_ATTEMPTS = 3
 _logger = logging.getLogger(__name__)
 
@@ -85,17 +93,6 @@ def _as_int(value: object) -> int | None:
 
 def _as_float(value: object) -> float | None:
     return value if isinstance(value, (int | float)) and value >= 0 else None
-
-
-def _retry_after(response: object) -> float | None:
-    headers = _value(response, "headers", {})
-    raw = _value(headers, "retry-after")
-    if raw is None:
-        return None
-    try:
-        return max(0.0, float(raw))
-    except (TypeError, ValueError):
-        return None
 
 
 def _tool_calls(value: object) -> tuple[dict[str, object], ...]:
@@ -187,12 +184,7 @@ def _run_sync(factory: Any) -> Any:
 
 
 class EmbeddedLiteLLMProvider:
-    """Provider-owned LiteLLM Router and deployment control plane.
-
-    The Router is deliberately long-lived per process. Database-backed
-    deployment snapshots are rebuilt only after a mutation or replica revision
-    change, so request handling never creates process-local routing state.
-    """
+    """Own user-scoped OpenRouter deployment selection and reliability policy."""
 
     provider_name = "litellm"
 
@@ -203,83 +195,158 @@ class EmbeddedLiteLLMProvider:
         route_resolver: LLMRouteResolver | None = None,
         telemetry: LLMProviderTelemetry | None = None,
         redis_client: Redis | None = None,
+        key_health: RedisProviderKeyTelemetry | None = None,
     ) -> None:
         self._state = state
         self._route_resolver = route_resolver or UserScopedRouteResolver()
         self.telemetry = telemetry or LLMProviderTelemetry()
-        self._router: Any = None
-        self._revision = 0
-        self._refresh_lock = asyncio.Lock()
-        self._redis = redis_client or Redis(
-            host=os.getenv("REDIS_HOST", "localhost"),
-            port=int(os.getenv("REDIS_PORT", "6379")),
-            password=os.getenv("REDIS_PASSWORD") or None,
-            decode_responses=True,
-            socket_connect_timeout=0.2,
-            socket_timeout=0.2,
-        )
+        self._key_health = key_health
+        self._redis = redis_client
 
     async def start(self) -> None:
-        await self._redis.ping()
-        await self._refresh()
+        if self._key_health is not None:
+            await self._key_health.ping()
+        elif self._redis is not None:
+            await self._redis.ping()
 
     async def close(self) -> None:
-        self._router = None
-        await self._redis.aclose()
+        if self._redis is not None:
+            await self._redis.aclose()
 
     async def aclose(self) -> None:
         await self.close()
 
-    async def _refresh(self) -> None:
-        async with self._refresh_lock:
-            deployments = await self._state.list_deployments()
-            keys = {
-                deployment.id: await self._state.deployment_key(deployment.id)
-                for deployment in deployments
-            }
-            from litellm import Router
+    async def _eligible_deployments(self, user_id: str) -> list[ProviderDeployment]:
+        deployments = [
+            item
+            for item in await self._state.list_deployments()
+            if item.user_id == user_id
+            and item.status not in {"invalid_key", "disabled"}
+        ]
+        if self._key_health is None or not deployments:
+            return deployments
+        health = await self._key_health.get_many_strict(
+            [item.id for item in deployments]
+        )
+        result: list[ProviderDeployment] = []
+        now = datetime.now(UTC)
+        for item in deployments:
+            current = health.get(item.id)
+            if current is None:
+                result.append(item)
+                continue
+            if current.status == "invalid_key":
+                continue
+            if current.status == "cooldown":
+                if not current.cooldown_until or not _cooldown_expired(
+                    current.cooldown_until, now
+                ):
+                    continue
+            result.append(item)
+        return result
 
-            redis_host = os.getenv("REDIS_HOST", "localhost")
-            redis_port = int(os.getenv("REDIS_PORT", "6379"))
-            self._router = Router(
-                model_list=_model_list(deployments, keys),
-                redis_host=redis_host,
-                redis_port=redis_port,
-                redis_password=os.getenv("REDIS_PASSWORD") or None,
-                num_retries=1,
-                retry_after=1,
-                max_fallbacks=0,
-                default_fallbacks=[],
-                fallbacks=[],
-                context_window_fallbacks=[],
-                content_policy_fallbacks=[],
-                allowed_fails=0,
-                cooldown_time=float(
+    async def _router_for(self, deployment: ProviderDeployment) -> Any:
+        from litellm import Router
+
+        key = await self._state.deployment_key(deployment.id)
+        router = Router(
+            model_list=_model_list([deployment], {deployment.id: key}),
+            num_retries=0,
+            max_fallbacks=0,
+            default_fallbacks=[],
+            fallbacks=[],
+        )
+        return router
+
+    async def _record_key_use(self, deployment_id: str) -> int | None:
+        if self._key_health is None:
+            return None
+        try:
+            return await self._key_health.record_use(deployment_id)
+        except Exception as exc:
+            _logger.warning(
+                "LLM key use could not be recorded in Redis (%s)", type(exc).__name__
+            )
+            return None
+
+    async def _record_key_success(
+        self, deployment_id: str, expected_version: int | None
+    ) -> None:
+        if self._key_health is None:
+            return
+        try:
+            await self._key_health.record_success(
+                deployment_id, expected_version=expected_version
+            )
+        except Exception as exc:
+            _logger.warning(
+                "LLM key success could not be recorded in Redis (%s)",
+                type(exc).__name__,
+            )
+
+    async def _record_key_failure(
+        self, deployment_id: str, failure: UpstreamFailure
+    ) -> None:
+        if self._key_health is None:
+            return
+        try:
+            await self._key_health.record_failure(
+                deployment_id,
+                failure,
+                cooldown_seconds=float(
                     os.getenv("LLM_PROVIDER_KEY_COOLDOWN_SECONDS", "30")
                 ),
-                routing_strategy="simple-shuffle",
             )
-            self._revision = await self._read_revision()
+        except Exception as exc:
+            _logger.warning(
+                "LLM key failure could not be recorded in Redis (%s)",
+                type(exc).__name__,
+            )
 
-    async def _read_revision(self) -> int:
-        value = await self._redis.get(_REVISION_KEY)
-        if value is None:
-            return 0
-        try:
-            return int(value)
-        except (TypeError, ValueError) as exc:
-            raise RuntimeError("LLM provider deployment revision is invalid") from exc
+    @staticmethod
+    def _retry_delay(failure: UpstreamFailure, attempt: int) -> float:
+        if failure.retry_after_seconds is not None:
+            return failure.retry_after_seconds
+        return min(8.0, float(2 ** max(0, attempt - 1)))
 
-    async def _revision_changed(self) -> bool:
-        return await self._read_revision() != self._revision
-
-    async def _publish_revision(self) -> None:
-        self._revision = int(await self._redis.incr(_REVISION_KEY))
-
-    async def _ensure_router(self) -> Any:
-        if self._router is None or await self._revision_changed():
-            await self._refresh()
-        return self._router
+    def _failure_error(
+        self,
+        request: CompletionRequest,
+        failure: UpstreamFailure,
+        *,
+        attempt: int,
+        deployment: ProviderDeployment,
+        attempts: list[LLMAttempt],
+        partial_output: str = "",
+        partial_tool_calls: tuple[dict[str, object], ...] = (),
+    ) -> LLMProviderError:
+        code = {
+            FailureCategory.AUTHENTICATION: LLMErrorCode.AUTHENTICATION_FAILED,
+            FailureCategory.CREDIT: LLMErrorCode.RATE_LIMITED,
+            FailureCategory.RATE_LIMIT: LLMErrorCode.RATE_LIMITED,
+            FailureCategory.TIMEOUT: LLMErrorCode.UPSTREAM_TIMEOUT,
+            FailureCategory.BAD_REQUEST: LLMErrorCode.BAD_REQUEST,
+            FailureCategory.UNAVAILABLE: LLMErrorCode.UPSTREAM_UNAVAILABLE,
+        }[failure.category]
+        attribution = LLMAttribution(
+            deployment_id=deployment.id,
+            key_fingerprint=deployment.fingerprint,
+        )
+        return LLMProviderError(
+            code=code,
+            provider=self.provider_name,
+            model=request.route.alias,
+            request_id=request.request_id,
+            reason=failure.reason,
+            retryable=failure.retryable,
+            http_status=failure.http_status,
+            retry_after_seconds=failure.retry_after_seconds,
+            attempt=attempt,
+            partial_output=partial_output,
+            partial_tool_calls=partial_tool_calls,
+            attribution=attribution,
+            attempts=tuple(attempts),
+        )
 
     def _resolve(self, request: CompletionRequest) -> ResolvedModelRoute:
         principal = get_provider_principal()
@@ -371,31 +438,6 @@ class EmbeddedLiteLLMProvider:
         return kwargs
 
     @staticmethod
-    def _response_attribution(
-        response: object, resolved: ResolvedModelRoute
-    ) -> LLMAttribution | None:
-        hidden = _value(response, "_hidden_params", {})
-        if not isinstance(hidden, Mapping):
-            return resolved.attribution
-        deployment_id = hidden.get("model_id") or hidden.get("deployment_id")
-        if not isinstance(deployment_id, str) or not deployment_id:
-            return resolved.attribution
-        return LLMAttribution(
-            deployment_id=deployment_id[:255],
-            key_fingerprint=(
-                resolved.attribution.key_fingerprint
-                if resolved.attribution is not None
-                else None
-            ),
-        )
-
-    @staticmethod
-    def _retry_delay(attempt: int, error: LLMProviderError | None = None) -> float:
-        if error is not None and error.retry_after_seconds is not None:
-            return min(8.0, max(0.0, error.retry_after_seconds))
-        return min(8.0, 1.0 * (2 ** max(0, attempt - 1)))
-
-    @staticmethod
     def _terminal(
         error: LLMProviderError, attempts: list[LLMAttempt]
     ) -> LLMProviderError:
@@ -434,80 +476,70 @@ class EmbeddedLiteLLMProvider:
             attribution=resolved.attribution,
         )
 
-    def _error(
-        self,
-        request: CompletionRequest,
-        exc: Exception,
-        *,
-        attempt: int = 1,
-        resolved: ResolvedModelRoute | None = None,
-    ) -> LLMProviderError:
-        status = getattr(exc, "status_code", None)
-        response = getattr(exc, "response", None)
-        if status is None and response is not None:
-            status = getattr(response, "status_code", None)
-        if status == 429:
-            code = LLMErrorCode.RATE_LIMITED
-        elif status in {408, 504} or isinstance(exc, TimeoutError):
-            code = LLMErrorCode.UPSTREAM_TIMEOUT
-        elif status in {400, 401, 403, 404}:
-            code = (
-                LLMErrorCode.BAD_REQUEST
-                if status == 400
-                else LLMErrorCode.AUTHENTICATION_FAILED
-            )
-        else:
-            code = LLMErrorCode.UPSTREAM_UNAVAILABLE
-        return LLMProviderError(
-            code=code,
-            provider=self.provider_name,
-            model=request.route.alias,
-            request_id=request.request_id,
-            reason="LLM provider request failed",
-            retryable=code
-            in {
-                LLMErrorCode.RATE_LIMITED,
-                LLMErrorCode.UPSTREAM_TIMEOUT,
-                LLMErrorCode.UPSTREAM_UNAVAILABLE,
-            },
-            http_status=status if isinstance(status, int) else None,
-            retry_after_seconds=_retry_after(response),
-            attempt=attempt,
-            attribution=(resolved.attribution if resolved is not None else None),
-        )
-
     async def acomplete(
         self,
         request: CompletionRequest,
         *,
         response_schema: type[BaseModel] | None = None,
         _record_telemetry: bool = True,
+        _budget: AttemptBudget | None = None,
+        _attempts: list[LLMAttempt] | None = None,
     ) -> CompletionResult:
         started_at = (
             self.telemetry.started(request, stream=False) if _record_telemetry else None
         )
         resolved = self._resolve(request)
-        attempts: list[LLMAttempt] = []
+        principal = get_provider_principal()
+        if principal is None:
+            raise RuntimeError("provider principal is required")
+        deployments = await self._eligible_deployments(principal.user_id)
         limit = min(
             _MAX_RETRY_ATTEMPTS,
             2 if request.request_class is LLMRequestClass.INTERACTIVE else 3,
         )
-        for attempt in range(1, limit + 1):
-            retry_error: LLMProviderError | None = None
+        budget = _budget or AttemptBudget.from_timeout(limit, request.timeout_seconds)
+        attempts = _attempts if _attempts is not None else []
+        candidate_index = 0
+        retry_deployment: ProviderDeployment | None = None
+        retry_error: LLMProviderError | None = None
+        last_error: LLMProviderError | None = None
+        while candidate_index < len(deployments) or retry_deployment is not None:
+            is_same_deployment_retry = retry_deployment is not None
+            if retry_deployment is not None:
+                deployment = retry_deployment
+                retry_deployment = None
+            else:
+                deployment = deployments[candidate_index]
+                candidate_index += 1
             try:
-                router = await self._ensure_router()
+                reservation = budget.reserve(
+                    deployment.id, allow_repeat=is_same_deployment_retry
+                )
+            except RetryBudgetExhausted:
+                if is_same_deployment_retry and retry_error is not None:
+                    terminal = self._terminal(retry_error, attempts)
+                    if started_at is not None:
+                        self.telemetry.failed(request, terminal, started_at=started_at)
+                    raise terminal from None
+                break
+            retry_error = None
+            try:
+                health_version = await self._record_key_use(deployment.id)
+                router = await self._router_for(deployment)
+                call_kwargs = self._kwargs(request, response_schema=response_schema)
+                call_kwargs["timeout"] = reservation.timeout_seconds
                 response = await router.acompletion(
-                    model=resolved.gateway_alias,
-                    **self._kwargs(request, response_schema=response_schema),
+                    model=resolved.gateway_alias, **call_kwargs
                 )
-                attribution = self._response_attribution(response, resolved)
+                attribution = LLMAttribution(
+                    deployment_id=deployment.id, key_fingerprint=deployment.fingerprint
+                )
                 attempt_record = LLMAttempt(
-                    attempt=attempt,
-                    deployment_id=(attribution.deployment_id if attribution else None),
-                    key_fingerprint=(
-                        attribution.key_fingerprint if attribution else None
-                    ),
+                    attempt=reservation.attempt,
+                    deployment_id=deployment.id,
+                    key_fingerprint=deployment.fingerprint,
                 )
+                attempts.append(attempt_record)
                 result = CompletionResult(
                     request_id=request.request_id,
                     text=_text(response),
@@ -516,75 +548,97 @@ class EmbeddedLiteLLMProvider:
                         _value(response, "choices", [{}])[0], "finish_reason"
                     ),
                     usage=_usage(response),
-                    attempt=attempt,
+                    attempt=reservation.attempt,
                     tool_calls=_tool_calls(
                         _value(_message(response), "tool_calls", ())
                     ),
                     attribution=attribution,
-                    attempts=(*attempts, attempt_record),
+                    attempts=tuple(attempts),
                 )
+                await self._record_key_success(deployment.id, health_version)
                 if started_at is not None:
                     self.telemetry.succeeded(request, result, started_at=started_at)
                 return result
-            except LLMProviderError as exc:
-                retry_error = exc
-                attempts.append(
-                    LLMAttempt(
-                        attempt=attempt,
-                        deployment_id=(
-                            exc.attribution.deployment_id if exc.attribution else None
-                        ),
-                        key_fingerprint=(
-                            exc.attribution.key_fingerprint if exc.attribution else None
-                        ),
-                        error_code=exc.code.value,
-                    )
-                )
-                if not exc.retryable or attempt >= limit:
-                    terminal = self._terminal(exc, attempts)
-                    if started_at is not None:
-                        self.telemetry.failed(request, terminal, started_at=started_at)
-                    raise terminal from exc
             except ValueError as exc:
+                if (
+                    attempts
+                    and attempts[-1].attempt == reservation.attempt
+                    and attempts[-1].error_code is None
+                ):
+                    attempts.pop()
                 error = self._malformed(
                     request,
                     resolved,
-                    attempt=attempt,
+                    attempt=reservation.attempt,
                     reason="provider response was malformed",
                 )
                 attempts.append(
-                    LLMAttempt(attempt=attempt, error_code=error.code.value)
+                    LLMAttempt(
+                        attempt=reservation.attempt,
+                        deployment_id=deployment.id,
+                        key_fingerprint=deployment.fingerprint,
+                        error_code=error.code.value,
+                    )
                 )
                 terminal = self._terminal(error, attempts)
                 if started_at is not None:
                     self.telemetry.failed(request, terminal, started_at=started_at)
                 raise terminal from exc
             except Exception as exc:
-                error = self._error(request, exc, attempt=attempt, resolved=resolved)
-                retry_error = error
+                failure = classify_exception(exc, deployment.id)
+                error = self._failure_error(
+                    request,
+                    failure,
+                    attempt=reservation.attempt,
+                    deployment=deployment,
+                    attempts=attempts,
+                )
+                last_error = error
                 attempts.append(
                     LLMAttempt(
-                        attempt=attempt,
-                        deployment_id=(
-                            error.attribution.deployment_id
-                            if error.attribution
-                            else None
-                        ),
-                        key_fingerprint=(
-                            error.attribution.key_fingerprint
-                            if error.attribution
-                            else None
-                        ),
+                        attempt=reservation.attempt,
+                        deployment_id=deployment.id,
+                        key_fingerprint=deployment.fingerprint,
                         error_code=error.code.value,
                     )
                 )
-                if not error.retryable or attempt >= limit:
+                await self._record_key_failure(deployment.id, failure)
+                if not failure.retryable and not failure.rotates_key:
                     terminal = self._terminal(error, attempts)
                     if started_at is not None:
                         self.telemetry.failed(request, terminal, started_at=started_at)
                     raise terminal from exc
-            await asyncio.sleep(self._retry_delay(attempt, retry_error))
-        raise RuntimeError("unreachable provider retry loop")
+                if failure.rotates_key:
+                    continue
+                delay = self._retry_delay(failure, reservation.attempt)
+                if (
+                    budget.used_attempts >= budget.maximum_attempts
+                    or not budget.delay_allowed(delay)
+                ):
+                    terminal = self._terminal(error, attempts)
+                    if started_at is not None:
+                        self.telemetry.failed(request, terminal, started_at=started_at)
+                    raise terminal from exc
+                retry_deployment = deployment
+                retry_error = error
+                await asyncio.sleep(delay)
+        if last_error is not None:
+            terminal = self._terminal(last_error, attempts)
+            if started_at is not None:
+                self.telemetry.failed(request, terminal, started_at=started_at)
+            raise terminal
+        error = LLMProviderError(
+            code=LLMErrorCode.FAILOVER_EXHAUSTED,
+            provider=self.provider_name,
+            model=request.route.alias,
+            request_id=request.request_id,
+            reason="no eligible provider deployment remains",
+            retryable=False,
+            attempts=tuple(attempts),
+        )
+        if started_at is not None:
+            self.telemetry.failed(request, error, started_at=started_at)
+        raise error
 
     async def acomplete_structured(self, request: StructuredRequest[_T]) -> _T:
         started_at = self.telemetry.started(request.completion, stream=False)
@@ -593,8 +647,17 @@ class EmbeddedLiteLLMProvider:
         )
         attempt_completion = completion
         all_attempts: list[LLMAttempt] = []
+        budget = AttemptBudget.from_timeout(
+            min(
+                _MAX_RETRY_ATTEMPTS,
+                2 if completion.request_class is LLMRequestClass.INTERACTIVE else 3,
+            ),
+            completion.timeout_seconds,
+        )
         for structured_attempt in range(1, _STRUCTURED_SCHEMA_RETRY_LIMIT + 2):
             try:
+                if structured_attempt > 1:
+                    budget.attempted_deployments.clear()
                 result = await self.acomplete(
                     attempt_completion.model_copy(
                         update={
@@ -605,11 +668,12 @@ class EmbeddedLiteLLMProvider:
                     ),
                     response_schema=request.response_schema,
                     _record_telemetry=False,
+                    _budget=budget,
+                    _attempts=all_attempts,
                 )
             except LLMProviderError as exc:
                 self.telemetry.failed(request.completion, exc, started_at=started_at)
                 raise
-            all_attempts.extend(result.attempts)
             try:
                 decoded = request.response_schema.model_validate_json(result.text)
             except (ValueError, ValidationError) as exc:
@@ -684,36 +748,66 @@ class EmbeddedLiteLLMProvider:
     async def astream(self, request: CompletionRequest) -> AsyncIterator[StreamEvent]:
         started_at = self.telemetry.started(request, stream=True)
         resolved = self._resolve(request)
+        principal = get_provider_principal()
+        if principal is None:
+            raise RuntimeError("provider principal is required")
+        deployments = await self._eligible_deployments(principal.user_id)
         attempts: list[LLMAttempt] = []
         limit = min(
             _MAX_RETRY_ATTEMPTS,
             2 if request.request_class is LLMRequestClass.INTERACTIVE else 3,
         )
+        budget = AttemptBudget.from_timeout(limit, request.timeout_seconds)
         sequence = 0
         first_token_at: float | None = None
-        for attempt in range(1, limit + 1):
+        candidate_index = 0
+        retry_deployment: ProviderDeployment | None = None
+        retry_error: LLMProviderError | None = None
+        last_error: LLMProviderError | None = None
+        while candidate_index < len(deployments) or retry_deployment is not None:
+            is_same_deployment_retry = retry_deployment is not None
+            if retry_deployment is not None:
+                deployment = retry_deployment
+                retry_deployment = None
+            else:
+                deployment = deployments[candidate_index]
+                candidate_index += 1
+            try:
+                reservation = budget.reserve(
+                    deployment.id, allow_repeat=is_same_deployment_retry
+                )
+            except RetryBudgetExhausted:
+                if is_same_deployment_retry and retry_error is not None:
+                    terminal = self._terminal(retry_error, attempts)
+                    self.telemetry.failed(
+                        request, terminal, started_at=started_at, stream=True
+                    )
+                    raise terminal from None
+                break
+            retry_error = None
+            attempt = reservation.attempt
             emitted = False
             partial_output = ""
             partial_tool_calls: tuple[dict[str, object], ...] = ()
+            health_version: int | None = None
             try:
-                router = await self._ensure_router()
-                stream = await router.acompletion(
-                    model=resolved.gateway_alias,
-                    messages=self._messages(request.messages),
-                    temperature=request.temperature,
-                    timeout=request.timeout_seconds,
-                    max_tokens=request.max_tokens,
-                    stream=True,
-                    stream_options={"include_usage": True},
-                    metadata={
+                health_version = await self._record_key_use(deployment.id)
+                router = await self._router_for(deployment)
+                call_kwargs = {
+                    "messages": self._messages(request.messages),
+                    "temperature": request.temperature,
+                    "timeout": reservation.timeout_seconds,
+                    "stream": True,
+                    "stream_options": {"include_usage": True},
+                    "metadata": {
                         **request.metadata,
                         "request_id": request.request_id,
                         "operation": request.operation,
                     },
-                    user=get_provider_principal().user_id,
-                    tools=(list(request.tools) if request.tools else None),
-                    tool_choice=request.tool_choice,
-                    extra_headers={
+                    "user": principal.user_id,
+                    "tools": list(request.tools) if request.tools else None,
+                    "tool_choice": request.tool_choice,
+                    "extra_headers": {
                         "X-Request-ID": request.request_id,
                         **(
                             {"Idempotency-Key": request.idempotency_key}
@@ -721,8 +815,17 @@ class EmbeddedLiteLLMProvider:
                             else {}
                         ),
                     },
+                }
+                if request.max_tokens is not None:
+                    call_kwargs["max_tokens"] = request.max_tokens
+                stream = await router.acompletion(
+                    model=resolved.gateway_alias,
+                    **call_kwargs,
                 )
-                attribution = self._response_attribution(stream, resolved)
+                attribution = LLMAttribution(
+                    deployment_id=deployment.id,
+                    key_fingerprint=deployment.fingerprint,
+                )
                 async for chunk in stream:
                     choices = _value(chunk, "choices", ())
                     usage = _usage(chunk)
@@ -766,7 +869,7 @@ class EmbeddedLiteLLMProvider:
                         sequence=sequence,
                         model=request.route.alias,
                         attempt=attempt,
-                        attribution=resolved.attribution,
+                        attribution=attribution,
                     )
                     sequence += 1
                 yield StreamEvent(
@@ -775,15 +878,27 @@ class EmbeddedLiteLLMProvider:
                     sequence=sequence,
                     model=request.route.alias,
                     attempt=attempt,
-                    attribution=resolved.attribution,
+                    attribution=attribution,
                 )
                 result = CompletionResult(
                     request_id=request.request_id,
                     text=partial_output,
                     model=request.route.alias,
                     attempt=attempt,
-                    attribution=resolved.attribution,
-                    attempts=tuple((*attempts, LLMAttempt(attempt=attempt))),
+                    attribution=LLMAttribution(
+                        deployment_id=deployment.id,
+                        key_fingerprint=deployment.fingerprint,
+                    ),
+                    attempts=tuple(
+                        (
+                            *attempts,
+                            LLMAttempt(
+                                attempt=attempt,
+                                deployment_id=deployment.id,
+                                key_fingerprint=deployment.fingerprint,
+                            ),
+                        )
+                    ),
                 )
                 self.telemetry.succeeded(
                     request,
@@ -796,25 +911,31 @@ class EmbeddedLiteLLMProvider:
                     ),
                     stream=True,
                 )
+                await self._record_key_success(deployment.id, health_version)
                 return
             except asyncio.CancelledError:
                 self.telemetry.cancelled(request, started_at=started_at, stream=True)
                 raise
-            except LLMProviderError as exc:
-                error = exc
             except Exception as exc:
-                error = self._error(request, exc, attempt=attempt, resolved=resolved)
+                failure = classify_exception(exc, deployment.id)
+                error = self._failure_error(
+                    request,
+                    failure,
+                    attempt=attempt,
+                    deployment=deployment,
+                    attempts=attempts,
+                    partial_output=partial_output,
+                    partial_tool_calls=partial_tool_calls,
+                )
+                last_error = error
             attempt_record = LLMAttempt(
                 attempt=attempt,
-                deployment_id=(
-                    error.attribution.deployment_id if error.attribution else None
-                ),
-                key_fingerprint=(
-                    error.attribution.key_fingerprint if error.attribution else None
-                ),
+                deployment_id=deployment.id,
+                key_fingerprint=deployment.fingerprint,
                 error_code=error.code.value,
             )
             attempts.append(attempt_record)
+            await self._record_key_failure(deployment.id, failure)
             if emitted:
                 interrupted = LLMProviderError(
                     code=LLMErrorCode.STREAM_INTERRUPTED,
@@ -841,14 +962,42 @@ class EmbeddedLiteLLMProvider:
                     stream=True,
                 )
                 raise interrupted from error
-            if not error.retryable or attempt >= limit:
+            if not error.retryable and not failure.rotates_key:
                 terminal = self._terminal(error, attempts)
                 self.telemetry.failed(
                     request, terminal, started_at=started_at, stream=True
                 )
                 raise terminal from error
-            await asyncio.sleep(self._retry_delay(attempt, error))
-        raise RuntimeError("stream retry loop reached unreachable state")
+            if failure.rotates_key:
+                continue
+            delay = self._retry_delay(failure, attempt)
+            if (
+                budget.used_attempts >= budget.maximum_attempts
+                or not budget.delay_allowed(delay)
+            ):
+                terminal = self._terminal(error, attempts)
+                self.telemetry.failed(
+                    request, terminal, started_at=started_at, stream=True
+                )
+                raise terminal from error
+            retry_deployment = deployment
+            retry_error = error
+            await asyncio.sleep(delay)
+        if last_error is not None:
+            terminal = self._terminal(last_error, attempts)
+            self.telemetry.failed(request, terminal, started_at=started_at, stream=True)
+            raise terminal
+        terminal = LLMProviderError(
+            code=LLMErrorCode.FAILOVER_EXHAUSTED,
+            provider=self.provider_name,
+            model=request.route.alias,
+            request_id=request.request_id,
+            reason="no eligible provider deployment remains",
+            retryable=False,
+            attempts=tuple(attempts),
+        )
+        self.telemetry.failed(request, terminal, started_at=started_at, stream=True)
+        raise terminal
 
     def complete(self, request: CompletionRequest) -> CompletionResult:
         return _run_sync(lambda: self.acomplete(request))
@@ -901,18 +1050,10 @@ class EmbeddedLiteLLMProvider:
             if existing is None:
                 raise
             return _managed(existing)
-        await self._refresh()
-        await self._publish_revision()
         return _managed(item)
-
-    async def refresh_after_key_import(self) -> None:
-        await self._refresh()
-        await self._publish_revision()
 
     async def update_model(self, model: str) -> None:
         await self._state.update_all_deployment_models(model)
-        await self._refresh()
-        await self._publish_revision()
 
     async def test_key(self, model_id: str) -> bool:
         item = await self._state.get_deployment(model_id)
@@ -922,7 +1063,9 @@ class EmbeddedLiteLLMProvider:
             validate_openrouter_key,
         )
 
+        health_version = await self._record_key_use(model_id)
         await validate_openrouter_key(await self._state.deployment_key(model_id))
+        await self._record_key_success(model_id, health_version)
         await self._state.update_deployment(
             model_id,
             status="healthy",
@@ -937,15 +1080,11 @@ class EmbeddedLiteLLMProvider:
         await self._state.update_deployment(
             model_id, status="replacement_grace", replacement_retire_at=retire_at
         )
-        await self._refresh()
-        await self._publish_revision()
 
     async def delete_key(self, model_id: str) -> None:
         if await self._state.get_deployment(model_id) is None:
             raise RuntimeError("managed key was not found")
         await self._state.delete_deployment(model_id)
-        await self._refresh()
-        await self._publish_revision()
 
 
 def _managed(item: ProviderDeployment) -> ManagedProviderKey:

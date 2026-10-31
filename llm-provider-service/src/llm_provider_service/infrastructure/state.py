@@ -130,9 +130,6 @@ class ProviderState:
                         status VARCHAR(32) NOT NULL DEFAULT 'queued',
                         created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
                         updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
-                        router_refreshed_at TIMESTAMP WITH TIME ZONE,
-                        router_refresh_owner VARCHAR(64),
-                        router_refresh_lease_until TIMESTAMP WITH TIME ZONE,
                         expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
                         UNIQUE (user_id, idempotency_key)
                     )
@@ -1130,7 +1127,7 @@ class ProviderState:
                 ).scalar_one_or_none()
                 if exists is None:
                     return None
-                retried = await session.execute(
+                await session.execute(
                     text(
                         """
                         UPDATE llm_provider_key_import_items
@@ -1143,128 +1140,8 @@ class ProviderState:
                     ),
                     {"batch_id": batch_id, "user_id": user_id, "now": now},
                 )
-                if (retried.rowcount or 0) > 0:
-                    await session.execute(
-                        text(
-                            """
-                            UPDATE llm_provider_key_import_batches
-                            SET router_refreshed_at=NULL,router_refresh_owner=NULL,
-                                router_refresh_lease_until=NULL
-                            WHERE id=:batch_id AND user_id=:user_id
-                            """
-                        ),
-                        {"batch_id": batch_id, "user_id": user_id},
-                    )
                 await self._refresh_import_batch(session, batch_id)
         return await self.get_key_import(user_id=user_id, batch_id=batch_id)
-
-    async def claim_key_import_router_refreshes(
-        self, *, worker_id: str, limit: int = 10, lease_seconds: int = 45
-    ) -> list[str]:
-        now = datetime.now(UTC)
-        async with self._sessions() as session:
-            async with session.begin():
-                stale_batches = (
-                    (
-                        await session.execute(
-                            text(
-                                """
-                            SELECT batch.id
-                            FROM llm_provider_key_import_batches AS batch
-                            WHERE batch.status IN ('queued','processing')
-                              AND NOT EXISTS (
-                                  SELECT 1
-                                  FROM llm_provider_key_import_items AS item
-                                  WHERE item.batch_id=batch.id
-                                    AND item.status IN ('queued','validating','retry_wait')
-                              )
-                            ORDER BY batch.updated_at,batch.id
-                            LIMIT :limit FOR UPDATE OF batch SKIP LOCKED
-                            """
-                            ),
-                            {"limit": min(max(limit, 1), 50)},
-                        )
-                    )
-                    .scalars()
-                    .all()
-                )
-                for batch_id in stale_batches:
-                    await self._refresh_import_batch(session, str(batch_id))
-
-                rows = (
-                    (
-                        await session.execute(
-                            text(
-                                """
-                            WITH selected AS (
-                                SELECT batch.id
-                                FROM llm_provider_key_import_batches AS batch
-                                WHERE batch.status IN ('completed','completed_with_errors')
-                                  AND batch.router_refreshed_at IS NULL
-                                  AND EXISTS (
-                                      SELECT 1
-                                      FROM llm_provider_key_import_items AS item
-                                      WHERE item.batch_id=batch.id
-                                        AND item.status='imported'
-                                  )
-                                  AND (batch.router_refresh_lease_until IS NULL
-                                       OR batch.router_refresh_lease_until <= :now)
-                                ORDER BY batch.updated_at,batch.id
-                                LIMIT :limit FOR UPDATE SKIP LOCKED
-                            )
-                            UPDATE llm_provider_key_import_batches AS batch
-                            SET router_refresh_owner=:worker_id,
-                                router_refresh_lease_until=:lease_until
-                            FROM selected
-                            WHERE batch.id=selected.id
-                            RETURNING batch.id
-                            """
-                            ),
-                            {
-                                "now": now,
-                                "limit": min(max(limit, 1), 50),
-                                "worker_id": worker_id,
-                                "lease_until": now + timedelta(seconds=lease_seconds),
-                            },
-                        )
-                    )
-                    .scalars()
-                    .all()
-                )
-        return [str(batch_id) for batch_id in rows]
-
-    async def mark_key_import_router_refreshed(
-        self, *, batch_id: str, worker_id: str
-    ) -> None:
-        async with self._sessions() as session:
-            await session.execute(
-                text(
-                    """
-                    UPDATE llm_provider_key_import_batches
-                    SET router_refreshed_at=NOW(),router_refresh_owner=NULL,
-                        router_refresh_lease_until=NULL
-                    WHERE id=:batch_id AND router_refresh_owner=:worker_id
-                    """
-                ),
-                {"batch_id": batch_id, "worker_id": worker_id},
-            )
-            await session.commit()
-
-    async def release_key_import_router_refresh(
-        self, *, batch_id: str, worker_id: str
-    ) -> None:
-        async with self._sessions() as session:
-            await session.execute(
-                text(
-                    """
-                    UPDATE llm_provider_key_import_batches
-                    SET router_refresh_owner=NULL,router_refresh_lease_until=NULL
-                    WHERE id=:batch_id AND router_refresh_owner=:worker_id
-                    """
-                ),
-                {"batch_id": batch_id, "worker_id": worker_id},
-            )
-            await session.commit()
 
     async def cleanup_key_imports(self) -> int:
         now = datetime.now(UTC)
@@ -1299,6 +1176,20 @@ class ProviderState:
 
     @staticmethod
     async def _refresh_import_batch(session: object, batch_id: str) -> None:
+        # Item completions run concurrently on different worker sessions. Lock
+        # the batch before deriving its aggregate status so the last committer
+        # observes every prior item update instead of persisting a stale
+        # ``processing`` value.
+        await session.execute(
+            text(
+                """
+                SELECT id FROM llm_provider_key_import_batches
+                WHERE id=:batch_id
+                FOR UPDATE
+                """
+            ),
+            {"batch_id": batch_id},
+        )
         await session.execute(
             text(
                 """

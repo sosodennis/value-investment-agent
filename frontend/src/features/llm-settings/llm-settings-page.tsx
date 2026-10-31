@@ -91,6 +91,9 @@ function keyErrorLabel(code: string | null | undefined): string | null {
     switch (code) {
         case 'invalid_key': return 'The provider rejected this key.';
         case 'rate_limited': return 'The provider rate limited this key.';
+        case 'global_rate_limited': return 'The provider is rate limiting requests.';
+        case 'credit_limit': return 'The provider credit limit blocked this request.';
+        case 'upstream_timeout': return 'The provider request timed out.';
         case 'unavailable': return 'The provider request failed.';
         default: return null;
     }

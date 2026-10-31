@@ -119,7 +119,6 @@ class ProviderKeyImportService:
                 if now >= next_cleanup_at:
                     await self._state.cleanup_key_imports()
                     next_cleanup_at = now + 60.0
-                await self._refresh_completed_batches()
                 items = await self._state.claim_key_import_items(
                     worker_id=self._worker_id,
                     limit=self._concurrency,
@@ -129,7 +128,6 @@ class ProviderKeyImportService:
                         *(self._process(item) for item in items),
                         return_exceptions=True,
                     )
-                    await self._refresh_completed_batches()
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
@@ -138,33 +136,6 @@ class ProviderKeyImportService:
                     type(exc).__name__,
                 )
             await asyncio.sleep(_POLL_INTERVAL_SECONDS)
-
-    async def _refresh_completed_batches(self) -> None:
-        claimed = await self._state.claim_key_import_router_refreshes(
-            worker_id=self._worker_id
-        )
-        for batch_id in claimed:
-            try:
-                await self._provider.refresh_after_key_import()
-                await self._state.mark_key_import_router_refreshed(
-                    batch_id=batch_id,
-                    worker_id=self._worker_id,
-                )
-            except asyncio.CancelledError:
-                await self._state.release_key_import_router_refresh(
-                    batch_id=batch_id,
-                    worker_id=self._worker_id,
-                )
-                raise
-            except Exception as exc:
-                await self._state.release_key_import_router_refresh(
-                    batch_id=batch_id,
-                    worker_id=self._worker_id,
-                )
-                logger.warning(
-                    "Provider key import router refresh failed (%s)",
-                    type(exc).__name__,
-                )
 
     async def _process(self, item: ClaimedKeyImportItem) -> None:
         try:
