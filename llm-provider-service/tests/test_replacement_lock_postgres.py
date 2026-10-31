@@ -36,6 +36,7 @@ class _Gateway:
                 created_at=None,
             )
         ]
+        self._replacement_prefix = str(uuid4())
         self._ids = itertools.count(1)
         self._active_adds = 0
         self.max_active_adds = 0
@@ -43,7 +44,7 @@ class _Gateway:
     async def list_managed(self) -> list[ManagedProviderKey]:
         return list(self.keys)
 
-    async def add_key(
+    async def add_replacement_key(
         self,
         *,
         key: str,
@@ -61,7 +62,7 @@ class _Gateway:
             self._active_adds -= 1
         identifier = next(self._ids)
         replacement_key = ManagedProviderKey(
-            id=f"replacement-{identifier}",
+            id=f"replacement-{self._replacement_prefix}-{identifier}",
             label=label,
             suffix=key[-4:],
             fingerprint=f"fingerprint-{identifier}",

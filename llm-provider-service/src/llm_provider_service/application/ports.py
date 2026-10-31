@@ -15,7 +15,7 @@ from src.llm_provider_service.domain.provider_models import (
 class KeyGateway(Protocol):
     async def list_managed(self) -> list[ManagedProviderKey]: ...
 
-    async def add_key(
+    async def add_replacement_key(
         self,
         *,
         key: str,

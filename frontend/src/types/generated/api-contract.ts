@@ -159,8 +159,8 @@ export interface paths {
         /** List Provider Keys */
         get: operations["list_provider_keys_api_v1_llm_provider_keys_get"];
         put?: never;
-        /** Add Provider Key */
-        post: operations["add_provider_key_api_v1_llm_provider_keys_post"];
+        /** Submit Provider Key */
+        post: operations["submit_provider_key_api_v1_llm_provider_keys_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3911,10 +3911,12 @@ export interface operations {
             };
         };
     };
-    add_provider_key_api_v1_llm_provider_keys_post: {
+    submit_provider_key_api_v1_llm_provider_keys_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "Idempotency-Key"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -3925,12 +3927,12 @@ export interface operations {
         };
         responses: {
             /** @description Successful Response */
-            201: {
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["src__llm_provider__interface__contracts__ProviderKeyResponse"];
+                    "application/json": components["schemas"]["ProviderKeyImportBatchResponse"];
                 };
             };
             /** @description Validation Error */

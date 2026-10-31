@@ -80,59 +80,6 @@ class ProviderSettingsService:
             for key in keys
         ]
 
-    async def add_key(
-        self, *, user_id: str, key: str, label: str
-    ) -> ManagedProviderKey:
-        fingerprint = key_fingerprint(key)
-        async with self._ownership.fingerprint_lock(
-            user_id=user_id, fingerprint=fingerprint
-        ):
-            owned_ids = await self._ownership.owned_ids(
-                user_id=user_id, resource_type=RESOURCE_TYPE
-            )
-            existing = next(
-                (
-                    item
-                    for item in await self._gateway.list_managed()
-                    if item.id in owned_ids and item.fingerprint == fingerprint
-                ),
-                None,
-            )
-            if existing is not None:
-                return existing
-
-            await self._test_key_material(key)
-            managed = await self._gateway.add_key(
-                key=key,
-                label=label,
-                model=await self._settings.get_selected_model(),
-                model_name=user_route_alias(user_id),
-                existing_ids=owned_ids,
-            )
-            if not await self._ownership.claim(
-                user_id=user_id,
-                resource_type=RESOURCE_TYPE,
-                resource_id=managed.id,
-                fingerprint=managed.fingerprint,
-            ):
-                await self._gateway.delete_key(managed.id)
-                existing_id = await self._ownership.find_by_fingerprint(
-                    user_id=user_id, fingerprint=managed.fingerprint
-                )
-                if existing_id is not None:
-                    existing = next(
-                        (
-                            item
-                            for item in await self._gateway.list_managed()
-                            if item.id == existing_id
-                        ),
-                        None,
-                    )
-                    if existing is not None:
-                        return existing
-                raise ProviderSettingsError("already_owned")
-            return managed
-
     async def replace_key(
         self, *, user_id: str, key_id: str, key: str, label: str
     ) -> ManagedProviderKey:
@@ -158,7 +105,7 @@ class ProviderSettingsService:
             owned_ids = await self._ownership.owned_ids(
                 user_id=user_id, resource_type=RESOURCE_TYPE
             )
-            replacement = await self._gateway.add_key(
+            replacement = await self._gateway.add_replacement_key(
                 key=key,
                 label=label,
                 model=await self._settings.get_selected_model(),

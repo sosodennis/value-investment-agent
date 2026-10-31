@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Mapping
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -13,6 +13,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
+from src.llm_provider_service.domain.errors import ProviderSettingsError
 from src.llm_provider_service.domain.key_imports import (
     ClaimedKeyImportItem,
     ImportBatchStatus,
@@ -558,6 +559,31 @@ class ProviderState:
                 )
                 existing_id_value = existing_id.scalar_one_or_none()
                 if isinstance(existing_id_value, str):
+                    stored_items = await session.execute(
+                        text(
+                            """
+                            SELECT source_line,label,fingerprint
+                            FROM llm_provider_key_import_items
+                            WHERE batch_id=:batch_id
+                            ORDER BY source_line
+                            """
+                        ),
+                        {"batch_id": existing_id_value},
+                    )
+                    stored_signature = [
+                        (int(line), str(label), str(fingerprint))
+                        for line, label, fingerprint in stored_items.all()
+                    ]
+                    requested_signature = [
+                        (
+                            item.source_line,
+                            _safe_key_label(item.label, item.api_key),
+                            key_fingerprint(item.api_key),
+                        )
+                        for item in items
+                    ]
+                    if stored_signature != requested_signature:
+                        raise ProviderSettingsError("idempotency_key_reused")
                     batch_id = existing_id_value
                 else:
                     deployed = await session.execute(
@@ -1366,23 +1392,22 @@ def _iso(value: object) -> str | None:
     return str(value) if value is not None else None
 
 
-def _deployment_from_row(row: object) -> ProviderDeployment:
-    data = row if isinstance(row, dict) else dict(row)  # type: ignore[arg-type]
-    created_at = _iso(data["created_at"])
+def _deployment_from_row(row: Mapping[str, object]) -> ProviderDeployment:
+    created_at = _iso(row["created_at"])
     if created_at is None:
         raise RuntimeError("provider deployment has no creation timestamp")
     return ProviderDeployment(
-        id=str(data["id"]),
-        user_id=str(data["user_id"]),
-        label=str(data["label"]),
-        suffix=str(data["suffix"]),
-        fingerprint=str(data["fingerprint"]),
-        model=str(data["model"]),
+        id=str(row["id"]),
+        user_id=str(row["user_id"]),
+        label=str(row["label"]),
+        suffix=str(row["suffix"]),
+        fingerprint=str(row["fingerprint"]),
+        model=str(row["model"]),
         created_at=created_at,
-        status=str(data.get("status") or "healthy"),
-        failure_count=max(0, int(data.get("failure_count") or 0)),
-        cooldown_until=_iso(data.get("cooldown_until")),
-        last_tested_at=_iso(data.get("last_tested_at")),
-        last_used_at=_iso(data.get("last_used_at")),
-        replacement_retire_at=_iso(data.get("replacement_retire_at")),
+        status=str(row.get("status") or "healthy"),
+        failure_count=max(0, int(row.get("failure_count") or 0)),
+        cooldown_until=_iso(row.get("cooldown_until")),
+        last_tested_at=_iso(row.get("last_tested_at")),
+        last_used_at=_iso(row.get("last_used_at")),
+        replacement_retire_at=_iso(row.get("replacement_retire_at")),
     )

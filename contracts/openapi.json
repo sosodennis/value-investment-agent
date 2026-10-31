@@ -10882,7 +10882,25 @@
         ]
       },
       "post": {
-        "operationId": "add_provider_key_api_v1_llm_provider_keys_post",
+        "operationId": "submit_provider_key_api_v1_llm_provider_keys_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -10894,11 +10912,11 @@
           "required": true
         },
         "responses": {
-          "201": {
+          "202": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/src__llm_provider__interface__contracts__ProviderKeyResponse"
+                  "$ref": "#/components/schemas/ProviderKeyImportBatchResponse"
                 }
               }
             },
@@ -10915,7 +10933,7 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Add Provider Key",
+        "summary": "Submit Provider Key",
         "tags": [
           "LLM settings"
         ]

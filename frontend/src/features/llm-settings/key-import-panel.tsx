@@ -38,8 +38,29 @@ const CSV_EXAMPLE = [
 type KeyImportPanelProps = {
     authenticated: boolean;
     onUnauthorized: (cause: unknown) => boolean;
-    onImportAccepted: () => void;
+    submittedImports: LlmProviderKeyImport[];
+    onImportCompleted: () => void;
 };
+
+function mergeImports(
+    current: LlmProviderKeyImport[],
+    incoming: LlmProviderKeyImport[],
+): LlmProviderKeyImport[] {
+    const byId = new Map<string, LlmProviderKeyImport>();
+    for (const batch of [...incoming, ...current]) {
+        const previous = byId.get(batch.id);
+        if (!previous || batch.updated_at > previous.updated_at) {
+            byId.set(batch.id, batch);
+        }
+    }
+    return [...byId.values()]
+        .sort((left, right) => right.created_at.localeCompare(left.created_at))
+        .slice(0, 10);
+}
+
+function isTerminalImport(batch: LlmProviderKeyImport): boolean {
+    return batch.status === 'completed' || batch.status === 'completed_with_errors';
+}
 
 function errorMessage(cause: unknown): string {
     if (!(cause instanceof LlmSettingsApiError)) {
@@ -123,12 +144,14 @@ function batchStatusText(batch: LlmProviderKeyImport): string {
 export function KeyImportPanel({
     authenticated,
     onUnauthorized,
-    onImportAccepted,
+    submittedImports,
+    onImportCompleted,
 }: KeyImportPanelProps) {
     const fileInputRef = useRef<HTMLInputElement>(null);
     const previewRequestRef = useRef(0);
     const pollingRef = useRef(false);
     const idempotencyKeyRef = useRef<string | null>(null);
+    const completedBatchIdsRef = useRef(new Set<string>());
     const [selectedFile, setSelectedFile] = useState<File | null>(null);
     const [preview, setPreview] = useState<LlmProviderKeyImportPreview | null>(null);
     const [imports, setImports] = useState<LlmProviderKeyImport[]>([]);
@@ -141,10 +164,28 @@ export function KeyImportPanel({
     const [importError, setImportError] = useState<string | null>(null);
     const [notice, setNotice] = useState<string | null>(null);
 
+    const notifyCompletedImport = useCallback((batch: LlmProviderKeyImport) => {
+        if (
+            !isTerminalImport(batch) ||
+            batch.imported_count === 0 ||
+            completedBatchIdsRef.current.has(batch.id)
+        ) {
+            return;
+        }
+        completedBatchIdsRef.current.add(batch.id);
+        onImportCompleted();
+    }, [onImportCompleted]);
+
+    const trackImports = useCallback((batches: LlmProviderKeyImport[]) => {
+        batches.forEach(notifyCompletedImport);
+    }, [notifyCompletedImport]);
+
     const refreshImports = useCallback(async () => {
         setIsLoadingImports(true);
         try {
-            setImports(await listLlmProviderKeyImports());
+            const result = await listLlmProviderKeyImports();
+            setImports((current) => mergeImports(current, result));
+            trackImports(result);
             setImportError(null);
         } catch (cause) {
             if (!onUnauthorized(cause)) {
@@ -153,14 +194,15 @@ export function KeyImportPanel({
         } finally {
             setIsLoadingImports(false);
         }
-    }, [onUnauthorized]);
+    }, [onUnauthorized, trackImports]);
 
     useEffect(() => {
         if (!authenticated) return;
         let cancelled = false;
         void listLlmProviderKeyImports().then((result) => {
             if (cancelled) return;
-            setImports(result);
+            setImports((current) => mergeImports(current, result));
+            trackImports(result);
             setImportError(null);
         }).catch((cause: unknown) => {
             if (cancelled || onUnauthorized(cause)) return;
@@ -171,9 +213,18 @@ export function KeyImportPanel({
         return () => {
             cancelled = true;
         };
-    }, [authenticated, onUnauthorized]);
+    }, [authenticated, onUnauthorized, trackImports]);
 
-    const activeBatchIds = imports
+    useEffect(() => {
+        trackImports(submittedImports);
+    }, [submittedImports, trackImports]);
+
+    const visibleImports = mergeImports(
+        submittedImports,
+        imports,
+    );
+
+    const activeBatchIds = visibleImports
         .filter((batch) => batch.status === 'queued' || batch.status === 'processing')
         .map((batch) => batch.id);
     const activeBatchKey = activeBatchIds.join(',');
@@ -187,9 +238,8 @@ export function KeyImportPanel({
             void Promise.all(batchIds.map((batchId) =>
                 getLlmProviderKeyImport(batchId)
             )).then((updated) => {
-                setImports((current) => current.map((batch) =>
-                    updated.find((item) => item.id === batch.id) ?? batch
-                ));
+                updated.forEach(notifyCompletedImport);
+                setImports((current) => mergeImports(current, updated));
             }).catch((cause: unknown) => {
                 if (onUnauthorized(cause)) return;
                 setImportError('Could not refresh key import progress.');
@@ -198,7 +248,7 @@ export function KeyImportPanel({
             });
         }, 1500);
         return () => window.clearInterval(timer);
-    }, [activeBatchKey, authenticated, onUnauthorized]);
+    }, [activeBatchKey, authenticated, notifyCompletedImport, onUnauthorized]);
 
     async function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
         const file = event.currentTarget.files?.[0] ?? null;
@@ -242,10 +292,10 @@ export function KeyImportPanel({
         idempotencyKeyRef.current = idempotencyKey;
         try {
             const batch = await createLlmProviderKeyImport(file, idempotencyKey);
-            setImports((current) => [batch, ...current.filter((item) => item.id !== batch.id)].slice(0, 10));
+            setImports((current) => mergeImports(current, [batch]));
+            trackImports([batch]);
             clearSelectedFile();
             setNotice('The import was accepted. Its results will remain available here.');
-            onImportAccepted();
         } catch (cause) {
             if (!onUnauthorized(cause)) setFileError(errorMessage(cause));
         } finally {
@@ -258,7 +308,9 @@ export function KeyImportPanel({
         setImportError(null);
         try {
             const updated = await retryLlmProviderKeyImport(batchId);
-            setImports((current) => current.map((batch) => batch.id === updated.id ? updated : batch));
+            completedBatchIdsRef.current.delete(updated.id);
+            notifyCompletedImport(updated);
+            setImports((current) => mergeImports(current, [updated]));
         } catch (cause) {
             if (!onUnauthorized(cause)) setImportError(errorMessage(cause));
         } finally {
@@ -378,9 +430,9 @@ export function KeyImportPanel({
                 </div>
                 {importError ? <Alert variant="destructive" role="alert" className="mt-3"><AlertDescription className="flex flex-wrap items-center justify-between gap-3"><span>{importError}</span><Button type="button" variant="outline" size="sm" onClick={() => void refreshImports()}>Retry history</Button></AlertDescription></Alert> : null}
                 {isLoadingImports ? <p className="py-4 text-sm text-muted-foreground" role="status">Loading import history</p> : null}
-                {!isLoadingImports && imports.length === 0 ? <p className="py-4 text-sm text-muted-foreground">No key imports yet.</p> : null}
+                {!isLoadingImports && visibleImports.length === 0 ? <p className="py-4 text-sm text-muted-foreground">No key imports yet.</p> : null}
                 <div className="mt-3 grid gap-3">
-                    {imports.map((batch) => {
+                    {visibleImports.map((batch) => {
                         const progress = batch.total_count === 0
                             ? 100
                             : Math.round((batch.processed_count / batch.total_count) * 100);

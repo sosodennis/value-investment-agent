@@ -49,11 +49,6 @@ class StreamResponse(StrictModel):
     event: dict[str, object]
 
 
-class KeyCreateInput(StrictModel):
-    api_key: SecretStr = Field(min_length=20, max_length=500)
-    label: str = Field(default="OpenRouter key", min_length=1, max_length=80)
-
-
 class KeyIdInput(StrictModel):
     key_id: str = Field(min_length=1, max_length=255)
 

@@ -33,6 +33,7 @@ class _Service:
         self.calls: list[tuple[str, object]] = []
         self.test_result = True
         self.replacement_error_code = "replacement_must_differ"
+        self.import_error_code: str | None = None
         self.import_batch = ProviderKeyImportBatchResponse(
             id="00000000-0000-0000-0000-000000000192",
             status="queued",
@@ -50,10 +51,6 @@ class _Service:
         self.calls.append(("list_keys", user_id))
         return [self.key]
 
-    async def add_key(self, *, user_id: str, key: str, label: str):
-        self.calls.append(("add_key", (user_id, key, label)))
-        return self.key
-
     async def replace_key(self, *, user_id: str, key_id: str, key: str, label: str):
         self.calls.append(("replace_key", (user_id, key_id, key, label)))
         raise ProviderSettingsError(self.replacement_error_code)
@@ -69,6 +66,8 @@ class _Service:
         self, *, user_id: str, idempotency_key: str, items: list[dict[str, object]]
     ):
         self.calls.append(("create_key_import", (user_id, idempotency_key, items)))
+        if self.import_error_code is not None:
+            raise ProviderSettingsError(self.import_error_code)
         return self.import_batch
 
     async def selected_model_settings(self, *, user_id: str):
@@ -118,20 +117,32 @@ async def test_provider_key_routes_delegate_to_provider_service() -> None:
         created = await client.post(
             "/api/v1/llm/provider-keys",
             json={"api_key": "sk-this-is-a-long-test-secret", "label": "primary"},
+            headers={"Idempotency-Key": "manual-request-192-key"},
         )
         tested = await client.post("/api/v1/llm/provider-keys/managed-a/test")
         deleted = await client.delete("/api/v1/llm/provider-keys/managed-a")
     assert listed.status_code == 200
-    assert created.status_code == 201
+    assert created.status_code == 202
     assert "sk-this-is-a-long-test-secret" not in created.text
     assert tested.status_code == 200
     assert deleted.status_code == 204
     assert [call[0] for call in service.calls] == [
         "list_keys",
-        "add_key",
+        "create_key_import",
         "test_key",
         "delete_key",
     ]
+    assert service.calls[1][1] == (
+        "user-a",
+        "manual-request-192-key",
+        [
+            {
+                "source_line": 1,
+                "label": "primary",
+                "api_key": "sk-this-is-a-long-test-secret",
+            }
+        ],
+    )
 
 
 @pytest.mark.asyncio
@@ -146,6 +157,22 @@ async def test_invalid_provider_key_validation_does_not_echo_secret_input() -> N
 
     assert response.status_code == 422
     assert canary not in response.text
+
+
+@pytest.mark.asyncio
+async def test_manual_import_idempotency_conflict_is_returned_as_conflict() -> None:
+    service = _Service()
+    service.import_error_code = "idempotency_key_reused"
+    async with _client(service) as client:
+        response = await client.post(
+            "/api/v1/llm/provider-keys",
+            json={"api_key": "sk-this-is-a-long-test-secret", "label": "primary"},
+            headers={"Idempotency-Key": "manual-request-192-key"},
+        )
+
+    assert response.status_code == 409
+    assert response.json() == {"detail": "idempotency_key_reused"}
+    assert "sk-this-is-a-long-test-secret" not in response.text
 
 
 @pytest.mark.asyncio

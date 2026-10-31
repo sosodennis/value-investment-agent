@@ -7,6 +7,7 @@ from uuid import uuid4
 import pytest
 from cryptography.fernet import Fernet
 from sqlalchemy import text
+from src.llm_provider_service.domain.errors import ProviderSettingsError
 from src.llm_provider_service.domain.key_imports import KeyImportInput
 from src.llm_provider_service.infrastructure.state import ProviderState
 
@@ -91,6 +92,12 @@ async def test_import_staging_is_encrypted_idempotent_owner_scoped_and_restartab
             items=items,
         )
         assert replay.id == batch.id
+        with pytest.raises(ProviderSettingsError, match="idempotency_key_reused"):
+            await state.create_key_import(
+                user_id=user_id,
+                idempotency_key="same-import-request-192",
+                items=[KeyImportInput(1, "Primary", _new_key(2))],
+            )
         assert (
             await state.get_key_import(user_id="another-owner", batch_id=batch.id)
             is None

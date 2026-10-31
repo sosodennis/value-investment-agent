@@ -25,14 +25,15 @@ import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { KeyImportPanel } from '@/features/llm-settings/key-import-panel';
 import {
-    addLlmProviderKey,
     deleteLlmProviderKey,
     getLlmSettings,
     listLlmProviderKeys,
     LlmSettingsApiError,
     replaceLlmProviderKey,
     type LlmProviderKey,
+    type LlmProviderKeyImport,
     type LlmModelOption,
+    submitLlmProviderKey,
     testLlmProviderKey,
     updateLlmSettings,
 } from '@/features/llm-settings/api';
@@ -95,8 +96,16 @@ function keyErrorLabel(code: string | null | undefined): string | null {
     }
 }
 
+function isIdempotencyKeyConflict(cause: unknown): boolean {
+    return cause instanceof LlmSettingsApiError &&
+        (cause.code === 'idempotency_key_reused' || cause.message === 'idempotency_key_reused');
+}
+
 function errorMessage(cause: unknown, fallback: string): string {
     if (!(cause instanceof LlmSettingsApiError)) return fallback;
+    if (isIdempotencyKeyConflict(cause)) {
+        return 'This request was already used for different content. Submit the key again.';
+    }
     switch (cause.message) {
         case 'invalid_key': return 'OpenRouter rejected this API key.';
         case 'rate_limited': return 'OpenRouter is rate limiting requests. Try again shortly.';
@@ -119,6 +128,7 @@ function statusVariant(status: string | undefined): 'success' | 'warning' | 'des
 export default function LlmSettingsPage() {
     const router = useRouter();
     const labelDraftRef = useRef('');
+    const manualSubmissionKeyRef = useRef<string | null>(null);
     const redirectingRef = useRef(false);
     const storedLabelDraft = useSyncExternalStore(
         subscribeLabelDraft,
@@ -132,6 +142,7 @@ export default function LlmSettingsPage() {
     const [labelOverride, setLabelOverride] = useState<string | null>(null);
     const label = labelOverride ?? storedLabelDraft ?? '';
     const [apiKey, setApiKey] = useState('');
+    const [submittedImports, setSubmittedImports] = useState<LlmProviderKeyImport[]>([]);
     const [keyLoadError, setKeyLoadError] = useState<string | null>(null);
     const [catalogError, setCatalogError] = useState<string | null>(null);
     const [operationError, setOperationError] = useState<string | null>(null);
@@ -169,6 +180,10 @@ export default function LlmSettingsPage() {
             setIsRefreshingKeys(false);
         }
     }, [redirectToLogin]);
+
+    const refreshKeysAfterImport = useCallback(() => {
+        void loadKeys(true);
+    }, [loadKeys]);
 
     const loadModels = useCallback(async () => {
         setIsLoadingModels(true);
@@ -248,21 +263,34 @@ export default function LlmSettingsPage() {
         setNotice(null);
         try {
             const input = { label: label.trim() || 'OpenRouter key', api_key: apiKey };
-            const created = replacing
-                ? await replaceLlmProviderKey(replacementCandidate.id, input)
-                : await addLlmProviderKey(input);
-            setKeys((current) => replacing
-                ? current.map((key) => key.id === replacementCandidate.id ? created : key)
-                : [created, ...current]);
+            if (replacing) {
+                const created = await replaceLlmProviderKey(replacementCandidate.id, input);
+                setKeys((current) => current.map((key) =>
+                    key.id === replacementCandidate.id ? created : key
+                ));
+                setNotice(
+                    `Key ending in ${created.suffix} passed its test and replaced ${input.label}.`,
+                );
+            } else {
+                const idempotencyKey = manualSubmissionKeyRef.current ?? crypto.randomUUID();
+                manualSubmissionKeyRef.current = idempotencyKey;
+                const submitted = await submitLlmProviderKey(input, idempotencyKey);
+                setSubmittedImports((current) => [
+                    submitted,
+                    ...current.filter((item) => item.id !== submitted.id),
+                ].slice(0, 10));
+                manualSubmissionKeyRef.current = null;
+                setNotice('The key was submitted. Track its status in import history.');
+            }
             setReplacementCandidate(null);
             setLabelOverride('');
             labelDraftRef.current = '';
             setStoredLabelDraft(null);
             setApiKey('');
-            setNotice(replacing
-                ? `Key ending in ${created.suffix} passed its test and replaced ${input.label}.`
-                : `Key ending in ${created.suffix} passed its test and was added.`);
         } catch (cause) {
+            if (isIdempotencyKeyConflict(cause)) {
+                manualSubmissionKeyRef.current = null;
+            }
             if (!redirectToLogin(cause)) setOperationError(errorMessage(cause, replacing ? 'Could not replace this key.' : 'Could not add this key.'));
         } finally {
             setIsAddingKey(false);
@@ -349,7 +377,7 @@ export default function LlmSettingsPage() {
                         <form onSubmit={(event) => void handleAddKey(event)} className="grid content-start gap-5 py-6" aria-labelledby="add-key-heading">
                             <div>
                                 <h2 id="add-key-heading" className="font-semibold">{replacementCandidate ? `Replace ${replacementCandidate.label}` : 'Add a provider key'}</h2>
-                                <p className="mt-1 text-sm text-muted-foreground">The key is tested before it is stored.</p>
+                                <p className="mt-1 text-sm text-muted-foreground">{replacementCandidate ? 'The replacement key is tested before it is saved.' : 'Submitted keys are checked in the background. Track the result in import history.'}</p>
                             </div>
                             {replacementCandidate ? <Button type="button" variant="ghost" className="justify-self-start" disabled={isAddingKey} onClick={() => { setReplacementCandidate(null); setLabelOverride(''); labelDraftRef.current = ''; setApiKey(''); }}>Cancel replacement</Button> : null}
                             <Field label="Label" htmlFor="key-label" description="Optional. Use a name you recognize.">
@@ -361,23 +389,29 @@ export default function LlmSettingsPage() {
                                     }
                                 }} onChange={(event) => {
                                     const nextLabel = event.target.value;
+                                    if (nextLabel !== label) manualSubmissionKeyRef.current = null;
                                     labelDraftRef.current = nextLabel;
                                     setLabelOverride(nextLabel);
                                     if (storedLabelDraft !== null) setStoredLabelDraft(null);
                                 }} placeholder="Primary research key" maxLength={80} disabled={isAddingKey} />
                             </Field>
                             <Field label="OpenRouter API key" htmlFor="openrouter-key">
-                                <Input id="openrouter-key" type="password" value={apiKey} onChange={(event) => setApiKey(event.target.value)} placeholder="sk-or-v1-..." minLength={20} maxLength={500} autoComplete="off" required disabled={isAddingKey} />
+                                <Input id="openrouter-key" type="password" value={apiKey} onChange={(event) => {
+                                    const nextKey = event.target.value;
+                                    if (nextKey !== apiKey) manualSubmissionKeyRef.current = null;
+                                    setApiKey(nextKey);
+                                }} placeholder="sk-or-v1-..." minLength={20} maxLength={500} autoComplete="off" required disabled={isAddingKey} />
                             </Field>
                             <Button type="submit" disabled={isAddingKey || !authenticated || !apiKey}>
                                 {isAddingKey ? <LoaderCircle className="animate-spin" aria-hidden="true" /> : replacementCandidate ? <RefreshCw aria-hidden="true" /> : <Plus aria-hidden="true" />}
-                                {isAddingKey ? (replacementCandidate ? 'Testing and replacing...' : 'Testing and adding...') : replacementCandidate ? 'Test and replace key' : 'Test and add key'}
+                                {isAddingKey ? (replacementCandidate ? 'Testing and replacing...' : 'Submitting key...') : replacementCandidate ? 'Test and replace key' : 'Add key'}
                             </Button>
                         </form>
                         <KeyImportPanel
                             authenticated={authenticated}
                             onUnauthorized={redirectToLogin}
-                            onImportAccepted={() => void loadKeys(true)}
+                            submittedImports={submittedImports}
+                            onImportCompleted={refreshKeysAfterImport}
                         />
                     </div>
 

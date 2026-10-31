@@ -61,9 +61,38 @@ acceptance data.
   tests.
 - The isolated Compose PostgreSQL and Redis services and the local Provider
   Service and BFF health endpoints reported healthy.
+- The updated LLM Settings browser flow submits a manual key as one import,
+  shows its queued and completed states, clears the password field, keeps the
+  key out of the page, and refreshes the configured-key list after completion.
+  The panel also resumes active history after returning to the page and keeps
+  multiple manual imports in progress at once. The existing 100-key TXT and
+  CSV browser flow still passes.
+- The PostgreSQL import test confirms that an identical retry returns the
+  original batch and that reusing its idempotency key for a different key is
+  rejected. The BFF maps that conflict to HTTP 409 without returning key
+  material.
+- Current verification passed: 20 frontend tests, frontend typecheck, scoped
+  ESLint, 2 Playwright tests, 21 BFF tests, and all 47 Provider Service tests
+  with the isolated PostgreSQL database enabled.
+- `bash scripts/generate-contracts.sh` regenerated the OpenAPI and TypeScript
+  contracts successfully.
+
+## Commands for the manual-entry update
+
+- `npm run test -- --run src/features/llm-settings/key-import-panel.test.tsx src/features/llm-settings/llm-settings-page.test.tsx src/features/llm-settings/api.test.ts` passed 20 tests.
+- `npm run typecheck` passed.
+- `npx eslint src/features/llm-settings/key-import-panel.tsx src/features/llm-settings/key-import-panel.test.tsx src/features/llm-settings/llm-settings-page.tsx src/features/llm-settings/llm-settings-page.test.tsx src/features/llm-settings/api.ts e2e/provider-key-import.spec.ts` passed.
+- `npm run build` passed.
+- `npm run test:e2e -- e2e/provider-key-import.spec.ts` passed 2 tests.
+- `uv run --project finance-agent-core pytest finance-agent-core/tests/test_llm_settings_api.py finance-agent-core/tests/test_llm_provider_remote_client.py` passed 21 tests.
+- `RUN_LLM_PROVIDER_POSTGRES_TESTS=1 POSTGRES_HOST=127.0.0.1 POSTGRES_PORT=55492 POSTGRES_DB=via_issue192_e2e POSTGRES_USER=postgres POSTGRES_PASSWORD="$(docker exec value-investment-agent-192-test-postgres-1 printenv POSTGRES_PASSWORD)" uv run --project llm-provider-service pytest llm-provider-service/tests` passed 47 tests.
+- `bash scripts/generate-contracts.sh` passed.
 
 ## Remaining gates
 
 - Confirm the dedicated low-limit staging credential required by issue #192's
   staging acceptance gate. The two available `.env` keys were used for the
   initial live check; their quota profile has not been confirmed here.
+- This worktree has no local `.env`, so Compose configuration validation could
+  not run from this checkout. PostgreSQL tests used the existing isolated
+  `value-investment-agent-192-test` service without restarting or removing it.

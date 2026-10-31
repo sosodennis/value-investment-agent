@@ -231,34 +231,12 @@ async def test_async_provider_calls_map_timeouts_without_leaking_details() -> No
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("error_type", [httpx.ConnectError, httpx.ReadTimeout])
-async def test_settings_calls_map_transport_errors_without_leaking_details(
-    error_type: type[httpx.TransportError],
-) -> None:
-    client = LLMProviderServiceSettingsClient(
-        base_url="http://provider.test", token="private-token"
-    )
-    await client._client.aclose()
-    client._client = httpx.AsyncClient(
-        transport=httpx.MockTransport(_failure_handler(error_type)), timeout=None
-    )
-    try:
-        with pytest.raises(ProviderSettingsError) as caught:
-            await client.add_key(
-                user_id="alice", key=_PRIVATE_VALUES[-1], label="primary"
-            )
-        assert caught.value.code == "provider_unavailable"
-        _assert_safe_error(caught.value)
-    finally:
-        await client.aclose()
-
-
-@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("status", "error_code", "expected_code"),
     [
         (400, "replacement_must_differ", "replacement_must_differ"),
         (409, "replacement_in_progress", "replacement_in_progress"),
+        (409, "idempotency_key_reused", "idempotency_key_reused"),
         (502, "replacement_must_differ", "provider_unavailable"),
         (400, "unexpected_internal_detail", "provider_unavailable"),
     ],

@@ -96,6 +96,8 @@ def _raise_http_error(error: ProviderSettingsError) -> None:
             status_code=409,
             detail="a key replacement is already in progress",
         ) from error
+    if code == "idempotency_key_reused":
+        raise HTTPException(status_code=409, detail=code) from error
     if code in {"invalid_key", "model_not_free", "request_rejected"}:
         raise HTTPException(status_code=400, detail=code) from error
     if code == "rate_limited":
@@ -191,19 +193,30 @@ async def list_provider_keys(
         _raise_http_error(exc)
 
 
-@provider_keys_router.post("", response_model=ProviderKeyResponse, status_code=201)
-async def add_provider_key(
+@provider_keys_router.post(
+    "", response_model=ProviderKeyImportBatchResponse, status_code=202
+)
+async def submit_provider_key(
     request: ProviderKeyCreateRequest,
     principal: Principal = Depends(require_current_user_mutation),
     service: LLMProviderServiceSettingsClient = Depends(get_provider_settings_service),
-) -> ProviderKeyResponse:
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+) -> ProviderKeyImportBatchResponse:
+    resolved_idempotency_key = (idempotency_key or "").strip() or str(uuid4())
+    if not 16 <= len(resolved_idempotency_key) <= 128:
+        raise HTTPException(status_code=400, detail={"code": "invalid_idempotency_key"})
     try:
-        key = await service.add_key(
+        return await service.create_key_import(
             user_id=principal.user_id,
-            key=request.api_key.get_secret_value(),
-            label=request.label,
+            idempotency_key=resolved_idempotency_key,
+            items=[
+                {
+                    "source_line": 1,
+                    "label": request.label,
+                    "api_key": request.api_key.get_secret_value(),
+                }
+            ],
         )
-        return _key_response(key)
     except ProviderSettingsError as exc:
         _raise_http_error(exc)
 

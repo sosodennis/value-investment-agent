@@ -865,7 +865,7 @@ class EmbeddedLiteLLMProvider:
     async def list_managed(self) -> list[ManagedProviderKey]:
         return [_managed(item) for item in await self._state.list_deployments()]
 
-    async def add_key(
+    async def add_replacement_key(
         self,
         *,
         key: str,

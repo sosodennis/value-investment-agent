@@ -147,6 +147,89 @@ test('imports 100-key TXT and CSV files and shows safe per-key progress', async 
     }
 });
 
+test('submits a manual key through durable import history', async ({ page }) => {
+    const apiKey = 'sk-or-v1-manual-synthetic-key-00000001';
+    let keyListReads = 0;
+
+    await page.route('**/api/v1/auth/me', async (route) => {
+        await route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            body: JSON.stringify({
+                auth_type: 'session',
+                email: 'playwright@example.test',
+                role: 'user',
+                subject: 'playwright-user',
+                user_id: 'playwright-user',
+            }),
+        });
+    });
+    await page.route('**/api/v1/llm/provider-keys**', async (route) => {
+        const request = route.request();
+        const url = new URL(request.url());
+        if (url.pathname === '/api/v1/llm/provider-keys/imports' && request.method() === 'GET') {
+            await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+            return;
+        }
+        if (url.pathname === '/api/v1/llm/provider-keys' && request.method() === 'POST') {
+            expect(request.headers()['idempotency-key']).toMatch(/^[0-9a-f-]{36}$/);
+            expect(request.postDataJSON()).toEqual({ label: 'Manual research key', api_key: apiKey });
+            await route.fulfill({
+                status: 202,
+                contentType: 'application/json',
+                body: JSON.stringify(makeManualBatch('manual-batch-1', 'queued')),
+            });
+            return;
+        }
+        if (url.pathname === '/api/v1/llm/provider-keys/imports/manual-batch-1') {
+            await route.fulfill({
+                status: 200,
+                contentType: 'application/json',
+                body: JSON.stringify(makeManualBatch('manual-batch-1', 'completed')),
+            });
+            return;
+        }
+        if (url.pathname === '/api/v1/llm/provider-keys' && request.method() === 'GET') {
+            keyListReads += 1;
+            await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+            return;
+        }
+        await route.continue();
+    });
+    await page.route('**/api/v1/llm/settings', async (route) => {
+        await route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            body: JSON.stringify({
+                selected_model: 'openrouter/free',
+                default_model: 'openrouter/free',
+                models: [{
+                    id: 'openrouter/free',
+                    name: 'Free Models Router',
+                    description: 'Selects a free model.',
+                    context_length: null,
+                }],
+            }),
+        });
+    });
+
+    await page.goto('/settings/llm');
+    await page.getByLabel('Label').fill('Manual research key');
+    await page.getByLabel('OpenRouter API key').fill(apiKey);
+    await page.getByRole('button', { name: 'Add key' }).click();
+
+    await expect(page.getByText('Queued')).toBeVisible();
+    await expect(page.getByText('The key was submitted. Track its status in import history.')).toBeVisible();
+    await expect(page.getByLabel('OpenRouter API key')).toHaveValue('');
+    await expect(page.getByText('Completed')).toBeVisible({ timeout: 10_000 });
+    await page.getByText('View per-key results').click();
+    const importEntry = page.locator('article').first();
+    await expect(importEntry.getByRole('cell', { name: 'Manual research key', exact: true })).toBeVisible();
+    await expect(importEntry.getByRole('cell', { name: 'Imported', exact: true })).toBeVisible();
+    await expect(page.getByText(apiKey, { exact: true })).toHaveCount(0);
+    await expect.poll(() => keyListReads).toBeGreaterThan(1);
+});
+
 function makeBatch(
     id: string,
     batchNumber: number,
@@ -172,5 +255,28 @@ function makeBatch(
         created_at: '2026-10-31T00:00:00Z',
         updated_at: '2026-10-31T00:00:00Z',
         items,
+    };
+}
+
+function makeManualBatch(id: string, status: 'queued' | 'completed') {
+    return {
+        id,
+        status,
+        total_count: 1,
+        processed_count: status === 'queued' ? 0 : 1,
+        imported_count: status === 'queued' ? 0 : 1,
+        duplicate_count: 0,
+        invalid_count: 0,
+        retryable_count: 0,
+        created_at: '2026-10-31T00:00:00Z',
+        updated_at: status === 'queued' ? '2026-10-31T00:00:00Z' : '2026-10-31T00:00:01Z',
+        items: [{
+            source_line: 1,
+            label: 'Manual research key',
+            suffix: '0001',
+            status: status === 'queued' ? 'queued' : 'imported',
+            attempts: status === 'queued' ? 0 : 1,
+            retryable: false,
+        }],
     };
 }

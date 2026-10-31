@@ -40,6 +40,7 @@ _SETTINGS_ERROR_STATUSES = {
     "replacement_must_differ": 400,
     "already_owned": 409,
     "replacement_in_progress": 409,
+    "idempotency_key_reused": 409,
     "rate_limited": 429,
 }
 
@@ -459,16 +460,6 @@ class LLMProviderServiceSettingsClient:
         return _settings_value(
             TypeAdapter(list[ManagedProviderKey]), result.get("keys")
         )
-
-    async def add_key(
-        self, *, user_id: str, key: str, label: str
-    ) -> ManagedProviderKey:
-        result = await self._call(
-            "/v1/provider-keys/create",
-            {"api_key": key, "label": label},
-            user_id=user_id,
-        )
-        return _settings_value(TypeAdapter(ManagedProviderKey), result.get("key"))
 
     async def replace_key(
         self, *, user_id: str, key_id: str, key: str, label: str

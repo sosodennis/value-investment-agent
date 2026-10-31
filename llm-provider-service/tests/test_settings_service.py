@@ -32,7 +32,7 @@ class _Gateway:
     async def list_managed(self) -> list[ManagedProviderKey]:
         return list(self.keys)
 
-    async def add_key(
+    async def add_replacement_key(
         self,
         *,
         key: str,

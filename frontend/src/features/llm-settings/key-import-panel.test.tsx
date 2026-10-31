@@ -24,6 +24,7 @@ vi.mock('@/features/llm-settings/api', () => ({
 }));
 
 import { KeyImportPanel } from './key-import-panel';
+import type { LlmProviderKeyImport } from './api';
 
 const preview = {
     file_type: 'txt' as const,
@@ -33,7 +34,9 @@ const preview = {
     issues: [],
 };
 
-function batch(overrides: Record<string, unknown> = {}) {
+function batch(
+    overrides: Partial<LlmProviderKeyImport> = {},
+): LlmProviderKeyImport {
     return {
         id: 'batch-1',
         status: 'queued',
@@ -85,12 +88,13 @@ describe('KeyImportPanel', () => {
     });
 
     it('previews a file, submits it, and refreshes its per-key result', async () => {
-        const onImportAccepted = vi.fn();
+        const onImportCompleted = vi.fn();
         render(
             <KeyImportPanel
                 authenticated
                 onUnauthorized={() => false}
-                onImportAccepted={onImportAccepted}
+                submittedImports={[]}
+                onImportCompleted={onImportCompleted}
             />,
         );
         await screen.findByText('No key imports yet.');
@@ -101,7 +105,6 @@ describe('KeyImportPanel', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Import keys' }));
         await screen.findByText('Queued');
         expect(api.createLlmProviderKeyImport).toHaveBeenCalledWith(file, expect.any(String));
-        expect(onImportAccepted).toHaveBeenCalledOnce();
 
         await waitFor(() => {
             expect(api.getLlmProviderKeyImport).toHaveBeenCalledWith('batch-1');
@@ -109,6 +112,7 @@ describe('KeyImportPanel', () => {
         await waitFor(() => {
             expect(screen.getByText('Completed')).toBeTruthy();
         });
+        expect(onImportCompleted).toHaveBeenCalledOnce();
         fireEvent.click(screen.getByText('View per-key results'));
         expect(screen.getByText('Imported')).toBeTruthy();
         expect(screen.getByText('1 imported · 0 duplicates · 0 failed')).toBeTruthy();
@@ -135,7 +139,8 @@ describe('KeyImportPanel', () => {
             <KeyImportPanel
                 authenticated
                 onUnauthorized={() => false}
-                onImportAccepted={vi.fn()}
+                submittedImports={[]}
+                onImportCompleted={vi.fn()}
             />,
         );
         await screen.findByRole('button', { name: 'Retry 1' });
@@ -151,6 +156,107 @@ describe('KeyImportPanel', () => {
             expect(screen.queryByText('1 rows · 1 unique keys · 0 duplicate rows')).toBeNull();
             expect((screen.getByLabelText('Key file') as HTMLInputElement).value).toBe('');
             expect(screen.getByRole('button', { name: 'Import keys' }).hasAttribute('disabled')).toBe(true);
+        });
+    });
+
+    it('shows and tracks a manually submitted one-key import', async () => {
+        const onImportCompleted = vi.fn();
+        const submittedImport = batch({ id: 'manual-batch-1' });
+        api.getLlmProviderKeyImport.mockResolvedValue(batch({
+            id: 'manual-batch-1',
+            status: 'completed',
+            processed_count: 1,
+            imported_count: 1,
+            items: [{
+                source_line: 1,
+                label: 'Manual key',
+                suffix: '0001',
+                status: 'imported',
+                attempts: 1,
+                retryable: false,
+            }],
+        }));
+        render(
+            <KeyImportPanel
+                authenticated
+                onUnauthorized={() => false}
+                submittedImports={[submittedImport]}
+                onImportCompleted={onImportCompleted}
+            />,
+        );
+
+        await screen.findByText('Queued');
+        await waitFor(() => {
+            expect(api.getLlmProviderKeyImport).toHaveBeenCalledWith('manual-batch-1');
+            expect(onImportCompleted).toHaveBeenCalledOnce();
+        }, { timeout: 4000, interval: 100 });
+        await screen.findByText('Completed');
+    });
+
+    it('resumes active history and refreshes keys when an imported batch completes', async () => {
+        const onImportCompleted = vi.fn();
+        api.listLlmProviderKeyImports.mockResolvedValue([batch({ id: 'resumed-batch' })]);
+        api.getLlmProviderKeyImport.mockResolvedValue(batch({
+            id: 'resumed-batch',
+            status: 'completed',
+            processed_count: 1,
+            imported_count: 1,
+            items: [{
+                source_line: 1,
+                label: 'OpenRouter key 1',
+                suffix: '0001',
+                status: 'imported',
+                attempts: 1,
+                retryable: false,
+            }],
+        }));
+        render(
+            <KeyImportPanel
+                authenticated
+                onUnauthorized={() => false}
+                submittedImports={[]}
+                onImportCompleted={onImportCompleted}
+            />,
+        );
+
+        await screen.findByText('Queued');
+        await waitFor(() => {
+            expect(api.getLlmProviderKeyImport).toHaveBeenCalledWith('resumed-batch');
+            expect(onImportCompleted).toHaveBeenCalledOnce();
+        }, { timeout: 4000, interval: 100 });
+        await screen.findByText('Completed');
+    });
+
+    it('keeps earlier manual imports in progress after another is submitted', async () => {
+        const props = {
+            authenticated: true,
+            onUnauthorized: () => false,
+            onImportCompleted: vi.fn(),
+        };
+        const first = batch({ id: 'manual-batch-1' });
+        const second = batch({
+            id: 'manual-batch-2',
+            created_at: '2026-10-31T00:00:01Z',
+            updated_at: '2026-10-31T00:00:01Z',
+        });
+        api.getLlmProviderKeyImport.mockImplementation(async (id: string) => batch({
+            id,
+            status: 'processing',
+            updated_at: '2026-10-31T00:00:02Z',
+        }));
+        const { rerender } = render(
+            <KeyImportPanel {...props} submittedImports={[first]} />,
+        );
+
+        await screen.findByText('Queued');
+        rerender(<KeyImportPanel {...props} submittedImports={[second, first]} />);
+
+        await waitFor(() => {
+            expect(api.getLlmProviderKeyImport).toHaveBeenCalledWith('manual-batch-1');
+            expect(api.getLlmProviderKeyImport).toHaveBeenCalledWith('manual-batch-2');
+        }, { timeout: 4000, interval: 100 });
+        await waitFor(() => {
+            expect(screen.getAllByText('Processing')).toHaveLength(2);
         });
     });
 });

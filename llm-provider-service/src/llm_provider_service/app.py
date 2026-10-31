@@ -24,7 +24,6 @@ from src.llm_provider_service.contracts import (
     CompletionInput,
     ErrorBody,
     ErrorResponse,
-    KeyCreateInput,
     KeyDeleteResult,
     KeyIdInput,
     KeyImportBatch,
@@ -70,6 +69,7 @@ _PROVIDER_KEY_ERROR_STATUSES = {
     "replacement_must_differ": 400,
     "already_owned": 409,
     "replacement_in_progress": 409,
+    "idempotency_key_reused": 409,
     "rate_limited": 429,
 }
 
@@ -511,24 +511,13 @@ async def provider_keys(action: str, request: Request) -> JSONResponse:
         timeout = _deadline_timeout(context, 10.0)
         user_id = context.principal.subject_id
         result: KeyListResult | KeyMutationResult | KeyTestResult | KeyDeleteResult
-        payload: KeyCreateInput | KeyReplaceInput | KeyIdInput
+        payload: KeyReplaceInput | KeyIdInput
         async with asyncio.timeout(timeout):
             if action == "list":
                 keys = await _as_principal(
                     context, lambda: runtime.settings.list_keys(user_id=user_id)
                 )
                 result = KeyListResult(keys=tuple(_summary(key) for key in keys))
-            elif action == "create":
-                payload = KeyCreateInput.model_validate(raw_input)
-                key = await _as_principal(
-                    context,
-                    lambda: runtime.settings.add_key(
-                        user_id=user_id,
-                        key=payload.api_key.get_secret_value(),
-                        label=payload.label,
-                    ),
-                )
-                result = KeyMutationResult(key=_summary(key))
             elif action == "replace":
                 payload = KeyReplaceInput.model_validate(raw_input)
                 key = await _as_principal(

@@ -337,17 +337,18 @@ export function listLlmProviderKeys(): Promise<LlmProviderKey[]> {
     return request('/api/v1/llm/provider-keys', parseLlmProviderKeys);
 }
 
-export function addLlmProviderKey(input: {
-    label: string;
-    api_key: string;
-}): Promise<LlmProviderKey> {
-    return request('/api/v1/llm/provider-keys', (value) =>
-        parseLlmProviderKey(value, 'llm_provider_key'),
-        {
-            method: 'POST',
-            body: JSON.stringify(input),
-        }
-    );
+export function submitLlmProviderKey(
+    input: {
+        label: string;
+        api_key: string;
+    },
+    idempotencyKey: string,
+): Promise<LlmProviderKeyImport> {
+    return request('/api/v1/llm/provider-keys', parseProviderKeyImport, {
+        method: 'POST',
+        headers: { 'Idempotency-Key': idempotencyKey },
+        body: JSON.stringify(input),
+    });
 }
 
 export function replaceLlmProviderKey(
