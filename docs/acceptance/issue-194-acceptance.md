@@ -1,7 +1,10 @@
 # Issue 194 acceptance evidence
 
-Verification target: `67a5b913705bda8b93ab3835c0439fe2b7dbda98`, branch
+Verification target: `429daf15fd6a799d3cf03649ba703965682af521`, branch
 `codex/issue-194-safe-key-rotation`, based on `origin/main` at #193.
+
+The final evidence commit contains only this acceptance record after the
+verified code commit `67a5b913705bda8b93ab3835c0439fe2b7dbda98`.
 
 The implementation makes the provider service own key-scoped rotation,
 shared key health, and the total retry budget. Only an explicit
