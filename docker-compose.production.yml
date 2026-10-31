@@ -7,3 +7,4 @@ services:
   llm-provider-service:
     environment:
       LLM_PROVIDER_SERVICE_TOKEN: ${LLM_PROVIDER_SERVICE_TOKEN:?Set LLM_PROVIDER_SERVICE_TOKEN to a production secret}
+      LLM_PROVIDER_ENCRYPTION_KEY: ${LLM_PROVIDER_ENCRYPTION_KEY:?Set LLM_PROVIDER_ENCRYPTION_KEY to a production Fernet key}

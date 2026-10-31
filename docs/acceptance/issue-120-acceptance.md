@@ -15,10 +15,10 @@
 | Service lint and formatting | PASS | `cd llm-provider-service && uv run ruff check src tests` |
 | Service lint, compile, strict typing, and tests | PASS | `uv run --with mypy mypy --strict --follow-imports=silent --ignore-missing-imports src/llm_provider_service/app.py`, `uv run ruff check src tests`, `uv run ruff format --check src tests`, `uv run pytest tests -q -rs` -> 73 passed, 1 skipped |
 | Backend provider boundary tests | PASS | `uv run pytest tests/test_llm_provider_contract.py tests/test_llm_provider_lifecycle.py tests/test_llm_provider_remote_client.py tests/test_llm_provider_remote_parsing.py tests/test_llm_settings_api.py tests/test_internal_service_contracts.py -q` -> 43 passed |
-| Compose default configuration | PASS | `LITELLM_MASTER_KEY=disposable-interpolation-only docker compose -p value-investment-agent-issue120-review config --quiet` |
-| Compose gateway profile | PASS | `LITELLM_MASTER_KEY=disposable-interpolation-only docker compose -p value-investment-agent-issue120-review --profile llm-gateway config --quiet` |
-| Inference named-context build checks | PASS | `LITELLM_MASTER_KEY=compose-validation-only docker compose build --check model-inference-news model-inference-fls` -> both checks completed with no warnings |
-| Provider container build | PASS | `LITELLM_MASTER_KEY=compose-validation-only docker compose -p value-investment-agent-issue120-fix build llm-provider-service` |
+| Compose default configuration | PASS | `LLM_PROVIDER_ENCRYPTION_KEY=JRNZ1-TpUwO-4trpfntsDM92mUvk3Oluu1MCsvZHpRU= docker compose -p value-investment-agent-issue120-review config --quiet` |
+| Embedded provider configuration | PASS | `LLM_PROVIDER_ENCRYPTION_KEY=JRNZ1-TpUwO-4trpfntsDM92mUvk3Oluu1MCsvZHpRU= docker compose -p value-investment-agent-issue120-review config --quiet` |
+| Inference named-context build checks | PASS | `LLM_PROVIDER_ENCRYPTION_KEY=JRNZ1-TpUwO-4trpfntsDM92mUvk3Oluu1MCsvZHpRU= docker compose build --check model-inference-news model-inference-fls` -> both checks completed with no warnings |
+| Provider container build | PASS | `LLM_PROVIDER_ENCRYPTION_KEY=JRNZ1-TpUwO-4trpfntsDM92mUvk3Oluu1MCsvZHpRU= docker compose -p value-investment-agent-issue120-fix build llm-provider-service` |
 | Architecture boundaries | PASS | `python3 scripts/architecture_guard.py` |
 | Patch whitespace | PASS | `git diff --check` |
 

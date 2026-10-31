@@ -36,7 +36,7 @@ Each project must use project-scoped volumes/networks, explicit host-port overri
 
 - `via-llm-stage`: backend `127.0.0.1:8100` healthy, PostgreSQL `5433` healthy, Redis `6380` healthy, LLM gateway `4001` healthy, frontend `3100` running.
 - `via-llm-provider`: backend `127.0.0.1:8000` healthy, PostgreSQL `5432` healthy, Redis `6379` healthy, frontend `3000` running; gateway was starting when inspected.
-- Root Compose config requires `LITELLM_MASTER_KEY` only when the `llm-gateway` profile is selected. No secret value is recorded here.
+- Root Compose config requires `LLM_PROVIDER_ENCRYPTION_KEY` for the embedded LLM provider service. No secret value is recorded here.
 
 ## Known stale paths at baseline
 

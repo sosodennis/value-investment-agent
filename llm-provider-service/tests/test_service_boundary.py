@@ -20,13 +20,9 @@ from src.llm_provider_service.domain.contracts import (
 )
 from src.llm_provider_service.domain.errors import ProviderSettingsError
 from src.llm_provider_service.domain.routes import DEFAULT_MODEL_ALIAS
-from src.llm_provider_service.infrastructure.gateway import (
-    LiteLLMGatewayConfig,
-    LiteLLMGatewayProvider,
-)
 
 
-class _Gateway:
+class _Provider:
     def __init__(self) -> None:
         self.completion_calls = 0
         self.stream_calls = 0
@@ -145,15 +141,15 @@ def anyio_backend() -> str:
 @pytest.fixture
 def client(monkeypatch):
     monkeypatch.setenv("LLM_PROVIDER_SERVICE_TOKEN", "service-secret")
-    gateway = _Gateway()
+    provider = _Provider()
     settings = _Settings()
     service.app.state.runtime = SimpleNamespace(
-        ready=True, gateway=gateway, settings=settings
+        ready=True, provider=provider, settings=settings
     )
     transport = httpx.ASGITransport(app=service.app)
     return (
         httpx.AsyncClient(transport=transport, base_url="http://provider.test"),
-        gateway,
+        provider,
         settings,
     )
 
@@ -188,7 +184,7 @@ def _completion_input(**updates: object) -> dict[str, object]:
 
 @pytest.mark.asyncio
 async def test_authentication_precedes_principal_parsing(client) -> None:
-    http, gateway, _ = client
+    http, provider, _ = client
     try:
         response = await http.post(
             "/v1/completions",
@@ -199,7 +195,7 @@ async def test_authentication_precedes_principal_parsing(client) -> None:
         await http.aclose()
 
     assert response.status_code == 401
-    assert gateway.completion_calls == 0
+    assert provider.completion_calls == 0
     assert response.json()["error"]["code"] == "internal_auth_invalid"
 
 
@@ -293,7 +289,7 @@ async def test_runtime_is_closed_when_startup_fails(monkeypatch) -> None:
 
 @pytest.mark.asyncio
 async def test_completion_echoes_context_and_binds_authenticated_user(client) -> None:
-    http, gateway, _ = client
+    http, provider, _ = client
     try:
         response = await http.post(
             "/v1/completions",
@@ -308,14 +304,14 @@ async def test_completion_echoes_context_and_binds_authenticated_user(client) ->
     assert body["correlation_id"] == "correlation-120"
     assert body["contract_version"] == "internal.v1"
     assert body["schema_version"] == "llm.v1"
-    assert gateway.principals == ["alice"]
+    assert provider.principals == ["alice"]
 
 
 @pytest.mark.asyncio
 async def test_invalid_context_deadline_and_non_allowlisted_route_are_rejected(
     client,
 ) -> None:
-    http, gateway, _ = client
+    http, provider, _ = client
     headers = {"Authorization": "Bearer service-secret"}
     try:
         invalid = await http.post(
@@ -348,7 +344,7 @@ async def test_invalid_context_deadline_and_non_allowlisted_route_are_rejected(
     assert invalid.status_code == 400
     assert expired.status_code == 504
     assert route.status_code == 400
-    assert gateway.completion_calls == 0
+    assert provider.completion_calls == 0
 
 
 @pytest.mark.asyncio
@@ -445,7 +441,7 @@ async def test_secret_key_material_never_appears_in_create_response(client) -> N
 
 @pytest.mark.asyncio
 async def test_stream_failure_has_monotonic_sequence_without_replay(client) -> None:
-    http, gateway, _ = client
+    http, provider, _ = client
     try:
         response = await http.post(
             "/v1/completions/stream",
@@ -464,7 +460,7 @@ async def test_stream_failure_has_monotonic_sequence_without_replay(client) -> N
     assert [event["sequence"] for event in events] == [0, 1, 2]
     assert events[-1]["kind"] == "error"
     assert events[-1]["error_code"] == "stream_interrupted"
-    assert gateway.stream_calls == 1
+    assert provider.stream_calls == 1
     assert "sk-do-not-leak" not in response.text
 
 
@@ -472,12 +468,12 @@ async def test_stream_failure_has_monotonic_sequence_without_replay(client) -> N
 @pytest.mark.parametrize("partial", [False, True])
 @pytest.mark.parametrize("request_timeout", [0.02, 5.0])
 async def test_stream_deadline_emits_deadline_error_and_closes_upstream(
-    client: tuple[httpx.AsyncClient, _Gateway, _Settings],
+    client: tuple[httpx.AsyncClient, _Provider, _Settings],
     monkeypatch: pytest.MonkeyPatch,
     partial: bool,
     request_timeout: float,
 ) -> None:
-    http, gateway, _ = client
+    http, provider, _ = client
     closed = asyncio.Event()
 
     async def stalled(request: CompletionRequest) -> AsyncIterator[StreamEvent]:
@@ -494,7 +490,7 @@ async def test_stream_deadline_emits_deadline_error_and_closes_upstream(
         finally:
             closed.set()
 
-    monkeypatch.setattr(gateway, "astream", stalled)
+    monkeypatch.setattr(provider, "astream", stalled)
     async with http:
         response = await http.post(
             "/v1/completions/stream",
@@ -524,10 +520,10 @@ async def test_stream_deadline_emits_deadline_error_and_closes_upstream(
 
 @pytest.mark.asyncio
 async def test_stream_preserves_provider_error_before_output(
-    client: tuple[httpx.AsyncClient, _Gateway, _Settings],
+    client: tuple[httpx.AsyncClient, _Provider, _Settings],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    http, gateway, _ = client
+    http, provider, _ = client
 
     async def rejected(request: CompletionRequest) -> AsyncIterator[StreamEvent]:
         yield StreamEvent(
@@ -545,7 +541,7 @@ async def test_stream_preserves_provider_error_before_output(
             retryable=False,
         )
 
-    monkeypatch.setattr(gateway, "astream", rejected)
+    monkeypatch.setattr(provider, "astream", rejected)
     async with http:
         response = await http.post(
             "/v1/completions/stream",
@@ -566,10 +562,10 @@ async def test_stream_preserves_provider_error_before_output(
 
 @pytest.mark.asyncio
 async def test_stream_cancellation_propagates_and_restores_principal(
-    client: tuple[httpx.AsyncClient, _Gateway, _Settings],
+    client: tuple[httpx.AsyncClient, _Provider, _Settings],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    http, gateway, _ = client
+    http, provider, _ = client
     entered = asyncio.Event()
     closed = asyncio.Event()
 
@@ -598,7 +594,7 @@ async def test_stream_cancellation_propagates_and_restores_principal(
         finally:
             assert get_provider_principal() is None
 
-    monkeypatch.setattr(gateway, "astream", stalled)
+    monkeypatch.setattr(provider, "astream", stalled)
     async with http:
         task = asyncio.create_task(send())
         try:
@@ -621,10 +617,10 @@ async def test_stream_cancellation_propagates_and_restores_principal(
     ],
 )
 async def test_malformed_request_json_is_normalized(
-    client: tuple[httpx.AsyncClient, _Gateway, _Settings],
+    client: tuple[httpx.AsyncClient, _Provider, _Settings],
     path: str,
 ) -> None:
-    http, gateway, _ = client
+    http, provider, _ = client
     async with http:
         response = await http.post(
             path,
@@ -634,85 +630,4 @@ async def test_malformed_request_json_is_normalized(
     assert response.status_code == 400
     assert response.json()["error"]["code"] == "invalid_context"
     assert "sk-do-not-leak" not in response.text
-    assert gateway.completion_calls == gateway.stream_calls == 0
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "content", ['{"answer":{"value":42},"completion":"preserved"}', "[]", "not-json"]
-)
-async def test_structured_completion_preserves_schema_and_response_decoding(
-    client: tuple[httpx.AsyncClient, _Gateway, _Settings],
-    monkeypatch: pytest.MonkeyPatch,
-    content: str,
-) -> None:
-    http, _, _ = client
-    schema = {
-        "title": "Answer",
-        "type": "object",
-        "properties": {
-            "answer": {"$ref": "#/$defs/Value"},
-            "completion": {"type": "string"},
-        },
-        "required": ["answer", "completion"],
-        "additionalProperties": False,
-        "$defs": {
-            "Value": {
-                "type": "object",
-                "properties": {"value": {"type": "integer"}},
-                "required": ["value"],
-            }
-        },
-    }
-    requests: list[httpx.Request] = []
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        requests.append(request)
-        return httpx.Response(
-            200, json={"choices": [{"message": {"content": content}}]}
-        )
-
-    async with httpx.AsyncClient(
-        transport=httpx.MockTransport(handler), base_url="https://gateway.test/v1"
-    ) as upstream:
-        gateway = LiteLLMGatewayProvider(
-            LiteLLMGatewayConfig(
-                base_url="https://gateway.test/v1",
-                api_key="test",
-                require_principal=True,
-            ),
-            async_client=upstream,
-        )
-        monkeypatch.setattr(service.app.state.runtime, "gateway", gateway)
-        try:
-            async with http:
-                response = await http.post(
-                    "/v1/completions",
-                    headers={"Authorization": "Bearer service-secret"},
-                    json={
-                        "context": _context(),
-                        "input": _completion_input(response_schema=schema),
-                    },
-                )
-        finally:
-            await gateway.aclose()
-
-    expected_requests = 1 if content.startswith("{") else 2
-    assert len(requests) == expected_requests
-    assert (
-        json.loads(requests[0].content)["response_format"]["json_schema"]["schema"]
-        == schema
-    )
-    if expected_requests == 2:
-        retry_payload = json.loads(requests[1].content)
-        assert retry_payload["response_format"]["json_schema"]["schema"] == schema
-        assert retry_payload["messages"][-1]["role"] == "user"
-        assert (
-            "Return exactly one JSON object" in retry_payload["messages"][-1]["content"]
-        )
-    if content.startswith("{"):
-        assert response.status_code == 200
-        assert json.loads(response.json()["result"]["text"]) == json.loads(content)
-    else:
-        assert response.status_code == 502
-        assert response.json()["error"]["code"] == "schema_validation_failed"
+    assert provider.completion_calls == provider.stream_calls == 0

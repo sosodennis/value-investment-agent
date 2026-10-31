@@ -11,7 +11,7 @@ RUNS="${ISSUE109_BENCHMARK_REPETITIONS:-5}"
 OUTPUT_DIR="${ISSUE109_BENCHMARK_OUTPUT_DIR:-reports/issue-109/comparison-$(date -u +%Y%m%dT%H%M%SZ)}"
 
 export INFERENCE_SERVICE_TOKEN="$TOKEN"
-export LITELLM_MASTER_KEY="${LITELLM_MASTER_KEY:-issue109-validation-only}"
+export LLM_PROVIDER_ENCRYPTION_KEY="${LLM_PROVIDER_ENCRYPTION_KEY:-JRNZ1-TpUwO-4trpfntsDM92mUvk3Oluu1MCsvZHpRU=}"
 export FRED_API_KEY="${FRED_API_KEY:-issue109-validation-only}"
 COMPOSE=(
   docker compose

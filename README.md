@@ -103,10 +103,18 @@ cp .env.example .env
 The template gives the backend and each internal service matching local
 authentication tokens. In particular, `INFERENCE_SERVICE_TOKEN` is passed to
 both inference containers and mapped to the backend's `MODEL_INFERENCE_TOKEN`.
-Keep those values identical when overriding them. Replace the local
-`LITELLM_MASTER_KEY` value with a private random value. OpenRouter user keys are
-added and tested in the app's LLM settings; do not put them in
-`LITELLM_MASTER_KEY`.
+Keep those values identical when overriding them. Generate a stable Fernet
+value for `LLM_PROVIDER_ENCRYPTION_KEY`; the embedded LLM provider service uses
+it to encrypt user-managed OpenRouter keys in PostgreSQL:
+
+```bash
+uv run python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'
+```
+
+Store the result in `.env` as `LLM_PROVIDER_ENCRYPTION_KEY=<generated-value>`,
+back it up separately, and do not rotate or discard it while provider keys
+remain in the database. OpenRouter user keys are added and tested in the app's
+LLM settings; never put them in Compose or source files.
 
 `SEARCH_SERVICE_TOKEN` must match between the backend and Search Service. The
 Compose default is for local development only; deployments must inject a unique
@@ -135,7 +143,7 @@ only. Search uses the same development-only pattern for `SEARCH_SERVICE_TOKEN`.
 Build and start the entire stack:
 
 ```bash
-docker compose --profile llm-gateway up --build
+docker compose up --build
 ```
 
 Access the application:
@@ -152,7 +160,7 @@ additional origins. Direct backend clients still need an explicit CORS origin.
 
 Open the LLM settings page, add one or more OpenRouter keys, and select a
 free model. The backend sends all application requests through the internal
-`openrouter-default` LiteLLM route.
+`openrouter-default` route; LiteLLM runs inside `llm-provider-service`.
 
 For production, provide `LLM_PROVIDER_SERVICE_TOKEN` through your deployment
 secret manager and use `docker-compose.production.yml`. The production overlay
@@ -164,7 +172,7 @@ is not loaded:
 docker compose \
   -f docker-compose.yml \
   -f docker-compose.production.yml \
-  --profile llm-gateway up -d --build
+  up -d --build
 ```
 
 ### 3. Manual Development (Optional)

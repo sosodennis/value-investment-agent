@@ -85,93 +85,6 @@ services:
       timeout: 5s
       retries: 5
 
-  # Optional LLM gateway POC. Start it with:
-  # docker compose --profile llm-gateway up -d llm-gateway
-  llm-gateway:
-    image: docker.litellm.ai/berriai/litellm@sha256:7294b90f868c5c38c99b83021c7ba46f9b439e95f8e32964c925c7d2563a03f7
-    platform: linux/arm64
-    profiles:
-      - llm-gateway
-    command:
-      ["--config", "/app/config.yaml", "--port", "4000", "--num_workers", "${LLM_GATEWAY_WORKERS:-1}"]
-    environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/litellm
-      STORE_MODEL_IN_DB: "True"
-      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:?set LITELLM_MASTER_KEY for the LLM gateway}
-      LITELLM_REDIS_HOST: ${LITELLM_REDIS_HOST:-redis}
-      LITELLM_REDIS_PORT: ${LITELLM_REDIS_PORT:-6379}
-      LITELLM_REDIS_PASSWORD: ${LITELLM_REDIS_PASSWORD:-}
-      LLM_PROVIDER_KEY_COOLDOWN_SECONDS: ${LLM_PROVIDER_KEY_COOLDOWN_SECONDS:-30}
-    mem_limit: ${LLM_GATEWAY_MEMORY_LIMIT:-1g}
-    cpus: ${LLM_GATEWAY_CPUS:-1.0}
-    restart: unless-stopped
-    volumes:
-      - ./infra/litellm/config.yaml:/app/config.yaml:ro
-      - ./infra/litellm/provider_key_telemetry.py:/app/provider_key_telemetry.py:ro
-    ports:
-      - "127.0.0.1:${LLM_GATEWAY_HOST_PORT:-4000}:4000"
-    depends_on:
-      postgres:
-        condition: service_healthy
-      llm-gateway-db-init:
-        condition: service_completed_successfully
-      redis:
-        condition: service_healthy
-    healthcheck:
-      test:
-        ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:4000/health/liveliness')\""]
-      interval: 10s
-      timeout: 5s
-      retries: 6
-      start_period: 30s
-
-  llm-gateway-contract-redis:
-    image: redis:7-alpine
-    platform: linux/arm64
-    profiles:
-      - llm-gateway-contract-test
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 2s
-      timeout: 2s
-      retries: 10
-
-  llm-gateway-contract-test:
-    image: docker.litellm.ai/berriai/litellm@sha256:7294b90f868c5c38c99b83021c7ba46f9b439e95f8e32964c925c7d2563a03f7
-    platform: linux/arm64
-    profiles:
-      - llm-gateway-contract-test
-    entrypoint: ["python3", "/app/router_retry_contract.py"]
-    volumes:
-      - ./infra/litellm/router_retry_contract.py:/app/router_retry_contract.py:ro
-      - ./infra/litellm/provider_key_telemetry.py:/app/provider_key_telemetry.py:ro
-    environment:
-      LITELLM_REDIS_HOST: llm-gateway-contract-redis
-      LITELLM_REDIS_PORT: 6379
-      LLM_PROVIDER_KEY_COOLDOWN_SECONDS: 1
-    depends_on:
-      llm-gateway-contract-redis:
-        condition: service_healthy
-
-  llm-gateway-db-init:
-    image: postgres:16-alpine
-    platform: linux/arm64
-    profiles:
-      - llm-gateway
-    environment:
-      PGHOST: postgres
-      PGPORT: 5432
-      PGUSER: ${POSTGRES_USER:-postgres}
-      PGPASSWORD: ${POSTGRES_PASSWORD:-postgres}
-    command:
-      ["sh", "/opt/init/create-litellm-database.sh"]
-    volumes:
-      - ./infra/litellm/create-litellm-database.sh:/opt/init/create-litellm-database.sh:ro
-    depends_on:
-      postgres:
-        condition: service_healthy
-    restart: "no"
-
   backend:
     image: *backend-image
     build: *backend-build
@@ -182,9 +95,9 @@ services:
       - POSTGRES_USER=${POSTGRES_USER:-postgres}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
       - POSTGRES_DB=${POSTGRES_DB:-langgraph}
-      - REDIS_HOST=${LITELLM_REDIS_HOST:-redis}
-      - REDIS_PORT=${LITELLM_REDIS_PORT:-6379}
-      - REDIS_PASSWORD=${LITELLM_REDIS_PASSWORD:-}
+      - REDIS_HOST=${REDIS_HOST:-redis}
+      - REDIS_PORT=${REDIS_PORT:-6379}
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
       - HF_HOME=/opt/hf-cache-baked
       - HF_BAKED_CACHE=/opt/hf-cache-baked
       - HF_HUB_CACHE=/opt/hf-cache-baked/hub
@@ -261,19 +174,12 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-langgraph}
       REDIS_HOST: redis
       REDIS_PORT: 6379
-      REDIS_PASSWORD: ${LITELLM_REDIS_PASSWORD:-}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
       LLM_PROVIDER_SERVICE_TOKEN: ${LLM_PROVIDER_SERVICE_TOKEN:-}
-      LLM_GATEWAY_BASE_URL: ${LLM_GATEWAY_BASE_URL:-http://llm-gateway:4000}
-      LLM_GATEWAY_API_KEY: ${LITELLM_MASTER_KEY:-}
-      LLM_GATEWAY_MAX_ATTEMPTS: ${LLM_GATEWAY_MAX_ATTEMPTS:-3}
-      LLM_GATEWAY_MAX_ATTEMPTS_INTERACTIVE: ${LLM_GATEWAY_MAX_ATTEMPTS_INTERACTIVE:-2}
-      LLM_GATEWAY_MAX_ATTEMPTS_BACKGROUND: ${LLM_GATEWAY_MAX_ATTEMPTS_BACKGROUND:-3}
-      LLM_GATEWAY_BACKOFF_SECONDS: ${LLM_GATEWAY_BACKOFF_SECONDS:-1.0}
-      LLM_GATEWAY_MAX_BACKOFF_SECONDS: ${LLM_GATEWAY_MAX_BACKOFF_SECONDS:-8}
-      LLM_GATEWAY_JITTER_SECONDS: ${LLM_GATEWAY_JITTER_SECONDS:-0.25}
+      LLM_PROVIDER_ENCRYPTION_KEY: ${LLM_PROVIDER_ENCRYPTION_KEY:?set LLM_PROVIDER_ENCRYPTION_KEY for the LLM provider service}
+      LLM_PROVIDER_KEY_COOLDOWN_SECONDS: ${LLM_PROVIDER_KEY_COOLDOWN_SECONDS:-30}
       OPENROUTER_HTTP_REFERER: ${OPENROUTER_HTTP_REFERER:-}
       OPENROUTER_X_TITLE: ${OPENROUTER_X_TITLE:-Value Investment Agent}
-      LLM_GATEWAY_REQUIRE_PRINCIPAL: ${LLM_GATEWAY_REQUIRE_PRINCIPAL:-true}
     expose:
       - "8002"
     ports:

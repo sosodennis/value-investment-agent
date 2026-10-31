@@ -61,7 +61,7 @@ async def test_verdict_provider_errors_propagate_with_retryability(
 
     error = LLMProviderError(
         code=error_code,
-        provider="litellm-gateway",
+        provider="litellm",
         model="openrouter-default",
         request_id="verdict-test",
         reason="gateway request failed",

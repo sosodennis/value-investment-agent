@@ -17,7 +17,7 @@ Compose validation passed with the dedicated ports: backend 8510, Postgres 8533,
 Cold launch:
 
 ```sh
-LITELLM_MASTER_KEY=local-validation-only \
+LLM_PROVIDER_ENCRYPTION_KEY=JRNZ1-TpUwO-4trpfntsDM92mUvk3Oluu1MCsvZHpRU= \
 INFERENCE_SERVICE_TOKEN=offline-validation-token \
 MODEL_INFERENCE_TOKEN=offline-validation-token \
 BACKEND_HOST_PORT=8510 POSTGRES_HOST_PORT=8533 REDIS_HOST_PORT=8481 \

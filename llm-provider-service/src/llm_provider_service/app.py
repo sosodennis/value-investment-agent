@@ -4,7 +4,7 @@ import asyncio
 import json
 import logging
 import os
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from contextvars import Token
 from datetime import UTC, datetime
@@ -243,6 +243,17 @@ def _bind_principal(
     )
 
 
+async def _as_principal(
+    context: InternalRequestContext,
+    operation: Callable[[], Awaitable[object]],
+) -> object:
+    token = _bind_principal(context)
+    try:
+        return await operation()
+    finally:
+        reset_provider_principal(token)
+
+
 @app.post("/v1/completions")
 async def completion(request: Request) -> JSONResponse:
     correlation_id = "unknown"
@@ -255,7 +266,7 @@ async def completion(request: Request) -> JSONResponse:
                 correlation_id, "policy_rejected", "provider route is not allowed", 400
             )
         runtime: ProviderRuntime = request.app.state.runtime
-        if not runtime.ready or runtime.gateway is None:
+        if not runtime.ready or runtime.provider is None:
             return _error(
                 correlation_id,
                 "not_ready",
@@ -282,10 +293,10 @@ async def completion(request: Request) -> JSONResponse:
         try:
             async with asyncio.timeout(timeout):
                 if payload.response_schema is None:
-                    result = await runtime.gateway.acomplete(operation)
+                    result = await runtime.provider.acomplete(operation)
                 else:
                     response_schema = _response_model(payload.response_schema)
-                    structured = await runtime.gateway.acomplete_structured(
+                    structured = await runtime.provider.acomplete_structured(
                         StructuredRequest[BaseModel](
                             completion=operation, response_schema=response_schema
                         )
@@ -351,8 +362,8 @@ async def stream_completion(request: Request) -> JSONResponse | StreamingRespons
                 correlation_id, "policy_rejected", "provider route is not allowed", 400
             )
         runtime: ProviderRuntime = request.app.state.runtime
-        gateway = runtime.gateway
-        if not runtime.ready or gateway is None:
+        provider = runtime.provider
+        if not runtime.ready or provider is None:
             return _error(
                 correlation_id,
                 "not_ready",
@@ -396,7 +407,7 @@ async def stream_completion(request: Request) -> JSONResponse | StreamingRespons
         next_sequence = 0
         try:
             async with asyncio.timeout(_deadline_timeout(context, timeout)):
-                async for event in gateway.astream(operation):
+                async for event in provider.astream(operation):
                     emitted = emitted or event.kind in {"delta", "completed"}
                     next_sequence = max(next_sequence, event.sequence + 1)
                     payload_json = json.dumps(
@@ -470,29 +481,40 @@ async def provider_keys(action: str, request: Request) -> JSONResponse:
         payload: KeyCreateInput | KeyReplaceInput | KeyIdInput
         async with asyncio.timeout(timeout):
             if action == "list":
-                keys = await runtime.settings.list_keys(user_id=user_id)
+                keys = await _as_principal(
+                    context, lambda: runtime.settings.list_keys(user_id=user_id)
+                )
                 result = KeyListResult(keys=tuple(_summary(key) for key in keys))
             elif action == "create":
                 payload = KeyCreateInput.model_validate(raw_input)
-                key = await runtime.settings.add_key(
-                    user_id=user_id,
-                    key=payload.api_key.get_secret_value(),
-                    label=payload.label,
+                key = await _as_principal(
+                    context,
+                    lambda: runtime.settings.add_key(
+                        user_id=user_id,
+                        key=payload.api_key.get_secret_value(),
+                        label=payload.label,
+                    ),
                 )
                 result = KeyMutationResult(key=_summary(key))
             elif action == "replace":
                 payload = KeyReplaceInput.model_validate(raw_input)
-                key = await runtime.settings.replace_key(
-                    user_id=user_id,
-                    key_id=payload.key_id,
-                    key=payload.api_key.get_secret_value(),
-                    label=payload.label,
+                key = await _as_principal(
+                    context,
+                    lambda: runtime.settings.replace_key(
+                        user_id=user_id,
+                        key_id=payload.key_id,
+                        key=payload.api_key.get_secret_value(),
+                        label=payload.label,
+                    ),
                 )
                 result = KeyMutationResult(key=_summary(key))
             elif action == "test":
                 payload = KeyIdInput.model_validate(raw_input)
-                passed = await runtime.settings.test_key(
-                    user_id=user_id, key_id=payload.key_id
+                passed = await _as_principal(
+                    context,
+                    lambda: runtime.settings.test_key(
+                        user_id=user_id, key_id=payload.key_id
+                    ),
                 )
                 result = KeyTestResult(
                     id=payload.key_id,
@@ -501,8 +523,11 @@ async def provider_keys(action: str, request: Request) -> JSONResponse:
                 )
             elif action == "delete":
                 payload = KeyIdInput.model_validate(raw_input)
-                await runtime.settings.delete_key(
-                    user_id=user_id, key_id=payload.key_id
+                await _as_principal(
+                    context,
+                    lambda: runtime.settings.delete_key(
+                        user_id=user_id, key_id=payload.key_id
+                    ),
                 )
                 result = KeyDeleteResult()
             else:
@@ -561,9 +586,12 @@ async def settings(action: str, request: Request) -> JSONResponse:
                 selected, models = await runtime.settings.selected_model_settings()
             elif action == "update":
                 payload = SettingsUpdateInput.model_validate(raw_input)
-                await runtime.settings.update_selected_model(
-                    model_id=payload.selected_model,
-                    user_id=context.principal.subject_id,
+                await _as_principal(
+                    context,
+                    lambda: runtime.settings.update_selected_model(
+                        model_id=payload.selected_model,
+                        user_id=context.principal.subject_id,
+                    ),
                 )
                 selected, models = await runtime.settings.selected_model_settings()
             else:
