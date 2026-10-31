@@ -140,3 +140,10 @@ export function register(
 export function logout(): Promise<void> {
     return request('/api/v1/auth/logout', () => undefined, { method: 'POST' });
 }
+
+export function selectActiveOrganization(organizationId: string): Promise<AuthUser> {
+    return request('/api/v1/auth/session/organization', parseAuthUser, {
+        method: 'PUT',
+        body: JSON.stringify({ organization_id: organizationId }),
+    });
+}

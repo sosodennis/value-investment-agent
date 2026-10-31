@@ -9,6 +9,7 @@ describe('primary navigation', () => {
             '/technical-observability',
             '/settings/llm',
             '/settings/search',
+            '/settings/organization',
         ]);
     });
 
