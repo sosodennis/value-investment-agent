@@ -2,12 +2,23 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, update
 from sqlalchemy.exc import IntegrityError
 
 from src.auth.application.errors import RegistrationConflictError
-from src.auth.domain.entities import SessionRecord, UserRecord
+from src.auth.domain.entities import (
+    MembershipRecord,
+    MembershipRole,
+    MembershipStatus,
+    OrganizationMembership,
+    OrganizationRecord,
+    RegistrationRecord,
+    SessionRecord,
+    UserRecord,
+)
 from src.auth.infrastructure.models import (
+    MembershipModel,
+    OrganizationModel,
     OwnedResourceModel,
     SessionModel,
     UserModel,
@@ -29,17 +40,34 @@ class SqlAlchemyUserRepository:
             model = await session.get(UserModel, user_id)
         return self._to_record(model) if model else None
 
-    async def create(self, *, email: str, password_hash: str) -> UserRecord:
-        model = UserModel(email=email, password_hash=password_hash)
+    async def create_with_default_organization(
+        self, *, email: str, password_hash: str
+    ) -> RegistrationRecord:
+        user_model = UserModel(email=email, password_hash=password_hash)
+        organization_model = OrganizationModel(name="Personal organization")
         async with AsyncSessionLocal() as session:
-            session.add(model)
             try:
+                session.add_all([user_model, organization_model])
+                await session.flush()
+                membership_model = MembershipModel(
+                    organization_id=organization_model.id,
+                    user_id=user_model.id,
+                    role=MembershipRole.OWNER.value,
+                    status=MembershipStatus.ACTIVE.value,
+                )
+                session.add(membership_model)
                 await session.commit()
-                await session.refresh(model)
+                await session.refresh(user_model)
+                await session.refresh(organization_model)
+                await session.refresh(membership_model)
             except IntegrityError as exc:
                 await session.rollback()
                 raise RegistrationConflictError("email is already registered") from exc
-        return self._to_record(model)
+        return RegistrationRecord(
+            user=self._to_record(user_model),
+            organization=self._to_organization_record(organization_model),
+            membership=self._to_membership_record(membership_model),
+        )
 
     @staticmethod
     def _to_record(model: UserModel) -> UserRecord:
@@ -50,18 +78,84 @@ class SqlAlchemyUserRepository:
             created_at=model.created_at,
         )
 
+    @staticmethod
+    def _to_organization_record(model: OrganizationModel) -> OrganizationRecord:
+        return OrganizationRecord(
+            id=model.id,
+            name=model.name,
+            created_at=model.created_at,
+        )
+
+    @staticmethod
+    def _to_membership_record(model: MembershipModel) -> MembershipRecord:
+        return MembershipRecord(
+            id=model.id,
+            organization_id=model.organization_id,
+            user_id=model.user_id,
+            role=MembershipRole(model.role),
+            status=MembershipStatus(model.status),
+            created_at=model.created_at,
+            updated_at=model.updated_at,
+        )
+
+
+class SqlAlchemyOrganizationRepository:
+    async def get_default_for_user(self, user_id: str) -> OrganizationMembership | None:
+        async with AsyncSessionLocal() as session:
+            result = await session.execute(
+                select(OrganizationModel, MembershipModel)
+                .join(
+                    MembershipModel,
+                    MembershipModel.organization_id == OrganizationModel.id,
+                )
+                .where(MembershipModel.user_id == user_id)
+                .where(MembershipModel.status == MembershipStatus.ACTIVE.value)
+                .order_by(MembershipModel.created_at, MembershipModel.id)
+                .limit(1)
+            )
+            row = result.first()
+        return self._to_context(row) if row else None
+
+    async def get_membership(
+        self, *, user_id: str, organization_id: str
+    ) -> OrganizationMembership | None:
+        async with AsyncSessionLocal() as session:
+            result = await session.execute(
+                select(OrganizationModel, MembershipModel)
+                .join(
+                    MembershipModel,
+                    MembershipModel.organization_id == OrganizationModel.id,
+                )
+                .where(MembershipModel.user_id == user_id)
+                .where(MembershipModel.organization_id == organization_id)
+            )
+            row = result.first()
+        return self._to_context(row) if row else None
+
+    @staticmethod
+    def _to_context(
+        row: tuple[OrganizationModel, MembershipModel],
+    ) -> OrganizationMembership:
+        organization, membership = row
+        return OrganizationMembership(
+            organization=SqlAlchemyUserRepository._to_organization_record(organization),
+            membership=SqlAlchemyUserRepository._to_membership_record(membership),
+        )
+
 
 class SqlAlchemySessionRepository:
     async def create(
         self,
         *,
         user_id: str,
+        active_organization_id: str,
         token_hash: str,
         csrf_token_hash: str,
         expires_at: datetime,
     ) -> SessionRecord:
         model = SessionModel(
             user_id=user_id,
+            active_organization_id=active_organization_id,
             token_hash=token_hash,
             csrf_token_hash=csrf_token_hash,
             expires_at=expires_at,
@@ -95,11 +189,26 @@ class SqlAlchemySessionRepository:
                 model.revoked_at = revoked_at
                 await session.commit()
 
+    async def set_active_organization(
+        self, *, session_id: str, organization_id: str, now: datetime
+    ) -> bool:
+        async with AsyncSessionLocal() as session:
+            result = await session.execute(
+                update(SessionModel)
+                .where(SessionModel.id == session_id)
+                .where(SessionModel.revoked_at.is_(None))
+                .where(SessionModel.expires_at > now)
+                .values(active_organization_id=organization_id)
+            )
+            await session.commit()
+        return result.rowcount == 1
+
     @staticmethod
     def _to_record(model: SessionModel) -> SessionRecord:
         return SessionRecord(
             id=model.id,
             user_id=model.user_id,
+            active_organization_id=model.active_organization_id,
             token_hash=model.token_hash,
             csrf_token_hash=model.csrf_token_hash,
             expires_at=model.expires_at,

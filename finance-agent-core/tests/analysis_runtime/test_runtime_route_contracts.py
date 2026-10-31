@@ -172,7 +172,11 @@ async def test_activities_route_loads_an_exact_historical_run_after_rerun() -> N
     app = FastAPI()
     app.include_router(router)
     app.dependency_overrides[require_current_user] = lambda: Principal(
-        user_id="user-1", subject="user-1", email="user@example.test"
+        user_id="user-1",
+        subject="user-1",
+        email="user@example.test",
+        organization_id="organization-1",
+        membership_id="membership-1",
     )
     service = AnalysisRuntimeService(
         repository=InMemoryActivityRepository(), owner=Owner(), runner=Runner()
@@ -227,7 +231,11 @@ async def test_event_route_streams_replayed_workflow_events_without_transform_he
         thread_id="thread-1",
         request=SimpleNamespace(app=app),
         principal=Principal(
-            user_id="user-1", subject="user-1", email="user@example.test"
+            user_id="user-1",
+            subject="user-1",
+            email="user@example.test",
+            organization_id="organization-1",
+            membership_id="membership-1",
         ),
         after_seq=0,
         run_id=run_id,
@@ -253,7 +261,13 @@ async def test_http_interaction_snapshot_resume_and_completion_contract() -> Non
     app.include_router(router)
 
     def principal() -> Principal:
-        return Principal(user_id="user-1", subject="user-1", email="user@example.test")
+        return Principal(
+            user_id="user-1",
+            subject="user-1",
+            email="user@example.test",
+            organization_id="organization-1",
+            membership_id="membership-1",
+        )
 
     app.dependency_overrides[require_current_user] = principal
     app.dependency_overrides[require_current_user_mutation] = principal
@@ -326,10 +340,18 @@ async def test_authenticated_retry_endpoint_requires_key_and_returns_same_attemp
     app = FastAPI()
     app.include_router(router)
     app.dependency_overrides[require_current_user] = lambda: Principal(
-        user_id="user-1", subject="user-1", email="user@example.test"
+        user_id="user-1",
+        subject="user-1",
+        email="user@example.test",
+        organization_id="organization-1",
+        membership_id="membership-1",
     )
     app.dependency_overrides[require_current_user_mutation] = lambda: Principal(
-        user_id="user-1", subject="user-1", email="user@example.test"
+        user_id="user-1",
+        subject="user-1",
+        email="user@example.test",
+        organization_id="organization-1",
+        membership_id="membership-1",
     )
     runner = RetryableRunner()
     service = AnalysisRuntimeService(

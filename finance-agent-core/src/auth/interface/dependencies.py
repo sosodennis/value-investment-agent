@@ -8,7 +8,7 @@ from fastapi import HTTPException, Request, Response
 
 from src.auth.application.service import hash_secret
 from src.auth.application.wiring import get_auth_service
-from src.auth.domain.entities import UserRecord
+from src.auth.domain.entities import AuthenticatedContext
 from src.auth.interface.contracts import Principal
 
 SESSION_COOKIE_NAME = "app_session"
@@ -28,16 +28,22 @@ def _now() -> datetime:
     return datetime.utcnow()
 
 
-async def current_user(request: Request) -> UserRecord:
+async def current_context(request: Request) -> AuthenticatedContext:
     token = request.cookies.get(SESSION_COOKIE_NAME)
-    user = await get_auth_service().authenticate(session_token=token or "", now=_now())
-    if user is None:
+    context = await get_auth_service().authenticate(
+        session_token=token or "", now=_now()
+    )
+    if context is None:
         raise HTTPException(status_code=401, detail="authentication is required")
-    return user
+    return context
+
+
+async def current_user(request: Request) -> AuthenticatedContext:
+    return await current_context(request)
 
 
 async def require_current_user(request: Request) -> Principal:
-    return Principal.from_user(await current_user(request))
+    return Principal.from_context(await current_context(request))
 
 
 def require_csrf(request: Request, *, expected_hash: str) -> None:
@@ -60,10 +66,10 @@ async def require_current_user_mutation(request: Request) -> Principal:
     if session is None:
         raise HTTPException(status_code=401, detail="authentication is required")
     require_csrf(request, expected_hash=session.csrf_token_hash)
-    user = await service.user_for_session(session)
-    if user is None:
+    context = await service.authenticate(session_token=token or "", now=_now())
+    if context is None or context.session.id != session.id:
         raise HTTPException(status_code=401, detail="authentication is required")
-    return Principal.from_user(user)
+    return Principal.from_context(context)
 
 
 def set_auth_cookies(

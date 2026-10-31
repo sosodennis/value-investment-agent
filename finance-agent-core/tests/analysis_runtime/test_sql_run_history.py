@@ -461,6 +461,8 @@ async def test_completed_output_references_survive_later_run_and_restart() -> No
                 user_id=active_principal_id,
                 subject=active_principal_id,
                 email=f"{active_principal_id}@example.test",
+                organization_id="organization-history",
+                membership_id="membership-history",
             )
 
         app.dependency_overrides[require_current_user] = current_principal
