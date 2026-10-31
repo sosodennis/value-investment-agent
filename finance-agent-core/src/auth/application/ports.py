@@ -4,11 +4,15 @@ from datetime import datetime
 from typing import Protocol
 
 from src.auth.domain.entities import (
+    MembershipRecord,
+    OrganizationMember,
     OrganizationMembership,
+    OrganizationRecord,
     RegistrationRecord,
     SessionRecord,
     UserRecord,
 )
+from src.auth.domain.events import OrganizationLifecycleEventDraft
 
 
 class UserRepository(Protocol):
@@ -29,6 +33,67 @@ class OrganizationRepository(Protocol):
     async def get_membership(
         self, *, user_id: str, organization_id: str
     ) -> OrganizationMembership | None: ...
+
+
+class OrganizationLifecycleRepository(Protocol):
+    async def create_organization(
+        self,
+        *,
+        owner_user_id: str,
+        name: str,
+        now: datetime,
+        event: OrganizationLifecycleEventDraft,
+    ) -> OrganizationMembership: ...
+
+    async def list_for_user(self, *, user_id: str) -> list[OrganizationMembership]: ...
+
+    async def get_organization(
+        self, *, organization_id: str
+    ) -> OrganizationRecord | None: ...
+
+    async def rename_organization(
+        self,
+        *,
+        organization_id: str,
+        name: str,
+        actor_user_id: str,
+        expected_actor: MembershipRecord,
+        now: datetime,
+        event: OrganizationLifecycleEventDraft,
+    ) -> OrganizationRecord: ...
+
+    async def list_members(
+        self, *, organization_id: str
+    ) -> list[OrganizationMember]: ...
+
+    async def get_member(
+        self, *, organization_id: str, user_id: str
+    ) -> OrganizationMember | None: ...
+
+    async def change_membership(
+        self,
+        *,
+        organization_id: str,
+        user_id: str,
+        role: str | None,
+        status: str | None,
+        expected_actor: MembershipRecord,
+        expected_target: MembershipRecord,
+        now: datetime,
+        event: OrganizationLifecycleEventDraft,
+    ) -> OrganizationMember: ...
+
+    async def transfer_ownership(
+        self,
+        *,
+        organization_id: str,
+        current_owner_user_id: str,
+        target_user_id: str,
+        expected_current_owner: MembershipRecord,
+        expected_target: MembershipRecord,
+        now: datetime,
+        event: OrganizationLifecycleEventDraft,
+    ) -> OrganizationMember: ...
 
 
 class SessionRepository(Protocol):

@@ -299,3 +299,35 @@ async def test_active_organization_selection_rejects_a_revocation_race() -> None
             organization_id=registered.active_organization_id,
             now=now,
         )
+
+
+@pytest.mark.asyncio
+async def test_actor_authentication_survives_an_invalid_active_membership() -> None:
+    users = MemoryUsers()
+    sessions = MemorySessions()
+    service = AuthService(
+        users=users,
+        organizations=MemoryOrganizations(users),
+        sessions=sessions,
+        password_hasher=MemoryHasher(),
+    )
+    now = datetime(2026, 1, 1)
+    registered = await service.register(
+        email="actor@example.com", password="password-1", now=now
+    )
+    membership = users.organizations[registered.active_organization_id].membership
+    users.organizations[registered.active_organization_id] = OrganizationMembership(
+        organization=users.organizations[
+            registered.active_organization_id
+        ].organization,
+        membership=replace(membership, status=MembershipStatus.SUSPENDED),
+    )
+
+    assert (
+        await service.authenticate(session_token=registered.session_token, now=now)
+    ) is None
+    actor = await service.authenticate_actor(
+        session_token=registered.session_token, now=now
+    )
+    assert actor is not None
+    assert actor.user.id == registered.user.id

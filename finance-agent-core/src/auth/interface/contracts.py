@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -41,3 +42,47 @@ class LoginRequest(BaseModel):
 
 class SelectOrganizationRequest(BaseModel):
     organization_id: str = Field(min_length=1, max_length=128)
+
+
+class OrganizationCreateRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+
+
+class OrganizationRenameRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+
+
+class OrganizationRoleChangeRequest(BaseModel):
+    role: Literal["admin", "member"]
+
+
+class OrganizationStatusChangeRequest(BaseModel):
+    status: Literal["active", "suspended", "removed"]
+
+
+class OrganizationOwnershipTransferRequest(BaseModel):
+    target_user_id: str = Field(min_length=1, max_length=128)
+
+
+class OrganizationResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    organization_id: str
+    name: str
+    created_at: datetime
+    membership_id: str
+    role: Literal["owner", "admin", "member"]
+    status: Literal["pending", "active", "suspended", "removed"]
+
+
+class OrganizationMemberResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    user_id: str
+    email: str
+    membership_id: str
+    organization_id: str
+    role: Literal["owner", "admin", "member"]
+    status: Literal["pending", "active", "suspended", "removed"]
+    created_at: datetime
+    updated_at: datetime

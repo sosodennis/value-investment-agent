@@ -22,8 +22,8 @@ from src.auth.interface.contracts import (
 )
 from src.auth.interface.dependencies import (
     clear_auth_cookies,
+    require_current_actor_mutation,
     require_current_user,
-    require_current_user_mutation,
     set_auth_cookies,
 )
 
@@ -133,7 +133,7 @@ async def me(principal: Principal = Depends(require_current_user)) -> Principal:
 async def select_active_organization(
     request: Request,
     body: SelectOrganizationRequest,
-    _principal: Principal = Depends(require_current_user_mutation),
+    _actor=Depends(require_current_actor_mutation),
 ) -> Principal:
     token = request.cookies.get("app_session", "")
     try:
@@ -153,7 +153,7 @@ async def select_active_organization(
 async def logout(
     request: Request,
     response: Response,
-    _principal: Principal = Depends(require_current_user_mutation),
+    _actor=Depends(require_current_actor_mutation),
 ) -> None:
     token = request.cookies.get("app_session", "")
     await get_auth_service().logout(session_token=token, now=datetime.utcnow())

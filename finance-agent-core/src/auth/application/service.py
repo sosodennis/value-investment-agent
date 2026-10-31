@@ -18,6 +18,7 @@ from src.auth.application.ports import (
     UserRepository,
 )
 from src.auth.domain.entities import (
+    AuthenticatedActorContext,
     AuthenticatedContext,
     AuthSession,
     SessionRecord,
@@ -111,6 +112,17 @@ class AuthService:
             session=session,
             membership=organization.membership,
         )
+
+    async def authenticate_actor(
+        self, *, session_token: str, now: datetime
+    ) -> AuthenticatedActorContext | None:
+        session = await self.authenticate_session(session_token=session_token, now=now)
+        if session is None:
+            return None
+        user = await self.user_for_session(session)
+        if user is None:
+            return None
+        return AuthenticatedActorContext(user=user, session=session)
 
     async def authenticate_session(
         self, *, session_token: str, now: datetime

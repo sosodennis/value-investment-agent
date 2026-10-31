@@ -55,6 +55,12 @@ class OrganizationMembership:
 
 
 @dataclass(frozen=True, slots=True)
+class OrganizationMember:
+    user: UserRecord
+    membership: MembershipRecord
+
+
+@dataclass(frozen=True, slots=True)
 class RegistrationRecord:
     user: UserRecord
     organization: OrganizationRecord
@@ -87,6 +93,12 @@ class AuthenticatedContext:
     user: UserRecord
     session: SessionRecord
     membership: MembershipRecord
+
+
+@dataclass(frozen=True, slots=True)
+class AuthenticatedActorContext:
+    user: UserRecord
+    session: SessionRecord
 
 
 @dataclass(frozen=True, slots=True)
