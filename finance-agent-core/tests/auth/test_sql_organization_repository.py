@@ -557,6 +557,59 @@ async def test_lifecycle_event_failure_rolls_back_the_membership_mutation() -> N
         )
 
 
+@pytest.mark.asyncio
+async def test_membership_event_failure_rolls_back_the_membership_mutation() -> None:
+    await init_db()
+    (
+        users,
+        repository,
+        owner,
+        target,
+        organization,
+        now,
+    ) = await _create_organization_fixture()
+    organization_id = organization.organization.id
+    owner_membership, target_membership = await _member_snapshots(
+        repository,
+        organization_id=organization_id,
+        owner_id=owner.user.id,
+        target_id=target.user.id,
+    )
+    try:
+        with pytest.raises(IntegrityError):
+            await repository.change_membership(
+                organization_id=organization_id,
+                user_id=target.user.id,
+                role=MembershipRole.ADMIN.value,
+                status=None,
+                expected_actor=owner_membership,
+                expected_target=target_membership,
+                now=now,
+                event=_event(
+                    event_type=OrganizationLifecycleEventType.MEMBERSHIP_ROLE_CHANGED,
+                    actor_user_id="missing-actor",
+                    target_user_id=target.user.id,
+                    payload={"from_role": "member", "to_role": "admin"},
+                    occurred_at=now,
+                ),
+            )
+        current = await repository.get_member(
+            organization_id=organization_id, user_id=target.user.id
+        )
+        assert current is not None
+        assert current.membership.role is MembershipRole.MEMBER
+        assert await session_count_events(organization_id=organization_id) == 1
+    finally:
+        await _cleanup(
+            user_ids={owner.user.id, target.user.id},
+            organization_ids={
+                owner.organization.id,
+                target.organization.id,
+                organization_id,
+            },
+        )
+
+
 def replace_membership(
     membership: MembershipRecord, *, role: MembershipRole
 ) -> MembershipRecord:

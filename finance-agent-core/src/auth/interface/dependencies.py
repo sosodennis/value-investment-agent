@@ -55,6 +55,16 @@ async def current_context(request: Request) -> AuthenticatedContext:
     return context
 
 
+async def current_actor(request: Request) -> AuthenticatedActorContext:
+    token = request.cookies.get(SESSION_COOKIE_NAME)
+    actor = await get_auth_service().authenticate_actor(
+        session_token=token or "", now=_now()
+    )
+    if actor is None:
+        raise HTTPException(status_code=401, detail="authentication is required")
+    return actor
+
+
 async def current_user(request: Request) -> AuthenticatedContext:
     return await current_context(request)
 

@@ -35,7 +35,7 @@ from src.auth.interface.contracts import (
     OrganizationStatusChangeRequest,
 )
 from src.auth.interface.dependencies import (
-    current_context,
+    current_actor,
     require_current_actor_mutation,
     require_current_context_mutation,
     require_organization_permission,
@@ -134,9 +134,9 @@ async def create_organization(
 
 @router.get("", response_model=list[OrganizationResponse])
 async def list_organizations(
-    context: AuthenticatedContext = Depends(current_context),
+    actor: AuthenticatedActorContext = Depends(current_actor),
 ) -> list[OrganizationResponse]:
-    organizations = await get_organization_service().list_organizations(context=context)
+    organizations = await get_organization_service().list_organizations(actor=actor)
     return [_organization_response(item) for item in organizations]
 
 

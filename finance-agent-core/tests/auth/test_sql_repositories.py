@@ -321,10 +321,14 @@ async def test_http_selector_rejects_untrusted_organization_scope() -> None:
                 json={"organization_id": recovery_org_id},
                 headers=headers,
             )
+            listed = await client.get("/api/v1/organizations")
 
         assert selected.status_code == 200
         assert selected.json()["organization_id"] == active_org_id
         assert rejected.status_code == 404
+        assert listed.status_code == 200
+        assert recovery_org_id in {item["organization_id"] for item in listed.json()}
+        assert active_org_id in {item["organization_id"] for item in listed.json()}
         assert recovered.status_code == 200
         assert recovered.json()["organization_id"] == recovery_org_id
     finally:

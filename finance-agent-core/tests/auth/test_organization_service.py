@@ -267,7 +267,9 @@ async def test_create_rename_list_and_emit_lifecycle_events() -> None:
         name="Beta team",
         now=now,
     )
-    organizations = await service.list_organizations(context=context)
+    organizations = await service.list_organizations(
+        actor=AuthenticatedActorContext(user=context.user, session=context.session)
+    )
 
     assert renamed.name == "Beta team"
     assert {item.organization.id for item in organizations} == {

@@ -70,11 +70,11 @@ class OrganizationService:
         return organization
 
     async def list_organizations(
-        self, *, context: AuthenticatedContext
+        self, *, actor: AuthenticatedActorContext
     ) -> list[OrganizationMembership]:
-        if not context.user.id:
+        if not actor.user.id:
             raise MembershipNotFoundError("authenticated user is required")
-        return await self._repository.list_for_user(user_id=context.user.id)
+        return await self._repository.list_for_user(user_id=actor.user.id)
 
     async def get_organization(
         self, *, context: AuthenticatedContext, organization_id: str

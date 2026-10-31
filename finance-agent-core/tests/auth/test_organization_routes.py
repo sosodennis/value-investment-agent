@@ -18,6 +18,7 @@ from src.auth.domain.entities import (
     UserRecord,
 )
 from src.auth.interface.dependencies import (
+    current_actor,
     current_context,
     require_current_actor_mutation,
 )
@@ -98,6 +99,9 @@ async def test_organization_routes_bind_server_context_and_support_create(
     app = FastAPI()
     app.include_router(router)
     app.dependency_overrides[current_context] = lambda: context
+    app.dependency_overrides[current_actor] = lambda: AuthenticatedActorContext(
+        user=context.user, session=context.session
+    )
     app.dependency_overrides[require_current_actor_mutation] = (
         lambda: AuthenticatedActorContext(user=context.user, session=context.session)
     )
