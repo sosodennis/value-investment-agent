@@ -58,7 +58,7 @@ const DATE_PRESET_VALUES: TechnicalObservabilityDatePreset[] = [
 export function createDefaultTechnicalObservabilityFilters(
     now: Date = new Date()
 ): TechnicalObservabilityFilters {
-    const eventTimeStart = subtractDays(now, 30).toISOString();
+    const eventTimeStart = startOfUtcDay(subtractDays(now, 30)).toISOString();
     return {
         tickers: [],
         agentSources: [],
@@ -96,7 +96,7 @@ export function applyTechnicalObservabilityDatePreset(
     const days = preset === 'last_7d' ? 7 : preset === 'last_90d' ? 90 : 30;
     return {
         datePreset: preset,
-        eventTimeStart: subtractDays(now, days).toISOString(),
+        eventTimeStart: startOfUtcDay(subtractDays(now, days)).toISOString(),
         eventTimeEnd: null,
     };
 }
@@ -240,6 +240,12 @@ export function parseTechnicalCalibrationObservationBuildResultResponse(
 function subtractDays(value: Date, days: number): Date {
     const next = new Date(value);
     next.setUTCDate(next.getUTCDate() - days);
+    return next;
+}
+
+function startOfUtcDay(value: Date): Date {
+    const next = new Date(value);
+    next.setUTCHours(0, 0, 0, 0);
     return next;
 }
 
