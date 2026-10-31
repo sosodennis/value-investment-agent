@@ -5,7 +5,7 @@ description = "Private OpenRouter and LiteLLM provider control plane"
 requires-python = ">=3.11"
 dependencies = [
     "asyncpg>=0.31.0",
-    "cryptography>=44.0.0,<47.0.0",
+    "cryptography>=50.0.0,<51.0.0",
     "fastapi>=0.110.0,<1.0.0",
     "httpx>=0.28.1",
     "litellm==1.106.6",
@@ -38,6 +38,12 @@ ignore = ["E501"]
 [tool.ruff.format]
 quote-style = "double"
 indent-style = "space"
+
+[tool.uv]
+# LiteLLM 1.106.6 declares an older upper bound, but its file-lock usage is
+# compatible with the patched release. Pin the reviewed security fix until
+# LiteLLM widens its dependency range.
+override-dependencies = ["filelock==4.2.5"]
 
 [build-system]
 requires = ["setuptools>=68"]

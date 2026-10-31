@@ -95,4 +95,5 @@ def test_backend_does_not_receive_provider_runtime_secrets() -> None:
 def test_litellm_is_a_provider_service_dependency() -> None:
     pyproject = (ROOT / "llm-provider-service/pyproject.toml").read_text()
     assert '"litellm==1.106.6"' in pyproject
-    assert '"cryptography>=44.0.0,<47.0.0"' in pyproject
+    assert '"cryptography>=50.0.0,<51.0.0"' in pyproject
+    assert '"filelock==4.2.5"' in pyproject
