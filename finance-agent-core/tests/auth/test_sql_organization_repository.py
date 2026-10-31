@@ -207,16 +207,14 @@ async def test_lifecycle_repository_locks_owner_transfer_and_persists_events() -
         )
 
 
-async def _create_organization_fixture() -> (
-    tuple[
-        SqlAlchemyUserRepository,
-        SqlAlchemyOrganizationLifecycleRepository,
-        RegistrationRecord,
-        RegistrationRecord,
-        OrganizationMembership,
-        datetime,
-    ]
-):
+async def _create_organization_fixture() -> tuple[
+    SqlAlchemyUserRepository,
+    SqlAlchemyOrganizationLifecycleRepository,
+    RegistrationRecord,
+    RegistrationRecord,
+    OrganizationMembership,
+    datetime,
+]:
     users = SqlAlchemyUserRepository()
     repository = SqlAlchemyOrganizationLifecycleRepository()
     now = datetime.utcnow()
