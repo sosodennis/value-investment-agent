@@ -94,15 +94,49 @@ The Provider Service does not extract user-supplied tar archives. The remaining
 49 findings are low severity. These dispositions are recorded for reviewer
 assessment; the Scout database itself still reports the findings.
 
+## Local staging smoke on main
+
+The smoke used the repository `.env` against main commit
+`303ab691d0c0ea668e84a007600685f04019299b`. `STAGING_BASE_URL` resolved to
+`http://127.0.0.1:8000`, so this was a local staging run, not a remote
+deployment. Compose used the isolated project
+`value-investment-agent-189-staging-20261031`; its PostgreSQL and Redis volumes
+were removed after the run. The required provider encryption key was absent
+from `.env`, so the run used a generated ephemeral Fernet key without editing
+the file.
+
+- Health, registration, and login passed. Both configured keys were present
+  and passed the live health test. The corrected smoke polled the secondary
+  key's `202` import batch until the item was imported. The primary key was
+  created during the first attempt and appeared in the later key list. The
+  smoke script fix is in draft PR #197.
+- The default `openrouter/free` model returned `404` with no available endpoint.
+  The test account was set to the previously verified
+  `nvidia/nemotron-3.5-lightning:free` model for the workflow run.
+- The AAPL workflow resolved the NASDAQ ticker after the requested
+  ticker-selection interaction. Financial health and DCF model selection
+  completed. Parameter extraction produced 24 assumptions and the audit
+  passed. The workflow then paused at `valuation_approval`. No deterministic
+  calculation or final valuation artifact ran.
+- FLS inference failed. The workflow used lexical filtering and continued, but
+  forward-signal extraction logged an `FLSFilterStats` type error and produced
+  no signals. Market-data retrieval also reported blocked third-party sources
+  and fallback warnings.
+- The smoke report records completion as `INCONCLUSIVE` at the approval gate
+  and failover as `INCONCLUSIVE`; it contains no credentials or provider
+  responses. The test account and encrypted key copies were removed with the
+  isolated database volume.
+
 ## Remaining gate
 
-The repository has no configured GitHub deployment environment or recorded
-deployment. This evidence is from the local, isolated Compose project and real
-OpenRouter upstream. It does not claim to be staging evidence. The live 429 was
+The local `.env` smoke is recorded above. It reached the required human
+approval gate and did not run the deterministic calculation. The live 429 was
 an upstream shared-pool limit; a real key-scoped upstream fault was not
 available, although deterministic tests cover that classification and
-rotation path.
+rotation path. Do not mark the issue `VERIFIED` until the remaining acceptance
+criteria, including a controlled key-scoped failure, pass on the delivered
+commit.
 
-Issue #189 explicitly requires staging evidence against the delivered commit.
-Keep the issue open and do not mark it `VERIFIED` until that staging evidence
-is recorded or the maintainer explicitly revises the criterion.
+The repository has no configured remote GitHub deployment environment or
+recorded deployment. This local smoke used staging credentials and real
+OpenRouter requests, but it does not prove a remote deployment.
