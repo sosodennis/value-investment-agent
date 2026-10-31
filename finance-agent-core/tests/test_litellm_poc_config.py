@@ -9,6 +9,7 @@ ROOT = Path(__file__).parents[2]
 LOCAL_PROVIDER_TOKEN = "local-development-only-token"
 TEST_PROVIDER_TOKEN = "compose-test-provider-token"
 TEST_ENCRYPTION_KEY = "compose-test-encryption-key"
+TEST_DIRECTORY_CURSOR_SECRET = "compose-test-directory-cursor-secret"
 
 
 def _compose_config(
@@ -18,6 +19,7 @@ def _compose_config(
     env.pop("COMPOSE_FILE", None)
     env.pop("LLM_PROVIDER_SERVICE_TOKEN", None)
     env["LLM_PROVIDER_ENCRYPTION_KEY"] = TEST_ENCRYPTION_KEY
+    env["DIRECTORY_CURSOR_SECRET"] = TEST_DIRECTORY_CURSOR_SECRET
     if provider_token is not None:
         env["LLM_PROVIDER_SERVICE_TOKEN"] = provider_token
     return subprocess.run(
