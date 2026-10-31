@@ -15,7 +15,7 @@ from src.llm_provider_service.domain.provider_models import (
 class KeyGateway(Protocol):
     async def list_managed(self) -> list[ManagedProviderKey]: ...
 
-    async def add_key(
+    async def add_replacement_key(
         self,
         *,
         key: str,
@@ -39,6 +39,10 @@ class KeyGateway(Protocol):
 class OwnershipPort(Protocol):
     def replacement_lock(
         self, *, user_id: str, key_id: str
+    ) -> AbstractAsyncContextManager[None]: ...
+
+    def fingerprint_lock(
+        self, *, user_id: str, fingerprint: str
     ) -> AbstractAsyncContextManager[None]: ...
 
     async def claim(

@@ -159,8 +159,77 @@ export interface paths {
         /** List Provider Keys */
         get: operations["list_provider_keys_api_v1_llm_provider_keys_get"];
         put?: never;
-        /** Add Provider Key */
-        post: operations["add_provider_key_api_v1_llm_provider_keys_post"];
+        /** Submit Provider Key */
+        post: operations["submit_provider_key_api_v1_llm_provider_keys_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/llm/provider-keys/imports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Provider Key Imports */
+        get: operations["list_provider_key_imports_api_v1_llm_provider_keys_imports_get"];
+        put?: never;
+        /** Create Provider Key Import */
+        post: operations["create_provider_key_import_api_v1_llm_provider_keys_imports_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/llm/provider-keys/imports/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Preview Provider Key Import */
+        post: operations["preview_provider_key_import_api_v1_llm_provider_keys_imports_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/llm/provider-keys/imports/{batch_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Provider Key Import */
+        get: operations["get_provider_key_import_api_v1_llm_provider_keys_imports__batch_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/llm/provider-keys/imports/{batch_id}/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Retry Provider Key Import */
+        post: operations["retry_provider_key_import_api_v1_llm_provider_keys_imports__batch_id__retry_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1521,6 +1590,83 @@ export interface components {
         ProviderKeyEnabledRequest: {
             /** Enabled */
             enabled: boolean;
+        };
+        /** ProviderKeyImportBatchResponse */
+        ProviderKeyImportBatchResponse: {
+            /** Created At */
+            created_at: string;
+            /** Duplicate Count */
+            duplicate_count: number;
+            /** Id */
+            id: string;
+            /** Imported Count */
+            imported_count: number;
+            /** Invalid Count */
+            invalid_count: number;
+            /** Items */
+            items?: components["schemas"]["ProviderKeyImportItemResponse"][];
+            /** Processed Count */
+            processed_count: number;
+            /** Retryable Count */
+            retryable_count: number;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "queued" | "processing" | "completed" | "completed_with_errors";
+            /** Total Count */
+            total_count: number;
+            /** Updated At */
+            updated_at: string;
+        };
+        /** ProviderKeyImportItemResponse */
+        ProviderKeyImportItemResponse: {
+            /** Attempts */
+            attempts: number;
+            /** Error Code */
+            error_code?: ("invalid_key" | "request_rejected" | "rate_limited" | "upstream_unavailable" | "worker_attempts_exhausted" | "staging_unavailable" | "already_owned" | "duplicate_in_batch" | "already_importing" | "retry_expired") | null;
+            /** Label */
+            label: string;
+            /**
+             * Retryable
+             * @default false
+             */
+            retryable: boolean;
+            /** Source Line */
+            source_line: number;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "queued" | "validating" | "retry_wait" | "imported" | "duplicate" | "invalid" | "unavailable" | "expired";
+            /** Suffix */
+            suffix?: string | null;
+        };
+        /** ProviderKeyImportParseIssue */
+        ProviderKeyImportParseIssue: {
+            /**
+             * Code
+             * @enum {string}
+             */
+            code: "invalid_key_format" | "invalid_csv_row" | "invalid_label";
+            /** Source Line */
+            source_line: number;
+        };
+        /** ProviderKeyImportPreviewResponse */
+        ProviderKeyImportPreviewResponse: {
+            /** Duplicate Count */
+            duplicate_count: number;
+            /**
+             * File Type
+             * @enum {string}
+             */
+            file_type: "txt" | "csv";
+            /** Issues */
+            issues: components["schemas"]["ProviderKeyImportParseIssue"][];
+            /** Row Count */
+            row_count: number;
+            /** Unique Count */
+            unique_count: number;
         };
         /** ProviderKeyReplaceRequest */
         ProviderKeyReplaceRequest: {
@@ -3765,10 +3911,12 @@ export interface operations {
             };
         };
     };
-    add_provider_key_api_v1_llm_provider_keys_post: {
+    submit_provider_key_api_v1_llm_provider_keys_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "Idempotency-Key"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -3779,12 +3927,159 @@ export interface operations {
         };
         responses: {
             /** @description Successful Response */
-            201: {
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["src__llm_provider__interface__contracts__ProviderKeyResponse"];
+                    "application/json": components["schemas"]["ProviderKeyImportBatchResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_provider_key_imports_api_v1_llm_provider_keys_imports_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderKeyImportBatchResponse"][];
+                };
+            };
+        };
+    };
+    create_provider_key_import_api_v1_llm_provider_keys_imports_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Idempotency-Key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /** Format: binary */
+                    file: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderKeyImportBatchResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_provider_key_import_api_v1_llm_provider_keys_imports_preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /** Format: binary */
+                    file: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderKeyImportPreviewResponse"];
+                };
+            };
+        };
+    };
+    get_provider_key_import_api_v1_llm_provider_keys_imports__batch_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                batch_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderKeyImportBatchResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    retry_provider_key_import_api_v1_llm_provider_keys_imports__batch_id__retry_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                batch_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderKeyImportBatchResponse"];
                 };
             };
             /** @description Validation Error */

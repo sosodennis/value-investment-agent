@@ -3415,6 +3415,217 @@
         "title": "ProviderKeyEnabledRequest",
         "type": "object"
       },
+      "ProviderKeyImportBatchResponse": {
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "duplicate_count": {
+            "title": "Duplicate Count",
+            "type": "integer"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "imported_count": {
+            "title": "Imported Count",
+            "type": "integer"
+          },
+          "invalid_count": {
+            "title": "Invalid Count",
+            "type": "integer"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ProviderKeyImportItemResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "processed_count": {
+            "title": "Processed Count",
+            "type": "integer"
+          },
+          "retryable_count": {
+            "title": "Retryable Count",
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "queued",
+              "processing",
+              "completed",
+              "completed_with_errors"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "total_count": {
+            "title": "Total Count",
+            "type": "integer"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "total_count",
+          "processed_count",
+          "imported_count",
+          "duplicate_count",
+          "invalid_count",
+          "retryable_count",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "ProviderKeyImportBatchResponse",
+        "type": "object"
+      },
+      "ProviderKeyImportItemResponse": {
+        "properties": {
+          "attempts": {
+            "title": "Attempts",
+            "type": "integer"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "enum": [
+                  "invalid_key",
+                  "request_rejected",
+                  "rate_limited",
+                  "upstream_unavailable",
+                  "worker_attempts_exhausted",
+                  "staging_unavailable",
+                  "already_owned",
+                  "duplicate_in_batch",
+                  "already_importing",
+                  "retry_expired"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "retryable": {
+            "default": false,
+            "title": "Retryable",
+            "type": "boolean"
+          },
+          "source_line": {
+            "title": "Source Line",
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "queued",
+              "validating",
+              "retry_wait",
+              "imported",
+              "duplicate",
+              "invalid",
+              "unavailable",
+              "expired"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "suffix": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Suffix"
+          }
+        },
+        "required": [
+          "source_line",
+          "label",
+          "status",
+          "attempts"
+        ],
+        "title": "ProviderKeyImportItemResponse",
+        "type": "object"
+      },
+      "ProviderKeyImportParseIssue": {
+        "properties": {
+          "code": {
+            "enum": [
+              "invalid_key_format",
+              "invalid_csv_row",
+              "invalid_label"
+            ],
+            "title": "Code",
+            "type": "string"
+          },
+          "source_line": {
+            "title": "Source Line",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "source_line",
+          "code"
+        ],
+        "title": "ProviderKeyImportParseIssue",
+        "type": "object"
+      },
+      "ProviderKeyImportPreviewResponse": {
+        "properties": {
+          "duplicate_count": {
+            "title": "Duplicate Count",
+            "type": "integer"
+          },
+          "file_type": {
+            "enum": [
+              "txt",
+              "csv"
+            ],
+            "title": "File Type",
+            "type": "string"
+          },
+          "issues": {
+            "items": {
+              "$ref": "#/components/schemas/ProviderKeyImportParseIssue"
+            },
+            "title": "Issues",
+            "type": "array"
+          },
+          "row_count": {
+            "title": "Row Count",
+            "type": "integer"
+          },
+          "unique_count": {
+            "title": "Unique Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "file_type",
+          "row_count",
+          "unique_count",
+          "duplicate_count",
+          "issues"
+        ],
+        "title": "ProviderKeyImportPreviewResponse",
+        "type": "object"
+      },
       "ProviderKeyReplaceRequest": {
         "additionalProperties": false,
         "properties": {
@@ -10671,7 +10882,25 @@
         ]
       },
       "post": {
-        "operationId": "add_provider_key_api_v1_llm_provider_keys_post",
+        "operationId": "submit_provider_key_api_v1_llm_provider_keys_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -10683,11 +10912,11 @@
           "required": true
         },
         "responses": {
-          "201": {
+          "202": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/src__llm_provider__interface__contracts__ProviderKeyResponse"
+                  "$ref": "#/components/schemas/ProviderKeyImportBatchResponse"
                 }
               }
             },
@@ -10704,7 +10933,222 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Add Provider Key",
+        "summary": "Submit Provider Key",
+        "tags": [
+          "LLM settings"
+        ]
+      }
+    },
+    "/api/v1/llm/provider-keys/imports": {
+      "get": {
+        "operationId": "list_provider_key_imports_api_v1_llm_provider_keys_imports_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ProviderKeyImportBatchResponse"
+                  },
+                  "title": "Response List Provider Key Imports Api V1 Llm Provider Keys Imports Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Provider Key Imports",
+        "tags": [
+          "LLM settings"
+        ]
+      },
+      "post": {
+        "operationId": "create_provider_key_import_api_v1_llm_provider_keys_imports_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "properties": {
+                  "file": {
+                    "format": "binary",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "file"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderKeyImportBatchResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Provider Key Import",
+        "tags": [
+          "LLM settings"
+        ]
+      }
+    },
+    "/api/v1/llm/provider-keys/imports/preview": {
+      "post": {
+        "operationId": "preview_provider_key_import_api_v1_llm_provider_keys_imports_preview_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "properties": {
+                  "file": {
+                    "format": "binary",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "file"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderKeyImportPreviewResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Preview Provider Key Import",
+        "tags": [
+          "LLM settings"
+        ]
+      }
+    },
+    "/api/v1/llm/provider-keys/imports/{batch_id}": {
+      "get": {
+        "operationId": "get_provider_key_import_api_v1_llm_provider_keys_imports__batch_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "batch_id",
+            "required": true,
+            "schema": {
+              "title": "Batch Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderKeyImportBatchResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Provider Key Import",
+        "tags": [
+          "LLM settings"
+        ]
+      }
+    },
+    "/api/v1/llm/provider-keys/imports/{batch_id}/retry": {
+      "post": {
+        "operationId": "retry_provider_key_import_api_v1_llm_provider_keys_imports__batch_id__retry_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "batch_id",
+            "required": true,
+            "schema": {
+              "title": "Batch Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderKeyImportBatchResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Retry Provider Key Import",
         "tags": [
           "LLM settings"
         ]

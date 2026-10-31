@@ -91,23 +91,6 @@ class _Settings:
             if owner == user_id
         ]
 
-    async def add_key(self, *, user_id: str, key: str, label: str):
-        self.secrets.append(key)
-        return SimpleNamespace(
-            id="new-key",
-            label=label,
-            suffix=key[-4:],
-            fingerprint="safe-fingerprint",
-            created_at=None,
-            status="untested",
-            last_tested_at=None,
-            failure_count=0,
-            cooldown_until=None,
-            last_error=None,
-            last_used_at=None,
-            replacement_retire_at=None,
-        )
-
     async def replace_key(self, *, user_id: str, key_id: str, key: str, label: str):
         _ = (user_id, key_id, key, label)
         if self.replacement_error_code is None:
@@ -418,8 +401,8 @@ async def test_settings_read_honors_deadline_during_operation(client) -> None:
 
 
 @pytest.mark.asyncio
-async def test_secret_key_material_never_appears_in_create_response(client) -> None:
-    http, _, settings = client
+async def test_ordinary_key_create_action_is_removed(client) -> None:
+    http, _, _ = client
     secret = "sk-this-is-a-long-test-secret-value"
     try:
         response = await http.post(
@@ -433,10 +416,8 @@ async def test_secret_key_material_never_appears_in_create_response(client) -> N
     finally:
         await http.aclose()
 
-    assert response.status_code == 200
+    assert response.status_code == 404
     assert secret not in response.text
-    assert secret in settings.secrets
-    assert "suffix" in response.json()["result"]["key"]
 
 
 @pytest.mark.asyncio

@@ -32,7 +32,7 @@ class _Gateway:
     async def list_managed(self) -> list[ManagedProviderKey]:
         return list(self.keys)
 
-    async def add_key(
+    async def add_replacement_key(
         self,
         *,
         key: str,
@@ -70,6 +70,7 @@ class _Ownership:
     def __init__(self) -> None:
         self.ids = {"old-key"}
         self.lock = asyncio.Lock()
+        self.fingerprint_locks: dict[str, asyncio.Lock] = {}
 
     @asynccontextmanager
     async def replacement_lock(
@@ -77,6 +78,15 @@ class _Ownership:
     ) -> AsyncIterator[None]:
         _ = (user_id, key_id)
         async with self.lock:
+            yield
+
+    @asynccontextmanager
+    async def fingerprint_lock(
+        self, *, user_id: str, fingerprint: str
+    ) -> AsyncIterator[None]:
+        _ = user_id
+        lock = self.fingerprint_locks.setdefault(fingerprint, asyncio.Lock())
+        async with lock:
             yield
 
     async def owns(self, *, user_id: str, resource_type: str, resource_id: str) -> bool:

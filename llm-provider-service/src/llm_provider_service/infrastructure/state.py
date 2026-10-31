@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import os
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Mapping
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 from cryptography.fernet import Fernet, InvalidToken
@@ -12,6 +12,17 @@ from sqlalchemy import String, delete, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+
+from src.llm_provider_service.domain.errors import ProviderSettingsError
+from src.llm_provider_service.domain.key_imports import (
+    ClaimedKeyImportItem,
+    ImportBatchStatus,
+    ImportItemStatus,
+    KeyImportInput,
+    KeyImportItemSnapshot,
+    KeyImportSnapshot,
+)
+from src.llm_provider_service.domain.key_metadata import key_fingerprint, key_suffix
 
 
 def _database_url() -> str:
@@ -106,6 +117,81 @@ class ProviderState:
                         replacement_retire_at TIMESTAMP WITH TIME ZONE,
                         UNIQUE (user_id, fingerprint)
                     )
+                    """
+                )
+            )
+            await connection.execute(
+                text(
+                    """
+                    CREATE TABLE IF NOT EXISTS llm_provider_key_import_batches (
+                        id VARCHAR(36) PRIMARY KEY,
+                        user_id VARCHAR(256) NOT NULL,
+                        idempotency_key VARCHAR(128) NOT NULL,
+                        status VARCHAR(32) NOT NULL DEFAULT 'queued',
+                        created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+                        updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+                        router_refreshed_at TIMESTAMP WITH TIME ZONE,
+                        router_refresh_owner VARCHAR(64),
+                        router_refresh_lease_until TIMESTAMP WITH TIME ZONE,
+                        expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+                        UNIQUE (user_id, idempotency_key)
+                    )
+                    """
+                )
+            )
+            await connection.execute(
+                text(
+                    """
+                    CREATE TABLE IF NOT EXISTS llm_provider_key_import_items (
+                        id VARCHAR(36) PRIMARY KEY,
+                        batch_id VARCHAR(36) NOT NULL REFERENCES
+                            llm_provider_key_import_batches(id) ON DELETE CASCADE,
+                        user_id VARCHAR(256) NOT NULL,
+                        source_line INTEGER NOT NULL,
+                        label VARCHAR(80) NOT NULL,
+                        encrypted_key TEXT,
+                        fingerprint VARCHAR(128) NOT NULL,
+                        suffix VARCHAR(16) NOT NULL,
+                        status VARCHAR(32) NOT NULL,
+                        error_code VARCHAR(64),
+                        attempts INTEGER NOT NULL DEFAULT 0,
+                        retryable BOOLEAN NOT NULL DEFAULT FALSE,
+                        next_retry_at TIMESTAMP WITH TIME ZONE,
+                        lease_owner VARCHAR(64),
+                        lease_until TIMESTAMP WITH TIME ZONE,
+                        created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+                        updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+                        expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+                        UNIQUE (batch_id, source_line)
+                    )
+                    """
+                )
+            )
+            await connection.execute(
+                text(
+                    """
+                    CREATE INDEX IF NOT EXISTS
+                        ix_llm_provider_key_import_items_pending
+                    ON llm_provider_key_import_items
+                        (status, next_retry_at, lease_until, created_at)
+                    """
+                )
+            )
+            await connection.execute(
+                text(
+                    """
+                    CREATE INDEX IF NOT EXISTS
+                        ix_llm_provider_key_import_items_owner_fingerprint
+                    ON llm_provider_key_import_items (user_id, fingerprint, status)
+                    """
+                )
+            )
+            await connection.execute(
+                text(
+                    """
+                    CREATE INDEX IF NOT EXISTS
+                        ix_llm_provider_key_import_batches_owner_created
+                    ON llm_provider_key_import_batches (user_id, created_at DESC)
                     """
                 )
             )
@@ -325,6 +411,24 @@ class ProviderState:
                     {"lock_key": lock_key},
                 )
 
+    @asynccontextmanager
+    async def fingerprint_lock(
+        self, *, user_id: str, fingerprint: str
+    ) -> AsyncIterator[None]:
+        lock_key = f"llm-provider-key-fingerprint:{user_id}:{fingerprint}"
+        async with self._engine.connect() as connection:
+            await connection.execute(
+                text("SELECT pg_advisory_lock(hashtextextended(:lock_key, 0))"),
+                {"lock_key": lock_key},
+            )
+            try:
+                yield
+            finally:
+                await connection.execute(
+                    text("SELECT pg_advisory_unlock(hashtextextended(:lock_key, 0))"),
+                    {"lock_key": lock_key},
+                )
+
     async def claim(
         self,
         *,
@@ -424,9 +528,854 @@ class ProviderState:
             await session.commit()
         return model_id
 
+    async def create_key_import(
+        self,
+        *,
+        user_id: str,
+        idempotency_key: str,
+        items: list[KeyImportInput],
+    ) -> KeyImportSnapshot:
+        cipher = self._require_cipher()
+        batch_id = str(uuid4())
+        now = datetime.now(UTC)
+        stage_expires_at = now + timedelta(days=7)
+        batch_expires_at = now + timedelta(days=30)
+        async with self._sessions() as session:
+            async with session.begin():
+                await session.execute(
+                    text(
+                        "SELECT pg_advisory_xact_lock(hashtextextended(:lock_key, 0))"
+                    ),
+                    {"lock_key": f"llm-provider-import-owner:{user_id}"},
+                )
+                existing_id = await session.execute(
+                    text(
+                        """
+                        SELECT id FROM llm_provider_key_import_batches
+                        WHERE user_id=:user_id AND idempotency_key=:idempotency_key
+                        """
+                    ),
+                    {"user_id": user_id, "idempotency_key": idempotency_key},
+                )
+                existing_id_value = existing_id.scalar_one_or_none()
+                if isinstance(existing_id_value, str):
+                    stored_items = await session.execute(
+                        text(
+                            """
+                            SELECT source_line,label,fingerprint
+                            FROM llm_provider_key_import_items
+                            WHERE batch_id=:batch_id
+                            ORDER BY source_line
+                            """
+                        ),
+                        {"batch_id": existing_id_value},
+                    )
+                    stored_signature = [
+                        (int(line), str(label), str(fingerprint))
+                        for line, label, fingerprint in stored_items.all()
+                    ]
+                    requested_signature = [
+                        (
+                            item.source_line,
+                            _safe_key_label(item.label, item.api_key),
+                            key_fingerprint(item.api_key),
+                        )
+                        for item in items
+                    ]
+                    if stored_signature != requested_signature:
+                        raise ProviderSettingsError("idempotency_key_reused")
+                    batch_id = existing_id_value
+                else:
+                    deployed = await session.execute(
+                        text(
+                            """
+                            SELECT fingerprint FROM llm_provider_deployments
+                            WHERE user_id=:user_id
+                            """
+                        ),
+                        {"user_id": user_id},
+                    )
+                    owned_fingerprints = set(deployed.scalars().all())
+                    pending = await session.execute(
+                        text(
+                            """
+                            SELECT fingerprint FROM llm_provider_key_import_items
+                            WHERE user_id=:user_id
+                              AND status IN ('queued','validating','retry_wait')
+                              AND expires_at > NOW()
+                            """
+                        ),
+                        {"user_id": user_id},
+                    )
+                    pending_fingerprints = set(pending.scalars().all())
+                    await session.execute(
+                        text(
+                            """
+                            INSERT INTO llm_provider_key_import_batches
+                                (id,user_id,idempotency_key,status,created_at,updated_at,
+                                 expires_at)
+                            VALUES (:id,:user_id,:idempotency_key,'queued',:now,:now,
+                                    :expires_at)
+                            """
+                        ),
+                        {
+                            "id": batch_id,
+                            "user_id": user_id,
+                            "idempotency_key": idempotency_key,
+                            "now": now,
+                            "expires_at": batch_expires_at,
+                        },
+                    )
+                    seen: set[str] = set()
+                    for item in items:
+                        fingerprint = key_fingerprint(item.api_key)
+                        suffix = key_suffix(item.api_key)
+                        safe_label = _safe_key_label(item.label, item.api_key)
+                        error_code: str | None = None
+                        if fingerprint in seen:
+                            status = "duplicate"
+                            error_code = "duplicate_in_batch"
+                        elif fingerprint in owned_fingerprints:
+                            status = "duplicate"
+                            error_code = "already_owned"
+                        elif fingerprint in pending_fingerprints:
+                            status = "duplicate"
+                            error_code = "already_importing"
+                        else:
+                            status = "queued"
+                        seen.add(fingerprint)
+                        encrypted_key = (
+                            cipher.encrypt(item.api_key.encode("utf-8")).decode("ascii")
+                            if status == "queued"
+                            else None
+                        )
+                        await session.execute(
+                            text(
+                                """
+                                INSERT INTO llm_provider_key_import_items
+                                    (id,batch_id,user_id,source_line,label,encrypted_key,
+                                     fingerprint,suffix,status,error_code,attempts,
+                                     retryable,created_at,updated_at,expires_at)
+                                VALUES (:id,:batch_id,:user_id,:source_line,:label,
+                                        :encrypted_key,:fingerprint,:suffix,:status,
+                                        :error_code,0,FALSE,:now,:now,:expires_at)
+                                """
+                            ),
+                            {
+                                "id": str(uuid4()),
+                                "batch_id": batch_id,
+                                "user_id": user_id,
+                                "source_line": item.source_line,
+                                "label": safe_label,
+                                "encrypted_key": encrypted_key,
+                                "fingerprint": fingerprint,
+                                "suffix": suffix,
+                                "status": status,
+                                "error_code": error_code,
+                                "now": now,
+                                "expires_at": stage_expires_at,
+                            },
+                        )
+                    await self._refresh_import_batch(session, batch_id)
+        snapshot = await self.get_key_import(user_id=user_id, batch_id=batch_id)
+        if snapshot is None:
+            raise RuntimeError("provider key import was not persisted")
+        return snapshot
+
+    async def list_key_imports(
+        self, *, user_id: str, limit: int = 10
+    ) -> list[KeyImportSnapshot]:
+        async with self._sessions() as session:
+            rows = await session.execute(
+                text(
+                    """
+                    SELECT id FROM llm_provider_key_import_batches
+                    WHERE user_id=:user_id AND expires_at > NOW()
+                    ORDER BY created_at DESC,id DESC LIMIT :limit
+                    """
+                ),
+                {"user_id": user_id, "limit": min(max(limit, 1), 50)},
+            )
+            batch_ids = list(rows.scalars().all())
+        snapshots: list[KeyImportSnapshot] = []
+        for batch_id in batch_ids:
+            snapshot = await self.get_key_import(
+                user_id=user_id, batch_id=str(batch_id)
+            )
+            if snapshot is not None:
+                snapshots.append(snapshot)
+        return snapshots
+
+    async def get_key_import(
+        self, *, user_id: str, batch_id: str
+    ) -> KeyImportSnapshot | None:
+        async with self._sessions() as session:
+            batch = (
+                (
+                    await session.execute(
+                        text(
+                            """
+                        SELECT id,status,created_at,updated_at
+                        FROM llm_provider_key_import_batches
+                        WHERE id=:batch_id AND user_id=:user_id
+                          AND expires_at > NOW()
+                        """
+                        ),
+                        {"batch_id": batch_id, "user_id": user_id},
+                    )
+                )
+                .mappings()
+                .first()
+            )
+            if batch is None:
+                return None
+            rows = (
+                (
+                    await session.execute(
+                        text(
+                            """
+                        SELECT source_line,label,suffix,status,error_code,attempts,
+                               retryable
+                        FROM llm_provider_key_import_items
+                        WHERE batch_id=:batch_id AND user_id=:user_id
+                        ORDER BY source_line,id
+                        """
+                        ),
+                        {"batch_id": batch_id, "user_id": user_id},
+                    )
+                )
+                .mappings()
+                .all()
+            )
+        items = tuple(
+            KeyImportItemSnapshot(
+                source_line=int(row["source_line"]),
+                label=str(row["label"]),
+                suffix=(str(row["suffix"]) if row["suffix"] is not None else None),
+                status=_import_item_status(str(row["status"])),
+                error_code=(
+                    str(row["error_code"]) if row["error_code"] is not None else None
+                ),
+                attempts=max(0, int(row["attempts"])),
+                retryable=bool(row["retryable"]),
+            )
+            for row in rows
+        )
+        imported_count = sum(item.status == "imported" for item in items)
+        duplicate_count = sum(item.status == "duplicate" for item in items)
+        invalid_count = sum(
+            item.status in {"invalid", "unavailable", "expired"} for item in items
+        )
+        retryable_count = sum(item.retryable for item in items)
+        processed_count = sum(
+            item.status not in {"queued", "validating", "retry_wait"} for item in items
+        )
+        return KeyImportSnapshot(
+            id=str(batch["id"]),
+            status=_import_batch_status(items),
+            total_count=len(items),
+            processed_count=processed_count,
+            imported_count=imported_count,
+            duplicate_count=duplicate_count,
+            invalid_count=invalid_count,
+            retryable_count=retryable_count,
+            created_at=_required_iso(batch["created_at"]),
+            updated_at=_required_iso(batch["updated_at"]),
+            items=items,
+        )
+
+    async def claim_key_import_items(
+        self, *, worker_id: str, limit: int, lease_seconds: int = 45
+    ) -> list[ClaimedKeyImportItem]:
+        cipher = self._require_cipher()
+        now = datetime.now(UTC)
+        async with self._sessions() as session:
+            async with session.begin():
+                expired = await session.execute(
+                    text(
+                        """
+                        UPDATE llm_provider_key_import_items
+                        SET status='unavailable',error_code='worker_attempts_exhausted',
+                            retryable=TRUE,lease_owner=NULL,lease_until=NULL,
+                            updated_at=:now
+                        WHERE status='validating' AND lease_until <= :now
+                          AND attempts >= 3 AND encrypted_key IS NOT NULL
+                        RETURNING batch_id
+                        """
+                    ),
+                    {"now": now},
+                )
+                changed_batches = {str(value) for value in expired.scalars().all()}
+                rows = (
+                    (
+                        await session.execute(
+                            text(
+                                """
+                            WITH selected AS (
+                                SELECT id
+                                FROM llm_provider_key_import_items
+                                WHERE (
+                                    (status IN ('queued','retry_wait')
+                                     AND (next_retry_at IS NULL OR next_retry_at <= :now))
+                                    OR (status='validating' AND lease_until <= :now)
+                                )
+                                  AND attempts < 3
+                                  AND encrypted_key IS NOT NULL
+                                  AND expires_at > :now
+                                ORDER BY created_at,source_line,id
+                                LIMIT :limit FOR UPDATE SKIP LOCKED
+                            )
+                            UPDATE llm_provider_key_import_items AS item
+                            SET status='validating',attempts=item.attempts+1,
+                                next_retry_at=NULL,lease_owner=:worker_id,
+                                lease_until=:lease_until,updated_at=:now
+                            FROM selected
+                            WHERE item.id=selected.id
+                            RETURNING item.id,item.batch_id,item.user_id,
+                                item.source_line,item.label,item.fingerprint,item.suffix,
+                                item.encrypted_key,item.attempts
+                            """
+                            ),
+                            {
+                                "now": now,
+                                "limit": min(max(limit, 1), 50),
+                                "worker_id": worker_id,
+                                "lease_until": now + timedelta(seconds=lease_seconds),
+                            },
+                        )
+                    )
+                    .mappings()
+                    .all()
+                )
+                claimed: list[ClaimedKeyImportItem] = []
+                for row in rows:
+                    try:
+                        key = cipher.decrypt(
+                            str(row["encrypted_key"]).encode("ascii")
+                        ).decode("utf-8")
+                    except (InvalidToken, UnicodeDecodeError):
+                        await session.execute(
+                            text(
+                                """
+                                UPDATE llm_provider_key_import_items
+                                SET status='unavailable',error_code='staging_unavailable',
+                                    retryable=FALSE,encrypted_key=NULL,
+                                    lease_owner=NULL,lease_until=NULL,updated_at=:now
+                                WHERE id=:id AND lease_owner=:worker_id
+                                """
+                            ),
+                            {
+                                "id": row["id"],
+                                "worker_id": worker_id,
+                                "now": now,
+                            },
+                        )
+                        changed_batches.add(str(row["batch_id"]))
+                        continue
+                    claimed.append(
+                        ClaimedKeyImportItem(
+                            id=str(row["id"]),
+                            batch_id=str(row["batch_id"]),
+                            user_id=str(row["user_id"]),
+                            source_line=int(row["source_line"]),
+                            label=str(row["label"]),
+                            fingerprint=str(row["fingerprint"]),
+                            suffix=str(row["suffix"]),
+                            api_key=key,
+                            attempts=int(row["attempts"]),
+                            worker_id=worker_id,
+                        )
+                    )
+                for batch_id in {item.batch_id for item in claimed}:
+                    changed_batches.add(batch_id)
+                for batch_id in changed_batches:
+                    await self._refresh_import_batch(session, batch_id)
+        return claimed
+
+    async def find_import_deployment(
+        self, *, user_id: str, fingerprint: str
+    ) -> str | None:
+        async with self._sessions() as session:
+            result = await session.execute(
+                text(
+                    """
+                    SELECT id FROM llm_provider_deployments
+                    WHERE user_id=:user_id AND fingerprint=:fingerprint
+                    """
+                ),
+                {"user_id": user_id, "fingerprint": fingerprint},
+            )
+            value = result.scalar_one_or_none()
+        return str(value) if value is not None else None
+
+    async def finish_import_duplicate(self, *, item: ClaimedKeyImportItem) -> None:
+        now = datetime.now(UTC)
+        async with self._sessions() as session:
+            async with session.begin():
+                deployment_id = (
+                    await session.execute(
+                        text(
+                            """
+                            SELECT id FROM llm_provider_deployments
+                            WHERE user_id=:user_id AND fingerprint=:fingerprint
+                            """
+                        ),
+                        {"user_id": item.user_id, "fingerprint": item.fingerprint},
+                    )
+                ).scalar_one_or_none()
+                if deployment_id is not None:
+                    await session.execute(
+                        text(
+                            """
+                            INSERT INTO llm_provider_owned_keys
+                                (key_id,user_id,fingerprint)
+                            VALUES (:key_id,:user_id,:fingerprint)
+                            ON CONFLICT DO NOTHING
+                            """
+                        ),
+                        {
+                            "key_id": str(deployment_id),
+                            "user_id": item.user_id,
+                            "fingerprint": item.fingerprint,
+                        },
+                    )
+                await session.execute(
+                    text(
+                        """
+                        UPDATE llm_provider_key_import_items
+                        SET status='duplicate',error_code='already_owned',
+                            retryable=FALSE,encrypted_key=NULL,lease_owner=NULL,
+                            lease_until=NULL,updated_at=:now
+                        WHERE id=:id AND status='validating' AND lease_owner=:worker_id
+                        """
+                    ),
+                    {"id": item.id, "worker_id": item.worker_id, "now": now},
+                )
+                await self._refresh_import_batch(session, item.batch_id)
+
+    async def finish_import_success(
+        self, *, item: ClaimedKeyImportItem, model: str
+    ) -> bool:
+        cipher = self._require_cipher()
+        now = datetime.now(UTC)
+        deployment_id = str(uuid4())
+        encrypted_key = cipher.encrypt(item.api_key.encode("utf-8")).decode("ascii")
+        async with self._sessions() as session:
+            async with session.begin():
+                current = (
+                    await session.execute(
+                        text(
+                            """
+                            SELECT id FROM llm_provider_key_import_items
+                            WHERE id=:id AND status='validating'
+                              AND lease_owner=:worker_id FOR UPDATE
+                            """
+                        ),
+                        {"id": item.id, "worker_id": item.worker_id},
+                    )
+                ).scalar_one_or_none()
+                if current is None:
+                    return False
+                existing_owned = (
+                    await session.execute(
+                        text(
+                            """
+                            SELECT key_id FROM llm_provider_owned_keys
+                            WHERE user_id=:user_id AND fingerprint=:fingerprint
+                            """
+                        ),
+                        {"user_id": item.user_id, "fingerprint": item.fingerprint},
+                    )
+                ).scalar_one_or_none()
+                if existing_owned is not None:
+                    await session.execute(
+                        text(
+                            """
+                            UPDATE llm_provider_key_import_items
+                            SET status='duplicate',error_code='already_owned',
+                                retryable=FALSE,encrypted_key=NULL,lease_owner=NULL,
+                                lease_until=NULL,updated_at=:now
+                            WHERE id=:id
+                            """
+                        ),
+                        {"id": item.id, "now": now},
+                    )
+                    await self._refresh_import_batch(session, item.batch_id)
+                    return False
+                existing_deployment = (
+                    await session.execute(
+                        text(
+                            """
+                            SELECT id FROM llm_provider_deployments
+                            WHERE user_id=:user_id AND fingerprint=:fingerprint
+                            """
+                        ),
+                        {"user_id": item.user_id, "fingerprint": item.fingerprint},
+                    )
+                ).scalar_one_or_none()
+                if existing_deployment is None:
+                    await session.execute(
+                        text(
+                            """
+                            INSERT INTO llm_provider_deployments
+                                (id,user_id,encrypted_key,label,suffix,fingerprint,model,
+                                 created_at,status,last_tested_at)
+                            VALUES (:id,:user_id,:encrypted_key,:label,:suffix,
+                                    :fingerprint,:model,:now,'healthy',:now)
+                            """
+                        ),
+                        {
+                            "id": deployment_id,
+                            "user_id": item.user_id,
+                            "encrypted_key": encrypted_key,
+                            "label": item.label,
+                            "suffix": item.suffix,
+                            "fingerprint": item.fingerprint,
+                            "model": model,
+                            "now": now,
+                        },
+                    )
+                else:
+                    deployment_id = str(existing_deployment)
+                await session.execute(
+                    text(
+                        """
+                        INSERT INTO llm_provider_owned_keys (key_id,user_id,fingerprint)
+                        VALUES (:key_id,:user_id,:fingerprint)
+                        ON CONFLICT DO NOTHING
+                        """
+                    ),
+                    {
+                        "key_id": deployment_id,
+                        "user_id": item.user_id,
+                        "fingerprint": item.fingerprint,
+                    },
+                )
+                await session.execute(
+                    text(
+                        """
+                        UPDATE llm_provider_key_import_items
+                        SET status='imported',error_code=NULL,retryable=FALSE,
+                            encrypted_key=NULL,lease_owner=NULL,lease_until=NULL,
+                            updated_at=:now
+                        WHERE id=:id
+                        """
+                    ),
+                    {"id": item.id, "now": now},
+                )
+                await self._refresh_import_batch(session, item.batch_id)
+        return True
+
+    async def finish_import_failure(
+        self,
+        *,
+        item: ClaimedKeyImportItem,
+        error_code: str,
+        retryable: bool,
+        delay_seconds: float,
+    ) -> None:
+        now = datetime.now(UTC)
+        retry_pending = retryable and item.attempts < 3
+        status = (
+            "retry_wait"
+            if retry_pending
+            else ("unavailable" if retryable else "invalid")
+        )
+        async with self._sessions() as session:
+            async with session.begin():
+                await session.execute(
+                    text(
+                        """
+                        UPDATE llm_provider_key_import_items
+                        SET status=:status,error_code=:error_code,
+                            retryable=:retryable,
+                            encrypted_key=CASE WHEN :retryable THEN encrypted_key ELSE NULL END,
+                            next_retry_at=CASE WHEN :retry_pending
+                                THEN :next_retry_at
+                                ELSE CAST(NULL AS TIMESTAMP WITH TIME ZONE) END,
+                            lease_owner=NULL,lease_until=NULL,updated_at=:now
+                        WHERE id=:id AND status='validating' AND lease_owner=:worker_id
+                        """
+                    ),
+                    {
+                        "id": item.id,
+                        "worker_id": item.worker_id,
+                        "status": status,
+                        "error_code": error_code,
+                        "retryable": retryable,
+                        "retry_pending": retry_pending,
+                        "next_retry_at": now + timedelta(seconds=max(delay_seconds, 0)),
+                        "now": now,
+                    },
+                )
+                await self._refresh_import_batch(session, item.batch_id)
+
+    async def retry_key_import(
+        self, *, user_id: str, batch_id: str
+    ) -> KeyImportSnapshot | None:
+        now = datetime.now(UTC)
+        async with self._sessions() as session:
+            async with session.begin():
+                exists = (
+                    await session.execute(
+                        text(
+                            """
+                            SELECT id FROM llm_provider_key_import_batches
+                            WHERE id=:batch_id AND user_id=:user_id
+                              AND expires_at > :now FOR UPDATE
+                            """
+                        ),
+                        {"batch_id": batch_id, "user_id": user_id, "now": now},
+                    )
+                ).scalar_one_or_none()
+                if exists is None:
+                    return None
+                retried = await session.execute(
+                    text(
+                        """
+                        UPDATE llm_provider_key_import_items
+                        SET status='queued',attempts=0,error_code=NULL,
+                            retryable=FALSE,next_retry_at=NULL,updated_at=:now
+                        WHERE batch_id=:batch_id AND user_id=:user_id
+                          AND status='unavailable' AND retryable=TRUE
+                          AND encrypted_key IS NOT NULL AND expires_at > :now
+                        """
+                    ),
+                    {"batch_id": batch_id, "user_id": user_id, "now": now},
+                )
+                if (retried.rowcount or 0) > 0:
+                    await session.execute(
+                        text(
+                            """
+                            UPDATE llm_provider_key_import_batches
+                            SET router_refreshed_at=NULL,router_refresh_owner=NULL,
+                                router_refresh_lease_until=NULL
+                            WHERE id=:batch_id AND user_id=:user_id
+                            """
+                        ),
+                        {"batch_id": batch_id, "user_id": user_id},
+                    )
+                await self._refresh_import_batch(session, batch_id)
+        return await self.get_key_import(user_id=user_id, batch_id=batch_id)
+
+    async def claim_key_import_router_refreshes(
+        self, *, worker_id: str, limit: int = 10, lease_seconds: int = 45
+    ) -> list[str]:
+        now = datetime.now(UTC)
+        async with self._sessions() as session:
+            async with session.begin():
+                stale_batches = (
+                    (
+                        await session.execute(
+                            text(
+                                """
+                            SELECT batch.id
+                            FROM llm_provider_key_import_batches AS batch
+                            WHERE batch.status IN ('queued','processing')
+                              AND NOT EXISTS (
+                                  SELECT 1
+                                  FROM llm_provider_key_import_items AS item
+                                  WHERE item.batch_id=batch.id
+                                    AND item.status IN ('queued','validating','retry_wait')
+                              )
+                            ORDER BY batch.updated_at,batch.id
+                            LIMIT :limit FOR UPDATE OF batch SKIP LOCKED
+                            """
+                            ),
+                            {"limit": min(max(limit, 1), 50)},
+                        )
+                    )
+                    .scalars()
+                    .all()
+                )
+                for batch_id in stale_batches:
+                    await self._refresh_import_batch(session, str(batch_id))
+
+                rows = (
+                    (
+                        await session.execute(
+                            text(
+                                """
+                            WITH selected AS (
+                                SELECT batch.id
+                                FROM llm_provider_key_import_batches AS batch
+                                WHERE batch.status IN ('completed','completed_with_errors')
+                                  AND batch.router_refreshed_at IS NULL
+                                  AND EXISTS (
+                                      SELECT 1
+                                      FROM llm_provider_key_import_items AS item
+                                      WHERE item.batch_id=batch.id
+                                        AND item.status='imported'
+                                  )
+                                  AND (batch.router_refresh_lease_until IS NULL
+                                       OR batch.router_refresh_lease_until <= :now)
+                                ORDER BY batch.updated_at,batch.id
+                                LIMIT :limit FOR UPDATE SKIP LOCKED
+                            )
+                            UPDATE llm_provider_key_import_batches AS batch
+                            SET router_refresh_owner=:worker_id,
+                                router_refresh_lease_until=:lease_until
+                            FROM selected
+                            WHERE batch.id=selected.id
+                            RETURNING batch.id
+                            """
+                            ),
+                            {
+                                "now": now,
+                                "limit": min(max(limit, 1), 50),
+                                "worker_id": worker_id,
+                                "lease_until": now + timedelta(seconds=lease_seconds),
+                            },
+                        )
+                    )
+                    .scalars()
+                    .all()
+                )
+        return [str(batch_id) for batch_id in rows]
+
+    async def mark_key_import_router_refreshed(
+        self, *, batch_id: str, worker_id: str
+    ) -> None:
+        async with self._sessions() as session:
+            await session.execute(
+                text(
+                    """
+                    UPDATE llm_provider_key_import_batches
+                    SET router_refreshed_at=NOW(),router_refresh_owner=NULL,
+                        router_refresh_lease_until=NULL
+                    WHERE id=:batch_id AND router_refresh_owner=:worker_id
+                    """
+                ),
+                {"batch_id": batch_id, "worker_id": worker_id},
+            )
+            await session.commit()
+
+    async def release_key_import_router_refresh(
+        self, *, batch_id: str, worker_id: str
+    ) -> None:
+        async with self._sessions() as session:
+            await session.execute(
+                text(
+                    """
+                    UPDATE llm_provider_key_import_batches
+                    SET router_refresh_owner=NULL,router_refresh_lease_until=NULL
+                    WHERE id=:batch_id AND router_refresh_owner=:worker_id
+                    """
+                ),
+                {"batch_id": batch_id, "worker_id": worker_id},
+            )
+            await session.commit()
+
+    async def cleanup_key_imports(self) -> int:
+        now = datetime.now(UTC)
+        async with self._sessions() as session:
+            async with session.begin():
+                expired = await session.execute(
+                    text(
+                        """
+                        UPDATE llm_provider_key_import_items
+                        SET status='expired',error_code='retry_expired',retryable=FALSE,
+                            encrypted_key=NULL,next_retry_at=NULL,lease_owner=NULL,
+                            lease_until=NULL,updated_at=:now
+                        WHERE encrypted_key IS NOT NULL AND expires_at <= :now
+                        RETURNING batch_id
+                        """
+                    ),
+                    {"now": now},
+                )
+                affected_batches = set(expired.scalars().all())
+                for batch_id in affected_batches:
+                    await self._refresh_import_batch(session, str(batch_id))
+                deleted = await session.execute(
+                    text(
+                        """
+                        DELETE FROM llm_provider_key_import_batches
+                        WHERE expires_at <= :now
+                        """
+                    ),
+                    {"now": now},
+                )
+        return len(affected_batches) + max(deleted.rowcount or 0, 0)
+
+    @staticmethod
+    async def _refresh_import_batch(session: object, batch_id: str) -> None:
+        await session.execute(
+            text(
+                """
+                UPDATE llm_provider_key_import_batches AS batch
+                SET status=CASE
+                    WHEN EXISTS (
+                        SELECT 1 FROM llm_provider_key_import_items AS item
+                        WHERE item.batch_id=batch.id AND item.status='validating'
+                    ) THEN 'processing'
+                    WHEN EXISTS (
+                        SELECT 1 FROM llm_provider_key_import_items AS item
+                        WHERE item.batch_id=batch.id AND item.status='queued'
+                    ) THEN 'queued'
+                    WHEN EXISTS (
+                        SELECT 1 FROM llm_provider_key_import_items AS item
+                        WHERE item.batch_id=batch.id AND item.status='retry_wait'
+                    ) THEN 'processing'
+                    WHEN EXISTS (
+                        SELECT 1 FROM llm_provider_key_import_items AS item
+                        WHERE item.batch_id=batch.id
+                          AND item.status IN ('invalid','unavailable','expired')
+                    ) THEN 'completed_with_errors'
+                    ELSE 'completed'
+                END,
+                updated_at=NOW()
+                WHERE batch.id=:batch_id
+                """
+            ),
+            {"batch_id": batch_id},
+        )
+
 
 class _Base(DeclarativeBase):
     pass
+
+
+def _safe_key_label(label: str, api_key: str) -> str:
+    safe = label.strip() or "OpenRouter key"
+    if api_key in safe:
+        safe = safe.replace(api_key, "[redacted]")
+    return safe[:80]
+
+
+def _import_item_status(value: str) -> ImportItemStatus:
+    allowed: tuple[ImportItemStatus, ...] = (
+        "queued",
+        "validating",
+        "retry_wait",
+        "imported",
+        "duplicate",
+        "invalid",
+        "unavailable",
+        "expired",
+    )
+    if value not in allowed:
+        raise RuntimeError("provider key import item status is invalid")
+    return value
+
+
+def _import_batch_status(
+    items: tuple[KeyImportItemSnapshot, ...],
+) -> ImportBatchStatus:
+    statuses = {item.status for item in items}
+    if "validating" in statuses or "retry_wait" in statuses:
+        return "processing"
+    if "queued" in statuses:
+        return "queued"
+    if statuses & {"invalid", "unavailable", "expired"}:
+        return "completed_with_errors"
+    return "completed"
+
+
+def _required_iso(value: object) -> str:
+    result = _iso(value)
+    if result is None:
+        raise RuntimeError("provider key import has no timestamp")
+    return result
 
 
 class _OwnedKey(_Base):
@@ -443,23 +1392,22 @@ def _iso(value: object) -> str | None:
     return str(value) if value is not None else None
 
 
-def _deployment_from_row(row: object) -> ProviderDeployment:
-    data = row if isinstance(row, dict) else dict(row)  # type: ignore[arg-type]
-    created_at = _iso(data["created_at"])
+def _deployment_from_row(row: Mapping[str, object]) -> ProviderDeployment:
+    created_at = _iso(row["created_at"])
     if created_at is None:
         raise RuntimeError("provider deployment has no creation timestamp")
     return ProviderDeployment(
-        id=str(data["id"]),
-        user_id=str(data["user_id"]),
-        label=str(data["label"]),
-        suffix=str(data["suffix"]),
-        fingerprint=str(data["fingerprint"]),
-        model=str(data["model"]),
+        id=str(row["id"]),
+        user_id=str(row["user_id"]),
+        label=str(row["label"]),
+        suffix=str(row["suffix"]),
+        fingerprint=str(row["fingerprint"]),
+        model=str(row["model"]),
         created_at=created_at,
-        status=str(data.get("status") or "healthy"),
-        failure_count=max(0, int(data.get("failure_count") or 0)),
-        cooldown_until=_iso(data.get("cooldown_until")),
-        last_tested_at=_iso(data.get("last_tested_at")),
-        last_used_at=_iso(data.get("last_used_at")),
-        replacement_retire_at=_iso(data.get("replacement_retire_at")),
+        status=str(row.get("status") or "healthy"),
+        failure_count=max(0, int(row.get("failure_count") or 0)),
+        cooldown_until=_iso(row.get("cooldown_until")),
+        last_tested_at=_iso(row.get("last_tested_at")),
+        last_used_at=_iso(row.get("last_used_at")),
+        replacement_retire_at=_iso(row.get("replacement_retire_at")),
     )

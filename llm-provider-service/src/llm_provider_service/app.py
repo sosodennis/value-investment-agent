@@ -24,9 +24,14 @@ from src.llm_provider_service.contracts import (
     CompletionInput,
     ErrorBody,
     ErrorResponse,
-    KeyCreateInput,
     KeyDeleteResult,
     KeyIdInput,
+    KeyImportBatch,
+    KeyImportBatchIdInput,
+    KeyImportCreateInput,
+    KeyImportItemSummary,
+    KeyImportListResult,
+    KeyImportResult,
     KeyListResult,
     KeyMutationResult,
     KeyReplaceInput,
@@ -64,6 +69,7 @@ _PROVIDER_KEY_ERROR_STATUSES = {
     "replacement_must_differ": 400,
     "already_owned": 409,
     "replacement_in_progress": 409,
+    "idempotency_key_reused": 409,
     "rate_limited": 429,
 }
 
@@ -140,6 +146,33 @@ def _summary(key: ManagedProviderKey) -> KeySummary:
         last_error=key.last_error,
         last_used_at=key.last_used_at,
         replacement_retire_at=key.replacement_retire_at,
+    )
+
+
+def _key_import_summary(snapshot) -> KeyImportBatch:
+    return KeyImportBatch(
+        id=snapshot.id,
+        status=snapshot.status,
+        total_count=snapshot.total_count,
+        processed_count=snapshot.processed_count,
+        imported_count=snapshot.imported_count,
+        duplicate_count=snapshot.duplicate_count,
+        invalid_count=snapshot.invalid_count,
+        retryable_count=snapshot.retryable_count,
+        created_at=snapshot.created_at,
+        updated_at=snapshot.updated_at,
+        items=tuple(
+            KeyImportItemSummary(
+                source_line=item.source_line,
+                label=item.label,
+                suffix=item.suffix,
+                status=item.status,
+                error_code=item.error_code,
+                attempts=item.attempts,
+                retryable=item.retryable,
+            )
+            for item in snapshot.items
+        ),
     )
 
 
@@ -478,24 +511,13 @@ async def provider_keys(action: str, request: Request) -> JSONResponse:
         timeout = _deadline_timeout(context, 10.0)
         user_id = context.principal.subject_id
         result: KeyListResult | KeyMutationResult | KeyTestResult | KeyDeleteResult
-        payload: KeyCreateInput | KeyReplaceInput | KeyIdInput
+        payload: KeyReplaceInput | KeyIdInput
         async with asyncio.timeout(timeout):
             if action == "list":
                 keys = await _as_principal(
                     context, lambda: runtime.settings.list_keys(user_id=user_id)
                 )
                 result = KeyListResult(keys=tuple(_summary(key) for key in keys))
-            elif action == "create":
-                payload = KeyCreateInput.model_validate(raw_input)
-                key = await _as_principal(
-                    context,
-                    lambda: runtime.settings.add_key(
-                        user_id=user_id,
-                        key=payload.api_key.get_secret_value(),
-                        label=payload.label,
-                    ),
-                )
-                result = KeyMutationResult(key=_summary(key))
             elif action == "replace":
                 payload = KeyReplaceInput.model_validate(raw_input)
                 key = await _as_principal(
@@ -547,6 +569,92 @@ async def provider_keys(action: str, request: Request) -> JSONResponse:
     except ProviderSettingsError as exc:
         status = _PROVIDER_KEY_ERROR_STATUSES.get(exc.code, 502)
         return _error(correlation_id, exc.code, "provider-key operation failed", status)
+    except TimeoutError:
+        return _error(
+            correlation_id,
+            "deadline_exceeded",
+            "request deadline expired",
+            504,
+            retryable=True,
+        )
+    except Exception:
+        return _error(
+            correlation_id,
+            "unavailable",
+            "LLM provider is unavailable",
+            503,
+            retryable=True,
+        )
+
+
+@app.post("/v1/provider-key-imports/{action}", response_model=None)
+async def provider_key_imports(action: str, request: Request) -> JSONResponse:
+    correlation_id = "unknown"
+    try:
+        context, raw_input = await _authorized_body(request)
+        correlation_id = context.correlation_id
+        runtime: ProviderRuntime = request.app.state.runtime
+        imports = runtime.imports
+        if not runtime.ready or imports is None:
+            return _error(
+                correlation_id,
+                "not_ready",
+                "provider service is not ready",
+                503,
+                retryable=True,
+            )
+        timeout = _deadline_timeout(context, 10.0)
+        user_id = context.principal.subject_id
+        async with asyncio.timeout(timeout):
+            if action == "create":
+                payload = KeyImportCreateInput.model_validate(raw_input)
+                snapshot = await imports.create_import(
+                    user_id=user_id,
+                    idempotency_key=payload.idempotency_key,
+                    items=tuple(
+                        (item.source_line, item.label, item.api_key)
+                        for item in payload.items
+                    ),
+                )
+                result = KeyImportResult(import_batch=_key_import_summary(snapshot))
+            elif action == "list":
+                snapshots = await imports.list_imports(user_id=user_id)
+                result = KeyImportListResult(
+                    imports=tuple(_key_import_summary(item) for item in snapshots)
+                )
+            elif action in {"get", "retry"}:
+                payload = KeyImportBatchIdInput.model_validate(raw_input)
+                snapshot = (
+                    await imports.retry_import(
+                        user_id=user_id, batch_id=payload.batch_id
+                    )
+                    if action == "retry"
+                    else await imports.get_import(
+                        user_id=user_id, batch_id=payload.batch_id
+                    )
+                )
+                if snapshot is None:
+                    return _error(
+                        correlation_id,
+                        "not_found",
+                        "provider key import was not found",
+                        404,
+                    )
+                result = KeyImportResult(import_batch=_key_import_summary(snapshot))
+            else:
+                return _error(
+                    correlation_id,
+                    "invalid_argument",
+                    "provider key import operation is not supported",
+                    404,
+                )
+        return JSONResponse(content=_success(context, result.model_dump(mode="json")))
+    except InternalAuthenticationError as exc:
+        return _error(correlation_id, exc.code, str(exc), 401)
+    except (InternalContextValidationError, ValidationError):
+        return _error(
+            correlation_id, "invalid_context", "request context is invalid", 400
+        )
     except TimeoutError:
         return _error(
             correlation_id,

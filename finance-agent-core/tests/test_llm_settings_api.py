@@ -12,6 +12,7 @@ from src.auth.interface.dependencies import (
 from src.llm_provider.application.wiring import get_provider_settings_service
 from src.llm_provider.domain.errors import ProviderSettingsError
 from src.llm_provider.domain.provider_models import ManagedProviderKey, OpenRouterModel
+from src.llm_provider.interface.contracts import ProviderKeyImportBatchResponse
 
 
 @pytest.fixture(autouse=True)
@@ -32,14 +33,23 @@ class _Service:
         self.calls: list[tuple[str, object]] = []
         self.test_result = True
         self.replacement_error_code = "replacement_must_differ"
+        self.import_error_code: str | None = None
+        self.import_batch = ProviderKeyImportBatchResponse(
+            id="00000000-0000-0000-0000-000000000192",
+            status="queued",
+            total_count=1,
+            processed_count=0,
+            imported_count=0,
+            duplicate_count=0,
+            invalid_count=0,
+            retryable_count=0,
+            created_at="2026-10-31T00:00:00Z",
+            updated_at="2026-10-31T00:00:00Z",
+        )
 
     async def list_keys(self, *, user_id: str):
         self.calls.append(("list_keys", user_id))
         return [self.key]
-
-    async def add_key(self, *, user_id: str, key: str, label: str):
-        self.calls.append(("add_key", (user_id, key, label)))
-        return self.key
 
     async def replace_key(self, *, user_id: str, key_id: str, key: str, label: str):
         self.calls.append(("replace_key", (user_id, key_id, key, label)))
@@ -51,6 +61,14 @@ class _Service:
 
     async def delete_key(self, *, user_id: str, key_id: str):
         self.calls.append(("delete_key", (user_id, key_id)))
+
+    async def create_key_import(
+        self, *, user_id: str, idempotency_key: str, items: list[dict[str, object]]
+    ):
+        self.calls.append(("create_key_import", (user_id, idempotency_key, items)))
+        if self.import_error_code is not None:
+            raise ProviderSettingsError(self.import_error_code)
+        return self.import_batch
 
     async def selected_model_settings(self, *, user_id: str):
         _ = user_id
@@ -99,20 +117,114 @@ async def test_provider_key_routes_delegate_to_provider_service() -> None:
         created = await client.post(
             "/api/v1/llm/provider-keys",
             json={"api_key": "sk-this-is-a-long-test-secret", "label": "primary"},
+            headers={"Idempotency-Key": "manual-request-192-key"},
         )
         tested = await client.post("/api/v1/llm/provider-keys/managed-a/test")
         deleted = await client.delete("/api/v1/llm/provider-keys/managed-a")
     assert listed.status_code == 200
-    assert created.status_code == 201
+    assert created.status_code == 202
     assert "sk-this-is-a-long-test-secret" not in created.text
     assert tested.status_code == 200
     assert deleted.status_code == 204
     assert [call[0] for call in service.calls] == [
         "list_keys",
-        "add_key",
+        "create_key_import",
         "test_key",
         "delete_key",
     ]
+    assert service.calls[1][1] == (
+        "user-a",
+        "manual-request-192-key",
+        [
+            {
+                "source_line": 1,
+                "label": "primary",
+                "api_key": "sk-this-is-a-long-test-secret",
+            }
+        ],
+    )
+
+
+@pytest.mark.asyncio
+async def test_invalid_provider_key_validation_does_not_echo_secret_input() -> None:
+    service = _Service()
+    canary = "sk-short-canary-123"
+    async with _client(service) as client:
+        response = await client.post(
+            "/api/v1/llm/provider-keys",
+            json={"api_key": canary, "label": "test"},
+        )
+
+    assert response.status_code == 422
+    assert canary not in response.text
+
+
+@pytest.mark.asyncio
+async def test_manual_import_idempotency_conflict_is_returned_as_conflict() -> None:
+    service = _Service()
+    service.import_error_code = "idempotency_key_reused"
+    async with _client(service) as client:
+        response = await client.post(
+            "/api/v1/llm/provider-keys",
+            json={"api_key": "sk-this-is-a-long-test-secret", "label": "primary"},
+            headers={"Idempotency-Key": "manual-request-192-key"},
+        )
+
+    assert response.status_code == 409
+    assert response.json() == {"detail": "idempotency_key_reused"}
+    assert "sk-this-is-a-long-test-secret" not in response.text
+
+
+@pytest.mark.asyncio
+async def test_file_import_preview_and_submit_do_not_return_key_material() -> None:
+    service = _Service()
+    canary = "sk-or-v1-synthetic-credential-0001"
+    file = ("keys.txt", f"{canary}\n{canary}\n".encode(), "text/plain")
+    async with _client(service) as client:
+        preview = await client.post(
+            "/api/v1/llm/provider-keys/imports/preview",
+            files={"file": file},
+        )
+        submitted = await client.post(
+            "/api/v1/llm/provider-keys/imports",
+            files={"file": file},
+            headers={"Idempotency-Key": "import-request-192-key"},
+        )
+
+    assert preview.status_code == 200
+    assert preview.json() == {
+        "file_type": "txt",
+        "row_count": 2,
+        "unique_count": 1,
+        "duplicate_count": 1,
+        "issues": [],
+    }
+    assert submitted.status_code == 202
+    assert canary not in preview.text
+    assert canary not in submitted.text
+    assert service.calls[-1][0] == "create_key_import"
+    _, request = service.calls[-1]
+    assert request[1] == "import-request-192-key"
+    assert len(request[2]) == 2
+
+
+@pytest.mark.asyncio
+async def test_file_import_rejects_malformed_rows_without_echoing_values() -> None:
+    service = _Service()
+    canary = "sk-or-v1-synthetic-credential-0001"
+    async with _client(service) as client:
+        response = await client.post(
+            "/api/v1/llm/provider-keys/imports",
+            files={"file": ("keys.csv", f"api_key\n{canary}\nshort\n".encode())},
+            headers={"Idempotency-Key": "import-request-192-invalid"},
+        )
+
+    assert response.status_code == 422
+    assert response.json()["detail"]["issues"] == [
+        {"source_line": 3, "code": "invalid_csv_row"}
+    ]
+    assert canary not in response.text
+    assert service.calls == []
 
 
 @pytest.mark.asyncio

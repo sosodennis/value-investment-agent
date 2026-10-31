@@ -3,6 +3,9 @@ from __future__ import annotations
 import os
 from contextlib import AbstractAsyncContextManager
 
+from src.llm_provider_service.application.key_import_service import (
+    ProviderKeyImportService,
+)
 from src.llm_provider_service.application.ports import ModelCatalog
 from src.llm_provider_service.application.settings_service import (
     ProviderSettingsService,
@@ -31,6 +34,11 @@ class _Ownership:
         self, *, user_id: str, key_id: str
     ) -> AbstractAsyncContextManager[None]:
         return self._state.replacement_lock(user_id=user_id, key_id=key_id)
+
+    def fingerprint_lock(
+        self, *, user_id: str, fingerprint: str
+    ) -> AbstractAsyncContextManager[None]:
+        return self._state.fingerprint_lock(user_id=user_id, fingerprint=fingerprint)
 
     async def claim(
         self,
@@ -96,6 +104,7 @@ class ProviderRuntime:
         self.telemetry: RedisProviderKeyTelemetry | None = None
         self.provider: EmbeddedLiteLLMProvider | None = None
         self.settings: ProviderSettingsService | None = None
+        self.imports: ProviderKeyImportService | None = None
         self.ready = False
 
     async def start(self) -> None:
@@ -111,10 +120,17 @@ class ProviderRuntime:
             validate_key=validate_openrouter_key,
             telemetry=self.telemetry,
         )
+        self.imports = ProviderKeyImportService(
+            state=self.state,
+            provider=self.provider,
+        )
+        await self.imports.start()
         self.ready = True
 
     async def close(self) -> None:
         self.ready = False
+        if self.imports is not None:
+            await self.imports.close()
         if self.provider is not None:
             await self.provider.aclose()
         if self.telemetry is not None:

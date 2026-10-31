@@ -5,11 +5,16 @@ import { LlmSettingsApiError } from './api';
 import LlmSettingsPage from './llm-settings-page';
 
 const api = vi.hoisted(() => ({
-    addLlmProviderKey: vi.fn(),
+    createLlmProviderKeyImport: vi.fn(),
     deleteLlmProviderKey: vi.fn(),
+    getLlmProviderKeyImport: vi.fn(),
     getLlmSettings: vi.fn(),
     listLlmProviderKeys: vi.fn(),
+    listLlmProviderKeyImports: vi.fn(),
+    previewLlmProviderKeyImport: vi.fn(),
     replaceLlmProviderKey: vi.fn(),
+    retryLlmProviderKeyImport: vi.fn(),
+    submitLlmProviderKey: vi.fn(),
     testLlmProviderKey: vi.fn(),
     updateLlmSettings: vi.fn(),
 }));
@@ -38,10 +43,12 @@ vi.mock('@/features/llm-settings/api', () => ({
     ...api,
     LlmSettingsApiError: class LlmSettingsApiError extends Error {
         status: number;
+        code: string | null;
 
-        constructor(message: string, status: number) {
+        constructor(message: string, status: number, code: string | null = null) {
             super(message);
             this.status = status;
+            this.code = code;
         }
     },
 }));
@@ -62,6 +69,7 @@ describe('LLM settings', () => {
         vi.clearAllMocks();
         sessionStorage.clear();
         api.listLlmProviderKeys.mockResolvedValue([]);
+        api.listLlmProviderKeyImports.mockResolvedValue([]);
         api.getLlmSettings.mockResolvedValue({
             selected_model: 'openrouter/free',
             default_model: 'openrouter/free',
@@ -72,28 +80,42 @@ describe('LLM settings', () => {
                 context_length: null,
             }],
         });
-        api.addLlmProviderKey.mockResolvedValue({
-            id: 'managed-1',
-            label: 'Primary key',
-            suffix: 'cdef',
-            fingerprint: 'f00dbabe1234',
-            created_at: '2026-10-21T00:00:00Z',
-            status: 'healthy',
-            failure_count: 0,
+        api.previewLlmProviderKeyImport.mockResolvedValue({
+            file_type: 'txt',
+            row_count: 0,
+            unique_count: 0,
+            duplicate_count: 0,
+            issues: [],
+        });
+        api.submitLlmProviderKey.mockResolvedValue({
+            id: 'manual-import-1',
+            status: 'queued',
+            total_count: 1,
+            processed_count: 0,
+            imported_count: 0,
+            duplicate_count: 0,
+            invalid_count: 0,
+            retryable_count: 0,
+            created_at: '2026-10-31T00:00:00Z',
+            updated_at: '2026-10-31T00:00:00Z',
+            items: [],
+        });
+        api.getLlmProviderKeyImport.mockResolvedValue({
+            id: 'manual-import-1',
+            status: 'completed',
+            total_count: 1,
+            processed_count: 1,
+            imported_count: 1,
+            duplicate_count: 0,
+            invalid_count: 0,
+            retryable_count: 0,
+            created_at: '2026-10-31T00:00:00Z',
+            updated_at: '2026-10-31T00:00:01Z',
+            items: [],
         });
     });
 
-    it('loads the signed-in settings session and clears the one-time key after adding', async () => {
-        const pendingAdd = deferred<{
-            id: string;
-            label: string;
-            suffix: string;
-            fingerprint: string;
-            created_at: string;
-            status: string;
-            failure_count: number;
-        }>();
-        api.addLlmProviderKey.mockReturnValue(pendingAdd.promise);
+    it('submits a manual key through import history and clears the one-time key', async () => {
         render(<LlmSettingsPage />);
         await waitFor(() => expect(api.listLlmProviderKeys).toHaveBeenCalledWith());
 
@@ -103,27 +125,43 @@ describe('LLM settings', () => {
         fireEvent.change(screen.getByLabelText('OpenRouter API key'), {
             target: { value: 'sk-or-v1-test-openrouter-secret' },
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Test and add key' }));
-        const pendingButton = screen.getByRole('button', { name: 'Testing and adding...' });
+        fireEvent.click(screen.getByRole('button', { name: 'Add key' }));
+        const pendingButton = screen.getByRole('button', { name: 'Submitting key...' });
         expect(pendingButton.hasAttribute('disabled')).toBe(true);
 
-        pendingAdd.resolve({
-            id: 'managed-1',
-            label: 'Primary key',
-            suffix: 'cdef',
-            fingerprint: 'f00dbabe1234',
-            created_at: '2026-10-21T00:00:00Z',
-            status: 'healthy',
-            failure_count: 0,
-        });
-
-        await screen.findByText('Primary key');
-        screen.getByText('Healthy');
-        expect(api.addLlmProviderKey).toHaveBeenCalledWith({
+        await screen.findByText('Queued');
+        expect(api.submitLlmProviderKey).toHaveBeenCalledWith({
             label: 'Primary key',
             api_key: 'sk-or-v1-test-openrouter-secret',
-        });
+        }, expect.any(String));
         expect(screen.queryByDisplayValue('sk-or-v1-test-openrouter-secret')).toBeNull();
+        await waitFor(() => expect(api.listLlmProviderKeys).toHaveBeenCalledTimes(2), {
+            timeout: 4000,
+            interval: 100,
+        });
+    });
+
+    it('uses a new idempotency key after the server rejects a reused token', async () => {
+        api.submitLlmProviderKey.mockRejectedValueOnce(
+            new LlmSettingsApiError('idempotency_key_reused', 409, 'idempotency_key_reused'),
+        );
+        render(<LlmSettingsPage />);
+        await waitFor(() => expect(api.listLlmProviderKeys).toHaveBeenCalledWith());
+
+        fireEvent.change(screen.getByLabelText('Label'), {
+            target: { value: 'Primary key' },
+        });
+        fireEvent.change(screen.getByLabelText('OpenRouter API key'), {
+            target: { value: 'sk-or-v1-test-openrouter-secret' },
+        });
+        fireEvent.click(screen.getByRole('button', { name: 'Add key' }));
+        await screen.findByText('This request was already used for different content. Submit the key again.');
+        fireEvent.click(screen.getByRole('button', { name: 'Add key' }));
+
+        await screen.findByText('The key was submitted. Track its status in import history.');
+        const submittedKeys = api.submitLlmProviderKey.mock.calls.map(([, key]) => key);
+        expect(submittedKeys).toHaveLength(2);
+        expect(submittedKeys[0]).not.toBe(submittedKeys[1]);
     });
 
     it('keeps the model catalogue available when key loading fails and retries keys independently', async () => {
