@@ -129,6 +129,16 @@ def test_litellm_timeout_is_classified_as_timeout() -> None:
     assert failure.retryable
 
 
+def test_upstream_server_failure_is_retryable_without_key_rotation() -> None:
+    class UpstreamUnavailable(Exception):
+        status_code = 503
+
+    failure = classify_exception(UpstreamUnavailable("temporarily unavailable"), "a")
+    assert failure.category is FailureCategory.UNAVAILABLE
+    assert failure.retryable
+    assert not failure.rotates_key
+
+
 def _runtime_request() -> CompletionRequest:
     return CompletionRequest(
         messages=(ChatMessage(role=ChatRole.USER, content="hello"),),
@@ -139,10 +149,10 @@ def _runtime_request() -> CompletionRequest:
     )
 
 
-def _deployment(identifier: str) -> ProviderDeployment:
+def _deployment(identifier: str, *, user_id: str = "alice") -> ProviderDeployment:
     return ProviderDeployment(
         id=identifier,
-        user_id="alice",
+        user_id=user_id,
         label=identifier,
         suffix="1234",
         fingerprint=f"fingerprint-{identifier}",
@@ -254,6 +264,24 @@ async def test_key_scoped_failure_rotates_within_one_user_pool(
     assert calls == ["key-a", "key-b"]
     assert health.failures == ["key-a"]
     assert health.successes == ["key-b"]
+
+
+@pytest.mark.asyncio
+async def test_runtime_filters_deployments_to_authenticated_user(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    state = _RuntimeState()
+    state.items.append(_deployment("key-bob", user_id="bob"))
+    runtime = EmbeddedLiteLLMProvider(state, key_health=_Health())
+    monkeypatch.setattr("litellm.Router", lambda **kwargs: None)
+    token = set_provider_principal(ProviderPrincipal(user_id="alice"))
+    try:
+        eligible = await runtime._eligible_deployments("alice")
+    finally:
+        reset_provider_principal(token)
+        await runtime.aclose()
+
+    assert [item.id for item in eligible] == ["key-a", "key-b"]
 
 
 @pytest.mark.asyncio
