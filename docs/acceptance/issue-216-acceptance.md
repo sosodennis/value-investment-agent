@@ -1,6 +1,6 @@
 # Issue 216 staging acceptance
 
-Verified implementation commit: `4457aabe38d859dafa35eeb3140a14d79483dcc0` on
+Verified implementation commit: `2fb10719d6682ce1eace792d1a069cdb9a7a4894` on
 `codex/issue-216-staging-acceptance`. The run used the dedicated
 `value-investment-agent-216-staging` Compose project and the local-only
 `.env.staging` file with mode `0600`. The PostgreSQL and Redis volumes were
@@ -16,8 +16,8 @@ in this document.
 | `docker compose --env-file .env.staging -p value-investment-agent-216-staging up -d` | exit 0 |
 | `docker compose ... ps` | backend, frontend, provider, model inference, search, PostgreSQL, and Redis healthy; migrations exited 0 |
 | `bash -n scripts/organization_staging_acceptance.sh scripts/refactor_staging_smoke.sh` | exit 0 |
-| `organization_staging_acceptance.sh` with the real CSV | exit 0; `60/60 VERIFIED` |
-| `refactor_staging_smoke.sh` with Bob fixture and `STAGING_BASE_URL=http://127.0.0.1:18580` | exit 0 |
+| `organization_staging_acceptance.sh` with the real CSV | exit 0; `60/60 VERIFIED` on the exact integration SHA |
+| `refactor_staging_smoke.sh` with Bob fixture and `STAGING_BASE_URL=http://127.0.0.1:18580` | exit 0 on the exact integration SHA |
 | `refactor_staging_smoke.sh` with Bob fixture, the real CSV, and `STAGING_REQUIRE_LIVE_PROVIDER=1` | exit 0; duplicate import of all 5 existing keys and `key1` through `key5` each returned `healthy` |
 | `docker compose ... -f docker-compose.production.yml config --quiet` | exit 0; rendered backend/provider/Search tokens and Search encryption key were all non-empty |
 | Browser route acceptance at frontend port `18581` | verified for organization settings, notifications, LLM settings, Search settings, and workspace |
@@ -44,7 +44,7 @@ and Beta; and selected organization context explicitly. It verified:
   `0 failed`, `0 invalid`, and `0 retryable` rows.
 
 The organization report is local evidence at
-`/tmp/value-investment-agent-216-organization.jsonl`; it records only check
+`/tmp/value-investment-agent-216-organization-integration.jsonl`; it records only check
 names, statuses, HTTP codes, and safe details.
 
 ## Runtime and browser evidence
@@ -57,10 +57,11 @@ verified that a regular member cannot mutate provider configuration. The smoke
 intentionally did not approve the valuation or execute deterministic
 calculation. The CSV smoke imported the five existing keys as duplicates and
 tested `key1` through `key5` individually; each returned `healthy`. Failover
-is `INCONCLUSIVE` because no primary key fault was injected.
+is `INCONCLUSIVE` because no primary key fault was injected. The final runtime
+report is `/tmp/value-investment-agent-216-bob-csv-integration.jsonl`.
 
 The frontend was checked at viewport `701x699` in the local in-app browser as
-Bob after selecting Alpha:
+Bob after selecting Alpha on the exact integration SHA:
 
 | Route | Observed result |
 | --- | --- |
@@ -68,7 +69,7 @@ Bob after selecting Alpha:
 | `/notifications` | private organization invitation inbox showed the accepted invitation |
 | `/settings/llm` | Alpha provider page showed import history `5 / 5`, `5 imported`, and masked key suffixes only |
 | `/settings/search` | Alpha Search settings showed shared provider availability and organization-scoped provider-key copy |
-| `/` and workspace route | analysis input and recent runtime runs rendered; service capabilities reported Operational |
+| `/` and workspace route | analysis input rendered; service capabilities reported Operational |
 
 ## Limitations and maintenance
 
