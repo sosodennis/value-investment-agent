@@ -29,6 +29,7 @@ Root `AGENTS.md` contains finance-domain constraints, agent skill routing, and r
 - [`Organization lifecycle`](runbooks/organization-lifecycle.md) defines organization and membership operations, status transitions, ownership invariants, lifecycle events, and verification commands.
 - [`Notification inbox and outbox`](runbooks/notification-inbox.md) defines the durable recipient-private inbox, payload safety, action references, delivery boundary, outbox leases, and verification commands.
 - [Local staging deployment](runbooks/staging-deployment.md) defines the dedicated `.env.staging` lifecycle, Compose commands, smoke acceptance, and maintenance rules.
+- [Organization provider secret lifecycle](runbooks/provider-secret-lifecycle.md) defines organization key ownership, encryption-key rotation, revocation, reset, and retained-data gates.
 
 ## Decisions and research
 

@@ -23,10 +23,14 @@ the durable control plane. Generate the Fernet key with:
 uv run python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'
 ```
 
-The database schema is created idempotently on first use. Keep the encryption
-key stable and back it up separately; losing it makes stored provider keys
-unreadable. In Compose, the service connects to the existing `postgres`
-service and waits for its health check. Use a unique Compose project name and
-host ports for concurrent worktrees. Build with
+The target organization schema is versioned as `search_provider_schema_version`
+and is created on first use. Legacy `search_provider_*` tables cause startup to
+fail so disposable data can be reset explicitly and retained production data
+cannot be deleted implicitly. Keep the encryption key stable and back it up
+separately; rotate it only with
+[`docs/runbooks/provider-secret-lifecycle.md`](../docs/runbooks/provider-secret-lifecycle.md).
+In Compose, the service connects to the existing `postgres` service and waits
+for its health check. Use a unique Compose project name and host ports for
+concurrent worktrees. Build with
 `docker compose build search-service`; the image uses the `internal-contracts`
 named context for shared `internal.v1` auth/context primitives.

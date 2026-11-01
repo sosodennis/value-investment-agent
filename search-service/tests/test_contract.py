@@ -14,12 +14,12 @@ from search_service.contracts import (
     Capability,
     NewsSearchRequest,
     Operation,
+    OrganizationSettings,
     ProviderCapabilities,
     ProviderKeySetEnabledInput,
     ProviderKeySummary,
     ProviderSetting,
     SearchResult,
-    UserSettings,
     WebSearchRequest,
 )
 
@@ -158,11 +158,11 @@ class FakeControlPlane:
 
     async def get_settings(self, *, organization_id):
         _ = organization_id
-        return UserSettings(providers=())
+        return OrganizationSettings(providers=())
 
     async def replace_settings(self, *, organization_id, providers):
         _ = organization_id
-        return UserSettings(
+        return OrganizationSettings(
             providers=tuple(
                 ProviderSetting(**provider.model_dump()) for provider in providers
             )
@@ -515,6 +515,49 @@ async def test_key_test_failure_does_not_persist_and_success_redacts() -> None:
     assert success.status_code == 200
     assert "raw-secret" not in success.text
     assert control.raw_keys == ["raw-secret"]
+
+
+@pytest.mark.asyncio
+async def test_short_provider_key_and_secret_label_never_echo_in_response() -> None:
+    provider = FakeProvider(
+        "alpha",
+        capabilities=ProviderCapabilities(
+            provider="alpha", operations=frozenset({Operation.WEB})
+        ),
+    )
+    control = FakeControlPlane()
+    client = client_for(control, {"alpha": provider})
+    try:
+        rejected = await client.post(
+            "/v1/provider-keys/add",
+            headers={"Authorization": "Bearer service-token"},
+            json={
+                "context": context(),
+                "input": {"provider": "alpha", "api_key": "abcd", "label": "abcd"},
+            },
+        )
+        success = await client.post(
+            "/v1/provider-keys/add",
+            headers={"Authorization": "Bearer service-token"},
+            json={
+                "context": context(),
+                "input": {"provider": "alpha", "api_key": "abcd", "label": "main"},
+            },
+        )
+        listed = await client.post(
+            "/v1/provider-keys/list",
+            headers={"Authorization": "Bearer service-token"},
+            json={"context": context(), "input": {}},
+        )
+    finally:
+        await client.aclose()
+    assert rejected.status_code == 400
+    assert "abcd" not in rejected.text
+    assert success.status_code == 200
+    assert success.json()["result"]["suffix"] == "****"
+    assert "abcd" not in success.text
+    assert listed.status_code == 200
+    assert "abcd" not in listed.text
 
 
 @pytest.mark.asyncio

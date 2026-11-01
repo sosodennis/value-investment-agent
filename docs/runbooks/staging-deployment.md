@@ -7,6 +7,12 @@ cookie behavior.
 
 ## Prepare the staging environment
 
+Provider secret generation, organization-key rotation/revocation, encrypted
+storage, and retained-data gates are defined in
+[`provider-secret-lifecycle.md`](provider-secret-lifecycle.md). Follow that
+runbook before changing either provider encryption key or resetting provider
+data.
+
 Run the setup script once from the repository root. Point it at the existing
 local environment so it can copy only the four `STAGING_*` values that the
 smoke test needs:

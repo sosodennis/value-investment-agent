@@ -143,3 +143,15 @@ def test_postgres_control_plane_requires_service_encryption_key() -> None:
     )
     with pytest.raises(ValueError, match="Fernet key"):
         PostgresSearchControlPlane("postgresql://unused", "not-a-valid-key")
+    with pytest.raises(ValueError, match="database URL and encryption key"):
+        PostgresSearchControlPlane("postgresql://unused", "")
+
+
+@pytest.mark.asyncio
+async def test_search_encryption_rotation_rejects_invalid_replacement_key() -> None:
+    from cryptography.fernet import Fernet
+
+    old_key = Fernet.generate_key().decode("ascii")
+    store = PostgresSearchControlPlane("postgresql://unused", old_key)
+    with pytest.raises(ValueError, match="Fernet keys"):
+        await store.rotate_encryption_key(old_key=old_key, new_key="not-a-valid-key")

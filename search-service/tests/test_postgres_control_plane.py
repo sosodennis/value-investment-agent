@@ -100,6 +100,34 @@ async def test_postgres_control_plane_is_owner_scoped_atomic_and_durable() -> No
             == 4
         )
 
+        leased = await store.claim_credential(
+            organization_id=owner, provider="provider-1", lease_seconds=30
+        )
+        assert leased is not None
+        disabled = await store.set_key_enabled(
+            organization_id=owner, key_id=leased.key_id, enabled=False
+        )
+        assert disabled.enabled is False
+        claimed_again = await store.claim_credential(
+            organization_id=owner, provider="provider-1", lease_seconds=30
+        )
+        assert claimed_again is not None
+        assert claimed_again.key_id != leased.key_id
+        await store.release_credential(
+            organization_id=owner, key_id=claimed_again.key_id, succeeded=True
+        )
+        await store.release_credential(
+            organization_id=owner, key_id=leased.key_id, succeeded=True
+        )
+        assert (
+            next(
+                item
+                for item in await store.list_keys(organization_id=owner)
+                if item.id == leased.key_id
+            ).status
+            == "disabled"
+        )
+
         persisted = PostgresSearchControlPlane(
             os.environ["SEARCH_TEST_DATABASE_URL"],
             encryption_key,
@@ -109,6 +137,22 @@ async def test_postgres_control_plane_is_owner_scoped_atomic_and_durable() -> No
             for item in await persisted.credentials_for(organization_id=owner)
         } == {f"secret-{index}" for index in range(8)}
         await persisted.aclose()
+
+        rotated_key = Fernet.generate_key().decode("ascii")
+        assert (
+            await store.rotate_encryption_key(
+                old_key=encryption_key, new_key=rotated_key
+            )
+            == 8
+        )
+        rotated = PostgresSearchControlPlane(
+            os.environ["SEARCH_TEST_DATABASE_URL"], rotated_key
+        )
+        assert {
+            item.api_key
+            for item in await rotated.credentials_for(organization_id=owner)
+        } == {f"secret-{index}" for index in range(8)}
+        await rotated.aclose()
     finally:
         async with pool.acquire() as connection:
             async with connection.transaction():

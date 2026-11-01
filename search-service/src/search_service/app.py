@@ -31,6 +31,7 @@ from .contracts import (
     EmptyInput,
     NewsSearchRequest,
     Operation,
+    OrganizationSettings,
     ProviderCatalog,
     ProviderCatalogResult,
     ProviderKeyAddInput,
@@ -51,7 +52,6 @@ from .contracts import (
     SearchSuccess,
     SettingsReadResult,
     SettingsUpdateInput,
-    UserSettings,
     WebSearchRequest,
 )
 from .errors import SearchServiceError
@@ -313,7 +313,18 @@ def _fingerprint(api_key: str) -> str:
 
 
 def _safe_suffix(api_key: str) -> str:
-    return api_key[-4:].rjust(4, "*")
+    return api_key[-4:] if len(api_key) > 4 else "****"
+
+
+def _safe_label(label: str, api_key: str) -> str:
+    normalized = label.strip() or "Search provider key"
+    if api_key in normalized:
+        raise SearchServiceError(
+            SearchErrorCode.INVALID_REQUEST,
+            400,
+            "key label must not contain provider key material",
+        )
+    return normalized
 
 
 def _correlation_id(raw: object) -> str:
@@ -1024,6 +1035,7 @@ def create_app(
                     "provider is not configured",
                 )
             key = payload.api_key.get_secret_value()
+            label = _safe_label(payload.label, key)
             valid = await _test_provider_key(
                 provider, key, deadline_at=context.deadline_at
             )
@@ -1038,7 +1050,7 @@ def create_app(
                     organization_id=context.principal.organization_id,
                     provider=payload.provider,
                     api_key=key,
-                    label=payload.label,
+                    label=label,
                     suffix=_safe_suffix(key),
                     fingerprint=_fingerprint(key),
                     key_id=payload.key_id,
@@ -1048,7 +1060,7 @@ def create_app(
                     organization_id=context.principal.organization_id,
                     provider=payload.provider,
                     api_key=key,
-                    label=payload.label,
+                    label=label,
                     suffix=_safe_suffix(key),
                     fingerprint=_fingerprint(key),
                 )
@@ -1312,12 +1324,12 @@ class _UnavailableControlPlane:
     ) -> ProviderKeySummary:
         raise RuntimeError("search control plane is not configured")
 
-    async def get_settings(self, *, organization_id: str) -> UserSettings:
+    async def get_settings(self, *, organization_id: str) -> OrganizationSettings:
         raise RuntimeError("search control plane is not configured")
 
     async def replace_settings(
         self, *, organization_id: str, providers: tuple[ProviderPreference, ...]
-    ) -> UserSettings:
+    ) -> OrganizationSettings:
         raise RuntimeError("search control plane is not configured")
 
 
@@ -1327,6 +1339,10 @@ if os.getenv("TAVILY_API_ENABLED", "1").lower() not in {"0", "false", "no"}:
 
 _database_url = os.getenv("SEARCH_CONTROL_DATABASE_URL", "")
 _encryption_key = os.getenv("SEARCH_PROVIDER_ENCRYPTION_KEY", "")
+if _database_url and not _encryption_key:
+    raise ValueError(
+        "SEARCH_PROVIDER_ENCRYPTION_KEY is required when Search control storage is configured"
+    )
 _default_control_plane = cast(
     SearchControlPlane,
     PostgresSearchControlPlane(_database_url, _encryption_key)

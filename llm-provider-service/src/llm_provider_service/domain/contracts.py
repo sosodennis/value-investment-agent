@@ -48,7 +48,8 @@ class ProviderPrincipal(BaseModel):
     """Authenticated identity supplied by the application boundary.
 
     This is intentionally smaller than the auth capability's session model.
-    Provider adapters only need a stable user identifier and must never receive
+    Provider adapters use the user identifier for actor attribution and the
+    organization identifier for provider ownership. They must never receive
     cookies, bearer tokens, or provider credentials.
     """
 

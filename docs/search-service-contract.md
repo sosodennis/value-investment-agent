@@ -2,13 +2,14 @@
 
 The independently deployed Search Service consumes the shared `internal.v1`
 context from #119. It owns provider-neutral search, provider capability
-routing, normalized results, and user-scoped provider credentials.
+routing, normalized results, and organization-scoped provider credentials.
 
 ## Request and response envelopes
 
-Every POST operation accepts exactly `context` and `input`. The principal is
-the owner for settings and key operations; callers cannot supply a separate
-user identifier. This example shows the News mapping.
+Every POST operation accepts exactly `context` and `input`. The verified
+organization in the principal is the owner for settings and key operations;
+callers cannot supply a separate user or organization identifier. This example
+shows the News mapping.
 
 ```json
 {
@@ -82,13 +83,13 @@ parsing or using the principal. Authentication failures preserve
 | `POST /v1/search/web` | Web search input | Normalized web results |
 | `POST /v1/search/news` | News search input | Normalized news results |
 | `POST /v1/providers/catalog` | `{}` | Provider operation and option capabilities |
-| `POST /v1/settings/read` | `{}` | Authenticated user's provider settings |
-| `POST /v1/settings/update` | Full provider preference list | Atomically replaced settings through the control-plane port |
+| `POST /v1/settings/read` | `{}` | Verified organization provider settings |
+| `POST /v1/settings/update` | Full provider preference list | Atomically replaced settings for the verified organization through the control-plane port |
 | `POST /v1/provider-keys/test` | Provider and key | Validity only; never persisted |
-| `POST /v1/provider-keys/add` | Provider, key, label | Test then activate |
-| `POST /v1/provider-keys/replace` | Owned key ID, provider, key, label | Test then replace; failed tests preserve the current key |
-| `POST /v1/provider-keys/delete` | Owned key ID only | Idempotent deletion; no key material is accepted |
-| `POST /v1/provider-keys/list` | `{}` | Masked key metadata |
+| `POST /v1/provider-keys/add` | Provider, key, label | Test then activate for the verified organization |
+| `POST /v1/provider-keys/replace` | Owned key ID, provider, key, label | Test then replace an organization-owned key; failed tests preserve the current key |
+| `POST /v1/provider-keys/delete` | Owned key ID only | Idempotent deletion from the verified organization; no key material is accepted |
+| `POST /v1/provider-keys/list` | `{}` | Masked key metadata for the verified organization |
 
 Raw keys are accepted only by key test/add/replace and are never returned in
 responses. Key lists expose provider, label, suffix, fingerprint, enabled
@@ -97,7 +98,7 @@ only primitive values.
 
 ## Routing, deadlines, and errors
 
-A provider is eligible when enabled for the authenticated user, credentialed
+A provider is eligible when enabled for the verified organization, credentialed
 when required, capable of the operation, and capable of every requested
 option. Providers are attempted in priority order, up to three attempts.
 Provider attempts and fallback share the lesser of `deadline_at` and the
@@ -115,7 +116,7 @@ request timeout. No retry resets either deadline.
 
 Error messages are bounded and redacted; they do not include keys, query text,
 upstream payloads, or internal URLs. Provider credentials, cooldowns,
-enablement, priorities, and atomic per-user settings persistence are
+enablement, priorities, and atomic organization settings persistence are
 control-plane responsibilities owned by #123.
 
 ## Executable contract

@@ -62,6 +62,14 @@ class _Provider:
         raise RuntimeError("upstream failure including sk-do-not-leak")
 
 
+def test_provider_runtime_requires_encryption_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("LLM_PROVIDER_ENCRYPTION_KEY", raising=False)
+    with pytest.raises(ValueError, match="LLM_PROVIDER_ENCRYPTION_KEY is required"):
+        service.ProviderRuntime()
+
+
 class _Settings:
     def __init__(self) -> None:
         self.owners = {"key-a": "organization-120"}
