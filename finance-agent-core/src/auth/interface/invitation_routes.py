@@ -11,6 +11,7 @@ from src.auth.application.invitation_errors import (
     InvitationValidationError,
 )
 from src.auth.application.invitation_service import InvitationService
+from src.auth.application.rate_limit import enforce_rate_limit, rate_limit_settings
 from src.auth.application.wiring import get_invitation_service
 from src.auth.domain.authorization import AuthorizationResource, OrganizationPermission
 from src.auth.domain.entities import (
@@ -27,6 +28,7 @@ from src.auth.interface.dependencies import (
     require_current_context_mutation,
     require_organization_permission,
 )
+from src.shared.kernel.rate_limit import RateLimiterUnavailable, RateLimitExceeded
 
 router = APIRouter(prefix="/api/v1/organizations", tags=["Invitations"])
 
@@ -73,6 +75,22 @@ def _raise_http(error: Exception) -> None:
         raise HTTPException(status_code=409, detail=error.code) from error
     if isinstance(error, InvitationValidationError):
         raise HTTPException(status_code=400, detail=str(error)) from error
+    if isinstance(error, RateLimitExceeded):
+        raise HTTPException(
+            status_code=429,
+            detail={
+                "code": "rate_limited",
+                "message": str(error),
+                "retry_after_seconds": error.retry_after_seconds,
+            },
+            headers={"Retry-After": str(error.retry_after_seconds)},
+        ) from error
+    if isinstance(error, RateLimiterUnavailable):
+        raise HTTPException(
+            status_code=503,
+            detail={"code": "rate_limiter_unavailable"},
+            headers={"Retry-After": "5"},
+        ) from error
     raise error
 
 
@@ -89,6 +107,33 @@ async def create_invitation(
     context: AuthenticatedContext = Depends(require_current_context_mutation),
     service: InvitationService = Depends(get_invitation_service),
 ) -> InvitationResponse:
+    await enforce_rate_limit(
+        request=request,
+        organization_id=organization_id,
+        actor_user_id=context.user.id,
+        operation="invitation.create.actor",
+        key_parts=(context.user.id, organization_id),
+        limit=rate_limit_settings.invitations_per_actor_hour,
+        window_seconds=3600,
+    )
+    await enforce_rate_limit(
+        request=request,
+        organization_id=organization_id,
+        actor_user_id=context.user.id,
+        operation="invitation.create.organization",
+        key_parts=(organization_id,),
+        limit=rate_limit_settings.invitations_per_organization_hour,
+        window_seconds=3600,
+    )
+    await enforce_rate_limit(
+        request=request,
+        organization_id=organization_id,
+        actor_user_id=context.user.id,
+        operation="invitation.create.recipient",
+        key_parts=(body.recipient_user_id,),
+        limit=rate_limit_settings.invitations_per_recipient_hour,
+        window_seconds=3600,
+    )
     try:
         invitation = await service.create(
             context=context,
@@ -103,6 +148,8 @@ async def create_invitation(
         InvitationConflictError,
         InvitationNotFoundError,
         InvitationValidationError,
+        RateLimitExceeded,
+        RateLimiterUnavailable,
     ) as error:
         if isinstance(error, AuthorizationDeniedError):
             await record_denied_permission(
@@ -139,6 +186,8 @@ async def list_invitations(
         InvitationConflictError,
         InvitationNotFoundError,
         InvitationValidationError,
+        RateLimitExceeded,
+        RateLimiterUnavailable,
     ) as error:
         _raise_http(error)
     return [_response(invitation) for invitation in invitations]
@@ -171,12 +220,22 @@ async def get_invitation(
     response_model=InvitationResponse,
 )
 async def accept_invitation(
+    request: Request,
     organization_id: str,
     invitation_id: str,
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
     actor: AuthenticatedActorContext = Depends(require_current_actor_mutation),
     service: InvitationService = Depends(get_invitation_service),
 ) -> InvitationResponse:
+    await enforce_rate_limit(
+        request=request,
+        organization_id=organization_id,
+        actor_user_id=actor.user.id,
+        operation="invitation.respond",
+        key_parts=(actor.user.id, organization_id),
+        limit=rate_limit_settings.invitation_responses_per_recipient_hour,
+        window_seconds=3600,
+    )
     try:
         invitation = await service.transition_for_recipient(
             actor=actor,
@@ -201,12 +260,22 @@ async def accept_invitation(
     response_model=InvitationResponse,
 )
 async def decline_invitation(
+    request: Request,
     organization_id: str,
     invitation_id: str,
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
     actor: AuthenticatedActorContext = Depends(require_current_actor_mutation),
     service: InvitationService = Depends(get_invitation_service),
 ) -> InvitationResponse:
+    await enforce_rate_limit(
+        request=request,
+        organization_id=organization_id,
+        actor_user_id=actor.user.id,
+        operation="invitation.respond",
+        key_parts=(actor.user.id, organization_id),
+        limit=rate_limit_settings.invitation_responses_per_recipient_hour,
+        window_seconds=3600,
+    )
     try:
         invitation = await service.transition_for_recipient(
             actor=actor,
@@ -244,6 +313,15 @@ async def revoke_invitation(
     ),
     service: InvitationService = Depends(get_invitation_service),
 ) -> InvitationResponse:
+    await enforce_rate_limit(
+        request=request,
+        organization_id=organization_id,
+        actor_user_id=context.user.id,
+        operation="invitation.revoke",
+        key_parts=(context.user.id, organization_id),
+        limit=rate_limit_settings.invitations_per_actor_hour,
+        window_seconds=3600,
+    )
     try:
         invitation = await service.transition_for_manager(
             context=context,
@@ -289,6 +367,24 @@ async def resend_invitation(
     ),
     service: InvitationService = Depends(get_invitation_service),
 ) -> InvitationResponse:
+    await enforce_rate_limit(
+        request=request,
+        organization_id=organization_id,
+        actor_user_id=context.user.id,
+        operation="invitation.resend.actor",
+        key_parts=(context.user.id, organization_id),
+        limit=rate_limit_settings.invitations_per_actor_hour,
+        window_seconds=3600,
+    )
+    await enforce_rate_limit(
+        request=request,
+        organization_id=organization_id,
+        actor_user_id=context.user.id,
+        operation="invitation.resend.invitation",
+        key_parts=(invitation_id,),
+        limit=rate_limit_settings.resend_per_invitation_hour,
+        window_seconds=3600,
+    )
     try:
         invitation = await service.transition_for_manager(
             context=context,
@@ -303,6 +399,8 @@ async def resend_invitation(
         InvitationConflictError,
         InvitationNotFoundError,
         InvitationValidationError,
+        RateLimitExceeded,
+        RateLimiterUnavailable,
     ) as error:
         if isinstance(error, AuthorizationDeniedError):
             await record_denied_permission(

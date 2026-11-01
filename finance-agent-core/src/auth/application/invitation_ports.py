@@ -42,3 +42,13 @@ class InvitationRepository(Protocol):
         idempotency_key: str,
         now: datetime,
     ) -> InvitationRecord: ...
+
+
+class InvitationRetentionRepository(Protocol):
+    async def expire_and_purge(
+        self,
+        *,
+        now: datetime,
+        terminal_before: datetime,
+        limit: int,
+    ) -> tuple[int, int]: ...

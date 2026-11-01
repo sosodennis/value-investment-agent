@@ -44,6 +44,14 @@ class NotificationRepository(Protocol):
         self, *, recipient_user_id: str, item_id: str, now: datetime
     ) -> NotificationInboxItem | None: ...
 
+    async def purge_expired(
+        self,
+        *,
+        created_before: datetime,
+        expired_before: datetime,
+        limit: int,
+    ) -> int: ...
+
 
 class NotificationTransaction(Protocol):
     async def enqueue(

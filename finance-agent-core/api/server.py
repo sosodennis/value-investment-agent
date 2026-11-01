@@ -47,6 +47,7 @@ from src.notifications.entrypoint import get_notification_worker, notifications_
 from src.observability.routes import router as observability_router
 from src.search_settings import search_settings_router
 from src.search_settings.composition.routes import close_search_service
+from src.shared.kernel.rate_limit import close_rate_limiter
 from src.workflow.graph import get_graph
 
 
@@ -94,6 +95,7 @@ async def lifespan(app: FastAPI):
         await close_search_service()
         await close_llm_provider()
         await close_model_inference()
+        await close_rate_limiter()
 
 
 app = FastAPI(

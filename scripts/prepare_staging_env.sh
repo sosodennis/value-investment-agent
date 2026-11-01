@@ -45,7 +45,7 @@ trap cleanup EXIT
 
 {
   printf '%s\n' \
-    'APP_ENV=development' \
+    'APP_ENV=staging' \
     'COMPOSE_PROJECT_NAME=value-investment-agent-staging' \
     "INFERENCE_SERVICE_TOKEN=$(openssl rand -hex 32)" \
     "LLM_PROVIDER_SERVICE_TOKEN=$(openssl rand -hex 32)" \
