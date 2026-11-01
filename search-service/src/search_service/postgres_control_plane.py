@@ -9,13 +9,14 @@ import asyncpg
 from cryptography.fernet import Fernet, InvalidToken
 
 from .contracts import (
+    OrganizationSettings,
     ProviderKeySummary,
     ProviderPreference,
     ProviderSetting,
     SearchErrorCode,
-    UserSettings,
 )
 from .errors import SearchServiceError
+from .schema import initialize_schema
 
 
 @dataclass(frozen=True)
@@ -51,52 +52,8 @@ class PostgresSearchControlPlane:
             if self._pool is None:
                 pool = await asyncpg.create_pool(self._dsn, min_size=1, max_size=10)
                 async with pool.acquire() as connection:
-                    await connection.execute(
-                        """
-                        CREATE TABLE IF NOT EXISTS organization_search_provider_keys (
-                            organization_id TEXT NOT NULL,
-                            key_id TEXT NOT NULL,
-                            provider TEXT NOT NULL,
-                            encrypted_key TEXT NOT NULL,
-                            label TEXT NOT NULL,
-                            suffix TEXT NOT NULL,
-                            fingerprint TEXT NOT NULL,
-                            enabled BOOLEAN NOT NULL DEFAULT TRUE,
-                            priority INTEGER NOT NULL DEFAULT 0 CHECK (priority >= 0),
-                            status TEXT NOT NULL DEFAULT 'active',
-                            failure_count INTEGER NOT NULL DEFAULT 0,
-                            cooldown_until TIMESTAMPTZ,
-                            last_tested_at TIMESTAMPTZ NOT NULL,
-                            lease_until TIMESTAMPTZ,
-                            last_used_at TIMESTAMPTZ,
-                            PRIMARY KEY (organization_id, key_id),
-                            UNIQUE (organization_id, provider, fingerprint)
-                        )
-                        """
-                    )
-                    await connection.execute(
-                        """
-                        CREATE TABLE IF NOT EXISTS organization_search_provider_preferences (
-                            organization_id TEXT NOT NULL,
-                            provider TEXT NOT NULL,
-                            enabled BOOLEAN NOT NULL,
-                            priority INTEGER NOT NULL CHECK (priority >= 0),
-                            PRIMARY KEY (organization_id, provider),
-                            UNIQUE (organization_id, priority)
-                        )
-                        """
-                    )
-                    await connection.execute(
-                        """
-                        CREATE TABLE IF NOT EXISTS organization_search_provider_health (
-                            organization_id TEXT NOT NULL,
-                            provider TEXT NOT NULL,
-                            failure_count INTEGER NOT NULL DEFAULT 0,
-                            cooldown_until TIMESTAMPTZ,
-                            PRIMARY KEY (organization_id, provider)
-                        )
-                        """
-                    )
+                    async with connection.transaction():
+                        await initialize_schema(connection)
                 self._pool = pool
             return self._pool
 
@@ -104,6 +61,47 @@ class PostgresSearchControlPlane:
         if self._pool is not None:
             await self._pool.close()
             self._pool = None
+
+    async def rotate_encryption_key(self, *, old_key: str, new_key: str) -> int:
+        """Re-encrypt all organization credentials in one transaction."""
+
+        try:
+            old_cipher = Fernet(old_key.encode("ascii"))
+            new_cipher = Fernet(new_key.encode("ascii"))
+        except (ValueError, UnicodeEncodeError) as exc:
+            raise ValueError("encryption keys must be Fernet keys") from exc
+        pool = await self._connection()
+        updated = 0
+        async with pool.acquire() as connection, connection.transaction():
+            rows = await connection.fetch(
+                """
+                SELECT organization_id,key_id,encrypted_key
+                FROM organization_search_provider_keys
+                FOR UPDATE
+                """
+            )
+            for row in rows:
+                try:
+                    plaintext = old_cipher.decrypt(
+                        str(row["encrypted_key"]).encode("ascii")
+                    )
+                except Exception as exc:
+                    raise RuntimeError(
+                        "stored Search provider credential cannot be re-encrypted"
+                    ) from exc
+                await connection.execute(
+                    """
+                    UPDATE organization_search_provider_keys
+                    SET encrypted_key=$3
+                    WHERE organization_id=$1 AND key_id=$2
+                    """,
+                    row["organization_id"],
+                    row["key_id"],
+                    new_cipher.encrypt(plaintext).decode("ascii"),
+                )
+                updated += 1
+        self._cipher = new_cipher
+        return updated
 
     async def is_ready(self) -> bool:
         pool = await self._connection()
@@ -428,7 +426,6 @@ class PostgresSearchControlPlane:
                    SET enabled=$3,
                        status=CASE WHEN $3 THEN 'active' ELSE 'disabled' END,
                        cooldown_until=NULL,
-                       lease_until=NULL,
                        failure_count=CASE WHEN $3 THEN 0 ELSE failure_count END
                  WHERE organization_id=$1 AND key_id=$2
                 RETURNING key_id,provider,label,suffix,fingerprint,enabled,priority,status,
@@ -446,7 +443,7 @@ class PostgresSearchControlPlane:
                 )
             return self._summary(row)
 
-    async def get_settings(self, *, organization_id: str) -> UserSettings:
+    async def get_settings(self, *, organization_id: str) -> OrganizationSettings:
         pool = await self._connection()
         async with pool.acquire() as connection:
             rows = await connection.fetch(
@@ -470,7 +467,7 @@ class PostgresSearchControlPlane:
             )
             if row["key_id"] is not None:
                 item[2].append(self._summary(row))
-        return UserSettings(
+        return OrganizationSettings(
             providers=tuple(
                 ProviderSetting(
                     provider=provider,
@@ -484,7 +481,7 @@ class PostgresSearchControlPlane:
 
     async def replace_settings(
         self, *, organization_id: str, providers: tuple[ProviderPreference, ...]
-    ) -> UserSettings:
+    ) -> OrganizationSettings:
         pool = await self._connection()
         async with pool.acquire() as connection, connection.transaction():
             await connection.execute(
@@ -512,7 +509,9 @@ class PostgresSearchControlPlane:
                 await connection.execute(
                     """
                     UPDATE organization_search_provider_keys
-                       SET lease_until=NULL,status='active',failure_count=0,
+                       SET lease_until=NULL,
+                           status=CASE WHEN enabled THEN 'active' ELSE 'disabled' END,
+                           failure_count=0,
                            cooldown_until=NULL
                      WHERE organization_id=$1 AND key_id=$2
                     """,

@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 from types import SimpleNamespace
 
 import pytest
+from cryptography.fernet import Fernet
 from src.llm_provider_service.application.context import (
     reset_provider_principal,
     set_provider_principal,
@@ -28,10 +29,22 @@ from src.llm_provider_service.domain.routes import (
 from src.llm_provider_service.infrastructure.embedded_runtime import (
     EmbeddedLiteLLMProvider,
 )
-from src.llm_provider_service.infrastructure.state import ProviderDeployment
+from src.llm_provider_service.infrastructure.state import (
+    ProviderDeployment,
+    ProviderState,
+)
 from src.llm_provider_service.infrastructure.upstream_errors import (
     classify_exception,
 )
+
+
+@pytest.mark.asyncio
+async def test_llm_encryption_rotation_rejects_invalid_replacement_key() -> None:
+    old_key = Fernet.generate_key().decode("ascii")
+    state = ProviderState(encryption_key=old_key)
+    with pytest.raises(ValueError, match="Fernet keys"):
+        await state.rotate_encryption_key(old_key=old_key, new_key="not-a-valid-key")
+    await state.close()
 
 
 def test_provider_route_requires_verified_organization_context() -> None:

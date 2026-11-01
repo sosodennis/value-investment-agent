@@ -211,7 +211,7 @@ def document() -> dict[str, object]:
                 empty,
                 "SettingsSuccess",
                 errors=("400", "401", "503", "504"),
-                description="Read settings for the authenticated user.",
+                description="Read settings for the verified organization.",
             )
         },
         "/v1/settings/update": {
@@ -220,7 +220,7 @@ def document() -> dict[str, object]:
                 "SettingsEnvelope",
                 "SettingsSuccess",
                 errors=("400", "401", "404", "503", "504"),
-                description="Atomically replace the authenticated user's provider order and enablement.",
+                description="Atomically replace the verified organization's provider order and enablement.",
             )
         },
         "/v1/provider-keys/test": {
@@ -238,7 +238,7 @@ def document() -> dict[str, object]:
                 "ProviderKeyAddEnvelope",
                 "ProviderKeySuccess",
                 errors=("400", "401", "422", "429", "502", "503", "504"),
-                description="Test a key before activating it for the authenticated user.",
+                description="Test a key before activating it for the verified organization.",
             )
         },
         "/v1/provider-keys/replace": {
@@ -265,7 +265,7 @@ def document() -> dict[str, object]:
                 empty,
                 "ProviderKeyListSuccess",
                 errors=("400", "401", "503", "504"),
-                description="List masked key metadata for the authenticated user.",
+                description="List masked key metadata for the verified organization.",
             )
         },
         "/v1/provider-keys/set-enabled": {

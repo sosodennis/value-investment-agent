@@ -47,8 +47,8 @@ Any retained database needs the explicit provider/data disposition tracked by
 Provider key events emitted before the organization-scoped provider slices
 (`#213` and `#214`) are complete identify the verified active organization
 context and include the provider resource scope as metadata. They do not grant
-organization ownership over the current user-scoped provider resource; the
-provider cutover issue owns that boundary.
+organization ownership over the current organization-scoped provider resource;
+the provider cutover issue owns that boundary.
 
 ## Retention and recovery
 

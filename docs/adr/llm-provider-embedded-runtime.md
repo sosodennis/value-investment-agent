@@ -7,7 +7,7 @@ LiteLLM Router is an internal runtime adapter of that service. Backend callers
 depend only on `LLMProviderPort` and the versioned `internal.v1` service
 contract.
 
-The service owns authentication, principal binding, user-scoped provider
+The service owns authentication, principal binding, organization-scoped provider
 settings, encrypted provider credentials, deployment lifecycle, normalized
 errors, deployment selection, shared key health, and retry/streaming semantics.
 LiteLLM remains an internal adapter for model-provider translation and one
@@ -15,8 +15,9 @@ upstream dispatch at a time.
 
 There is one runtime path. A separate LiteLLM HTTP gateway, compatibility
 adapter, or provider fallback is not part of the project architecture. Existing
-keys that remain only in an old LiteLLM database require the explicit migration
-or re-key decision tracked by #190 before those retained records can be retired.
+keys that remain only in an old LiteLLM database require the explicit
+export/re-key or retained-data decision tracked by #190 before those retained
+records can be retired.
 
 ## Constraints
 
@@ -24,7 +25,7 @@ or re-key decision tracked by #190 before those retained records can be retired.
   not change.
 - Raw provider keys are encrypted with the provider service encryption key and
   are never returned by the service or written to logs/metrics.
-- Each request selects one eligible deployment from the authenticated user's
+- Each request selects one eligible deployment from the verified organization's
   PostgreSQL-owned pool and creates a Router configured with zero retries and
   no fallbacks for that dispatch. The service's `AttemptBudget` covers every
   deployment dispatch, structured correction, delay, and the original request

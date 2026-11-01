@@ -31,6 +31,7 @@ from .contracts import (
     EmptyInput,
     NewsSearchRequest,
     Operation,
+    OrganizationSettings,
     ProviderCatalog,
     ProviderCatalogResult,
     ProviderKeyAddInput,
@@ -51,7 +52,6 @@ from .contracts import (
     SearchSuccess,
     SettingsReadResult,
     SettingsUpdateInput,
-    UserSettings,
     WebSearchRequest,
 )
 from .errors import SearchServiceError
@@ -1312,12 +1312,12 @@ class _UnavailableControlPlane:
     ) -> ProviderKeySummary:
         raise RuntimeError("search control plane is not configured")
 
-    async def get_settings(self, *, organization_id: str) -> UserSettings:
+    async def get_settings(self, *, organization_id: str) -> OrganizationSettings:
         raise RuntimeError("search control plane is not configured")
 
     async def replace_settings(
         self, *, organization_id: str, providers: tuple[ProviderPreference, ...]
-    ) -> UserSettings:
+    ) -> OrganizationSettings:
         raise RuntimeError("search control plane is not configured")
 
 
@@ -1327,6 +1327,10 @@ if os.getenv("TAVILY_API_ENABLED", "1").lower() not in {"0", "false", "no"}:
 
 _database_url = os.getenv("SEARCH_CONTROL_DATABASE_URL", "")
 _encryption_key = os.getenv("SEARCH_PROVIDER_ENCRYPTION_KEY", "")
+if _database_url and not _encryption_key:
+    raise ValueError(
+        "SEARCH_PROVIDER_ENCRYPTION_KEY is required when Search control storage is configured"
+    )
 _default_control_plane = cast(
     SearchControlPlane,
     PostgresSearchControlPlane(_database_url, _encryption_key)

@@ -41,7 +41,7 @@ export default function RegisterPage() {
             <section className="w-full max-w-md border-y border-border bg-card px-5 py-8 sm:border sm:px-8" aria-labelledby="register-title">
                 <p className="text-sm font-medium text-primary">Account access</p>
                 <h1 id="register-title" className="mt-2 font-headline text-2xl font-semibold">Create your account</h1>
-                <p className="mt-2 text-sm text-muted-foreground">Your workspace and provider settings are scoped to your account.</p>
+                <p className="mt-2 text-sm text-muted-foreground">Create your account, then choose an organization to manage shared provider settings.</p>
                 <form onSubmit={submit} className="mt-8 grid gap-5">
                     <Field label="Display name" htmlFor="register-display-name">
                         <Input id="register-display-name" type="text" required maxLength={80} autoComplete="name" value={displayName} onChange={(event) => setDisplayName(event.target.value)} disabled={isSubmitting} />

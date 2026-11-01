@@ -6,12 +6,12 @@ from typing import Protocol
 from .contracts import (
     Capability,
     Operation,
+    OrganizationSettings,
     ProviderCapabilities,
     ProviderKeySummary,
     ProviderPreference,
     SearchRequestBase,
     SearchResult,
-    UserSettings,
 )
 
 
@@ -109,11 +109,11 @@ class SearchControlPlane(Protocol):
 
     async def delete_key(self, *, organization_id: str, key_id: str) -> None: ...
 
-    async def get_settings(self, *, organization_id: str) -> UserSettings: ...
+    async def get_settings(self, *, organization_id: str) -> OrganizationSettings: ...
 
     async def replace_settings(
         self, *, organization_id: str, providers: tuple[ProviderPreference, ...]
-    ) -> UserSettings: ...
+    ) -> OrganizationSettings: ...
 
 
 def requested_capabilities(request: SearchRequestBase) -> frozenset[Capability]:

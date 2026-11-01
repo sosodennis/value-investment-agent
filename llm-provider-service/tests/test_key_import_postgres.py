@@ -201,6 +201,31 @@ async def test_import_staging_is_encrypted_idempotent_organization_scoped_and_re
 
 
 @pytest.mark.asyncio
+async def test_encryption_rotation_reencrypts_organization_deployments() -> None:
+    old_key = Fernet.generate_key().decode("ascii")
+    new_key = Fernet.generate_key().decode("ascii")
+    organization_id = f"rotation-organization-{uuid4()}"
+    state = ProviderState(encryption_key=old_key)
+    await state.initialize()
+    try:
+        deployment = await state.create_deployment(
+            organization_id=organization_id,
+            key=_new_key(7),
+            label="rotation",
+            suffix="0007",
+            fingerprint="rotation-fingerprint",
+            model="openrouter/free",
+        )
+        assert await state.rotate_encryption_key(old_key=old_key, new_key=new_key) == 1
+        assert await state.deployment_key(
+            organization_id=organization_id, deployment_id=deployment.id
+        ) == _new_key(7)
+    finally:
+        await _delete_organization_data(state, organization_id)
+        await state.close()
+
+
+@pytest.mark.asyncio
 async def test_two_workers_claim_all_items_of_a_hundred_key_batch_once() -> None:
     encryption_key = Fernet.generate_key().decode("ascii")
     organization_id = f"import-organizations-{uuid4()}"

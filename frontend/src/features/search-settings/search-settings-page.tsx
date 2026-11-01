@@ -289,7 +289,7 @@ export default function SearchSettingsPage() {
 
             <AlertDialog open={deleteTarget !== null} onOpenChange={(open) => { if (!open && pendingKeyId === null) setDeleteTarget(null); }}>
                 <AlertDialogContent>
-                    <AlertDialogHeader><AlertDialogTitle>Delete provider key?</AlertDialogTitle><AlertDialogDescription>{deleteTarget ? `Delete “${deleteTarget.label}” for ${deleteTarget.provider}? This removes the key from your account.` : 'This removes the key from your account.'}</AlertDialogDescription></AlertDialogHeader>
+                    <AlertDialogHeader><AlertDialogTitle>Delete provider key?</AlertDialogTitle><AlertDialogDescription>{deleteTarget ? `Delete “${deleteTarget.label}” for ${deleteTarget.provider}? This removes the key from this organization.` : 'This removes the key from this organization.'}</AlertDialogDescription></AlertDialogHeader>
                     <AlertDialogFooter><AlertDialogCancel disabled={pendingKeyId !== null}>Cancel</AlertDialogCancel><AlertDialogAction disabled={pendingKeyId !== null} onClick={(event) => { event.preventDefault(); void removeKey(); }}>{pendingKeyId ? <Loader2 className="animate-spin" /> : <Trash2 />}Delete key</AlertDialogAction></AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>

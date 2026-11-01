@@ -14,12 +14,12 @@ from search_service.contracts import (
     Capability,
     NewsSearchRequest,
     Operation,
+    OrganizationSettings,
     ProviderCapabilities,
     ProviderKeySetEnabledInput,
     ProviderKeySummary,
     ProviderSetting,
     SearchResult,
-    UserSettings,
     WebSearchRequest,
 )
 
@@ -158,11 +158,11 @@ class FakeControlPlane:
 
     async def get_settings(self, *, organization_id):
         _ = organization_id
-        return UserSettings(providers=())
+        return OrganizationSettings(providers=())
 
     async def replace_settings(self, *, organization_id, providers):
         _ = organization_id
-        return UserSettings(
+        return OrganizationSettings(
             providers=tuple(
                 ProviderSetting(**provider.model_dump()) for provider in providers
             )

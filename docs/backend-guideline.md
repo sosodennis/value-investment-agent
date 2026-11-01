@@ -172,7 +172,7 @@ This table records the 2026-10-24 code and issue review. It is an audit snapshot
 | Auth and run ownership | Verify | Enforce the same owner check for REST, artifacts, and SSE attach before reading or registering resources. The backend cutover and ownership checks are part of [#145](https://github.com/sosodennis/value-investment-agent/issues/145). |
 | LLM Provider facade and service | Align | Separate the agent-facing client, product settings facade, and provider runtime. Keep provider SDK types in its adapter and test service lifecycle and retry ownership. |
 | Model Inference client and service | Align | Bound model concurrency, deadlines, cancellation, and blocking work. Keep domain-specific fallback in the caller that owns the decision. |
-| Search client, settings, and service | Align | Keep provider response types inside provider adapters. Normalize search results before returning them to agents and preserve user scoping for keys and preferences. |
+| Search client, settings, and service | Align | Keep provider response types inside provider adapters. Normalize search results before returning them to agents and preserve organization scoping for keys and preferences. |
 | `shared/internal_services` | Keep narrow | Share principal, correlation, deadline, authentication, error, and readiness primitives. Keep every operation schema with its service. |
 | LangGraph checkpoint and runtime projection | Align | Keep graph resume state separate from durable product events and read projections. Define retention for each store. |
 | HTTP and internal-service contracts | Align | Use explicit Pydantic schemas, generated OpenAPI types, stable error codes, UTC timestamps, and operation-specific schema versions. |

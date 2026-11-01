@@ -24,6 +24,8 @@ from src.llm_provider_service.domain.key_imports import (
 )
 from src.llm_provider_service.domain.key_metadata import key_fingerprint, key_suffix
 
+from .schema import initialize_schema
+
 
 def _database_url() -> str:
     user = os.getenv("POSTGRES_USER", "postgres")
@@ -68,136 +70,62 @@ class ProviderState:
         async with self._engine.begin() as connection:
             # Multiple replicas can start against the same database. Serialize
             # target-schema creation so PostgreSQL does not race while creating
-            # the same relation type. Legacy user-scoped rows are deliberately
-            # outside this clean-cut schema.
+            # the same relation type.
             await connection.execute(
                 text("SELECT pg_advisory_xact_lock(hashtextextended(:lock_key, 0))"),
                 {"lock_key": "llm-provider-schema-initialize"},
             )
-            await connection.execute(
-                text(
-                    """
-                    CREATE TABLE IF NOT EXISTS llm_provider_organization_owned_keys (
-                        key_id VARCHAR(255) PRIMARY KEY,
-                        organization_id VARCHAR(256) NOT NULL,
-                        fingerprint VARCHAR(128),
-                        UNIQUE (organization_id, fingerprint)
-                    )
-                    """
-                )
-            )
-            await connection.execute(
-                text(
-                    """
-                    CREATE TABLE IF NOT EXISTS llm_provider_organization_settings (
-                        organization_id VARCHAR(256) NOT NULL,
-                        id VARCHAR(80) NOT NULL,
-                        value VARCHAR(200) NOT NULL,
-                        updated_by VARCHAR(256) NOT NULL,
-                        updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
-                        PRIMARY KEY (organization_id, id)
-                    )
-                    """
-                )
-            )
-            await connection.execute(
-                text(
-                    """
-                    CREATE TABLE IF NOT EXISTS llm_provider_organization_deployments (
-                        id VARCHAR(255) PRIMARY KEY,
-                        organization_id VARCHAR(256) NOT NULL,
-                        encrypted_key TEXT NOT NULL,
-                        label VARCHAR(255) NOT NULL,
-                        suffix VARCHAR(16) NOT NULL,
-                        fingerprint VARCHAR(128) NOT NULL,
-                        model VARCHAR(512) NOT NULL,
-                        created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
-                        status VARCHAR(32) NOT NULL DEFAULT 'healthy',
-                        failure_count INTEGER NOT NULL DEFAULT 0,
-                        cooldown_until TIMESTAMP WITH TIME ZONE,
-                        last_tested_at TIMESTAMP WITH TIME ZONE,
-                        last_used_at TIMESTAMP WITH TIME ZONE,
-                        replacement_retire_at TIMESTAMP WITH TIME ZONE,
-                        UNIQUE (organization_id, fingerprint)
-                    )
-                    """
-                )
-            )
-            await connection.execute(
-                text(
-                    """
-                    CREATE TABLE IF NOT EXISTS llm_provider_organization_key_import_batches (
-                        id VARCHAR(36) PRIMARY KEY,
-                        organization_id VARCHAR(256) NOT NULL,
-                        idempotency_key VARCHAR(128) NOT NULL,
-                        status VARCHAR(32) NOT NULL DEFAULT 'queued',
-                        created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
-                        updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
-                        expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
-                        UNIQUE (organization_id, idempotency_key)
-                    )
-                    """
-                )
-            )
-            await connection.execute(
-                text(
-                    """
-                    CREATE TABLE IF NOT EXISTS llm_provider_organization_key_import_items (
-                        id VARCHAR(36) PRIMARY KEY,
-                        batch_id VARCHAR(36) NOT NULL REFERENCES
-                            llm_provider_organization_key_import_batches(id) ON DELETE CASCADE,
-                        organization_id VARCHAR(256) NOT NULL,
-                        source_line INTEGER NOT NULL,
-                        label VARCHAR(80) NOT NULL,
-                        encrypted_key TEXT,
-                        fingerprint VARCHAR(128) NOT NULL,
-                        suffix VARCHAR(16) NOT NULL,
-                        status VARCHAR(32) NOT NULL,
-                        error_code VARCHAR(64),
-                        attempts INTEGER NOT NULL DEFAULT 0,
-                        retryable BOOLEAN NOT NULL DEFAULT FALSE,
-                        next_retry_at TIMESTAMP WITH TIME ZONE,
-                        lease_owner VARCHAR(64),
-                        lease_until TIMESTAMP WITH TIME ZONE,
-                        created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
-                        updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
-                        expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
-                        UNIQUE (batch_id, source_line)
-                    )
-                    """
-                )
-            )
-            await connection.execute(
-                text(
-                    """
-                    CREATE INDEX IF NOT EXISTS
-                        ix_llm_provider_organization_key_import_items_pending
-                    ON llm_provider_organization_key_import_items
-                        (status, next_retry_at, lease_until, created_at)
-                    """
-                )
-            )
-            await connection.execute(
-                text(
-                    """
-                    CREATE INDEX IF NOT EXISTS
-                        ix_llm_provider_organization_key_import_items_owner_fingerprint
-                    ON llm_provider_organization_key_import_items (organization_id, fingerprint, status)
-                    """
-                )
-            )
-            await connection.execute(
-                text(
-                    """
-                    CREATE INDEX IF NOT EXISTS
-                        ix_llm_provider_organization_key_import_batches_owner_created
-                    ON llm_provider_organization_key_import_batches (organization_id, created_at DESC)
-                    """
-                )
-            )
+            await initialize_schema(connection)
 
     async def close(self) -> None:
         await self._engine.dispose()
+
+    async def rotate_encryption_key(self, *, old_key: str, new_key: str) -> int:
+        """Re-encrypt organization provider ciphertext in one transaction."""
+
+        try:
+            old_cipher = Fernet(old_key.encode("ascii"))
+            new_cipher = Fernet(new_key.encode("ascii"))
+        except (ValueError, UnicodeEncodeError) as exc:
+            raise ValueError("encryption keys must be Fernet keys") from exc
+        updated = 0
+        async with self._engine.begin() as connection:
+            for table in (
+                "llm_provider_organization_deployments",
+                "llm_provider_organization_key_import_items",
+            ):
+                rows = (
+                    await connection.execute(
+                        text(
+                            f"SELECT id,encrypted_key FROM {table} "
+                            "WHERE encrypted_key IS NOT NULL FOR UPDATE"
+                        )
+                    )
+                ).mappings()
+                for row in rows:
+                    try:
+                        plaintext = old_cipher.decrypt(
+                            str(row["encrypted_key"]).encode("ascii")
+                        )
+                    except Exception as exc:
+                        raise RuntimeError(
+                            "stored LLM provider credential cannot be re-encrypted"
+                        ) from exc
+                    await connection.execute(
+                        text(
+                            f"UPDATE {table} SET encrypted_key=:encrypted_key "
+                            "WHERE id=:id"
+                        ),
+                        {
+                            "id": row["id"],
+                            "encrypted_key": new_cipher.encrypt(plaintext).decode(
+                                "ascii"
+                            ),
+                        },
+                    )
+                    updated += 1
+        self._cipher = new_cipher
+        return updated
 
     def _require_cipher(self) -> Fernet:
         if self._cipher is None:

@@ -228,7 +228,7 @@ class ProviderPreference(WireModel):
     priority: int = Field(ge=0)
 
 
-class UserSettings(WireModel):
+class OrganizationSettings(WireModel):
     providers: tuple[ProviderSetting, ...]
 
 
@@ -237,7 +237,7 @@ class SettingsUpdateInput(WireModel):
 
 
 class SettingsReadResult(WireModel):
-    settings: UserSettings
+    settings: OrganizationSettings
 
 
 class ProviderCatalogResult(WireModel):
