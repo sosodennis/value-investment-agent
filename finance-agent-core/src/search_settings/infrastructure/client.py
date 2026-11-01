@@ -3,7 +3,6 @@ from __future__ import annotations
 import os
 from datetime import UTC, datetime, timedelta
 from typing import Literal, TypeVar
-from uuid import uuid4
 
 import httpx
 from pydantic import BaseModel, Field, ValidationError
@@ -15,6 +14,7 @@ from src.search_settings.domain import (
     SearchSettingsSnapshot,
     StrictModel,
 )
+from src.shared.kernel.correlation import resolve_correlation_id
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -131,16 +131,19 @@ class SearchServiceClient:
         payload = _Envelope(
             context=_RequestContext(
                 principal=_Context(subject_id=principal),
-                correlation_id=str(uuid4()),
+                correlation_id=resolve_correlation_id(),
                 deadline_at=self._deadline(),
             ),
             input=input_data,
         )
+        correlation_id = payload.context.correlation_id
         try:
+            headers = {"Authorization": f"Bearer {self._token}"}
+            headers["X-Request-ID"] = correlation_id
             response = await self._client.post(
                 f"{self._base_url}{path}",
                 json=payload.model_dump(mode="json"),
-                headers={"Authorization": f"Bearer {self._token}"},
+                headers=headers,
             )
         except httpx.TimeoutException:
             raise SearchServiceError(
@@ -152,20 +155,30 @@ class SearchServiceClient:
             ) from None
         if response.is_error:
             try:
-                error = _ErrorEnvelope.model_validate(response.json()).error
+                envelope = _ErrorEnvelope.model_validate(response.json())
+                if envelope.correlation_id != correlation_id:
+                    raise ValueError("search service correlation mismatch")
+                error = envelope.error
             except (ValidationError, ValueError):
                 raise SearchServiceError(
                     503, "service_unavailable", "Search Service is unavailable"
                 ) from None
             raise SearchServiceError(response.status_code, error.code, error.message)
         try:
-            return response_type.model_validate(response.json())
+            envelope = response_type.model_validate(response.json())
         except (ValidationError, ValueError):
             raise SearchServiceError(
                 502,
                 "invalid_service_response",
                 "Search Service returned an invalid response",
             ) from None
+        if getattr(envelope, "correlation_id", None) != correlation_id:
+            raise SearchServiceError(
+                502,
+                "invalid_service_response",
+                "Search Service returned an invalid response",
+            )
+        return envelope
 
     async def read(
         self, *, principal: str

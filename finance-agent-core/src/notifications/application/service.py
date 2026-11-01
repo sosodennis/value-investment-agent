@@ -13,6 +13,7 @@ from src.notifications.domain.entities import (
     validate_notification_payload,
 )
 from src.notifications.domain.errors import NotificationNotFoundError
+from src.shared.kernel.correlation import resolve_correlation_id
 
 from .ports import NotificationRepository, NotificationTransaction
 
@@ -25,6 +26,7 @@ class NotificationService:
         self,
         *,
         event_key: str,
+        correlation_id: str | None = None,
         notification_type: NotificationType,
         organization_id: str | None,
         payload: object,
@@ -52,6 +54,7 @@ class NotificationService:
         )
         return await enqueue(
             event_key=event_key,
+            correlation_id=resolve_correlation_id(correlation_id),
             notification_type=notification_type,
             organization_id=organization_id,
             payload=validated_payload,

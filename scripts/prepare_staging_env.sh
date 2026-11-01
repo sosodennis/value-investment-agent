@@ -51,6 +51,7 @@ trap cleanup EXIT
     "LLM_PROVIDER_SERVICE_TOKEN=$(openssl rand -hex 32)" \
     "SEARCH_SERVICE_TOKEN=$(openssl rand -hex 32)" \
     "DIRECTORY_CURSOR_SECRET=$(openssl rand -hex 32)" \
+    "AUDIT_CURSOR_SECRET=$(openssl rand -hex 32)" \
     "LLM_PROVIDER_ENCRYPTION_KEY=$(openssl rand -base64 32 | tr '/+' '_-' | tr -d '\n')" \
     "SEARCH_PROVIDER_ENCRYPTION_KEY=$(openssl rand -base64 32 | tr '/+' '_-' | tr -d '\n')" \
     'POSTGRES_USER=staging' \

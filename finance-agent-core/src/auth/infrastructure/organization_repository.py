@@ -5,6 +5,9 @@ from datetime import datetime
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.audit.application.ports import AuditRepository
+from src.audit.domain.entities import AuditEventDraft, AuditOutcome
+from src.audit.infrastructure.repository import SqlAlchemyAuditRepository
 from src.auth.application.errors import (
     InvalidMembershipTransitionError,
     MembershipInvariantError,
@@ -25,7 +28,6 @@ from src.auth.domain.events import OrganizationLifecycleEventDraft
 from src.auth.domain.membership_policy import is_allowed_membership_status_transition
 from src.auth.infrastructure.models import (
     MembershipModel,
-    OrganizationLifecycleEventModel,
     OrganizationModel,
     UserModel,
 )
@@ -33,6 +35,9 @@ from src.infrastructure.database import AsyncSessionLocal
 
 
 class SqlAlchemyOrganizationLifecycleRepository:
+    def __init__(self, *, audit_repository: AuditRepository | None = None) -> None:
+        self._audit = audit_repository or SqlAlchemyAuditRepository()
+
     async def create_organization(
         self,
         *,
@@ -59,7 +64,7 @@ class SqlAlchemyOrganizationLifecycleRepository:
                 )
                 session.add(membership)
                 await session.flush()
-                self._add_event(
+                await self._add_event(
                     session,
                     organization_id=organization.id,
                     event=event,
@@ -124,7 +129,7 @@ class SqlAlchemyOrganizationLifecycleRepository:
                 self._assert_membership_snapshot(actor, expected_actor)
                 organization.name = name
                 await session.flush()
-                self._add_event(
+                await self._add_event(
                     session,
                     organization_id=organization_id,
                     event=event,
@@ -210,7 +215,7 @@ class SqlAlchemyOrganizationLifecycleRepository:
                     membership.status = status
                 membership.updated_at = now
                 await session.flush()
-                self._add_event(
+                await self._add_event(
                     session,
                     organization_id=organization_id,
                     event=event,
@@ -256,7 +261,7 @@ class SqlAlchemyOrganizationLifecycleRepository:
                 source.updated_at = now
                 target.updated_at = now
                 await session.flush()
-                self._add_event(
+                await self._add_event(
                     session,
                     organization_id=organization_id,
                     event=event,
@@ -268,22 +273,25 @@ class SqlAlchemyOrganizationLifecycleRepository:
                 membership=self._membership_record(target),
             )
 
-    @staticmethod
-    def _add_event(
+    async def _add_event(
+        self,
         session: AsyncSession,
         *,
         organization_id: str,
         event: OrganizationLifecycleEventDraft,
     ) -> None:
-        session.add(
-            OrganizationLifecycleEventModel(
-                event_type=event.event_type.value,
+        await self._audit.append_in_session(
+            session,
+            event=AuditEventDraft(
                 organization_id=organization_id,
                 actor_user_id=event.actor_user_id,
-                target_user_id=event.target_user_id,
+                action=event.event_type.value,
+                outcome=AuditOutcome.SUCCESS,
+                target_type="user" if event.target_user_id else None,
+                target_id=event.target_user_id,
                 payload=event.payload,
                 occurred_at=event.occurred_at,
-            )
+            ),
         )
 
     @staticmethod

@@ -20,6 +20,8 @@ from src.analysis_runtime.infrastructure import (
     SqlAlchemyActivityRepository,
 )
 from src.analysis_runtime.interface.routes import router as analysis_runtime_router
+from src.audit.entrypoint import audit_router
+from src.audit.interface.middleware import CorrelationIdMiddleware
 from src.auth.entrypoint import (
     auth_router,
     get_ownership_service,
@@ -117,11 +119,15 @@ async def request_validation_error_handler(
 
 
 app.add_middleware(
+    CorrelationIdMiddleware,
+)
+app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins(),
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
     allow_headers=["Content-Type", "X-CSRF-Token", "X-Request-ID", "Idempotency-Key"],
+    expose_headers=["X-Request-ID"],
 )
 app.include_router(auth_router)
 app.include_router(organization_router)
@@ -134,6 +140,7 @@ app.include_router(dashboard_router)
 app.include_router(observability_router)
 app.include_router(artifact_router)
 app.include_router(notifications_router)
+app.include_router(audit_router)
 
 
 def _openapi() -> dict[str, object]:

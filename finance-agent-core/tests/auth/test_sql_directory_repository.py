@@ -6,7 +6,7 @@ from dataclasses import replace
 from datetime import datetime
 
 import pytest
-from sqlalchemy import delete
+from sqlalchemy import delete, text
 
 from src.auth.application.directory_service import DirectoryService
 from src.auth.domain.entities import (
@@ -130,6 +130,19 @@ async def test_directory_search_filters_current_members_and_supports_cursor_page
             registration.organization.id for registration in registrations
         ]
         async with AsyncSessionLocal() as session:
+            await session.execute(
+                text(
+                    "ALTER TABLE auth_audit_events "
+                    "DISABLE TRIGGER auth_audit_events_no_truncate"
+                )
+            )
+            await session.execute(text("TRUNCATE TABLE auth_audit_events"))
+            await session.execute(
+                text(
+                    "ALTER TABLE auth_audit_events "
+                    "ENABLE TRIGGER auth_audit_events_no_truncate"
+                )
+            )
             await session.execute(
                 delete(MembershipModel).where(MembershipModel.user_id.in_(user_ids))
             )

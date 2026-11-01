@@ -134,8 +134,11 @@ async def me(principal: Principal = Depends(require_current_user)) -> Principal:
 async def select_active_organization(
     request: Request,
     body: SelectOrganizationRequest,
-    _actor=Depends(require_current_actor_mutation),
+    actor=Depends(require_current_actor_mutation),
 ) -> Principal:
+    from src.audit.application.recording import record_best_effort
+    from src.audit.domain.entities import AuditOutcome
+
     token = request.cookies.get("app_session", "")
     try:
         context = await get_auth_service().select_active_organization(
@@ -144,9 +147,32 @@ async def select_active_organization(
             now=datetime.utcnow(),
         )
     except InvalidOrganizationContextError as exc:
+        current_context = await get_auth_service().authenticate(
+            session_token=token, now=datetime.utcnow()
+        )
+        if current_context is not None:
+            await record_best_effort(
+                organization_id=current_context.membership.organization_id,
+                actor_user_id=actor.user.id,
+                action="context.organization.selection_denied",
+                outcome=AuditOutcome.DENIED,
+                target_type="organization",
+                target_id=body.organization_id,
+                correlation_id=request.headers.get("X-Request-ID"),
+                payload={"requested_organization_id": body.organization_id},
+            )
         raise HTTPException(
             status_code=404, detail="organization context not found"
         ) from exc
+    await record_best_effort(
+        organization_id=body.organization_id,
+        actor_user_id=actor.user.id,
+        action="context.organization.selected",
+        outcome=AuditOutcome.SUCCESS,
+        target_type="organization",
+        target_id=body.organization_id,
+        correlation_id=request.headers.get("X-Request-ID"),
+    )
     return Principal.from_context(context)
 
 
@@ -154,8 +180,20 @@ async def select_active_organization(
 async def logout(
     request: Request,
     response: Response,
-    _actor=Depends(require_current_actor_mutation),
+    actor=Depends(require_current_actor_mutation),
 ) -> None:
+    from src.audit.application.recording import record_best_effort
+    from src.audit.domain.entities import AuditOutcome
+
     token = request.cookies.get("app_session", "")
     await get_auth_service().logout(session_token=token, now=datetime.utcnow())
+    await record_best_effort(
+        organization_id=actor.session.active_organization_id,
+        actor_user_id=actor.user.id,
+        action="context.session.logged_out",
+        outcome=AuditOutcome.SUCCESS,
+        target_type="session",
+        target_id=actor.session.id,
+        correlation_id=request.headers.get("X-Request-ID"),
+    )
     clear_auth_cookies(response)

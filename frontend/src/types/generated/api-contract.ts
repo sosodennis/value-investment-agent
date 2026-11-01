@@ -477,6 +477,23 @@ export interface paths {
         patch: operations["rename_organization_api_v1_organizations__organization_id__patch"];
         trace?: never;
     };
+    "/api/v1/organizations/{organization_id}/audit-events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Audit Events */
+        get: operations["list_audit_events_api_v1_organizations__organization_id__audit_events_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/organizations/{organization_id}/directory/users": {
         parameters: {
             query?: never;
@@ -1085,6 +1102,51 @@ export interface components {
             timeseries_bundle_id?: string | null;
             /** Verification Report Id */
             verification_report_id?: string | null;
+        };
+        /** AuditEventListResponse */
+        AuditEventListResponse: {
+            /** Items */
+            items: components["schemas"]["AuditEventResponse"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
+        /** AuditEventResponse */
+        AuditEventResponse: {
+            /** Action */
+            action: string;
+            /** Actor System */
+            actor_system: string | null;
+            /**
+             * Actor Type
+             * @enum {string}
+             */
+            actor_type: "user" | "system";
+            /** Actor User Id */
+            actor_user_id: string | null;
+            /** Correlation Id */
+            correlation_id: string;
+            /** Event Id */
+            event_id: string;
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            /** Organization Id */
+            organization_id: string;
+            /**
+             * Outcome
+             * @enum {string}
+             */
+            outcome: "success" | "denied" | "failure";
+            /** Payload */
+            payload: {
+                [key: string]: unknown;
+            };
+            /** Target Id */
+            target_id: string | null;
+            /** Target Type */
+            target_type: string | null;
         };
         /**
          * CapabilityItem
@@ -5134,6 +5196,62 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["OrganizationResponse"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_audit_events_api_v1_organizations__organization_id__audit_events_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                /** @description Opaque signed cursor for occurred_at DESC, id DESC pagination. */
+                cursor?: string | null;
+            };
+            header?: never;
+            path: {
+                organization_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuditEventListResponse"];
+                };
+            };
+            /** @description Malformed or tampered pagination cursor */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The actor lacks organization.audit.read */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The organization is outside the verified context */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

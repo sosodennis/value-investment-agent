@@ -7,7 +7,7 @@ from datetime import datetime
 
 import httpx
 import pytest
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import delete, func, select, text, update
 from sqlalchemy.exc import IntegrityError
 
 from api.server import app
@@ -49,6 +49,19 @@ async def _cleanup_user(email: str) -> None:
         )
         if user_id is None:
             return
+        await session.execute(
+            text(
+                "ALTER TABLE auth_audit_events "
+                "DISABLE TRIGGER auth_audit_events_no_truncate"
+            )
+        )
+        await session.execute(text("TRUNCATE TABLE auth_audit_events"))
+        await session.execute(
+            text(
+                "ALTER TABLE auth_audit_events "
+                "ENABLE TRIGGER auth_audit_events_no_truncate"
+            )
+        )
         organization_ids = set(
             (
                 await session.scalars(

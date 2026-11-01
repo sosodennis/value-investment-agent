@@ -29,6 +29,7 @@ class FakeRepository:
                     id="delivery-1",
                     event_id="event-1",
                     event_key=kwargs["event_key"],
+                    correlation_id=kwargs["correlation_id"],
                     recipient_user_id=kwargs["recipient_user_ids"][0],
                     channel="in_app",
                     idempotency_key="event-1:in_app:user-1",

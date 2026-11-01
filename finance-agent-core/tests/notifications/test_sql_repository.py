@@ -6,9 +6,10 @@ import uuid
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, text
 
-from src.auth.infrastructure.models import OrganizationLifecycleEventModel, UserModel
+from src.audit.infrastructure.models import AuditEventModel
+from src.auth.infrastructure.models import UserModel
 from src.auth.infrastructure.repositories import SqlAlchemyUserRepository
 from src.infrastructure.database import AsyncSessionLocal, init_db
 from src.notifications.application.service import NotificationService
@@ -46,6 +47,19 @@ class _FailingDeliveryAdapter:
 
 async def _cleanup(user_ids: set[str], event_keys: set[str]) -> None:
     async with AsyncSessionLocal() as session:
+        await session.execute(
+            text(
+                "ALTER TABLE auth_audit_events "
+                "DISABLE TRIGGER auth_audit_events_no_truncate"
+            )
+        )
+        await session.execute(text("TRUNCATE TABLE auth_audit_events"))
+        await session.execute(
+            text(
+                "ALTER TABLE auth_audit_events "
+                "ENABLE TRIGGER auth_audit_events_no_truncate"
+            )
+        )
         event_ids = set(
             (
                 await session.scalars(
@@ -107,6 +121,7 @@ async def test_notification_repository_isolates_recipients_deduplicates_events_a
     try:
         first = await repository.enqueue(
             event_key=event_key,
+            correlation_id="notification-correlation-1",
             notification_type=NotificationType.ORGANIZATION_INVITATION,
             organization_id=user_a.organization.id,
             payload={"organization_name": "Alpha"},
@@ -119,12 +134,27 @@ async def test_notification_repository_isolates_recipients_deduplicates_events_a
         )
         assert len(first.deliveries) == 1
         assert first.deliveries[0].organization_id == user_a.organization.id
+        assert first.deliveries[0].correlation_id == "notification-correlation-1"
         concurrent_runs = await asyncio.gather(
             worker.run_once(now=now, worker_id="worker-a"),
             worker.run_once(now=now, worker_id="worker-b"),
         )
         assert sum(result.claimed for result in concurrent_runs) == 1
         assert sum(result.delivered for result in concurrent_runs) == 1
+        async with AsyncSessionLocal() as session:
+            event = await session.get(NotificationEventModel, first.event_id)
+            assert event is not None
+            assert event.correlation_id == "notification-correlation-1"
+            delivered_audit = (
+                await session.scalars(
+                    select(AuditEventModel).where(
+                        AuditEventModel.action == "notification.in_app.delivered",
+                        AuditEventModel.target_id == first.event_id,
+                    )
+                )
+            ).first()
+            assert delivered_audit is not None
+            assert delivered_audit.correlation_id == "notification-correlation-1"
         assert (
             await repository.list_for_recipient(
                 recipient_user_id=user_b.user.id, limit=50, now=now
@@ -250,6 +280,7 @@ async def test_notification_outbox_retry_dead_letter_replay_and_idempotent_inbox
     try:
         enqueued = await repository.enqueue(
             event_key=event_key,
+            correlation_id="notification-failure-correlation",
             notification_type=NotificationType.SYSTEM,
             organization_id=None,
             payload={"message": "safe"},
@@ -318,12 +349,15 @@ async def test_notification_transaction_rolls_back_event_and_outbox_together() -
         async with AsyncSessionLocal() as session:
             with pytest.raises(RuntimeError, match="source transaction failure"):
                 async with session.begin():
-                    source_event = OrganizationLifecycleEventModel(
-                        event_type="organization.invitation.created",
+                    source_event = AuditEventModel(
                         organization_id=user.organization.id,
+                        actor_type="user",
                         actor_user_id=user.user.id,
+                        action="organization.invitation.created",
+                        outcome="success",
+                        correlation_id=event_key,
                         payload={"notification_event_key": event_key},
-                        occurred_at=now.replace(tzinfo=None),
+                        occurred_at=now,
                     )
                     session.add(source_event)
                     await session.flush()
@@ -362,9 +396,8 @@ async def test_notification_transaction_rolls_back_event_and_outbox_together() -
             )
             assert (
                 await session.scalar(
-                    select(OrganizationLifecycleEventModel.id).where(
-                        OrganizationLifecycleEventModel.event_type
-                        == "organization.invitation.created"
+                    select(AuditEventModel.id).where(
+                        AuditEventModel.action == "organization.invitation.created"
                     )
                 )
                 is None

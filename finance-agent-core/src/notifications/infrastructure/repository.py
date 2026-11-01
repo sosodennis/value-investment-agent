@@ -9,6 +9,8 @@ from sqlalchemy import func, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.audit.domain.entities import AuditEventDraft, AuditOutcome
+from src.audit.infrastructure.repository import SqlAlchemyAuditRepository
 from src.infrastructure.database import AsyncSessionLocal
 from src.notifications.application.ports import NotificationRepository
 from src.notifications.domain.entities import (
@@ -25,6 +27,7 @@ from src.notifications.domain.errors import (
     NotificationEventConflictError,
     NotificationOutboxLeaseError,
 )
+from src.shared.kernel.correlation import resolve_correlation_id
 
 from .models import (
     NotificationEventModel,
@@ -36,11 +39,17 @@ _SAFE_ERROR_CODE_PATTERN: Final = r"^[a-z0-9][a-z0-9_.:-]{0,63}$"
 
 
 class SqlAlchemyNotificationRepository(NotificationRepository):
+    def __init__(
+        self, *, audit_repository: SqlAlchemyAuditRepository | None = None
+    ) -> None:
+        self._audit = audit_repository or SqlAlchemyAuditRepository()
+
     async def publish_in_session(
         self,
         session: AsyncSession,
         *,
         event_key: str,
+        correlation_id: str | None = None,
         organization_id: str,
         payload: dict[str, JsonValue],
         recipient_user_id: str,
@@ -51,6 +60,7 @@ class SqlAlchemyNotificationRepository(NotificationRepository):
         return await self.enqueue_in_session(
             session,
             event_key=event_key,
+            correlation_id=resolve_correlation_id(correlation_id),
             notification_type=NotificationType.ORGANIZATION_INVITATION,
             organization_id=organization_id,
             payload=payload,
@@ -66,6 +76,7 @@ class SqlAlchemyNotificationRepository(NotificationRepository):
         self,
         *,
         event_key: str,
+        correlation_id: str | None = None,
         notification_type: NotificationType,
         organization_id: str | None,
         payload: dict[str, JsonValue],
@@ -79,6 +90,7 @@ class SqlAlchemyNotificationRepository(NotificationRepository):
                 result = await self.enqueue_in_session(
                     session,
                     event_key=event_key,
+                    correlation_id=resolve_correlation_id(correlation_id),
                     notification_type=notification_type,
                     organization_id=organization_id,
                     payload=payload,
@@ -94,6 +106,7 @@ class SqlAlchemyNotificationRepository(NotificationRepository):
         session: AsyncSession,
         *,
         event_key: str,
+        correlation_id: str,
         notification_type: NotificationType,
         organization_id: str | None,
         payload: dict[str, JsonValue],
@@ -102,10 +115,12 @@ class SqlAlchemyNotificationRepository(NotificationRepository):
         occurred_at: datetime,
         expires_at: datetime | None,
     ) -> NotificationEnqueueResult:
+        resolved_correlation_id = resolve_correlation_id(correlation_id)
         event_insert = (
             insert(NotificationEventModel)
             .values(
                 event_key=event_key,
+                correlation_id=resolved_correlation_id,
                 notification_type=notification_type.value,
                 organization_id=organization_id,
                 payload=payload,
@@ -234,6 +249,21 @@ class SqlAlchemyNotificationRepository(NotificationRepository):
                         )
                     )
                 ).first()
+                if row and row[1].organization_id is not None:
+                    await self._audit.append_in_session(
+                        session,
+                        event=AuditEventDraft(
+                            organization_id=row[1].organization_id,
+                            actor_system="notification-worker",
+                            action="notification.in_app.delivered",
+                            outcome=AuditOutcome.SUCCESS,
+                            target_type="notification_event",
+                            target_id=row[1].id,
+                            payload={"notification_type": row[1].notification_type},
+                            correlation_id=row[1].correlation_id,
+                            occurred_at=delivery.occurred_at,
+                        ),
+                    )
             return self._to_item(*row) if row else None
 
     async def claim_ready(
@@ -372,6 +402,26 @@ class SqlAlchemyNotificationRepository(NotificationRepository):
                     delivery.dead_lettered_at = now
                 await session.flush()
                 event = await session.get(NotificationEventModel, delivery.event_id)
+                if event is not None and event.organization_id is not None:
+                    await self._audit.append_in_session(
+                        session,
+                        event=AuditEventDraft(
+                            organization_id=event.organization_id,
+                            actor_system="notification-worker",
+                            action="notification.in_app.delivery_failed",
+                            outcome=AuditOutcome.FAILURE,
+                            target_type="notification_event",
+                            target_id=event.id,
+                            payload={
+                                "notification_type": event.notification_type,
+                                "retryable": retryable,
+                                "terminal": terminal,
+                                "error_code": safe_error,
+                            },
+                            correlation_id=event.correlation_id,
+                            occurred_at=now,
+                        ),
+                    )
             return self._to_delivery(delivery, event) if event else None
 
     async def list_dead_letters(self, *, limit: int) -> list[NotificationDeadLetter]:
@@ -517,6 +567,7 @@ class SqlAlchemyNotificationRepository(NotificationRepository):
             id=outbox.id,
             event_id=event.id,
             event_key=event.event_key,
+            correlation_id=event.correlation_id,
             recipient_user_id=outbox.recipient_user_id,
             channel=outbox.channel,
             idempotency_key=outbox.idempotency_key,

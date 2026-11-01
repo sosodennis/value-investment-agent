@@ -84,12 +84,22 @@ def require_organization_permission(
             if resource_factory is not None
             else _default_authorization_resource(permission, context)
         )
-        _require_permission(
-            service=get_authorization_service(),
-            context=context,
-            permission=permission,
-            resource=resource,
-        )
+        try:
+            _require_permission(
+                service=get_authorization_service(),
+                context=context,
+                permission=permission,
+                resource=resource,
+            )
+        except HTTPException as error:
+            await record_denied_permission(
+                request=request,
+                context=context,
+                permission=permission,
+                resource=resource,
+                failure_code=str(error.detail),
+            )
+            raise
         return context
 
     return dependency
@@ -115,6 +125,39 @@ def _require_permission(
             else 403
         )
         raise HTTPException(status_code=status_code, detail=exc.code) from exc
+
+
+async def record_denied_permission(
+    *,
+    request: Request,
+    context: AuthenticatedContext,
+    permission: OrganizationPermission,
+    resource: AuthorizationResource,
+    failure_code: str,
+) -> None:
+    verified_organization_id = context.membership.organization_id
+    if not verified_organization_id:
+        return
+    try:
+        from src.audit.application.recording import record_best_effort
+        from src.audit.domain.entities import AuditOutcome
+
+        await record_best_effort(
+            organization_id=verified_organization_id,
+            actor_user_id=context.user.id,
+            action="authorization.denied",
+            outcome=AuditOutcome.DENIED,
+            target_type="organization",
+            target_id=resource.organization_id,
+            correlation_id=request.headers.get("X-Request-ID"),
+            payload={
+                "permission": permission.value,
+                "failure_code": failure_code,
+                "requested_organization_id": resource.organization_id,
+            },
+        )
+    except Exception:
+        return
 
 
 def _default_authorization_resource(

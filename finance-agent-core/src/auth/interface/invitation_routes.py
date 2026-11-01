@@ -22,6 +22,7 @@ from src.auth.domain.invitations import InvitationOperation, InvitationRecord
 from src.auth.interface.contracts import InvitationCreateRequest, InvitationResponse
 from src.auth.interface.dependencies import (
     current_actor,
+    record_denied_permission,
     require_current_actor_mutation,
     require_current_context_mutation,
     require_organization_permission,
@@ -81,6 +82,7 @@ def _raise_http(error: Exception) -> None:
     status_code=status.HTTP_201_CREATED,
 )
 async def create_invitation(
+    request: Request,
     organization_id: str,
     body: InvitationCreateRequest,
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
@@ -102,6 +104,14 @@ async def create_invitation(
         InvitationNotFoundError,
         InvitationValidationError,
     ) as error:
+        if isinstance(error, AuthorizationDeniedError):
+            await record_denied_permission(
+                request=request,
+                context=context,
+                permission=OrganizationPermission.INVITATION_CREATE,
+                resource=AuthorizationResource(organization_id=organization_id),
+                failure_code=error.code,
+            )
         _raise_http(error)
     return _response(invitation)
 
@@ -221,6 +231,7 @@ async def decline_invitation(
     response_model=InvitationResponse,
 )
 async def revoke_invitation(
+    request: Request,
     organization_id: str,
     invitation_id: str,
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
@@ -248,6 +259,14 @@ async def revoke_invitation(
         InvitationNotFoundError,
         InvitationValidationError,
     ) as error:
+        if isinstance(error, AuthorizationDeniedError):
+            await record_denied_permission(
+                request=request,
+                context=context,
+                permission=OrganizationPermission.INVITATION_REVOKE,
+                resource=AuthorizationResource(organization_id=organization_id),
+                failure_code=error.code,
+            )
         _raise_http(error)
     return _response(invitation)
 
@@ -257,10 +276,17 @@ async def revoke_invitation(
     response_model=InvitationResponse,
 )
 async def resend_invitation(
+    request: Request,
     organization_id: str,
     invitation_id: str,
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
-    context: AuthenticatedContext = Depends(require_current_context_mutation),
+    context: AuthenticatedContext = Depends(
+        require_organization_permission(
+            OrganizationPermission.INVITATION_REVOKE,
+            resource_factory=_resource,
+            context_dependency=require_current_context_mutation,
+        )
+    ),
     service: InvitationService = Depends(get_invitation_service),
 ) -> InvitationResponse:
     try:
@@ -278,5 +304,13 @@ async def resend_invitation(
         InvitationNotFoundError,
         InvitationValidationError,
     ) as error:
+        if isinstance(error, AuthorizationDeniedError):
+            await record_denied_permission(
+                request=request,
+                context=context,
+                permission=OrganizationPermission.INVITATION_REVOKE,
+                resource=AuthorizationResource(organization_id=organization_id),
+                failure_code=error.code,
+            )
         _raise_http(error)
     return _response(invitation)

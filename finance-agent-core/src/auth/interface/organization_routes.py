@@ -40,6 +40,7 @@ from src.auth.interface.contracts import (
 )
 from src.auth.interface.dependencies import (
     current_actor,
+    record_denied_permission,
     require_current_actor_mutation,
     require_current_context_mutation,
     require_organization_permission,
@@ -261,6 +262,7 @@ async def search_directory_users(
     response_model=OrganizationMemberResponse,
 )
 async def change_member_role(
+    request: Request,
     organization_id: str,
     target_user_id: str,
     body: OrganizationRoleChangeRequest,
@@ -281,6 +283,16 @@ async def change_member_role(
             now=datetime.utcnow(),
         )
     except (AuthError, AuthPolicyError) as error:
+        if isinstance(error, AuthorizationDeniedError):
+            await record_denied_permission(
+                request=request,
+                context=context,
+                permission=OrganizationPermission.MEMBERSHIP_ROLE_CHANGE,
+                resource=AuthorizationResource(
+                    organization_id=organization_id, target_user_id=target_user_id
+                ),
+                failure_code=error.code,
+            )
         _raise_http(error)
     return _member_response(member)
 
@@ -290,6 +302,7 @@ async def change_member_role(
     response_model=OrganizationMemberResponse,
 )
 async def change_member_status(
+    request: Request,
     organization_id: str,
     target_user_id: str,
     body: OrganizationStatusChangeRequest,
@@ -310,6 +323,16 @@ async def change_member_status(
             now=datetime.utcnow(),
         )
     except (AuthError, AuthPolicyError) as error:
+        if isinstance(error, AuthorizationDeniedError):
+            await record_denied_permission(
+                request=request,
+                context=context,
+                permission=OrganizationPermission.MEMBERSHIP_REMOVE,
+                resource=AuthorizationResource(
+                    organization_id=organization_id, target_user_id=target_user_id
+                ),
+                failure_code=error.code,
+            )
         _raise_http(error)
     return _member_response(member)
 
@@ -319,6 +342,7 @@ async def change_member_status(
     response_model=OrganizationMemberResponse,
 )
 async def transfer_ownership(
+    request: Request,
     organization_id: str,
     body: OrganizationOwnershipTransferRequest,
     context: AuthenticatedContext = Depends(
@@ -337,6 +361,17 @@ async def transfer_ownership(
             now=datetime.utcnow(),
         )
     except (AuthError, AuthPolicyError) as error:
+        if isinstance(error, AuthorizationDeniedError):
+            await record_denied_permission(
+                request=request,
+                context=context,
+                permission=OrganizationPermission.MEMBERSHIP_OWNER_TRANSFER,
+                resource=AuthorizationResource(
+                    organization_id=organization_id,
+                    target_user_id=body.target_user_id,
+                ),
+                failure_code=error.code,
+            )
         _raise_http(error)
     return _member_response(member)
 
@@ -346,6 +381,7 @@ async def transfer_ownership(
     response_model=OrganizationMemberResponse,
 )
 async def leave_organization(
+    request: Request,
     organization_id: str,
     context: AuthenticatedContext = Depends(
         require_organization_permission(
@@ -360,5 +396,15 @@ async def leave_organization(
             context=context, organization_id=organization_id, now=datetime.utcnow()
         )
     except (AuthError, AuthPolicyError) as error:
+        if isinstance(error, AuthorizationDeniedError):
+            await record_denied_permission(
+                request=request,
+                context=context,
+                permission=OrganizationPermission.MEMBERSHIP_LEAVE,
+                resource=AuthorizationResource(
+                    organization_id=organization_id, target_user_id=context.user.id
+                ),
+                failure_code=error.code,
+            )
         _raise_http(error)
     return _member_response(member)
