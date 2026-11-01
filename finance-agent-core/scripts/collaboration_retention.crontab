@@ -1,0 +1,1 @@
+15 2 * * * cd /app && python scripts/run_collaboration_retention.py

@@ -1,3 +1,8 @@
+from src.shared.kernel.rate_limit import RateLimitExceeded as _RateLimitExceeded
+
+RateLimitExceeded = _RateLimitExceeded
+
+
 class AuthError(RuntimeError):
     """Base class for safe authentication failures."""
 
@@ -40,7 +45,3 @@ class AuthorizationDeniedError(AuthError):
     def __init__(self, code: str) -> None:
         self.code = code
         super().__init__(code)
-
-
-class RateLimitExceeded(AuthError):
-    """The request exceeded the endpoint rate limit."""

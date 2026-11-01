@@ -5,12 +5,13 @@ from collections.abc import Sequence
 from datetime import datetime, timedelta
 from typing import Final
 
-from sqlalchemy import func, select, update
+from sqlalchemy import delete, exists, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.audit.domain.entities import AuditEventDraft, AuditOutcome
 from src.audit.infrastructure.repository import SqlAlchemyAuditRepository
+from src.auth.infrastructure.models import InvitationModel
 from src.infrastructure.database import AsyncSessionLocal
 from src.notifications.application.ports import NotificationRepository
 from src.notifications.domain.entities import (
@@ -28,6 +29,12 @@ from src.notifications.domain.errors import (
     NotificationOutboxLeaseError,
 )
 from src.shared.kernel.correlation import resolve_correlation_id
+from src.shared.kernel.rate_limit import (
+    RateLimiterUnavailable,
+    RateLimitExceeded,
+    rate_limit_settings,
+    rate_limiter,
+)
 
 from .models import (
     NotificationEventModel,
@@ -115,6 +122,36 @@ class SqlAlchemyNotificationRepository(NotificationRepository):
         occurred_at: datetime,
         expires_at: datetime | None,
     ) -> NotificationEnqueueResult:
+        try:
+            if organization_id is not None:
+                await rate_limiter.check(
+                    key=f"notification.fanout:organization:{organization_id}",
+                    limit=rate_limit_settings.notification_fanout_per_organization_minute,
+                    window_seconds=60,
+                    cost=len(recipient_user_ids),
+                )
+            await rate_limiter.check(
+                key="notification.fanout:system",
+                limit=rate_limit_settings.notification_fanout_system_minute,
+                window_seconds=60,
+                cost=len(recipient_user_ids),
+            )
+        except (RateLimitExceeded, RateLimiterUnavailable):
+            if organization_id is not None:
+                from src.audit.application.recording import record_best_effort
+                from src.audit.domain.entities import AuditOutcome
+
+                await record_best_effort(
+                    organization_id=organization_id,
+                    actor_system="notification-service",
+                    action="abuse.notification_fanout_limited",
+                    outcome=AuditOutcome.DENIED,
+                    target_type="notification_event",
+                    target_id=event_key,
+                    payload={"recipient_count": len(recipient_user_ids)},
+                    correlation_id=correlation_id,
+                )
+            raise
         resolved_correlation_id = resolve_correlation_id(correlation_id)
         event_insert = (
             insert(NotificationEventModel)
@@ -552,6 +589,66 @@ class SqlAlchemyNotificationRepository(NotificationRepository):
                     )
                 ).one()
             return self._to_item(*row)
+
+    async def purge_expired(
+        self,
+        *,
+        created_before: datetime,
+        expired_before: datetime,
+        limit: int,
+    ) -> int:
+        if not 1 <= limit <= 1_000:
+            raise ValueError("notification retention batch size is invalid")
+        async with AsyncSessionLocal() as session:
+            async with session.begin():
+                event_ids = list(
+                    await session.scalars(
+                        select(NotificationEventModel.id)
+                        .where(
+                            (NotificationEventModel.created_at <= created_before)
+                            | (NotificationEventModel.expires_at <= expired_before)
+                        )
+                        .where(
+                            ~exists(
+                                select(InvitationModel.id).where(
+                                    InvitationModel.notification_event_id
+                                    == NotificationEventModel.id,
+                                    or_(
+                                        InvitationModel.status == "pending",
+                                        InvitationModel.updated_at > created_before,
+                                    ),
+                                )
+                            )
+                        )
+                        .where(
+                            ~exists(
+                                select(NotificationOutboxModel.id).where(
+                                    NotificationOutboxModel.event_id
+                                    == NotificationEventModel.id,
+                                    NotificationOutboxModel.status.in_(
+                                        (
+                                            NotificationDeliveryStatus.PENDING.value,
+                                            NotificationDeliveryStatus.LEASED.value,
+                                        )
+                                    ),
+                                )
+                            )
+                        )
+                        .order_by(
+                            NotificationEventModel.expires_at, NotificationEventModel.id
+                        )
+                        .limit(limit)
+                        .with_for_update(skip_locked=True)
+                    )
+                )
+                if not event_ids:
+                    return 0
+                result = await session.execute(
+                    delete(NotificationEventModel).where(
+                        NotificationEventModel.id.in_(event_ids)
+                    )
+                )
+            return int(result.rowcount or 0)
 
     @staticmethod
     def _to_delivery(

@@ -12,11 +12,18 @@ from src.auth.application.errors import (
     MembershipNotFoundError,
     OrganizationMutationConflictError,
     OrganizationNotFoundError,
-    RateLimitExceeded,
 )
-from src.auth.application.rate_limit import rate_limiter
-from src.auth.application.wiring import get_directory_service, get_organization_service
-from src.auth.domain.authorization import AuthorizationResource, OrganizationPermission
+from src.auth.application.rate_limit import enforce_rate_limit, rate_limit_settings
+from src.auth.application.wiring import (
+    get_authorization_service,
+    get_directory_service,
+    get_organization_service,
+)
+from src.auth.domain.authorization import (
+    AuthorizationContext,
+    AuthorizationResource,
+    OrganizationPermission,
+)
 from src.auth.domain.entities import (
     AuthenticatedActorContext,
     AuthenticatedContext,
@@ -53,6 +60,15 @@ def _organization_resource(
     request: Request, _context: AuthenticatedContext
 ) -> AuthorizationResource:
     return AuthorizationResource(organization_id=request.path_params["organization_id"])
+
+
+def _member_resource(
+    request: Request, context: AuthenticatedContext
+) -> AuthorizationResource:
+    return AuthorizationResource(
+        organization_id=request.path_params["organization_id"],
+        target_user_id=request.path_params.get("target_user_id", context.user.id),
+    )
 
 
 def _utc(value: datetime) -> datetime:
@@ -202,8 +218,8 @@ async def list_members(
     organization_id: str,
     context: AuthenticatedContext = Depends(
         require_organization_permission(
-            OrganizationPermission.MEMBERSHIP_READ,
-            resource_factory=_organization_resource,
+            OrganizationPermission.MEMBERSHIP_ROLE_CHANGE,
+            resource_factory=_member_resource,
         )
     ),
 ) -> list[OrganizationMemberResponse]:
@@ -218,6 +234,7 @@ async def list_members(
     response_model=DirectorySearchResponse,
 )
 async def search_directory_users(
+    request: Request,
     organization_id: str,
     q: str = Query(default="", max_length=80),
     limit: int = Query(default=20, ge=1, le=50),
@@ -230,10 +247,14 @@ async def search_directory_users(
     ),
 ) -> DirectorySearchResponse:
     try:
-        await rate_limiter.check(
-            key=f"directory:{context.user.id}:{organization_id}",
-            limit=60,
-            window_seconds=300,
+        await enforce_rate_limit(
+            request=request,
+            organization_id=organization_id,
+            actor_user_id=context.user.id,
+            operation="directory.search",
+            key_parts=(context.user.id, organization_id),
+            limit=rate_limit_settings.directory_per_user_minute,
+            window_seconds=60,
         )
         page = await get_directory_service().search_users(
             context=context,
@@ -241,8 +262,6 @@ async def search_directory_users(
             limit=limit,
             cursor=cursor,
         )
-    except RateLimitExceeded as error:
-        raise HTTPException(status_code=429, detail=str(error)) from error
     except AuthPolicyError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
     return DirectorySearchResponse(
@@ -274,6 +293,44 @@ async def change_member_role(
         )
     ),
 ) -> OrganizationMemberResponse:
+    role_resource = AuthorizationResource(
+        organization_id=organization_id,
+        target_user_id=target_user_id,
+        requested_role=MembershipRole(body.role),
+    )
+    try:
+        get_authorization_service().require(
+            context=AuthorizationContext.from_authenticated_context(context),
+            permission=OrganizationPermission.MEMBERSHIP_ROLE_CHANGE,
+            resource=role_resource,
+        )
+    except AuthorizationDeniedError as error:
+        await record_denied_permission(
+            request=request,
+            context=context,
+            permission=OrganizationPermission.MEMBERSHIP_ROLE_CHANGE,
+            resource=role_resource,
+            failure_code=error.code,
+        )
+        _raise_http(error)
+    await enforce_rate_limit(
+        request=request,
+        organization_id=organization_id,
+        actor_user_id=context.user.id,
+        operation="membership.role_change",
+        key_parts=(context.user.id, organization_id),
+        limit=rate_limit_settings.role_changes_per_actor_hour,
+        window_seconds=3600,
+    )
+    await enforce_rate_limit(
+        request=request,
+        organization_id=organization_id,
+        actor_user_id=context.user.id,
+        operation="membership.role_change.organization",
+        key_parts=(organization_id,),
+        limit=rate_limit_settings.role_changes_per_organization_hour,
+        window_seconds=3600,
+    )
     try:
         member = await get_organization_service().change_role(
             context=context,
@@ -308,12 +365,21 @@ async def change_member_status(
     body: OrganizationStatusChangeRequest,
     context: AuthenticatedContext = Depends(
         require_organization_permission(
-            OrganizationPermission.MEMBERSHIP_READ,
-            resource_factory=_organization_resource,
+            OrganizationPermission.MEMBERSHIP_REMOVE,
+            resource_factory=_member_resource,
             context_dependency=require_current_context_mutation,
         )
     ),
 ) -> OrganizationMemberResponse:
+    await enforce_rate_limit(
+        request=request,
+        organization_id=organization_id,
+        actor_user_id=context.user.id,
+        operation="membership.status_change",
+        key_parts=(context.user.id, organization_id),
+        limit=rate_limit_settings.membership_changes_per_actor_hour,
+        window_seconds=3600,
+    )
     try:
         member = await get_organization_service().change_status(
             context=context,
@@ -347,12 +413,21 @@ async def transfer_ownership(
     body: OrganizationOwnershipTransferRequest,
     context: AuthenticatedContext = Depends(
         require_organization_permission(
-            OrganizationPermission.MEMBERSHIP_READ,
-            resource_factory=_organization_resource,
+            OrganizationPermission.MEMBERSHIP_OWNER_TRANSFER,
+            resource_factory=_member_resource,
             context_dependency=require_current_context_mutation,
         )
     ),
 ) -> OrganizationMemberResponse:
+    await enforce_rate_limit(
+        request=request,
+        organization_id=organization_id,
+        actor_user_id=context.user.id,
+        operation="membership.owner_transfer",
+        key_parts=(context.user.id, organization_id),
+        limit=rate_limit_settings.owner_transfers_per_actor_hour,
+        window_seconds=3600,
+    )
     try:
         member = await get_organization_service().transfer_ownership(
             context=context,
@@ -385,12 +460,21 @@ async def leave_organization(
     organization_id: str,
     context: AuthenticatedContext = Depends(
         require_organization_permission(
-            OrganizationPermission.MEMBERSHIP_READ,
-            resource_factory=_organization_resource,
+            OrganizationPermission.MEMBERSHIP_LEAVE,
+            resource_factory=_member_resource,
             context_dependency=require_current_context_mutation,
         )
     ),
 ) -> OrganizationMemberResponse:
+    await enforce_rate_limit(
+        request=request,
+        organization_id=organization_id,
+        actor_user_id=context.user.id,
+        operation="membership.leave",
+        key_parts=(context.user.id, organization_id),
+        limit=rate_limit_settings.membership_changes_per_actor_hour,
+        window_seconds=3600,
+    )
     try:
         member = await get_organization_service().leave_organization(
             context=context, organization_id=organization_id, now=datetime.utcnow()

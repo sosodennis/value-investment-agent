@@ -55,6 +55,37 @@ status, attempt count, safe error code, and timestamps; it never returns event
 payload or action metadata. Any future operations endpoint must add an explicit
 operator authorization contract before exposing these capabilities.
 
+## Retention and abuse controls
+
+The shared Redis limiter uses atomic fixed-window counters with bounded defaults:
+directory search is 30 requests per user per minute; invitations are 10 per
+actor per hour, 50 per organization per hour, and 10 per recipient per hour;
+resend is 3 per invitation per hour; role changes are 30 per actor and 100 per
+organization per hour; and notification fan-out is 100 recipients per
+organization per minute, with a system-wide ceiling of 1,000 recipients per
+minute. Every limit is independently keyed by the relevant
+actor, recipient, organization, or invitation. Deployments may lower or raise
+these values through the documented `ORG_*` environment variables, subject to
+startup bounds.
+
+Invite, resend, role, membership, and directory decisions fail closed when
+Redis is unavailable. A throttled response is HTTP 429 with stable
+`rate_limited` detail and a bounded `Retry-After` header. Limiter failures and
+throttled decisions are recorded in the organization audit trail without
+secrets. The local in-memory implementation is only for development and tests;
+production Compose provides Redis so multiple workers share counters.
+
+Compose's optional `scheduler` profile runs
+`python scripts/run_collaboration_retention.py` daily at 02:15 UTC. Each run
+processes at most 100 rows per table. Foreign-key cascades
+remove expired notification inbox and outbox rows. Pending invitation rows are
+first marked expired and their final notification is retained; terminal
+invitation rows are purged only after the configured retention period. Audit
+rows are never deleted. Both commands log counts; operators should alert on
+repeated failures or sustained dead-letter growth. Change the schedule, batch
+size, retention defaults, or active-invitation protection only with a runbook
+and acceptance-test update.
+
 ## API
 
 | Method | Route | Contract |

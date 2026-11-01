@@ -26,6 +26,7 @@ from src.auth.interface.dependencies import (
     require_current_user,
     set_auth_cookies,
 )
+from src.shared.kernel.rate_limit import RateLimiterUnavailable
 
 router = APIRouter(prefix="/api/v1/auth", tags=["Authentication"])
 SESSION_MAX_AGE_SECONDS = 7 * 24 * 60 * 60
@@ -57,7 +58,21 @@ async def register(
     except RegistrationConflictError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except RateLimitExceeded as exc:
-        raise HTTPException(status_code=429, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=429,
+            detail={
+                "code": "rate_limited",
+                "message": str(exc),
+                "retry_after_seconds": exc.retry_after_seconds,
+            },
+            headers={"Retry-After": str(exc.retry_after_seconds)},
+        ) from exc
+    except RateLimiterUnavailable as exc:
+        raise HTTPException(
+            status_code=503,
+            detail={"code": "rate_limiter_unavailable"},
+            headers={"Retry-After": "5"},
+        ) from exc
     except AuthPolicyError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except InvalidOrganizationContextError as exc:
@@ -102,7 +117,21 @@ async def login(
             status_code=401, detail="invalid email or password"
         ) from exc
     except RateLimitExceeded as exc:
-        raise HTTPException(status_code=429, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=429,
+            detail={
+                "code": "rate_limited",
+                "message": str(exc),
+                "retry_after_seconds": exc.retry_after_seconds,
+            },
+            headers={"Retry-After": str(exc.retry_after_seconds)},
+        ) from exc
+    except RateLimiterUnavailable as exc:
+        raise HTTPException(
+            status_code=503,
+            detail={"code": "rate_limiter_unavailable"},
+            headers={"Retry-After": "5"},
+        ) from exc
     except AuthPolicyError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except InvalidOrganizationContextError as exc:
