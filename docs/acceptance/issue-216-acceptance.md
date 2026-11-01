@@ -18,6 +18,7 @@ in this document.
 | `bash -n scripts/organization_staging_acceptance.sh scripts/refactor_staging_smoke.sh` | exit 0 |
 | `organization_staging_acceptance.sh` with the real CSV | exit 0; `60/60 VERIFIED` |
 | `refactor_staging_smoke.sh` with Bob fixture and `STAGING_BASE_URL=http://127.0.0.1:18580` | exit 0 |
+| `refactor_staging_smoke.sh` with Bob fixture, the real CSV, and `STAGING_REQUIRE_LIVE_PROVIDER=1` | exit 0; duplicate import of all 5 existing keys and `key1` through `key5` each returned `healthy` |
 | `docker compose ... -f docker-compose.production.yml config --quiet` | exit 0; rendered backend/provider/Search tokens and Search encryption key were all non-empty |
 | Browser route acceptance at frontend port `18581` | verified for organization settings, notifications, LLM settings, Search settings, and workspace |
 | Secret redaction scan | exit 0; passed against four artifacts, `.env.staging.example`, the real CSV values, and Compose logs |
@@ -35,7 +36,7 @@ and Beta; and selected organization context explicitly. It verified:
 - re-invitation, membership acceptance, removal, and access rejection after
   removal;
 - ownership transfer, role promotion, and last-owner protection;
-- shared LLM settings and provider-key reads for an organization member;
+- shared LLM settings and provider-key reads for another organization user;
 - member denial for provider mutation;
 - organization-scoped Search settings and cross-organization denial;
 - organization audit read access and cross-organization denial;
@@ -50,12 +51,13 @@ names, statuses, HTTP codes, and safe details.
 
 Bob's fixture selected Alpha after login and the runtime smoke verified health,
 registration/login, organization context selection, workflow start, ticker
-selection, the pending valuation approval boundary, and completion. The smoke
+selection, the pending valuation approval boundary, and completion. In the
+final state Bob is the transferred owner; the earlier harness assertion also
+verified that a regular member cannot mutate provider configuration. The smoke
 intentionally did not approve the valuation or execute deterministic
-calculation. Its provider-key checks were `INCONCLUSIVE` because the fixture
-does not contain raw provider keys; the preceding organization run verified the
-five live key imports and tests. Failover is `INCONCLUSIVE` because no primary
-key fault was injected.
+calculation. The CSV smoke imported the five existing keys as duplicates and
+tested `key1` through `key5` individually; each returned `healthy`. Failover
+is `INCONCLUSIVE` because no primary key fault was injected.
 
 The frontend was checked at viewport `701x699` in the local in-app browser as
 Bob after selecting Alpha:

@@ -119,9 +119,10 @@ STAGING_BOB_FIXTURE=/tmp/value-investment-agent-216-bob.env \
 bash scripts/organization_staging_acceptance.sh
 ```
 
-The harness writes a local-only fixture for a member runtime check. Use it with
-the smoke script and the staging backend URL to prove that a second user can
-run the organization-scoped workflow:
+The harness writes a local-only fixture for a second organization user. In the
+final acceptance state Bob is the transferred owner; use the fixture with the
+smoke script and the staging backend URL to prove that a second user can run
+the organization-scoped workflow:
 
 ```bash
 STAGING_SECRET_FILE=/tmp/value-investment-agent-216-bob.env \
