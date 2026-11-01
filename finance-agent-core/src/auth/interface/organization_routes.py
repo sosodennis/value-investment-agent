@@ -218,8 +218,8 @@ async def list_members(
     organization_id: str,
     context: AuthenticatedContext = Depends(
         require_organization_permission(
-            OrganizationPermission.MEMBERSHIP_ROLE_CHANGE,
-            resource_factory=_member_resource,
+            OrganizationPermission.MEMBERSHIP_READ,
+            resource_factory=_organization_resource,
         )
     ),
 ) -> list[OrganizationMemberResponse]:
@@ -411,13 +411,7 @@ async def transfer_ownership(
     request: Request,
     organization_id: str,
     body: OrganizationOwnershipTransferRequest,
-    context: AuthenticatedContext = Depends(
-        require_organization_permission(
-            OrganizationPermission.MEMBERSHIP_OWNER_TRANSFER,
-            resource_factory=_member_resource,
-            context_dependency=require_current_context_mutation,
-        )
-    ),
+    context: AuthenticatedContext = Depends(require_current_context_mutation),
 ) -> OrganizationMemberResponse:
     await enforce_rate_limit(
         request=request,

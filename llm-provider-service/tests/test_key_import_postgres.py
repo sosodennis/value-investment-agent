@@ -158,6 +158,10 @@ async def test_import_staging_is_encrypted_idempotent_organization_scoped_and_re
             assert completed.imported_count == 1
             assert completed.duplicate_count == 1
             assert completed.items[0].status == "imported"
+            listed = await restarted.list_deployments(organization_id=organization_id)
+            assert len(listed) == 1
+            assert listed[0].organization_id == organization_id
+            assert listed[0].fingerprint == resumed[0].fingerprint
 
             async with restarted._sessions() as session:
                 staged = (
