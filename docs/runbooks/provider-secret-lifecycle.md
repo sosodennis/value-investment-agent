@@ -12,6 +12,15 @@ each service:
 
 - `LLM_PROVIDER_ENCRYPTION_KEY` protects LLM deployment and import ciphertext.
 - `SEARCH_PROVIDER_ENCRYPTION_KEY` protects Search provider-key ciphertext.
+- `LLM_PROVIDER_SERVICE_TOKEN` authenticates backend calls to the LLM provider
+  service.
+- `SEARCH_SERVICE_TOKEN` authenticates backend calls to the Search service.
+
+Production must provide both service tokens to the backend and their matching
+provider services. The production Compose overlay rejects missing values and
+must never inherit the local development fallback token. Generate independent
+high-entropy service tokens per environment and store them with the other
+deployment secrets.
 
 Generate keys with the service runtime, never with a copied example value:
 

@@ -71,6 +71,15 @@ jobs:
           LLM_PROVIDER_ENCRYPTION_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
         run: docker compose config --quiet
 
+  production-compose-secret-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate production secret wiring
+        run: bash scripts/check_production_compose.sh
+
   llm-provider-service-contract-gate:
     runs-on: ubuntu-latest
     defaults:
