@@ -313,7 +313,18 @@ def _fingerprint(api_key: str) -> str:
 
 
 def _safe_suffix(api_key: str) -> str:
-    return api_key[-4:].rjust(4, "*")
+    return api_key[-4:] if len(api_key) > 4 else "****"
+
+
+def _safe_label(label: str, api_key: str) -> str:
+    normalized = label.strip() or "Search provider key"
+    if api_key in normalized:
+        raise SearchServiceError(
+            SearchErrorCode.INVALID_REQUEST,
+            400,
+            "key label must not contain provider key material",
+        )
+    return normalized
 
 
 def _correlation_id(raw: object) -> str:
@@ -1024,6 +1035,7 @@ def create_app(
                     "provider is not configured",
                 )
             key = payload.api_key.get_secret_value()
+            label = _safe_label(payload.label, key)
             valid = await _test_provider_key(
                 provider, key, deadline_at=context.deadline_at
             )
@@ -1038,7 +1050,7 @@ def create_app(
                     organization_id=context.principal.organization_id,
                     provider=payload.provider,
                     api_key=key,
-                    label=payload.label,
+                    label=label,
                     suffix=_safe_suffix(key),
                     fingerprint=_fingerprint(key),
                     key_id=payload.key_id,
@@ -1048,7 +1060,7 @@ def create_app(
                     organization_id=context.principal.organization_id,
                     provider=payload.provider,
                     api_key=key,
-                    label=payload.label,
+                    label=label,
                     suffix=_safe_suffix(key),
                     fingerprint=_fingerprint(key),
                 )

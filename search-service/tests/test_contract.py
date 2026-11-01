@@ -518,6 +518,49 @@ async def test_key_test_failure_does_not_persist_and_success_redacts() -> None:
 
 
 @pytest.mark.asyncio
+async def test_short_provider_key_and_secret_label_never_echo_in_response() -> None:
+    provider = FakeProvider(
+        "alpha",
+        capabilities=ProviderCapabilities(
+            provider="alpha", operations=frozenset({Operation.WEB})
+        ),
+    )
+    control = FakeControlPlane()
+    client = client_for(control, {"alpha": provider})
+    try:
+        rejected = await client.post(
+            "/v1/provider-keys/add",
+            headers={"Authorization": "Bearer service-token"},
+            json={
+                "context": context(),
+                "input": {"provider": "alpha", "api_key": "abcd", "label": "abcd"},
+            },
+        )
+        success = await client.post(
+            "/v1/provider-keys/add",
+            headers={"Authorization": "Bearer service-token"},
+            json={
+                "context": context(),
+                "input": {"provider": "alpha", "api_key": "abcd", "label": "main"},
+            },
+        )
+        listed = await client.post(
+            "/v1/provider-keys/list",
+            headers={"Authorization": "Bearer service-token"},
+            json={"context": context(), "input": {}},
+        )
+    finally:
+        await client.aclose()
+    assert rejected.status_code == 400
+    assert "abcd" not in rejected.text
+    assert success.status_code == 200
+    assert success.json()["result"]["suffix"] == "****"
+    assert "abcd" not in success.text
+    assert listed.status_code == 200
+    assert "abcd" not in listed.text
+
+
+@pytest.mark.asyncio
 async def test_delete_key_uses_owned_id_without_key_material() -> None:
     control = FakeControlPlane()
     client = client_for(control, {})
