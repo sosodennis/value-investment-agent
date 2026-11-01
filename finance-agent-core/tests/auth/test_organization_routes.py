@@ -63,6 +63,17 @@ class StubOrganizationService:
         self.context = context
         self.created = 0
         self.changed_roles: list[tuple[str, MembershipRole]] = []
+        self.transferred_to: list[str] = []
+
+    async def list_members(
+        self, *, context: AuthenticatedContext, organization_id: str
+    ) -> list[OrganizationMember]:
+        return [
+            OrganizationMember(
+                user=context.user,
+                membership=context.membership,
+            )
+        ]
 
     async def create_organization(
         self, *, actor: AuthenticatedActorContext, name: str, now: datetime
@@ -117,6 +128,33 @@ class StubOrganizationService:
         )
         return OrganizationMember(user=target, membership=membership)
 
+    async def transfer_ownership(
+        self,
+        *,
+        context: AuthenticatedContext,
+        organization_id: str,
+        target_user_id: str,
+        now: datetime,
+    ) -> OrganizationMember:
+        self.transferred_to.append(target_user_id)
+        target = UserRecord(
+            id=target_user_id,
+            email="member@example.test",
+            password_hash="unused",
+            created_at=now,
+            display_name="Member",
+        )
+        membership = MembershipRecord(
+            id="membership-member",
+            organization_id=organization_id,
+            user_id=target_user_id,
+            role=MembershipRole.OWNER,
+            status=MembershipStatus.ACTIVE,
+            created_at=now,
+            updated_at=now,
+        )
+        return OrganizationMember(user=target, membership=membership)
+
 
 @pytest.mark.asyncio
 async def test_organization_routes_bind_server_context_and_support_create(
@@ -144,18 +182,28 @@ async def test_organization_routes_bind_server_context_and_support_create(
     ) as client:
         created = await client.post("/api/v1/organizations", json={"name": "Beta"})
         same_organization = await client.get("/api/v1/organizations/organization-a")
+        members = await client.get("/api/v1/organizations/organization-a/members")
         cross_organization = await client.get("/api/v1/organizations/organization-b")
         role_change = await client.patch(
             "/api/v1/organizations/organization-a/members/user-member/role",
             json={"role": "admin"},
+        )
+        ownership_transfer = await client.post(
+            "/api/v1/organizations/organization-a/ownership/transfer",
+            json={"target_user_id": "user-member"},
         )
 
     assert created.status_code == 201
     assert created.json()["organization_id"] == "organization-b"
     assert service.created == 1
     assert same_organization.status_code == 200
+    assert members.status_code == 200
+    assert members.json()[0]["user_id"] == "user-owner"
     assert cross_organization.status_code == 404
     assert cross_organization.json() == {"detail": "resource_not_found"}
     assert role_change.status_code == 200
     assert role_change.json()["role"] == "admin"
     assert service.changed_roles == [("user-member", MembershipRole.ADMIN)]
+    assert ownership_transfer.status_code == 200
+    assert ownership_transfer.json()["role"] == "owner"
+    assert service.transferred_to == ["user-member"]

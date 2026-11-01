@@ -146,9 +146,9 @@ class ProviderState:
                         FROM llm_provider_organization_deployments
                         WHERE organization_id=:organization_id
                         ORDER BY created_at,id
-                        """,
-                        {"organization_id": organization_id},
-                    )
+                        """
+                    ),
+                    {"organization_id": organization_id},
                 )
             ).mappings()
             return [_deployment_from_row(row) for row in rows]

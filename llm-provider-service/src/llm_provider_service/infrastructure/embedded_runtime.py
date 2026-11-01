@@ -30,6 +30,10 @@ from src.llm_provider_service.domain.contracts import (
     StructuredRequest,
     Usage,
 )
+from src.llm_provider_service.domain.errors import (
+    OpenRouterKeyTestError,
+    ProviderSettingsError,
+)
 from src.llm_provider_service.domain.key_metadata import key_fingerprint, key_suffix
 from src.llm_provider_service.domain.provider_models import ManagedProviderKey
 from src.llm_provider_service.domain.reliability import (
@@ -1090,12 +1094,14 @@ class EmbeddedLiteLLMProvider:
             organization_id=organization_id, model=model
         )
 
-    async def test_key(self, model_id: str) -> bool:
+    async def test_key(self, model_id: str, *, organization_id: str) -> bool:
         principal = get_provider_principal()
         if principal is None:
             raise RuntimeError("provider principal is required")
+        if principal.organization_id != organization_id:
+            raise ProviderSettingsError("organization_context_mismatch")
         item = await self._state.get_deployment(
-            organization_id=principal.organization_id, deployment_id=model_id
+            organization_id=organization_id, deployment_id=model_id
         )
         if item is None:
             raise RuntimeError("managed key was not found")
@@ -1106,16 +1112,19 @@ class EmbeddedLiteLLMProvider:
         health_version = await self._record_key_use(
             model_id, organization_id=principal.organization_id
         )
-        await validate_openrouter_key(
-            await self._state.deployment_key(
-                organization_id=principal.organization_id, deployment_id=model_id
+        try:
+            await validate_openrouter_key(
+                await self._state.deployment_key(
+                    organization_id=organization_id, deployment_id=model_id
+                )
             )
-        )
+        except OpenRouterKeyTestError as exc:
+            raise ProviderSettingsError(exc.code) from exc
         await self._record_key_success(
-            model_id, health_version, organization_id=principal.organization_id
+            model_id, health_version, organization_id=organization_id
         )
         await self._state.update_deployment(
-            organization_id=principal.organization_id,
+            organization_id=organization_id,
             deployment_id=model_id,
             status="healthy",
             failure_count=0,

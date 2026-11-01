@@ -21,6 +21,10 @@ from src.llm_provider_service.domain.contracts import (
     StreamEvent,
     StructuredRequest,
 )
+from src.llm_provider_service.domain.errors import (
+    OpenRouterKeyTestError,
+    ProviderSettingsError,
+)
 from src.llm_provider_service.domain.routes import (
     DEFAULT_MODEL_ALIAS,
     organization_route_alias,
@@ -231,6 +235,35 @@ async def test_embedded_runtime_forwards_request_identity_and_metadata(
         "X-Request-ID": "embedded-1",
         "Idempotency-Key": "idem-1",
     }
+
+
+@pytest.mark.asyncio
+async def test_embedded_runtime_preserves_key_validation_error_code(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runtime = _runtime(monkeypatch)
+    await runtime.start()
+    token = set_provider_principal(
+        ProviderPrincipal(
+            user_id="alice", organization_id="org-a", membership_id="membership-a"
+        )
+    )
+
+    async def rate_limited(_key: str) -> None:
+        raise OpenRouterKeyTestError("rate_limited", retry_after_seconds=2)
+
+    monkeypatch.setattr(
+        "src.llm_provider_service.infrastructure.openrouter_key_test.validate_openrouter_key",
+        rate_limited,
+    )
+    try:
+        with pytest.raises(ProviderSettingsError) as caught:
+            await runtime.test_key("key-1", organization_id="org-a")
+    finally:
+        reset_provider_principal(token)
+        await runtime.aclose()
+
+    assert caught.value.code == "rate_limited"
 
 
 @pytest.mark.asyncio

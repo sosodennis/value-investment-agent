@@ -57,6 +57,8 @@ BACKEND_HOST_PORT="${BACKEND_HOST_PORT:-8000}"
 BACKEND_ORIGIN="${STAGING_BASE_URL:-http://127.0.0.1:${BACKEND_HOST_PORT}}"
 BACKEND_ORIGIN="${BACKEND_ORIGIN%/}"
 STAGING_EMAIL="$(read_secret STAGING_EMAIL || true)"
+STAGING_DISPLAY_NAME="$(read_secret STAGING_DISPLAY_NAME || true)"
+STAGING_ORGANIZATION_ID="$(read_secret STAGING_ORGANIZATION_ID || true)"
 STAGING_PASSWORD="$(read_secret STAGING_PASSWORD || true)"
 STAGING_OPENROUTER_KEY="$(read_secret STAGING_OPENROUTER_KEY || true)"
 STAGING_SECONDARY_OPENROUTER_KEY="$(read_secret STAGING_SECONDARY_OPENROUTER_KEY || true)"
@@ -64,6 +66,7 @@ STAGING_PRIMARY_LABEL="$(read_secret STAGING_PRIMARY_LABEL || true)"
 STAGING_SECONDARY_LABEL="$(read_secret STAGING_SECONDARY_LABEL || true)"
 STAGING_PRIMARY_LABEL="${STAGING_PRIMARY_LABEL:-full-refactor-staging-primary}"
 STAGING_SECONDARY_LABEL="${STAGING_SECONDARY_LABEL:-full-refactor-staging-secondary}"
+STAGING_DISPLAY_NAME="${STAGING_DISPLAY_NAME:-Staging Acceptance User}"
 primary_key_id=""
 secondary_key_id=""
 
@@ -135,7 +138,7 @@ secret_bundle_available() {
 
 login() {
   local payload
-  payload="$(jq -cn --arg email "$STAGING_EMAIL" --arg password "$STAGING_PASSWORD" '{email:$email,password:$password}')"
+  payload="$(jq -cn --arg email "$STAGING_EMAIL" --arg display_name "$STAGING_DISPLAY_NAME" --arg password "$STAGING_PASSWORD" '{email:$email,display_name:$display_name,password:$password}')"
   request POST /api/v1/auth/register "$payload" || true
   if [[ "$REQUEST_CODE" != "201" && "$REQUEST_CODE" != "409" ]]; then
     record register NOT_VERIFIED "$REQUEST_ID" "$REQUEST_LATENCY_MS" 1 "http_$REQUEST_CODE"
@@ -147,6 +150,16 @@ login() {
   CSRF_TOKEN="$(csrf_token)"
   [[ -n "$CSRF_TOKEN" ]] || { record login NOT_VERIFIED "$REQUEST_ID" "$REQUEST_LATENCY_MS" 1 missing_csrf_cookie; return 1; }
   record login VERIFIED "$REQUEST_ID" "$REQUEST_LATENCY_MS"
+}
+
+select_organization() {
+  [[ -n "$STAGING_ORGANIZATION_ID" ]] || return 0
+  request PUT /api/v1/auth/session/organization "$(jq -cn --arg organization_id "$STAGING_ORGANIZATION_ID" '{organization_id:$organization_id}')" "$CSRF_TOKEN"
+  [[ "$REQUEST_CODE" == "200" ]] || {
+    record organization_context NOT_VERIFIED "$REQUEST_ID" "$REQUEST_LATENCY_MS" 1 "http_$REQUEST_CODE"
+    return 1
+  }
+  record organization_context VERIFIED "$REQUEST_ID" "$REQUEST_LATENCY_MS"
 }
 
 ensure_key() {
@@ -345,6 +358,7 @@ if ! secret_bundle_available; then
 fi
 
 login
+select_organization
 if [[ -n "$STAGING_KEY_IMPORT_FILE" ]]; then
   batch_import_file
   expected_key_count="$(awk -F, 'NR > 1 { gsub(/^[[:space:]\"]+|[[:space:]\"]+$/, "", $1); if ($1 != "") count++ } END { print count + 0 }' "$STAGING_KEY_IMPORT_FILE")"
