@@ -40,6 +40,10 @@ async def init_db():
             SessionModel,
             UserModel,
         )
+        from src.notifications.infrastructure.models import (  # noqa: F401
+            NotificationEventModel,
+            NotificationInboxItemModel,
+        )
 
         from .models import (  # noqa: F401
             Artifact,

@@ -322,6 +322,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/notifications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Notifications */
+        get: operations["list_notifications_api_v1_notifications_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/notifications/unread-count": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Unread Count */
+        get: operations["unread_count_api_v1_notifications_unread_count_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/notifications/{notification_id}/read": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Mark Notification Read */
+        patch: operations["mark_notification_read_api_v1_notifications__notification_id__read_patch"];
+        trace?: never;
+    };
     "/api/v1/observability/calibration/direction-readiness": {
         parameters: {
             query?: never;
@@ -1671,6 +1722,54 @@ export interface components {
              * @constant
              */
             version: "v1";
+        };
+        /** NotificationActionResponse */
+        NotificationActionResponse: {
+            /** Action Ref */
+            action_ref: string;
+            /** Action Type */
+            action_type: string;
+        };
+        /** NotificationListResponse */
+        NotificationListResponse: {
+            /** Items */
+            items: components["schemas"]["NotificationResponse"][];
+            /** Unread Count */
+            unread_count: number;
+        };
+        /** NotificationResponse */
+        NotificationResponse: {
+            action: components["schemas"]["NotificationActionResponse"] | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Event Id */
+            event_id: string;
+            /** Expires At */
+            expires_at: string | null;
+            /** Notification Id */
+            notification_id: string;
+            /** Organization Id */
+            organization_id: string | null;
+            /** Payload */
+            payload: {
+                [key: string]: unknown;
+            };
+            /** Read At */
+            read_at: string | null;
+            type: components["schemas"]["NotificationType"];
+        };
+        /**
+         * NotificationType
+         * @enum {string}
+         */
+        NotificationType: "organization.invitation" | "organization.membership" | "system";
+        /** NotificationUnreadCountResponse */
+        NotificationUnreadCountResponse: {
+            /** Unread Count */
+            unread_count: number;
         };
         /** ObservabilitySummaryModel */
         ObservabilitySummaryModel: {
@@ -4527,6 +4626,88 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LlmSettingsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_notifications_api_v1_notifications_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    unread_count_api_v1_notifications_unread_count_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationUnreadCountResponse"];
+                };
+            };
+        };
+    };
+    mark_notification_read_api_v1_notifications__notification_id__read_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                notification_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationResponse"];
                 };
             };
             /** @description Validation Error */
