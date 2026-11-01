@@ -32,6 +32,24 @@ export type OrganizationMember = {
 export type OrganizationRoleChange = Extract<OrganizationRole, 'admin' | 'member'>;
 export type OrganizationStatusChange = Extract<OrganizationMemberStatus, 'active' | 'suspended' | 'removed'>;
 
+export type DirectoryUser = { userId: string; displayName: string };
+export type InvitationStatus = 'pending' | 'accepted' | 'declined' | 'expired' | 'revoked';
+export type Invitation = {
+    invitationId: string;
+    organizationId: string;
+    organizationName: string;
+    inviterUserId: string;
+    inviterDisplayName: string;
+    recipientUserId: string;
+    recipientDisplayName: string;
+    requestedRole: 'admin' | 'member';
+    status: InvitationStatus;
+    createdAt: string;
+    updatedAt: string;
+    expiresAt: string;
+    revision: number;
+};
+
 export class OrganizationApiError extends Error {
     readonly status: number;
     readonly code: string | null;
@@ -82,6 +100,11 @@ function readStatus(value: unknown, context: string): OrganizationStatus {
     throw new TypeError(`${context} has an unsupported status.`);
 }
 
+function readInvitationStatus(value: unknown, context: string): InvitationStatus {
+    if (value === 'pending' || value === 'accepted' || value === 'declined' || value === 'expired' || value === 'revoked') return value;
+    throw new TypeError(`${context} has an unsupported invitation status.`);
+}
+
 function readErrorCode(value: unknown): string | null {
     if (!isRecord(value) || !isRecord(value.detail)) return typeof value === 'string' ? value : null;
     return typeof value.detail.code === 'string' ? value.detail.code : null;
@@ -121,6 +144,44 @@ export function parseOrganizationMember(value: unknown, context = 'organization_
 export function parseOrganizationMembers(value: unknown): OrganizationMember[] {
     if (!Array.isArray(value)) throw new TypeError('organization_members must be an array.');
     return value.map((item, index) => parseOrganizationMember(item, `organization_members[${index}]`));
+}
+
+export function parseDirectoryUsers(value: unknown): DirectoryUser[] {
+    const record = readRecord(value, 'directory_search');
+    if (!Array.isArray(record.items)) throw new TypeError('directory_search.items must be an array.');
+    return record.items.map((item, index) => {
+        const entry = readRecord(item, `directory_search.items[${index}]`);
+        return {
+            userId: readString(entry.user_id, `directory_search.items[${index}].user_id`),
+            displayName: readString(entry.display_name, `directory_search.items[${index}].display_name`),
+        };
+    });
+}
+
+export function parseInvitation(value: unknown, context = 'invitation'): Invitation {
+    const item = readRecord(value, context);
+    const role = item.requested_role === 'admin' || item.requested_role === 'member' ? item.requested_role : null;
+    if (!role) throw new TypeError(`${context}.requested_role is invalid.`);
+    return {
+        invitationId: readString(item.invitation_id, `${context}.invitation_id`),
+        organizationId: readString(item.organization_id, `${context}.organization_id`),
+        organizationName: readString(item.organization_name, `${context}.organization_name`),
+        inviterUserId: readString(item.inviter_user_id, `${context}.inviter_user_id`),
+        inviterDisplayName: readString(item.inviter_display_name, `${context}.inviter_display_name`),
+        recipientUserId: readString(item.recipient_user_id, `${context}.recipient_user_id`),
+        recipientDisplayName: readString(item.recipient_display_name, `${context}.recipient_display_name`),
+        requestedRole: role,
+        status: readInvitationStatus(item.status, `${context}.status`),
+        createdAt: readDateTime(item.created_at, `${context}.created_at`),
+        updatedAt: readDateTime(item.updated_at, `${context}.updated_at`),
+        expiresAt: readDateTime(item.expires_at, `${context}.expires_at`),
+        revision: typeof item.revision === 'number' ? item.revision : (() => { throw new TypeError(`${context}.revision is invalid.`); })(),
+    };
+}
+
+export function parseInvitations(value: unknown): Invitation[] {
+    if (!Array.isArray(value)) throw new TypeError('invitations must be an array.');
+    return value.map((item, index) => parseInvitation(item, `invitations[${index}]`));
 }
 
 async function request<T>(path: string, decode: (payload: unknown) => T, init?: RequestInit): Promise<T> {
@@ -180,6 +241,39 @@ export function renameOrganization(organizationId: string, name: string): Promis
 
 export function listOrganizationMembers(organizationId: string): Promise<OrganizationMember[]> {
     return request(organizationPath(organizationId, '/members'), parseOrganizationMembers);
+}
+
+export function searchOrganizationUsers(organizationId: string, query: string): Promise<DirectoryUser[]> {
+    return request(
+        `${organizationPath(organizationId, '/directory/users')}?q=${encodeURIComponent(query)}&limit=20`,
+        parseDirectoryUsers,
+    );
+}
+
+export function listInvitations(organizationId: string): Promise<Invitation[]> {
+    return request(organizationPath(organizationId, '/invitations'), parseInvitations);
+}
+
+export function createInvitation(organizationId: string, recipientUserId: string, role: 'admin' | 'member', idempotencyKey = `create-invitation-${crypto.randomUUID()}`): Promise<Invitation> {
+    return request(organizationPath(organizationId, '/invitations'), (value) => parseInvitation(value), {
+        method: 'POST',
+        headers: { 'Idempotency-Key': idempotencyKey },
+        body: JSON.stringify({ recipient_user_id: recipientUserId, role }),
+    });
+}
+
+export function revokeInvitation(organizationId: string, invitationId: string, idempotencyKey = `revoke-invitation-${invitationId}-${crypto.randomUUID()}`): Promise<Invitation> {
+    return request(organizationPath(organizationId, `/invitations/${encodeURIComponent(invitationId)}/revoke`), parseInvitation, {
+        method: 'POST',
+        headers: { 'Idempotency-Key': idempotencyKey },
+    });
+}
+
+export function resendInvitation(organizationId: string, invitationId: string, idempotencyKey = `resend-invitation-${invitationId}-${crypto.randomUUID()}`): Promise<Invitation> {
+    return request(organizationPath(organizationId, `/invitations/${encodeURIComponent(invitationId)}/resend`), parseInvitation, {
+        method: 'POST',
+        headers: { 'Idempotency-Key': idempotencyKey },
+    });
 }
 
 export function changeMemberRole(

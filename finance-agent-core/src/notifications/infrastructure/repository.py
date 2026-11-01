@@ -36,6 +36,32 @@ _SAFE_ERROR_CODE_PATTERN: Final = r"^[a-z0-9][a-z0-9_.:-]{0,63}$"
 
 
 class SqlAlchemyNotificationRepository(NotificationRepository):
+    async def publish_in_session(
+        self,
+        session: AsyncSession,
+        *,
+        event_key: str,
+        organization_id: str,
+        payload: dict[str, JsonValue],
+        recipient_user_id: str,
+        expires_at: datetime,
+        action_ref: str,
+        now: datetime,
+    ) -> NotificationEnqueueResult:
+        return await self.enqueue_in_session(
+            session,
+            event_key=event_key,
+            notification_type=NotificationType.ORGANIZATION_INVITATION,
+            organization_id=organization_id,
+            payload=payload,
+            action=NotificationAction(
+                action_type="organization.invitation", action_ref=action_ref
+            ),
+            recipient_user_ids=(recipient_user_id,),
+            occurred_at=now,
+            expires_at=expires_at,
+        )
+
     async def enqueue(
         self,
         *,

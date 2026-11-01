@@ -6,6 +6,7 @@ import os
 
 from src.auth.application.authorization_service import AuthorizationService
 from src.auth.application.directory_service import DirectoryService
+from src.auth.application.invitation_service import InvitationService
 from src.auth.application.organization_service import OrganizationService
 from src.auth.application.ownership_service import OwnershipService
 from src.auth.application.service import AuthService
@@ -26,6 +27,7 @@ _authorization_service: AuthorizationService | None = None
 _organization_service: OrganizationService | None = None
 _ownership_service: OwnershipService | None = None
 _directory_service: DirectoryService | None = None
+_invitation_service: InvitationService | None = None
 
 
 def _directory_cursor_secret() -> str:
@@ -85,15 +87,26 @@ def get_directory_service() -> DirectoryService:
     return _directory_service
 
 
+def get_invitation_service() -> InvitationService:
+    global _invitation_service
+    if _invitation_service is None:
+        from src.auth.infrastructure.invitation_repository import (
+            SqlAlchemyInvitationRepository,
+        )
+
+        _invitation_service = InvitationService(
+            repository=SqlAlchemyInvitationRepository(),
+            authorization=get_authorization_service(),
+        )
+    return _invitation_service
+
+
 def reset_auth_wiring() -> None:
-    global \
-        _auth_service, \
-        _authorization_service, \
-        _organization_service, \
-        _ownership_service, \
-        _directory_service
+    global _auth_service, _authorization_service, _organization_service
+    global _ownership_service, _directory_service, _invitation_service
     _auth_service = None
     _authorization_service = None
     _organization_service = None
     _ownership_service = None
     _directory_service = None
+    _invitation_service = None

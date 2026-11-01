@@ -9,10 +9,14 @@ import {
     Pencil,
     Plus,
     RefreshCw,
+    RotateCcw,
+    Search,
+    Send,
     ShieldCheck,
     UserRound,
     UserRoundMinus,
     UserRoundX,
+    X,
 } from 'lucide-react';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -354,6 +358,112 @@ function OrganizationList({
     );
 }
 
+function InvitationManagement({ organization, onFeedback }: { organization: Organization; onFeedback: (feedback: FeedbackState) => void }) {
+    const [query, setQuery] = React.useState('');
+    const [users, setUsers] = React.useState<organizationApi.DirectoryUser[]>([]);
+    const [selectedUser, setSelectedUser] = React.useState<organizationApi.DirectoryUser | null>(null);
+    const [role, setRole] = React.useState<'admin' | 'member'>(organization.role === 'owner' ? 'admin' : 'member');
+    const [invitations, setInvitations] = React.useState<organizationApi.Invitation[]>([]);
+    const [busy, setBusy] = React.useState(false);
+    const [error, setError] = React.useState<string | null>(null);
+    const createKey = React.useRef<string | null>(null);
+    const operationKeys = React.useRef(new Map<string, string>());
+
+    const loadInvitations = React.useCallback(async () => {
+        try {
+            setInvitations(await organizationApi.listInvitations(organization.id));
+            setError(null);
+        } catch (caught) {
+            setError(errorMessage(caught, 'Invitations could not be loaded.'));
+        }
+    }, [organization.id]);
+
+    React.useEffect(() => {
+        const timer = window.setTimeout(() => void loadInvitations(), 0);
+        return () => window.clearTimeout(timer);
+    }, [loadInvitations]);
+
+    React.useEffect(() => {
+        const timer = window.setTimeout(() => {
+            setRole(organization.role === 'owner' ? 'admin' : 'member');
+            setSelectedUser(null);
+            setQuery('');
+        }, 0);
+        return () => window.clearTimeout(timer);
+    }, [organization.id, organization.role]);
+
+    React.useEffect(() => {
+        const normalized = query.trim();
+        if (normalized.length < 2) {
+            return;
+        }
+        const timer = window.setTimeout(() => {
+            void organizationApi.searchOrganizationUsers(organization.id, normalized).then(setUsers).catch((caught) => setError(errorMessage(caught, 'User search failed.')));
+        }, 250);
+        return () => window.clearTimeout(timer);
+    }, [organization.id, query]);
+
+    async function createInvite() {
+        if (!selectedUser) return;
+        const idempotencyKey = createKey.current ?? `create-invitation-${organization.id}-${selectedUser.userId}-${crypto.randomUUID()}`;
+        createKey.current = idempotencyKey;
+        setBusy(true);
+        setError(null);
+        try {
+            await organizationApi.createInvitation(organization.id, selectedUser.userId, role, idempotencyKey);
+            createKey.current = null;
+            setSelectedUser(null);
+            setQuery('');
+            onFeedback({ tone: 'success', message: `Invitation sent to ${selectedUser.displayName}.` });
+            await loadInvitations();
+        } catch (caught) {
+            setError(errorMessage(caught, 'The invitation could not be created.'));
+        } finally {
+            setBusy(false);
+        }
+    }
+
+    async function updateInvite(invitation: organizationApi.Invitation, operation: 'revoke' | 'resend') {
+        const operationKey = `${operation}:${invitation.invitationId}`;
+        const idempotencyKey = operationKeys.current.get(operationKey) ?? `${operation}-invitation-${invitation.invitationId}-${crypto.randomUUID()}`;
+        operationKeys.current.set(operationKey, idempotencyKey);
+        setBusy(true);
+        setError(null);
+        try {
+            if (operation === 'revoke') await organizationApi.revokeInvitation(organization.id, invitation.invitationId, idempotencyKey);
+            else await organizationApi.resendInvitation(organization.id, invitation.invitationId, idempotencyKey);
+            operationKeys.current.delete(operationKey);
+            await loadInvitations();
+        } catch (caught) {
+            setError(errorMessage(caught, 'The invitation could not be updated.'));
+        } finally {
+            setBusy(false);
+        }
+    }
+
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle>Invite members</CardTitle>
+                <CardDescription>Search registered users by display name. Invitations stay inside the notification inbox.</CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-4">
+                {error ? <Alert variant="destructive"><AlertTriangle aria-hidden="true" className="size-4" /><AlertDescription>{error}</AlertDescription></Alert> : null}
+                <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_9rem_auto] sm:items-end">
+                    <div className="grid gap-1.5">
+                        <Label htmlFor="invite-user-search">Find a registered user</Label>
+                        <div className="relative"><Search aria-hidden="true" className="pointer-events-none absolute left-3 top-2.5 size-4 text-muted-foreground" /><Input id="invite-user-search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search by display name" className="pl-9" maxLength={80} disabled={busy} /></div>
+                    </div>
+                    <div className="grid gap-1.5"><Label htmlFor="invite-role">Role</Label><select id="invite-role" className="h-10 rounded-md border border-input bg-background px-3 text-sm" value={role} onChange={(event) => setRole(event.target.value as 'admin' | 'member')} disabled={busy || organization.role !== 'owner'}><option value="member">Member</option>{organization.role === 'owner' ? <option value="admin">Admin</option> : null}</select></div>
+                    <Button disabled={!selectedUser || busy} onClick={() => void createInvite()}><Send aria-hidden="true" />Invite</Button>
+                </div>
+                {query.trim().length >= 2 && users.length > 0 ? <div className="grid gap-1 rounded-md border border-border/70 p-2" role="listbox" aria-label="Directory search results">{users.map((user) => <button type="button" key={user.userId} className={`flex items-center justify-between rounded-sm px-3 py-2 text-left text-sm hover:bg-accent ${selectedUser?.userId === user.userId ? 'bg-accent' : ''}`} onClick={() => setSelectedUser(user)}><span>{user.displayName}</span>{selectedUser?.userId === user.userId ? <Badge variant="outline">Selected</Badge> : null}</button>)}</div> : null}
+                {invitations.length > 0 ? <div className="grid gap-2"><h3 className="text-sm font-medium">Recent invitations</h3>{invitations.map((invitation) => <div key={invitation.invitationId} className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-border/70 px-3 py-2 text-sm"><div><span className="font-medium">{invitation.recipientDisplayName}</span><span className="ml-2 text-muted-foreground">{invitation.requestedRole} · {invitation.status}</span></div><div className="flex gap-2">{invitation.status === 'pending' ? <Button size="sm" variant="outline" disabled={busy} onClick={() => void updateInvite(invitation, 'revoke')}><X aria-hidden="true" />Revoke</Button> : invitation.status !== 'accepted' ? <Button size="sm" variant="outline" disabled={busy} onClick={() => void updateInvite(invitation, 'resend')}><RotateCcw aria-hidden="true" />Resend</Button> : null}</div></div>)}</div> : null}
+            </CardContent>
+        </Card>
+    );
+}
+
 export default function OrganizationSettingsPage() {
     const { user, refresh: refreshAuth } = useAuth();
     const {
@@ -642,6 +752,10 @@ export default function OrganizationSettingsPage() {
                     </CardContent>
                 </Card>
             </section>
+
+            {activeOrganization && (activeOrganization.role === 'owner' || activeOrganization.role === 'admin') ? (
+                <InvitationManagement organization={activeOrganization} onFeedback={setFeedback} />
+            ) : null}
 
             <Card>
                 <CardHeader className="flex-row items-start justify-between gap-4">

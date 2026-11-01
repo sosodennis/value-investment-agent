@@ -25,6 +25,8 @@ test('imports 100-key TXT and CSV files and shows safe per-key progress', async 
                 role: 'user',
                 subject: 'playwright-user',
                 user_id: 'playwright-user',
+                organization_id: 'playwright-organization',
+                membership_id: 'playwright-membership',
             }),
         });
     });
@@ -161,6 +163,8 @@ test('submits a manual key through durable import history', async ({ page }) => 
                 role: 'user',
                 subject: 'playwright-user',
                 user_id: 'playwright-user',
+                organization_id: 'playwright-organization',
+                membership_id: 'playwright-membership',
             }),
         });
     });

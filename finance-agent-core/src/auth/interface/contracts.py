@@ -101,3 +101,28 @@ class DirectorySearchResponse(BaseModel):
 
     items: list[DirectoryUserResponse]
     next_cursor: str | None = None
+
+
+class InvitationCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    recipient_user_id: str = Field(min_length=1, max_length=128)
+    role: Literal["admin", "member"]
+
+
+class InvitationResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    invitation_id: str
+    organization_id: str
+    organization_name: str
+    inviter_user_id: str
+    inviter_display_name: str
+    recipient_user_id: str
+    recipient_display_name: str
+    requested_role: Literal["admin", "member"]
+    status: Literal["pending", "accepted", "declined", "expired", "revoked"]
+    created_at: datetime
+    updated_at: datetime
+    expires_at: datetime
+    revision: int

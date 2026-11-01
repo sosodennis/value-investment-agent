@@ -16,8 +16,11 @@ writing inbox rows directly.
   together; the worker claims rows with a PostgreSQL lease before calling the
   in-app adapter.
 - `organization_id` is optional metadata. It never grants access to an inbox.
-- `read_at` is recipient-owned state. Expired events remain durable for
-  inspection but are excluded from list, unread count, and mark-read results.
+- `read_at` is recipient-owned state. Events whose delivery has expired are
+  excluded from list, unread count, and mark-read results. Invitation events
+  clear their delivery expiry when they reach a terminal outcome so the
+  recipient can still see the final accepted, declined, expired, or revoked
+  result in the inbox.
 - Payloads are bounded JSON objects. Credential-like keys such as token,
   secret, password, cookie, credential, authorization, and API key are rejected.
   Credential-bearing values, bearer strings, provider-key prefixes, and URLs
@@ -79,7 +82,9 @@ uv run ruff format --check src/notifications tests/notifications
 The PostgreSQL test must use the isolated disposable Compose database. It
 covers recipient isolation, organization metadata, duplicate event delivery,
 concurrent workers and read updates, retry/dead-letter/replay, unread counts,
-and expired inbox items. CI runs the same test through the dedicated
+and expired delivery filtering. Invitation integration tests additionally
+verify that terminal invitation outcomes remain visible in the recipient's
+inbox. CI runs the same test through the dedicated
 `notification-postgres-integration` job.
 
 Update this runbook and the OpenAPI contract when notification types, payload
