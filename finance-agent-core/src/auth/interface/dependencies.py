@@ -2,18 +2,35 @@ from __future__ import annotations
 
 import hmac
 import os
+from collections.abc import Awaitable, Callable
 from datetime import datetime
 
-from fastapi import HTTPException, Request, Response
+from fastapi import Depends, HTTPException, Request, Response
 
+from src.auth.application.authorization_service import AuthorizationService
+from src.auth.application.errors import AuthorizationDeniedError
 from src.auth.application.service import hash_secret
-from src.auth.application.wiring import get_auth_service
-from src.auth.domain.entities import UserRecord
+from src.auth.application.wiring import (
+    get_auth_service,
+    get_authorization_service,
+)
+from src.auth.domain.authorization import (
+    AuthorizationContext,
+    AuthorizationFailureCode,
+    AuthorizationResource,
+    OrganizationPermission,
+)
+from src.auth.domain.entities import AuthenticatedActorContext, AuthenticatedContext
 from src.auth.interface.contracts import Principal
 
 SESSION_COOKIE_NAME = "app_session"
 CSRF_COOKIE_NAME = "app_csrf"
 CSRF_HEADER_NAME = "X-CSRF-Token"
+
+AuthorizationResourceFactory = Callable[
+    [Request, AuthenticatedContext], AuthorizationResource
+]
+ContextDependency = Callable[..., Awaitable[AuthenticatedContext]]
 
 
 def _is_production() -> bool:
@@ -28,16 +45,131 @@ def _now() -> datetime:
     return datetime.utcnow()
 
 
-async def current_user(request: Request) -> UserRecord:
+async def current_context(request: Request) -> AuthenticatedContext:
     token = request.cookies.get(SESSION_COOKIE_NAME)
-    user = await get_auth_service().authenticate(session_token=token or "", now=_now())
-    if user is None:
+    context = await get_auth_service().authenticate(
+        session_token=token or "", now=_now()
+    )
+    if context is None:
         raise HTTPException(status_code=401, detail="authentication is required")
-    return user
+    return context
+
+
+async def current_actor(request: Request) -> AuthenticatedActorContext:
+    token = request.cookies.get(SESSION_COOKIE_NAME)
+    actor = await get_auth_service().authenticate_actor(
+        session_token=token or "", now=_now()
+    )
+    if actor is None:
+        raise HTTPException(status_code=401, detail="authentication is required")
+    return actor
+
+
+async def current_user(request: Request) -> AuthenticatedContext:
+    return await current_context(request)
+
+
+def require_organization_permission(
+    permission: OrganizationPermission,
+    *,
+    resource_factory: AuthorizationResourceFactory | None = None,
+    context_dependency: ContextDependency = current_context,
+) -> Callable[..., Awaitable[AuthenticatedContext]]:
+    async def dependency(
+        request: Request,
+        context: AuthenticatedContext = Depends(context_dependency),
+    ) -> AuthenticatedContext:
+        resource = (
+            resource_factory(request, context)
+            if resource_factory is not None
+            else _default_authorization_resource(permission, context)
+        )
+        try:
+            _require_permission(
+                service=get_authorization_service(),
+                context=context,
+                permission=permission,
+                resource=resource,
+            )
+        except HTTPException as error:
+            await record_denied_permission(
+                request=request,
+                context=context,
+                permission=permission,
+                resource=resource,
+                failure_code=str(error.detail),
+            )
+            raise
+        return context
+
+    return dependency
+
+
+def _require_permission(
+    *,
+    service: AuthorizationService,
+    context: AuthenticatedContext,
+    permission: OrganizationPermission,
+    resource: AuthorizationResource | None = None,
+) -> None:
+    try:
+        service.require(
+            context=AuthorizationContext.from_authenticated_context(context),
+            permission=permission,
+            resource=resource,
+        )
+    except AuthorizationDeniedError as exc:
+        status_code = (
+            404
+            if exc.code == AuthorizationFailureCode.RESOURCE_NOT_FOUND.value
+            else 403
+        )
+        raise HTTPException(status_code=status_code, detail=exc.code) from exc
+
+
+async def record_denied_permission(
+    *,
+    request: Request,
+    context: AuthenticatedContext,
+    permission: OrganizationPermission,
+    resource: AuthorizationResource,
+    failure_code: str,
+) -> None:
+    verified_organization_id = context.membership.organization_id
+    if not verified_organization_id:
+        return
+    try:
+        from src.audit.application.recording import record_best_effort
+        from src.audit.domain.entities import AuditOutcome
+
+        await record_best_effort(
+            organization_id=verified_organization_id,
+            actor_user_id=context.user.id,
+            action="authorization.denied",
+            outcome=AuditOutcome.DENIED,
+            target_type="organization",
+            target_id=resource.organization_id,
+            correlation_id=request.headers.get("X-Request-ID"),
+            payload={
+                "permission": permission.value,
+                "failure_code": failure_code,
+                "requested_organization_id": resource.organization_id,
+            },
+        )
+    except Exception:
+        return
+
+
+def _default_authorization_resource(
+    permission: OrganizationPermission, context: AuthenticatedContext
+) -> AuthorizationResource:
+    if permission is OrganizationPermission.ORGANIZATION_CREATE:
+        return AuthorizationResource()
+    return AuthorizationResource(organization_id=context.membership.organization_id)
 
 
 async def require_current_user(request: Request) -> Principal:
-    return Principal.from_user(await current_user(request))
+    return Principal.from_context(await current_context(request))
 
 
 def require_csrf(request: Request, *, expected_hash: str) -> None:
@@ -53,17 +185,37 @@ def require_csrf(request: Request, *, expected_hash: str) -> None:
         raise HTTPException(status_code=403, detail="csrf validation failed")
 
 
-async def require_current_user_mutation(request: Request) -> Principal:
+async def require_current_context_mutation(request: Request) -> AuthenticatedContext:
     token = request.cookies.get(SESSION_COOKIE_NAME)
     service = get_auth_service()
     session = await service.authenticate_session(session_token=token or "", now=_now())
     if session is None:
         raise HTTPException(status_code=401, detail="authentication is required")
     require_csrf(request, expected_hash=session.csrf_token_hash)
-    user = await service.user_for_session(session)
-    if user is None:
+    context = await service.authenticate(session_token=token or "", now=_now())
+    if context is None or context.session.id != session.id:
         raise HTTPException(status_code=401, detail="authentication is required")
-    return Principal.from_user(user)
+    return context
+
+
+async def require_current_actor_mutation(
+    request: Request,
+) -> AuthenticatedActorContext:
+    token = request.cookies.get(SESSION_COOKIE_NAME)
+    service = get_auth_service()
+    session = await service.authenticate_session(session_token=token or "", now=_now())
+    if session is None:
+        raise HTTPException(status_code=401, detail="authentication is required")
+    require_csrf(request, expected_hash=session.csrf_token_hash)
+    actor = await service.authenticate_actor(session_token=token or "", now=_now())
+    if actor is None or actor.session.id != session.id:
+        raise HTTPException(status_code=401, detail="authentication is required")
+    return actor
+
+
+async def require_current_user_mutation(request: Request) -> Principal:
+    context = await require_current_context_mutation(request)
+    return Principal.from_context(context)
 
 
 def set_auth_cookies(

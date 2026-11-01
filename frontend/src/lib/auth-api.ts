@@ -54,7 +54,9 @@ function parseAuthUser(value: unknown): AuthUser {
         value.role !== 'user' ||
         typeof value.email !== 'string' ||
         typeof value.subject !== 'string' ||
-        typeof value.user_id !== 'string'
+        typeof value.user_id !== 'string' ||
+        typeof value.organization_id !== 'string' ||
+        typeof value.membership_id !== 'string'
     ) {
         throw new TypeError('auth response has an invalid principal.');
     }
@@ -65,6 +67,8 @@ function parseAuthUser(value: unknown): AuthUser {
         role: 'user',
         subject: value.subject,
         user_id: value.user_id,
+        organization_id: value.organization_id,
+        membership_id: value.membership_id,
     };
 }
 
@@ -122,13 +126,24 @@ export function login(email: string, password: string): Promise<AuthUser> {
     });
 }
 
-export function register(email: string, password: string): Promise<AuthUser> {
+export function register(
+    email: string,
+    displayName: string,
+    password: string,
+): Promise<AuthUser> {
     return request('/api/v1/auth/register', parseAuthUser, {
         method: 'POST',
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email, display_name: displayName, password }),
     });
 }
 
 export function logout(): Promise<void> {
     return request('/api/v1/auth/logout', () => undefined, { method: 'POST' });
+}
+
+export function selectActiveOrganization(organizationId: string): Promise<AuthUser> {
+    return request('/api/v1/auth/session/organization', parseAuthUser, {
+        method: 'PUT',
+        body: JSON.stringify({ organization_id: organizationId }),
+    });
 }

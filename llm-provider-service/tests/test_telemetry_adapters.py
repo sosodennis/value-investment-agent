@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from hashlib import sha256
 from uuid import uuid4
 
 import pytest
@@ -10,6 +11,8 @@ from src.llm_provider_service.domain.reliability import (
     UpstreamFailure,
 )
 from src.llm_provider_service.infrastructure import key_telemetry
+
+ORG_HASH = sha256(b"org-a").hexdigest()[:32]
 
 
 class _Pipeline:
@@ -89,13 +92,13 @@ async def test_key_health_cooldown_expiry_and_error_values_are_sanitized(
     expired_id = str(uuid4())
     active_id = str(uuid4())
     rows = {
-        f"via:llm-provider:key-health:{expired_id}": {
+        f"via:llm-provider:key-health:{ORG_HASH}:{expired_id}": {
             "status": "cooldown",
             "cooldown_until": "2000-01-01T00:00:00+00:00",
             "failure_count": "-4",
             "last_error": "sk-upstream-secret",
         },
-        f"via:llm-provider:key-health:{active_id}": {
+        f"via:llm-provider:key-health:{ORG_HASH}:{active_id}": {
             "status": "cooldown",
             "cooldown_until": "2999-01-01T00:00:00+00:00",
             "failure_count": "3",
@@ -108,9 +111,11 @@ async def test_key_health_cooldown_expiry_and_error_values_are_sanitized(
     telemetry = key_telemetry.RedisProviderKeyTelemetry()
 
     try:
-        health = await telemetry.get_many([expired_id, active_id, "not-a-uuid"])
-        await telemetry.delete(expired_id)
-        await telemetry.delete("not-a-uuid")
+        health = await telemetry.get_many(
+            [expired_id, active_id, "not-a-uuid"], organization_id="org-a"
+        )
+        await telemetry.delete(expired_id, organization_id="org-a")
+        await telemetry.delete("not-a-uuid", organization_id="org-a")
     finally:
         await telemetry.close()
 
@@ -132,10 +137,10 @@ async def test_key_health_cooldown_expiry_and_error_values_are_sanitized(
     }
     assert redis._pipeline is not None
     assert redis._pipeline.keys == [
-        f"via:llm-provider:key-health:{expired_id}",
-        f"via:llm-provider:key-health:{active_id}",
+        f"via:llm-provider:key-health:{ORG_HASH}:{expired_id}",
+        f"via:llm-provider:key-health:{ORG_HASH}:{active_id}",
     ]
-    assert redis.deleted == [f"via:llm-provider:key-health:{expired_id}"]
+    assert redis.deleted == [f"via:llm-provider:key-health:{ORG_HASH}:{expired_id}"]
 
 
 def _key_failure() -> UpstreamFailure:
@@ -159,13 +164,17 @@ async def test_late_success_does_not_clear_a_newer_key_cooldown(
     monkeypatch.setattr(key_telemetry, "Redis", lambda **kwargs: redis)
     telemetry = key_telemetry.RedisProviderKeyTelemetry()
     try:
-        request_version = await telemetry.record_use(key_id)
-        await telemetry.record_failure(key_id, _key_failure(), cooldown_seconds=30)
+        request_version = await telemetry.record_use(key_id, organization_id="org-a")
+        await telemetry.record_failure(
+            key_id, _key_failure(), organization_id="org-a", cooldown_seconds=30
+        )
         assert (
-            await telemetry.record_success(key_id, expected_version=request_version)
+            await telemetry.record_success(
+                key_id, organization_id="org-a", expected_version=request_version
+            )
             is False
         )
-        health = await telemetry.get_many_strict([key_id])
+        health = await telemetry.get_many_strict([key_id], organization_id="org-a")
     finally:
         await telemetry.close()
 
@@ -193,9 +202,11 @@ async def test_global_rate_limit_records_failure_without_disabling_key(
         reason="LLM provider request failed",
     )
     try:
-        await telemetry.record_use(key_id)
-        await telemetry.record_failure(key_id, failure, cooldown_seconds=30)
-        health = await telemetry.get_many_strict([key_id])
+        await telemetry.record_use(key_id, organization_id="org-a")
+        await telemetry.record_failure(
+            key_id, failure, organization_id="org-a", cooldown_seconds=30
+        )
+        health = await telemetry.get_many_strict([key_id], organization_id="org-a")
     finally:
         await telemetry.close()
 
@@ -212,7 +223,7 @@ async def test_manual_success_clears_an_invalid_key_health_record(
     key_id = str(uuid4())
     redis = _Redis(
         {
-            f"via:llm-provider:key-health:{key_id}": {
+            f"via:llm-provider:key-health:{ORG_HASH}:{key_id}": {
                 "status": "invalid_key",
                 "failure_count": "2",
                 "last_error": "invalid_key",
@@ -223,10 +234,12 @@ async def test_manual_success_clears_an_invalid_key_health_record(
     monkeypatch.setattr(key_telemetry, "Redis", lambda **kwargs: redis)
     telemetry = key_telemetry.RedisProviderKeyTelemetry()
     try:
-        request_version = await telemetry.record_use(key_id)
+        request_version = await telemetry.record_use(key_id, organization_id="org-a")
         assert request_version == 5
-        assert await telemetry.record_success(key_id, expected_version=request_version)
-        health = await telemetry.get_many_strict([key_id])
+        assert await telemetry.record_success(
+            key_id, organization_id="org-a", expected_version=request_version
+        )
+        health = await telemetry.get_many_strict([key_id], organization_id="org-a")
     finally:
         await telemetry.close()
 

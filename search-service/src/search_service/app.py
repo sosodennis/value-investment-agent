@@ -5,7 +5,7 @@ import hashlib
 import logging
 import os
 import random
-from collections.abc import Awaitable, Callable, Mapping
+from collections.abc import Awaitable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import TypeVar, cast
@@ -14,6 +14,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ValidationError
 from src.shared.internal_services import (
+    INTERNAL_CONTEXT_ISSUER,
     INTERNAL_CONTRACT_VERSION,
     InternalAuthenticationError,
     InternalContextValidationError,
@@ -30,6 +31,7 @@ from .contracts import (
     EmptyInput,
     NewsSearchRequest,
     Operation,
+    OrganizationSettings,
     ProviderCatalog,
     ProviderCatalogResult,
     ProviderKeyAddInput,
@@ -50,7 +52,6 @@ from .contracts import (
     SearchSuccess,
     SettingsReadResult,
     SettingsUpdateInput,
-    UserSettings,
     WebSearchRequest,
 )
 from .errors import SearchServiceError
@@ -188,42 +189,24 @@ async def _test_provider_key(
 async def _claim_credential(
     control_plane: SearchControlPlane,
     *,
-    subject_id: str,
+    organization_id: str,
     provider: str,
     deadline_at: datetime,
 ) -> object | None:
-    """Claim one key when the durable pool supports leases.
-
-    The fallback is intentional: it keeps the runtime usable while an older
-    in-process control plane is being replaced by the pooled implementation.
-    """
-
-    claim = getattr(control_plane, "claim_credential", None)
-    if not callable(claim):
-        return None
-    operation = cast(Callable[..., Awaitable[object | None]], claim)
-    try:
-        return await _call_control_plane(
-            operation(
-                subject_id=subject_id,
-                provider=provider,
-                lease_seconds=_LEASE_SECONDS,
-            ),
-            deadline_at=deadline_at,
-        )
-    except TypeError:
-        # A transitional implementation may expose the method without the
-        # lease parameter. It still provides useful ownership isolation.
-        return await _call_control_plane(
-            operation(subject_id=subject_id, provider=provider),
-            deadline_at=deadline_at,
-        )
+    return await _call_control_plane(
+        control_plane.claim_credential(
+            organization_id=organization_id,
+            provider=provider,
+            lease_seconds=_LEASE_SECONDS,
+        ),
+        deadline_at=deadline_at,
+    )
 
 
 async def _release_credential(
     control_plane: SearchControlPlane,
     *,
-    subject_id: str,
+    organization_id: str,
     credential: _CredentialView,
     succeeded: bool,
     deadline_at: datetime,
@@ -232,30 +215,20 @@ async def _release_credential(
         return
     if _remaining(deadline_at) <= 0:
         return
-    release = getattr(control_plane, "release_credential", None)
-    if not callable(release):
-        return
-    operation = cast(Callable[..., Awaitable[object]], release)
-    try:
-        await _call_control_plane(
-            operation(
-                subject_id=subject_id,
-                key_id=credential.key_id,
-                succeeded=succeeded,
-            ),
-            deadline_at=deadline_at,
-        )
-    except TypeError:
-        await _call_control_plane(
-            operation(subject_id=subject_id, key_id=credential.key_id),
-            deadline_at=deadline_at,
-        )
+    await _call_control_plane(
+        control_plane.release_credential(
+            organization_id=organization_id,
+            key_id=credential.key_id,
+            succeeded=succeeded,
+        ),
+        deadline_at=deadline_at,
+    )
 
 
 async def _record_credential_failure(
     control_plane: SearchControlPlane,
     *,
-    subject_id: str,
+    organization_id: str,
     credential: _CredentialView,
     error: SearchServiceError,
     deadline_at: datetime,
@@ -268,10 +241,6 @@ async def _record_credential_failure(
     status = (
         "invalid" if error.code == SearchErrorCode.AUTHENTICATION_FAILED else "cooldown"
     )
-    key_failure = getattr(control_plane, "record_key_failure", None)
-    provider_failure = getattr(control_plane, "record_provider_failure", None)
-    if not callable(provider_failure):
-        provider_failure = getattr(control_plane, "record_failure", None)
     if (
         error.code
         in {
@@ -282,46 +251,31 @@ async def _record_credential_failure(
         or _remaining(deadline_at) <= 0
     ):
         return
-    operation: Awaitable[object] | None = None
     try:
         provider_scoped = error.code in {
             SearchErrorCode.UPSTREAM_UNAVAILABLE,
             SearchErrorCode.UPSTREAM_MALFORMED,
         }
-        if provider_scoped and callable(provider_failure):
-            operation = cast(Callable[..., Awaitable[object]], provider_failure)(
-                subject_id=subject_id,
+        if provider_scoped:
+            operation = control_plane.record_provider_failure(
+                organization_id=organization_id,
                 provider=credential.provider,
                 cooldown_seconds=cooldown_seconds,
             )
-        elif callable(key_failure) and credential.key_id is not None:
-            operation = cast(Callable[..., Awaitable[object]], key_failure)(
-                subject_id=subject_id,
+        elif credential.key_id is not None:
+            operation = control_plane.record_key_failure(
+                organization_id=organization_id,
                 key_id=credential.key_id,
                 status=status,
                 cooldown_seconds=cooldown_seconds,
             )
-        elif callable(provider_failure):
-            operation = cast(Callable[..., Awaitable[object]], provider_failure)(
-                subject_id=subject_id,
+        else:
+            operation = control_plane.record_provider_failure(
+                organization_id=organization_id,
                 provider=credential.provider,
                 cooldown_seconds=cooldown_seconds,
             )
-        if operation is None:
-            return
         await _call_control_plane(operation, deadline_at=deadline_at)
-    except TypeError:
-        # Compatibility with the old provider-wide record_failure signature.
-        if not callable(provider_failure):
-            return
-        await _call_control_plane(
-            cast(Callable[..., Awaitable[object]], provider_failure)(
-                subject_id=subject_id,
-                provider=credential.provider,
-                cooldown_seconds=cooldown_seconds,
-            ),
-            deadline_at=deadline_at,
-        )
     except SearchServiceError as exc:
         if exc.code == SearchErrorCode.DEADLINE_EXCEEDED:
             raise
@@ -359,7 +313,18 @@ def _fingerprint(api_key: str) -> str:
 
 
 def _safe_suffix(api_key: str) -> str:
-    return api_key[-4:].rjust(4, "*")
+    return api_key[-4:] if len(api_key) > 4 else "****"
+
+
+def _safe_label(label: str, api_key: str) -> str:
+    normalized = label.strip() or "Search provider key"
+    if api_key in normalized:
+        raise SearchServiceError(
+            SearchErrorCode.INVALID_REQUEST,
+            400,
+            "key label must not contain provider key material",
+        )
+    return normalized
 
 
 def _correlation_id(raw: object) -> str:
@@ -427,11 +392,20 @@ def create_app(
         raw_context = raw.get("context", {}) if isinstance(raw, dict) else {}
         if not isinstance(raw_context, dict):
             raw_context = {}
-        return authenticate_internal_request(
+        context = authenticate_internal_request(
             request.headers.get("Authorization"),
             expected_token=service_token,
             raw_context=raw_context,
+            expected_audience="search-service",
+            expected_issuer=INTERNAL_CONTEXT_ISSUER,
+            organization_header=request.headers.get("X-Organization-ID"),
         )
+        if context.principal.organization_id in {
+            None,
+            "unscoped",
+        } or context.principal.membership_id in {None, "unscoped"}:
+            raise InternalContextValidationError()
+        return context
 
     async def read_json(request: Request) -> object:
         try:
@@ -471,7 +445,9 @@ def create_app(
             )
             requested = requested_capabilities(payload)
             credentials = await _call_control_plane(
-                control_plane.credentials_for(subject_id=context.principal.subject_id),
+                control_plane.credentials_for(
+                    organization_id=context.principal.organization_id
+                ),
                 deadline_at=operation_deadline,
             )
             now = datetime.now(UTC)
@@ -537,13 +513,15 @@ def create_app(
                             True,
                         )
                     candidate: _CredentialView | None = None
-                    claimed = await _claim_credential(
-                        control_plane,
-                        subject_id=context.principal.subject_id,
-                        provider=provider_name,
-                        deadline_at=operation_deadline,
-                    )
-                    if claimed is not None:
+                    if provider.capabilities.key_required:
+                        claimed = await _claim_credential(
+                            control_plane,
+                            organization_id=context.principal.organization_id,
+                            provider=provider_name,
+                            deadline_at=operation_deadline,
+                        )
+                        if claimed is None:
+                            break
                         candidate = _credential_view(claimed)
                         if not _eligible_credential(candidate, now=datetime.now(UTC)):
                             continue
@@ -674,14 +652,14 @@ def create_app(
                         if error is not None:
                             await _record_credential_failure(
                                 control_plane,
-                                subject_id=context.principal.subject_id,
+                                organization_id=context.principal.organization_id,
                                 credential=candidate,
                                 error=error,
                                 deadline_at=operation_deadline,
                             )
                         await _release_credential(
                             control_plane,
-                            subject_id=context.principal.subject_id,
+                            organization_id=context.principal.organization_id,
                             credential=candidate,
                             succeeded=succeeded,
                             deadline_at=operation_deadline,
@@ -882,7 +860,9 @@ def create_app(
             correlation_id = context.correlation_id
             EmptyInput.model_validate(raw_input)
             settings = await _call_control_plane(
-                control_plane.get_settings(subject_id=context.principal.subject_id),
+                control_plane.get_settings(
+                    organization_id=context.principal.organization_id
+                ),
                 deadline_at=context.deadline_at,
             )
             return success(context, SettingsReadResult(settings=settings))
@@ -936,7 +916,7 @@ def create_app(
                 )
             result = await _call_control_plane(
                 control_plane.replace_settings(
-                    subject_id=context.principal.subject_id,
+                    organization_id=context.principal.organization_id,
                     providers=payload.providers,
                 ),
                 deadline_at=context.deadline_at,
@@ -1055,6 +1035,7 @@ def create_app(
                     "provider is not configured",
                 )
             key = payload.api_key.get_secret_value()
+            label = _safe_label(payload.label, key)
             valid = await _test_provider_key(
                 provider, key, deadline_at=context.deadline_at
             )
@@ -1066,20 +1047,20 @@ def create_app(
                 )
             if isinstance(payload, ProviderKeyReplaceInput):
                 key_operation = control_plane.replace_tested_key(
-                    subject_id=context.principal.subject_id,
+                    organization_id=context.principal.organization_id,
                     provider=payload.provider,
                     api_key=key,
-                    label=payload.label,
+                    label=label,
                     suffix=_safe_suffix(key),
                     fingerprint=_fingerprint(key),
                     key_id=payload.key_id,
                 )
             else:
                 key_operation = control_plane.add_tested_key(
-                    subject_id=context.principal.subject_id,
+                    organization_id=context.principal.organization_id,
                     provider=payload.provider,
                     api_key=key,
-                    label=payload.label,
+                    label=label,
                     suffix=_safe_suffix(key),
                     fingerprint=_fingerprint(key),
                 )
@@ -1142,7 +1123,8 @@ def create_app(
             payload = ProviderKeyDeleteInput.model_validate(raw_input)
             await _call_control_plane(
                 control_plane.delete_key(
-                    subject_id=context.principal.subject_id, key_id=payload.key_id
+                    organization_id=context.principal.organization_id,
+                    key_id=payload.key_id,
                 ),
                 deadline_at=context.deadline_at,
             )
@@ -1183,7 +1165,7 @@ def create_app(
             payload = ProviderKeySetEnabledInput.model_validate(raw_input)
             summary = await _call_control_plane(
                 control_plane.set_key_enabled(
-                    subject_id=context.principal.subject_id,
+                    organization_id=context.principal.organization_id,
                     key_id=payload.key_id,
                     enabled=payload.enabled,
                 ),
@@ -1236,7 +1218,9 @@ def create_app(
             EmptyInput.model_validate(raw_input)
             result = ProviderKeyList(
                 providers=await _call_control_plane(
-                    control_plane.list_keys(subject_id=context.principal.subject_id),
+                    control_plane.list_keys(
+                        organization_id=context.principal.organization_id
+                    ),
                     deadline_at=context.deadline_at,
                 )
             )
@@ -1273,14 +1257,39 @@ def create_app(
 
 class _UnavailableControlPlane:
     async def credentials_for(
-        self, *, subject_id: str
+        self, *, organization_id: str
     ) -> tuple[ProviderCredential, ...]:
+        raise RuntimeError("search control plane is not configured")
+
+    async def claim_credential(
+        self, *, organization_id: str, provider: str, lease_seconds: int = 30
+    ) -> ProviderCredential | None:
+        raise RuntimeError("search control plane is not configured")
+
+    async def release_credential(
+        self, *, organization_id: str, key_id: str, succeeded: bool = False
+    ) -> None:
+        raise RuntimeError("search control plane is not configured")
+
+    async def record_key_failure(
+        self,
+        *,
+        organization_id: str,
+        key_id: str,
+        status: str = "cooldown",
+        cooldown_seconds: int = 30,
+    ) -> None:
+        raise RuntimeError("search control plane is not configured")
+
+    async def record_provider_failure(
+        self, *, organization_id: str, provider: str, cooldown_seconds: int = 30
+    ) -> None:
         raise RuntimeError("search control plane is not configured")
 
     async def add_tested_key(
         self,
         *,
-        subject_id: str,
+        organization_id: str,
         provider: str,
         api_key: str,
         label: str,
@@ -1292,7 +1301,7 @@ class _UnavailableControlPlane:
     async def replace_tested_key(
         self,
         *,
-        subject_id: str,
+        organization_id: str,
         provider: str,
         api_key: str,
         label: str,
@@ -1302,23 +1311,25 @@ class _UnavailableControlPlane:
     ) -> ProviderKeySummary:
         raise RuntimeError("search control plane is not configured")
 
-    async def list_keys(self, *, subject_id: str) -> tuple[ProviderKeySummary, ...]:
+    async def list_keys(
+        self, *, organization_id: str
+    ) -> tuple[ProviderKeySummary, ...]:
         raise RuntimeError("search control plane is not configured")
 
-    async def delete_key(self, *, subject_id: str, key_id: str) -> None:
+    async def delete_key(self, *, organization_id: str, key_id: str) -> None:
         raise RuntimeError("search control plane is not configured")
 
     async def set_key_enabled(
-        self, *, subject_id: str, key_id: str, enabled: bool
+        self, *, organization_id: str, key_id: str, enabled: bool
     ) -> ProviderKeySummary:
         raise RuntimeError("search control plane is not configured")
 
-    async def get_settings(self, *, subject_id: str) -> UserSettings:
+    async def get_settings(self, *, organization_id: str) -> OrganizationSettings:
         raise RuntimeError("search control plane is not configured")
 
     async def replace_settings(
-        self, *, subject_id: str, providers: tuple[ProviderPreference, ...]
-    ) -> UserSettings:
+        self, *, organization_id: str, providers: tuple[ProviderPreference, ...]
+    ) -> OrganizationSettings:
         raise RuntimeError("search control plane is not configured")
 
 
@@ -1328,6 +1339,10 @@ if os.getenv("TAVILY_API_ENABLED", "1").lower() not in {"0", "false", "no"}:
 
 _database_url = os.getenv("SEARCH_CONTROL_DATABASE_URL", "")
 _encryption_key = os.getenv("SEARCH_PROVIDER_ENCRYPTION_KEY", "")
+if _database_url and not _encryption_key:
+    raise ValueError(
+        "SEARCH_PROVIDER_ENCRYPTION_KEY is required when Search control storage is configured"
+    )
 _default_control_plane = cast(
     SearchControlPlane,
     PostgresSearchControlPlane(_database_url, _encryption_key)

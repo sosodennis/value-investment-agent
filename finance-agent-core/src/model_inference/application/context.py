@@ -9,8 +9,19 @@ _inference_principal: ContextVar[InternalPrincipal | None] = ContextVar(
 )
 
 
-def set_inference_principal(subject_id: str) -> Token[InternalPrincipal | None]:
-    return _inference_principal.set(InternalPrincipal(subject_id=subject_id))
+def set_inference_principal(
+    principal: InternalPrincipal | str,
+    *,
+    organization_id: str | None = None,
+    membership_id: str | None = None,
+) -> Token[InternalPrincipal | None]:
+    if isinstance(principal, str):
+        principal = InternalPrincipal(
+            subject_id=principal,
+            organization_id=organization_id,
+            membership_id=membership_id,
+        )
+    return _inference_principal.set(principal)
 
 
 def reset_inference_principal(token: Token[InternalPrincipal | None]) -> None:

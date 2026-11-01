@@ -3,7 +3,15 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Index, String, UniqueConstraint
+from sqlalchemy import (
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.infrastructure.database import Base
@@ -18,9 +26,177 @@ class UserModel(Base):
     email: Mapped[str] = mapped_column(
         String(320), unique=True, index=True, nullable=False
     )
+    display_name: Mapped[str] = mapped_column(String(80), nullable=False)
+    display_name_normalized: Mapped[str] = mapped_column(
+        String(80), index=True, nullable=False
+    )
     password_hash: Mapped[str] = mapped_column(String(500), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, default=datetime.utcnow
+    )
+
+
+class OrganizationModel(Base):
+    __tablename__ = "auth_organizations"
+
+    id: Mapped[str] = mapped_column(
+        String, primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=datetime.utcnow
+    )
+
+
+class MembershipModel(Base):
+    __tablename__ = "auth_memberships"
+
+    id: Mapped[str] = mapped_column(
+        String, primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    organization_id: Mapped[str] = mapped_column(
+        String,
+        ForeignKey("auth_organizations.id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
+    user_id: Mapped[str] = mapped_column(
+        String,
+        ForeignKey("auth_users.id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
+    role: Mapped[str] = mapped_column(String(32), nullable=False, default="member")
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="active")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=datetime.utcnow
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=datetime.utcnow
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id", "user_id", name="uq_auth_membership_organization_user"
+        ),
+        CheckConstraint(
+            "role IN ('owner', 'admin', 'member')",
+            name="ck_auth_membership_role",
+        ),
+        CheckConstraint(
+            "status IN ('pending', 'active', 'suspended', 'removed')",
+            name="ck_auth_membership_status",
+        ),
+        Index("idx_auth_membership_user_status", "user_id", "status"),
+    )
+
+
+class InvitationModel(Base):
+    __tablename__ = "auth_invitations"
+
+    id: Mapped[str] = mapped_column(
+        String, primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    organization_id: Mapped[str] = mapped_column(
+        String,
+        ForeignKey("auth_organizations.id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
+    inviter_user_id: Mapped[str] = mapped_column(
+        String,
+        ForeignKey("auth_users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    recipient_user_id: Mapped[str] = mapped_column(
+        String,
+        ForeignKey("auth_users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    requested_role: Mapped[str] = mapped_column(String(32), nullable=False)
+    status: Mapped[str] = mapped_column(String(24), nullable=False, default="pending")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    revision: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    notification_event_id: Mapped[str] = mapped_column(String, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "recipient_user_id",
+            name="uq_auth_invitation_organization_recipient",
+        ),
+        CheckConstraint(
+            "requested_role IN ('admin', 'member')",
+            name="ck_auth_invitation_requested_role",
+        ),
+        CheckConstraint(
+            "status IN ('pending', 'accepted', 'declined', 'expired', 'revoked')",
+            name="ck_auth_invitation_status",
+        ),
+        CheckConstraint("revision > 0", name="ck_auth_invitation_revision"),
+        Index(
+            "idx_auth_invitation_organization_status",
+            "organization_id",
+            "status",
+            "updated_at",
+        ),
+        Index(
+            "idx_auth_invitation_recipient_status",
+            "recipient_user_id",
+            "status",
+            "updated_at",
+        ),
+    )
+
+
+class InvitationOperationModel(Base):
+    __tablename__ = "auth_invitation_operations"
+
+    id: Mapped[str] = mapped_column(
+        String, primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    invitation_id: Mapped[str] = mapped_column(
+        String,
+        ForeignKey("auth_invitations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    organization_id: Mapped[str] = mapped_column(
+        String,
+        ForeignKey("auth_organizations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    actor_user_id: Mapped[str] = mapped_column(
+        String,
+        ForeignKey("auth_users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    operation: Mapped[str] = mapped_column(String(24), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "actor_user_id",
+            "operation",
+            "idempotency_key",
+            name="uq_auth_invitation_operation_key",
+        ),
+        Index(
+            "idx_auth_invitation_operation_invitation",
+            "invitation_id",
+            "operation",
+            "created_at",
+        ),
     )
 
 
@@ -33,6 +209,12 @@ class SessionModel(Base):
     user_id: Mapped[str] = mapped_column(
         String,
         ForeignKey("auth_users.id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
+    active_organization_id: Mapped[str] = mapped_column(
+        String,
+        ForeignKey("auth_organizations.id", ondelete="RESTRICT"),
         index=True,
         nullable=False,
     )

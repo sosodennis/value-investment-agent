@@ -111,12 +111,16 @@ class AnalysisRuntimeService:
         thread_id: str,
         input_data: Mapping[str, object],
         run_id: str | None = None,
+        organization_id: str = "unscoped",
+        membership_id: str = "unscoped",
     ) -> str:
         if not await self.owner.claim(principal_id=principal_id, thread_id=thread_id):
             raise ThreadNotFoundError("thread was not found")
         if thread_id in self._tasks and not self._tasks[thread_id].done():
             raise RunAlreadyActiveError("thread already has an active run")
         previous = await self.repository.get_run(thread_id=thread_id)
+        if previous and previous.organization_id != organization_id:
+            raise ThreadNotFoundError("thread was not found")
         if previous and previous.status in {"running", "waiting", "queued"}:
             raise RunAlreadyActiveError("thread already has an active run")
         selected_run_id = run_id or str(uuid.uuid4())
@@ -127,11 +131,15 @@ class AnalysisRuntimeService:
             status="queued",
             now=now,
             principal_id=principal_id,
+            organization_id=organization_id,
+            membership_id=membership_id,
             input_data=input_data,
         )
         task = asyncio.create_task(
             self._execute(
                 principal_id=principal_id,
+                organization_id=organization_id,
+                membership_id=membership_id,
                 thread_id=thread_id,
                 run_id=selected_run_id,
                 input_data=input_data,
@@ -148,6 +156,8 @@ class AnalysisRuntimeService:
         source_run_id: str,
         checkpoint: CheckpointIdentity,
         idempotency_key: str,
+        organization_id: str = "unscoped",
+        membership_id: str = "unscoped",
     ) -> RetryOperation:
         if not idempotency_key.strip():
             raise RetryNotAvailableError("Idempotency-Key is required")
@@ -166,6 +176,8 @@ class AnalysisRuntimeService:
         ).hexdigest()
         operation, _ = await self.repository.begin_retry(
             principal_id=principal_id,
+            organization_id=organization_id,
+            membership_id=membership_id,
             thread_id=thread_id,
             source_run_id=source_run_id,
             checkpoint=checkpoint,
@@ -183,6 +195,8 @@ class AnalysisRuntimeService:
             self._tasks[thread_id] = asyncio.create_task(
                 self._execute(
                     principal_id=principal_id,
+                    organization_id=claimed.organization_id,
+                    membership_id=claimed.membership_id,
                     thread_id=thread_id,
                     run_id=claimed.target_run_id,
                     input_data={
@@ -203,6 +217,8 @@ class AnalysisRuntimeService:
         principal_id: str,
         identity: InteractionIdentity,
         response: InteractionResponse,
+        organization_id: str = "unscoped",
+        membership_id: str = "unscoped",
     ) -> str:
         await self._check_owner(principal_id=principal_id, thread_id=identity.thread_id)
         task = self._tasks.get(identity.thread_id)
@@ -213,6 +229,8 @@ class AnalysisRuntimeService:
                 identity=identity,
                 response=response,
                 principal_id=principal_id,
+                organization_id=organization_id,
+                membership_id=membership_id,
                 now=datetime.now(timezone.utc),
             )
             for event in claimed.events:
@@ -226,6 +244,8 @@ class AnalysisRuntimeService:
         self._tasks[identity.thread_id] = asyncio.create_task(
             self._execute(
                 principal_id=principal_id,
+                organization_id=claimed.organization_id,
+                membership_id=claimed.membership_id,
                 thread_id=identity.thread_id,
                 run_id=identity.run_id,
                 input_data=resume_input,
@@ -250,6 +270,8 @@ class AnalysisRuntimeService:
             self._tasks[thread_id] = asyncio.create_task(
                 self._execute(
                     principal_id=item.principal_id,
+                    organization_id=item.organization_id,
+                    membership_id=item.membership_id,
                     thread_id=thread_id,
                     run_id=item.identity.run_id,
                     input_data=resume_input,
@@ -277,6 +299,8 @@ class AnalysisRuntimeService:
             self._tasks[operation.thread_id] = asyncio.create_task(
                 self._execute(
                     principal_id=claimed.principal_id,
+                    organization_id=claimed.organization_id,
+                    membership_id=claimed.membership_id,
                     thread_id=claimed.thread_id,
                     run_id=claimed.target_run_id,
                     input_data={
@@ -292,7 +316,14 @@ class AnalysisRuntimeService:
             recovered += 1
         return recovered
 
-    async def cancel(self, *, principal_id: str, thread_id: str, run_id: str) -> None:
+    async def cancel(
+        self,
+        *,
+        principal_id: str,
+        thread_id: str,
+        run_id: str,
+        organization_id: str = "unscoped",
+    ) -> None:
         await self._check_owner(principal_id=principal_id, thread_id=thread_id)
         task = self._tasks.get(thread_id)
         async with self._subscription_gate:
@@ -300,6 +331,7 @@ class AnalysisRuntimeService:
                 thread_id=thread_id,
                 run_id=run_id,
                 principal_id=principal_id,
+                organization_id=organization_id,
                 now=datetime.now(timezone.utc),
             )
             for event in events:
@@ -312,17 +344,25 @@ class AnalysisRuntimeService:
             task.cancel()
 
     async def snapshot(
-        self, *, principal_id: str, thread_id: str, run_id: str | None = None
+        self,
+        *,
+        principal_id: str,
+        thread_id: str,
+        run_id: str | None = None,
+        organization_id: str = "unscoped",
     ) -> WorkflowSnapshot:
         await self._check_owner(principal_id=principal_id, thread_id=thread_id)
         if run_id is None:
             run = await self.repository.get_run(thread_id=thread_id)
-            if run is None:
+            if run is None or run.organization_id != organization_id:
                 raise ThreadNotFoundError("thread was not found")
             run_id = run.run_id
         elif (
             await self.repository.get_run_history(
-                principal_id=principal_id, thread_id=thread_id, run_id=run_id
+                principal_id=principal_id,
+                organization_id=organization_id,
+                thread_id=thread_id,
+                run_id=run_id,
             )
             is None
         ):
@@ -337,9 +377,11 @@ class AnalysisRuntimeService:
         before_started_at: datetime | None = None,
         before_thread_id: str | None = None,
         before_run_id: str | None = None,
+        organization_id: str = "unscoped",
     ) -> AnalysisRunPage:
         return await self.repository.list_run_history(
             principal_id=principal_id,
+            organization_id=organization_id,
             limit=limit,
             before_started_at=before_started_at,
             before_thread_id=before_thread_id,
@@ -353,8 +395,12 @@ class AnalysisRuntimeService:
         thread_id: str,
         after_seq: int,
         limit: int | None = None,
+        organization_id: str = "unscoped",
     ) -> ReplayPage:
         await self._check_owner(principal_id=principal_id, thread_id=thread_id)
+        run = await self.repository.get_run(thread_id=thread_id)
+        if run is None or run.organization_id != organization_id:
+            raise ThreadNotFoundError("thread was not found")
         return await self.repository.replay(
             thread_id=thread_id,
             after_seq=after_seq,
@@ -368,6 +414,7 @@ class AnalysisRuntimeService:
         thread_id: str,
         after_seq: int,
         limit: int | None = None,
+        organization_id: str = "unscoped",
     ) -> tuple[ReplayPage, RuntimeSubscriber]:
         await self._check_owner(principal_id=principal_id, thread_id=thread_id)
         async with self._subscription_gate:
@@ -376,6 +423,7 @@ class AnalysisRuntimeService:
                 thread_id=thread_id,
                 after_seq=after_seq,
                 limit=limit,
+                organization_id=organization_id,
             )
             subscriber = await self.hub.subscribe(thread_id=thread_id)
         return replay, subscriber
@@ -406,6 +454,8 @@ class AnalysisRuntimeService:
         principal_id: str,
         thread_id: str,
         run_id: str,
+        organization_id: str,
+        membership_id: str,
         input_data: Mapping[str, object],
     ) -> None:
         retry_input = input_data.get("retry")
@@ -425,6 +475,8 @@ class AnalysisRuntimeService:
                 status="running",
                 now=datetime.now(timezone.utc),
                 principal_id=principal_id,
+                organization_id=organization_id,
+                membership_id=membership_id,
             )
             suspended = False
             current_activity_id: str | None = None
@@ -433,6 +485,8 @@ class AnalysisRuntimeService:
                 run_id=run_id,
                 input_data=input_data,
                 principal_id=principal_id,
+                organization_id=organization_id,
+                membership_id=membership_id,
             ):
                 if isinstance(item, InteractionRequested):
                     current_activity_id = item.activity.activity_id
@@ -441,6 +495,8 @@ class AnalysisRuntimeService:
                         events = await self.repository.record_waiting_interaction(
                             requested=item,
                             principal_id=principal_id,
+                            organization_id=organization_id,
+                            membership_id=membership_id,
                             now=datetime.now(timezone.utc),
                         )
                         for event in events:
@@ -574,6 +630,8 @@ class AnalysisRuntimeService:
                 status="failed",
                 now=datetime.now(timezone.utc),
                 principal_id=principal_id,
+                organization_id=organization_id,
+                membership_id=membership_id,
             )
             if retry_operation_id is not None:
                 await self.repository.set_retry_status(

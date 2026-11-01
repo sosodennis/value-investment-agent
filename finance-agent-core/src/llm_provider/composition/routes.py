@@ -6,10 +6,14 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from starlette.datastructures import UploadFile
 from starlette.requests import Request as StarletteRequest
 
-from src.auth.entrypoint import (
-    Principal,
-    require_current_user,
-    require_current_user_mutation,
+from src.audit.application.recording import record_best_effort
+from src.audit.domain.entities import AuditOutcome
+from src.auth.domain.authorization import OrganizationPermission
+from src.auth.domain.entities import AuthenticatedContext
+from src.auth.entrypoint import Principal
+from src.auth.interface.dependencies import (
+    require_current_context_mutation,
+    require_organization_permission,
 )
 from src.llm_provider.application.key_import_file import (
     MAX_IMPORT_FILE_BYTES,
@@ -56,6 +60,26 @@ provider_keys_router = APIRouter(
 )
 llm_settings_router = APIRouter(prefix="/api/v1/llm/settings", tags=["LLM settings"])
 
+_provider_config_read = require_organization_permission(
+    OrganizationPermission.PROVIDER_CONFIG_READ
+)
+_provider_config_write = require_organization_permission(
+    OrganizationPermission.PROVIDER_CONFIG_WRITE,
+    context_dependency=require_current_context_mutation,
+)
+
+
+async def _read_principal(
+    context: AuthenticatedContext = Depends(_provider_config_read),
+) -> Principal:
+    return Principal.from_context(context)
+
+
+async def _write_principal(
+    context: AuthenticatedContext = Depends(_provider_config_write),
+) -> Principal:
+    return Principal.from_context(context)
+
 
 def _key_response(key: ManagedProviderKey) -> ProviderKeyResponse:
     return ProviderKeyResponse(
@@ -80,6 +104,8 @@ def _raise_http_error(error: ProviderSettingsError) -> None:
         raise HTTPException(
             status_code=404, detail="managed key was not found"
         ) from error
+    if code in {"permission_denied", "organization_context_required"}:
+        raise HTTPException(status_code=403, detail=code) from error
     if code == "invalid_key_id":
         raise HTTPException(status_code=400, detail="invalid managed key id") from error
     if code == "replacement_must_differ":
@@ -181,14 +207,27 @@ def _parse_upload(filename: str, data: bytes):
 
 @provider_keys_router.get("", response_model=list[ProviderKeyResponse])
 async def list_provider_keys(
-    principal: Principal = Depends(require_current_user),
+    principal: Principal = Depends(_read_principal),
     service: LLMProviderServiceSettingsClient = Depends(get_provider_settings_service),
 ) -> list[ProviderKeyResponse]:
     try:
-        return [
+        keys = [
             _key_response(key)
-            for key in await service.list_keys(user_id=principal.user_id)
+            for key in await service.list_keys(
+                user_id=principal.user_id,
+                organization_id=principal.organization_id,
+                membership_id=principal.membership_id,
+            )
         ]
+        await record_best_effort(
+            organization_id=principal.organization_id,
+            actor_user_id=principal.user_id,
+            action="provider.key.listed",
+            outcome=AuditOutcome.SUCCESS,
+            target_type="provider",
+            target_id="llm",
+        )
+        return keys
     except ProviderSettingsError as exc:
         _raise_http_error(exc)
 
@@ -198,7 +237,7 @@ async def list_provider_keys(
 )
 async def submit_provider_key(
     request: ProviderKeyCreateRequest,
-    principal: Principal = Depends(require_current_user_mutation),
+    principal: Principal = Depends(_write_principal),
     service: LLMProviderServiceSettingsClient = Depends(get_provider_settings_service),
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ) -> ProviderKeyImportBatchResponse:
@@ -206,8 +245,10 @@ async def submit_provider_key(
     if not 16 <= len(resolved_idempotency_key) <= 128:
         raise HTTPException(status_code=400, detail={"code": "invalid_idempotency_key"})
     try:
-        return await service.create_key_import(
+        result = await service.create_key_import(
             user_id=principal.user_id,
+            organization_id=principal.organization_id,
+            membership_id=principal.membership_id,
             idempotency_key=resolved_idempotency_key,
             items=[
                 {
@@ -217,6 +258,16 @@ async def submit_provider_key(
                 }
             ],
         )
+        await record_best_effort(
+            organization_id=principal.organization_id,
+            actor_user_id=principal.user_id,
+            action="provider.key.created",
+            outcome=AuditOutcome.SUCCESS,
+            target_type="provider",
+            target_id="llm",
+            payload={"item_count": 1},
+        )
+        return result
     except ProviderSettingsError as exc:
         _raise_http_error(exc)
 
@@ -228,7 +279,7 @@ async def submit_provider_key(
 )
 async def preview_provider_key_import(
     request: Request,
-    _principal: Principal = Depends(require_current_user_mutation),
+    _principal: Principal = Depends(_read_principal),
 ) -> ProviderKeyImportPreviewResponse:
     filename, data = await _read_import_file(request)
     parsed = _parse_upload(filename, data)
@@ -255,7 +306,7 @@ async def preview_provider_key_import(
 )
 async def create_provider_key_import(
     request: Request,
-    principal: Principal = Depends(require_current_user_mutation),
+    principal: Principal = Depends(_write_principal),
     service: LLMProviderServiceSettingsClient = Depends(get_provider_settings_service),
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ) -> ProviderKeyImportBatchResponse:
@@ -281,8 +332,10 @@ async def create_provider_key_import(
     if not 16 <= len(resolved_idempotency_key) <= 128:
         raise HTTPException(status_code=400, detail={"code": "invalid_idempotency_key"})
     try:
-        return await service.create_key_import(
+        result = await service.create_key_import(
             user_id=principal.user_id,
+            organization_id=principal.organization_id,
+            membership_id=principal.membership_id,
             idempotency_key=resolved_idempotency_key,
             items=[
                 {
@@ -293,6 +346,16 @@ async def create_provider_key_import(
                 for item in parsed.items
             ],
         )
+        await record_best_effort(
+            organization_id=principal.organization_id,
+            actor_user_id=principal.user_id,
+            action="provider.key.imported",
+            outcome=AuditOutcome.SUCCESS,
+            target_type="provider",
+            target_id="llm",
+            payload={"item_count": len(parsed.items)},
+        )
+        return result
     except ProviderSettingsError as exc:
         _raise_http_error(exc)
 
@@ -301,11 +364,15 @@ async def create_provider_key_import(
     "/imports", response_model=list[ProviderKeyImportBatchResponse]
 )
 async def list_provider_key_imports(
-    principal: Principal = Depends(require_current_user),
+    principal: Principal = Depends(_read_principal),
     service: LLMProviderServiceSettingsClient = Depends(get_provider_settings_service),
 ) -> list[ProviderKeyImportBatchResponse]:
     try:
-        return await service.list_key_imports(user_id=principal.user_id)
+        return await service.list_key_imports(
+            user_id=principal.user_id,
+            organization_id=principal.organization_id,
+            membership_id=principal.membership_id,
+        )
     except ProviderSettingsError as exc:
         _raise_http_error(exc)
 
@@ -315,12 +382,15 @@ async def list_provider_key_imports(
 )
 async def get_provider_key_import(
     batch_id: str,
-    principal: Principal = Depends(require_current_user),
+    principal: Principal = Depends(_read_principal),
     service: LLMProviderServiceSettingsClient = Depends(get_provider_settings_service),
 ) -> ProviderKeyImportBatchResponse:
     try:
         return await service.get_key_import(
-            user_id=principal.user_id, batch_id=batch_id
+            user_id=principal.user_id,
+            batch_id=batch_id,
+            organization_id=principal.organization_id,
+            membership_id=principal.membership_id,
         )
     except ProviderSettingsError as exc:
         _raise_http_error(exc)
@@ -331,13 +401,25 @@ async def get_provider_key_import(
 )
 async def retry_provider_key_import(
     batch_id: str,
-    principal: Principal = Depends(require_current_user_mutation),
+    principal: Principal = Depends(_write_principal),
     service: LLMProviderServiceSettingsClient = Depends(get_provider_settings_service),
 ) -> ProviderKeyImportBatchResponse:
     try:
-        return await service.retry_key_import(
-            user_id=principal.user_id, batch_id=batch_id
+        result = await service.retry_key_import(
+            user_id=principal.user_id,
+            batch_id=batch_id,
+            organization_id=principal.organization_id,
+            membership_id=principal.membership_id,
         )
+        await record_best_effort(
+            organization_id=principal.organization_id,
+            actor_user_id=principal.user_id,
+            action="provider.key.import_retried",
+            outcome=AuditOutcome.SUCCESS,
+            target_type="provider_import",
+            target_id=batch_id,
+        )
+        return result
     except ProviderSettingsError as exc:
         _raise_http_error(exc)
 
@@ -348,7 +430,7 @@ async def retry_provider_key_import(
 async def replace_provider_key(
     key_id: str,
     request: ProviderKeyCreateRequest,
-    principal: Principal = Depends(require_current_user_mutation),
+    principal: Principal = Depends(_write_principal),
     service: LLMProviderServiceSettingsClient = Depends(get_provider_settings_service),
 ) -> ProviderKeyResponse:
     try:
@@ -357,6 +439,16 @@ async def replace_provider_key(
             key_id=key_id,
             key=request.api_key.get_secret_value(),
             label=request.label,
+            organization_id=principal.organization_id,
+            membership_id=principal.membership_id,
+        )
+        await record_best_effort(
+            organization_id=principal.organization_id,
+            actor_user_id=principal.user_id,
+            action="provider.key.replaced",
+            outcome=AuditOutcome.SUCCESS,
+            target_type="provider_key",
+            target_id=key_id,
         )
         return _key_response(key)
     except ProviderSettingsError as exc:
@@ -366,11 +458,24 @@ async def replace_provider_key(
 @provider_keys_router.post("/{key_id}/test", response_model=ProviderKeyTestResponse)
 async def test_provider_key(
     key_id: str,
-    principal: Principal = Depends(require_current_user_mutation),
+    principal: Principal = Depends(_write_principal),
     service: LLMProviderServiceSettingsClient = Depends(get_provider_settings_service),
 ) -> ProviderKeyTestResponse:
     try:
-        passed = await service.test_key(user_id=principal.user_id, key_id=key_id)
+        passed = await service.test_key(
+            user_id=principal.user_id,
+            key_id=key_id,
+            organization_id=principal.organization_id,
+            membership_id=principal.membership_id,
+        )
+        await record_best_effort(
+            organization_id=principal.organization_id,
+            actor_user_id=principal.user_id,
+            action="provider.key.tested",
+            outcome=AuditOutcome.SUCCESS if passed else AuditOutcome.FAILURE,
+            target_type="provider_key",
+            target_id=key_id,
+        )
         return ProviderKeyTestResponse(
             id=key_id,
             passed=passed,
@@ -388,23 +493,38 @@ async def test_provider_key(
 @provider_keys_router.delete("/{key_id}", status_code=204)
 async def delete_provider_key(
     key_id: str,
-    principal: Principal = Depends(require_current_user_mutation),
+    principal: Principal = Depends(_write_principal),
     service: LLMProviderServiceSettingsClient = Depends(get_provider_settings_service),
 ) -> None:
     try:
-        await service.delete_key(user_id=principal.user_id, key_id=key_id)
+        await service.delete_key(
+            user_id=principal.user_id,
+            key_id=key_id,
+            organization_id=principal.organization_id,
+            membership_id=principal.membership_id,
+        )
+        await record_best_effort(
+            organization_id=principal.organization_id,
+            actor_user_id=principal.user_id,
+            action="provider.key.deleted",
+            outcome=AuditOutcome.SUCCESS,
+            target_type="provider_key",
+            target_id=key_id,
+        )
     except ProviderSettingsError as exc:
         _raise_http_error(exc)
 
 
 @llm_settings_router.get("", response_model=LlmSettingsResponse)
 async def read_llm_settings(
-    _principal: Principal = Depends(require_current_user),
+    _principal: Principal = Depends(_read_principal),
     service: LLMProviderServiceSettingsClient = Depends(get_provider_settings_service),
 ) -> LlmSettingsResponse:
     try:
         selected, models = await service.selected_model_settings(
-            user_id=_principal.subject
+            user_id=_principal.subject,
+            organization_id=_principal.organization_id,
+            membership_id=_principal.membership_id,
         )
     except ProviderSettingsError as exc:
         _raise_http_error(exc)
@@ -426,12 +546,24 @@ async def read_llm_settings(
 @llm_settings_router.put("", response_model=LlmSettingsResponse)
 async def update_llm_settings(
     request: LlmSettingsUpdateRequest,
-    principal: Principal = Depends(require_current_user_mutation),
+    principal: Principal = Depends(_write_principal),
     service: LLMProviderServiceSettingsClient = Depends(get_provider_settings_service),
 ) -> LlmSettingsResponse:
     try:
         await service.update_selected_model(
-            model_id=request.selected_model, user_id=principal.user_id
+            model_id=request.selected_model,
+            user_id=principal.user_id,
+            organization_id=principal.organization_id,
+            membership_id=principal.membership_id,
+        )
+        await record_best_effort(
+            organization_id=principal.organization_id,
+            actor_user_id=principal.user_id,
+            action="provider.config.updated",
+            outcome=AuditOutcome.SUCCESS,
+            target_type="provider_config",
+            target_id="llm",
+            payload={"selected_model": request.selected_model},
         )
     except ProviderSettingsError as exc:
         _raise_http_error(exc)

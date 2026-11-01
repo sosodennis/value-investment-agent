@@ -110,6 +110,8 @@ async def test_legacy_history_backfill_is_truthful_and_exact_runs_survive_restar
                 UserModel(
                     id=owner_id,
                     email=f"{owner_id}@example.test",
+                    display_name="History Owner",
+                    display_name_normalized="history owner",
                     password_hash="test-only",
                 )
             )
@@ -364,6 +366,8 @@ async def test_completed_output_references_survive_later_run_and_restart() -> No
             UserModel(
                 id=owner_id,
                 email=f"{owner_id}@example.test",
+                display_name="Output Owner",
+                display_name_normalized="output owner",
                 password_hash="test-only",
             )
         )
@@ -461,6 +465,8 @@ async def test_completed_output_references_survive_later_run_and_restart() -> No
                 user_id=active_principal_id,
                 subject=active_principal_id,
                 email=f"{active_principal_id}@example.test",
+                organization_id="organization-history",
+                membership_id="membership-history",
             )
 
         app.dependency_overrides[require_current_user] = current_principal

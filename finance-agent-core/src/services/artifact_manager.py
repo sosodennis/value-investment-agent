@@ -18,7 +18,7 @@ from src.interface.artifacts.artifact_envelope import (
 )
 
 from ..infrastructure.database import AsyncSessionLocal
-from ..infrastructure.models import Artifact, WorkflowActivityEvent
+from ..infrastructure.models import Artifact, WorkflowActivityEvent, WorkflowRunHistory
 
 
 class ArtifactManager:
@@ -146,6 +146,24 @@ class ArtifactManager:
             return await session.scalar(
                 select(Artifact.thread_id).where(Artifact.id == artifact_id)
             )
+
+    @staticmethod
+    async def belongs_to_organization(
+        *,
+        thread_id: str,
+        organization_id: str,
+        run_id: str | None = None,
+    ) -> bool:
+        """Verify the resolved artifact thread belongs to the active organization."""
+        async with AsyncSessionLocal() as session:
+            statement = (
+                select(WorkflowRunHistory.thread_id)
+                .where(WorkflowRunHistory.thread_id == thread_id)
+                .where(WorkflowRunHistory.organization_id == organization_id)
+            )
+            if run_id is not None:
+                statement = statement.where(WorkflowRunHistory.run_id == run_id)
+            return await session.scalar(statement) is not None
 
     @staticmethod
     async def get_agent_output_thread_id(

@@ -38,6 +38,12 @@ async def get_artifact(
         )
     if thread_id is None:
         raise HTTPException(status_code=404, detail="artifact_not_found")
+    if not await artifact_manager.belongs_to_organization(
+        thread_id=thread_id,
+        organization_id=principal.organization_id,
+        run_id=run_id,
+    ):
+        raise HTTPException(status_code=404, detail="artifact_not_found")
     owned = await get_ownership_service().owns(
         user_id=principal.user_id,
         resource_type="thread",

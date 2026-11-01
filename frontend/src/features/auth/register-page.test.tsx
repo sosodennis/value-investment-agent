@@ -16,11 +16,12 @@ describe('registration route', () => {
     it('creates an account and redirects into the workspace', async () => {
         auth.signUp.mockResolvedValue({});
         render(<RegisterPage />);
+        fireEvent.change(screen.getByLabelText('Display name'), { target: { value: 'Analyst One' } });
         fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'analyst@example.com' } });
         fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'password123' } });
         fireEvent.click(screen.getByRole('button', { name: 'Create account' }));
 
-        await waitFor(() => expect(auth.signUp).toHaveBeenCalledWith('analyst@example.com', 'password123'));
+        await waitFor(() => expect(auth.signUp).toHaveBeenCalledWith('analyst@example.com', 'Analyst One', 'password123'));
         expect(router.replace).toHaveBeenCalledWith('/workspace');
     });
 
@@ -28,6 +29,7 @@ describe('registration route', () => {
         let fail!: (error: unknown) => void;
         auth.signUp.mockReturnValue(new Promise((_, reject) => { fail = reject; }));
         render(<RegisterPage />);
+        fireEvent.change(screen.getByLabelText('Display name'), { target: { value: 'Analyst One' } });
         fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'analyst@example.com' } });
         fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'password123' } });
         fireEvent.click(screen.getByRole('button', { name: 'Create account' }));
@@ -41,6 +43,8 @@ describe('registration route', () => {
 
     it('enforces email and password constraints before account creation', () => {
         render(<RegisterPage />);
+        expect(screen.getByLabelText('Display name').hasAttribute('required')).toBe(true);
+        expect(screen.getByLabelText('Display name').getAttribute('maxlength')).toBe('80');
         expect(screen.getByLabelText('Email').hasAttribute('required')).toBe(true);
         expect(screen.getByLabelText('Email').getAttribute('type')).toBe('email');
         expect(screen.getByLabelText('Password').getAttribute('minlength')).toBe('8');

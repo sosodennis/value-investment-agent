@@ -5,6 +5,7 @@ from datetime import UTC, datetime, timedelta
 
 import httpx
 import pytest
+from src.shared.internal_services import InternalPrincipal, build_internal_context
 
 from search_service.app import create_app
 from search_service.contracts import (
@@ -18,12 +19,19 @@ from search_service.errors import SearchServiceError
 
 
 def _context() -> dict[str, object]:
-    return {
-        "principal": {"subject_id": "runtime-user"},
-        "correlation_id": "runtime-correlation",
-        "contract_version": "internal.v1",
-        "deadline_at": (datetime.now(UTC) + timedelta(seconds=2)).isoformat(),
-    }
+    deadline = datetime.now(UTC) + timedelta(seconds=2)
+    return build_internal_context(
+        principal=InternalPrincipal(
+            subject_id="runtime-user",
+            organization_id="organization-runtime",
+            membership_id="membership-runtime",
+        ),
+        correlation_id="runtime-correlation",
+        deadline_at=deadline,
+        audience="search-service",
+        signing_key="runtime-service-token",
+        issued_at=deadline - timedelta(seconds=5),
+    ).model_dump(mode="json")
 
 
 @dataclass
@@ -44,14 +52,14 @@ class Pool:
     provider_failures: list[str] = field(default_factory=list)
     releases: list[tuple[str, bool]] = field(default_factory=list)
 
-    async def credentials_for(self, *, subject_id: str) -> tuple[Credential, ...]:
-        _ = subject_id
+    async def credentials_for(self, *, organization_id: str) -> tuple[Credential, ...]:
+        _ = organization_id
         return tuple(self.credentials)
 
     async def claim_credential(
-        self, *, subject_id: str, provider: str, lease_seconds: int = 30
+        self, *, organization_id: str, provider: str, lease_seconds: int = 30
     ) -> Credential | None:
-        _ = (subject_id, lease_seconds)
+        _ = (organization_id, lease_seconds)
         for credential in sorted(self.credentials, key=lambda item: item.priority):
             if (
                 credential.provider == provider
@@ -64,9 +72,9 @@ class Pool:
         return None
 
     async def release_credential(
-        self, *, subject_id: str, key_id: str, succeeded: bool = False
+        self, *, organization_id: str, key_id: str, succeeded: bool = False
     ) -> None:
-        _ = subject_id
+        _ = organization_id
         credential = next(item for item in self.credentials if item.key_id == key_id)
         credential.leased = False
         self.releases.append((key_id, succeeded))
@@ -74,21 +82,29 @@ class Pool:
     async def record_key_failure(
         self,
         *,
-        subject_id: str,
+        organization_id: str,
         key_id: str,
         status: str = "cooldown",
         cooldown_seconds: int = 30,
     ) -> None:
-        _ = (subject_id, cooldown_seconds)
+        _ = (organization_id, cooldown_seconds)
         credential = next(item for item in self.credentials if item.key_id == key_id)
         credential.status = status
         self.failures.append((key_id, status))
 
     async def record_provider_failure(
-        self, *, subject_id: str, provider: str, cooldown_seconds: int = 30
+        self, *, organization_id: str, provider: str, cooldown_seconds: int = 30
     ) -> None:
-        _ = (subject_id, cooldown_seconds)
+        _ = (organization_id, cooldown_seconds)
         self.provider_failures.append(provider)
+
+
+class LeaseBusyPool(Pool):
+    async def claim_credential(
+        self, *, organization_id: str, provider: str, lease_seconds: int = 30
+    ) -> Credential | None:
+        _ = (organization_id, provider, lease_seconds)
+        return None
 
 
 class ScriptedProvider:
@@ -136,6 +152,28 @@ def _client(pool: Pool, providers: dict[str, ScriptedProvider]) -> httpx.AsyncCl
     return httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app), base_url="http://runtime.test"
     )
+
+
+@pytest.mark.asyncio
+async def test_does_not_use_snapshot_credential_when_lease_claim_is_unavailable() -> (
+    None
+):
+    provider = ScriptedProvider("primary", {"primary-key": _result("primary")})
+    pool = LeaseBusyPool(
+        [Credential("primary-id", "primary", "primary-key", priority=0)]
+    )
+    client = _client(pool, {"primary": provider})
+    try:
+        response = await client.post(
+            "/v1/search/web",
+            headers={"Authorization": "Bearer runtime-service-token"},
+            json={"context": _context(), "input": {"query": "earnings"}},
+        )
+    finally:
+        await client.aclose()
+    assert response.status_code == 503
+    assert response.json()["error"]["code"] == "UPSTREAM_UNAVAILABLE"
+    assert provider.calls == []
 
 
 @pytest.mark.asyncio

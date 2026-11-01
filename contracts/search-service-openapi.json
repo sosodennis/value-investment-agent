@@ -108,6 +108,34 @@
         "additionalProperties": false,
         "description": "Authenticated application identity, without browser or provider secrets.",
         "properties": {
+          "membership_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Membership Id"
+          },
+          "organization_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Organization Id"
+          },
           "subject_id": {
             "maxLength": 256,
             "minLength": 1,
@@ -145,6 +173,20 @@
         "additionalProperties": false,
         "description": "Request metadata accepted by an internal capability service.",
         "properties": {
+          "audience": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Audience"
+          },
           "contract_version": {
             "const": "internal.v1",
             "title": "Contract Version",
@@ -161,8 +203,49 @@
             "title": "Deadline At",
             "type": "string"
           },
+          "issued_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Issued At"
+          },
+          "issuer": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Issuer"
+          },
           "principal": {
             "$ref": "#/components/schemas/InternalPrincipal"
+          },
+          "signature": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Signature"
           }
         },
         "required": [
@@ -263,6 +346,23 @@
         ],
         "title": "Operation",
         "type": "string"
+      },
+      "OrganizationSettings": {
+        "additionalProperties": false,
+        "properties": {
+          "providers": {
+            "items": {
+              "$ref": "#/components/schemas/ProviderSetting"
+            },
+            "title": "Providers",
+            "type": "array"
+          }
+        },
+        "required": [
+          "providers"
+        ],
+        "title": "OrganizationSettings",
+        "type": "object"
       },
       "ProviderCapabilities": {
         "additionalProperties": false,
@@ -1132,7 +1232,7 @@
         "additionalProperties": false,
         "properties": {
           "settings": {
-            "$ref": "#/components/schemas/UserSettings"
+            "$ref": "#/components/schemas/OrganizationSettings"
           }
         },
         "required": [
@@ -1194,23 +1294,6 @@
         ],
         "title": "TimeRange",
         "type": "string"
-      },
-      "UserSettings": {
-        "additionalProperties": false,
-        "properties": {
-          "providers": {
-            "items": {
-              "$ref": "#/components/schemas/ProviderSetting"
-            },
-            "title": "Providers",
-            "type": "array"
-          }
-        },
-        "required": [
-          "providers"
-        ],
-        "title": "UserSettings",
-        "type": "object"
       },
       "WebSearchEnvelope": {
         "additionalProperties": false,
@@ -1388,7 +1471,7 @@
     },
     "/v1/provider-keys/add": {
       "post": {
-        "description": "Test a key before activating it for the authenticated user.",
+        "description": "Test a key before activating it for the verified organization.",
         "operationId": "providerKeyAddTestActivate",
         "requestBody": {
           "content": {
@@ -1604,7 +1687,7 @@
     },
     "/v1/provider-keys/list": {
       "post": {
-        "description": "List masked key metadata for the authenticated user.",
+        "description": "List masked key metadata for the verified organization.",
         "operationId": "providerKeyList",
         "requestBody": {
           "content": {
@@ -2345,7 +2428,7 @@
     },
     "/v1/settings/read": {
       "post": {
-        "description": "Read settings for the authenticated user.",
+        "description": "Read settings for the verified organization.",
         "operationId": "settingsRead",
         "requestBody": {
           "content": {
@@ -2448,7 +2531,7 @@
     },
     "/v1/settings/update": {
       "post": {
-        "description": "Atomically replace the authenticated user's provider order and enablement.",
+        "description": "Atomically replace the verified organization's provider order and enablement.",
         "operationId": "settingsUpdate",
         "requestBody": {
           "content": {

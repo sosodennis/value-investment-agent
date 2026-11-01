@@ -1,5 +1,6 @@
 import os
 
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import declarative_base
 
@@ -31,11 +32,22 @@ Base = declarative_base()
 
 async def init_db():
     async with engine.begin() as conn:
+        from src.audit.infrastructure.models import AuditEventModel  # noqa: F401
+
         # We'll import models here or at the top level to ensure they are registered
         from src.auth.infrastructure.models import (  # noqa: F401
+            InvitationModel,
+            InvitationOperationModel,
+            MembershipModel,
+            OrganizationModel,
             OwnedResourceModel,
             SessionModel,
             UserModel,
+        )
+        from src.notifications.infrastructure.models import (  # noqa: F401
+            NotificationEventModel,
+            NotificationInboxItemModel,
+            NotificationOutboxModel,
         )
 
         from .models import (  # noqa: F401
@@ -53,6 +65,51 @@ async def init_db():
         )
 
         await conn.run_sync(Base.metadata.create_all)
+        if conn.dialect.name == "postgresql":
+            await conn.execute(
+                text(
+                    """
+                    CREATE OR REPLACE FUNCTION prevent_auth_audit_events_mutation()
+                    RETURNS trigger
+                    LANGUAGE plpgsql
+                    AS $$
+                    BEGIN
+                        RAISE EXCEPTION 'auth_audit_events is append-only';
+                    END;
+                    $$
+                    """
+                )
+            )
+            await conn.execute(
+                text(
+                    "DROP TRIGGER IF EXISTS auth_audit_events_append_only "
+                    "ON auth_audit_events"
+                )
+            )
+            await conn.execute(
+                text(
+                    "DROP TRIGGER IF EXISTS auth_audit_events_no_truncate "
+                    "ON auth_audit_events"
+                )
+            )
+            await conn.execute(
+                text(
+                    """
+                    CREATE TRIGGER auth_audit_events_append_only
+                    BEFORE UPDATE OR DELETE ON auth_audit_events
+                    FOR EACH ROW EXECUTE FUNCTION prevent_auth_audit_events_mutation()
+                    """
+                )
+            )
+            await conn.execute(
+                text(
+                    """
+                    CREATE TRIGGER auth_audit_events_no_truncate
+                    BEFORE TRUNCATE ON auth_audit_events
+                    FOR EACH STATEMENT EXECUTE FUNCTION prevent_auth_audit_events_mutation()
+                    """
+                )
+            )
 
 
 async def get_db():

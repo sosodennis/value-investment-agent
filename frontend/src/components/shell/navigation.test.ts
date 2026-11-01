@@ -7,8 +7,10 @@ describe('primary navigation', () => {
             '/',
             '/workspace',
             '/technical-observability',
+            '/notifications',
             '/settings/llm',
             '/settings/search',
+            '/settings/organization',
         ]);
     });
 

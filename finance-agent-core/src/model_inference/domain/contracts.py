@@ -60,6 +60,8 @@ class InferenceRequest:
     deadline_ms: int
     principal_subject_id: str
     deadline_at: datetime
+    principal_organization_id: str = "unscoped"
+    principal_membership_id: str = "unscoped"
 
 
 @dataclass(frozen=True, slots=True)

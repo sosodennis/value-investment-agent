@@ -331,6 +331,8 @@ class PendingResume(BaseModel):
 
     identity: InteractionIdentity
     principal_id: str
+    organization_id: str = "unscoped"
+    membership_id: str = "unscoped"
     response: InteractionResponse
     scope_path: tuple[str, ...] = Field(min_length=1)
     attempt: int = Field(ge=1)
@@ -340,6 +342,8 @@ class ClaimedInteractionResume(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     identity: InteractionIdentity
+    organization_id: str = "unscoped"
+    membership_id: str = "unscoped"
     response: InteractionResponse
     scope_path: tuple[str, ...] = Field(min_length=1)
     attempt: int = Field(ge=1)
@@ -351,6 +355,9 @@ class RunStatusRecord(BaseModel):
 
     thread_id: str
     run_id: str
+    principal_id: str = "unscoped"
+    organization_id: str = "unscoped"
+    membership_id: str = "unscoped"
     status: RunStatus
     started_at: datetime
     updated_at: datetime
@@ -362,6 +369,9 @@ class AnalysisRunRecord(BaseModel):
 
     thread_id: str
     run_id: str
+    principal_id: str = "unscoped"
+    organization_id: str = "unscoped"
+    membership_id: str = "unscoped"
     status: RunStatus
     started_at: datetime | None = None
     updated_at: datetime | None = None
@@ -393,6 +403,8 @@ class RetryOperation(BaseModel):
     source_run_id: str = Field(min_length=1)
     target_run_id: str = Field(min_length=1)
     principal_id: str = Field(min_length=1)
+    organization_id: str = "unscoped"
+    membership_id: str = "unscoped"
     idempotency_key: str = Field(min_length=1, max_length=200)
     request_hash: str = Field(min_length=64, max_length=64)
     checkpoint: CheckpointIdentity
@@ -428,7 +440,13 @@ class RetryOperationView(BaseModel):
     def from_operation(cls, operation: RetryOperation) -> RetryOperationView:
         return cls.model_validate(
             operation.model_dump(
-                exclude={"principal_id", "idempotency_key", "request_hash"}
+                exclude={
+                    "principal_id",
+                    "organization_id",
+                    "membership_id",
+                    "idempotency_key",
+                    "request_hash",
+                }
             )
         )
 

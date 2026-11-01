@@ -4,9 +4,12 @@ This is the independently deployable LLM capability service. Its public
 contract is `internal.v1` plus the project-owned `llm.v1` completion and stream
 schemas. Backend agents do not call LiteLLM, OpenRouter, or provider SDKs.
 
-The runtime stores provider deployments in the service-owned PostgreSQL table
-with Fernet encryption. Set a stable `LLM_PROVIDER_ENCRYPTION_KEY` and back it
-up with the database. Each request resolves the authenticated user's eligible
+The runtime stores organization-owned provider deployments in the service-owned
+PostgreSQL tables with Fernet encryption. Set a stable
+`LLM_PROVIDER_ENCRYPTION_KEY` and back it up with the database. The target
+schema is versioned as `llm_provider_schema_version`; legacy user-scoped
+`llm_provider_*` tables cause startup to fail. Each request resolves the
+verified organization's eligible
 deployments, then invokes LiteLLM once for one deployment. The service owns the
 shared Redis key-health record: explicit key-scoped failures set a cooldown or
 invalid-key status, while model, account, workspace, and upstream-provider
@@ -17,7 +20,9 @@ settings API, so runtime use, failures, cooldown expiry, and safe error
 categories remain visible across replicas. A Redis read failure makes data
 plane selection fail closed. There is no alternate provider runtime or HTTP
 gateway fallback. Existing keys that remain only in the old LiteLLM database
-require the explicit re-key/migration decision tracked by #190.
+require the explicit retained-data decision documented in
+[`docs/runbooks/provider-secret-lifecycle.md`](../docs/runbooks/provider-secret-lifecycle.md)
+and tracked by #190.
 
 The provider owns one bounded attempt budget per request. Interactive requests
 use up to two upstream dispatches and background requests up to three; the

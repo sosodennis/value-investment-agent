@@ -10,6 +10,7 @@ const routeOwners = [
     { route: 'register/page.tsx', module: '@/features/auth/register-page', component: 'RegisterPage' },
     { route: 'settings/llm/page.tsx', module: '@/features/llm-settings/llm-settings-page', component: 'LlmSettingsPage' },
     { route: 'settings/search/page.tsx', module: '@/features/search-settings/search-settings-page', component: 'SearchSettingsPage' },
+    { route: 'settings/organization/page.tsx', module: '@/features/organizations/organization-settings-page', component: 'OrganizationSettingsPage' },
 ] as const;
 
 describe('App Router feature boundaries', () => {

@@ -7,7 +7,6 @@ from collections.abc import AsyncIterator, Iterator
 from datetime import UTC, datetime, timedelta
 from email.utils import parsedate_to_datetime
 from typing import NoReturn, TypeVar
-from uuid import uuid4
 
 import httpx
 from pydantic import BaseModel, TypeAdapter, ValidationError
@@ -19,6 +18,7 @@ from src.llm_provider.domain.contracts import (
     LLMErrorCode,
     LLMProviderError,
     LLMProviderPort,
+    ProviderPrincipal,
     StreamEvent,
     StructuredRequest,
 )
@@ -27,6 +27,11 @@ from src.llm_provider.domain.provider_models import ManagedProviderKey, OpenRout
 from src.llm_provider.interface.contracts import (
     ProviderKeyImportBatchResponse,
 )
+from src.shared.internal_services import (
+    InternalPrincipal,
+    build_internal_context,
+)
+from src.shared.kernel.correlation import resolve_correlation_id
 
 _Model = TypeVar("_Model", bound=BaseModel)
 _Value = TypeVar("_Value")
@@ -42,6 +47,9 @@ _SETTINGS_ERROR_STATUSES = {
     "replacement_in_progress": 409,
     "idempotency_key_reused": 409,
     "rate_limited": 429,
+    "permission_denied": 403,
+    "organization_context_required": 403,
+    "resource_not_found": 404,
 }
 
 
@@ -54,6 +62,7 @@ class _StreamEnvelope(BaseModel):
 
 
 class _SettingsEnvelope(BaseModel):
+    correlation_id: str
     result: dict[str, object]
 
 
@@ -87,13 +96,26 @@ def _deadline(seconds: float) -> datetime:
     return datetime.now(UTC) + timedelta(seconds=max(0.001, seconds))
 
 
-def _context(*, user_id: str, seconds: float) -> dict[str, object]:
-    return {
-        "principal": {"subject_id": user_id},
-        "correlation_id": str(uuid4()),
-        "contract_version": "internal.v1",
-        "deadline_at": _deadline(seconds).isoformat().replace("+00:00", "Z"),
-    }
+def _context(
+    *,
+    principal: ProviderPrincipal,
+    seconds: float,
+    signing_key: str,
+    audience: str = "llm-provider-service",
+    correlation_id: str | None = None,
+) -> dict[str, object]:
+    context = build_internal_context(
+        principal=InternalPrincipal(
+            subject_id=principal.user_id,
+            organization_id=principal.organization_id,
+            membership_id=principal.membership_id,
+        ),
+        correlation_id=correlation_id or resolve_correlation_id(),
+        deadline_at=_deadline(seconds),
+        audience=audience,
+        signing_key=signing_key,
+    )
+    return context.model_dump(mode="json")
 
 
 def _retry_after_seconds(response: httpx.Response) -> float | None:
@@ -151,10 +173,12 @@ class LLMProviderServiceClient(LLMProviderPort):
         self._client = httpx.Client(timeout=None)
         self._async_client = httpx.AsyncClient(timeout=None)
 
-    def _headers(self) -> dict[str, str]:
-        return {"Authorization": f"Bearer {self._token}"}
+    def _headers(self, correlation_id: str | None = None) -> dict[str, str]:
+        headers = {"Authorization": f"Bearer {self._token}"}
+        headers["X-Request-ID"] = correlation_id or resolve_correlation_id()
+        return headers
 
-    def _principal(self) -> str:
+    def _principal(self) -> ProviderPrincipal:
         principal = get_provider_principal()
         if principal is None:
             raise LLMProviderError(
@@ -165,7 +189,7 @@ class LLMProviderServiceClient(LLMProviderPort):
                 reason="authenticated provider principal is required",
                 retryable=False,
             )
-        return principal.user_id
+        return principal
 
     @staticmethod
     def _input(
@@ -269,13 +293,17 @@ class LLMProviderServiceClient(LLMProviderPort):
         *,
         response_schema: dict[str, object] | None = None,
     ) -> httpx.Response:
+        correlation_id = resolve_correlation_id()
         try:
             return self._client.post(
                 f"{self._base_url}/v1/completions",
-                headers=self._headers(),
+                headers=self._headers(correlation_id),
                 json={
                     "context": _context(
-                        user_id=self._principal(), seconds=request.timeout_seconds
+                        principal=self._principal(),
+                        signing_key=self._token,
+                        seconds=request.timeout_seconds,
+                        correlation_id=correlation_id,
                     ),
                     "input": self._input(request, response_schema=response_schema),
                 },
@@ -290,13 +318,17 @@ class LLMProviderServiceClient(LLMProviderPort):
         *,
         response_schema: dict[str, object] | None = None,
     ) -> httpx.Response:
+        correlation_id = resolve_correlation_id()
         try:
             return await self._async_client.post(
                 f"{self._base_url}/v1/completions",
-                headers=self._headers(),
+                headers=self._headers(correlation_id),
                 json={
                     "context": _context(
-                        user_id=self._principal(), seconds=request.timeout_seconds
+                        principal=self._principal(),
+                        signing_key=self._token,
+                        seconds=request.timeout_seconds,
+                        correlation_id=correlation_id,
                     ),
                     "input": self._input(request, response_schema=response_schema),
                 },
@@ -357,14 +389,18 @@ class LLMProviderServiceClient(LLMProviderPort):
         yield from self._stream_sync(request)
 
     def _stream_sync(self, request: CompletionRequest) -> Iterator[StreamEvent]:
+        correlation_id = resolve_correlation_id()
         try:
             with self._client.stream(
                 "POST",
                 f"{self._base_url}/v1/completions/stream",
-                headers=self._headers(),
+                headers=self._headers(correlation_id),
                 json={
                     "context": _context(
-                        user_id=self._principal(), seconds=request.timeout_seconds
+                        principal=self._principal(),
+                        signing_key=self._token,
+                        seconds=request.timeout_seconds,
+                        correlation_id=correlation_id,
                     ),
                     "input": self._input(request),
                 },
@@ -381,14 +417,18 @@ class LLMProviderServiceClient(LLMProviderPort):
             _raise_provider_transport_error(request, exc)
 
     async def astream(self, request: CompletionRequest) -> AsyncIterator[StreamEvent]:
+        correlation_id = resolve_correlation_id()
         try:
             async with self._async_client.stream(
                 "POST",
                 f"{self._base_url}/v1/completions/stream",
-                headers=self._headers(),
+                headers=self._headers(correlation_id),
                 json={
                     "context": _context(
-                        user_id=self._principal(), seconds=request.timeout_seconds
+                        principal=self._principal(),
+                        signing_key=self._token,
+                        seconds=request.timeout_seconds,
+                        correlation_id=correlation_id,
                     ),
                     "input": self._input(request),
                 },
@@ -410,7 +450,11 @@ class LLMProviderServiceClient(LLMProviderPort):
 
 class LLMProviderServiceSettingsClient:
     def __init__(
-        self, *, base_url: str | None = None, token: str | None = None
+        self,
+        *,
+        base_url: str | None = None,
+        token: str | None = None,
+        client: httpx.AsyncClient | None = None,
     ) -> None:
         self._base_url = (base_url or _url()).rstrip("/")
         self._token = token if token is not None else _token()
@@ -418,17 +462,36 @@ class LLMProviderServiceSettingsClient:
             raise RuntimeError("LLM_PROVIDER_SERVICE_URL is required")
         if not self._token:
             raise RuntimeError("LLM_PROVIDER_SERVICE_TOKEN is required")
-        self._client = httpx.AsyncClient(timeout=None)
+        self._client = client or httpx.AsyncClient(timeout=None)
+        self._owns_client = client is None
 
     async def _call(
-        self, action: str, payload: dict[str, object], *, user_id: str
+        self,
+        action: str,
+        payload: dict[str, object],
+        *,
+        user_id: str,
+        organization_id: str,
+        membership_id: str,
     ) -> dict[str, object]:
+        correlation_id = resolve_correlation_id()
         try:
+            headers = {"Authorization": f"Bearer {self._token}"}
+            headers["X-Request-ID"] = correlation_id
             response = await self._client.post(
                 f"{self._base_url}{action}",
-                headers={"Authorization": f"Bearer {self._token}"},
+                headers=headers,
                 json={
-                    "context": _context(user_id=user_id, seconds=10.0),
+                    "context": _context(
+                        principal=ProviderPrincipal(
+                            user_id=user_id,
+                            organization_id=organization_id,
+                            membership_id=membership_id,
+                        ),
+                        signing_key=self._token,
+                        seconds=10.0,
+                        correlation_id=correlation_id,
+                    ),
                     "input": payload,
                 },
                 timeout=10.0,
@@ -436,8 +499,6 @@ class LLMProviderServiceSettingsClient:
         except httpx.TransportError:
             raise ProviderSettingsError("provider_unavailable") from None
         if response.status_code >= 400:
-            if response.status_code == 404:
-                raise ProviderSettingsError("not_found") from None
             try:
                 body = response.json()
                 error = body.get("error", {}) if isinstance(body, dict) else {}
@@ -449,40 +510,88 @@ class LLMProviderServiceSettingsClient:
                 and _SETTINGS_ERROR_STATUSES.get(code) == response.status_code
             ):
                 raise ProviderSettingsError(code) from None
+            if response.status_code == 404:
+                raise ProviderSettingsError("not_found") from None
             raise ProviderSettingsError("provider_unavailable") from None
         try:
-            return _SettingsEnvelope.model_validate_json(response.content).result
+            envelope = _SettingsEnvelope.model_validate_json(response.content)
         except ValidationError:
             raise ProviderSettingsError("provider_unavailable") from None
+        if envelope.correlation_id != correlation_id:
+            raise ProviderSettingsError("provider_unavailable")
+        return envelope.result
 
-    async def list_keys(self, *, user_id: str) -> list[ManagedProviderKey]:
-        result = await self._call("/v1/provider-keys/list", {}, user_id=user_id)
+    async def list_keys(
+        self,
+        *,
+        user_id: str,
+        organization_id: str,
+        membership_id: str,
+    ) -> list[ManagedProviderKey]:
+        result = await self._call(
+            "/v1/provider-keys/list",
+            {},
+            user_id=user_id,
+            organization_id=organization_id,
+            membership_id=membership_id,
+        )
         return _settings_value(
             TypeAdapter(list[ManagedProviderKey]), result.get("keys")
         )
 
     async def replace_key(
-        self, *, user_id: str, key_id: str, key: str, label: str
+        self,
+        *,
+        user_id: str,
+        key_id: str,
+        key: str,
+        label: str,
+        organization_id: str,
+        membership_id: str,
     ) -> ManagedProviderKey:
         result = await self._call(
             "/v1/provider-keys/replace",
             {"key_id": key_id, "api_key": key, "label": label},
             user_id=user_id,
+            organization_id=organization_id,
+            membership_id=membership_id,
         )
         return _settings_value(TypeAdapter(ManagedProviderKey), result.get("key"))
 
-    async def test_key(self, *, user_id: str, key_id: str) -> bool:
+    async def test_key(
+        self,
+        *,
+        user_id: str,
+        key_id: str,
+        organization_id: str,
+        membership_id: str,
+    ) -> bool:
         result = await self._call(
-            "/v1/provider-keys/test", {"key_id": key_id}, user_id=user_id
+            "/v1/provider-keys/test",
+            {"key_id": key_id},
+            user_id=user_id,
+            organization_id=organization_id,
+            membership_id=membership_id,
         )
         try:
             return TypeAdapter(bool).validate_python(result.get("passed"), strict=True)
         except ValidationError:
             raise ProviderSettingsError("provider_unavailable") from None
 
-    async def delete_key(self, *, user_id: str, key_id: str) -> None:
+    async def delete_key(
+        self,
+        *,
+        user_id: str,
+        key_id: str,
+        organization_id: str,
+        membership_id: str,
+    ) -> None:
         await self._call(
-            "/v1/provider-keys/delete", {"key_id": key_id}, user_id=user_id
+            "/v1/provider-keys/delete",
+            {"key_id": key_id},
+            user_id=user_id,
+            organization_id=organization_id,
+            membership_id=membership_id,
         )
 
     async def create_key_import(
@@ -491,65 +600,117 @@ class LLMProviderServiceSettingsClient:
         user_id: str,
         idempotency_key: str,
         items: list[dict[str, object]],
+        organization_id: str,
+        membership_id: str,
     ) -> ProviderKeyImportBatchResponse:
         result = await self._call(
             "/v1/provider-key-imports/create",
             {"idempotency_key": idempotency_key, "items": items},
             user_id=user_id,
+            organization_id=organization_id,
+            membership_id=membership_id,
         )
         return _settings_value(
             TypeAdapter(ProviderKeyImportBatchResponse), result.get("import_batch")
         )
 
     async def list_key_imports(
-        self, *, user_id: str
+        self,
+        *,
+        user_id: str,
+        organization_id: str,
+        membership_id: str,
     ) -> list[ProviderKeyImportBatchResponse]:
-        result = await self._call("/v1/provider-key-imports/list", {}, user_id=user_id)
+        result = await self._call(
+            "/v1/provider-key-imports/list",
+            {},
+            user_id=user_id,
+            organization_id=organization_id,
+            membership_id=membership_id,
+        )
         return _settings_value(
             TypeAdapter(list[ProviderKeyImportBatchResponse]), result.get("imports")
         )
 
     async def get_key_import(
-        self, *, user_id: str, batch_id: str
+        self,
+        *,
+        user_id: str,
+        batch_id: str,
+        organization_id: str,
+        membership_id: str,
     ) -> ProviderKeyImportBatchResponse:
         result = await self._call(
-            "/v1/provider-key-imports/get", {"batch_id": batch_id}, user_id=user_id
+            "/v1/provider-key-imports/get",
+            {"batch_id": batch_id},
+            user_id=user_id,
+            organization_id=organization_id,
+            membership_id=membership_id,
         )
         return _settings_value(
             TypeAdapter(ProviderKeyImportBatchResponse), result.get("import_batch")
         )
 
     async def retry_key_import(
-        self, *, user_id: str, batch_id: str
+        self,
+        *,
+        user_id: str,
+        batch_id: str,
+        organization_id: str,
+        membership_id: str,
     ) -> ProviderKeyImportBatchResponse:
         result = await self._call(
-            "/v1/provider-key-imports/retry", {"batch_id": batch_id}, user_id=user_id
+            "/v1/provider-key-imports/retry",
+            {"batch_id": batch_id},
+            user_id=user_id,
+            organization_id=organization_id,
+            membership_id=membership_id,
         )
         return _settings_value(
             TypeAdapter(ProviderKeyImportBatchResponse), result.get("import_batch")
         )
 
     async def selected_model_settings(
-        self, *, user_id: str | None = None
+        self,
+        *,
+        user_id: str,
+        organization_id: str,
+        membership_id: str,
     ) -> tuple[str, list[OpenRouterModel]]:
         result = await self._call(
-            "/v1/settings/read", {}, user_id=user_id or self._principal()
+            "/v1/settings/read",
+            {},
+            user_id=user_id,
+            organization_id=organization_id,
+            membership_id=membership_id,
         )
         return _settings_value(
             TypeAdapter(str), result.get("selected_model")
         ), _settings_value(TypeAdapter(list[OpenRouterModel]), result.get("models"))
 
-    async def update_selected_model(self, *, model_id: str, user_id: str) -> str:
+    async def update_selected_model(
+        self,
+        *,
+        model_id: str,
+        user_id: str,
+        organization_id: str,
+        membership_id: str,
+    ) -> str:
         result = await self._call(
-            "/v1/settings/update", {"selected_model": model_id}, user_id=user_id
+            "/v1/settings/update",
+            {"selected_model": model_id},
+            user_id=user_id,
+            organization_id=organization_id,
+            membership_id=membership_id,
         )
         return _settings_value(TypeAdapter(str), result.get("selected_model"))
 
-    def _principal(self) -> str:
+    def _principal(self) -> ProviderPrincipal:
         principal = get_provider_principal()
         if principal is None:
             raise ProviderSettingsError("provider_context_missing")
-        return principal.user_id
+        return principal
 
     async def aclose(self) -> None:
-        await self._client.aclose()
+        if self._owns_client:
+            await self._client.aclose()

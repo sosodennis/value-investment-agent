@@ -9,15 +9,28 @@ ROOT = Path(__file__).parents[2]
 LOCAL_PROVIDER_TOKEN = "local-development-only-token"
 TEST_PROVIDER_TOKEN = "compose-test-provider-token"
 TEST_ENCRYPTION_KEY = "compose-test-encryption-key"
+TEST_SEARCH_SERVICE_TOKEN = "compose-test-search-service-token"
+TEST_SEARCH_ENCRYPTION_KEY = "compose-test-search-encryption-key"
+TEST_DIRECTORY_CURSOR_SECRET = "compose-test-directory-cursor-secret"
+TEST_AUDIT_CURSOR_SECRET = "compose-test-audit-cursor-secret"
 
 
 def _compose_config(
-    *files: str, provider_token: str | None
+    *files: str,
+    provider_token: str | None,
+    audit_secret: str | None = TEST_AUDIT_CURSOR_SECRET,
 ) -> subprocess.CompletedProcess[str]:
     env = os.environ.copy()
     env.pop("COMPOSE_FILE", None)
     env.pop("LLM_PROVIDER_SERVICE_TOKEN", None)
     env["LLM_PROVIDER_ENCRYPTION_KEY"] = TEST_ENCRYPTION_KEY
+    env["SEARCH_SERVICE_TOKEN"] = TEST_SEARCH_SERVICE_TOKEN
+    env["SEARCH_PROVIDER_ENCRYPTION_KEY"] = TEST_SEARCH_ENCRYPTION_KEY
+    env["DIRECTORY_CURSOR_SECRET"] = TEST_DIRECTORY_CURSOR_SECRET
+    if audit_secret is not None:
+        env["AUDIT_CURSOR_SECRET"] = audit_secret
+    else:
+        env.pop("AUDIT_CURSOR_SECRET", None)
     if provider_token is not None:
         env["LLM_PROVIDER_SERVICE_TOKEN"] = provider_token
     return subprocess.run(
@@ -59,10 +72,28 @@ def test_compose_auth_dev_and_production_secret() -> None:
     assert production_without_token.returncode != 0
     assert "LLM_PROVIDER_SERVICE_TOKEN" in production_without_token.stderr
 
+    production_without_audit_secret = _compose_config(
+        *production_files,
+        provider_token=TEST_PROVIDER_TOKEN,
+        audit_secret=None,
+    )
+    assert production_without_audit_secret.returncode != 0
+    assert "AUDIT_CURSOR_SECRET" in production_without_audit_secret.stderr
+
     production = _compose_config(*production_files, provider_token=TEST_PROVIDER_TOKEN)
     assert production.returncode == 0, production.stderr
     services = json.loads(production.stdout)["services"]
     assert services["backend"]["environment"]["APP_ENV"] == "production"
+    assert services["backend"]["environment"]["SEARCH_SERVICE_TOKEN"] == (
+        TEST_SEARCH_SERVICE_TOKEN
+    )
+    assert services["search-service"]["environment"]["SEARCH_SERVICE_TOKEN"] == (
+        TEST_SEARCH_SERVICE_TOKEN
+    )
+    assert (
+        services["search-service"]["environment"]["SEARCH_PROVIDER_ENCRYPTION_KEY"]
+        == TEST_SEARCH_ENCRYPTION_KEY
+    )
 
 
 def test_canonical_compose_has_one_llm_provider_service() -> None:

@@ -23,7 +23,7 @@ not a compatibility alias.
 | Technical observability | `src/agents/technical/subdomains/decision_observability/`; `api/server.py:250-438` | `src/observability/technical/` | DB-backed read model and calibration/monitoring queries |
 | LLM settings facade and client | `src/llm_provider/` and `src/llm_provider/composition/routes.py` | `src/llm_provider/` | Browser settings facade plus typed client to independent LLM Provider service |
 | Model Inference client | `src/model_inference/` | `src/model_inference/` | Typed inference operation client and trusted internal principal context |
-| Search client and settings facade | `src/search/`, `src/search_settings/` | `src/search/` and `src/search_settings/` | Typed Search client; user-scoped provider settings |
+| Search client and settings facade | `src/search/`, `src/search_settings/` | `src/search/` and `src/search_settings/` | Typed Search client; organization-scoped provider settings |
 | Shared contracts | `src/shared/kernel/`, `src/shared/internal_services/`, `src/shared/artifacts/` | Same packages, narrowed | Stable domain-neutral contracts only; no feature service or provider policy |
 | History messages | `src/services/history.py`; `ChatMessage` in `src/infrastructure/models.py:29-45` | `src/analysis_runtime/` message repository | Thread-owned messages and typed history response |
 
@@ -102,7 +102,7 @@ the API boundary; provider and LangGraph exception text never crosses it.
 
 | Current table | Current model | Action | Canonical owner |
 | --- | --- | --- | --- |
-| `llm_settings` | `LlmSetting` | Retain/rebuild with authenticated user ownership | LLM settings facade/service |
+| `llm_settings` | `LlmSetting` | Retain/rebuild with verified organization ownership | LLM settings facade/service |
 | `chat_history` | `ChatMessage` | Retain/rebuild as thread message repository; add explicit ownership through thread/run boundary | Analysis runtime |
 | `artifacts` | `Artifact` | Retain/rebuild with typed artifact references and owner checks | Artifact store |
 | `technical_prediction_events` | `TechnicalPredictionEvent` | Retain for technical observability | Technical observability |

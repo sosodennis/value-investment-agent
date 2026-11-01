@@ -13,4 +13,7 @@ uv run python scripts/export_openapi.py
 cd "${ROOT_DIR}/frontend"
 npm run generate:api-contract
 
+cd "${ROOT_DIR}"
+uv run --directory "${ROOT_DIR}/search-service" python scripts/generate_openapi.py
+
 echo "Contract generation completed."

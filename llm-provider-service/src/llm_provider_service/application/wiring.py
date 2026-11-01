@@ -31,46 +31,62 @@ class _Ownership:
         self._state = state
 
     def replacement_lock(
-        self, *, user_id: str, key_id: str
+        self, *, organization_id: str, key_id: str
     ) -> AbstractAsyncContextManager[None]:
-        return self._state.replacement_lock(user_id=user_id, key_id=key_id)
+        return self._state.replacement_lock(
+            organization_id=organization_id, key_id=key_id
+        )
 
     def fingerprint_lock(
-        self, *, user_id: str, fingerprint: str
+        self, *, organization_id: str, fingerprint: str
     ) -> AbstractAsyncContextManager[None]:
-        return self._state.fingerprint_lock(user_id=user_id, fingerprint=fingerprint)
+        return self._state.fingerprint_lock(
+            organization_id=organization_id, fingerprint=fingerprint
+        )
 
     async def claim(
         self,
         *,
-        user_id: str,
+        organization_id: str,
         resource_type: str,
         resource_id: str,
         fingerprint: str | None = None,
     ) -> bool:
         return await self._state.claim(
-            user_id=user_id,
+            organization_id=organization_id,
             resource_type=resource_type,
             resource_id=resource_id,
             fingerprint=fingerprint,
         )
 
-    async def owns(self, *, user_id: str, resource_type: str, resource_id: str) -> bool:
+    async def owns(
+        self, *, organization_id: str, resource_type: str, resource_id: str
+    ) -> bool:
         return await self._state.owns(
-            user_id=user_id, resource_type=resource_type, resource_id=resource_id
+            organization_id=organization_id,
+            resource_type=resource_type,
+            resource_id=resource_id,
         )
 
-    async def owned_ids(self, *, user_id: str, resource_type: str) -> set[str]:
-        return await self._state.owned_ids(user_id=user_id, resource_type=resource_type)
+    async def owned_ids(self, *, organization_id: str, resource_type: str) -> set[str]:
+        return await self._state.owned_ids(
+            organization_id=organization_id, resource_type=resource_type
+        )
 
-    async def release(self, *, resource_type: str, resource_id: str) -> None:
-        await self._state.release(resource_type=resource_type, resource_id=resource_id)
+    async def release(
+        self, *, organization_id: str, resource_type: str, resource_id: str
+    ) -> None:
+        await self._state.release(
+            organization_id=organization_id,
+            resource_type=resource_type,
+            resource_id=resource_id,
+        )
 
     async def find_by_fingerprint(
-        self, *, user_id: str, fingerprint: str
+        self, *, organization_id: str, fingerprint: str
     ) -> str | None:
         return await self._state.find_by_fingerprint(
-            user_id=user_id, fingerprint=fingerprint
+            organization_id=organization_id, fingerprint=fingerprint
         )
 
 
@@ -78,11 +94,15 @@ class _Settings:
     def __init__(self, state: ProviderState) -> None:
         self._state = state
 
-    async def get_selected_model(self) -> str:
-        return await self._state.get_selected_model()
+    async def get_selected_model(self, *, organization_id: str) -> str:
+        return await self._state.get_selected_model(organization_id=organization_id)
 
-    async def set_selected_model(self, model_id: str, *, updated_by: str) -> str:
-        return await self._state.set_selected_model(model_id, updated_by=updated_by)
+    async def set_selected_model(
+        self, model_id: str, *, organization_id: str, updated_by: str
+    ) -> str:
+        return await self._state.set_selected_model(
+            model_id, organization_id=organization_id, updated_by=updated_by
+        )
 
 
 class _Catalog(ModelCatalog):
@@ -136,10 +156,6 @@ class ProviderRuntime:
         if self.telemetry is not None:
             await self.telemetry.close()
         await self.state.close()
-
-    async def synchronize_model(self) -> None:
-        if self.settings is not None:
-            await self.settings.synchronize_selected_model()
 
     async def cleanup_replacements(self) -> int:
         if self.settings is None:

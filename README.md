@@ -162,11 +162,13 @@ Open the LLM settings page, add one or more OpenRouter keys, and select a
 free model. The backend sends all application requests through the internal
 `openrouter-default` route; LiteLLM runs inside `llm-provider-service`.
 
-For production, provide `LLM_PROVIDER_SERVICE_TOKEN` through your deployment
+For production, provide `LLM_PROVIDER_SERVICE_TOKEN`, `SEARCH_SERVICE_TOKEN`,
+`LLM_PROVIDER_ENCRYPTION_KEY`, `SEARCH_PROVIDER_ENCRYPTION_KEY`,
+`DIRECTORY_CURSOR_SECRET`, and `AUDIT_CURSOR_SECRET` through your deployment
 secret manager and use `docker-compose.production.yml`. The production overlay
-sets `APP_ENV=production` and fails Compose configuration when the token is
-missing. Pass both Compose files explicitly so the local development override
-is not loaded:
+sets `APP_ENV=production`, requires every service authentication and encryption
+secret, and fails Compose configuration when one is missing. Pass both Compose
+files explicitly so the local development override is not loaded:
 
 ```bash
 docker compose \

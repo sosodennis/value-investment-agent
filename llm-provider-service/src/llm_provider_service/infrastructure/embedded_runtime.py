@@ -30,6 +30,10 @@ from src.llm_provider_service.domain.contracts import (
     StructuredRequest,
     Usage,
 )
+from src.llm_provider_service.domain.errors import (
+    OpenRouterKeyTestError,
+    ProviderSettingsError,
+)
 from src.llm_provider_service.domain.key_metadata import key_fingerprint, key_suffix
 from src.llm_provider_service.domain.provider_models import ManagedProviderKey
 from src.llm_provider_service.domain.reliability import (
@@ -38,7 +42,7 @@ from src.llm_provider_service.domain.reliability import (
     RetryBudgetExhausted,
     UpstreamFailure,
 )
-from src.llm_provider_service.domain.routes import UserScopedRouteResolver
+from src.llm_provider_service.domain.routes import OrganizationScopedRouteResolver
 from src.llm_provider_service.infrastructure.state import (
     ProviderDeployment,
     ProviderState,
@@ -126,7 +130,7 @@ def _model_list(
 ) -> list[dict[str, object]]:
     return [
         {
-            "model_name": f"openrouter-user-{_user_hash(deployment.user_id)}",
+            "model_name": f"openrouter-org-{_organization_hash(deployment.organization_id)}",
             "litellm_params": {
                 "model": (
                     deployment.model
@@ -153,10 +157,10 @@ def _model_list(
     ]
 
 
-def _user_hash(user_id: str) -> str:
+def _organization_hash(organization_id: str) -> str:
     from hashlib import sha256
 
-    return sha256(user_id.encode("utf-8")).hexdigest()[:20]
+    return sha256(organization_id.encode("utf-8")).hexdigest()[:20]
 
 
 def _run_sync(factory: Any) -> Any:
@@ -184,7 +188,7 @@ def _run_sync(factory: Any) -> Any:
 
 
 class EmbeddedLiteLLMProvider:
-    """Own user-scoped OpenRouter deployment selection and reliability policy."""
+    """Own organization-scoped OpenRouter deployment selection and reliability policy."""
 
     provider_name = "litellm"
 
@@ -198,7 +202,7 @@ class EmbeddedLiteLLMProvider:
         key_health: RedisProviderKeyTelemetry | None = None,
     ) -> None:
         self._state = state
-        self._route_resolver = route_resolver or UserScopedRouteResolver()
+        self._route_resolver = route_resolver or OrganizationScopedRouteResolver()
         self.telemetry = telemetry or LLMProviderTelemetry()
         self._key_health = key_health
         self._redis = redis_client
@@ -216,17 +220,20 @@ class EmbeddedLiteLLMProvider:
     async def aclose(self) -> None:
         await self.close()
 
-    async def _eligible_deployments(self, user_id: str) -> list[ProviderDeployment]:
+    async def _eligible_deployments(
+        self, organization_id: str
+    ) -> list[ProviderDeployment]:
         deployments = [
             item
-            for item in await self._state.list_deployments()
-            if item.user_id == user_id
-            and item.status not in {"invalid_key", "disabled"}
+            for item in await self._state.list_deployments(
+                organization_id=organization_id
+            )
+            if item.status not in {"invalid_key", "disabled"}
         ]
         if self._key_health is None or not deployments:
             return deployments
         health = await self._key_health.get_many_strict(
-            [item.id for item in deployments]
+            [item.id for item in deployments], organization_id=organization_id
         )
         result: list[ProviderDeployment] = []
         now = datetime.now(UTC)
@@ -248,7 +255,9 @@ class EmbeddedLiteLLMProvider:
     async def _router_for(self, deployment: ProviderDeployment) -> Any:
         from litellm import Router
 
-        key = await self._state.deployment_key(deployment.id)
+        key = await self._state.deployment_key(
+            organization_id=deployment.organization_id, deployment_id=deployment.id
+        )
         router = Router(
             model_list=_model_list([deployment], {deployment.id: key}),
             num_retries=0,
@@ -258,11 +267,15 @@ class EmbeddedLiteLLMProvider:
         )
         return router
 
-    async def _record_key_use(self, deployment_id: str) -> int | None:
+    async def _record_key_use(
+        self, deployment_id: str, *, organization_id: str
+    ) -> int | None:
         if self._key_health is None:
             return None
         try:
-            return await self._key_health.record_use(deployment_id)
+            return await self._key_health.record_use(
+                deployment_id, organization_id=organization_id
+            )
         except Exception as exc:
             _logger.warning(
                 "LLM key use could not be recorded in Redis (%s)", type(exc).__name__
@@ -270,13 +283,19 @@ class EmbeddedLiteLLMProvider:
             return None
 
     async def _record_key_success(
-        self, deployment_id: str, expected_version: int | None
+        self,
+        deployment_id: str,
+        expected_version: int | None,
+        *,
+        organization_id: str,
     ) -> None:
         if self._key_health is None:
             return
         try:
             await self._key_health.record_success(
-                deployment_id, expected_version=expected_version
+                deployment_id,
+                organization_id=organization_id,
+                expected_version=expected_version,
             )
         except Exception as exc:
             _logger.warning(
@@ -285,7 +304,7 @@ class EmbeddedLiteLLMProvider:
             )
 
     async def _record_key_failure(
-        self, deployment_id: str, failure: UpstreamFailure
+        self, deployment_id: str, failure: UpstreamFailure, *, organization_id: str
     ) -> None:
         if self._key_health is None:
             return
@@ -293,6 +312,7 @@ class EmbeddedLiteLLMProvider:
             await self._key_health.record_failure(
                 deployment_id,
                 failure,
+                organization_id=organization_id,
                 cooldown_seconds=float(
                     os.getenv("LLM_PROVIDER_KEY_COOLDOWN_SECONDS", "30")
                 ),
@@ -492,7 +512,7 @@ class EmbeddedLiteLLMProvider:
         principal = get_provider_principal()
         if principal is None:
             raise RuntimeError("provider principal is required")
-        deployments = await self._eligible_deployments(principal.user_id)
+        deployments = await self._eligible_deployments(principal.organization_id)
         limit = min(
             _MAX_RETRY_ATTEMPTS,
             2 if request.request_class is LLMRequestClass.INTERACTIVE else 3,
@@ -524,7 +544,9 @@ class EmbeddedLiteLLMProvider:
                 break
             retry_error = None
             try:
-                health_version = await self._record_key_use(deployment.id)
+                health_version = await self._record_key_use(
+                    deployment.id, organization_id=deployment.organization_id
+                )
                 router = await self._router_for(deployment)
                 call_kwargs = self._kwargs(request, response_schema=response_schema)
                 call_kwargs["timeout"] = reservation.timeout_seconds
@@ -555,7 +577,11 @@ class EmbeddedLiteLLMProvider:
                     attribution=attribution,
                     attempts=tuple(attempts),
                 )
-                await self._record_key_success(deployment.id, health_version)
+                await self._record_key_success(
+                    deployment.id,
+                    health_version,
+                    organization_id=deployment.organization_id,
+                )
                 if started_at is not None:
                     self.telemetry.succeeded(request, result, started_at=started_at)
                 return result
@@ -602,7 +628,9 @@ class EmbeddedLiteLLMProvider:
                         error_code=error.code.value,
                     )
                 )
-                await self._record_key_failure(deployment.id, failure)
+                await self._record_key_failure(
+                    deployment.id, failure, organization_id=deployment.organization_id
+                )
                 if not failure.retryable and not failure.rotates_key:
                     terminal = self._terminal(error, attempts)
                     if started_at is not None:
@@ -751,7 +779,7 @@ class EmbeddedLiteLLMProvider:
         principal = get_provider_principal()
         if principal is None:
             raise RuntimeError("provider principal is required")
-        deployments = await self._eligible_deployments(principal.user_id)
+        deployments = await self._eligible_deployments(principal.organization_id)
         attempts: list[LLMAttempt] = []
         limit = min(
             _MAX_RETRY_ATTEMPTS,
@@ -791,7 +819,9 @@ class EmbeddedLiteLLMProvider:
             partial_tool_calls: tuple[dict[str, object], ...] = ()
             health_version: int | None = None
             try:
-                health_version = await self._record_key_use(deployment.id)
+                health_version = await self._record_key_use(
+                    deployment.id, organization_id=deployment.organization_id
+                )
                 router = await self._router_for(deployment)
                 call_kwargs = {
                     "messages": self._messages(request.messages),
@@ -911,7 +941,11 @@ class EmbeddedLiteLLMProvider:
                     ),
                     stream=True,
                 )
-                await self._record_key_success(deployment.id, health_version)
+                await self._record_key_success(
+                    deployment.id,
+                    health_version,
+                    organization_id=deployment.organization_id,
+                )
                 return
             except asyncio.CancelledError:
                 self.telemetry.cancelled(request, started_at=started_at, stream=True)
@@ -935,7 +969,9 @@ class EmbeddedLiteLLMProvider:
                 error_code=error.code.value,
             )
             attempts.append(attempt_record)
-            await self._record_key_failure(deployment.id, failure)
+            await self._record_key_failure(
+                deployment.id, failure, organization_id=deployment.organization_id
+            )
             if emitted:
                 interrupted = LLMProviderError(
                     code=LLMErrorCode.STREAM_INTERRUPTED,
@@ -1011,8 +1047,15 @@ class EmbeddedLiteLLMProvider:
 
         yield from _run_sync(collect)
 
-    async def list_managed(self) -> list[ManagedProviderKey]:
-        return [_managed(item) for item in await self._state.list_deployments()]
+    async def list_managed(
+        self, *, organization_id: str | None = None
+    ) -> list[ManagedProviderKey]:
+        deployments = (
+            await self._state.list_deployments(organization_id=organization_id)
+            if organization_id is not None
+            else await self._state.list_all_deployments()
+        )
+        return [_managed(item) for item in deployments]
 
     async def add_replacement_key(
         self,
@@ -1021,22 +1064,16 @@ class EmbeddedLiteLLMProvider:
         label: str,
         model: str,
         model_name: str,
+        organization_id: str,
         existing_ids: Collection[str],
     ) -> ManagedProviderKey:
-        principal = get_provider_principal()
-        if principal is None:
-            raise RuntimeError("provider principal is required")
         fingerprint = key_fingerprint(key)
-        for item in await self._state.list_deployments():
-            if (
-                item.id in existing_ids
-                and item.user_id == principal.user_id
-                and item.fingerprint == fingerprint
-            ):
+        for item in await self._state.list_deployments(organization_id=organization_id):
+            if item.id in existing_ids and item.fingerprint == fingerprint:
                 return _managed(item)
         try:
             item = await self._state.create_deployment(
-                user_id=principal.user_id,
+                organization_id=organization_id,
                 key=key,
                 label=label,
                 suffix=key_suffix(key),
@@ -1045,29 +1082,50 @@ class EmbeddedLiteLLMProvider:
             )
         except IntegrityError:
             existing = await self._state.find_deployment_by_fingerprint(
-                user_id=principal.user_id, fingerprint=fingerprint
+                organization_id=organization_id, fingerprint=fingerprint
             )
             if existing is None:
                 raise
             return _managed(existing)
         return _managed(item)
 
-    async def update_model(self, model: str) -> None:
-        await self._state.update_all_deployment_models(model)
+    async def update_model(self, model: str, *, organization_id: str) -> None:
+        await self._state.update_all_deployment_models(
+            organization_id=organization_id, model=model
+        )
 
-    async def test_key(self, model_id: str) -> bool:
-        item = await self._state.get_deployment(model_id)
+    async def test_key(self, model_id: str, *, organization_id: str) -> bool:
+        principal = get_provider_principal()
+        if principal is None:
+            raise RuntimeError("provider principal is required")
+        if principal.organization_id != organization_id:
+            raise ProviderSettingsError("organization_context_mismatch")
+        item = await self._state.get_deployment(
+            organization_id=organization_id, deployment_id=model_id
+        )
         if item is None:
             raise RuntimeError("managed key was not found")
         from src.llm_provider_service.infrastructure.openrouter_key_test import (
             validate_openrouter_key,
         )
 
-        health_version = await self._record_key_use(model_id)
-        await validate_openrouter_key(await self._state.deployment_key(model_id))
-        await self._record_key_success(model_id, health_version)
+        health_version = await self._record_key_use(
+            model_id, organization_id=principal.organization_id
+        )
+        try:
+            await validate_openrouter_key(
+                await self._state.deployment_key(
+                    organization_id=organization_id, deployment_id=model_id
+                )
+            )
+        except OpenRouterKeyTestError as exc:
+            raise ProviderSettingsError(exc.code) from exc
+        await self._record_key_success(
+            model_id, health_version, organization_id=organization_id
+        )
         await self._state.update_deployment(
-            model_id,
+            organization_id=organization_id,
+            deployment_id=model_id,
             status="healthy",
             failure_count=0,
             last_tested_at=datetime.now(UTC),
@@ -1075,16 +1133,30 @@ class EmbeddedLiteLLMProvider:
         return True
 
     async def mark_replacement_grace(
-        self, model_id: str, *, retire_at: datetime
+        self,
+        model_id: str,
+        *,
+        organization_id: str,
+        retire_at: datetime,
     ) -> None:
         await self._state.update_deployment(
-            model_id, status="replacement_grace", replacement_retire_at=retire_at
+            organization_id=organization_id,
+            deployment_id=model_id,
+            status="replacement_grace",
+            replacement_retire_at=retire_at,
         )
 
-    async def delete_key(self, model_id: str) -> None:
-        if await self._state.get_deployment(model_id) is None:
+    async def delete_key(self, model_id: str, *, organization_id: str) -> None:
+        if (
+            await self._state.get_deployment(
+                organization_id=organization_id, deployment_id=model_id
+            )
+            is None
+        ):
             raise RuntimeError("managed key was not found")
-        await self._state.delete_deployment(model_id)
+        await self._state.delete_deployment(
+            organization_id=organization_id, deployment_id=model_id
+        )
 
 
 def _managed(item: ProviderDeployment) -> ManagedProviderKey:
@@ -1094,6 +1166,7 @@ def _managed(item: ProviderDeployment) -> ManagedProviderKey:
         suffix=item.suffix,
         fingerprint=item.fingerprint,
         created_at=item.created_at,
+        organization_id=item.organization_id,
         status=item.status,
         last_tested_at=item.last_tested_at,
         failure_count=item.failure_count,

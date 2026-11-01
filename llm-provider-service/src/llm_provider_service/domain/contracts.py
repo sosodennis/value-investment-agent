@@ -48,13 +48,16 @@ class ProviderPrincipal(BaseModel):
     """Authenticated identity supplied by the application boundary.
 
     This is intentionally smaller than the auth capability's session model.
-    Provider adapters only need a stable user identifier and must never receive
+    Provider adapters use the user identifier for actor attribution and the
+    organization identifier for provider ownership. They must never receive
     cookies, bearer tokens, or provider credentials.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     user_id: str = Field(min_length=1)
+    organization_id: str = Field(default="unscoped", min_length=1, max_length=128)
+    membership_id: str = Field(default="unscoped", min_length=1, max_length=128)
 
 
 class LLMAttribution(BaseModel):

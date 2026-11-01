@@ -2,12 +2,16 @@ from __future__ import annotations
 
 from functools import lru_cache
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 
-from src.auth.entrypoint import (
-    Principal,
-    require_current_user,
-    require_current_user_mutation,
+from src.audit.application.recording import record_best_effort
+from src.audit.domain.entities import AuditOutcome
+from src.auth.domain.authorization import OrganizationPermission
+from src.auth.domain.entities import AuthenticatedContext
+from src.auth.entrypoint import Principal
+from src.auth.interface.dependencies import (
+    require_current_context_mutation,
+    require_organization_permission,
 )
 from src.search_settings.domain import (
     ProviderKeyCreateRequest,
@@ -25,6 +29,38 @@ from src.search_settings.infrastructure.client import (
 search_settings_router = APIRouter(
     prefix="/api/v1/search/settings", tags=["Search settings"]
 )
+
+_provider_config_read = require_organization_permission(
+    OrganizationPermission.PROVIDER_CONFIG_READ
+)
+_provider_config_write = require_organization_permission(
+    OrganizationPermission.PROVIDER_CONFIG_WRITE,
+    context_dependency=require_current_context_mutation,
+)
+
+
+async def _read_principal(
+    request: Request,
+    context: AuthenticatedContext = Depends(_provider_config_read),
+) -> Principal:
+    _require_request_organization(request, context)
+    return Principal.from_context(context)
+
+
+async def _write_principal(
+    request: Request,
+    context: AuthenticatedContext = Depends(_provider_config_write),
+) -> Principal:
+    _require_request_organization(request, context)
+    return Principal.from_context(context)
+
+
+def _require_request_organization(
+    request: Request, context: AuthenticatedContext
+) -> None:
+    requested = request.headers.get("X-Organization-ID")
+    if requested != context.membership.organization_id:
+        raise HTTPException(status_code=409, detail="organization_context_mismatch")
 
 
 @lru_cache
@@ -49,11 +85,15 @@ def _raise(error: SearchServiceError) -> None:
 
 @search_settings_router.get("", response_model=SearchSettingsResponse)
 async def read_search_settings(
-    principal: Principal = Depends(require_current_user),
+    principal: Principal = Depends(_read_principal),
     service: SearchServiceClient = Depends(get_search_service),
 ) -> SearchSettingsResponse:
     try:
-        catalog, settings = await service.read(principal=principal.user_id)
+        catalog, settings = await service.read(
+            principal=principal.user_id,
+            organization_id=principal.organization_id,
+            membership_id=principal.membership_id,
+        )
         return SearchSettingsResponse(providers=catalog, settings=settings)
     except SearchServiceError as exc:
         _raise(exc)
@@ -62,13 +102,29 @@ async def read_search_settings(
 @search_settings_router.put("", response_model=SearchSettingsResponse)
 async def update_search_settings(
     request: ProviderPreferencesRequest,
-    principal: Principal = Depends(require_current_user_mutation),
+    principal: Principal = Depends(_write_principal),
     service: SearchServiceClient = Depends(get_search_service),
 ) -> SearchSettingsResponse:
     try:
-        catalog = await service.catalog(principal=principal.user_id)
+        catalog = await service.catalog(
+            principal=principal.user_id,
+            organization_id=principal.organization_id,
+            membership_id=principal.membership_id,
+        )
         settings = await service.update(
-            principal=principal.user_id, providers=request.providers
+            principal=principal.user_id,
+            providers=request.providers,
+            organization_id=principal.organization_id,
+            membership_id=principal.membership_id,
+        )
+        await record_best_effort(
+            organization_id=principal.organization_id,
+            actor_user_id=principal.user_id,
+            action="provider.config.updated",
+            outcome=AuditOutcome.SUCCESS,
+            target_type="provider_config",
+            target_id="search",
+            payload={"provider_count": len(request.providers)},
         )
         return SearchSettingsResponse(providers=catalog, settings=settings)
     except SearchServiceError as exc:
@@ -80,7 +136,7 @@ async def update_search_settings(
 )
 async def add_search_key(
     request: ProviderKeyCreateRequest,
-    principal: Principal = Depends(require_current_user_mutation),
+    principal: Principal = Depends(_write_principal),
     service: SearchServiceClient = Depends(get_search_service),
 ) -> ProviderKeyResponse:
     try:
@@ -89,6 +145,17 @@ async def add_search_key(
             provider=request.provider,
             api_key=request.api_key.get_secret_value(),
             label=request.label,
+            organization_id=principal.organization_id,
+            membership_id=principal.membership_id,
+        )
+        await record_best_effort(
+            organization_id=principal.organization_id,
+            actor_user_id=principal.user_id,
+            action="provider.key.created",
+            outcome=AuditOutcome.SUCCESS,
+            target_type="provider",
+            target_id="search",
+            payload={"provider": request.provider},
         )
         return ProviderKeyResponse(**result.model_dump())
     except SearchServiceError as exc:
@@ -100,7 +167,7 @@ async def add_search_key(
 )
 async def replace_search_key(
     request: ProviderKeyReplaceRequest,
-    principal: Principal = Depends(require_current_user_mutation),
+    principal: Principal = Depends(_write_principal),
     service: SearchServiceClient = Depends(get_search_service),
 ) -> ProviderKeyResponse:
     try:
@@ -110,6 +177,17 @@ async def replace_search_key(
             provider=request.provider,
             api_key=request.api_key.get_secret_value(),
             label=request.label,
+            organization_id=principal.organization_id,
+            membership_id=principal.membership_id,
+        )
+        await record_best_effort(
+            organization_id=principal.organization_id,
+            actor_user_id=principal.user_id,
+            action="provider.key.replaced",
+            outcome=AuditOutcome.SUCCESS,
+            target_type="provider_key",
+            target_id=request.key_id,
+            payload={"provider": request.provider},
         )
         return ProviderKeyResponse(**result.model_dump())
     except SearchServiceError as exc:
@@ -119,11 +197,24 @@ async def replace_search_key(
 @search_settings_router.delete("/keys/{key_id}", status_code=204)
 async def delete_search_key(
     key_id: str,
-    principal: Principal = Depends(require_current_user_mutation),
+    principal: Principal = Depends(_write_principal),
     service: SearchServiceClient = Depends(get_search_service),
 ) -> None:
     try:
-        await service.delete_key(principal=principal.user_id, key_id=key_id)
+        await service.delete_key(
+            principal=principal.user_id,
+            key_id=key_id,
+            organization_id=principal.organization_id,
+            membership_id=principal.membership_id,
+        )
+        await record_best_effort(
+            organization_id=principal.organization_id,
+            actor_user_id=principal.user_id,
+            action="provider.key.deleted",
+            outcome=AuditOutcome.SUCCESS,
+            target_type="provider_key",
+            target_id=key_id,
+        )
     except SearchServiceError as exc:
         _raise(exc)
 
@@ -132,12 +223,26 @@ async def delete_search_key(
 async def set_search_key_enabled(
     key_id: str,
     request: ProviderKeyEnabledRequest,
-    principal: Principal = Depends(require_current_user_mutation),
+    principal: Principal = Depends(_write_principal),
     service: SearchServiceClient = Depends(get_search_service),
 ) -> ProviderKeyResponse:
     try:
         result = await service.set_key_enabled(
-            principal=principal.user_id, key_id=key_id, enabled=request.enabled
+            principal=principal.user_id,
+            key_id=key_id,
+            enabled=request.enabled,
+            organization_id=principal.organization_id,
+            membership_id=principal.membership_id,
+        )
+        await record_best_effort(
+            organization_id=principal.organization_id,
+            actor_user_id=principal.user_id,
+            action="provider.key.enabled"
+            if request.enabled
+            else "provider.key.disabled",
+            outcome=AuditOutcome.SUCCESS,
+            target_type="provider_key",
+            target_id=key_id,
         )
         return ProviderKeyResponse(**result.model_dump())
     except SearchServiceError as exc:

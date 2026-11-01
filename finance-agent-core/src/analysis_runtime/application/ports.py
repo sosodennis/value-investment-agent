@@ -32,6 +32,8 @@ class GraphRunner(Protocol):
         run_id: str,
         input_data: Mapping[str, object],
         principal_id: str,
+        organization_id: str = "unscoped",
+        membership_id: str = "unscoped",
     ) -> AsyncIterator[
         Activity | InteractionRequested | WorkflowAgentOutput | Mapping[str, object]
     ]: ...
@@ -61,13 +63,19 @@ class ActivityRepository(Protocol):
     async def get_run(self, *, thread_id: str) -> RunStatusRecord | None: ...
 
     async def get_run_history(
-        self, *, principal_id: str, thread_id: str, run_id: str
+        self,
+        *,
+        principal_id: str,
+        organization_id: str = "unscoped",
+        thread_id: str,
+        run_id: str,
     ) -> AnalysisRunRecord | None: ...
 
     async def list_run_history(
         self,
         *,
         principal_id: str,
+        organization_id: str = "unscoped",
         limit: int,
         before_started_at: datetime | None = None,
         before_thread_id: str | None = None,
@@ -82,6 +90,8 @@ class ActivityRepository(Protocol):
         status: RunStatus,
         now: datetime,
         principal_id: str | None = None,
+        organization_id: str | None = None,
+        membership_id: str | None = None,
         input_data: Mapping[str, object] | None = None,
     ) -> RunStatusRecord: ...
 
@@ -91,6 +101,8 @@ class ActivityRepository(Protocol):
         requested: InteractionRequested,
         principal_id: str,
         now: datetime,
+        organization_id: str = "unscoped",
+        membership_id: str = "unscoped",
     ) -> tuple[WorkflowEvent, ...]: ...
 
     async def claim_interaction_response(
@@ -100,6 +112,8 @@ class ActivityRepository(Protocol):
         response: InteractionResponse,
         principal_id: str,
         now: datetime,
+        organization_id: str = "unscoped",
+        membership_id: str = "unscoped",
     ) -> ClaimedInteractionResume: ...
 
     async def cancel_run_with_interaction(
@@ -109,6 +123,7 @@ class ActivityRepository(Protocol):
         run_id: str,
         principal_id: str,
         now: datetime,
+        organization_id: str = "unscoped",
     ) -> tuple[WorkflowEvent, ...]: ...
 
     async def pending_resumes(self) -> tuple[PendingResume, ...]: ...
@@ -120,6 +135,8 @@ class ActivityRepository(Protocol):
         thread_id: str,
         source_run_id: str,
         checkpoint: CheckpointIdentity,
+        organization_id: str = "unscoped",
+        membership_id: str = "unscoped",
         idempotency_key: str,
         request_hash: str,
         now: datetime,

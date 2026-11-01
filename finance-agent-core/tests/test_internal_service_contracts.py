@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timedelta, timezone
 
 import pytest
 from pydantic import ValidationError
@@ -14,6 +14,7 @@ from src.shared.internal_services import (
     InternalRequestContext,
     ReadinessStatus,
     authenticate_internal_request,
+    build_internal_context,
 )
 
 
@@ -103,6 +104,81 @@ def test_authentication_returns_typed_context_and_excludes_secrets() -> None:
     assert context.principal.subject_id == "user-123"
     assert "service-secret" not in context.model_dump_json()
     assert "cookie" not in context.model_dump_json().lower()
+
+
+def test_signed_context_rejects_tampering_and_organization_header_swaps() -> None:
+    signed = build_internal_context(
+        principal=InternalPrincipal(
+            subject_id="user-123",
+            organization_id="organization-a",
+            membership_id="membership-a",
+        ),
+        correlation_id="correlation-signed",
+        deadline_at=datetime.now(UTC) + timedelta(seconds=30),
+        audience="search-service",
+        signing_key="service-secret",
+    )
+    raw = signed.model_dump(mode="json")
+    raw["principal"]["organization_id"] = "organization-attacker"
+
+    with pytest.raises(InternalAuthenticationError) as tampered:
+        authenticate_internal_request(
+            "Bearer service-secret",
+            expected_token="service-secret",
+            raw_context=raw,
+            expected_audience="search-service",
+            signing_key="service-secret",
+        )
+    assert tampered.value.code == "internal_context_signature_invalid"
+
+    with pytest.raises(InternalAuthenticationError) as swapped:
+        authenticate_internal_request(
+            "Bearer service-secret",
+            expected_token="service-secret",
+            raw_context=signed.model_dump(mode="json"),
+            expected_audience="search-service",
+            signing_key="service-secret",
+            organization_header="organization-attacker",
+        )
+    assert swapped.value.code == "internal_context_organization_mismatch"
+
+
+def test_strict_authentication_rejects_unsigned_legacy_context() -> None:
+    with pytest.raises(InternalAuthenticationError) as failure:
+        authenticate_internal_request(
+            "Bearer service-secret",
+            expected_token="service-secret",
+            raw_context=_context(),
+            expected_audience="search-service",
+            expected_issuer="finance-agent-core",
+            signing_key="service-secret",
+        )
+    assert failure.value.code == "internal_context_claims_invalid"
+
+
+def test_signed_context_requires_expected_audience_and_issuer() -> None:
+    signed = build_internal_context(
+        principal=InternalPrincipal(
+            subject_id="user-123",
+            organization_id="organization-a",
+            membership_id="membership-a",
+        ),
+        correlation_id="correlation-signed",
+        deadline_at=datetime.now(UTC) + timedelta(seconds=30),
+        audience="search-service",
+        signing_key="service-secret",
+    )
+
+    with pytest.raises(InternalAuthenticationError) as failure:
+        authenticate_internal_request(
+            "Bearer service-secret",
+            expected_token="service-secret",
+            raw_context=signed.model_dump(mode="json"),
+            expected_audience="model-inference-service",
+            expected_issuer="finance-agent-core",
+            signing_key="service-secret",
+        )
+    assert failure.value.code == "internal_context_claims_invalid"
 
 
 def test_error_and_readiness_envelopes_are_versioned_and_strict() -> None:

@@ -23,6 +23,8 @@ def auth_override():
         user_id="dashboard-test-user",
         subject="dashboard-test-user",
         email="dashboard-test@example.com",
+        organization_id="organization-dashboard",
+        membership_id="membership-dashboard",
     )
     yield
     app.dependency_overrides.clear()

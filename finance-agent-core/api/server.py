@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from contextlib import asynccontextmanager
 
 import uvicorn
@@ -19,7 +20,14 @@ from src.analysis_runtime.infrastructure import (
     SqlAlchemyActivityRepository,
 )
 from src.analysis_runtime.interface.routes import router as analysis_runtime_router
-from src.auth.entrypoint import auth_router, get_ownership_service
+from src.audit.entrypoint import audit_router
+from src.audit.interface.middleware import CorrelationIdMiddleware
+from src.auth.entrypoint import (
+    auth_router,
+    get_ownership_service,
+    invitation_router,
+    organization_router,
+)
 from src.dashboard.infrastructure import (
     HttpReadinessProvider,
     MarketMoversService,
@@ -35,9 +43,11 @@ from src.llm_provider.entrypoint import (
     provider_keys_router,
 )
 from src.model_inference.entrypoint import close_model_inference
+from src.notifications.entrypoint import get_notification_worker, notifications_router
 from src.observability.routes import router as observability_router
 from src.search_settings import search_settings_router
 from src.search_settings.composition.routes import close_search_service
+from src.shared.kernel.rate_limit import close_rate_limiter
 from src.workflow.graph import get_graph
 
 
@@ -72,12 +82,20 @@ async def lifespan(app: FastAPI):
     await runtime.recover_pending_retries()
     app.state.market_movers_service = MarketMoversService(YahooMarketMoversProvider())
     app.state.readiness_provider = HttpReadinessProvider()
+    notification_stop = asyncio.Event()
+    notification_worker_task = asyncio.create_task(
+        get_notification_worker().serve(stop_event=notification_stop)
+    )
+    app.state.notification_worker_task = notification_worker_task
     try:
         yield
     finally:
+        notification_stop.set()
+        await notification_worker_task
         await close_search_service()
         await close_llm_provider()
         await close_model_inference()
+        await close_rate_limiter()
 
 
 app = FastAPI(
@@ -103,13 +121,19 @@ async def request_validation_error_handler(
 
 
 app.add_middleware(
+    CorrelationIdMiddleware,
+)
+app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins(),
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
     allow_headers=["Content-Type", "X-CSRF-Token", "X-Request-ID", "Idempotency-Key"],
+    expose_headers=["X-Request-ID"],
 )
 app.include_router(auth_router)
+app.include_router(organization_router)
+app.include_router(invitation_router)
 app.include_router(provider_keys_router)
 app.include_router(llm_settings_router)
 app.include_router(search_settings_router)
@@ -117,6 +141,8 @@ app.include_router(analysis_runtime_router)
 app.include_router(dashboard_router)
 app.include_router(observability_router)
 app.include_router(artifact_router)
+app.include_router(notifications_router)
+app.include_router(audit_router)
 
 
 def _openapi() -> dict[str, object]:

@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 from types import SimpleNamespace
 
 import pytest
+from cryptography.fernet import Fernet
 from src.llm_provider_service.application.context import (
     reset_provider_principal,
     set_provider_principal,
@@ -21,14 +22,42 @@ from src.llm_provider_service.domain.reliability import (
     FailureScope,
     RetryBudgetExhausted,
 )
-from src.llm_provider_service.domain.routes import DEFAULT_MODEL_ALIAS
+from src.llm_provider_service.domain.routes import (
+    DEFAULT_MODEL_ALIAS,
+    OrganizationScopedRouteResolver,
+)
 from src.llm_provider_service.infrastructure.embedded_runtime import (
     EmbeddedLiteLLMProvider,
 )
-from src.llm_provider_service.infrastructure.state import ProviderDeployment
+from src.llm_provider_service.infrastructure.state import (
+    ProviderDeployment,
+    ProviderState,
+)
 from src.llm_provider_service.infrastructure.upstream_errors import (
     classify_exception,
 )
+
+
+@pytest.mark.asyncio
+async def test_llm_encryption_rotation_rejects_invalid_replacement_key() -> None:
+    old_key = Fernet.generate_key().decode("ascii")
+    state = ProviderState(encryption_key=old_key)
+    with pytest.raises(ValueError, match="Fernet keys"):
+        await state.rotate_encryption_key(old_key=old_key, new_key="not-a-valid-key")
+    await state.close()
+
+
+def test_provider_route_requires_verified_organization_context() -> None:
+    resolver = OrganizationScopedRouteResolver()
+    with pytest.raises(ValueError, match="organization provider context is required"):
+        resolver.resolve(
+            route=ModelRoute(alias=DEFAULT_MODEL_ALIAS),
+            principal=ProviderPrincipal(
+                user_id="alice",
+                organization_id="unscoped",
+                membership_id="unscoped",
+            ),
+        )
 
 
 def _error(*, status: int, metadata: dict[str, object] | None = None, headers=None):
@@ -149,10 +178,12 @@ def _runtime_request() -> CompletionRequest:
     )
 
 
-def _deployment(identifier: str, *, user_id: str = "alice") -> ProviderDeployment:
+def _deployment(
+    identifier: str, *, organization_id: str = "org-a"
+) -> ProviderDeployment:
     return ProviderDeployment(
         id=identifier,
-        user_id=user_id,
+        organization_id=organization_id,
         label=identifier,
         suffix="1234",
         fingerprint=f"fingerprint-{identifier}",
@@ -172,11 +203,15 @@ class _RuntimeState:
         self.items = [_deployment("key-a"), _deployment("key-b")]
         self.keys = {"key-a": "sk-a", "key-b": "sk-b"}
 
-    async def list_deployments(self) -> list[ProviderDeployment]:
-        return list(self.items)
+    async def list_deployments(
+        self, *, organization_id: str
+    ) -> list[ProviderDeployment]:
+        _ = organization_id
+        return [item for item in self.items if item.organization_id == organization_id]
 
-    async def deployment_key(self, identifier: str) -> str:
-        return self.keys[identifier]
+    async def deployment_key(self, *, organization_id: str, deployment_id: str) -> str:
+        _ = organization_id
+        return self.keys[deployment_id]
 
 
 class _Health:
@@ -188,27 +223,40 @@ class _Health:
     async def ping(self) -> bool:
         return True
 
-    async def get_many_strict(self, key_ids: list[str]) -> dict[str, object]:
+    async def get_many_strict(
+        self, key_ids: list[str], *, organization_id: str
+    ) -> dict[str, object]:
+        _ = organization_id
         return {}
 
-    async def record_use(self, key_id: str) -> int:
+    async def record_use(self, key_id: str, *, organization_id: str) -> int:
+        _ = organization_id
+        _ = organization_id
         if self.fail_writes:
             raise ConnectionError("redis write failed")
         return 0
 
     async def record_success(
-        self, key_id: str, *, expected_version: int | None
+        self, key_id: str, *, organization_id: str, expected_version: int | None
     ) -> bool:
+        _ = organization_id
         if self.fail_writes:
             raise ConnectionError("redis write failed")
         self.successes.append(key_id)
         return True
 
     async def record_failure(
-        self, key_id: str, failure: object, *, cooldown_seconds: float
+        self,
+        key_id: str,
+        failure: object,
+        *,
+        organization_id: str,
+        cooldown_seconds: float,
     ) -> None:
+        _ = organization_id
         if self.fail_writes:
             raise ConnectionError("redis write failed")
+        _ = organization_id
         self.failures.append(key_id)
 
     async def close(self) -> None:
@@ -226,7 +274,7 @@ class _GlobalLimit(RuntimeError):
 
 
 @pytest.mark.asyncio
-async def test_key_scoped_failure_rotates_within_one_user_pool(
+async def test_key_scoped_failure_rotates_within_one_organization_pool(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     calls: list[str] = []
@@ -253,7 +301,11 @@ async def test_key_scoped_failure_rotates_within_one_user_pool(
     monkeypatch.setattr("litellm.Router", Router)
     runtime = EmbeddedLiteLLMProvider(_RuntimeState(), key_health=health)
     await runtime.start()
-    token = set_provider_principal(ProviderPrincipal(user_id="alice"))
+    token = set_provider_principal(
+        ProviderPrincipal(
+            user_id="alice", organization_id="org-a", membership_id="membership-a"
+        )
+    )
     try:
         result = await runtime.acomplete(_runtime_request())
     finally:
@@ -271,12 +323,16 @@ async def test_runtime_filters_deployments_to_authenticated_user(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     state = _RuntimeState()
-    state.items.append(_deployment("key-bob", user_id="bob"))
+    state.items.append(_deployment("key-bob", organization_id="org-b"))
     runtime = EmbeddedLiteLLMProvider(state, key_health=_Health())
     monkeypatch.setattr("litellm.Router", lambda **kwargs: None)
-    token = set_provider_principal(ProviderPrincipal(user_id="alice"))
+    token = set_provider_principal(
+        ProviderPrincipal(
+            user_id="alice", organization_id="org-a", membership_id="membership-a"
+        )
+    )
     try:
-        eligible = await runtime._eligible_deployments("alice")
+        eligible = await runtime._eligible_deployments("org-a")
     finally:
         reset_provider_principal(token)
         await runtime.aclose()
@@ -319,7 +375,11 @@ async def test_global_limit_retries_same_key_without_rotation(
     )
     runtime = EmbeddedLiteLLMProvider(_RuntimeState(), key_health=health)
     await runtime.start()
-    token = set_provider_principal(ProviderPrincipal(user_id="alice"))
+    token = set_provider_principal(
+        ProviderPrincipal(
+            user_id="alice", organization_id="org-a", membership_id="membership-a"
+        )
+    )
     try:
         result = await runtime.acomplete(_runtime_request())
     finally:
@@ -360,7 +420,11 @@ async def test_redis_write_failure_does_not_replay_successful_request(
         _RuntimeState(), key_health=_Health(fail_writes=True)
     )
     await runtime.start()
-    token = set_provider_principal(ProviderPrincipal(user_id="alice"))
+    token = set_provider_principal(
+        ProviderPrincipal(
+            user_id="alice", organization_id="org-a", membership_id="membership-a"
+        )
+    )
     try:
         result = await runtime.acomplete(_runtime_request())
     finally:

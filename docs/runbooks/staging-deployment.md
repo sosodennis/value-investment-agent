@@ -7,6 +7,12 @@ cookie behavior.
 
 ## Prepare the staging environment
 
+Provider secret generation, organization-key rotation/revocation, encrypted
+storage, and retained-data gates are defined in
+[`provider-secret-lifecycle.md`](provider-secret-lifecycle.md). Follow that
+runbook before changing either provider encryption key or resetting provider
+data.
+
 Run the setup script once from the repository root. Point it at the existing
 local environment so it can copy only the four `STAGING_*` values that the
 smoke test needs:
@@ -16,8 +22,9 @@ STAGING_SOURCE_ENV_FILE=/absolute/path/to/.env ./scripts/prepare_staging_env.sh
 ```
 
 The script creates `.env.staging` with mode `0600`. It generates the database
-password, internal service tokens, and Fernet encryption keys. It refuses to
-overwrite an existing file. Keep the file on the host and do not commit it.
+password, internal service tokens, the directory and audit cursor signing
+secrets, and Fernet encryption keys. It refuses to overwrite an existing file. Keep the
+file on the host and do not commit it.
 
 Check the file mode and ignore rule without printing its contents:
 
@@ -96,6 +103,46 @@ acceptance run must stop at that checkpoint. Do not approve the valuation and
 do not run the deterministic calculation during this infrastructure
 acceptance.
 
+For organization and notification acceptance, run the fresh-staging harness
+after the infrastructure smoke. It creates four disposable users, two
+organizations, and exercises directory search, private inbox delivery,
+invitation accept/decline/expiry/resend/revoke/repeated actions, ownership
+transfer, last-owner protection, membership removal, provider-key isolation,
+Search settings isolation, and audit access. When a local CSV is available, it
+also imports and validates the full batch in the selected organization:
+
+```bash
+STAGING_SECRET_FILE=.env.staging \
+STAGING_KEY_IMPORT_FILE=/absolute/path/to/open-router-api-key.csv \
+STAGING_ORGANIZATION_REPORT=/tmp/value-investment-agent-216-organization.jsonl \
+STAGING_BOB_FIXTURE=/tmp/value-investment-agent-216-bob.env \
+bash scripts/organization_staging_acceptance.sh
+```
+
+The harness writes a local-only fixture for a second organization user. In the
+final acceptance state Bob is the transferred owner; use the fixture with the
+smoke script and the staging backend URL to prove that a second user can run
+the organization-scoped workflow:
+
+```bash
+STAGING_SECRET_FILE=/tmp/value-investment-agent-216-bob.env \
+STAGING_BASE_URL=http://127.0.0.1:18580 \
+STAGING_REQUIRE_LIVE_PROVIDER=0 \
+STAGING_SMOKE_REPORT=/tmp/value-investment-agent-216-bob-runtime.jsonl \
+bash scripts/refactor_staging_smoke.sh
+```
+
+`STAGING_ORGANIZATION_ID`, when present in the secret file, is selected after
+login. Keep the fixture mode `0600`; never commit it or paste its password,
+session cookies, organization IDs, or provider response bodies into GitHub.
+
+For user-facing acceptance, record the route, viewport, user role, action, and
+observed result for `/settings/organization`, `/notifications`,
+`/settings/llm`, `/settings/search`, and the workspace route. The local
+acceptance does not certify hosted TLS, reverse-proxy cookie behavior, the
+optional scheduler, or provider failover without explicit primary-key fault
+injection.
+
 Review the report for statuses and request metadata only. It must contain no
 raw provider key, password, token, Fernet key, or response body:
 
@@ -150,6 +197,9 @@ that alters any of the following:
   credential rotation procedures.
 - The staging smoke endpoints, asynchronous import contract, provider test,
   AAPL workflow, approval checkpoint, or report redaction checks.
+- Organization membership, directory search, invitation lifecycle, inbox
+  notification, organization context selection, provider/Search sharing or
+  isolation, and browser acceptance routes.
 - Stop, volume retention, cleanup, or recovery steps.
 
 After each update, rerun environment creation in an isolated disposable

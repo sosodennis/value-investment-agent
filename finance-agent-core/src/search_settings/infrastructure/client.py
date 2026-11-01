@@ -3,10 +3,9 @@ from __future__ import annotations
 import os
 from datetime import UTC, datetime, timedelta
 from typing import Literal, TypeVar
-from uuid import uuid4
 
 import httpx
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, ValidationError
 
 from src.search_settings.domain import (
     ProviderCapabilities,
@@ -15,6 +14,8 @@ from src.search_settings.domain import (
     SearchSettingsSnapshot,
     StrictModel,
 )
+from src.shared.internal_services import InternalPrincipal, build_internal_context
+from src.shared.kernel.correlation import resolve_correlation_id
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -26,19 +27,8 @@ class SearchServiceError(Exception):
         self.code = code
 
 
-class _Context(StrictModel):
-    subject_id: str = Field(min_length=1, max_length=256)
-
-
-class _RequestContext(StrictModel):
-    principal: _Context
-    correlation_id: str = Field(min_length=1, max_length=128)
-    contract_version: Literal["internal.v1"] = "internal.v1"
-    deadline_at: str
-
-
 class _Envelope(StrictModel):
-    context: _RequestContext
+    context: dict[str, object]
     input: dict[str, object]
 
 
@@ -127,20 +117,31 @@ class SearchServiceClient:
         path: str,
         input_data: dict[str, object],
         response_type: type[T],
+        organization_id: str,
+        membership_id: str,
     ) -> T:
+        correlation_id = resolve_correlation_id()
         payload = _Envelope(
-            context=_RequestContext(
-                principal=_Context(subject_id=principal),
-                correlation_id=str(uuid4()),
-                deadline_at=self._deadline(),
-            ),
+            context=build_internal_context(
+                principal=InternalPrincipal(
+                    subject_id=principal,
+                    organization_id=organization_id,
+                    membership_id=membership_id,
+                ),
+                correlation_id=correlation_id,
+                deadline_at=datetime.now(UTC) + timedelta(seconds=10),
+                audience="search-service",
+                signing_key=self._token,
+            ).model_dump(mode="json"),
             input=input_data,
         )
         try:
+            headers = {"Authorization": f"Bearer {self._token}"}
+            headers["X-Request-ID"] = correlation_id
             response = await self._client.post(
                 f"{self._base_url}{path}",
                 json=payload.model_dump(mode="json"),
-                headers={"Authorization": f"Bearer {self._token}"},
+                headers=headers,
             )
         except httpx.TimeoutException:
             raise SearchServiceError(
@@ -152,53 +153,92 @@ class SearchServiceClient:
             ) from None
         if response.is_error:
             try:
-                error = _ErrorEnvelope.model_validate(response.json()).error
+                envelope = _ErrorEnvelope.model_validate(response.json())
+                if envelope.correlation_id != correlation_id:
+                    raise ValueError("search service correlation mismatch")
+                error = envelope.error
             except (ValidationError, ValueError):
                 raise SearchServiceError(
                     503, "service_unavailable", "Search Service is unavailable"
                 ) from None
             raise SearchServiceError(response.status_code, error.code, error.message)
         try:
-            return response_type.model_validate(response.json())
+            envelope = response_type.model_validate(response.json())
         except (ValidationError, ValueError):
             raise SearchServiceError(
                 502,
                 "invalid_service_response",
                 "Search Service returned an invalid response",
             ) from None
+        if getattr(envelope, "correlation_id", None) != correlation_id:
+            raise SearchServiceError(
+                502,
+                "invalid_service_response",
+                "Search Service returned an invalid response",
+            )
+        return envelope
 
     async def read(
-        self, *, principal: str
+        self,
+        *,
+        principal: str,
+        organization_id: str,
+        membership_id: str,
     ) -> tuple[list[ProviderCapabilities], SearchSettingsSnapshot]:
         catalog, settings = (
-            await self._catalog(principal),
-            await self._settings(principal),
+            await self._catalog(principal, organization_id, membership_id),
+            await self._settings(principal, organization_id, membership_id),
         )
         return catalog, settings
 
-    async def catalog(self, *, principal: str) -> list[ProviderCapabilities]:
-        return await self._catalog(principal)
+    async def catalog(
+        self,
+        *,
+        principal: str,
+        organization_id: str,
+        membership_id: str,
+    ) -> list[ProviderCapabilities]:
+        return await self._catalog(principal, organization_id, membership_id)
 
-    async def _catalog(self, principal: str) -> list[ProviderCapabilities]:
+    async def _catalog(
+        self,
+        principal: str,
+        organization_id: str,
+        membership_id: str,
+    ) -> list[ProviderCapabilities]:
         envelope = await self._post(
             principal=principal,
             path="/v1/providers/catalog",
             input_data={},
             response_type=_CatalogEnvelope,
+            organization_id=organization_id,
+            membership_id=membership_id,
         )
         return envelope.result.catalog.providers
 
-    async def _settings(self, principal: str) -> SearchSettingsSnapshot:
+    async def _settings(
+        self,
+        principal: str,
+        organization_id: str,
+        membership_id: str,
+    ) -> SearchSettingsSnapshot:
         envelope = await self._post(
             principal=principal,
             path="/v1/settings/read",
             input_data={},
             response_type=_SettingsEnvelope,
+            organization_id=organization_id,
+            membership_id=membership_id,
         )
         return envelope.result.settings
 
     async def update(
-        self, *, principal: str, providers: list[ProviderPreference]
+        self,
+        *,
+        principal: str,
+        providers: list[ProviderPreference],
+        organization_id: str,
+        membership_id: str,
     ) -> SearchSettingsSnapshot:
         envelope = await self._post(
             principal=principal,
@@ -207,22 +247,41 @@ class SearchServiceClient:
                 "providers": [item.model_dump(mode="json") for item in providers]
             },
             response_type=_SettingsEnvelope,
+            organization_id=organization_id,
+            membership_id=membership_id,
         )
         return envelope.result.settings
 
     async def add_key(
-        self, *, principal: str, provider: str, api_key: str, label: str
+        self,
+        *,
+        principal: str,
+        provider: str,
+        api_key: str,
+        label: str,
+        organization_id: str,
+        membership_id: str,
     ) -> ProviderKeyResult:
         envelope = await self._post(
             principal=principal,
             path="/v1/provider-keys/add",
             input_data={"provider": provider, "api_key": api_key, "label": label},
             response_type=_KeyEnvelope,
+            organization_id=organization_id,
+            membership_id=membership_id,
         )
         return envelope.result
 
     async def replace_key(
-        self, *, principal: str, key_id: str, provider: str, api_key: str, label: str
+        self,
+        *,
+        principal: str,
+        key_id: str,
+        provider: str,
+        api_key: str,
+        label: str,
+        organization_id: str,
+        membership_id: str,
     ) -> ProviderKeyResult:
         envelope = await self._post(
             principal=principal,
@@ -234,25 +293,44 @@ class SearchServiceClient:
                 "label": label,
             },
             response_type=_KeyEnvelope,
+            organization_id=organization_id,
+            membership_id=membership_id,
         )
         return envelope.result
 
-    async def delete_key(self, *, principal: str, key_id: str) -> None:
+    async def delete_key(
+        self,
+        *,
+        principal: str,
+        key_id: str,
+        organization_id: str,
+        membership_id: str,
+    ) -> None:
         await self._post(
             principal=principal,
             path="/v1/provider-keys/delete",
             input_data={"key_id": key_id},
             response_type=_DeleteEnvelope,
+            organization_id=organization_id,
+            membership_id=membership_id,
         )
 
     async def set_key_enabled(
-        self, *, principal: str, key_id: str, enabled: bool
+        self,
+        *,
+        principal: str,
+        key_id: str,
+        enabled: bool,
+        organization_id: str,
+        membership_id: str,
     ) -> ProviderKeyResult:
         envelope = await self._post(
             principal=principal,
             path="/v1/provider-keys/set-enabled",
             input_data={"key_id": key_id, "enabled": enabled},
             response_type=_KeyEnvelope,
+            organization_id=organization_id,
+            membership_id=membership_id,
         )
         return envelope.result
 

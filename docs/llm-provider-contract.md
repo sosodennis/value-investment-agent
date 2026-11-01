@@ -13,19 +13,20 @@ an internal runtime and is replaceable behind this contract. There is no
 separate HTTP gateway or provider fallback. Direct OpenAI fallback is not part
 of the production contract.
 
-Provider settings are user-scoped in the current delivery. Every settings
-request requires the shared `app_session` principal; the server derives the
-user id from that session and never accepts an owner id or provider admin token
-from the browser. A user can list, test, add, and delete only deployments
-claimed by that user. The development-only loopback local-admin endpoint still
-exists for local diagnostics, but it does not authorize provider settings.
+Provider settings are organization-scoped. Every settings request requires the
+verified organization membership in the shared `app_session` principal; the
+server never accepts a user or organization owner id, or a provider admin token,
+from the browser. A member can use the organization-owned deployments, while
+the application authorization layer decides which members may mutate them.
+The development-only loopback local-admin endpoint still exists for local
+diagnostics, but it does not authorize provider settings.
 
 The authenticated `/stream` API binds the session-derived principal to a
 `ContextVar` for each workflow request. The compiled graph stays shared and
 does not store a user id in agent wiring. The provider runtime requires a
 principal. A missing principal returns
 the non-retryable `provider_context_missing` error. The provider adapter
-resolves the user's opaque gateway route for each completion or stream; browser
+resolves the organization's opaque gateway route for each completion or stream; browser
 input never supplies a deployment id, route alias, or OpenRouter key.
 
 The model picker remains a global free-model policy for the MVP. It is updated
@@ -69,7 +70,7 @@ Streaming may fail over only before the first delta or tool side effect. After
 bytes have been delivered, the adapter raises `stream_interrupted` with the
 partial output instead of replaying the request.
 
-## Migration shape
+## Application boundary shape
 
 Agent application services consume `LLMProviderPort` through typed completion
 and structured requests. LangGraph still owns workflow state and callbacks;
@@ -90,15 +91,16 @@ evidence remain acceptance gates for #189.
 
 The application constructs one shared provider runtime per process. Local and
 canonical Compose development use the embedded runtime. The model group is
-derived from the authenticated user id, while provider-owned encrypted
-deployments are the source of truth for that user's configured OpenRouter keys.
+derived from the verified organization id, while provider-owned encrypted
+deployments are the source of truth for that organization's configured OpenRouter keys.
 
 The project database stores selected-model settings, ownership metadata, and
 provider-owned encrypted OpenRouter keys. The encryption key is supplied as
 `LLM_PROVIDER_ENCRYPTION_KEY` and must be backed up with the service database.
 Existing keys that remain only in an old LiteLLM database are not silently
-reset; #190 records the required explicit migration or re-key decision before
-those retained records can be retired.
+reset. The retained-data export/re-key or disposable-reset decision is recorded
+in #190 and the provider secret lifecycle runbook before those records can be
+retired.
 Vault and cloud secret-manager integrations are deferred.
 
 Basic telemetry records request outcome, attempt/retry counts, latency,
@@ -111,7 +113,7 @@ Per-key operational health is separate from aggregate request telemetry. The
 provider runtime records only the managed deployment id, a bounded outcome or
 error code, timestamps, consecutive failures, and the configured cooldown
 expiry in a namespaced Redis hash. It never sends an additional prompt. The
-settings API first applies the authenticated user's ownership filter, then
+settings API first applies the verified organization's ownership filter, then
 reads health only for those key ids. Health expires after 90 days. Redis is the
 runtime health source; PostgreSQL lifecycle fields do not override an
 unavailable Redis view.

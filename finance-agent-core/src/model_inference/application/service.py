@@ -23,6 +23,7 @@ from src.model_inference.domain.contracts import (
     NewsSentimentResult,
 )
 from src.model_inference.domain.errors import InferenceErrorCode, InferenceFailure
+from src.shared.internal_services import InternalPrincipal
 
 _MAX_ATTEMPTS = 2
 _MAX_RETRY_AFTER_MS = 500
@@ -47,7 +48,8 @@ class ModelInferenceService(ModelInference):
 
     async def news_sentiment(self, text: str) -> NewsSentimentResult:
         request_id = uuid4().hex
-        principal_subject_id = self._principal_subject_id(request_id)
+        principal = self._principal_context(request_id)
+        principal_subject_id = principal.subject_id
         policy = OPERATION_POLICIES[InferenceOperation.NEWS_SENTIMENT]
         if not text.strip() or len(text) > int(policy.max_text_chars or 0):
             raise InferenceFailure(
@@ -66,6 +68,8 @@ class ModelInferenceService(ModelInference):
             request_id=request_id,
             deadline=deadline,
             principal_subject_id=principal_subject_id,
+            principal_organization_id=principal.organization_id or "unscoped",
+            principal_membership_id=principal.membership_id or "unscoped",
             deadline_at=deadline_at,
         )
         if not isinstance(result, NewsSentimentResult):
@@ -74,7 +78,8 @@ class ModelInferenceService(ModelInference):
 
     def news_sentiment_sync(self, text: str) -> NewsSentimentResult:
         request_id = uuid4().hex
-        principal_subject_id = self._principal_subject_id(request_id)
+        principal = self._principal_context(request_id)
+        principal_subject_id = principal.subject_id
         policy = OPERATION_POLICIES[InferenceOperation.NEWS_SENTIMENT]
         if not text.strip() or len(text) > int(policy.max_text_chars or 0):
             raise InferenceFailure(
@@ -95,13 +100,16 @@ class ModelInferenceService(ModelInference):
                 request_id=request_id,
                 deadline=deadline,
                 principal_subject_id=principal_subject_id,
+                principal_organization_id=principal.organization_id or "unscoped",
+                principal_membership_id=principal.membership_id or "unscoped",
                 deadline_at=deadline_at,
             ),
         )
 
     def fls_predictions(self, sentences: Sequence[str]) -> FLSResult:
         request_id = uuid4().hex
-        principal_subject_id = self._principal_subject_id(request_id)
+        principal = self._principal_context(request_id)
+        principal_subject_id = principal.subject_id
         policy = OPERATION_POLICIES[InferenceOperation.SEC_FLS]
         if not sentences:
             raise InferenceFailure(
@@ -134,6 +142,8 @@ class ModelInferenceService(ModelInference):
                 request_id=request_id,
                 deadline=deadline,
                 principal_subject_id=principal_subject_id,
+                principal_organization_id=principal.organization_id or "unscoped",
+                principal_membership_id=principal.membership_id or "unscoped",
                 deadline_at=deadline_at,
             ),
         )
@@ -145,6 +155,8 @@ class ModelInferenceService(ModelInference):
         request_id: str,
         deadline: float,
         principal_subject_id: str,
+        principal_organization_id: str,
+        principal_membership_id: str,
         deadline_at: datetime,
     ) -> NewsSentimentResult:
         result = self._infer_sync(
@@ -154,6 +166,8 @@ class ModelInferenceService(ModelInference):
             deadline=deadline,
             retries_used=0,
             principal_subject_id=principal_subject_id,
+            principal_organization_id=principal_organization_id,
+            principal_membership_id=principal_membership_id,
             deadline_at=deadline_at,
         )
         if not isinstance(result, NewsSentimentResult):
@@ -167,6 +181,8 @@ class ModelInferenceService(ModelInference):
         request_id: str,
         deadline: float,
         principal_subject_id: str,
+        principal_organization_id: str,
+        principal_membership_id: str,
         deadline_at: datetime,
     ) -> FLSResult:
         predictions: list[FLSPrediction] = []
@@ -184,6 +200,8 @@ class ModelInferenceService(ModelInference):
                 deadline=deadline,
                 retries_used=retries_used,
                 principal_subject_id=principal_subject_id,
+                principal_organization_id=principal_organization_id,
+                principal_membership_id=principal_membership_id,
                 deadline_at=deadline_at,
             )
             if not isinstance(result, FLSResult):
@@ -207,6 +225,8 @@ class ModelInferenceService(ModelInference):
         request_id: str,
         deadline: float,
         principal_subject_id: str,
+        principal_organization_id: str,
+        principal_membership_id: str,
         deadline_at: datetime,
     ) -> InferenceResult:
         policy = OPERATION_POLICIES[operation]
@@ -219,6 +239,8 @@ class ModelInferenceService(ModelInference):
                 deadline_ms=min(deadline_ms, policy.maximum_deadline_ms),
                 principal_subject_id=principal_subject_id,
                 deadline_at=deadline_at,
+                principal_organization_id=principal_organization_id,
+                principal_membership_id=principal_membership_id,
             )
             try:
                 result = await asyncio.wait_for(
@@ -253,6 +275,8 @@ class ModelInferenceService(ModelInference):
         deadline: float,
         retries_used: int,
         principal_subject_id: str,
+        principal_organization_id: str,
+        principal_membership_id: str,
         deadline_at: datetime,
     ) -> InferenceResult:
         result, _retries_used = self._infer_sync_with_retry_count(
@@ -262,6 +286,8 @@ class ModelInferenceService(ModelInference):
             deadline=deadline,
             retries_used=retries_used,
             principal_subject_id=principal_subject_id,
+            principal_organization_id=principal_organization_id,
+            principal_membership_id=principal_membership_id,
             deadline_at=deadline_at,
         )
         return result
@@ -275,6 +301,8 @@ class ModelInferenceService(ModelInference):
         deadline: float,
         retries_used: int,
         principal_subject_id: str,
+        principal_organization_id: str,
+        principal_membership_id: str,
         deadline_at: datetime,
     ) -> tuple[InferenceResult, int]:
         policy = OPERATION_POLICIES[operation]
@@ -288,6 +316,8 @@ class ModelInferenceService(ModelInference):
                 deadline_ms=min(deadline_ms, policy.maximum_deadline_ms),
                 principal_subject_id=principal_subject_id,
                 deadline_at=deadline_at,
+                principal_organization_id=principal_organization_id,
+                principal_membership_id=principal_membership_id,
             )
             try:
                 result = self._transport.infer(request)
@@ -309,6 +339,10 @@ class ModelInferenceService(ModelInference):
 
     @staticmethod
     def _principal_subject_id(request_id: str) -> str:
+        return ModelInferenceService._principal_context(request_id).subject_id
+
+    @staticmethod
+    def _principal_context(request_id: str) -> InternalPrincipal:
         principal = get_inference_principal()
         if principal is None:
             raise InferenceFailure(
@@ -317,7 +351,7 @@ class ModelInferenceService(ModelInference):
                 retryable=False,
                 message="authenticated principal context is required",
             )
-        return principal.subject_id
+        return principal
 
     @staticmethod
     def _remaining_ms(deadline: float, request_id: str) -> int:

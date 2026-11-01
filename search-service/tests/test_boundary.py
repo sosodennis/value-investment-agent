@@ -115,11 +115,13 @@ async def test_control_plane_errors_are_bounded_and_redacted(
     route: str, operation_input: dict[str, object], outcome: str
 ) -> None:
     control = UnavailableControlPlane(outcome)
-    request_context = context()
-    if outcome == "deadline":
-        request_context["deadline_at"] = (
+    request_context = context(
+        deadline=(
             datetime.now(UTC) + timedelta(milliseconds=25)
-        ).isoformat()
+            if outcome == "deadline"
+            else None
+        )
+    )
     async with client_for(control, {"alpha": provider()}) as client:
         response = await client.post(
             route,
@@ -396,7 +398,7 @@ class OwnedControlPlane(FakeControlPlane):
     def __init__(self) -> None:
         super().__init__()
         self.owned = {
-            ("user-a", "key-123"): ProviderKeySummary(
+            ("organization-122", "key-123"): ProviderKeySummary(
                 id="key-123",
                 provider="alpha",
                 label="main",
@@ -407,16 +409,28 @@ class OwnedControlPlane(FakeControlPlane):
             )
         }
 
-    async def delete_key(self, *, subject_id: str, key_id: str) -> None:
-        self.owned.pop((subject_id, key_id), None)
+    async def delete_key(self, *, organization_id: str, key_id: str) -> None:
+        self.owned.pop((organization_id, key_id), None)
 
-    async def list_keys(self, *, subject_id: str) -> tuple[ProviderKeySummary, ...]:
+    async def list_keys(
+        self, *, organization_id: str
+    ) -> tuple[ProviderKeySummary, ...]:
         return tuple(
-            key for (owner, _key_id), key in self.owned.items() if owner == subject_id
+            key
+            for (owner, _key_id), key in self.owned.items()
+            if owner == organization_id
         )
 
-    async def credentials_for(self, *, subject_id: str) -> tuple[Credential, ...]:
-        return (Credential("alpha", f"{subject_id}-secret"),)
+    async def credentials_for(self, *, organization_id: str) -> tuple[Credential, ...]:
+        return (Credential("alpha", f"{organization_id}-secret"),)
+
+    async def claim_credential(
+        self, *, organization_id: str, provider: str, lease_seconds: int = 30
+    ) -> Credential | None:
+        _ = lease_seconds
+        if provider != "alpha":
+            return None
+        return Credential("alpha", f"{organization_id}-secret")
 
 
 @pytest.mark.asyncio
@@ -426,15 +440,21 @@ async def test_delete_is_owner_scoped_and_idempotent() -> None:
         foreign = await client.post(
             "/v1/provider-keys/delete",
             headers=HEADERS,
-            json={"context": context(user_id="user-b"), "input": {"key_id": "key-123"}},
+            json={
+                "context": context(user_id="user-b", organization_id="organization-b"),
+                "input": {"key_id": "key-123"},
+            },
         )
         absent = await client.post(
             "/v1/provider-keys/delete",
             headers=HEADERS,
-            json={"context": context(user_id="user-b"), "input": {"key_id": "missing"}},
+            json={
+                "context": context(user_id="user-b", organization_id="organization-b"),
+                "input": {"key_id": "missing"},
+            },
         )
         assert foreign.json() == absent.json()
-        assert ("user-a", "key-123") in control.owned
+        assert ("organization-122", "key-123") in control.owned
         first = await client.post(
             "/v1/provider-keys/delete",
             headers=HEADERS,
@@ -451,7 +471,7 @@ async def test_delete_is_owner_scoped_and_idempotent() -> None:
 
 
 @pytest.mark.asyncio
-async def test_key_listing_and_search_routing_use_the_context_owner() -> None:
+async def test_key_listing_and_search_routing_use_the_context_organization() -> None:
     control = OwnedControlPlane()
     upstream = provider()
     async with client_for(control, {"alpha": upstream}) as client:
@@ -476,8 +496,11 @@ async def test_key_listing_and_search_routing_use_the_context_owner() -> None:
             )
             assert response.status_code == 200
     assert own.json()["result"]["providers"][0]["id"] == "key-123"
-    assert other.json()["result"]["providers"] == []
-    assert upstream.calls == [("web", "user-a-secret"), ("web", "user-b-secret")]
+    assert other.json()["result"]["providers"][0]["id"] == "key-123"
+    assert upstream.calls == [
+        ("web", "organization-122-secret"),
+        ("web", "organization-122-secret"),
+    ]
 
 
 @pytest.mark.asyncio
@@ -502,9 +525,8 @@ async def test_every_operation_rejects_invalid_envelopes_and_expired_deadlines(
     elif invalid == "non-object-input":
         body["input"] = []
     else:
-        request_context["deadline_at"] = (
-            datetime.now(UTC) - timedelta(seconds=1)
-        ).isoformat()
+        request_context = context(deadline=datetime.now(UTC) - timedelta(seconds=1))
+        body["context"] = request_context
     async with client_for(FakeControlPlane(), {"alpha": provider()}) as client:
         response = await client.post(route, headers=HEADERS, json=body)
     assert response.status_code == (504 if invalid == "expired" else 400)

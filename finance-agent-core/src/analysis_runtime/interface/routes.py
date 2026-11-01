@@ -103,6 +103,12 @@ def _runtime(request: Request) -> AnalysisRuntimeService:
     return service
 
 
+def _require_bound_organization(request: Request, principal: Principal) -> None:
+    supplied = getattr(request, "headers", {}).get("X-Organization-ID")
+    if supplied is not None and supplied != principal.organization_id:
+        raise HTTPException(status_code=403, detail="organization_context_mismatch")
+
+
 def _map_error(exc: Exception) -> HTTPException:
     if isinstance(exc, ThreadNotFoundError | RunNotFoundError):
         return HTTPException(status_code=404, detail=exc.code)
@@ -138,9 +144,12 @@ async def start_run(
     request: Request,
     principal: Principal = Depends(require_current_user_mutation),
 ) -> RunResponse:
+    _require_bound_organization(request, principal)
     try:
         run_id = await _runtime(request).start(
             principal_id=principal.user_id,
+            organization_id=principal.organization_id,
+            membership_id=principal.membership_id,
             thread_id=thread_id,
             input_data={"message": body.message},
         )
@@ -161,11 +170,14 @@ async def resume_run(
     request: Request,
     principal: Principal = Depends(require_current_user_mutation),
 ) -> RunResponse:
+    _require_bound_organization(request, principal)
     if body.identity.thread_id != thread_id or body.identity.run_id != run_id:
         raise HTTPException(status_code=422, detail="interaction_identity_mismatch")
     try:
         resumed_run_id = await _runtime(request).resume(
             principal_id=principal.user_id,
+            organization_id=principal.organization_id,
+            membership_id=principal.membership_id,
             identity=body.identity,
             response=body.response,
         )
@@ -187,9 +199,12 @@ async def retry_run(
     idempotency_key: str = Header(..., alias="Idempotency-Key", min_length=1),
     principal: Principal = Depends(require_current_user_mutation),
 ) -> RetryResponse:
+    _require_bound_organization(request, principal)
     try:
         operation = await _runtime(request).retry(
             principal_id=principal.user_id,
+            organization_id=principal.organization_id,
+            membership_id=principal.membership_id,
             thread_id=thread_id,
             source_run_id=run_id,
             checkpoint=body.checkpoint,
@@ -215,9 +230,13 @@ async def cancel_run(
     request: Request,
     principal: Principal = Depends(require_current_user_mutation),
 ) -> None:
+    _require_bound_organization(request, principal)
     try:
         await _runtime(request).cancel(
-            principal_id=principal.user_id, thread_id=thread_id, run_id=run_id
+            principal_id=principal.user_id,
+            organization_id=principal.organization_id,
+            thread_id=thread_id,
+            run_id=run_id,
         )
     except Exception as exc:
         raise _map_error(exc) from exc
@@ -229,10 +248,13 @@ async def thread_snapshot(
     request: Request,
     principal: Principal = Depends(require_current_user),
 ):
+    _require_bound_organization(request, principal)
     try:
         return (
             await _runtime(request).snapshot(
-                principal_id=principal.user_id, thread_id=thread_id
+                principal_id=principal.user_id,
+                organization_id=principal.organization_id,
+                thread_id=thread_id,
             )
         ).model_dump(mode="json")
     except Exception as exc:
@@ -246,9 +268,13 @@ async def activity_snapshot(
     principal: Principal = Depends(require_current_user),
     run_id: str | None = Query(default=None, min_length=1),
 ):
+    _require_bound_organization(request, principal)
     try:
         snapshot = await _runtime(request).snapshot(
-            principal_id=principal.user_id, thread_id=thread_id, run_id=run_id
+            principal_id=principal.user_id,
+            organization_id=principal.organization_id,
+            thread_id=thread_id,
+            run_id=run_id,
         )
         return snapshot.model_dump(mode="json")
     except Exception as exc:
@@ -302,16 +328,19 @@ async def activity_events(
     after_seq: int = Query(default=0, ge=0),
     run_id: str | None = Query(default=None, min_length=1),
 ):
+    _require_bound_organization(request, principal)
     service = _runtime(request)
     try:
         if run_id is not None:
             await service.snapshot(
                 principal_id=principal.user_id,
+                organization_id=principal.organization_id,
                 thread_id=thread_id,
                 run_id=run_id,
             )
         replay, subscriber = await service.subscribe(
             principal_id=principal.user_id,
+            organization_id=principal.organization_id,
             thread_id=thread_id,
             after_seq=after_seq,
         )
