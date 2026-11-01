@@ -20,6 +20,24 @@ const api = vi.hoisted(() => ({
 }));
 
 const router = vi.hoisted(() => ({ replace: vi.fn() }));
+const organizationContext = vi.hoisted(() => ({
+    activeOrganization: {
+        id: 'organization-a',
+        name: 'Acme Research',
+        role: 'owner' as 'owner' | 'admin' | 'member',
+        status: 'active',
+        membership_id: 'membership-a',
+        created_at: '2026-10-31T00:00:00Z',
+    } as {
+        id: string;
+        name: string;
+        role: 'owner' | 'admin' | 'member';
+        status: string;
+        membership_id: string;
+        created_at: string;
+    } | null,
+    isLoading: false,
+}));
 
 const existingKey = {
     id: 'managed-1',
@@ -57,6 +75,10 @@ vi.mock('next/navigation', () => ({
     useRouter: () => router,
 }));
 
+vi.mock('@/features/organizations/organization-context', () => ({
+    useOrganizationContext: () => organizationContext,
+}));
+
 describe('LLM settings', () => {
     afterEach(() => {
         cleanup();
@@ -68,6 +90,15 @@ describe('LLM settings', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         sessionStorage.clear();
+        organizationContext.activeOrganization = {
+            id: 'organization-a',
+            name: 'Acme Research',
+            role: 'owner',
+            status: 'active',
+            membership_id: 'membership-a',
+            created_at: '2026-10-31T00:00:00Z',
+        };
+        organizationContext.isLoading = false;
         api.listLlmProviderKeys.mockResolvedValue([]);
         api.listLlmProviderKeyImports.mockResolvedValue([]);
         api.getLlmSettings.mockResolvedValue({
@@ -219,6 +250,73 @@ describe('LLM settings', () => {
         await screen.findByText('Cooling down');
         screen.getByText(/2 failures/);
         screen.getByText('The provider rate limited this key.');
+    });
+
+    it('lets organization members view provider settings but disables every mutation', async () => {
+        organizationContext.activeOrganization = {
+            id: 'organization-a',
+            name: 'Acme Research',
+            role: 'member',
+            status: 'active',
+            membership_id: 'membership-a',
+            created_at: '2026-10-31T00:00:00Z',
+        };
+        api.listLlmProviderKeys.mockResolvedValue([existingKey]);
+        render(<LlmSettingsPage />);
+
+        await screen.findByText(existingKey.label);
+        expect(screen.getByText(/Active organization:/).textContent).toContain('Acme Research · member');
+        expect((screen.getByLabelText('OpenRouter API key') as HTMLInputElement).disabled).toBe(true);
+        expect((screen.getByRole('combobox', { name: 'Default OpenRouter model' }) as HTMLButtonElement).disabled).toBe(true);
+        expect((screen.getByRole('button', { name: 'Test' }) as HTMLButtonElement).disabled).toBe(true);
+        expect(screen.getByText('Only organization owners and admins can change provider keys.')).toBeTruthy();
+    });
+
+    it('does not request or display provider settings without an active organization', () => {
+        organizationContext.activeOrganization = null;
+        render(<LlmSettingsPage />);
+
+        expect(screen.getByText('Select an active organization to manage provider settings.')).toBeTruthy();
+        expect(api.listLlmProviderKeys).not.toHaveBeenCalled();
+        expect(api.getLlmSettings).not.toHaveBeenCalled();
+        expect(screen.queryByText('No keys configured')).toBeNull();
+    });
+
+    it('clears submitted import metadata when the active organization changes', async () => {
+        const submitted = {
+            id: 'organization-a-import',
+            status: 'queued' as const,
+            total_count: 1,
+            processed_count: 0,
+            imported_count: 0,
+            duplicate_count: 0,
+            invalid_count: 0,
+            retryable_count: 0,
+            created_at: '2026-10-31T00:00:00Z',
+            updated_at: '2026-10-31T00:00:00Z',
+            items: [],
+        };
+        api.submitLlmProviderKey.mockResolvedValue(submitted);
+        const { rerender } = render(<LlmSettingsPage />);
+        await waitFor(() => expect(api.listLlmProviderKeys).toHaveBeenCalledWith());
+        fireEvent.change(screen.getByLabelText('OpenRouter API key'), {
+            target: { value: 'sk-or-v1-test-openrouter-secret' },
+        });
+        fireEvent.click(screen.getByRole('button', { name: 'Add key' }));
+        await screen.findByText('Queued');
+
+        organizationContext.activeOrganization = {
+            id: 'organization-b',
+            name: 'Second Organization',
+            role: 'owner',
+            status: 'active',
+            membership_id: 'membership-b',
+            created_at: '2026-10-31T00:00:00Z',
+        };
+        rerender(<LlmSettingsPage />);
+
+        await waitFor(() => expect(screen.queryByText('Queued')).toBeNull());
+        expect(screen.queryByText('organization-a-import')).toBeNull();
     });
 
     it('deletes a configured key only after explicit dialog confirmation', async () => {

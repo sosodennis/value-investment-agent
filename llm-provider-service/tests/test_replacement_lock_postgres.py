@@ -106,12 +106,12 @@ async def test_replacements_serialize_across_independent_postgres_state_clients(
     state_one = ProviderState()
     state_two = ProviderState()
     old_key_id = f"old-{uuid4()}"
-    user_id = f"user-{uuid4()}"
+    organization_id = f"organization-{uuid4()}"
     try:
         await asyncio.gather(state_one.initialize(), state_two.initialize())
         assert state_one._engine is not state_two._engine
         assert await state_one.claim(
-            user_id=user_id,
+            organization_id=organization_id,
             resource_type="provider_key",
             resource_id=old_key_id,
             fingerprint=f"fingerprint-{uuid4()}",
@@ -141,7 +141,7 @@ async def test_replacements_serialize_across_independent_postgres_state_clients(
         ) -> ManagedProviderKey:
             await start.wait()
             return await service.replace_key(
-                user_id=user_id,
+                organization_id=organization_id,
                 key_id=old_key_id,
                 key=key,
                 label=key,

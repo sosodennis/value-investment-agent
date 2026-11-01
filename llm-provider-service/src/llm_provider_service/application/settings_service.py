@@ -26,7 +26,7 @@ from src.llm_provider_service.domain.provider_models import (
     ManagedProviderKey,
     OpenRouterModel,
 )
-from src.llm_provider_service.domain.routes import user_route_alias
+from src.llm_provider_service.domain.routes import organization_route_alias
 
 RESOURCE_TYPE = "provider_key"
 
@@ -49,23 +49,27 @@ class ProviderSettingsService:
         self._validate_key = validate_key
         self._telemetry = telemetry
 
-    async def list_keys(self, *, user_id: str) -> list[ManagedProviderKey]:
+    async def list_keys(self, *, organization_id: str) -> list[ManagedProviderKey]:
         owned_ids = await self._ownership.owned_ids(
-            user_id=user_id, resource_type=RESOURCE_TYPE
+            organization_id=organization_id, resource_type=RESOURCE_TYPE
         )
         keys = [
-            key for key in await self._gateway.list_managed() if key.id in owned_ids
+            key
+            for key in await self._gateway.list_managed(organization_id=organization_id)
+            if key.id in owned_ids
         ]
         for key in keys:
             await self._ownership.claim(
-                user_id=user_id,
+                organization_id=organization_id,
                 resource_type=RESOURCE_TYPE,
                 resource_id=key.id,
                 fingerprint=key.fingerprint,
             )
         if self._telemetry is None or not keys:
             return keys
-        health_by_id = await self._telemetry.get_many({key.id for key in keys})
+        health_by_id = await self._telemetry.get_many(
+            {key.id for key in keys}, organization_id=organization_id
+        )
         return [
             replace(
                 key,
@@ -81,18 +85,24 @@ class ProviderSettingsService:
         ]
 
     async def replace_key(
-        self, *, user_id: str, key_id: str, key: str, label: str
+        self, *, organization_id: str, key_id: str, key: str, label: str
     ) -> ManagedProviderKey:
         try:
             key_id = validate_model_id(key_id)
         except ValueError as exc:
             raise ProviderSettingsError("invalid_key_id") from exc
-        async with self._ownership.replacement_lock(user_id=user_id, key_id=key_id):
+        async with self._ownership.replacement_lock(
+            organization_id=organization_id, key_id=key_id
+        ):
             if not await self._ownership.owns(
-                user_id=user_id, resource_type=RESOURCE_TYPE, resource_id=key_id
+                organization_id=organization_id,
+                resource_type=RESOURCE_TYPE,
+                resource_id=key_id,
             ):
                 raise ProviderSettingsError("not_found")
-            existing_keys = await self._gateway.list_managed()
+            existing_keys = await self._gateway.list_managed(
+                organization_id=organization_id
+            )
             old_key = next((item for item in existing_keys if item.id == key_id), None)
             if old_key is None:
                 raise ProviderSettingsError("not_found")
@@ -103,23 +113,28 @@ class ProviderSettingsService:
             await self._test_key_material(key)
 
             owned_ids = await self._ownership.owned_ids(
-                user_id=user_id, resource_type=RESOURCE_TYPE
+                organization_id=organization_id, resource_type=RESOURCE_TYPE
             )
             replacement = await self._gateway.add_replacement_key(
                 key=key,
                 label=label,
-                model=await self._settings.get_selected_model(),
-                model_name=user_route_alias(user_id),
+                model=await self._settings.get_selected_model(
+                    organization_id=organization_id
+                ),
+                model_name=organization_route_alias(organization_id),
+                organization_id=organization_id,
                 existing_ids=owned_ids,
             )
             if not await self._ownership.claim(
-                user_id=user_id,
+                organization_id=organization_id,
                 resource_type=RESOURCE_TYPE,
                 resource_id=replacement.id,
                 fingerprint=replacement.fingerprint,
             ):
                 if replacement.id not in owned_ids:
-                    await self._gateway.delete_key(replacement.id)
+                    await self._gateway.delete_key(
+                        replacement.id, organization_id=organization_id
+                    )
                 raise ProviderSettingsError("already_owned")
             grace_seconds = min(
                 3600,
@@ -128,61 +143,80 @@ class ProviderSettingsService:
             try:
                 await self._gateway.mark_replacement_grace(
                     key_id,
+                    organization_id=organization_id,
                     retire_at=datetime.now(UTC) + timedelta(seconds=grace_seconds),
                 )
             except Exception:
-                await self._gateway.delete_key(replacement.id)
+                await self._gateway.delete_key(
+                    replacement.id, organization_id=organization_id
+                )
                 await self._ownership.release(
-                    resource_type=RESOURCE_TYPE, resource_id=replacement.id
+                    organization_id=organization_id,
+                    resource_type=RESOURCE_TYPE,
+                    resource_id=replacement.id,
                 )
                 raise
             return replacement
 
-    async def test_key(self, *, user_id: str, key_id: str) -> bool:
+    async def test_key(self, *, organization_id: str, key_id: str) -> bool:
         try:
             key_id = validate_model_id(key_id)
         except ValueError as exc:
             raise ProviderSettingsError("invalid_key_id") from exc
         if not await self._ownership.owns(
-            user_id=user_id, resource_type=RESOURCE_TYPE, resource_id=key_id
+            organization_id=organization_id,
+            resource_type=RESOURCE_TYPE,
+            resource_id=key_id,
         ):
             raise ProviderSettingsError("not_found")
         try:
-            return await self._gateway.test_key(key_id)
+            return await self._gateway.test_key(key_id, organization_id=organization_id)
         except ProviderSettingsError as exc:
             raise ProviderSettingsError(_safe_gateway_error(exc)) from exc
 
-    async def delete_key(self, *, user_id: str, key_id: str) -> None:
+    async def delete_key(self, *, organization_id: str, key_id: str) -> None:
         try:
             key_id = validate_model_id(key_id)
         except ValueError as exc:
             raise ProviderSettingsError("invalid_key_id") from exc
         if not await self._ownership.owns(
-            user_id=user_id, resource_type=RESOURCE_TYPE, resource_id=key_id
+            organization_id=organization_id,
+            resource_type=RESOURCE_TYPE,
+            resource_id=key_id,
         ):
             raise ProviderSettingsError("not_found")
         try:
-            await self._gateway.delete_key(key_id)
+            await self._gateway.delete_key(key_id, organization_id=organization_id)
         except ProviderSettingsError as exc:
             if _safe_gateway_error(exc) != "not_found":
                 raise ProviderSettingsError(_safe_gateway_error(exc)) from exc
-        await self._ownership.release(resource_type=RESOURCE_TYPE, resource_id=key_id)
+        await self._ownership.release(
+            organization_id=organization_id,
+            resource_type=RESOURCE_TYPE,
+            resource_id=key_id,
+        )
         if self._telemetry is not None:
-            await self._telemetry.delete(key_id)
+            await self._telemetry.delete(key_id, organization_id=organization_id)
 
     async def selected_model_settings(
         self,
+        *,
+        organization_id: str,
     ) -> tuple[str, Sequence[OpenRouterModel]]:
         try:
             models = await self._catalog.list_free_models()
         except OpenRouterModelsError as exc:
             raise ProviderSettingsError("catalog_unavailable") from exc
-        selected_model = await self._settings.get_selected_model()
+        selected_model = await self._settings.get_selected_model(
+            organization_id=organization_id
+        )
         if not any(model.id == selected_model for model in models):
             selected_model = "openrouter/free"
         return selected_model, models
 
-    async def update_selected_model(self, *, model_id: str, user_id: str) -> str:
+    async def update_selected_model(
+        self, *, model_id: str, organization_id: str, updated_by: str
+    ) -> str:
         try:
             valid = await self._catalog.validate_free_model(model_id)
         except OpenRouterModelsError as exc:
@@ -190,16 +224,12 @@ class ProviderSettingsService:
         if not valid:
             raise ProviderSettingsError("model_not_free")
         try:
-            await self._gateway.update_model(model_id)
+            await self._gateway.update_model(model_id, organization_id=organization_id)
         except ProviderSettingsError as exc:
             raise ProviderSettingsError(_safe_gateway_error(exc)) from exc
-        return await self._settings.set_selected_model(model_id, updated_by=user_id)
-
-    async def synchronize_selected_model(self) -> None:
-        try:
-            await self._gateway.update_model(await self._settings.get_selected_model())
-        except ProviderSettingsError as exc:
-            raise ProviderSettingsError(_safe_gateway_error(exc)) from exc
+        return await self._settings.set_selected_model(
+            model_id, organization_id=organization_id, updated_by=updated_by
+        )
 
     async def cleanup_expired_replacements(self) -> int:
         now = datetime.now(UTC)
@@ -217,15 +247,21 @@ class ProviderSettingsService:
                 expired_ids.append(key.id)
         for key_id in expired_ids:
             try:
-                await self._gateway.delete_key(key_id)
+                await self._gateway.delete_key(
+                    key_id, organization_id=key.organization_id
+                )
             except ProviderSettingsError as exc:
                 if _safe_gateway_error(exc) != "not_found":
                     raise ProviderSettingsError(_safe_gateway_error(exc)) from exc
             await self._ownership.release(
-                resource_type=RESOURCE_TYPE, resource_id=key_id
+                organization_id=key.organization_id,
+                resource_type=RESOURCE_TYPE,
+                resource_id=key_id,
             )
             if self._telemetry is not None:
-                await self._telemetry.delete(key_id)
+                await self._telemetry.delete(
+                    key_id, organization_id=key.organization_id
+                )
         return len(expired_ids)
 
     async def _test_key_material(self, key: str) -> None:

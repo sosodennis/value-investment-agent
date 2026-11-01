@@ -10,6 +10,7 @@ class ManagedProviderKey:
     suffix: str
     fingerprint: str
     created_at: str | None
+    organization_id: str = ""
     status: str = "untested"
     last_tested_at: str | None = None
     failure_count: int = 0

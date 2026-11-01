@@ -21,17 +21,20 @@ from src.llm_provider_service.domain.contracts import (
     StreamEvent,
     StructuredRequest,
 )
-from src.llm_provider_service.domain.routes import DEFAULT_MODEL_ALIAS, user_route_alias
+from src.llm_provider_service.domain.routes import (
+    DEFAULT_MODEL_ALIAS,
+    organization_route_alias,
+)
 from src.llm_provider_service.infrastructure.embedded_runtime import (
     EmbeddedLiteLLMProvider,
 )
 from src.llm_provider_service.infrastructure.state import ProviderDeployment
 
 
-def _deployment(user_id: str, identifier: str = "key-1") -> ProviderDeployment:
+def _deployment(organization_id: str, identifier: str = "key-1") -> ProviderDeployment:
     return ProviderDeployment(
         id=identifier,
-        user_id=user_id,
+        organization_id=organization_id,
         label="primary",
         suffix="1234",
         fingerprint="abcdef012345",
@@ -48,17 +51,25 @@ def _deployment(user_id: str, identifier: str = "key-1") -> ProviderDeployment:
 
 class _State:
     def __init__(self) -> None:
-        self.items = [_deployment("alice")]
+        self.items = [_deployment("org-a")]
         self.keys = {"key-1": "sk-alice"}
 
-    async def list_deployments(self):
-        return list(self.items)
+    async def list_deployments(self, *, organization_id: str):
+        return [item for item in self.items if item.organization_id == organization_id]
 
-    async def deployment_key(self, identifier: str) -> str:
-        return self.keys[identifier]
+    async def deployment_key(self, *, organization_id: str, deployment_id: str) -> str:
+        _ = organization_id
+        return self.keys[deployment_id]
 
-    async def get_deployment(self, identifier: str):
-        return next((item for item in self.items if item.id == identifier), None)
+    async def get_deployment(self, *, organization_id: str, deployment_id: str):
+        return next(
+            (
+                item
+                for item in self.items
+                if item.id == deployment_id and item.organization_id == organization_id
+            ),
+            None,
+        )
 
 
 class _Redis:
@@ -142,14 +153,18 @@ async def test_embedded_runtime_uses_user_scoped_router(
     monkeypatch.setenv("LLM_PROVIDER_KEY_COOLDOWN_SECONDS", "1")
     runtime = _runtime(monkeypatch)
     await runtime.start()
-    token = set_provider_principal(ProviderPrincipal(user_id="alice"))
+    token = set_provider_principal(
+        ProviderPrincipal(
+            user_id="alice", organization_id="org-a", membership_id="membership-a"
+        )
+    )
     try:
         result = await runtime.acomplete(_request())
     finally:
         reset_provider_principal(token)
         await runtime.aclose()
     assert result.text == "answer"
-    assert _Router.calls == [(user_route_alias("alice"), False)]
+    assert _Router.calls == [(organization_route_alias("org-a"), False)]
     assert (
         _Router.instances[-1].model_list[0]["litellm_params"]["api_key"] == "sk-alice"
     )
@@ -164,7 +179,11 @@ async def test_embedded_runtime_stream_surfaces_interruption_without_replay(
     _Router.stream_failure = True
     runtime = _runtime(monkeypatch)
     await runtime.start()
-    token = set_provider_principal(ProviderPrincipal(user_id="alice"))
+    token = set_provider_principal(
+        ProviderPrincipal(
+            user_id="alice", organization_id="org-a", membership_id="membership-a"
+        )
+    )
     try:
         events: list[StreamEvent] = []
         with pytest.raises(LLMProviderError) as caught:
@@ -176,7 +195,7 @@ async def test_embedded_runtime_stream_surfaces_interruption_without_replay(
         await runtime.aclose()
     assert [event.kind for event in events] == ["started", "delta"]
     assert caught.value.code.value == "stream_interrupted"
-    assert _Router.calls == [(user_route_alias("alice"), True)]
+    assert _Router.calls == [(organization_route_alias("org-a"), True)]
     assert caught.value.attempts[0].error_code == "upstream_unavailable"
 
 
@@ -186,7 +205,11 @@ async def test_embedded_runtime_forwards_request_identity_and_metadata(
 ) -> None:
     runtime = _runtime(monkeypatch)
     await runtime.start()
-    token = set_provider_principal(ProviderPrincipal(user_id="alice"))
+    token = set_provider_principal(
+        ProviderPrincipal(
+            user_id="alice", organization_id="org-a", membership_id="membership-a"
+        )
+    )
     request = _request().model_copy(
         update={
             "idempotency_key": "idem-1",
@@ -236,7 +259,11 @@ async def test_embedded_runtime_retries_before_first_stream_delta(
     )
     runtime = EmbeddedLiteLLMProvider(_State(), redis_client=_Redis())
     await runtime.start()
-    token = set_provider_principal(ProviderPrincipal(user_id="alice"))
+    token = set_provider_principal(
+        ProviderPrincipal(
+            user_id="alice", organization_id="org-a", membership_id="membership-a"
+        )
+    )
     try:
         events = [event async for event in runtime.astream(_request())]
     finally:
@@ -281,7 +308,11 @@ async def test_embedded_runtime_preserves_terminal_attempt_history(
     )
     runtime = EmbeddedLiteLLMProvider(_State(), redis_client=_Redis())
     await runtime.start()
-    token = set_provider_principal(ProviderPrincipal(user_id="alice"))
+    token = set_provider_principal(
+        ProviderPrincipal(
+            user_id="alice", organization_id="org-a", membership_id="membership-a"
+        )
+    )
     try:
         with pytest.raises(LLMProviderError) as caught:
             await runtime.acomplete(_request())
@@ -307,7 +338,11 @@ async def test_embedded_runtime_rejects_malformed_completion_without_retry(
     runtime = EmbeddedLiteLLMProvider(_State(), redis_client=_Redis())
     monkeypatch.setattr("litellm.Router", MalformedRouter)
     await runtime.start()
-    token = set_provider_principal(ProviderPrincipal(user_id="alice"))
+    token = set_provider_principal(
+        ProviderPrincipal(
+            user_id="alice", organization_id="org-a", membership_id="membership-a"
+        )
+    )
     try:
         with pytest.raises(LLMProviderError) as caught:
             await runtime.acomplete(_request())
@@ -355,7 +390,11 @@ async def test_real_litellm_router_receives_provider_deployment(
     monkeypatch.setattr("litellm.caching.redis_cache.RedisCache.ping", fake_redis_ping)
     runtime = EmbeddedLiteLLMProvider(_State(), redis_client=_Redis())
     await runtime.start()
-    token = set_provider_principal(ProviderPrincipal(user_id="alice"))
+    token = set_provider_principal(
+        ProviderPrincipal(
+            user_id="alice", organization_id="org-a", membership_id="membership-a"
+        )
+    )
     try:
         result = await runtime.acomplete(_request())
     finally:
@@ -399,7 +438,11 @@ async def test_embedded_runtime_corrects_invalid_structured_output(
     monkeypatch.setattr("litellm.Router", StructuredRouter)
     runtime = EmbeddedLiteLLMProvider(_State(), redis_client=_Redis())
     await runtime.start()
-    token = set_provider_principal(ProviderPrincipal(user_id="alice"))
+    token = set_provider_principal(
+        ProviderPrincipal(
+            user_id="alice", organization_id="org-a", membership_id="membership-a"
+        )
+    )
     try:
         result = await runtime.acomplete_structured(
             StructuredRequest(completion=_request(), response_schema=Answer)

@@ -47,6 +47,9 @@ _SETTINGS_ERROR_STATUSES = {
     "replacement_in_progress": 409,
     "idempotency_key_reused": 409,
     "rate_limited": 429,
+    "permission_denied": 403,
+    "organization_context_required": 403,
+    "resource_not_found": 404,
 }
 
 
@@ -468,8 +471,8 @@ class LLMProviderServiceSettingsClient:
         payload: dict[str, object],
         *,
         user_id: str,
-        organization_id: str | None = None,
-        membership_id: str | None = None,
+        organization_id: str,
+        membership_id: str,
     ) -> dict[str, object]:
         correlation_id = resolve_correlation_id()
         try:
@@ -482,8 +485,8 @@ class LLMProviderServiceSettingsClient:
                     "context": _context(
                         principal=ProviderPrincipal(
                             user_id=user_id,
-                            organization_id=organization_id or "unscoped",
-                            membership_id=membership_id or "unscoped",
+                            organization_id=organization_id,
+                            membership_id=membership_id,
                         ),
                         signing_key=self._token,
                         seconds=10.0,
@@ -496,8 +499,6 @@ class LLMProviderServiceSettingsClient:
         except httpx.TransportError:
             raise ProviderSettingsError("provider_unavailable") from None
         if response.status_code >= 400:
-            if response.status_code == 404:
-                raise ProviderSettingsError("not_found") from None
             try:
                 body = response.json()
                 error = body.get("error", {}) if isinstance(body, dict) else {}
@@ -509,6 +510,8 @@ class LLMProviderServiceSettingsClient:
                 and _SETTINGS_ERROR_STATUSES.get(code) == response.status_code
             ):
                 raise ProviderSettingsError(code) from None
+            if response.status_code == 404:
+                raise ProviderSettingsError("not_found") from None
             raise ProviderSettingsError("provider_unavailable") from None
         try:
             envelope = _SettingsEnvelope.model_validate_json(response.content)
@@ -522,8 +525,8 @@ class LLMProviderServiceSettingsClient:
         self,
         *,
         user_id: str,
-        organization_id: str | None = None,
-        membership_id: str | None = None,
+        organization_id: str,
+        membership_id: str,
     ) -> list[ManagedProviderKey]:
         result = await self._call(
             "/v1/provider-keys/list",
@@ -543,8 +546,8 @@ class LLMProviderServiceSettingsClient:
         key_id: str,
         key: str,
         label: str,
-        organization_id: str | None = None,
-        membership_id: str | None = None,
+        organization_id: str,
+        membership_id: str,
     ) -> ManagedProviderKey:
         result = await self._call(
             "/v1/provider-keys/replace",
@@ -560,8 +563,8 @@ class LLMProviderServiceSettingsClient:
         *,
         user_id: str,
         key_id: str,
-        organization_id: str | None = None,
-        membership_id: str | None = None,
+        organization_id: str,
+        membership_id: str,
     ) -> bool:
         result = await self._call(
             "/v1/provider-keys/test",
@@ -580,8 +583,8 @@ class LLMProviderServiceSettingsClient:
         *,
         user_id: str,
         key_id: str,
-        organization_id: str | None = None,
-        membership_id: str | None = None,
+        organization_id: str,
+        membership_id: str,
     ) -> None:
         await self._call(
             "/v1/provider-keys/delete",
@@ -597,8 +600,8 @@ class LLMProviderServiceSettingsClient:
         user_id: str,
         idempotency_key: str,
         items: list[dict[str, object]],
-        organization_id: str | None = None,
-        membership_id: str | None = None,
+        organization_id: str,
+        membership_id: str,
     ) -> ProviderKeyImportBatchResponse:
         result = await self._call(
             "/v1/provider-key-imports/create",
@@ -615,8 +618,8 @@ class LLMProviderServiceSettingsClient:
         self,
         *,
         user_id: str,
-        organization_id: str | None = None,
-        membership_id: str | None = None,
+        organization_id: str,
+        membership_id: str,
     ) -> list[ProviderKeyImportBatchResponse]:
         result = await self._call(
             "/v1/provider-key-imports/list",
@@ -634,8 +637,8 @@ class LLMProviderServiceSettingsClient:
         *,
         user_id: str,
         batch_id: str,
-        organization_id: str | None = None,
-        membership_id: str | None = None,
+        organization_id: str,
+        membership_id: str,
     ) -> ProviderKeyImportBatchResponse:
         result = await self._call(
             "/v1/provider-key-imports/get",
@@ -653,8 +656,8 @@ class LLMProviderServiceSettingsClient:
         *,
         user_id: str,
         batch_id: str,
-        organization_id: str | None = None,
-        membership_id: str | None = None,
+        organization_id: str,
+        membership_id: str,
     ) -> ProviderKeyImportBatchResponse:
         result = await self._call(
             "/v1/provider-key-imports/retry",
@@ -670,18 +673,16 @@ class LLMProviderServiceSettingsClient:
     async def selected_model_settings(
         self,
         *,
-        user_id: str | None = None,
-        organization_id: str | None = None,
-        membership_id: str | None = None,
+        user_id: str,
+        organization_id: str,
+        membership_id: str,
     ) -> tuple[str, list[OpenRouterModel]]:
         result = await self._call(
             "/v1/settings/read",
             {},
-            user_id=user_id or self._principal().user_id,
-            organization_id=organization_id
-            or (self._principal().organization_id if user_id is None else None),
-            membership_id=membership_id
-            or (self._principal().membership_id if user_id is None else None),
+            user_id=user_id,
+            organization_id=organization_id,
+            membership_id=membership_id,
         )
         return _settings_value(
             TypeAdapter(str), result.get("selected_model")
@@ -692,8 +693,8 @@ class LLMProviderServiceSettingsClient:
         *,
         model_id: str,
         user_id: str,
-        organization_id: str | None = None,
-        membership_id: str | None = None,
+        organization_id: str,
+        membership_id: str,
     ) -> str:
         result = await self._call(
             "/v1/settings/update",

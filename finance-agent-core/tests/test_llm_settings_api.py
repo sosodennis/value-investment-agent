@@ -5,11 +5,8 @@ import pytest
 
 from api.server import app
 from src.auth.interface.contracts import Principal
-from src.auth.interface.dependencies import (
-    require_current_user,
-    require_current_user_mutation,
-)
 from src.llm_provider.application.wiring import get_provider_settings_service
+from src.llm_provider.composition.routes import _read_principal, _write_principal
 from src.llm_provider.domain.errors import ProviderSettingsError
 from src.llm_provider.domain.provider_models import ManagedProviderKey, OpenRouterModel
 from src.llm_provider.interface.contracts import ProviderKeyImportBatchResponse
@@ -141,8 +138,8 @@ def _client(service: _Service) -> httpx.AsyncClient:
         organization_id="organization-a",
         membership_id="membership-a",
     )
-    app.dependency_overrides[require_current_user] = lambda: principal
-    app.dependency_overrides[require_current_user_mutation] = lambda: principal
+    app.dependency_overrides[_read_principal] = lambda: principal
+    app.dependency_overrides[_write_principal] = lambda: principal
     app.dependency_overrides[get_provider_settings_service] = lambda: service
     return httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app), base_url="http://testserver"
