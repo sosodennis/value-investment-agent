@@ -5,7 +5,7 @@ import uuid
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, select, text
 
 from src.auth.application.invitation_errors import InvitationNotFoundError
 from src.auth.domain.invitations import InvitationOperation
@@ -30,6 +30,19 @@ pytestmark = pytest.mark.skipif(
 
 async def _cleanup(user_ids: set[str], organization_id: str) -> None:
     async with AsyncSessionLocal() as session:
+        await session.execute(
+            text(
+                "ALTER TABLE auth_audit_events "
+                "DISABLE TRIGGER auth_audit_events_no_truncate"
+            )
+        )
+        await session.execute(text("TRUNCATE TABLE auth_audit_events"))
+        await session.execute(
+            text(
+                "ALTER TABLE auth_audit_events "
+                "ENABLE TRIGGER auth_audit_events_no_truncate"
+            )
+        )
         invitation_ids = set(
             (
                 await session.scalars(
