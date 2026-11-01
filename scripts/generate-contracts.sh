@@ -14,6 +14,6 @@ cd "${ROOT_DIR}/frontend"
 npm run generate:api-contract
 
 cd "${ROOT_DIR}"
-python3 search-service/scripts/generate_openapi.py
+uv run --directory "${ROOT_DIR}/search-service" python scripts/generate_openapi.py
 
 echo "Contract generation completed."
