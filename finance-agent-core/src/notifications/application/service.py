@@ -5,6 +5,7 @@ from datetime import datetime
 
 from src.notifications.domain.entities import (
     NotificationAction,
+    NotificationEnqueueResult,
     NotificationInboxItem,
     NotificationType,
     require_utc,
@@ -13,18 +14,12 @@ from src.notifications.domain.entities import (
 )
 from src.notifications.domain.errors import NotificationNotFoundError
 
-from .ports import NotificationDeliveryAdapter, NotificationRepository
+from .ports import NotificationRepository, NotificationTransaction
 
 
 class NotificationService:
-    def __init__(
-        self,
-        *,
-        repository: NotificationRepository,
-        delivery: NotificationDeliveryAdapter,
-    ) -> None:
+    def __init__(self, *, repository: NotificationRepository) -> None:
         self._repository = repository
-        self._delivery = delivery
 
     async def publish(
         self,
@@ -37,7 +32,8 @@ class NotificationService:
         recipient_user_ids: Sequence[str],
         occurred_at: datetime,
         expires_at: datetime | None,
-    ) -> list[NotificationInboxItem]:
+        transaction: NotificationTransaction | None = None,
+    ) -> NotificationEnqueueResult:
         if not event_key.strip() or len(event_key) > 255:
             raise ValueError("notification event key is required")
         validate_notification_action(action)
@@ -51,7 +47,10 @@ class NotificationService:
             if expires_at is not None
             else None
         )
-        items = await self._repository.publish(
+        enqueue = (
+            transaction.enqueue if transaction is not None else self._repository.enqueue
+        )
+        return await enqueue(
             event_key=event_key,
             notification_type=notification_type,
             organization_id=organization_id,
@@ -61,9 +60,6 @@ class NotificationService:
             occurred_at=occurred_at,
             expires_at=expires_at,
         )
-        for item in items:
-            await self._delivery.deliver(item=item)
-        return items
 
     async def list_for_recipient(
         self, *, recipient_user_id: str, limit: int, now: datetime

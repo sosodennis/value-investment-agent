@@ -7,6 +7,9 @@ import pytest
 from src.notifications.application.service import NotificationService
 from src.notifications.domain.entities import (
     NotificationAction,
+    NotificationDelivery,
+    NotificationDeliveryStatus,
+    NotificationEnqueueResult,
     NotificationInboxItem,
     NotificationType,
 )
@@ -17,22 +20,49 @@ class FakeRepository:
     def __init__(self) -> None:
         self.published: list[dict[str, object]] = []
 
-    async def publish(self, **kwargs):
+    async def enqueue(self, **kwargs):
         self.published.append(kwargs)
-        return [
-            NotificationInboxItem(
-                id="inbox-1",
-                event_id="event-1",
-                recipient_user_id=kwargs["recipient_user_ids"][0],
-                notification_type=kwargs["notification_type"],
-                organization_id=kwargs["organization_id"],
-                payload=kwargs["payload"],
-                action=kwargs["action"],
-                read_at=None,
-                created_at=kwargs["occurred_at"],
-                expires_at=kwargs["expires_at"],
-            )
-        ]
+        return NotificationEnqueueResult(
+            event_id="event-1",
+            deliveries=(
+                NotificationDelivery(
+                    id="delivery-1",
+                    event_id="event-1",
+                    event_key=kwargs["event_key"],
+                    recipient_user_id=kwargs["recipient_user_ids"][0],
+                    channel="in_app",
+                    idempotency_key="event-1:in_app:user-1",
+                    notification_type=kwargs["notification_type"],
+                    organization_id=kwargs["organization_id"],
+                    payload=kwargs["payload"],
+                    action=kwargs["action"],
+                    occurred_at=kwargs["occurred_at"],
+                    expires_at=kwargs["expires_at"],
+                    status=NotificationDeliveryStatus.PENDING,
+                    attempts=0,
+                    next_attempt_at=kwargs["occurred_at"],
+                    lease_owner=None,
+                    lease_expires_at=None,
+                    last_error=None,
+                    delivered_at=None,
+                    dead_lettered_at=None,
+                ),
+            ),
+        )
+
+    async def deliver_in_app(self, **kwargs):
+        return NotificationInboxItem(
+            id="inbox-1",
+            event_id="event-1",
+            recipient_user_id=kwargs["delivery"].recipient_user_id,
+            notification_type=kwargs["delivery"].notification_type,
+            organization_id=kwargs["delivery"].organization_id,
+            payload=kwargs["delivery"].payload,
+            action=kwargs["delivery"].action,
+            read_at=None,
+            created_at=kwargs["delivery"].occurred_at,
+            expires_at=kwargs["delivery"].expires_at,
+        )
 
     async def list_for_recipient(self, **kwargs):
         return []
@@ -44,21 +74,12 @@ class FakeRepository:
         return None
 
 
-class FakeDelivery:
-    def __init__(self) -> None:
-        self.items: list[NotificationInboxItem] = []
-
-    async def deliver(self, *, item: NotificationInboxItem) -> None:
-        self.items.append(item)
-
-
 @pytest.mark.asyncio
-async def test_publish_deduplicates_recipients_and_delivers_persisted_inbox_items() -> (
+async def test_publish_deduplicates_recipients_and_enqueues_persisted_deliveries() -> (
     None
 ):
     repository = FakeRepository()
-    delivery = FakeDelivery()
-    service = NotificationService(repository=repository, delivery=delivery)
+    service = NotificationService(repository=repository)
     now = datetime(2026, 1, 1, tzinfo=UTC)
 
     items = await service.publish(
@@ -74,14 +95,13 @@ async def test_publish_deduplicates_recipients_and_delivers_persisted_inbox_item
         expires_at=now + timedelta(days=7),
     )
 
-    assert items[0].recipient_user_id == "user-1"
+    assert items.deliveries[0].recipient_user_id == "user-1"
     assert repository.published[0]["recipient_user_ids"] == ("user-1",)
-    assert delivery.items == items
 
 
 @pytest.mark.asyncio
 async def test_publish_rejects_credential_like_payload_fields() -> None:
-    service = NotificationService(repository=FakeRepository(), delivery=FakeDelivery())
+    service = NotificationService(repository=FakeRepository())
 
     with pytest.raises(NotificationPayloadError, match="token"):
         await service.publish(
@@ -98,7 +118,7 @@ async def test_publish_rejects_credential_like_payload_fields() -> None:
 
 @pytest.mark.asyncio
 async def test_publish_rejects_sensitive_values_and_unsafe_action_references() -> None:
-    service = NotificationService(repository=FakeRepository(), delivery=FakeDelivery())
+    service = NotificationService(repository=FakeRepository())
 
     with pytest.raises(NotificationPayloadError, match="credential-like"):
         await service.publish(
@@ -143,7 +163,7 @@ async def test_publish_rejects_sensitive_values_and_unsafe_action_references() -
 
 @pytest.mark.asyncio
 async def test_publish_requires_utc_timestamps() -> None:
-    service = NotificationService(repository=FakeRepository(), delivery=FakeDelivery())
+    service = NotificationService(repository=FakeRepository())
 
     with pytest.raises(ValueError, match="occurred_at"):
         await service.publish(

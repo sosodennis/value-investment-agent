@@ -9,6 +9,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Index,
+    Integer,
     String,
     UniqueConstraint,
 )
@@ -95,5 +96,76 @@ class NotificationInboxItemModel(Base):
             "idx_notification_inbox_recipient_unread",
             "recipient_user_id",
             "read_at",
+        ),
+    )
+
+
+class NotificationOutboxModel(Base):
+    __tablename__ = "notification_outbox"
+
+    id: Mapped[str] = mapped_column(
+        String, primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    event_id: Mapped[str] = mapped_column(
+        String,
+        ForeignKey("notification_events.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    recipient_user_id: Mapped[str] = mapped_column(
+        String,
+        ForeignKey("auth_users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    channel: Mapped[str] = mapped_column(String(32), nullable=False, default="in_app")
+    idempotency_key: Mapped[str] = mapped_column(
+        String(255), unique=True, nullable=False
+    )
+    status: Mapped[str] = mapped_column(
+        String(24), nullable=False, default="pending", index=True
+    )
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    next_attempt_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
+    lease_owner: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    lease_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    last_error: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    delivered_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    dead_lettered_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "event_id",
+            "recipient_user_id",
+            "channel",
+            name="uq_notification_outbox_event_recipient_channel",
+        ),
+        CheckConstraint(
+            "status IN ('pending', 'leased', 'delivered', 'dead_letter')",
+            name="ck_notification_outbox_status",
+        ),
+        CheckConstraint("attempts >= 0", name="ck_notification_outbox_attempts"),
+        Index(
+            "idx_notification_outbox_ready",
+            "status",
+            "next_attempt_at",
+            "id",
+        ),
+        Index(
+            "idx_notification_outbox_dead_letter",
+            "status",
+            "dead_lettered_at",
+            "id",
         ),
     )

@@ -21,6 +21,13 @@ class NotificationType(str, Enum):
     SYSTEM = "system"
 
 
+class NotificationDeliveryStatus(str, Enum):
+    PENDING = "pending"
+    LEASED = "leased"
+    DELIVERED = "delivered"
+    DEAD_LETTER = "dead_letter"
+
+
 @dataclass(frozen=True, slots=True)
 class NotificationAction:
     """Stable, opaque action metadata for a future invitation workflow."""
@@ -53,6 +60,49 @@ class NotificationInboxItem:
     read_at: datetime | None
     created_at: datetime
     expires_at: datetime | None
+
+
+@dataclass(frozen=True, slots=True)
+class NotificationDelivery:
+    id: str
+    event_id: str
+    event_key: str
+    recipient_user_id: str
+    channel: str
+    idempotency_key: str
+    notification_type: NotificationType
+    organization_id: str | None
+    payload: dict[str, JsonValue]
+    action: NotificationAction | None
+    occurred_at: datetime
+    expires_at: datetime | None
+    status: NotificationDeliveryStatus
+    attempts: int
+    next_attempt_at: datetime
+    lease_owner: str | None
+    lease_expires_at: datetime | None
+    last_error: str | None
+    delivered_at: datetime | None
+    dead_lettered_at: datetime | None
+
+
+@dataclass(frozen=True, slots=True)
+class NotificationEnqueueResult:
+    event_id: str
+    deliveries: tuple[NotificationDelivery, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class NotificationDeadLetter:
+    id: str
+    event_id: str
+    recipient_user_id: str
+    channel: str
+    idempotency_key: str
+    status: NotificationDeliveryStatus
+    attempts: int
+    last_error: str | None
+    dead_lettered_at: datetime
 
 
 _FORBIDDEN_PAYLOAD_KEY_PARTS = frozenset(
