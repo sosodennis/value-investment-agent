@@ -9,6 +9,8 @@ ROOT = Path(__file__).parents[2]
 LOCAL_PROVIDER_TOKEN = "local-development-only-token"
 TEST_PROVIDER_TOKEN = "compose-test-provider-token"
 TEST_ENCRYPTION_KEY = "compose-test-encryption-key"
+TEST_SEARCH_SERVICE_TOKEN = "compose-test-search-service-token"
+TEST_SEARCH_ENCRYPTION_KEY = "compose-test-search-encryption-key"
 TEST_DIRECTORY_CURSOR_SECRET = "compose-test-directory-cursor-secret"
 TEST_AUDIT_CURSOR_SECRET = "compose-test-audit-cursor-secret"
 
@@ -22,6 +24,8 @@ def _compose_config(
     env.pop("COMPOSE_FILE", None)
     env.pop("LLM_PROVIDER_SERVICE_TOKEN", None)
     env["LLM_PROVIDER_ENCRYPTION_KEY"] = TEST_ENCRYPTION_KEY
+    env["SEARCH_SERVICE_TOKEN"] = TEST_SEARCH_SERVICE_TOKEN
+    env["SEARCH_PROVIDER_ENCRYPTION_KEY"] = TEST_SEARCH_ENCRYPTION_KEY
     env["DIRECTORY_CURSOR_SECRET"] = TEST_DIRECTORY_CURSOR_SECRET
     if audit_secret is not None:
         env["AUDIT_CURSOR_SECRET"] = audit_secret
@@ -80,6 +84,16 @@ def test_compose_auth_dev_and_production_secret() -> None:
     assert production.returncode == 0, production.stderr
     services = json.loads(production.stdout)["services"]
     assert services["backend"]["environment"]["APP_ENV"] == "production"
+    assert services["backend"]["environment"]["SEARCH_SERVICE_TOKEN"] == (
+        TEST_SEARCH_SERVICE_TOKEN
+    )
+    assert services["search-service"]["environment"]["SEARCH_SERVICE_TOKEN"] == (
+        TEST_SEARCH_SERVICE_TOKEN
+    )
+    assert (
+        services["search-service"]["environment"]["SEARCH_PROVIDER_ENCRYPTION_KEY"]
+        == TEST_SEARCH_ENCRYPTION_KEY
+    )
 
 
 def test_canonical_compose_has_one_llm_provider_service() -> None:
