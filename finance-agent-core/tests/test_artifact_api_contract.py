@@ -38,6 +38,10 @@ def authenticated_api(monkeypatch: pytest.MonkeyPatch) -> AsyncMock:
         AsyncMock(return_value="test-thread"),
     )
     monkeypatch.setattr(
+        "src.interface.artifacts.routes.artifact_manager.belongs_to_organization",
+        AsyncMock(return_value=True),
+    )
+    monkeypatch.setattr(
         "src.interface.artifacts.routes.artifact_manager.get_artifact_envelope",
         AsyncMock(),
     )
@@ -291,6 +295,10 @@ async def test_get_output_artifact_uses_run_event_when_artifact_row_has_no_threa
             "src.interface.artifacts.routes.artifact_manager.get_artifact_envelope",
             new=AsyncMock(return_value=envelope),
         ),
+        patch(
+            "src.interface.artifacts.routes.artifact_manager.belongs_to_organization",
+            new=AsyncMock(return_value=True),
+        ) as belongs_to_organization,
     ):
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=app),
@@ -310,6 +318,11 @@ async def test_get_output_artifact_uses_run_event_when_artifact_row_has_no_threa
     )
     authenticated_api.owns.assert_awaited_once_with(
         user_id="test-user", resource_type="thread", resource_id="test-thread"
+    )
+    belongs_to_organization.assert_awaited_once_with(
+        thread_id="test-thread",
+        organization_id="organization-test",
+        run_id=run_id,
     )
 
 
@@ -461,3 +474,75 @@ async def test_get_artifact_returns_404_when_missing(
     assert response.status_code == 404
     assert response.json() == {"detail": "artifact_not_found"}
     authenticated_api.owns.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_get_artifact_rejects_active_organization_mismatch(
+    authenticated_api: AsyncMock,
+) -> None:
+    with (
+        patch(
+            "src.interface.artifacts.routes.artifact_manager.belongs_to_organization",
+            new=AsyncMock(return_value=False),
+        ) as belongs_to_organization,
+        patch(
+            "src.interface.artifacts.routes.artifact_manager.get_artifact_envelope",
+            new=AsyncMock(),
+        ) as get_artifact_envelope,
+    ):
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app),
+            base_url="http://testserver",
+        ) as client:
+            response = await client.get("/api/v1/artifacts/tenant-private")
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": "artifact_not_found"}
+    belongs_to_organization.assert_awaited_once_with(
+        thread_id="test-thread",
+        organization_id="organization-test",
+        run_id=None,
+    )
+    authenticated_api.owns.assert_not_awaited()
+    get_artifact_envelope.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_get_run_scoped_artifact_rejects_active_organization_mismatch(
+    authenticated_api: AsyncMock,
+) -> None:
+    with (
+        patch(
+            "src.interface.artifacts.routes.artifact_manager.get_artifact_thread_id",
+            new=AsyncMock(return_value=None),
+        ),
+        patch(
+            "src.interface.artifacts.routes.artifact_manager.get_agent_output_thread_id",
+            new=AsyncMock(return_value="test-thread"),
+        ),
+        patch(
+            "src.interface.artifacts.routes.artifact_manager.belongs_to_organization",
+            new=AsyncMock(return_value=False),
+        ) as belongs_to_organization,
+        patch(
+            "src.interface.artifacts.routes.artifact_manager.get_artifact_envelope",
+            new=AsyncMock(),
+        ) as get_artifact_envelope,
+    ):
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app),
+            base_url="http://testserver",
+        ) as client:
+            response = await client.get(
+                "/api/v1/artifacts/tenant-private?run_id=run-private"
+            )
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": "artifact_not_found"}
+    belongs_to_organization.assert_awaited_once_with(
+        thread_id="test-thread",
+        organization_id="organization-test",
+        run_id="run-private",
+    )
+    authenticated_api.owns.assert_not_awaited()
+    get_artifact_envelope.assert_not_awaited()
