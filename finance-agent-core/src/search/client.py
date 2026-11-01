@@ -14,7 +14,7 @@ from src.search.contracts import (
     SearchSuccess,
     WebSearchRequest,
 )
-from src.shared.internal_services import get_request_principal
+from src.shared.internal_services import build_internal_context, get_request_principal
 from src.shared.kernel.correlation import resolve_correlation_id
 
 
@@ -114,14 +114,14 @@ class SearchClient:
                 retryable=False,
             )
         correlation_id = resolve_correlation_id()
-        context = {
-            "principal": principal.model_dump(mode="json"),
-            "correlation_id": correlation_id,
-            "contract_version": "internal.v1",
-            "deadline_at": (
-                datetime.now(timezone.utc) + timedelta(seconds=request.timeout_seconds)
-            ).isoformat(),
-        }
+        context = build_internal_context(
+            principal=principal,
+            correlation_id=correlation_id,
+            deadline_at=datetime.now(timezone.utc)
+            + timedelta(seconds=request.timeout_seconds),
+            audience="search-service",
+            signing_key=self._settings.service_token,
+        ).model_dump(mode="json")
         return correlation_id, {
             "context": context,
             "input": request.model_dump(mode="json"),

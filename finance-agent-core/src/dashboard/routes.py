@@ -100,6 +100,7 @@ async def recent_analyses(
     try:
         page = await runtime.list_run_history(
             principal_id=principal.user_id,
+            organization_id=principal.organization_id,
             limit=limit,
             before_started_at=before_started_at,
             before_thread_id=before_thread_id,

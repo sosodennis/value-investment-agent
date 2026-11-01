@@ -24,6 +24,8 @@ class InternalPrincipal(_WireModel):
     """Authenticated application identity, without browser or provider secrets."""
 
     subject_id: str = Field(min_length=1, max_length=256)
+    organization_id: str | None = Field(default=None, min_length=1, max_length=128)
+    membership_id: str | None = Field(default=None, min_length=1, max_length=128)
 
 
 class InternalRequestContext(_WireModel):
@@ -33,6 +35,10 @@ class InternalRequestContext(_WireModel):
     correlation_id: str = Field(min_length=1, max_length=128)
     contract_version: Literal[INTERNAL_CONTRACT_VERSION]
     deadline_at: datetime
+    audience: str | None = Field(default=None, min_length=1, max_length=128)
+    issuer: str | None = Field(default=None, min_length=1, max_length=128)
+    issued_at: datetime | None = None
+    signature: str | None = Field(default=None, min_length=64, max_length=128)
 
     @field_validator("deadline_at", mode="before")
     @classmethod
@@ -48,6 +54,24 @@ class InternalRequestContext(_WireModel):
             raise ValueError("deadline_at must be an ISO 8601 timestamp")
         if value.tzinfo is None or value.utcoffset() is None:
             raise ValueError("deadline_at must be timezone-aware")
+        return value.astimezone(timezone.utc)
+
+    @field_validator("issued_at", mode="before")
+    @classmethod
+    def parse_utc_issued_at(cls, value: object) -> datetime | None:
+        if value is None:
+            return None
+        if isinstance(value, str):
+            try:
+                value = datetime.fromisoformat(
+                    value[:-1] + "+00:00" if value.endswith("Z") else value
+                )
+            except ValueError as exc:
+                raise ValueError("issued_at must be an ISO 8601 timestamp") from exc
+        if not isinstance(value, datetime):
+            raise ValueError("issued_at must be an ISO 8601 timestamp")
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("issued_at must be timezone-aware")
         return value.astimezone(timezone.utc)
 
 

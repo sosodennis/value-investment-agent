@@ -47,36 +47,87 @@ class _Service:
             updated_at="2026-10-31T00:00:00Z",
         )
 
-    async def list_keys(self, *, user_id: str):
-        self.calls.append(("list_keys", user_id))
+    async def list_keys(
+        self, *, user_id: str, organization_id: str, membership_id: str
+    ):
+        self.calls.append(("list_keys", (user_id, organization_id, membership_id)))
         return [self.key]
 
-    async def replace_key(self, *, user_id: str, key_id: str, key: str, label: str):
-        self.calls.append(("replace_key", (user_id, key_id, key, label)))
+    async def replace_key(
+        self,
+        *,
+        user_id: str,
+        key_id: str,
+        key: str,
+        label: str,
+        organization_id: str,
+        membership_id: str,
+    ):
+        self.calls.append(
+            (
+                "replace_key",
+                (user_id, key_id, key, label, organization_id, membership_id),
+            )
+        )
         raise ProviderSettingsError(self.replacement_error_code)
 
-    async def test_key(self, *, user_id: str, key_id: str):
-        self.calls.append(("test_key", (user_id, key_id)))
+    async def test_key(
+        self, *, user_id: str, key_id: str, organization_id: str, membership_id: str
+    ):
+        self.calls.append(
+            ("test_key", (user_id, key_id, organization_id, membership_id))
+        )
         return self.test_result
 
-    async def delete_key(self, *, user_id: str, key_id: str):
-        self.calls.append(("delete_key", (user_id, key_id)))
+    async def delete_key(
+        self, *, user_id: str, key_id: str, organization_id: str, membership_id: str
+    ):
+        self.calls.append(
+            ("delete_key", (user_id, key_id, organization_id, membership_id))
+        )
 
     async def create_key_import(
-        self, *, user_id: str, idempotency_key: str, items: list[dict[str, object]]
+        self,
+        *,
+        user_id: str,
+        organization_id: str,
+        membership_id: str,
+        idempotency_key: str,
+        items: list[dict[str, object]],
     ):
-        self.calls.append(("create_key_import", (user_id, idempotency_key, items)))
+        self.calls.append(
+            (
+                "create_key_import",
+                (user_id, organization_id, membership_id, idempotency_key, items),
+            )
+        )
         if self.import_error_code is not None:
             raise ProviderSettingsError(self.import_error_code)
         return self.import_batch
 
-    async def selected_model_settings(self, *, user_id: str):
+    async def selected_model_settings(
+        self, *, user_id: str, organization_id: str, membership_id: str
+    ):
         _ = user_id
-        self.calls.append(("selected_model_settings", None))
+        self.calls.append(
+            ("selected_model_settings", (user_id, organization_id, membership_id))
+        )
         return "openrouter/free", self.models
 
-    async def update_selected_model(self, *, model_id: str, user_id: str):
-        self.calls.append(("update_selected_model", (model_id, user_id)))
+    async def update_selected_model(
+        self,
+        *,
+        model_id: str,
+        user_id: str,
+        organization_id: str,
+        membership_id: str,
+    ):
+        self.calls.append(
+            (
+                "update_selected_model",
+                (model_id, user_id, organization_id, membership_id),
+            )
+        )
         if model_id != "openrouter/free":
             raise ProviderSettingsError("model_not_free")
         return model_id
@@ -138,6 +189,8 @@ async def test_provider_key_routes_delegate_to_provider_service() -> None:
     ]
     assert service.calls[1][1] == (
         "user-a",
+        "organization-a",
+        "membership-a",
         "manual-request-192-key",
         [
             {
@@ -208,8 +261,8 @@ async def test_file_import_preview_and_submit_do_not_return_key_material() -> No
     assert canary not in submitted.text
     assert service.calls[-1][0] == "create_key_import"
     _, request = service.calls[-1]
-    assert request[1] == "import-request-192-key"
-    assert len(request[2]) == 2
+    assert request[3] == "import-request-192-key"
+    assert len(request[4]) == 2
 
 
 @pytest.mark.asyncio

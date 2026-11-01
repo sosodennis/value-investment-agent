@@ -279,6 +279,63 @@ async def test_runtime_persists_before_publish_and_replays() -> None:
 
 
 @pytest.mark.asyncio
+async def test_runtime_binds_snapshots_and_replay_to_the_recorded_organization() -> (
+    None
+):
+    service = AnalysisRuntimeService(
+        repository=InMemoryActivityRepository(), owner=Owner(), runner=Runner()
+    )
+    await service.start(
+        principal_id="user",
+        organization_id="organization-a",
+        membership_id="membership-a",
+        thread_id="thread",
+        input_data={"message": "AAPL"},
+    )
+    await service._tasks["thread"]
+
+    with pytest.raises(ThreadNotFoundError):
+        await service.snapshot(
+            principal_id="user",
+            organization_id="organization-b",
+            thread_id="thread",
+        )
+    with pytest.raises(ThreadNotFoundError):
+        await service.replay(
+            principal_id="user",
+            organization_id="organization-b",
+            thread_id="thread",
+            after_seq=0,
+        )
+
+
+@pytest.mark.asyncio
+async def test_runtime_rejects_reusing_a_terminal_thread_in_another_organization() -> (
+    None
+):
+    service = AnalysisRuntimeService(
+        repository=InMemoryActivityRepository(), owner=Owner(), runner=Runner()
+    )
+    await service.start(
+        principal_id="user",
+        organization_id="organization-a",
+        membership_id="membership-a",
+        thread_id="thread",
+        input_data={"message": "AAPL"},
+    )
+    await service._tasks["thread"]
+
+    with pytest.raises(ThreadNotFoundError):
+        await service.start(
+            principal_id="user",
+            organization_id="organization-b",
+            membership_id="membership-b",
+            thread_id="thread",
+            input_data={"message": "MSFT"},
+        )
+
+
+@pytest.mark.asyncio
 async def test_runtime_persists_agent_output_for_replay_and_snapshot() -> None:
     repository = InMemoryActivityRepository()
     service = AnalysisRuntimeService(

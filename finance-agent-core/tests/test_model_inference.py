@@ -41,6 +41,8 @@ def _news_request() -> InferenceRequest:
         request_id="request-123",
         deadline_ms=450,
         principal_subject_id="user-123",
+        principal_organization_id="organization-1",
+        principal_membership_id="membership-1",
         deadline_at=datetime.now(timezone.utc) + timedelta(milliseconds=450),
     )
 
@@ -113,7 +115,9 @@ def _settings() -> ModelInferenceSettings:
 
 @pytest.fixture(autouse=True)
 def _authenticated_inference_context():
-    token = set_inference_principal("user-123")
+    token = set_inference_principal(
+        "user-123", organization_id="organization-1", membership_id="membership-1"
+    )
     yield
     from src.model_inference.application.context import reset_inference_principal
 
@@ -126,7 +130,11 @@ def test_http_adapter_sends_versioned_news_request_and_parses_result() -> None:
         assert request.headers["Authorization"] == "Bearer test-token"
         assert request.headers["X-Request-ID"] == "request-123"
         body = json.loads(request.content)
-        assert body["context"]["principal"] == {"subject_id": "user-123"}
+        assert body["context"]["principal"] == {
+            "subject_id": "user-123",
+            "organization_id": "organization-1",
+            "membership_id": "membership-1",
+        }
         assert body["context"]["correlation_id"] == "request-123"
         assert body["context"]["contract_version"] == "internal.v1"
         assert {

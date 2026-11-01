@@ -10,6 +10,9 @@ from src.analysis_runtime.domain.contracts import CheckpointIdentity
 class WorkflowExecutionContext:
     thread_id: str
     run_id: str
+    principal_id: str = "unscoped"
+    organization_id: str = "unscoped"
+    membership_id: str = "unscoped"
     source_run_id: str | None = None
     checkpoint: CheckpointIdentity | None = None
 

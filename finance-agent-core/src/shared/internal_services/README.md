@@ -9,9 +9,11 @@ lifecycle.
 
 The product API authenticates the browser session first. It derives
 `subject_id` from the authenticated user record (currently `Principal.user_id`)
-and creates one `InternalRequestContext` per outbound call. The browser session
-cookie, browser bearer credentials, CSRF token, and provider keys never leave
-the product API.
+and creates one signed `InternalRequestContext` per outbound call. The active
+organization and membership come from the server-verified session context; they
+are never accepted from a browser body, query, or arbitrary header. The browser
+session cookie, browser bearer credentials, CSRF token, and provider keys never
+leave the product API.
 
 The backend sends its service credential separately in
 `Authorization: Bearer <service-token>`. The capability service compares that
@@ -30,10 +32,18 @@ Each service owns its operation schema and places its payload beside `context`:
 ```json
 {
   "context": {
-    "principal": {"subject_id": "user-123"},
+    "principal": {
+      "subject_id": "user-123",
+      "organization_id": "organization-123",
+      "membership_id": "membership-123"
+    },
     "correlation_id": "1f128da9-052d-4e64-9f13-82d9b3ec7ea1",
     "contract_version": "internal.v1",
-    "deadline_at": "2026-10-23T18:30:00Z"
+    "deadline_at": "2026-10-23T18:30:00Z",
+    "audience": "search-service",
+    "issuer": "finance-agent-core",
+    "issued_at": "2026-10-23T18:29:00Z",
+    "signature": "<hex HMAC-SHA256 signature>"
   },
   "input": {"service_owned": "payload"}
 }
@@ -54,11 +64,13 @@ version.
 ```
 
 `deadline_at` is an absolute RFC 3339 timestamp with a UTC offset. The model
-normalizes accepted offsets to UTC and rejects naive timestamps. A client sends
-the same deadline to every downstream service and computes its local timeout
-from the remaining time; it does not restart the budget on each hop. Each
-service remains responsible for its operation-specific limits and cancellation
-behavior.
+normalizes accepted offsets to UTC and rejects naive timestamps. `audience`,
+`issuer`, `issued_at`, and `signature` bind the context to one downstream
+service. The signature is an HMAC over the canonical context without the
+signature field. A client sends the same deadline to every downstream service
+and computes its local timeout from the remaining time; it does not restart the
+budget at each hop. Each service remains responsible for its operation-specific
+limits and cancellation behavior.
 
 ## Error envelope
 
@@ -110,16 +122,21 @@ from uuid import uuid4
 import httpx
 
 from src.auth.interface.dependencies import require_current_user
-from src.shared.internal_services import InternalRequestContext, InternalPrincipal
+from src.shared.internal_services import InternalPrincipal, build_internal_context
 
 
 async def call_internal_service(request, *, service_input, client: httpx.AsyncClient):
     principal = await require_current_user(request)
-    context = InternalRequestContext(
-        principal=InternalPrincipal(subject_id=principal.user_id),
+    context = build_internal_context(
+        principal=InternalPrincipal(
+            subject_id=principal.user_id,
+            organization_id=principal.organization_id,
+            membership_id=principal.membership_id,
+        ),
         correlation_id=str(uuid4()),
-        contract_version="internal.v1",
         deadline_at=datetime.now(timezone.utc) + timedelta(seconds=5),
+        audience="capability-service",
+        signing_key="<configured-service-token>",
     )
     return await client.post(
         "http://capability-service/v1/operation",
@@ -143,6 +160,10 @@ context = authenticate_internal_request(
     request.headers.get("Authorization"),
     expected_token=settings.backend_service_token,
     raw_context=body.get("context", {}),
+    expected_audience="capability-service",
+    expected_issuer="finance-agent-core",
+    signing_key=settings.backend_service_token,
+    organization_header=request.headers.get("X-Organization-ID"),
 )
 ```
 

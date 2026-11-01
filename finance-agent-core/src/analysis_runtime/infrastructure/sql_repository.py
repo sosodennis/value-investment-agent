@@ -268,11 +268,20 @@ class SqlAlchemyActivityRepository:
         )
 
     async def get_run_history(
-        self, *, principal_id: str, thread_id: str, run_id: str
+        self,
+        *,
+        principal_id: str,
+        organization_id: str = "unscoped",
+        thread_id: str,
+        run_id: str,
     ) -> AnalysisRunRecord | None:
         async with AsyncSessionLocal() as session:
             row = await session.get(WorkflowRunHistory, (thread_id, run_id))
-        if row is None or row.principal_id != principal_id:
+        if (
+            row is None
+            or row.principal_id != principal_id
+            or row.organization_id != organization_id
+        ):
             return None
         return self._history_from_model(row)
 
@@ -280,6 +289,7 @@ class SqlAlchemyActivityRepository:
         self,
         *,
         principal_id: str,
+        organization_id: str = "unscoped",
         limit: int,
         before_started_at: datetime | None = None,
         before_thread_id: str | None = None,
@@ -293,8 +303,10 @@ class SqlAlchemyActivityRepository:
         ):
             raise InvalidCursorError("run history cursor is incomplete")
         async with AsyncSessionLocal() as session:
-            query = select(WorkflowRunHistory).where(
-                WorkflowRunHistory.principal_id == principal_id
+            query = (
+                select(WorkflowRunHistory)
+                .where(WorkflowRunHistory.principal_id == principal_id)
+                .where(WorkflowRunHistory.organization_id == organization_id)
             )
             if before_thread_id is not None and before_run_id is not None:
                 if before_started_at is None:
@@ -359,6 +371,8 @@ class SqlAlchemyActivityRepository:
         status: RunStatus,
         now: datetime,
         principal_id: str | None = None,
+        organization_id: str | None = None,
+        membership_id: str | None = None,
         input_data: Mapping[str, object] | None = None,
     ) -> RunStatusRecord:
         async with AsyncSessionLocal() as session:
@@ -367,6 +381,12 @@ class SqlAlchemyActivityRepository:
                 .where(WorkflowRun.thread_id == thread_id)
                 .with_for_update()
             )
+            if (
+                row is not None
+                and organization_id is not None
+                and row.organization_id != organization_id
+            ):
+                raise ActivityPersistenceError("run organization cannot change")
             started = (
                 row.started_at
                 if row and row.run_id == run_id
@@ -374,10 +394,21 @@ class SqlAlchemyActivityRepository:
             )
             if row is None:
                 row = WorkflowRun(
-                    thread_id=thread_id, run_id=run_id, started_at=started
+                    thread_id=thread_id,
+                    run_id=run_id,
+                    principal_id=principal_id or "unscoped",
+                    organization_id=organization_id or "unscoped",
+                    membership_id=membership_id or "unscoped",
+                    started_at=started,
                 )
                 session.add(row)
             row.run_id = run_id
+            if principal_id is not None:
+                row.principal_id = principal_id
+            if organization_id is not None:
+                row.organization_id = organization_id
+            if membership_id is not None:
+                row.membership_id = membership_id
             row.status = status
             row.started_at = started
             row.updated_at = now.replace(tzinfo=None)
@@ -408,6 +439,8 @@ class SqlAlchemyActivityRepository:
                         thread_id=thread_id,
                         run_id=run_id,
                         principal_id=principal_id,
+                        organization_id=organization_id or "unscoped",
+                        membership_id=membership_id or "unscoped",
                         status=status,
                         started_at=started,
                         input_data=dict(input_data) if input_data is not None else None,
@@ -416,6 +449,11 @@ class SqlAlchemyActivityRepository:
             if history is not None:
                 if principal_id is not None and history.principal_id != principal_id:
                     raise ActivityPersistenceError("run owner cannot change")
+                if (
+                    organization_id is not None
+                    and history.organization_id != organization_id
+                ):
+                    raise ActivityPersistenceError("run organization cannot change")
                 history.status = status
                 history.updated_at = now.replace(tzinfo=None)
                 history.ended_at = row.ended_at
@@ -437,6 +475,8 @@ class SqlAlchemyActivityRepository:
         requested: InteractionRequested,
         principal_id: str,
         now: datetime,
+        organization_id: str = "unscoped",
+        membership_id: str = "unscoped",
     ) -> tuple[WorkflowEvent, ...]:
         identity = requested.identity
         async with AsyncSessionLocal() as session:
@@ -452,7 +492,11 @@ class SqlAlchemyActivityRepository:
                 (identity.thread_id, identity.run_id),
                 with_for_update=True,
             )
-            if history is None or history.principal_id != principal_id:
+            if (
+                history is None
+                or history.principal_id != principal_id
+                or history.organization_id != organization_id
+            ):
                 raise InteractionNotAvailableError("run owner cannot change")
             existing = await session.scalar(
                 select(WorkflowActivityEvent.event_id)
@@ -503,6 +547,8 @@ class SqlAlchemyActivityRepository:
         response: InteractionResponse,
         principal_id: str,
         now: datetime,
+        organization_id: str = "unscoped",
+        membership_id: str = "unscoped",
     ) -> ClaimedInteractionResume:
         async with AsyncSessionLocal() as session:
             run = await session.scalar(
@@ -584,7 +630,11 @@ class SqlAlchemyActivityRepository:
                 (identity.thread_id, identity.run_id),
                 with_for_update=True,
             )
-            if history is None or history.principal_id != principal_id:
+            if (
+                history is None
+                or history.principal_id != principal_id
+                or history.organization_id != organization_id
+            ):
                 raise InteractionNotAvailableError("run owner cannot change")
             pending_resume = await session.get(
                 WorkflowRunResume, identity.thread_id, with_for_update=True
@@ -621,6 +671,8 @@ class SqlAlchemyActivityRepository:
                     thread_id=identity.thread_id,
                     run_id=identity.run_id,
                     principal_id=principal_id,
+                    organization_id=history.organization_id,
+                    membership_id=history.membership_id,
                     activity_id=identity.activity_id,
                     interaction_id=identity.interaction_id,
                     response=response.model_dump(mode="json"),
@@ -630,6 +682,8 @@ class SqlAlchemyActivityRepository:
             await session.commit()
             return ClaimedInteractionResume(
                 identity=identity,
+                organization_id=history.organization_id,
+                membership_id=history.membership_id,
                 response=response,
                 scope_path=activity.scope_path,
                 attempt=resumed_activity.attempt,
@@ -643,6 +697,7 @@ class SqlAlchemyActivityRepository:
         run_id: str,
         principal_id: str,
         now: datetime,
+        organization_id: str = "unscoped",
     ) -> tuple[WorkflowEvent, ...]:
         async with AsyncSessionLocal() as session:
             run = await session.scalar(
@@ -655,7 +710,11 @@ class SqlAlchemyActivityRepository:
             history = await session.get(
                 WorkflowRunHistory, (thread_id, run_id), with_for_update=True
             )
-            if history is None or history.principal_id != principal_id:
+            if (
+                history is None
+                or history.principal_id != principal_id
+                or history.organization_id != organization_id
+            ):
                 raise InteractionNotAvailableError("run was not found")
             if run.status not in {"queued", "running", "waiting"}:
                 return ()
@@ -791,6 +850,8 @@ class SqlAlchemyActivityRepository:
                     PendingResume(
                         identity=interaction.identity,
                         principal_id=row.principal_id,
+                        organization_id=row.organization_id,
+                        membership_id=row.membership_id,
                         scope_path=activity.scope_path,
                         attempt=activity.attempt,
                         response=TypeAdapter(InteractionResponse).validate_python(
@@ -810,6 +871,8 @@ class SqlAlchemyActivityRepository:
         idempotency_key: str,
         request_hash: str,
         now: datetime,
+        organization_id: str = "unscoped",
+        membership_id: str = "unscoped",
     ) -> tuple[RetryOperation, bool]:
         async with AsyncSessionLocal() as session:
             existing = await session.scalar(
@@ -819,7 +882,10 @@ class SqlAlchemyActivityRepository:
                 .with_for_update()
             )
             if existing is not None:
-                if existing.request_hash != request_hash:
+                if (
+                    existing.request_hash != request_hash
+                    or existing.organization_id != organization_id
+                ):
                     raise RetryIdempotencyConflictError(
                         "idempotency key was already used for another retry command"
                     )
@@ -828,7 +894,11 @@ class SqlAlchemyActivityRepository:
             source = await session.get(
                 WorkflowRunHistory, (thread_id, source_run_id), with_for_update=True
             )
-            if source is None or source.principal_id != principal_id:
+            if (
+                source is None
+                or source.principal_id != principal_id
+                or source.organization_id != organization_id
+            ):
                 raise RetryNotAvailableError("source run was not found")
             if source.status != "failed":
                 raise RetryNotAvailableError("only a failed run may be retried")
@@ -867,7 +937,10 @@ class SqlAlchemyActivityRepository:
                     .with_for_update()
                 )
                 if existing is not None:
-                    if existing.request_hash != request_hash:
+                    if (
+                        existing.request_hash != request_hash
+                        or existing.organization_id != organization_id
+                    ):
                         raise RetryIdempotencyConflictError(
                             "idempotency key was already used for another retry command"
                         )
@@ -886,6 +959,8 @@ class SqlAlchemyActivityRepository:
                 source_run_id=source_run_id,
                 target_run_id=target_run_id,
                 principal_id=principal_id,
+                organization_id=organization_id,
+                membership_id=membership_id,
                 idempotency_key=idempotency_key,
                 request_hash=request_hash,
                 checkpoint=checkpoint.model_dump(mode="json"),
@@ -900,6 +975,9 @@ class SqlAlchemyActivityRepository:
                     thread_id=thread_id,
                     run_id=target_run_id,
                     status="queued",
+                    principal_id=principal_id,
+                    organization_id=organization_id,
+                    membership_id=membership_id,
                     started_at=now.replace(tzinfo=None),
                     updated_at=now.replace(tzinfo=None),
                 )
@@ -907,6 +985,9 @@ class SqlAlchemyActivityRepository:
             else:
                 current.run_id = target_run_id
                 current.status = "queued"
+                current.principal_id = principal_id
+                current.organization_id = organization_id
+                current.membership_id = membership_id
                 current.started_at = now.replace(tzinfo=None)
                 current.updated_at = now.replace(tzinfo=None)
                 current.ended_at = None
@@ -915,6 +996,8 @@ class SqlAlchemyActivityRepository:
                     thread_id=thread_id,
                     run_id=target_run_id,
                     principal_id=principal_id,
+                    organization_id=organization_id,
+                    membership_id=membership_id,
                     status="queued",
                     started_at=now.replace(tzinfo=None),
                     updated_at=now.replace(tzinfo=None),
@@ -1121,6 +1204,9 @@ class SqlAlchemyActivityRepository:
         return RunStatusRecord(
             thread_id=row.thread_id,
             run_id=row.run_id,
+            principal_id=row.principal_id,
+            organization_id=row.organization_id,
+            membership_id=row.membership_id,
             status=row.status,
             started_at=row.started_at.replace(tzinfo=timezone.utc),
             updated_at=row.updated_at.replace(tzinfo=timezone.utc),
@@ -1134,6 +1220,9 @@ class SqlAlchemyActivityRepository:
         return AnalysisRunRecord(
             thread_id=row.thread_id,
             run_id=row.run_id,
+            principal_id=row.principal_id,
+            organization_id=row.organization_id,
+            membership_id=row.membership_id,
             status=row.status,
             started_at=row.started_at.replace(tzinfo=timezone.utc)
             if row.started_at
@@ -1161,6 +1250,8 @@ class SqlAlchemyActivityRepository:
             source_run_id=row.source_run_id,
             target_run_id=row.target_run_id,
             principal_id=row.principal_id,
+            organization_id=row.organization_id,
+            membership_id=row.membership_id,
             idempotency_key=row.idempotency_key,
             request_hash=row.request_hash,
             checkpoint=CheckpointIdentity.model_validate(row.checkpoint),

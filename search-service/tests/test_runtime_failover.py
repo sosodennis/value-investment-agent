@@ -5,6 +5,7 @@ from datetime import UTC, datetime, timedelta
 
 import httpx
 import pytest
+from src.shared.internal_services import InternalPrincipal, build_internal_context
 
 from search_service.app import create_app
 from search_service.contracts import (
@@ -18,12 +19,19 @@ from search_service.errors import SearchServiceError
 
 
 def _context() -> dict[str, object]:
-    return {
-        "principal": {"subject_id": "runtime-user"},
-        "correlation_id": "runtime-correlation",
-        "contract_version": "internal.v1",
-        "deadline_at": (datetime.now(UTC) + timedelta(seconds=2)).isoformat(),
-    }
+    deadline = datetime.now(UTC) + timedelta(seconds=2)
+    return build_internal_context(
+        principal=InternalPrincipal(
+            subject_id="runtime-user",
+            organization_id="organization-runtime",
+            membership_id="membership-runtime",
+        ),
+        correlation_id="runtime-correlation",
+        deadline_at=deadline,
+        audience="search-service",
+        signing_key="runtime-service-token",
+        issued_at=deadline - timedelta(seconds=5),
+    ).model_dump(mode="json")
 
 
 @dataclass

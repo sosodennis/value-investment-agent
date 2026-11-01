@@ -237,6 +237,9 @@ class WorkflowRun(Base):
 
     thread_id = Column(String, primary_key=True)
     run_id = Column(String, nullable=False, unique=True, index=True)
+    principal_id = Column(String, nullable=False, default="unscoped", index=True)
+    organization_id = Column(String, nullable=False, default="unscoped", index=True)
+    membership_id = Column(String, nullable=False, default="unscoped", index=True)
     status = Column(String, nullable=False)
     started_at = Column(DateTime, nullable=False)
     updated_at = Column(DateTime, nullable=False, index=True)
@@ -249,6 +252,8 @@ class WorkflowRunResume(Base):
     thread_id = Column(String, primary_key=True)
     run_id = Column(String, nullable=False, index=True)
     principal_id = Column(String, nullable=False)
+    organization_id = Column(String, nullable=False, default="unscoped")
+    membership_id = Column(String, nullable=False, default="unscoped")
     activity_id = Column(String, nullable=False)
     interaction_id = Column(String, nullable=False)
     response = Column(JSON, nullable=False)
@@ -263,6 +268,8 @@ class WorkflowRunHistory(Base):
     thread_id = Column(String, primary_key=True)
     run_id = Column(String, primary_key=True)
     principal_id = Column(String, nullable=False, index=True)
+    organization_id = Column(String, nullable=False, default="unscoped", index=True)
+    membership_id = Column(String, nullable=False, default="unscoped", index=True)
     status = Column(String, nullable=False)
     started_at = Column(DateTime, nullable=True)
     updated_at = Column(DateTime, nullable=True)
@@ -277,6 +284,7 @@ class WorkflowRunHistory(Base):
         Index(
             "idx_workflow_run_history_recent",
             "principal_id",
+            "organization_id",
             "started_at",
             "thread_id",
             "run_id",
@@ -292,6 +300,8 @@ class WorkflowRetryOperation(Base):
     source_run_id = Column(String, nullable=False, index=True)
     target_run_id = Column(String, nullable=False, unique=True, index=True)
     principal_id = Column(String, nullable=False, index=True)
+    organization_id = Column(String, nullable=False, default="unscoped", index=True)
+    membership_id = Column(String, nullable=False, default="unscoped", index=True)
     idempotency_key = Column(String, nullable=False)
     request_hash = Column(String, nullable=False)
     checkpoint = Column(JSON, nullable=False)

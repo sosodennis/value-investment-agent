@@ -7,6 +7,7 @@ from pathlib import Path
 
 import httpx
 import pytest
+from src.shared.internal_services import InternalPrincipal, build_internal_context
 
 from search_service.app import create_app
 from search_service.contracts import (
@@ -135,13 +136,22 @@ class FakeControlPlane:
         )
 
 
-def context(*, user_id: str = "user-a") -> dict[str, object]:
-    return {
-        "principal": {"subject_id": user_id},
-        "correlation_id": "corr-122",
-        "contract_version": "internal.v1",
-        "deadline_at": (datetime.now(UTC) + timedelta(seconds=3)).isoformat(),
-    }
+def context(
+    *, user_id: str = "user-a", deadline: datetime | None = None
+) -> dict[str, object]:
+    deadline = deadline or datetime.now(UTC) + timedelta(seconds=3)
+    return build_internal_context(
+        principal=InternalPrincipal(
+            subject_id=user_id,
+            organization_id="organization-122",
+            membership_id="membership-122",
+        ),
+        correlation_id="corr-122",
+        deadline_at=deadline,
+        audience="search-service",
+        signing_key="service-token",
+        issued_at=deadline - timedelta(seconds=5),
+    ).model_dump(mode="json")
 
 
 def client_for(
