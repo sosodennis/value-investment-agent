@@ -18,7 +18,7 @@ in this document.
 | `bash -n scripts/organization_staging_acceptance.sh scripts/refactor_staging_smoke.sh` | exit 0 |
 | `organization_staging_acceptance.sh` with the real CSV | exit 0; `60/60 VERIFIED` on the exact integration SHA |
 | `refactor_staging_smoke.sh` with Bob fixture and `STAGING_BASE_URL=http://127.0.0.1:18580` | exit 0 on the exact integration SHA |
-| `refactor_staging_smoke.sh` with Bob fixture, the real CSV, and `STAGING_REQUIRE_LIVE_PROVIDER=1` | exit 0; duplicate import of all 5 existing keys and `key1` through `key5` each returned `healthy`; live workflow completed with the disposable Alpha staging selection `nvidia/nemotron-3.5-super-vl:free` |
+| `refactor_staging_smoke.sh` with Bob fixture, the real CSV, and `STAGING_REQUIRE_LIVE_PROVIDER=1` | exit 0; duplicate import of all 5 existing keys and `key1` through `key5` each returned `healthy`; live provider workflow reached the valuation-approval checkpoint with the disposable Alpha staging selection `nvidia/nemotron-3.5-super-vl:free` |
 | `docker compose ... -f docker-compose.production.yml config --quiet` | exit 0; rendered backend/provider/Search tokens and Search encryption key were all non-empty |
 | Browser route acceptance at frontend port `18581` | verified for organization settings, notifications, LLM settings, Search settings, and workspace |
 | Secret redaction scan | exit 0; passed against four artifacts, `.env.staging.example`, the real CSV values, and Compose logs |
@@ -51,7 +51,8 @@ names, statuses, HTTP codes, and safe details.
 
 Bob's fixture selected Alpha after login and the runtime smoke verified health,
 registration/login, organization context selection, workflow start, ticker
-selection, the pending valuation approval boundary, and completion. In the
+selection, the pending valuation approval boundary, and the completed smoke
+check. In the
 final state Bob is the transferred owner; the earlier harness assertion also
 verified that a regular member cannot mutate provider configuration. The smoke
 intentionally did not approve the valuation or execute deterministic
