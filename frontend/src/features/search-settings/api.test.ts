@@ -11,19 +11,19 @@ describe('Search settings API boundary', () => {
         }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
         vi.stubGlobal('fetch', fetchMock);
 
-        const result = await getSearchSettings();
+        const result = await getSearchSettings('org-alpha');
 
-        expect(fetchMock).toHaveBeenCalledWith('/api/v1/search/settings', expect.objectContaining({ credentials: 'include' }));
+        expect(fetchMock).toHaveBeenCalledWith('/api/v1/search/settings', expect.objectContaining({ credentials: 'include', headers: expect.objectContaining({ 'X-Organization-ID': 'org-alpha' }) }));
         expect(result.settings.providers[0]?.provider).toBe('ddgs');
     });
 
     it('rejects malformed payloads instead of exposing untyped fields', async () => {
         vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ providers: [], settings: { providers: [{ provider: 'ddgs', enabled: 'yes', priority: 0, keys: [] }] } }), { status: 200 })));
-        await expect(getSearchSettings()).rejects.toThrow('search_provider_setting.enabled must be a boolean.');
+        await expect(getSearchSettings('org-alpha')).rejects.toThrow('search_provider_setting.enabled must be a boolean.');
     });
 
     it('maps service unavailable responses to a typed API error', async () => {
         vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ detail: 'service_unavailable' }), { status: 503 })));
-        await expect(getSearchSettings()).rejects.toMatchObject({ status: 503, message: 'service_unavailable' });
+        await expect(getSearchSettings('org-alpha')).rejects.toMatchObject({ status: 503, message: 'service_unavailable' });
     });
 });

@@ -53,8 +53,8 @@ class PostgresSearchControlPlane:
                 async with pool.acquire() as connection:
                     await connection.execute(
                         """
-                        CREATE TABLE IF NOT EXISTS search_provider_keys (
-                            owner_id TEXT NOT NULL,
+                        CREATE TABLE IF NOT EXISTS organization_search_provider_keys (
+                            organization_id TEXT NOT NULL,
                             key_id TEXT NOT NULL,
                             provider TEXT NOT NULL,
                             encrypted_key TEXT NOT NULL,
@@ -69,47 +69,31 @@ class PostgresSearchControlPlane:
                             last_tested_at TIMESTAMPTZ NOT NULL,
                             lease_until TIMESTAMPTZ,
                             last_used_at TIMESTAMPTZ,
-                            PRIMARY KEY (owner_id, key_id),
-                            UNIQUE (owner_id, provider, fingerprint)
+                            PRIMARY KEY (organization_id, key_id),
+                            UNIQUE (organization_id, provider, fingerprint)
                         )
                         """
                     )
-                    # Existing development databases may have been created by
-                    # the one-key schema. Keep this startup migration small and
-                    # idempotent; production migrations can later own it.
                     await connection.execute(
                         """
-                        ALTER TABLE search_provider_keys
-                            DROP CONSTRAINT IF EXISTS search_provider_keys_owner_id_provider_key,
-                            DROP CONSTRAINT IF EXISTS search_provider_keys_owner_id_priority_key;
-                        ALTER TABLE search_provider_keys
-                            ADD COLUMN IF NOT EXISTS lease_until TIMESTAMPTZ,
-                            ADD COLUMN IF NOT EXISTS last_used_at TIMESTAMPTZ;
-                        CREATE UNIQUE INDEX IF NOT EXISTS
-                            search_provider_keys_owner_provider_fingerprint_idx
-                            ON search_provider_keys(owner_id, provider, fingerprint);
-                        """
-                    )
-                    await connection.execute(
-                        """
-                        CREATE TABLE IF NOT EXISTS search_provider_preferences (
-                            owner_id TEXT NOT NULL,
+                        CREATE TABLE IF NOT EXISTS organization_search_provider_preferences (
+                            organization_id TEXT NOT NULL,
                             provider TEXT NOT NULL,
                             enabled BOOLEAN NOT NULL,
                             priority INTEGER NOT NULL CHECK (priority >= 0),
-                            PRIMARY KEY (owner_id, provider),
-                            UNIQUE (owner_id, priority)
+                            PRIMARY KEY (organization_id, provider),
+                            UNIQUE (organization_id, priority)
                         )
                         """
                     )
                     await connection.execute(
                         """
-                        CREATE TABLE IF NOT EXISTS search_provider_health (
-                            owner_id TEXT NOT NULL,
+                        CREATE TABLE IF NOT EXISTS organization_search_provider_health (
+                            organization_id TEXT NOT NULL,
                             provider TEXT NOT NULL,
                             failure_count INTEGER NOT NULL DEFAULT 0,
                             cooldown_until TIMESTAMPTZ,
-                            PRIMARY KEY (owner_id, provider)
+                            PRIMARY KEY (organization_id, provider)
                         )
                         """
                     )
@@ -170,13 +154,15 @@ class PostgresSearchControlPlane:
             cooldown_until=row.get("cooldown_until") if hasattr(row, "get") else None,
         )
 
-    async def credentials_for(self, *, subject_id: str) -> tuple[StoredCredential, ...]:
+    async def credentials_for(
+        self, *, organization_id: str
+    ) -> tuple[StoredCredential, ...]:
         pool = await self._connection()
         async with pool.acquire() as connection:
             await connection.execute(
-                """UPDATE search_provider_keys SET status='active',cooldown_until=NULL
-                WHERE owner_id=$1 AND status='cooldown' AND cooldown_until <= now()""",
-                subject_id,
+                """UPDATE organization_search_provider_keys SET status='active',cooldown_until=NULL
+                WHERE organization_id=$1 AND status='cooldown' AND cooldown_until <= now()""",
+                organization_id,
             )
             rows = await connection.fetch(
                 """
@@ -184,12 +170,12 @@ class PostgresSearchControlPlane:
                        k.enabled,k.priority AS key_priority,k.cooldown_until,
                        COALESCE(p.enabled,TRUE) AS provider_enabled,
                        COALESCE(p.priority,2147483647) AS provider_priority
-                FROM search_provider_preferences p
-                RIGHT JOIN search_provider_keys k
-                  ON p.owner_id = k.owner_id AND p.provider = k.provider
-                LEFT JOIN search_provider_health h
-                  ON h.owner_id = k.owner_id AND h.provider = k.provider
-                WHERE k.owner_id = $1
+                FROM organization_search_provider_preferences p
+                RIGHT JOIN organization_search_provider_keys k
+                  ON p.organization_id = k.organization_id AND p.provider = k.provider
+                LEFT JOIN organization_search_provider_health h
+                  ON h.organization_id = k.organization_id AND h.provider = k.provider
+                WHERE k.organization_id = $1
                   AND k.enabled
                   AND COALESCE(p.enabled,TRUE)
                   AND k.status = 'active'
@@ -198,7 +184,7 @@ class PostgresSearchControlPlane:
                   AND (k.lease_until IS NULL OR k.lease_until <= now())
                 ORDER BY provider_priority,k.provider,k.priority,k.key_id
                 """,
-                subject_id,
+                organization_id,
             )
         return tuple(
             self._credential(
@@ -209,7 +195,7 @@ class PostgresSearchControlPlane:
         )
 
     async def claim_credential(
-        self, *, subject_id: str, provider: str, lease_seconds: int = 30
+        self, *, organization_id: str, provider: str, lease_seconds: int = 30
     ) -> StoredCredential | None:
         if lease_seconds < 1 or lease_seconds > 300:
             raise ValueError("lease_seconds must be between 1 and 300")
@@ -220,12 +206,12 @@ class PostgresSearchControlPlane:
                 SELECT k.key_id,k.provider,k.encrypted_key,k.fingerprint,k.status,
                        k.enabled,k.priority AS key_priority,k.cooldown_until,
                        COALESCE(p.priority,2147483647) AS provider_priority
-                FROM search_provider_keys k
-                LEFT JOIN search_provider_preferences p
-                  ON p.owner_id=k.owner_id AND p.provider=k.provider
-                LEFT JOIN search_provider_health h
-                  ON h.owner_id=k.owner_id AND h.provider=k.provider
-                WHERE k.owner_id=$1 AND k.provider=$2
+                FROM organization_search_provider_keys k
+                LEFT JOIN organization_search_provider_preferences p
+                  ON p.organization_id=k.organization_id AND p.provider=k.provider
+                LEFT JOIN organization_search_provider_health h
+                  ON h.organization_id=k.organization_id AND h.provider=k.provider
+                WHERE k.organization_id=$1 AND k.provider=$2
                   AND k.enabled AND COALESCE(p.enabled,TRUE)
                   AND k.status='active'
                   AND (h.cooldown_until IS NULL OR h.cooldown_until <= now())
@@ -235,20 +221,20 @@ class PostgresSearchControlPlane:
                 FOR UPDATE OF k SKIP LOCKED
                 LIMIT 1
                 """,
-                subject_id,
+                organization_id,
                 provider,
             )
             if row is None:
                 return None
             claimed = await connection.fetchrow(
                 """
-                UPDATE search_provider_keys
+                UPDATE organization_search_provider_keys
                    SET lease_until=now() + ($3::double precision * interval '1 second'),
                        last_used_at=now()
-                 WHERE owner_id=$1 AND key_id=$2
+                 WHERE organization_id=$1 AND key_id=$2
                 RETURNING key_id
                 """,
-                subject_id,
+                organization_id,
                 row["key_id"],
                 lease_seconds,
             )
@@ -259,7 +245,7 @@ class PostgresSearchControlPlane:
     async def _save_key(
         self,
         *,
-        subject_id: str,
+        organization_id: str,
         provider: str,
         api_key: str,
         label: str,
@@ -273,12 +259,12 @@ class PostgresSearchControlPlane:
         now = datetime.now(UTC)
         async with pool.acquire() as connection, connection.transaction():
             await connection.execute(
-                "SELECT pg_advisory_xact_lock(hashtext($1))", subject_id
+                "SELECT pg_advisory_xact_lock(hashtext($1))", organization_id
             )
             if replace:
                 existing = await connection.fetchrow(
-                    "SELECT key_id FROM search_provider_keys WHERE owner_id=$1 AND key_id=$2 FOR UPDATE",
-                    subject_id,
+                    "SELECT key_id FROM organization_search_provider_keys WHERE organization_id=$1 AND key_id=$2 FOR UPDATE",
+                    organization_id,
                     key_id,
                 )
                 if existing is None:
@@ -288,11 +274,11 @@ class PostgresSearchControlPlane:
                         "provider key was not found",
                     )
                 row = await connection.fetchrow(
-                    """UPDATE search_provider_keys SET provider=$3, encrypted_key=$4, label=$5,
+                    """UPDATE organization_search_provider_keys SET provider=$3, encrypted_key=$4, label=$5,
                     suffix=$6, fingerprint=$7, status='active', failure_count=0,
                     cooldown_until=NULL, lease_until=NULL, last_used_at=NULL, last_tested_at=$8
-                    WHERE owner_id=$1 AND key_id=$2 RETURNING *""",
-                    subject_id,
+                    WHERE organization_id=$1 AND key_id=$2 RETURNING *""",
+                    organization_id,
                     key_id,
                     provider,
                     encrypted,
@@ -303,23 +289,23 @@ class PostgresSearchControlPlane:
                 )
             else:
                 row = await connection.fetchrow(
-                    """SELECT * FROM search_provider_keys
-                    WHERE owner_id=$1 AND provider=$2 AND fingerprint=$3 FOR UPDATE""",
-                    subject_id,
+                    """SELECT * FROM organization_search_provider_keys
+                    WHERE organization_id=$1 AND provider=$2 AND fingerprint=$3 FOR UPDATE""",
+                    organization_id,
                     provider,
                     fingerprint,
                 )
                 if row is None:
                     priority = await connection.fetchval(
-                        "SELECT COALESCE(MAX(priority)+1,0) FROM search_provider_keys WHERE owner_id=$1 AND provider=$2",
-                        subject_id,
+                        "SELECT COALESCE(MAX(priority)+1,0) FROM organization_search_provider_keys WHERE organization_id=$1 AND provider=$2",
+                        organization_id,
                         provider,
                     )
                     row = await connection.fetchrow(
-                        """INSERT INTO search_provider_keys
-                        (owner_id,key_id,provider,encrypted_key,label,suffix,fingerprint,priority,last_tested_at)
+                        """INSERT INTO organization_search_provider_keys
+                        (organization_id,key_id,provider,encrypted_key,label,suffix,fingerprint,priority,last_tested_at)
                         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *""",
-                        subject_id,
+                        organization_id,
                         key_id,
                         provider,
                         encrypted,
@@ -336,7 +322,7 @@ class PostgresSearchControlPlane:
     async def add_tested_key(
         self,
         *,
-        subject_id: str,
+        organization_id: str,
         provider: str,
         api_key: str,
         label: str,
@@ -344,7 +330,7 @@ class PostgresSearchControlPlane:
         fingerprint: str,
     ) -> ProviderKeySummary:
         return await self._save_key(
-            subject_id=subject_id,
+            organization_id=organization_id,
             provider=provider,
             api_key=api_key,
             label=label,
@@ -357,7 +343,7 @@ class PostgresSearchControlPlane:
     async def replace_tested_key(
         self,
         *,
-        subject_id: str,
+        organization_id: str,
         provider: str,
         api_key: str,
         label: str,
@@ -366,7 +352,7 @@ class PostgresSearchControlPlane:
         key_id: str,
     ) -> ProviderKeySummary:
         return await self._save_key(
-            subject_id=subject_id,
+            organization_id=organization_id,
             provider=provider,
             api_key=api_key,
             label=label,
@@ -376,39 +362,41 @@ class PostgresSearchControlPlane:
             replace=True,
         )
 
-    async def list_keys(self, *, subject_id: str) -> tuple[ProviderKeySummary, ...]:
+    async def list_keys(
+        self, *, organization_id: str
+    ) -> tuple[ProviderKeySummary, ...]:
         pool = await self._connection()
         async with pool.acquire() as connection:
             await connection.execute(
-                """UPDATE search_provider_keys SET status='active',cooldown_until=NULL
-                WHERE owner_id=$1 AND status='cooldown' AND cooldown_until <= now()""",
-                subject_id,
+                """UPDATE organization_search_provider_keys SET status='active',cooldown_until=NULL
+                WHERE organization_id=$1 AND status='cooldown' AND cooldown_until <= now()""",
+                organization_id,
             )
             rows = await connection.fetch(
                 """SELECT k.key_id,k.provider,k.label,k.suffix,k.fingerprint,k.enabled,
                 COALESCE(p.priority,k.priority) AS priority,k.status,k.failure_count,
                 k.cooldown_until,k.last_tested_at,k.last_used_at
-                FROM search_provider_keys k LEFT JOIN search_provider_preferences p
-                ON p.owner_id=k.owner_id AND p.provider=k.provider
-                WHERE k.owner_id=$1 ORDER BY COALESCE(p.priority,2147483647),k.provider,
+                FROM organization_search_provider_keys k LEFT JOIN organization_search_provider_preferences p
+                ON p.organization_id=k.organization_id AND p.provider=k.provider
+                WHERE k.organization_id=$1 ORDER BY COALESCE(p.priority,2147483647),k.provider,
                 k.priority,k.key_id""",
-                subject_id,
+                organization_id,
             )
         return tuple(self._summary(row) for row in rows)
 
-    async def delete_key(self, *, subject_id: str, key_id: str) -> None:
+    async def delete_key(self, *, organization_id: str, key_id: str) -> None:
         pool = await self._connection()
         async with pool.acquire() as connection:
             await connection.execute(
-                "DELETE FROM search_provider_keys WHERE owner_id=$1 AND key_id=$2",
-                subject_id,
+                "DELETE FROM organization_search_provider_keys WHERE organization_id=$1 AND key_id=$2",
+                organization_id,
                 key_id,
             )
 
     async def record_provider_failure(
         self,
         *,
-        subject_id: str,
+        organization_id: str,
         provider: str,
         cooldown_seconds: int = 30,
     ) -> None:
@@ -418,35 +406,35 @@ class PostgresSearchControlPlane:
         async with pool.acquire() as connection:
             await connection.execute(
                 """
-                INSERT INTO search_provider_health(owner_id,provider,failure_count,cooldown_until)
+                INSERT INTO organization_search_provider_health(organization_id,provider,failure_count,cooldown_until)
                 VALUES ($1,$2,1,now() + ($3::double precision * interval '1 second'))
-                ON CONFLICT (owner_id,provider) DO UPDATE
-                SET failure_count=search_provider_health.failure_count+1,
+                ON CONFLICT (organization_id,provider) DO UPDATE
+                SET failure_count=organization_search_provider_health.failure_count+1,
                     cooldown_until=EXCLUDED.cooldown_until
                 """,
-                subject_id,
+                organization_id,
                 provider,
                 cooldown_seconds,
             )
 
     async def set_key_enabled(
-        self, *, subject_id: str, key_id: str, enabled: bool
+        self, *, organization_id: str, key_id: str, enabled: bool
     ) -> ProviderKeySummary:
         pool = await self._connection()
         async with pool.acquire() as connection, connection.transaction():
             row = await connection.fetchrow(
                 """
-                UPDATE search_provider_keys
+                UPDATE organization_search_provider_keys
                    SET enabled=$3,
                        status=CASE WHEN $3 THEN 'active' ELSE 'disabled' END,
                        cooldown_until=NULL,
                        lease_until=NULL,
                        failure_count=CASE WHEN $3 THEN 0 ELSE failure_count END
-                 WHERE owner_id=$1 AND key_id=$2
+                 WHERE organization_id=$1 AND key_id=$2
                 RETURNING key_id,provider,label,suffix,fingerprint,enabled,priority,status,
                           failure_count,cooldown_until,last_tested_at,last_used_at
                 """,
-                subject_id,
+                organization_id,
                 key_id,
                 enabled,
             )
@@ -458,7 +446,7 @@ class PostgresSearchControlPlane:
                 )
             return self._summary(row)
 
-    async def get_settings(self, *, subject_id: str) -> UserSettings:
+    async def get_settings(self, *, organization_id: str) -> UserSettings:
         pool = await self._connection()
         async with pool.acquire() as connection:
             rows = await connection.fetch(
@@ -467,11 +455,11 @@ class PostgresSearchControlPlane:
                 COALESCE(p.priority,2147483647) AS provider_priority,
                 k.key_id,k.label,k.suffix,k.fingerprint,k.enabled,k.priority,
                 k.status,k.failure_count,k.cooldown_until,k.last_tested_at,k.last_used_at
-                FROM search_provider_preferences p FULL OUTER JOIN search_provider_keys k
-                ON p.owner_id=k.owner_id AND p.provider=k.provider
-                WHERE COALESCE(p.owner_id,k.owner_id)=$1
+                FROM organization_search_provider_preferences p FULL OUTER JOIN organization_search_provider_keys k
+                ON p.organization_id=k.organization_id AND p.provider=k.provider
+                WHERE COALESCE(p.organization_id,k.organization_id)=$1
                 ORDER BY COALESCE(p.priority,2147483647),COALESCE(p.provider,k.provider),k.priority,k.key_id""",
-                subject_id,
+                organization_id,
             )
         settings: dict[str, tuple[bool, int, list[ProviderKeySummary]]] = {}
         for row in rows:
@@ -495,89 +483,64 @@ class PostgresSearchControlPlane:
         )
 
     async def replace_settings(
-        self, *, subject_id: str, providers: tuple[ProviderPreference, ...]
+        self, *, organization_id: str, providers: tuple[ProviderPreference, ...]
     ) -> UserSettings:
         pool = await self._connection()
         async with pool.acquire() as connection, connection.transaction():
             await connection.execute(
-                "SELECT pg_advisory_xact_lock(hashtext($1))", subject_id
+                "SELECT pg_advisory_xact_lock(hashtext($1))", organization_id
             )
             await connection.execute(
-                "DELETE FROM search_provider_preferences WHERE owner_id=$1", subject_id
+                "DELETE FROM organization_search_provider_preferences WHERE organization_id=$1",
+                organization_id,
             )
             await connection.executemany(
-                "INSERT INTO search_provider_preferences(owner_id,provider,enabled,priority) VALUES($1,$2,$3,$4)",
+                "INSERT INTO organization_search_provider_preferences(organization_id,provider,enabled,priority) VALUES($1,$2,$3,$4)",
                 [
-                    (subject_id, item.provider, item.enabled, item.priority)
+                    (organization_id, item.provider, item.enabled, item.priority)
                     for item in providers
                 ],
             )
-        return await self.get_settings(subject_id=subject_id)
-
-    async def record_failure(
-        self,
-        *,
-        subject_id: str,
-        provider: str,
-        key_id: str | None = None,
-        cooldown_seconds: int = 30,
-    ) -> None:
-        """Record a provider failure for legacy callers.
-
-        New runtime code should use ``record_key_failure`` so one bad key does
-        not quarantine the whole provider pool.
-        """
-        if key_id is not None:
-            await self.record_key_failure(
-                subject_id=subject_id,
-                key_id=key_id,
-                cooldown_seconds=cooldown_seconds,
-            )
-            return
-        await self.record_provider_failure(
-            subject_id=subject_id,
-            provider=provider,
-            cooldown_seconds=cooldown_seconds,
-        )
+        return await self.get_settings(organization_id=organization_id)
 
     async def release_credential(
-        self, *, subject_id: str, key_id: str, succeeded: bool = False
+        self, *, organization_id: str, key_id: str, succeeded: bool = False
     ) -> None:
         pool = await self._connection()
         async with pool.acquire() as connection:
             if succeeded:
                 await connection.execute(
                     """
-                    UPDATE search_provider_keys
+                    UPDATE organization_search_provider_keys
                        SET lease_until=NULL,status='active',failure_count=0,
                            cooldown_until=NULL
-                     WHERE owner_id=$1 AND key_id=$2
+                     WHERE organization_id=$1 AND key_id=$2
                     """,
-                    subject_id,
+                    organization_id,
                     key_id,
                 )
                 await connection.execute(
                     """
-                    UPDATE search_provider_health
+                    UPDATE organization_search_provider_health
                        SET failure_count=0,cooldown_until=NULL
-                     WHERE owner_id=$1
-                       AND provider=(SELECT provider FROM search_provider_keys
-                                     WHERE owner_id=$1 AND key_id=$2)
+                     WHERE organization_id=$1
+                       AND provider=(SELECT provider FROM organization_search_provider_keys
+                                     WHERE organization_id=$1 AND key_id=$2)
                     """,
-                    subject_id,
+                    organization_id,
                     key_id,
                 )
             else:
                 await connection.execute(
-                    "UPDATE search_provider_keys SET lease_until=NULL WHERE owner_id=$1 AND key_id=$2",
-                    subject_id,
+                    "UPDATE organization_search_provider_keys SET lease_until=NULL WHERE organization_id=$1 AND key_id=$2",
+                    organization_id,
                     key_id,
                 )
 
     async def record_key_failure(
         self,
         *,
-        subject_id: str,
+        organization_id: str,
         key_id: str,
         status: str = "cooldown",
         cooldown_seconds: int = 30,
@@ -590,26 +553,26 @@ class PostgresSearchControlPlane:
         async with pool.acquire() as connection:
             await connection.execute(
                 """
-                UPDATE search_provider_keys
+                UPDATE organization_search_provider_keys
                    SET failure_count=failure_count+1,
                        status=$3,
                        cooldown_until=CASE WHEN $3='cooldown'
                            THEN now() + ($4::double precision * interval '1 second')
                            ELSE NULL END,
                        lease_until=NULL
-                 WHERE owner_id=$1 AND key_id=$2
+                 WHERE organization_id=$1 AND key_id=$2
                 """,
-                subject_id,
+                organization_id,
                 key_id,
                 status,
                 cooldown_seconds,
             )
 
-    async def clear_expired_cooldowns(self, *, subject_id: str) -> None:
+    async def clear_expired_cooldowns(self, *, organization_id: str) -> None:
         pool = await self._connection()
         async with pool.acquire() as connection:
             await connection.execute(
-                """UPDATE search_provider_keys SET status='active',cooldown_until=NULL
-                WHERE owner_id=$1 AND status='cooldown' AND cooldown_until <= now()""",
-                subject_id,
+                """UPDATE organization_search_provider_keys SET status='active',cooldown_until=NULL
+                WHERE organization_id=$1 AND status='cooldown' AND cooldown_until <= now()""",
+                organization_id,
             )

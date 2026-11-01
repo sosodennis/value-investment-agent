@@ -65,13 +65,39 @@ class FakeControlPlane:
         self.keys: list[ProviderKeySummary] = []
         self.raw_keys: list[str] = []
 
-    async def credentials_for(self, *, subject_id: str):
+    async def credentials_for(self, *, organization_id: str):
         return self.credentials
 
-    async def add_tested_key(
-        self, *, subject_id, provider, api_key, label, suffix, fingerprint
+    async def claim_credential(
+        self, *, organization_id: str, provider: str, lease_seconds: int = 30
     ):
-        _ = subject_id
+        _ = (organization_id, provider, lease_seconds)
+        return None
+
+    async def release_credential(
+        self, *, organization_id: str, key_id: str, succeeded: bool = False
+    ):
+        _ = (organization_id, key_id, succeeded)
+
+    async def record_key_failure(
+        self,
+        *,
+        organization_id: str,
+        key_id: str,
+        status: str = "cooldown",
+        cooldown_seconds: int = 30,
+    ):
+        _ = (organization_id, key_id, status, cooldown_seconds)
+
+    async def record_provider_failure(
+        self, *, organization_id: str, provider: str, cooldown_seconds: int = 30
+    ):
+        _ = (organization_id, provider, cooldown_seconds)
+
+    async def add_tested_key(
+        self, *, organization_id, provider, api_key, label, suffix, fingerprint
+    ):
+        _ = organization_id
         self.raw_keys.append(api_key)
         summary = ProviderKeySummary(
             id="key-123",
@@ -86,9 +112,9 @@ class FakeControlPlane:
         return summary
 
     async def replace_tested_key(
-        self, *, subject_id, provider, api_key, label, suffix, fingerprint, key_id
+        self, *, organization_id, provider, api_key, label, suffix, fingerprint, key_id
     ):
-        _ = (subject_id, key_id)
+        _ = (organization_id, key_id)
         self.raw_keys.append(api_key)
         summary = ProviderKeySummary(
             id=key_id,
@@ -102,15 +128,15 @@ class FakeControlPlane:
         self.keys = [summary]
         return summary
 
-    async def list_keys(self, *, subject_id):
+    async def list_keys(self, *, organization_id):
         return tuple(self.keys)
 
-    async def delete_key(self, *, subject_id, key_id):
-        _ = (subject_id, key_id)
+    async def delete_key(self, *, organization_id, key_id):
+        _ = (organization_id, key_id)
         self.keys.clear()
 
-    async def set_key_enabled(self, *, subject_id, key_id, enabled):
-        _ = subject_id
+    async def set_key_enabled(self, *, organization_id, key_id, enabled):
+        _ = organization_id
         for index, key in enumerate(self.keys):
             if key.id == key_id:
                 updated = key.model_copy(
@@ -123,12 +149,12 @@ class FakeControlPlane:
                 return updated
         raise AssertionError("unknown key")
 
-    async def get_settings(self, *, subject_id):
-        _ = subject_id
+    async def get_settings(self, *, organization_id):
+        _ = organization_id
         return UserSettings(providers=())
 
-    async def replace_settings(self, *, subject_id, providers):
-        _ = subject_id
+    async def replace_settings(self, *, organization_id, providers):
+        _ = organization_id
         return UserSettings(
             providers=tuple(
                 ProviderSetting(**provider.model_dump()) for provider in providers
@@ -137,14 +163,17 @@ class FakeControlPlane:
 
 
 def context(
-    *, user_id: str = "user-a", deadline: datetime | None = None
+    *,
+    user_id: str = "user-a",
+    organization_id: str = "organization-122",
+    deadline: datetime | None = None,
 ) -> dict[str, object]:
     deadline = deadline or datetime.now(UTC) + timedelta(seconds=3)
     return build_internal_context(
         principal=InternalPrincipal(
             subject_id=user_id,
-            organization_id="organization-122",
-            membership_id="membership-122",
+            organization_id=organization_id,
+            membership_id=f"membership-{organization_id}",
         ),
         correlation_id="corr-122",
         deadline_at=deadline,
@@ -269,7 +298,7 @@ async def test_authentication_precedes_principal_use() -> None:
         response = await client.post(
             "/v1/search/web",
             headers={"Authorization": "Bearer wrong"},
-            json={"context": {"principal": {"subject_id": ""}}, "input": {}},
+            json={"context": {"principal": {"organization_id": ""}}, "input": {}},
         )
     finally:
         await client.aclose()

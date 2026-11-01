@@ -52,14 +52,14 @@ class Pool:
     provider_failures: list[str] = field(default_factory=list)
     releases: list[tuple[str, bool]] = field(default_factory=list)
 
-    async def credentials_for(self, *, subject_id: str) -> tuple[Credential, ...]:
-        _ = subject_id
+    async def credentials_for(self, *, organization_id: str) -> tuple[Credential, ...]:
+        _ = organization_id
         return tuple(self.credentials)
 
     async def claim_credential(
-        self, *, subject_id: str, provider: str, lease_seconds: int = 30
+        self, *, organization_id: str, provider: str, lease_seconds: int = 30
     ) -> Credential | None:
-        _ = (subject_id, lease_seconds)
+        _ = (organization_id, lease_seconds)
         for credential in sorted(self.credentials, key=lambda item: item.priority):
             if (
                 credential.provider == provider
@@ -72,9 +72,9 @@ class Pool:
         return None
 
     async def release_credential(
-        self, *, subject_id: str, key_id: str, succeeded: bool = False
+        self, *, organization_id: str, key_id: str, succeeded: bool = False
     ) -> None:
-        _ = subject_id
+        _ = organization_id
         credential = next(item for item in self.credentials if item.key_id == key_id)
         credential.leased = False
         self.releases.append((key_id, succeeded))
@@ -82,20 +82,20 @@ class Pool:
     async def record_key_failure(
         self,
         *,
-        subject_id: str,
+        organization_id: str,
         key_id: str,
         status: str = "cooldown",
         cooldown_seconds: int = 30,
     ) -> None:
-        _ = (subject_id, cooldown_seconds)
+        _ = (organization_id, cooldown_seconds)
         credential = next(item for item in self.credentials if item.key_id == key_id)
         credential.status = status
         self.failures.append((key_id, status))
 
     async def record_provider_failure(
-        self, *, subject_id: str, provider: str, cooldown_seconds: int = 30
+        self, *, organization_id: str, provider: str, cooldown_seconds: int = 30
     ) -> None:
-        _ = (subject_id, cooldown_seconds)
+        _ = (organization_id, cooldown_seconds)
         self.provider_failures.append(provider)
 
 

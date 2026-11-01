@@ -108,6 +108,34 @@
         "additionalProperties": false,
         "description": "Authenticated application identity, without browser or provider secrets.",
         "properties": {
+          "membership_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Membership Id"
+          },
+          "organization_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Organization Id"
+          },
           "subject_id": {
             "maxLength": 256,
             "minLength": 1,
@@ -145,6 +173,20 @@
         "additionalProperties": false,
         "description": "Request metadata accepted by an internal capability service.",
         "properties": {
+          "audience": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Audience"
+          },
           "contract_version": {
             "const": "internal.v1",
             "title": "Contract Version",
@@ -161,8 +203,49 @@
             "title": "Deadline At",
             "type": "string"
           },
+          "issued_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Issued At"
+          },
+          "issuer": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Issuer"
+          },
           "principal": {
             "$ref": "#/components/schemas/InternalPrincipal"
+          },
+          "signature": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Signature"
           }
         },
         "required": [

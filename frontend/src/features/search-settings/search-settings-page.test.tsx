@@ -8,6 +8,10 @@ const api = vi.hoisted(() => ({
     replaceSearchKey: vi.fn(), setSearchKeyEnabled: vi.fn(), updateSearchSettings: vi.fn(),
 }));
 const router = vi.hoisted(() => ({ replace: vi.fn() }));
+const organizationContext = vi.hoisted(() => ({
+    activeOrganization: { id: 'org-alpha', name: 'Alpha', role: 'owner' as 'owner' | 'admin' | 'member', status: 'active' as const },
+    isLoading: false,
+}));
 
 vi.mock('@/features/search-settings/api', () => ({
     ...api,
@@ -16,6 +20,7 @@ vi.mock('@/features/search-settings/api', () => ({
     },
 }));
 vi.mock('next/navigation', () => ({ useRouter: () => router }));
+vi.mock('@/features/organizations/organization-context', () => ({ useOrganizationContext: () => organizationContext }));
 
 const snapshot = {
     providers: [
@@ -31,6 +36,8 @@ const snapshot = {
 describe('Search settings page', () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        organizationContext.activeOrganization = { id: 'org-alpha', name: 'Alpha', role: 'owner', status: 'active' };
+        organizationContext.isLoading = false;
         api.getSearchSettings.mockResolvedValue(snapshot);
         api.addSearchKey.mockResolvedValue({ id: 'key1', provider: 'provider-a', tested: true, active: true, suffix: 'cdef', fingerprint: 'safe-fingerprint' });
         api.updateSearchSettings.mockResolvedValue(snapshot);
@@ -57,7 +64,7 @@ describe('Search settings page', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Test and add key' }));
         await screen.findByText('Provider key tested and added.');
         expect(api.addSearchKey).toHaveBeenCalledTimes(1);
-        expect(api.addSearchKey).toHaveBeenCalledWith({ provider: 'provider-a', api_key: 'raw-key-secret', label: 'provider-a key' });
+        expect(api.addSearchKey).toHaveBeenCalledWith('org-alpha', { provider: 'provider-a', api_key: 'raw-key-secret', label: 'provider-a key' });
         expect(screen.queryByDisplayValue('raw-key-secret')).toBeNull();
     });
 
@@ -82,10 +89,20 @@ describe('Search settings page', () => {
         fireEvent.click(screen.getByLabelText('Enabled', { selector: '#provider-enabled-provider-a' }));
         fireEvent.click(screen.getByRole('button', { name: 'Move ddgs up' }));
         fireEvent.click(screen.getByRole('button', { name: 'Save settings' }));
-        await waitFor(() => expect(api.updateSearchSettings).toHaveBeenCalledWith([
+        await waitFor(() => expect(api.updateSearchSettings).toHaveBeenCalledWith('org-alpha', [
             { provider: 'ddgs', enabled: true, priority: 0 },
             { provider: 'provider-a', enabled: false, priority: 1 },
         ]));
+    });
+
+    it('lets organization members read shared settings while disabling mutations', async () => {
+        organizationContext.activeOrganization = { id: 'org-alpha', name: 'Alpha', role: 'member', status: 'active' };
+        render(<SearchSettingsPage />);
+        await screen.findAllByText('provider-a');
+        expect(screen.getByText(/Owners and admins manage provider settings and keys/)).toBeTruthy();
+        expect((screen.getByRole('button', { name: 'Save settings' }) as HTMLButtonElement).disabled).toBe(true);
+        expect((screen.getByLabelText('Enabled', { selector: '#provider-enabled-provider-a' }) as HTMLButtonElement).disabled).toBe(true);
+        expect((screen.getByRole('button', { name: 'Test and add key' }) as HTMLButtonElement).disabled).toBe(true);
     });
 
     it('tests and replaces an existing provider key', async () => {
@@ -104,7 +121,7 @@ describe('Search settings page', () => {
         fireEvent.change(await screen.findByLabelText('Replacement API key'), { target: { value: 'replacement-secret' } });
         fireEvent.click(screen.getByRole('button', { name: 'Test and replace key' }));
         await screen.findByText('Provider key tested and replaced.');
-        expect(api.replaceSearchKey).toHaveBeenCalledWith({ provider: 'provider-a', key_id: 'key1', api_key: 'replacement-secret', label: 'Main' });
+        expect(api.replaceSearchKey).toHaveBeenCalledWith('org-alpha', { provider: 'provider-a', key_id: 'key1', api_key: 'replacement-secret', label: 'Main' });
     });
 
     it('toggles an existing key through its account-scoped API action', async () => {
@@ -119,7 +136,7 @@ describe('Search settings page', () => {
         render(<SearchSettingsPage />);
         await screen.findByText('Main · •••• cdef');
         fireEvent.click(screen.getByRole('button', { name: 'Disable Main' }));
-        await waitFor(() => expect(api.setSearchKeyEnabled).toHaveBeenCalledWith('key1', false));
+        await waitFor(() => expect(api.setSearchKeyEnabled).toHaveBeenCalledWith('org-alpha', 'key1', false));
     });
 
     it('requires an explicit dialog action before deleting a key', async () => {
@@ -137,7 +154,7 @@ describe('Search settings page', () => {
         expect(api.deleteSearchKey).not.toHaveBeenCalled();
         screen.getByRole('alertdialog');
         fireEvent.click(screen.getByRole('button', { name: 'Delete key' }));
-        await waitFor(() => expect(api.deleteSearchKey).toHaveBeenCalledWith('key1'));
+        await waitFor(() => expect(api.deleteSearchKey).toHaveBeenCalledWith('org-alpha', 'key1'));
         await screen.findByText('Main was deleted.');
     });
 

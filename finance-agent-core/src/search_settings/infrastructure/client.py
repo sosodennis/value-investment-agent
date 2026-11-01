@@ -117,16 +117,16 @@ class SearchServiceClient:
         path: str,
         input_data: dict[str, object],
         response_type: type[T],
-        organization_id: str | None = None,
-        membership_id: str | None = None,
+        organization_id: str,
+        membership_id: str,
     ) -> T:
         correlation_id = resolve_correlation_id()
         payload = _Envelope(
             context=build_internal_context(
                 principal=InternalPrincipal(
                     subject_id=principal,
-                    organization_id=organization_id or "unscoped",
-                    membership_id=membership_id or "unscoped",
+                    organization_id=organization_id,
+                    membership_id=membership_id,
                 ),
                 correlation_id=correlation_id,
                 deadline_at=datetime.now(UTC) + timedelta(seconds=10),
@@ -182,8 +182,8 @@ class SearchServiceClient:
         self,
         *,
         principal: str,
-        organization_id: str | None = None,
-        membership_id: str | None = None,
+        organization_id: str,
+        membership_id: str,
     ) -> tuple[list[ProviderCapabilities], SearchSettingsSnapshot]:
         catalog, settings = (
             await self._catalog(principal, organization_id, membership_id),
@@ -195,16 +195,16 @@ class SearchServiceClient:
         self,
         *,
         principal: str,
-        organization_id: str | None = None,
-        membership_id: str | None = None,
+        organization_id: str,
+        membership_id: str,
     ) -> list[ProviderCapabilities]:
         return await self._catalog(principal, organization_id, membership_id)
 
     async def _catalog(
         self,
         principal: str,
-        organization_id: str | None,
-        membership_id: str | None,
+        organization_id: str,
+        membership_id: str,
     ) -> list[ProviderCapabilities]:
         envelope = await self._post(
             principal=principal,
@@ -219,8 +219,8 @@ class SearchServiceClient:
     async def _settings(
         self,
         principal: str,
-        organization_id: str | None,
-        membership_id: str | None,
+        organization_id: str,
+        membership_id: str,
     ) -> SearchSettingsSnapshot:
         envelope = await self._post(
             principal=principal,
@@ -237,8 +237,8 @@ class SearchServiceClient:
         *,
         principal: str,
         providers: list[ProviderPreference],
-        organization_id: str | None = None,
-        membership_id: str | None = None,
+        organization_id: str,
+        membership_id: str,
     ) -> SearchSettingsSnapshot:
         envelope = await self._post(
             principal=principal,
@@ -259,8 +259,8 @@ class SearchServiceClient:
         provider: str,
         api_key: str,
         label: str,
-        organization_id: str | None = None,
-        membership_id: str | None = None,
+        organization_id: str,
+        membership_id: str,
     ) -> ProviderKeyResult:
         envelope = await self._post(
             principal=principal,
@@ -280,8 +280,8 @@ class SearchServiceClient:
         provider: str,
         api_key: str,
         label: str,
-        organization_id: str | None = None,
-        membership_id: str | None = None,
+        organization_id: str,
+        membership_id: str,
     ) -> ProviderKeyResult:
         envelope = await self._post(
             principal=principal,
@@ -303,8 +303,8 @@ class SearchServiceClient:
         *,
         principal: str,
         key_id: str,
-        organization_id: str | None = None,
-        membership_id: str | None = None,
+        organization_id: str,
+        membership_id: str,
     ) -> None:
         await self._post(
             principal=principal,
@@ -321,8 +321,8 @@ class SearchServiceClient:
         principal: str,
         key_id: str,
         enabled: bool,
-        organization_id: str | None = None,
-        membership_id: str | None = None,
+        organization_id: str,
+        membership_id: str,
     ) -> ProviderKeyResult:
         envelope = await self._post(
             principal=principal,

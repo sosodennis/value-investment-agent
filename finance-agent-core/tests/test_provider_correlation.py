@@ -82,7 +82,14 @@ async def test_search_settings_client_forwards_request_correlation() -> None:
     )
     token = _with_correlation("request-search-210")
     try:
-        assert await service.catalog(principal="user-1") == []
+        assert (
+            await service.catalog(
+                principal="user-1",
+                organization_id="org-alpha",
+                membership_id="membership-alpha",
+            )
+            == []
+        )
     finally:
         reset_correlation_id(token)
         await service.aclose()

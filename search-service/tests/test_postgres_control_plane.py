@@ -31,7 +31,7 @@ async def test_postgres_control_plane_is_owner_scoped_atomic_and_durable() -> No
         inserted = await asyncio.gather(
             *(
                 store.add_tested_key(
-                    subject_id=owner,
+                    organization_id=owner,
                     provider=f"provider-{index // 4}",
                     api_key=f"secret-{index}",
                     label=f"key-{index}",
@@ -48,7 +48,7 @@ async def test_postgres_control_plane_is_owner_scoped_atomic_and_durable() -> No
             item.priority for item in inserted if item.provider == "provider-1"
         } == {0, 1, 2, 3}
         duplicate = await store.add_tested_key(
-            subject_id=owner,
+            organization_id=owner,
             provider="provider-0",
             api_key="secret-0",
             label="duplicate-label-is-ignored",
@@ -56,15 +56,15 @@ async def test_postgres_control_plane_is_owner_scoped_atomic_and_durable() -> No
             fingerprint="fingerprint-0",
         )
         assert duplicate.id == inserted[0].id
-        credentials = await store.credentials_for(subject_id=owner)
+        credentials = await store.credentials_for(organization_id=owner)
         assert {item.api_key for item in credentials} == {
             f"secret-{index}" for index in range(8)
         }
-        assert await store.credentials_for(subject_id=f"{owner}-other") == ()
+        assert await store.credentials_for(organization_id=f"{owner}-other") == ()
 
         async with pool.acquire() as connection:
             ciphertexts = await connection.fetch(
-                "SELECT encrypted_key FROM search_provider_keys WHERE owner_id=$1",
+                "SELECT encrypted_key FROM organization_search_provider_keys WHERE organization_id=$1",
                 owner,
             )
         assert len(ciphertexts) == 8
@@ -73,7 +73,7 @@ async def test_postgres_control_plane_is_owner_scoped_atomic_and_durable() -> No
         claims = await asyncio.gather(
             *(
                 store.claim_credential(
-                    subject_id=owner, provider="provider-0", lease_seconds=2
+                    organization_id=owner, provider="provider-0", lease_seconds=2
                 )
                 for _ in range(2)
             )
@@ -82,20 +82,20 @@ async def test_postgres_control_plane_is_owner_scoped_atomic_and_durable() -> No
         claimed_ids = {item.key_id for item in claims if item is not None}
         assert len(claimed_ids) == 2
         await store.record_key_failure(
-            subject_id=owner,
+            organization_id=owner,
             key_id=claims[0].key_id,
             cooldown_seconds=1,
         )
         await store.release_credential(
-            subject_id=owner, key_id=claims[1].key_id, succeeded=False
+            organization_id=owner, key_id=claims[1].key_id, succeeded=False
         )
-        available = await store.credentials_for(subject_id=owner)
+        available = await store.credentials_for(organization_id=owner)
         assert sum(item.provider == "provider-0" for item in available) == 3
         await asyncio.sleep(1.1)
         assert (
             sum(
                 item.provider == "provider-0"
-                for item in await store.credentials_for(subject_id=owner)
+                for item in await store.credentials_for(organization_id=owner)
             )
             == 4
         )
@@ -105,19 +105,23 @@ async def test_postgres_control_plane_is_owner_scoped_atomic_and_durable() -> No
             encryption_key,
         )
         assert {
-            item.api_key for item in await persisted.credentials_for(subject_id=owner)
+            item.api_key
+            for item in await persisted.credentials_for(organization_id=owner)
         } == {f"secret-{index}" for index in range(8)}
         await persisted.aclose()
     finally:
         async with pool.acquire() as connection:
             async with connection.transaction():
                 await connection.execute(
-                    "DELETE FROM search_provider_preferences WHERE owner_id=$1", owner
+                    "DELETE FROM organization_search_provider_preferences WHERE organization_id=$1",
+                    owner,
                 )
                 await connection.execute(
-                    "DELETE FROM search_provider_keys WHERE owner_id=$1", owner
+                    "DELETE FROM organization_search_provider_keys WHERE organization_id=$1",
+                    owner,
                 )
                 await connection.execute(
-                    "DELETE FROM search_provider_health WHERE owner_id=$1", owner
+                    "DELETE FROM organization_search_provider_health WHERE organization_id=$1",
+                    owner,
                 )
         await store.aclose()
