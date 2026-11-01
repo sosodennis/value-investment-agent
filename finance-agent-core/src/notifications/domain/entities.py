@@ -40,6 +40,7 @@ class NotificationAction:
 class NotificationEvent:
     id: str
     event_key: str
+    correlation_id: str
     notification_type: NotificationType
     organization_id: str | None
     payload: dict[str, JsonValue]
@@ -67,6 +68,7 @@ class NotificationDelivery:
     id: str
     event_id: str
     event_key: str
+    correlation_id: str
     recipient_user_id: str
     channel: str
     idempotency_key: str

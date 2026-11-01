@@ -27,6 +27,7 @@ from src.notifications.domain.errors import (
     NotificationEventConflictError,
     NotificationOutboxLeaseError,
 )
+from src.shared.kernel.correlation import resolve_correlation_id
 
 from .models import (
     NotificationEventModel,
@@ -48,6 +49,7 @@ class SqlAlchemyNotificationRepository(NotificationRepository):
         session: AsyncSession,
         *,
         event_key: str,
+        correlation_id: str | None = None,
         organization_id: str,
         payload: dict[str, JsonValue],
         recipient_user_id: str,
@@ -58,6 +60,7 @@ class SqlAlchemyNotificationRepository(NotificationRepository):
         return await self.enqueue_in_session(
             session,
             event_key=event_key,
+            correlation_id=resolve_correlation_id(correlation_id),
             notification_type=NotificationType.ORGANIZATION_INVITATION,
             organization_id=organization_id,
             payload=payload,
@@ -73,6 +76,7 @@ class SqlAlchemyNotificationRepository(NotificationRepository):
         self,
         *,
         event_key: str,
+        correlation_id: str | None = None,
         notification_type: NotificationType,
         organization_id: str | None,
         payload: dict[str, JsonValue],
@@ -86,6 +90,7 @@ class SqlAlchemyNotificationRepository(NotificationRepository):
                 result = await self.enqueue_in_session(
                     session,
                     event_key=event_key,
+                    correlation_id=resolve_correlation_id(correlation_id),
                     notification_type=notification_type,
                     organization_id=organization_id,
                     payload=payload,
@@ -101,6 +106,7 @@ class SqlAlchemyNotificationRepository(NotificationRepository):
         session: AsyncSession,
         *,
         event_key: str,
+        correlation_id: str,
         notification_type: NotificationType,
         organization_id: str | None,
         payload: dict[str, JsonValue],
@@ -109,10 +115,12 @@ class SqlAlchemyNotificationRepository(NotificationRepository):
         occurred_at: datetime,
         expires_at: datetime | None,
     ) -> NotificationEnqueueResult:
+        resolved_correlation_id = resolve_correlation_id(correlation_id)
         event_insert = (
             insert(NotificationEventModel)
             .values(
                 event_key=event_key,
+                correlation_id=resolved_correlation_id,
                 notification_type=notification_type.value,
                 organization_id=organization_id,
                 payload=payload,
@@ -252,6 +260,7 @@ class SqlAlchemyNotificationRepository(NotificationRepository):
                             target_type="notification_event",
                             target_id=row[1].id,
                             payload={"notification_type": row[1].notification_type},
+                            correlation_id=row[1].correlation_id,
                             occurred_at=delivery.occurred_at,
                         ),
                     )
@@ -409,6 +418,7 @@ class SqlAlchemyNotificationRepository(NotificationRepository):
                                 "terminal": terminal,
                                 "error_code": safe_error,
                             },
+                            correlation_id=event.correlation_id,
                             occurred_at=now,
                         ),
                     )
@@ -557,6 +567,7 @@ class SqlAlchemyNotificationRepository(NotificationRepository):
             id=outbox.id,
             event_id=event.id,
             event_key=event.event_key,
+            correlation_id=event.correlation_id,
             recipient_user_id=outbox.recipient_user_id,
             channel=outbox.channel,
             idempotency_key=outbox.idempotency_key,

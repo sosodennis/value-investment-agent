@@ -22,6 +22,7 @@ def _delivery() -> NotificationDelivery:
         id="delivery-1",
         event_id="event-1",
         event_key="system:event-1",
+        correlation_id="correlation-1",
         recipient_user_id="user-1",
         channel="in_app",
         idempotency_key="event-1:in_app:user-1",
@@ -168,3 +169,7 @@ async def test_worker_does_not_log_or_persist_raw_generic_adapter_errors(
     assert result.dead_lettered == 1
     assert repository.delivery.last_error == "delivery_failed"
     assert "secret-token" not in caplog.text
+    assert any(
+        record.__dict__.get("correlation_id") == "correlation-1"
+        for record in caplog.records
+    )

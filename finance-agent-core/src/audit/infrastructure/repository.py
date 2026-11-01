@@ -17,6 +17,7 @@ from src.audit.domain.entities import (
 from src.audit.domain.redaction import redact_payload
 from src.auth.infrastructure.models import OrganizationModel, UserModel
 from src.infrastructure.database import AsyncSessionLocal
+from src.shared.kernel.correlation import resolve_correlation_id
 
 from .models import AuditEventModel, utc_now
 
@@ -45,7 +46,7 @@ class SqlAlchemyAuditRepository(AuditRepository):
             if actor_exists is None:
                 raise ValueError("audit actor user does not exist")
         occurred_at = _utc(event.occurred_at or utc_now())
-        correlation_id = event.correlation_id or str(uuid.uuid4())
+        correlation_id = resolve_correlation_id(event.correlation_id)
         if len(event.action) > 120 or not event.action.strip():
             raise ValueError(
                 "audit action must be a non-empty value of at most 120 characters"

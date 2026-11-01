@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 
 from src.audit.application.wiring import get_audit_service
 from src.audit.domain.entities import AuditEventDraft, AuditOutcome
+from src.shared.kernel.correlation import current_correlation_id
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +40,7 @@ async def record_best_effort(
                 target_type=target_type,
                 target_id=target_id,
                 payload=payload or {},
-                correlation_id=correlation_id,
+                correlation_id=correlation_id or current_correlation_id(),
                 occurred_at=datetime.now(UTC),
             )
         )

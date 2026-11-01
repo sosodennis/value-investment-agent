@@ -121,6 +121,7 @@ async def test_notification_repository_isolates_recipients_deduplicates_events_a
     try:
         first = await repository.enqueue(
             event_key=event_key,
+            correlation_id="notification-correlation-1",
             notification_type=NotificationType.ORGANIZATION_INVITATION,
             organization_id=user_a.organization.id,
             payload={"organization_name": "Alpha"},
@@ -133,12 +134,27 @@ async def test_notification_repository_isolates_recipients_deduplicates_events_a
         )
         assert len(first.deliveries) == 1
         assert first.deliveries[0].organization_id == user_a.organization.id
+        assert first.deliveries[0].correlation_id == "notification-correlation-1"
         concurrent_runs = await asyncio.gather(
             worker.run_once(now=now, worker_id="worker-a"),
             worker.run_once(now=now, worker_id="worker-b"),
         )
         assert sum(result.claimed for result in concurrent_runs) == 1
         assert sum(result.delivered for result in concurrent_runs) == 1
+        async with AsyncSessionLocal() as session:
+            event = await session.get(NotificationEventModel, first.event_id)
+            assert event is not None
+            assert event.correlation_id == "notification-correlation-1"
+            delivered_audit = (
+                await session.scalars(
+                    select(AuditEventModel).where(
+                        AuditEventModel.action == "notification.in_app.delivered",
+                        AuditEventModel.target_id == first.event_id,
+                    )
+                )
+            ).first()
+            assert delivered_audit is not None
+            assert delivered_audit.correlation_id == "notification-correlation-1"
         assert (
             await repository.list_for_recipient(
                 recipient_user_id=user_b.user.id, limit=50, now=now
@@ -264,6 +280,7 @@ async def test_notification_outbox_retry_dead_letter_replay_and_idempotent_inbox
     try:
         enqueued = await repository.enqueue(
             event_key=event_key,
+            correlation_id="notification-failure-correlation",
             notification_type=NotificationType.SYSTEM,
             organization_id=None,
             payload={"message": "safe"},

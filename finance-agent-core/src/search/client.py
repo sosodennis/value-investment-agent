@@ -3,7 +3,6 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from uuid import uuid4
 
 import httpx
 from pydantic import ValidationError
@@ -16,6 +15,7 @@ from src.search.contracts import (
     WebSearchRequest,
 )
 from src.shared.internal_services import get_request_principal
+from src.shared.kernel.correlation import resolve_correlation_id
 
 
 @dataclass(frozen=True)
@@ -69,7 +69,7 @@ class SearchClient:
             response = await self._async_client.post(
                 f"{self._settings.base_url.rstrip('/')}/v1/search/news",
                 json=payload,
-                headers=self._headers,
+                headers=self._headers_for(correlation_id),
                 timeout=request.timeout_seconds,
             )
         except httpx.TimeoutException as exc:
@@ -90,7 +90,7 @@ class SearchClient:
             response = self._client.post(
                 f"{self._settings.base_url.rstrip('/')}/v1/search/{operation}",
                 json=payload,
-                headers=self._headers,
+                headers=self._headers_for(correlation_id),
                 timeout=request.timeout_seconds,
             )
         except httpx.TimeoutException as exc:
@@ -113,7 +113,7 @@ class SearchClient:
                 "authenticated search principal is required",
                 retryable=False,
             )
-        correlation_id = uuid4().hex
+        correlation_id = resolve_correlation_id()
         context = {
             "principal": principal.model_dump(mode="json"),
             "correlation_id": correlation_id,
@@ -126,6 +126,11 @@ class SearchClient:
             "context": context,
             "input": request.model_dump(mode="json"),
         }
+
+    def _headers_for(self, correlation_id: str) -> dict[str, str]:
+        headers = dict(self._headers)
+        headers["X-Request-ID"] = correlation_id
+        return headers
 
     @staticmethod
     def _decode(

@@ -83,6 +83,7 @@ class NotificationOutboxWorker:
                     extra={
                         "delivery_id": delivery.id,
                         "event_id": delivery.event_id,
+                        "correlation_id": delivery.correlation_id,
                         "attempt": delivery.attempts,
                         "retryable": error.retryable,
                     },
@@ -105,7 +106,11 @@ class NotificationOutboxWorker:
                     retried += 1
                 logger.error(
                     "notification outbox adapter failed",
-                    extra={"delivery_id": delivery.id, "event_id": delivery.event_id},
+                    extra={
+                        "delivery_id": delivery.id,
+                        "event_id": delivery.event_id,
+                        "correlation_id": delivery.correlation_id,
+                    },
                 )
             else:
                 completion_time = current_time if now is not None else datetime.now(UTC)

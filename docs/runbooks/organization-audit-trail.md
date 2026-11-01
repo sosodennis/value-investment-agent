@@ -29,8 +29,20 @@ updates and deletes as a second boundary.
 
 Audit payloads must contain investigation metadata only. Never add provider
 keys, session tokens, CSRF values, invitation action references, passwords, or
-raw request headers. Use a correlation ID to connect an audit event to a
-request or worker trace without copying credentials into the event.
+raw request headers. Every HTTP request receives a bounded `X-Request-ID`
+correlation value at the API boundary; a valid inbound value is echoed in the
+response and reused by all audit events created during that request. Missing or
+oversized values receive a fresh identifier. Notification outbox events persist
+the same correlation value so worker logs and delivery audit events can be
+joined to the originating request. Autonomous work receives a fresh identifier
+at its persistence boundary.
+
+The `notification_events.correlation_id` column is part of the fresh target
+schema. Because this epic uses a clean-cut organization model, reset only
+disposable local or staging databases before applying the target schema; do not
+introduce a compatibility migration, dual read/write path, or legacy backfill.
+Any retained database needs the explicit provider/data disposition tracked by
+#215 before rollout.
 
 Provider key events emitted before the organization-scoped provider slices
 (`#213` and `#214`) are complete identify the verified active organization

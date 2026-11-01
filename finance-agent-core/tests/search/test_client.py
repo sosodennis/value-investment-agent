@@ -19,6 +19,7 @@ from src.shared.internal_services import (
     reset_request_principal,
     set_request_principal,
 )
+from src.shared.kernel.correlation import reset_correlation_id, set_correlation_id
 
 
 def _client(handler: httpx.MockTransport) -> SearchClient:
@@ -42,6 +43,15 @@ def _request_principal(subject_id: str = "test-user") -> Iterator[None]:
         reset_request_principal(token)
 
 
+@contextmanager
+def _correlation_id(value: str = "trace-search") -> Iterator[None]:
+    token = set_correlation_id(value)
+    try:
+        yield
+    finally:
+        reset_correlation_id(token)
+
+
 def test_web_operation_sends_frozen_policy_and_parses_empty_success() -> None:
     requests: list[httpx.Request] = []
 
@@ -57,7 +67,7 @@ def test_web_operation_sends_frozen_policy_and_parses_empty_success() -> None:
             },
         )
 
-    with _request_principal():
+    with _request_principal(), _correlation_id():
         result = _client(httpx.MockTransport(respond)).search_web(
             WebSearchRequest(query="  AAPL stock  ")
         )
@@ -65,7 +75,9 @@ def test_web_operation_sends_frozen_policy_and_parses_empty_success() -> None:
     assert result.results == ()
     assert requests[0].url.path == "/v1/search/web"
     assert requests[0].headers["authorization"] == "Bearer test-token"
+    assert requests[0].headers["x-request-id"] == "trace-search"
     sent = json.loads(requests[0].content)
+    assert sent["context"]["correlation_id"] == "trace-search"
     assert sent["context"]["principal"]["subject_id"] == "test-user"
     assert sent["input"] == {
         "query": "AAPL stock",
@@ -93,11 +105,13 @@ async def test_news_operation_sends_worldwide_week_limit_and_safe_search_off() -
             },
         )
 
-    with _request_principal():
+    with _request_principal(), _correlation_id("trace-news"):
         await _client(httpx.MockTransport(respond)).search_news(
             NewsSearchRequest(query="AAPL earnings", result_limit=4, time_range="week")
         )
+    assert captured[0].headers["x-request-id"] == "trace-news"
     sent = json.loads(captured[0].content)
+    assert sent["context"]["correlation_id"] == "trace-news"
     assert captured[0].url.path == "/v1/search/news"
     assert sent["input"]["region"] == "worldwide"
     assert sent["input"]["safe_search"] is False

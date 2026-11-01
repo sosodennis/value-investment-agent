@@ -9,6 +9,9 @@ writing inbox rows directly.
 ## Data Model
 
 - `notification_events` stores one durable event per opaque `event_key`.
+  Each event also stores the bounded `correlation_id` inherited from the
+  originating request or generated for autonomous work; every delivery and
+  worker audit event reuses it.
 - `notification_inbox_items` stores one recipient delivery per event and
   recipient pair.
 - `notification_outbox` stores one in-app delivery attempt per event and
@@ -30,6 +33,12 @@ writing inbox rows directly.
   invitation tokens, URLs, or query material.
 - Event timestamps are aware UTC values. Public responses always carry a UTC
   offset, and naive timestamps are rejected at the application boundary.
+- The current target schema requires `notification_events.correlation_id` to be
+  non-null. This organization cutover is clean-cut: local and disposable
+  staging databases must be reset and recreated from the target schema before
+  running the migration CLI. Do not add a compatibility ALTER, dual read/write,
+  or legacy backfill for this field; retained data requires the disposition
+  decision owned by #215 before deployment.
 
 The event key, outbox idempotency key, and `(event_id, recipient_user_id)`
 uniqueness constraints make retries and replay idempotent. Reusing an event
