@@ -268,7 +268,7 @@ async def change_member_role(
     body: OrganizationRoleChangeRequest,
     context: AuthenticatedContext = Depends(
         require_organization_permission(
-            OrganizationPermission.MEMBERSHIP_ROLE_CHANGE,
+            OrganizationPermission.MEMBERSHIP_READ,
             resource_factory=_organization_resource,
             context_dependency=require_current_context_mutation,
         )
