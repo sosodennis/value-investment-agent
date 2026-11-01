@@ -18,8 +18,9 @@ in this document.
 | `bash -n scripts/organization_staging_acceptance.sh scripts/refactor_staging_smoke.sh` | exit 0 |
 | `organization_staging_acceptance.sh` with the real CSV | exit 0; `60/60 VERIFIED` |
 | `refactor_staging_smoke.sh` with Bob fixture and `STAGING_BASE_URL=http://127.0.0.1:18580` | exit 0 |
+| `docker compose ... -f docker-compose.production.yml config --quiet` | exit 0; rendered backend/provider/Search tokens and Search encryption key were all non-empty |
 | Browser route acceptance at frontend port `18581` | verified for organization settings, notifications, LLM settings, Search settings, and workspace |
-| Secret redaction scan | pending final scan against final reports and Compose logs |
+| Secret redaction scan | exit 0; passed against four artifacts, `.env.staging.example`, the real CSV values, and Compose logs |
 
 ## Organization acceptance coverage
 
