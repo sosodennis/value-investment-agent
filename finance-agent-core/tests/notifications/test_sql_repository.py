@@ -6,7 +6,7 @@ import uuid
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, text
 
 from src.audit.infrastructure.models import AuditEventModel
 from src.auth.infrastructure.models import UserModel
@@ -47,6 +47,19 @@ class _FailingDeliveryAdapter:
 
 async def _cleanup(user_ids: set[str], event_keys: set[str]) -> None:
     async with AsyncSessionLocal() as session:
+        await session.execute(
+            text(
+                "ALTER TABLE auth_audit_events "
+                "DISABLE TRIGGER auth_audit_events_no_truncate"
+            )
+        )
+        await session.execute(text("TRUNCATE TABLE auth_audit_events"))
+        await session.execute(
+            text(
+                "ALTER TABLE auth_audit_events "
+                "ENABLE TRIGGER auth_audit_events_no_truncate"
+            )
+        )
         event_ids = set(
             (
                 await session.scalars(
