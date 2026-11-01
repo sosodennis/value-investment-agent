@@ -15,6 +15,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from pydantic import TypeAdapter, ValidationError
 from src.shared.internal_services import (
+    INTERNAL_CONTEXT_ISSUER,
     INTERNAL_CONTRACT_VERSION,
     InternalAuthenticationError,
     InternalContextValidationError,
@@ -344,6 +345,9 @@ def create_app(
                 request.headers.get("Authorization"),
                 expected_token=service_token,
                 raw_context=raw_context,
+                expected_audience="model-inference-service",
+                expected_issuer=INTERNAL_CONTEXT_ISSUER,
+                organization_header=request.headers.get("X-Organization-ID"),
             )
         except InternalAuthenticationError as exc:
             raise unauthenticated() from exc

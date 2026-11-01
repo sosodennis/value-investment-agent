@@ -9,6 +9,7 @@ from typing import cast
 
 import httpx
 import pytest
+from src.shared.internal_services import InternalPrincipal, build_internal_context
 
 from model_inference_service.app import create_app
 from model_inference_service.models import ModelStatus
@@ -78,14 +79,20 @@ def _client(app: object) -> httpx.AsyncClient:
 def _context(
     correlation_id: str, *, deadline_seconds: float = 5.0
 ) -> dict[str, object]:
-    return {
-        "principal": {"subject_id": "user-123"},
-        "correlation_id": correlation_id,
-        "contract_version": "internal.v1",
-        "deadline_at": (
-            datetime.now(UTC) + timedelta(seconds=deadline_seconds)
-        ).isoformat(),
-    }
+    return build_internal_context(
+        principal=InternalPrincipal(
+            subject_id="user-123",
+            organization_id="organization-123",
+            membership_id="membership-123",
+        ),
+        correlation_id=correlation_id,
+        deadline_at=(
+            deadline := datetime.now(UTC) + timedelta(seconds=deadline_seconds)
+        ),
+        audience="model-inference-service",
+        signing_key="secret",
+        issued_at=deadline - timedelta(seconds=5),
+    ).model_dump(mode="json")
 
 
 def _inference_body(

@@ -53,6 +53,7 @@ from src.llm_provider_service.domain.errors import ProviderSettingsError
 from src.llm_provider_service.domain.provider_models import ManagedProviderKey
 from src.llm_provider_service.domain.routes import DEFAULT_MODEL_ALIAS
 from src.shared.internal_services import (
+    INTERNAL_CONTEXT_ISSUER,
     INTERNAL_CONTRACT_VERSION,
     InternalAuthenticationError,
     InternalContextValidationError,
@@ -91,6 +92,9 @@ async def _authorized_body(
         request.headers.get("Authorization"),
         expected_token=_token(),
         raw_context=raw_context if isinstance(raw_context, dict) else {},
+        expected_audience="llm-provider-service",
+        expected_issuer=INTERNAL_CONTEXT_ISSUER,
+        organization_header=request.headers.get("X-Organization-ID"),
     )
     if _remaining(context.deadline_at) <= 0:
         raise TimeoutError("request deadline expired")
@@ -272,7 +276,11 @@ def _bind_principal(
     context: InternalRequestContext,
 ) -> Token[ProviderPrincipal | None]:
     return set_provider_principal(
-        ProviderPrincipal(user_id=context.principal.subject_id)
+        ProviderPrincipal(
+            user_id=context.principal.subject_id,
+            organization_id=context.principal.organization_id or "unscoped",
+            membership_id=context.principal.membership_id or "unscoped",
+        )
     )
 
 

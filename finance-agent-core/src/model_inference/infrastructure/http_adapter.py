@@ -20,7 +20,7 @@ from src.model_inference.infrastructure.settings import ModelInferenceSettings
 from src.shared.internal_services import (
     INTERNAL_CONTRACT_VERSION,
     InternalPrincipal,
-    InternalRequestContext,
+    build_internal_context,
 )
 
 _OPERATION_STATUS: dict[InferenceErrorCode, int] = {
@@ -229,11 +229,16 @@ class HttpInferenceAdapter:
                 retryable=False,
                 message="unsupported model inference input",
             )
-        context = InternalRequestContext(
-            principal=InternalPrincipal(subject_id=request.principal_subject_id),
+        context = build_internal_context(
+            principal=InternalPrincipal(
+                subject_id=request.principal_subject_id,
+                organization_id=request.principal_organization_id,
+                membership_id=request.principal_membership_id,
+            ),
             correlation_id=request.request_id,
-            contract_version=INTERNAL_CONTRACT_VERSION,
             deadline_at=request.deadline_at,
+            audience="model-inference-service",
+            signing_key=self._settings.token,
         )
         return {
             "context": context.model_dump(mode="json"),

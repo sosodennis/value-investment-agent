@@ -38,6 +38,10 @@ from src.llm_provider.entrypoint import (
     reset_provider_principal,
     set_provider_principal,
 )
+from src.model_inference.entrypoint import (
+    reset_inference_principal,
+    set_inference_principal,
+)
 from src.shared.internal_services import (
     InternalPrincipal,
     reset_request_principal,
@@ -255,6 +259,8 @@ class LangGraphRunner(GraphRunner):
         run_id: str,
         input_data: Mapping[str, object],
         principal_id: str,
+        organization_id: str = "unscoped",
+        membership_id: str = "unscoped",
     ) -> AsyncIterator[Activity | InteractionRequested | WorkflowAgentOutput]:
         message = input_data.get("message")
         interrupt_response = input_data.get("interrupt_response")
@@ -303,6 +309,8 @@ class LangGraphRunner(GraphRunner):
             thread_id=thread_id,
             run_id=run_id,
             principal_id=principal_id,
+            organization_id=organization_id,
+            membership_id=membership_id,
             checkpoint=checkpoint,
             source_run_id=source_run_id,
         )
@@ -490,6 +498,8 @@ class LangGraphRunner(GraphRunner):
         thread_id: str,
         run_id: str,
         principal_id: str,
+        organization_id: str,
+        membership_id: str,
         checkpoint: CheckpointIdentity | None,
         source_run_id: str | None,
     ) -> AsyncGenerator[Mapping[str, object], None]:
@@ -514,14 +524,32 @@ class LangGraphRunner(GraphRunner):
                         run_id=run_id,
                         source_run_id=source_run_id,
                         checkpoint=checkpoint,
+                        principal_id=principal_id,
+                        organization_id=organization_id,
+                        membership_id=membership_id,
                     )
                 )
                 provider_token = set_provider_principal(
-                    ProviderPrincipal(user_id=principal_id)
+                    ProviderPrincipal(
+                        user_id=principal_id,
+                        organization_id=organization_id,
+                        membership_id=membership_id,
+                    )
+                )
+                inference_token = set_inference_principal(
+                    InternalPrincipal(
+                        subject_id=principal_id,
+                        organization_id=organization_id,
+                        membership_id=membership_id,
+                    )
                 )
                 try:
                     request_token = set_request_principal(
-                        InternalPrincipal(subject_id=principal_id)
+                        InternalPrincipal(
+                            subject_id=principal_id,
+                            organization_id=organization_id,
+                            membership_id=membership_id,
+                        )
                     )
                     try:
                         try:
@@ -531,6 +559,7 @@ class LangGraphRunner(GraphRunner):
                     finally:
                         reset_request_principal(request_token)
                 finally:
+                    reset_inference_principal(inference_token)
                     reset_provider_principal(provider_token)
                     reset_workflow_execution_context(context_token)
                 yield raw

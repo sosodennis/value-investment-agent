@@ -187,12 +187,16 @@ async def test_activities_route_loads_an_exact_historical_run_after_rerun() -> N
         principal_id="user-1",
         thread_id="thread-1",
         input_data={"message": "AAPL"},
+        organization_id="organization-1",
+        membership_id="membership-1",
     )
     await service._tasks["thread-1"]
     second_run = await service.start(
         principal_id="user-1",
         thread_id="thread-1",
         input_data={"message": "MSFT"},
+        organization_id="organization-1",
+        membership_id="membership-1",
     )
     await service._tasks["thread-1"]
 
@@ -212,6 +216,36 @@ async def test_activities_route_loads_an_exact_historical_run_after_rerun() -> N
 
 
 @pytest.mark.asyncio
+async def test_runtime_rejects_a_forged_organization_header() -> None:
+    app = FastAPI()
+    app.include_router(router)
+    principal = Principal(
+        user_id="user-1",
+        subject="user-1",
+        email="user@example.test",
+        organization_id="organization-1",
+        membership_id="membership-1",
+    )
+    app.dependency_overrides[require_current_user_mutation] = lambda: principal
+    service = AnalysisRuntimeService(
+        repository=InMemoryActivityRepository(), owner=Owner(), runner=Runner()
+    )
+    app.state.analysis_runtime = service
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://testserver"
+    ) as client:
+        response = await client.post(
+            "/api/v1/threads/thread-1/runs",
+            headers={"X-Organization-ID": "organization-attacker"},
+            json={"message": "AAPL"},
+        )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "organization_context_mismatch"
+
+
+@pytest.mark.asyncio
 async def test_event_route_streams_replayed_workflow_events_without_transform_headers() -> (
     None
 ):
@@ -224,6 +258,8 @@ async def test_event_route_streams_replayed_workflow_events_without_transform_he
         principal_id="user-1",
         thread_id="thread-1",
         input_data={"message": "AAPL"},
+        organization_id="organization-1",
+        membership_id="membership-1",
     )
     await service._tasks["thread-1"]
 

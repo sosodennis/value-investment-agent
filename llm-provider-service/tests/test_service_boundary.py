@@ -20,6 +20,7 @@ from src.llm_provider_service.domain.contracts import (
 )
 from src.llm_provider_service.domain.errors import ProviderSettingsError
 from src.llm_provider_service.domain.routes import DEFAULT_MODEL_ALIAS
+from src.shared.internal_services import InternalPrincipal, build_internal_context
 
 
 class _Provider:
@@ -140,14 +141,19 @@ def client(monkeypatch):
 def _context(
     *, user_id: str = "alice", deadline: datetime | None = None
 ) -> dict[str, object]:
-    return {
-        "principal": {"subject_id": user_id},
-        "correlation_id": "correlation-120",
-        "contract_version": "internal.v1",
-        "deadline_at": (deadline or datetime.now(UTC) + timedelta(seconds=10))
-        .isoformat()
-        .replace("+00:00", "Z"),
-    }
+    resolved_deadline = deadline or datetime.now(UTC) + timedelta(seconds=10)
+    return build_internal_context(
+        principal=InternalPrincipal(
+            subject_id=user_id,
+            organization_id="organization-120",
+            membership_id="membership-120",
+        ),
+        correlation_id="correlation-120",
+        deadline_at=resolved_deadline,
+        audience="llm-provider-service",
+        signing_key="service-secret",
+        issued_at=resolved_deadline - timedelta(seconds=5),
+    ).model_dump(mode="json")
 
 
 def _completion_input(**updates: object) -> dict[str, object]:

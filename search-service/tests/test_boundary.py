@@ -115,11 +115,13 @@ async def test_control_plane_errors_are_bounded_and_redacted(
     route: str, operation_input: dict[str, object], outcome: str
 ) -> None:
     control = UnavailableControlPlane(outcome)
-    request_context = context()
-    if outcome == "deadline":
-        request_context["deadline_at"] = (
+    request_context = context(
+        deadline=(
             datetime.now(UTC) + timedelta(milliseconds=25)
-        ).isoformat()
+            if outcome == "deadline"
+            else None
+        )
+    )
     async with client_for(control, {"alpha": provider()}) as client:
         response = await client.post(
             route,
@@ -502,9 +504,8 @@ async def test_every_operation_rejects_invalid_envelopes_and_expired_deadlines(
     elif invalid == "non-object-input":
         body["input"] = []
     else:
-        request_context["deadline_at"] = (
-            datetime.now(UTC) - timedelta(seconds=1)
-        ).isoformat()
+        request_context = context(deadline=datetime.now(UTC) - timedelta(seconds=1))
+        body["context"] = request_context
     async with client_for(FakeControlPlane(), {"alpha": provider()}) as client:
         response = await client.post(route, headers=HEADERS, json=body)
     assert response.status_code == (504 if invalid == "expired" else 400)

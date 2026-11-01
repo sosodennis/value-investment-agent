@@ -207,19 +207,29 @@ class InMemoryActivityRepository:
             return self._runs.get(thread_id)
 
     async def get_run_history(
-        self, *, principal_id: str, thread_id: str, run_id: str
+        self,
+        *,
+        principal_id: str,
+        organization_id: str = "unscoped",
+        thread_id: str,
+        run_id: str,
     ) -> AnalysisRunRecord | None:
         async with self._lock:
             key = (thread_id, run_id)
             record = self._run_history.get(key)
             return (
-                record if record and self._run_owners.get(key) == principal_id else None
+                record
+                if record
+                and self._run_owners.get(key) == principal_id
+                and record.organization_id == organization_id
+                else None
             )
 
     async def list_run_history(
         self,
         *,
         principal_id: str,
+        organization_id: str = "unscoped",
         limit: int,
         before_started_at: datetime | None = None,
         before_thread_id: str | None = None,
@@ -239,6 +249,7 @@ class InMemoryActivityRepository:
                     for record in self._run_history.values()
                     if self._run_owners.get((record.thread_id, record.run_id))
                     == principal_id
+                    and record.organization_id == organization_id
                 ),
                 key=lambda record: (
                     record.started_at is not None,
@@ -288,16 +299,27 @@ class InMemoryActivityRepository:
         status: RunStatus,
         now: datetime,
         principal_id: str | None = None,
+        organization_id: str | None = None,
+        membership_id: str | None = None,
         input_data: Mapping[str, object] | None = None,
     ) -> RunStatusRecord:
         async with self._lock:
             previous = self._runs.get(thread_id)
+            if (
+                previous is not None
+                and organization_id is not None
+                and previous.organization_id != organization_id
+            ):
+                raise ActivityPersistenceError("run organization cannot change")
             started_at = (
                 previous.started_at if previous and previous.run_id == run_id else now
             )
             record = RunStatusRecord(
                 thread_id=thread_id,
                 run_id=run_id,
+                principal_id=principal_id or "unscoped",
+                organization_id=organization_id or "unscoped",
+                membership_id=membership_id or "unscoped",
                 status=status,
                 started_at=started_at,
                 updated_at=now,
@@ -314,6 +336,9 @@ class InMemoryActivityRepository:
                 self._run_history[(thread_id, run_id)] = AnalysisRunRecord(
                     thread_id=thread_id,
                     run_id=run_id,
+                    principal_id=principal_id,
+                    organization_id=organization_id or "unscoped",
+                    membership_id=membership_id or "unscoped",
                     status=status,
                     started_at=previous_history.started_at
                     if previous_history
@@ -346,6 +371,8 @@ class InMemoryActivityRepository:
         requested: InteractionRequested,
         principal_id: str,
         now: datetime,
+        organization_id: str = "unscoped",
+        membership_id: str = "unscoped",
     ) -> tuple[WorkflowEvent, ...]:
         async with self._lock:
             identity = requested.identity
@@ -355,6 +382,7 @@ class InMemoryActivityRepository:
                 run is None
                 or run.run_id != identity.run_id
                 or self._run_owners.get(run_key) != principal_id
+                or run.organization_id != organization_id
             ):
                 raise InteractionNotAvailableError("run owner cannot change")
             if run.status not in {"running", "queued"}:
@@ -390,6 +418,8 @@ class InMemoryActivityRepository:
         response: InteractionResponse,
         principal_id: str,
         now: datetime,
+        organization_id: str = "unscoped",
+        membership_id: str = "unscoped",
     ) -> ClaimedInteractionResume:
         async with self._lock:
             run = self._runs.get(identity.thread_id)
@@ -399,6 +429,7 @@ class InMemoryActivityRepository:
                 or run.run_id != identity.run_id
                 or run.status != "waiting"
                 or self._run_owners.get(run_key) != principal_id
+                or run.organization_id != organization_id
             ):
                 raise InteractionNotAvailableError("run cannot accept this interaction")
             interaction = next(
@@ -462,12 +493,16 @@ class InMemoryActivityRepository:
             self._pending_resumes[identity.thread_id] = PendingResume(
                 identity=identity,
                 principal_id=principal_id,
+                organization_id=run.organization_id,
+                membership_id=run.membership_id,
                 response=response,
                 scope_path=activity.scope_path,
                 attempt=resumed_activity.attempt,
             )
             return ClaimedInteractionResume(
                 identity=identity,
+                organization_id=run.organization_id,
+                membership_id=run.membership_id,
                 response=response,
                 scope_path=activity.scope_path,
                 attempt=resumed_activity.attempt,
@@ -481,6 +516,7 @@ class InMemoryActivityRepository:
         run_id: str,
         principal_id: str,
         now: datetime,
+        organization_id: str = "unscoped",
     ) -> tuple[WorkflowEvent, ...]:
         async with self._lock:
             run = self._runs.get(thread_id)
@@ -488,6 +524,7 @@ class InMemoryActivityRepository:
                 run is None
                 or run.run_id != run_id
                 or self._run_owners.get((thread_id, run_id)) != principal_id
+                or run.organization_id != organization_id
             ):
                 raise InteractionNotAvailableError("run was not found")
             if run.status not in {"queued", "running", "waiting"}:
@@ -548,12 +585,17 @@ class InMemoryActivityRepository:
         idempotency_key: str,
         request_hash: str,
         now: datetime,
+        organization_id: str = "unscoped",
+        membership_id: str = "unscoped",
     ) -> tuple[RetryOperation, bool]:
         async with self._lock:
             existing_id = self._retry_by_key.get((principal_id, idempotency_key))
             if existing_id is not None:
                 existing = self._retry_operations[existing_id]
-                if existing.request_hash != request_hash:
+                if (
+                    existing.request_hash != request_hash
+                    or existing.organization_id != organization_id
+                ):
                     raise RetryIdempotencyConflictError(
                         "idempotency key was already used for another retry command"
                     )
@@ -562,6 +604,7 @@ class InMemoryActivityRepository:
             if (
                 source is None
                 or self._run_owners.get((thread_id, source_run_id)) != principal_id
+                or source.organization_id != organization_id
             ):
                 raise RetryNotAvailableError("source run was not found")
             if source.status != "failed":
@@ -590,6 +633,8 @@ class InMemoryActivityRepository:
                 source_run_id=source_run_id,
                 target_run_id=target_run_id,
                 principal_id=principal_id,
+                organization_id=organization_id,
+                membership_id=membership_id,
                 idempotency_key=idempotency_key,
                 request_hash=request_hash,
                 checkpoint=checkpoint,
@@ -603,6 +648,9 @@ class InMemoryActivityRepository:
             self._runs[thread_id] = RunStatusRecord(
                 thread_id=thread_id,
                 run_id=target_run_id,
+                principal_id=principal_id,
+                organization_id=organization_id,
+                membership_id=membership_id,
                 status="queued",
                 started_at=now,
                 updated_at=now,
@@ -612,6 +660,9 @@ class InMemoryActivityRepository:
                 thread_id=thread_id,
                 run_id=target_run_id,
                 status="queued",
+                principal_id=principal_id,
+                organization_id=organization_id,
+                membership_id=membership_id,
                 started_at=now,
                 updated_at=now,
                 input_data={

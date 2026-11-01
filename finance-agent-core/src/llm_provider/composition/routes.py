@@ -189,7 +189,11 @@ async def list_provider_keys(
     try:
         keys = [
             _key_response(key)
-            for key in await service.list_keys(user_id=principal.user_id)
+            for key in await service.list_keys(
+                user_id=principal.user_id,
+                organization_id=principal.organization_id,
+                membership_id=principal.membership_id,
+            )
         ]
         await record_best_effort(
             organization_id=principal.organization_id,
@@ -219,6 +223,8 @@ async def submit_provider_key(
     try:
         result = await service.create_key_import(
             user_id=principal.user_id,
+            organization_id=principal.organization_id,
+            membership_id=principal.membership_id,
             idempotency_key=resolved_idempotency_key,
             items=[
                 {
@@ -304,6 +310,8 @@ async def create_provider_key_import(
     try:
         result = await service.create_key_import(
             user_id=principal.user_id,
+            organization_id=principal.organization_id,
+            membership_id=principal.membership_id,
             idempotency_key=resolved_idempotency_key,
             items=[
                 {
@@ -336,7 +344,11 @@ async def list_provider_key_imports(
     service: LLMProviderServiceSettingsClient = Depends(get_provider_settings_service),
 ) -> list[ProviderKeyImportBatchResponse]:
     try:
-        return await service.list_key_imports(user_id=principal.user_id)
+        return await service.list_key_imports(
+            user_id=principal.user_id,
+            organization_id=principal.organization_id,
+            membership_id=principal.membership_id,
+        )
     except ProviderSettingsError as exc:
         _raise_http_error(exc)
 
@@ -351,7 +363,10 @@ async def get_provider_key_import(
 ) -> ProviderKeyImportBatchResponse:
     try:
         return await service.get_key_import(
-            user_id=principal.user_id, batch_id=batch_id
+            user_id=principal.user_id,
+            batch_id=batch_id,
+            organization_id=principal.organization_id,
+            membership_id=principal.membership_id,
         )
     except ProviderSettingsError as exc:
         _raise_http_error(exc)
@@ -367,7 +382,10 @@ async def retry_provider_key_import(
 ) -> ProviderKeyImportBatchResponse:
     try:
         result = await service.retry_key_import(
-            user_id=principal.user_id, batch_id=batch_id
+            user_id=principal.user_id,
+            batch_id=batch_id,
+            organization_id=principal.organization_id,
+            membership_id=principal.membership_id,
         )
         await record_best_effort(
             organization_id=principal.organization_id,
@@ -397,6 +415,8 @@ async def replace_provider_key(
             key_id=key_id,
             key=request.api_key.get_secret_value(),
             label=request.label,
+            organization_id=principal.organization_id,
+            membership_id=principal.membership_id,
         )
         await record_best_effort(
             organization_id=principal.organization_id,
@@ -418,7 +438,12 @@ async def test_provider_key(
     service: LLMProviderServiceSettingsClient = Depends(get_provider_settings_service),
 ) -> ProviderKeyTestResponse:
     try:
-        passed = await service.test_key(user_id=principal.user_id, key_id=key_id)
+        passed = await service.test_key(
+            user_id=principal.user_id,
+            key_id=key_id,
+            organization_id=principal.organization_id,
+            membership_id=principal.membership_id,
+        )
         await record_best_effort(
             organization_id=principal.organization_id,
             actor_user_id=principal.user_id,
@@ -448,7 +473,12 @@ async def delete_provider_key(
     service: LLMProviderServiceSettingsClient = Depends(get_provider_settings_service),
 ) -> None:
     try:
-        await service.delete_key(user_id=principal.user_id, key_id=key_id)
+        await service.delete_key(
+            user_id=principal.user_id,
+            key_id=key_id,
+            organization_id=principal.organization_id,
+            membership_id=principal.membership_id,
+        )
         await record_best_effort(
             organization_id=principal.organization_id,
             actor_user_id=principal.user_id,
@@ -468,7 +498,9 @@ async def read_llm_settings(
 ) -> LlmSettingsResponse:
     try:
         selected, models = await service.selected_model_settings(
-            user_id=_principal.subject
+            user_id=_principal.subject,
+            organization_id=_principal.organization_id,
+            membership_id=_principal.membership_id,
         )
     except ProviderSettingsError as exc:
         _raise_http_error(exc)
@@ -495,7 +527,10 @@ async def update_llm_settings(
 ) -> LlmSettingsResponse:
     try:
         await service.update_selected_model(
-            model_id=request.selected_model, user_id=principal.user_id
+            model_id=request.selected_model,
+            user_id=principal.user_id,
+            organization_id=principal.organization_id,
+            membership_id=principal.membership_id,
         )
         await record_best_effort(
             organization_id=principal.organization_id,

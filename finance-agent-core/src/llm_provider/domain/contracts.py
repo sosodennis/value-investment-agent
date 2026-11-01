@@ -63,6 +63,8 @@ class ProviderPrincipal(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     user_id: str = Field(min_length=1)
+    organization_id: str = Field(default="unscoped", min_length=1, max_length=128)
+    membership_id: str = Field(default="unscoped", min_length=1, max_length=128)
 
 
 class LLMAttribution(BaseModel):
