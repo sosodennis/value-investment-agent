@@ -39,6 +39,7 @@ from src.llm_provider.entrypoint import (
     provider_keys_router,
 )
 from src.model_inference.entrypoint import close_model_inference
+from src.notifications.entrypoint import notifications_router
 from src.observability.routes import router as observability_router
 from src.search_settings import search_settings_router
 from src.search_settings.composition.routes import close_search_service
@@ -122,6 +123,7 @@ app.include_router(analysis_runtime_router)
 app.include_router(dashboard_router)
 app.include_router(observability_router)
 app.include_router(artifact_router)
+app.include_router(notifications_router)
 
 
 def _openapi() -> dict[str, object]:
