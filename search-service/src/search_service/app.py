@@ -502,13 +502,15 @@ def create_app(
                             True,
                         )
                     candidate: _CredentialView | None = None
-                    claimed = await _claim_credential(
-                        control_plane,
-                        organization_id=context.principal.organization_id,
-                        provider=provider_name,
-                        deadline_at=operation_deadline,
-                    )
-                    if claimed is not None:
+                    if provider.capabilities.key_required:
+                        claimed = await _claim_credential(
+                            control_plane,
+                            organization_id=context.principal.organization_id,
+                            provider=provider_name,
+                            deadline_at=operation_deadline,
+                        )
+                        if claimed is None:
+                            break
                         candidate = _credential_view(claimed)
                         if not _eligible_credential(candidate, now=datetime.now(UTC)):
                             continue

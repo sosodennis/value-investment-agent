@@ -71,8 +71,15 @@ class FakeControlPlane:
     async def claim_credential(
         self, *, organization_id: str, provider: str, lease_seconds: int = 30
     ):
-        _ = (organization_id, provider, lease_seconds)
-        return None
+        _ = (organization_id, lease_seconds)
+        return next(
+            (
+                credential
+                for credential in self.credentials
+                if credential.provider == provider
+            ),
+            None,
+        )
 
     async def release_credential(
         self, *, organization_id: str, key_id: str, succeeded: bool = False

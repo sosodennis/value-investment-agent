@@ -99,6 +99,14 @@ class Pool:
         self.provider_failures.append(provider)
 
 
+class LeaseBusyPool(Pool):
+    async def claim_credential(
+        self, *, organization_id: str, provider: str, lease_seconds: int = 30
+    ) -> Credential | None:
+        _ = (organization_id, provider, lease_seconds)
+        return None
+
+
 class ScriptedProvider:
     def __init__(
         self,
@@ -144,6 +152,28 @@ def _client(pool: Pool, providers: dict[str, ScriptedProvider]) -> httpx.AsyncCl
     return httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app), base_url="http://runtime.test"
     )
+
+
+@pytest.mark.asyncio
+async def test_does_not_use_snapshot_credential_when_lease_claim_is_unavailable() -> (
+    None
+):
+    provider = ScriptedProvider("primary", {"primary-key": _result("primary")})
+    pool = LeaseBusyPool(
+        [Credential("primary-id", "primary", "primary-key", priority=0)]
+    )
+    client = _client(pool, {"primary": provider})
+    try:
+        response = await client.post(
+            "/v1/search/web",
+            headers={"Authorization": "Bearer runtime-service-token"},
+            json={"context": _context(), "input": {"query": "earnings"}},
+        )
+    finally:
+        await client.aclose()
+    assert response.status_code == 503
+    assert response.json()["error"]["code"] == "UPSTREAM_UNAVAILABLE"
+    assert provider.calls == []
 
 
 @pytest.mark.asyncio

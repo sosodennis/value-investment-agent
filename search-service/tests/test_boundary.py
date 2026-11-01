@@ -424,6 +424,14 @@ class OwnedControlPlane(FakeControlPlane):
     async def credentials_for(self, *, organization_id: str) -> tuple[Credential, ...]:
         return (Credential("alpha", f"{organization_id}-secret"),)
 
+    async def claim_credential(
+        self, *, organization_id: str, provider: str, lease_seconds: int = 30
+    ) -> Credential | None:
+        _ = lease_seconds
+        if provider != "alpha":
+            return None
+        return Credential("alpha", f"{organization_id}-secret")
+
 
 @pytest.mark.asyncio
 async def test_delete_is_owner_scoped_and_idempotent() -> None:
