@@ -4,6 +4,7 @@ import logging
 import os
 from collections.abc import Collection
 from datetime import UTC, datetime, timedelta
+from hashlib import sha256
 from uuid import UUID
 
 from redis.asyncio import Redis
@@ -41,12 +42,13 @@ def _cooldown_expired(value: str | None, now: datetime) -> bool:
     return parsed <= now
 
 
-def _redis_key(key_id: str) -> str | None:
+def _redis_key(organization_id: str, key_id: str) -> str | None:
     try:
         normalized = str(UUID(key_id))
     except (ValueError, AttributeError):
         return None
-    return f"{_KEY_PREFIX}{normalized}"
+    organization_hash = sha256(organization_id.encode("utf-8")).hexdigest()[:32]
+    return f"{_KEY_PREFIX}{organization_hash}:{normalized}"
 
 
 class RedisProviderKeyTelemetry:
@@ -63,8 +65,10 @@ class RedisProviderKeyTelemetry:
     async def ping(self) -> bool:
         return bool(await self._client.ping())
 
-    async def get_many(self, key_ids: Collection[str]) -> dict[str, ProviderKeyHealth]:
-        keys = [(key_id, _redis_key(key_id)) for key_id in key_ids]
+    async def get_many(
+        self, key_ids: Collection[str], *, organization_id: str
+    ) -> dict[str, ProviderKeyHealth]:
+        keys = [(key_id, _redis_key(organization_id, key_id)) for key_id in key_ids]
         valid = [(key_id, key) for key_id, key in keys if key is not None]
         if not valid:
             return {}
@@ -113,10 +117,10 @@ class RedisProviderKeyTelemetry:
         return health
 
     async def get_many_strict(
-        self, key_ids: Collection[str]
+        self, key_ids: Collection[str], *, organization_id: str
     ) -> dict[str, ProviderKeyHealth]:
         """Read runtime health and propagate Redis failures to data-plane callers."""
-        keys = [(key_id, _redis_key(key_id)) for key_id in key_ids]
+        keys = [(key_id, _redis_key(organization_id, key_id)) for key_id in key_ids]
         valid = [(key_id, key) for key_id, key in keys if key is not None]
         if not valid:
             return {}
@@ -148,8 +152,10 @@ class RedisProviderKeyTelemetry:
             )
         return health
 
-    async def record_use(self, key_id: str, *, at: datetime | None = None) -> int:
-        key = _redis_key(key_id)
+    async def record_use(
+        self, key_id: str, *, organization_id: str, at: datetime | None = None
+    ) -> int:
+        key = _redis_key(organization_id, key_id)
         if key is None:
             return 0
         timestamp = (at or datetime.now(UTC)).isoformat()
@@ -168,10 +174,11 @@ class RedisProviderKeyTelemetry:
         self,
         key_id: str,
         *,
+        organization_id: str,
         expected_version: int | None,
         at: datetime | None = None,
     ) -> bool:
-        key = _redis_key(key_id)
+        key = _redis_key(organization_id, key_id)
         if key is None or expected_version is None:
             return False
         timestamp = (at or datetime.now(UTC)).isoformat()
@@ -201,10 +208,11 @@ class RedisProviderKeyTelemetry:
         key_id: str,
         failure: UpstreamFailure,
         *,
+        organization_id: str,
         cooldown_seconds: float,
         at: datetime | None = None,
     ) -> None:
-        key = _redis_key(key_id)
+        key = _redis_key(organization_id, key_id)
         if key is None:
             return
         now = at or datetime.now(UTC)
@@ -256,8 +264,8 @@ class RedisProviderKeyTelemetry:
             str(90 * 24 * 60 * 60),
         )
 
-    async def delete(self, key_id: str) -> None:
-        key = _redis_key(key_id)
+    async def delete(self, key_id: str, *, organization_id: str) -> None:
+        key = _redis_key(organization_id, key_id)
         if key is None:
             return
         try:

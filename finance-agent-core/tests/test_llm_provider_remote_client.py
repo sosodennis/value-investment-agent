@@ -117,7 +117,13 @@ def test_structured_remote_call_forwards_schema_and_does_not_retry() -> None:
     )
     client._client.close()
     client._client = httpx.Client(transport=httpx.MockTransport(handler), timeout=None)
-    token = set_provider_principal(ProviderPrincipal(user_id="alice"))
+    token = set_provider_principal(
+        ProviderPrincipal(
+            user_id="alice",
+            organization_id="organization-a",
+            membership_id="membership-a",
+        )
+    )
     try:
         result = client.complete_structured(
             StructuredRequest(completion=_request(), response_schema=_Answer)
@@ -152,7 +158,13 @@ def test_provider_429_honors_bounded_retry_after(
         ),
         timeout=None,
     )
-    token = set_provider_principal(ProviderPrincipal(user_id="alice"))
+    token = set_provider_principal(
+        ProviderPrincipal(
+            user_id="alice",
+            organization_id="organization-a",
+            membership_id="membership-a",
+        )
+    )
     try:
         with pytest.raises(LLMProviderError) as caught:
             client.complete(_request())
@@ -168,7 +180,13 @@ def test_provider_429_honors_bounded_retry_after(
 
 def test_sync_provider_calls_map_transport_errors_without_leaking_details() -> None:
     client = _sync_client(httpx.ConnectError)
-    token = set_provider_principal(ProviderPrincipal(user_id="alice"))
+    token = set_provider_principal(
+        ProviderPrincipal(
+            user_id="alice",
+            organization_id="organization-a",
+            membership_id="membership-a",
+        )
+    )
     try:
         calls: tuple[Callable[[], object], ...] = (
             lambda: client.complete(_request(content=_PRIVATE_VALUES[-1])),
@@ -198,7 +216,13 @@ def test_sync_provider_calls_map_transport_errors_without_leaking_details() -> N
 @pytest.mark.asyncio
 async def test_async_provider_calls_map_timeouts_without_leaking_details() -> None:
     client = await _async_client(httpx.ReadTimeout)
-    token = set_provider_principal(ProviderPrincipal(user_id="alice"))
+    token = set_provider_principal(
+        ProviderPrincipal(
+            user_id="alice",
+            organization_id="organization-a",
+            membership_id="membership-a",
+        )
+    )
 
     async def consume_stream() -> None:
         async for _event in client.astream(_request(content=_PRIVATE_VALUES[-1])):
@@ -270,6 +294,8 @@ async def test_settings_client_preserves_only_status_matched_known_error_codes(
                 key_id="managed-a",
                 key="replacement-key",
                 label="primary",
+                organization_id="organization-a",
+                membership_id="membership-a",
             )
     finally:
         await client.aclose()
@@ -296,7 +322,13 @@ async def test_async_cancellation_propagates_without_transport_error_mapping() -
     await client._async_client.aclose()
     transport = _BlockingTransport()
     client._async_client = httpx.AsyncClient(transport=transport, timeout=None)
-    token = set_provider_principal(ProviderPrincipal(user_id="alice"))
+    token = set_provider_principal(
+        ProviderPrincipal(
+            user_id="alice",
+            organization_id="organization-a",
+            membership_id="membership-a",
+        )
+    )
     task = asyncio.create_task(client.acomplete(_request()))
     try:
         await asyncio.wait_for(transport.started.wait(), timeout=1)
@@ -318,7 +350,13 @@ async def test_settings_cancellation_propagates_without_transport_error_mapping(
     await client._client.aclose()
     transport = _BlockingTransport()
     client._client = httpx.AsyncClient(transport=transport, timeout=None)
-    task = asyncio.create_task(client.list_keys(user_id="alice"))
+    task = asyncio.create_task(
+        client.list_keys(
+            user_id="alice",
+            organization_id="organization-a",
+            membership_id="membership-a",
+        )
+    )
     try:
         await asyncio.wait_for(transport.started.wait(), timeout=1)
         task.cancel()

@@ -1,3 +1,5 @@
+"""Provider route identifiers shared by control and data planes."""
+
 from __future__ import annotations
 
 from hashlib import sha256
@@ -10,15 +12,19 @@ from .contracts import (
 )
 
 DEFAULT_MODEL_ALIAS = "openrouter-default"
-USER_ROUTE_PREFIX = "openrouter-user-"
+ORGANIZATION_ROUTE_PREFIX = "openrouter-org-"
 
 
-def user_route_alias(user_id: str) -> str:
-    digest = sha256(user_id.encode("utf-8")).hexdigest()[:20]
-    return f"{USER_ROUTE_PREFIX}{digest}"
+def organization_route_alias(organization_id: str) -> str:
+    """Return a stable opaque LiteLLM alias for one organization pool."""
+
+    digest = sha256(organization_id.encode("utf-8")).hexdigest()[:20]
+    return f"{ORGANIZATION_ROUTE_PREFIX}{digest}"
 
 
-class UserScopedRouteResolver(LLMRouteResolver):
+class OrganizationScopedRouteResolver(LLMRouteResolver):
+    """Resolve the only logical route into an organization-owned gateway pool."""
+
     def resolve(
         self,
         *,
@@ -27,20 +33,17 @@ class UserScopedRouteResolver(LLMRouteResolver):
     ) -> ResolvedModelRoute:
         if route.alias != DEFAULT_MODEL_ALIAS:
             raise ValueError("unsupported provider route")
-        if principal is None:
-            return ResolvedModelRoute(
-                logical_alias=route.alias,
-                gateway_alias=route.alias,
-            )
+        if principal is None or principal.organization_id == "unscoped":
+            raise ValueError("organization provider context is required")
         return ResolvedModelRoute(
             logical_alias=route.alias,
-            gateway_alias=user_route_alias(principal.user_id),
+            gateway_alias=organization_route_alias(principal.organization_id),
         )
 
 
 __all__ = [
     "DEFAULT_MODEL_ALIAS",
-    "USER_ROUTE_PREFIX",
-    "UserScopedRouteResolver",
-    "user_route_alias",
+    "ORGANIZATION_ROUTE_PREFIX",
+    "OrganizationScopedRouteResolver",
+    "organization_route_alias",
 ]

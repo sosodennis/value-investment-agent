@@ -80,7 +80,7 @@ class ProviderKeyImportService:
     async def create_import(
         self,
         *,
-        user_id: str,
+        organization_id: str,
         idempotency_key: str,
         items: Sequence[tuple[int, str, SecretStr]],
     ) -> KeyImportSnapshot:
@@ -93,23 +93,27 @@ class ProviderKeyImportService:
             for line, label, secret in items
         ]
         return await self._state.create_key_import(
-            user_id=user_id,
+            organization_id=organization_id,
             idempotency_key=idempotency_key,
             items=normalized,
         )
 
-    async def list_imports(self, *, user_id: str) -> list[KeyImportSnapshot]:
-        return await self._state.list_key_imports(user_id=user_id)
+    async def list_imports(self, *, organization_id: str) -> list[KeyImportSnapshot]:
+        return await self._state.list_key_imports(organization_id=organization_id)
 
     async def get_import(
-        self, *, user_id: str, batch_id: str
+        self, *, organization_id: str, batch_id: str
     ) -> KeyImportSnapshot | None:
-        return await self._state.get_key_import(user_id=user_id, batch_id=batch_id)
+        return await self._state.get_key_import(
+            organization_id=organization_id, batch_id=batch_id
+        )
 
     async def retry_import(
-        self, *, user_id: str, batch_id: str
+        self, *, organization_id: str, batch_id: str
     ) -> KeyImportSnapshot | None:
-        return await self._state.retry_key_import(user_id=user_id, batch_id=batch_id)
+        return await self._state.retry_key_import(
+            organization_id=organization_id, batch_id=batch_id
+        )
 
     async def _run(self) -> None:
         next_cleanup_at = 0.0
@@ -140,11 +144,11 @@ class ProviderKeyImportService:
     async def _process(self, item: ClaimedKeyImportItem) -> None:
         try:
             async with self._state.fingerprint_lock(
-                user_id=item.user_id,
+                organization_id=item.organization_id,
                 fingerprint=item.fingerprint,
             ):
                 existing = await self._state.find_import_deployment(
-                    user_id=item.user_id,
+                    organization_id=item.organization_id,
                     fingerprint=item.fingerprint,
                 )
                 if existing is not None:
@@ -172,7 +176,9 @@ class ProviderKeyImportService:
                         ),
                     )
                     return
-                model = await self._state.get_selected_model()
+                model = await self._state.get_selected_model(
+                    organization_id=item.organization_id
+                )
                 await self._state.finish_import_success(item=item, model=model)
         except asyncio.CancelledError:
             raise

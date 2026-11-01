@@ -24,6 +24,7 @@ import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { KeyImportPanel } from '@/features/llm-settings/key-import-panel';
+import { useOrganizationContext } from '@/features/organizations/organization-context';
 import {
     deleteLlmProviderKey,
     getLlmSettings,
@@ -113,6 +114,9 @@ function errorMessage(cause: unknown, fallback: string): string {
         case 'invalid_key': return 'OpenRouter rejected this API key.';
         case 'rate_limited': return 'OpenRouter is rate limiting requests. Try again shortly.';
         case 'unavailable': return 'The gateway or OpenRouter is currently unavailable.';
+        case 'permission_denied': return 'You can view this organization provider configuration, but only an owner or admin can change it.';
+        case 'organization_context_required': return 'Select an active organization to view provider configuration.';
+        case 'resource_not_found': return 'The active organization provider configuration was not found.';
         default: return cause.message;
     }
 }
@@ -130,6 +134,10 @@ function statusVariant(status: string | undefined): 'success' | 'warning' | 'des
 
 export default function LlmSettingsPage() {
     const router = useRouter();
+    const { activeOrganization, isLoading: isLoadingOrganizations } = useOrganizationContext();
+    const activeOrganizationId = activeOrganization?.id ?? null;
+    const canMutate = activeOrganization?.role === 'owner' || activeOrganization?.role === 'admin';
+    const organizationReady = !isLoadingOrganizations && activeOrganizationId !== null;
     const labelDraftRef = useRef('');
     const manualSubmissionKeyRef = useRef<string | null>(null);
     const redirectingRef = useRef(false);
@@ -140,24 +148,39 @@ export default function LlmSettingsPage() {
     );
     const [authenticated, setAuthenticated] = useState(false);
     const [keys, setKeys] = useState<LlmProviderKey[]>([]);
+    const [keysOrganizationId, setKeysOrganizationId] = useState<string | null>(null);
     const [models, setModels] = useState<LlmModelOption[]>([]);
+    const [modelsOrganizationId, setModelsOrganizationId] = useState<string | null>(null);
     const [selectedModel, setSelectedModel] = useState('openrouter/free');
     const [labelOverride, setLabelOverride] = useState<string | null>(null);
     const label = labelOverride ?? storedLabelDraft ?? '';
     const [apiKey, setApiKey] = useState('');
+    const [apiKeyOrganizationId, setApiKeyOrganizationId] = useState<string | null>(null);
     const [submittedImports, setSubmittedImports] = useState<LlmProviderKeyImport[]>([]);
+    const [submittedImportsOrganizationId, setSubmittedImportsOrganizationId] = useState<string | null>(null);
     const [keyLoadError, setKeyLoadError] = useState<string | null>(null);
     const [catalogError, setCatalogError] = useState<string | null>(null);
     const [operationError, setOperationError] = useState<string | null>(null);
     const [notice, setNotice] = useState<string | null>(null);
-    const [isLoadingKeys, setIsLoadingKeys] = useState(true);
+    const [isLoadingKeysRequest, setIsLoadingKeysRequest] = useState(true);
     const [isRefreshingKeys, setIsRefreshingKeys] = useState(false);
-    const [isLoadingModels, setIsLoadingModels] = useState(true);
+    const [isLoadingModelsRequest, setIsLoadingModelsRequest] = useState(true);
     const [isAddingKey, setIsAddingKey] = useState(false);
     const [isSavingModel, setIsSavingModel] = useState(false);
     const [keyOperation, setKeyOperation] = useState<KeyOperation>(null);
     const [deleteCandidate, setDeleteCandidate] = useState<LlmProviderKey | null>(null);
     const [replacementCandidate, setReplacementCandidate] = useState<LlmProviderKey | null>(null);
+    const hasCurrentKeys = organizationReady && keysOrganizationId === activeOrganizationId;
+    const hasCurrentModels = organizationReady && modelsOrganizationId === activeOrganizationId;
+    const visibleKeys = hasCurrentKeys ? keys : [];
+    const visibleModels = hasCurrentModels ? models : [];
+    const currentSelectedModel = hasCurrentModels ? selectedModel : 'openrouter/free';
+    const visibleSubmittedImports = submittedImportsOrganizationId === activeOrganizationId
+        ? submittedImports
+        : [];
+    const visibleApiKey = apiKeyOrganizationId === activeOrganizationId ? apiKey : '';
+    const isLoadingKeys = organizationReady && (!hasCurrentKeys || isLoadingKeysRequest);
+    const isLoadingModels = organizationReady && (!hasCurrentModels || isLoadingModelsRequest);
 
     const redirectToLogin = useCallback((cause: unknown): boolean => {
         if (!(cause instanceof LlmSettingsApiError) || cause.status !== 401) return false;
@@ -170,75 +193,90 @@ export default function LlmSettingsPage() {
     }, [router]);
 
     const loadKeys = useCallback(async (refresh = false) => {
+        const organizationId = activeOrganizationId;
+        if (!organizationReady || !organizationId) return;
         if (refresh) setIsRefreshingKeys(true);
-        else setIsLoadingKeys(true);
+        else setIsLoadingKeysRequest(true);
         setKeyLoadError(null);
         try {
             setKeys(await listLlmProviderKeys());
+            setKeysOrganizationId(organizationId);
             setAuthenticated(true);
         } catch (cause) {
+            setKeysOrganizationId(organizationId);
             if (!redirectToLogin(cause)) setKeyLoadError(errorMessage(cause, 'Could not load provider keys.'));
         } finally {
-            setIsLoadingKeys(false);
+            setIsLoadingKeysRequest(false);
             setIsRefreshingKeys(false);
         }
-    }, [redirectToLogin]);
+    }, [activeOrganizationId, organizationReady, redirectToLogin]);
 
     const refreshKeysAfterImport = useCallback(() => {
         void loadKeys(true);
     }, [loadKeys]);
 
     const loadModels = useCallback(async () => {
-        setIsLoadingModels(true);
+        const organizationId = activeOrganizationId;
+        if (!organizationReady || !organizationId) return;
+        setIsLoadingModelsRequest(true);
         setCatalogError(null);
         try {
             const settings = await getLlmSettings();
             setAuthenticated(true);
             setModels(settings.models);
             setSelectedModel(settings.selected_model);
+            setModelsOrganizationId(organizationId);
         } catch (cause) {
+            setModelsOrganizationId(organizationId);
             if (!redirectToLogin(cause)) setCatalogError(errorMessage(cause, 'Could not load the model catalogue.'));
         } finally {
-            setIsLoadingModels(false);
+            setIsLoadingModelsRequest(false);
         }
-    }, [redirectToLogin]);
+    }, [activeOrganizationId, organizationReady, redirectToLogin]);
 
     useEffect(() => {
+        if (!organizationReady || !activeOrganizationId) return;
         let active = true;
-        void listLlmProviderKeys()
-            .then((nextKeys) => {
+        void Promise.resolve().then(() => {
+            if (!active) return;
+            setKeyLoadError(null);
+            setCatalogError(null);
+            const keyRequest = listLlmProviderKeys()
+                .then((nextKeys) => {
                 if (!active) return;
                 setKeys(nextKeys);
                 setAuthenticated(true);
-            })
-            .catch((cause: unknown) => {
+                })
+                .catch((cause: unknown) => {
                 if (!active) return;
                 if (!redirectToLogin(cause)) setKeyLoadError(errorMessage(cause, 'Could not load provider keys.'));
-            })
-            .finally(() => {
-                if (active) setIsLoadingKeys(false);
-            });
-        void getLlmSettings()
-            .then((settings) => {
+                });
+            const modelRequest = getLlmSettings()
+                .then((settings) => {
                 if (!active) return;
                 setAuthenticated(true);
                 setModels(settings.models);
                 setSelectedModel(settings.selected_model);
-            })
-            .catch((cause: unknown) => {
+                })
+                .catch((cause: unknown) => {
                 if (!active) return;
                 if (!redirectToLogin(cause)) setCatalogError(errorMessage(cause, 'Could not load the model catalogue.'));
-            })
-            .finally(() => {
-                if (active) setIsLoadingModels(false);
             });
+            void Promise.all([keyRequest, modelRequest]).finally(() => {
+                if (!active) return;
+                setKeysOrganizationId(activeOrganizationId);
+                setModelsOrganizationId(activeOrganizationId);
+                setIsLoadingKeysRequest(false);
+                setIsLoadingModelsRequest(false);
+            });
+        });
         return () => {
             active = false;
         };
-    }, [redirectToLogin]);
+    }, [activeOrganizationId, organizationReady, redirectToLogin]);
 
     async function handleModelChange(model: string) {
-        if (!model || model === selectedModel) return;
+        if (!canMutate || !model || model === selectedModel) return;
         const previousModel = selectedModel;
         setSelectedModel(model);
         setIsSavingModel(true);
@@ -259,13 +297,13 @@ export default function LlmSettingsPage() {
 
     async function handleAddKey(event: FormEvent<HTMLFormElement>) {
         event.preventDefault();
-        if (isAddingKey || !apiKey) return;
+        if (isAddingKey || !visibleApiKey || !canMutate) return;
         const replacing = replacementCandidate !== null;
         setIsAddingKey(true);
         setOperationError(null);
         setNotice(null);
         try {
-            const input = { label: label.trim() || 'OpenRouter key', api_key: apiKey };
+            const input = { label: label.trim() || 'OpenRouter key', api_key: visibleApiKey };
             if (replacing) {
                 const created = await replaceLlmProviderKey(replacementCandidate.id, input);
                 setKeys((current) => current.map((key) =>
@@ -282,6 +320,7 @@ export default function LlmSettingsPage() {
                     submitted,
                     ...current.filter((item) => item.id !== submitted.id),
                 ].slice(0, 10));
+                setSubmittedImportsOrganizationId(activeOrganizationId);
                 manualSubmissionKeyRef.current = null;
                 setNotice('The key was submitted. Track its status in import history.');
             }
@@ -289,7 +328,8 @@ export default function LlmSettingsPage() {
             setLabelOverride('');
             labelDraftRef.current = '';
             setStoredLabelDraft(null);
-            setApiKey('');
+                setApiKey('');
+                setApiKeyOrganizationId(activeOrganizationId);
         } catch (cause) {
             if (isIdempotencyKeyConflict(cause)) {
                 manualSubmissionKeyRef.current = null;
@@ -301,6 +341,7 @@ export default function LlmSettingsPage() {
     }
 
     async function handleTestKey(item: LlmProviderKey) {
+        if (!canMutate) return;
         setKeyOperation({ kind: 'test', id: item.id });
         setOperationError(null);
         setNotice(null);
@@ -315,6 +356,7 @@ export default function LlmSettingsPage() {
     }
 
     async function confirmDelete() {
+        if (!canMutate) return;
         const item = deleteCandidate;
         if (!item) return;
         setDeleteCandidate(null);
@@ -332,7 +374,7 @@ export default function LlmSettingsPage() {
         }
     }
 
-    const modelOptions = models.map((model) => ({
+    const modelOptions = visibleModels.map((model) => ({
         value: model.id,
         label: model.name,
         keywords: [model.id, model.description ?? ''],
@@ -345,6 +387,7 @@ export default function LlmSettingsPage() {
                     <div>
                         <p className="text-sm font-medium text-primary">LLM settings</p>
                         <h1 className="mt-2 font-headline text-2xl font-semibold">Provider configuration</h1>
+                        <p className="mt-2 text-sm text-muted-foreground">Active organization: <span className="font-medium text-foreground">{activeOrganization?.name ?? 'None selected'}</span>{activeOrganization ? ` · ${activeOrganization.role}` : ''}</p>
                     </div>
                     <p className="inline-flex items-center gap-2 text-sm text-muted-foreground"><ShieldCheck aria-hidden="true" className="size-4 text-success" />Managed gateway</p>
                 </header>
@@ -360,19 +403,20 @@ export default function LlmSettingsPage() {
                     <div className="mt-4 grid gap-3 sm:grid-cols-[minmax(16rem,28rem)_auto] sm:items-center">
                         <Combobox
                             ariaLabel="Default OpenRouter model"
-                            value={selectedModel}
+                            value={currentSelectedModel}
                             options={modelOptions}
-                            disabled={!authenticated || isLoadingModels || isSavingModel || modelOptions.length === 0}
+                            disabled={!authenticated || !canMutate || isLoadingModels || isSavingModel || modelOptions.length === 0}
                             placeholder={isLoadingModels ? 'Loading model catalogue...' : 'Select a model'}
                             searchPlaceholder="Search models..."
                             emptyMessage="No matching models."
                             onValueChange={(model) => void handleModelChange(model)}
                         />
-                        <p className="break-all font-mono text-xs text-muted-foreground" aria-label="Selected model id">{selectedModel}</p>
+                        <p className="break-all font-mono text-xs text-muted-foreground" aria-label="Selected model id">{currentSelectedModel}</p>
                     </div>
                     {isLoadingModels ? <p className="mt-3 text-sm text-muted-foreground" role="status">Loading model catalogue...</p> : null}
                     {catalogError ? <Alert variant="destructive" role="alert" className="mt-3"><AlertDescription className="flex flex-wrap items-center justify-between gap-3"><span>{catalogError}</span><Button variant="outline" size="sm" onClick={() => void loadModels()}>Retry catalogue</Button></AlertDescription></Alert> : null}
-                    {!isLoadingModels && !catalogError && models.length === 0 ? <EmptyState className="min-h-24 items-start text-left" title="No free models available" description="The provider catalogue returned no free models." /> : null}
+                    {!organizationReady ? <p className="mt-3 text-sm text-muted-foreground">Select an active organization to manage provider settings.</p> : null}
+                    {organizationReady && !isLoadingModels && !catalogError && visibleModels.length === 0 ? <EmptyState className="min-h-24 items-start text-left" title="No free models available" description="The provider catalogue returned no free models." /> : null}
                 </section>
 
                 <div className="grid gap-7 lg:grid-cols-[minmax(16rem,0.7fr)_minmax(0,1.3fr)]">
@@ -396,24 +440,27 @@ export default function LlmSettingsPage() {
                                     labelDraftRef.current = nextLabel;
                                     setLabelOverride(nextLabel);
                                     if (storedLabelDraft !== null) setStoredLabelDraft(null);
-                                }} placeholder="Primary research key" maxLength={80} disabled={isAddingKey} />
+                                }} placeholder="Primary research key" maxLength={80} disabled={isAddingKey || !canMutate} />
                             </Field>
                             <Field label="OpenRouter API key" htmlFor="openrouter-key">
-                                <Input id="openrouter-key" type="password" value={apiKey} onChange={(event) => {
+                                <Input id="openrouter-key" type="password" value={visibleApiKey} onChange={(event) => {
                                     const nextKey = event.target.value;
-                                    if (nextKey !== apiKey) manualSubmissionKeyRef.current = null;
+                                    if (nextKey !== visibleApiKey) manualSubmissionKeyRef.current = null;
                                     setApiKey(nextKey);
-                                }} placeholder="sk-or-v1-..." minLength={20} maxLength={500} autoComplete="off" required disabled={isAddingKey} />
+                                    setApiKeyOrganizationId(activeOrganizationId);
+                                }} placeholder="sk-or-v1-..." minLength={20} maxLength={500} autoComplete="off" required disabled={isAddingKey || !canMutate} />
                             </Field>
-                            <Button type="submit" disabled={isAddingKey || !authenticated || !apiKey}>
+                            <Button type="submit" disabled={isAddingKey || !authenticated || !canMutate || !visibleApiKey}>
                                 {isAddingKey ? <LoaderCircle className="animate-spin" aria-hidden="true" /> : replacementCandidate ? <RefreshCw aria-hidden="true" /> : <Plus aria-hidden="true" />}
                                 {isAddingKey ? (replacementCandidate ? 'Testing and replacing...' : 'Submitting key...') : replacementCandidate ? 'Test and replace key' : 'Add key'}
                             </Button>
                         </form>
                         <KeyImportPanel
-                            authenticated={authenticated}
+                            key={activeOrganizationId ?? 'no-organization'}
+                            authenticated={authenticated && organizationReady}
+                            canMutate={canMutate}
                             onUnauthorized={redirectToLogin}
-                            submittedImports={submittedImports}
+                            submittedImports={visibleSubmittedImports}
                             onImportCompleted={refreshKeysAfterImport}
                         />
                     </div>
@@ -430,8 +477,9 @@ export default function LlmSettingsPage() {
                         </div>
                         {isLoadingKeys ? <p className="py-8 text-sm text-muted-foreground" role="status">Loading provider keys...</p> : null}
                         {keyLoadError ? <Alert variant="destructive" role="alert" className="mt-4"><AlertDescription className="flex flex-wrap items-center justify-between gap-3"><span>{keyLoadError}</span><Button variant="outline" size="sm" onClick={() => void loadKeys()}>Retry keys</Button></AlertDescription></Alert> : null}
-                        {!isLoadingKeys && !keyLoadError && keys.length === 0 ? <EmptyState className="min-h-40" icon={<KeyRound />} title="No keys configured" description="Add a provider key to use your own OpenRouter account." /> : null}
-                        {keys.length > 0 ? (
+                        {!organizationReady ? <p className="py-8 text-sm text-muted-foreground">Select an active organization to view provider keys.</p> : null}
+                        {organizationReady && !isLoadingKeys && !keyLoadError && visibleKeys.length === 0 ? <EmptyState className="min-h-40" icon={<KeyRound />} title="No keys configured" description="Add a provider key to use your own OpenRouter account." /> : null}
+                        {visibleKeys.length > 0 ? (
                             <div className="mt-4 overflow-x-auto">
                                 <Table className="min-w-[620px]">
                                     <TableHeader>
@@ -443,7 +491,7 @@ export default function LlmSettingsPage() {
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
-                                {keys.map((item) => {
+                                {visibleKeys.map((item) => {
                                     const activeOperation = keyOperation?.id === item.id ? keyOperation.kind : null;
                                     return (
                                         <TableRow key={item.id}>
@@ -463,14 +511,14 @@ export default function LlmSettingsPage() {
                                             </TableCell>
                                             <TableCell>
                                                 <div className="flex justify-end gap-1">
-                                                    <Button type="button" variant="outline" size="sm" onClick={() => void handleTestKey(item)} disabled={keyOperation !== null || isLoadingKeys}>
+                                                    <Button type="button" variant="outline" size="sm" onClick={() => void handleTestKey(item)} disabled={!canMutate || keyOperation !== null || isLoadingKeys}>
                                                         {activeOperation === 'test' ? <LoaderCircle className="animate-spin" /> : <Check />}
                                                         {activeOperation === 'test' ? 'Testing...' : 'Test'}
                                                     </Button>
-                                                    <Button type="button" variant="outline" size="sm" onClick={() => { setReplacementCandidate(item); setLabelOverride(item.label); labelDraftRef.current = item.label; setApiKey(''); setOperationError(null); setNotice(null); }} disabled={keyOperation !== null || isLoadingKeys || isAddingKey}>
+                                                    <Button type="button" variant="outline" size="sm" onClick={() => { setReplacementCandidate(item); setLabelOverride(item.label); labelDraftRef.current = item.label; setApiKey(''); setOperationError(null); setNotice(null); }} disabled={!canMutate || keyOperation !== null || isLoadingKeys || isAddingKey}>
                                                         <RefreshCw aria-hidden="true" />Replace
                                                     </Button>
-                                                    <Button type="button" variant="ghost" size="icon" onClick={() => setDeleteCandidate(item)} disabled={keyOperation !== null || isLoadingKeys} aria-label={`Delete ${item.label}`} title={`Delete ${item.label}`}>
+                                                    <Button type="button" variant="ghost" size="icon" onClick={() => setDeleteCandidate(item)} disabled={!canMutate || keyOperation !== null || isLoadingKeys} aria-label={`Delete ${item.label}`} title={`Delete ${item.label}`}>
                                                         {activeOperation === 'delete' ? <LoaderCircle className="animate-spin" /> : <Trash2 />}
                                                     </Button>
                                                 </div>

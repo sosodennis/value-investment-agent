@@ -29,7 +29,10 @@ class _Gateway:
         self.grace_calls = 0
         self._next_id = 0
 
-    async def list_managed(self) -> list[ManagedProviderKey]:
+    async def list_managed(
+        self, *, organization_id: str | None = None
+    ) -> list[ManagedProviderKey]:
+        _ = organization_id
         return list(self.keys)
 
     async def add_replacement_key(
@@ -39,9 +42,10 @@ class _Gateway:
         label: str,
         model: str,
         model_name: str,
+        organization_id: str,
         existing_ids: set[str],
     ) -> ManagedProviderKey:
-        _ = (model, model_name, existing_ids)
+        _ = (model, model_name, organization_id, existing_ids)
         self._next_id += 1
         replacement = ManagedProviderKey(
             id=f"replacement-{self._next_id}",
@@ -54,15 +58,17 @@ class _Gateway:
         return replacement
 
     async def mark_replacement_grace(
-        self, model_id: str, *, retire_at: datetime
+        self, model_id: str, *, organization_id: str, retire_at: datetime
     ) -> None:
+        _ = organization_id
         self.grace_calls += 1
         old = next(key for key in self.keys if key.id == model_id)
         self.keys[self.keys.index(old)] = replace(
             old, replacement_retire_at=retire_at.isoformat()
         )
 
-    async def delete_key(self, model_id: str) -> None:
+    async def delete_key(self, model_id: str, *, organization_id: str) -> None:
+        _ = organization_id
         self.keys = [key for key in self.keys if key.id != model_id]
 
 
@@ -74,60 +80,67 @@ class _Ownership:
 
     @asynccontextmanager
     async def replacement_lock(
-        self, *, user_id: str, key_id: str
+        self, *, organization_id: str, key_id: str
     ) -> AsyncIterator[None]:
-        _ = (user_id, key_id)
+        _ = (organization_id, key_id)
         async with self.lock:
             yield
 
     @asynccontextmanager
     async def fingerprint_lock(
-        self, *, user_id: str, fingerprint: str
+        self, *, organization_id: str, fingerprint: str
     ) -> AsyncIterator[None]:
-        _ = user_id
+        _ = organization_id
         lock = self.fingerprint_locks.setdefault(fingerprint, asyncio.Lock())
         async with lock:
             yield
 
-    async def owns(self, *, user_id: str, resource_type: str, resource_id: str) -> bool:
-        _ = (user_id, resource_type)
+    async def owns(
+        self, *, organization_id: str, resource_type: str, resource_id: str
+    ) -> bool:
+        _ = (organization_id, resource_type)
         return resource_id in self.ids
 
-    async def owned_ids(self, *, user_id: str, resource_type: str) -> set[str]:
-        _ = (user_id, resource_type)
+    async def owned_ids(self, *, organization_id: str, resource_type: str) -> set[str]:
+        _ = (organization_id, resource_type)
         return set(self.ids)
 
     async def claim(
         self,
         *,
-        user_id: str,
+        organization_id: str,
         resource_type: str,
         resource_id: str,
         fingerprint: str | None = None,
     ) -> bool:
-        _ = (user_id, resource_type, fingerprint)
+        _ = (organization_id, resource_type, fingerprint)
         if resource_id in self.ids:
             return False
         self.ids.add(resource_id)
         return True
 
-    async def release(self, *, resource_type: str, resource_id: str) -> None:
-        _ = resource_type
+    async def release(
+        self, *, organization_id: str, resource_type: str, resource_id: str
+    ) -> None:
+        _ = (organization_id, resource_type)
         self.ids.discard(resource_id)
 
     async def find_by_fingerprint(
-        self, *, user_id: str, fingerprint: str
+        self, *, organization_id: str, fingerprint: str
     ) -> str | None:
-        _ = (user_id, fingerprint)
+        _ = (organization_id, fingerprint)
         return None
 
 
 class _Settings:
-    async def get_selected_model(self) -> str:
+    async def get_selected_model(self, *, organization_id: str) -> str:
+        _ = organization_id
         return "openrouter/free"
 
-    async def set_selected_model(self, model_id: str, *, updated_by: str) -> str:
-        _ = updated_by
+    async def set_selected_model(
+        self, model_id: str, *, organization_id: str, updated_by: str
+    ) -> str:
+        _ = (organization_id, updated_by)
         return model_id
 
 
@@ -157,10 +170,10 @@ async def test_concurrent_replacements_have_one_winner() -> None:
 
     results = await asyncio.gather(
         service.replace_key(
-            user_id="alice", key_id="old-key", key="key-one", label="one"
+            organization_id="alice", key_id="old-key", key="key-one", label="one"
         ),
         service.replace_key(
-            user_id="alice", key_id="old-key", key="key-two", label="two"
+            organization_id="alice", key_id="old-key", key="key-two", label="two"
         ),
         return_exceptions=True,
     )
@@ -192,7 +205,7 @@ async def test_replacement_rejects_the_current_key_without_mutating_gateway() ->
 
     with pytest.raises(ProviderSettingsError) as caught:
         await service.replace_key(
-            user_id="alice", key_id="old-key", key=same_key, label="same"
+            organization_id="alice", key_id="old-key", key=same_key, label="same"
         )
 
     assert caught.value.code == "replacement_must_differ"

@@ -92,6 +92,7 @@ describe('KeyImportPanel', () => {
         render(
             <KeyImportPanel
                 authenticated
+                canMutate
                 onUnauthorized={() => false}
                 submittedImports={[]}
                 onImportCompleted={onImportCompleted}
@@ -134,10 +135,14 @@ describe('KeyImportPanel', () => {
                 error_code: 'rate_limited',
             }],
         })]);
-        api.retryLlmProviderKeyImport.mockResolvedValue(batch({ status: 'processing' }));
+        api.retryLlmProviderKeyImport.mockResolvedValue(batch({
+            status: 'processing',
+            updated_at: '2026-10-31T00:00:01Z',
+        }));
         render(
             <KeyImportPanel
                 authenticated
+                canMutate
                 onUnauthorized={() => false}
                 submittedImports={[]}
                 onImportCompleted={vi.fn()}
@@ -179,6 +184,7 @@ describe('KeyImportPanel', () => {
         render(
             <KeyImportPanel
                 authenticated
+                canMutate
                 onUnauthorized={() => false}
                 submittedImports={[submittedImport]}
                 onImportCompleted={onImportCompleted}
@@ -213,6 +219,7 @@ describe('KeyImportPanel', () => {
         render(
             <KeyImportPanel
                 authenticated
+                canMutate
                 onUnauthorized={() => false}
                 submittedImports={[]}
                 onImportCompleted={onImportCompleted}
@@ -230,6 +237,7 @@ describe('KeyImportPanel', () => {
     it('keeps earlier manual imports in progress after another is submitted', async () => {
         const props = {
             authenticated: true,
+            canMutate: true,
             onUnauthorized: () => false,
             onImportCompleted: vi.fn(),
         };
@@ -258,5 +266,36 @@ describe('KeyImportPanel', () => {
         await waitFor(() => {
             expect(screen.getAllByText('Processing')).toHaveLength(2);
         });
+    });
+
+    it('allows members to read import history but disables key uploads and retries', async () => {
+        api.listLlmProviderKeyImports.mockResolvedValue([batch({
+            status: 'completed_with_errors',
+            processed_count: 1,
+            invalid_count: 1,
+            retryable_count: 1,
+            items: [{
+                source_line: 1,
+                label: 'OpenRouter key 1',
+                suffix: '0001',
+                status: 'unavailable',
+                attempts: 3,
+                retryable: true,
+            }],
+        })]);
+        render(
+            <KeyImportPanel
+                authenticated
+                canMutate={false}
+                onUnauthorized={() => false}
+                submittedImports={[]}
+                onImportCompleted={vi.fn()}
+            />,
+        );
+
+        await screen.findByRole('button', { name: 'Retry 1' });
+        expect((screen.getByLabelText('Key file') as HTMLInputElement).disabled).toBe(true);
+        expect((screen.getByRole('button', { name: 'Retry 1' }) as HTMLButtonElement).disabled).toBe(true);
+        expect(screen.getByText('Completed with errors')).toBeTruthy();
     });
 });

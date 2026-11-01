@@ -34,7 +34,13 @@ class _Answer(BaseModel):
 
 @pytest.fixture
 def principal() -> Iterator[None]:
-    token = set_provider_principal(ProviderPrincipal(user_id="alice"))
+    token = set_provider_principal(
+        ProviderPrincipal(
+            user_id="alice",
+            organization_id="organization-a",
+            membership_id="membership-a",
+        )
+    )
     try:
         yield
     finally:
@@ -193,7 +199,11 @@ async def test_malformed_settings_do_not_escape_parser_errors(body: bytes) -> No
     )
     try:
         with pytest.raises(ProviderSettingsError) as caught:
-            await client.list_keys(user_id="alice")
+            await client.list_keys(
+                user_id="alice",
+                organization_id="organization-a",
+                membership_id="membership-a",
+            )
         assert caught.value.code == "provider_unavailable"
         assert "sk-private-response" not in "".join(
             traceback.format_exception(caught.value)

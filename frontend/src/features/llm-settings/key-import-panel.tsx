@@ -37,6 +37,7 @@ const CSV_EXAMPLE = [
 
 type KeyImportPanelProps = {
     authenticated: boolean;
+    canMutate: boolean;
     onUnauthorized: (cause: unknown) => boolean;
     submittedImports: LlmProviderKeyImport[];
     onImportCompleted: () => void;
@@ -143,6 +144,7 @@ function batchStatusText(batch: LlmProviderKeyImport): string {
 
 export function KeyImportPanel({
     authenticated,
+    canMutate,
     onUnauthorized,
     submittedImports,
     onImportCompleted,
@@ -330,6 +332,7 @@ export function KeyImportPanel({
 
     const canSubmit =
         authenticated &&
+        canMutate &&
         selectedFile !== null &&
         preview !== null &&
         preview.issues.length === 0 &&
@@ -343,6 +346,7 @@ export function KeyImportPanel({
                 <div>
                     <h2 id="key-import-heading" className="font-semibold">Import provider keys</h2>
                     <p className="mt-1 text-sm text-muted-foreground">Upload up to 500 OpenRouter keys from a text file.</p>
+                    {!canMutate ? <p className="mt-2 text-sm text-warning">Only organization owners and admins can change provider keys.</p> : null}
                 </div>
                 <Popover>
                     <PopoverTrigger asChild>
@@ -383,7 +387,7 @@ export function KeyImportPanel({
                         id="key-import-file"
                         type="file"
                         accept=".txt,.csv,text/plain,text/csv"
-                        disabled={!authenticated || isPreviewing || isSubmitting}
+                        disabled={!authenticated || !canMutate || isPreviewing || isSubmitting}
                         onChange={(event) => void handleFileChange(event)}
                         className="block min-h-10 w-full cursor-pointer rounded-sm border border-input bg-background text-sm text-foreground file:mr-3 file:min-h-10 file:border-0 file:border-r file:border-input file:bg-muted file:px-3 file:text-sm file:font-medium file:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                     />
@@ -448,7 +452,7 @@ export function KeyImportPanel({
                                         <span className="text-sm font-medium">{batch.processed_count} / {batch.total_count}</span>
                                     </div>
                                     {canRetry ? (
-                                        <Button type="button" variant="outline" size="sm" onClick={() => void handleRetry(batch.id)} disabled={retryingBatchId !== null}>
+                                        <Button type="button" variant="outline" size="sm" onClick={() => void handleRetry(batch.id)} disabled={!canMutate || retryingBatchId !== null}>
                                             {retryingBatchId === batch.id ? <LoaderCircle className="animate-spin" aria-hidden="true" /> : <RefreshCw aria-hidden="true" />}
                                             {retryingBatchId === batch.id ? 'Retrying' : `Retry ${batch.retryable_count}`}
                                         </Button>

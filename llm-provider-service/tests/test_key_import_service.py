@@ -19,16 +19,19 @@ class _State:
 
     @asynccontextmanager
     async def fingerprint_lock(
-        self, *, user_id: str, fingerprint: str
+        self, *, organization_id: str, fingerprint: str
     ) -> AsyncIterator[None]:
-        _ = (user_id, fingerprint)
+        _ = (organization_id, fingerprint)
         yield
 
-    async def find_import_deployment(self, *, user_id: str, fingerprint: str) -> None:
-        _ = (user_id, fingerprint)
+    async def find_import_deployment(
+        self, *, organization_id: str, fingerprint: str
+    ) -> None:
+        _ = (organization_id, fingerprint)
         return None
 
-    async def get_selected_model(self) -> str:
+    async def get_selected_model(self, *, organization_id: str) -> str:
+        _ = organization_id
         return "openrouter/free"
 
     async def finish_import_failure(self, **values: object) -> None:
@@ -42,7 +45,7 @@ def _item(*, attempts: int = 1) -> ClaimedKeyImportItem:
     return ClaimedKeyImportItem(
         id="item-id",
         batch_id="batch-id",
-        user_id="owner-id",
+        organization_id="owner-id",
         source_line=1,
         label="staging key",
         fingerprint="safe-fingerprint",

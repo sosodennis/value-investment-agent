@@ -64,13 +64,13 @@ class _Provider:
 
 class _Settings:
     def __init__(self) -> None:
-        self.owners = {"key-a": "alice"}
+        self.owners = {"key-a": "organization-120"}
         self.secrets: list[str] = []
         self.list_delay = 0.0
         self.settings_delay = 0.0
         self.replacement_error_code: str | None = None
 
-    async def list_keys(self, *, user_id: str):
+    async def list_keys(self, *, organization_id: str):
         if self.list_delay:
             await asyncio.sleep(self.list_delay)
         return [
@@ -89,29 +89,34 @@ class _Settings:
                 replacement_retire_at=None,
             )
             for key_id, owner in self.owners.items()
-            if owner == user_id
+            if owner == organization_id
         ]
 
-    async def replace_key(self, *, user_id: str, key_id: str, key: str, label: str):
-        _ = (user_id, key_id, key, label)
+    async def replace_key(
+        self, *, organization_id: str, key_id: str, key: str, label: str
+    ):
+        _ = (organization_id, key_id, key, label)
         if self.replacement_error_code is None:
             raise AssertionError("replacement error code must be configured")
         raise ProviderSettingsError(self.replacement_error_code)
 
-    async def test_key(self, *, user_id: str, key_id: str) -> bool:
-        if self.owners.get(key_id) != user_id:
+    async def test_key(self, *, organization_id: str, key_id: str) -> bool:
+        if self.owners.get(key_id) != organization_id:
             from src.llm_provider_service.domain.errors import ProviderSettingsError
 
             raise ProviderSettingsError("not_found")
         return True
 
-    async def selected_model_settings(self):
+    async def selected_model_settings(self, *, organization_id: str):
+        _ = organization_id
         if self.settings_delay:
             await asyncio.sleep(self.settings_delay)
         return "openrouter/free", ()
 
-    async def update_selected_model(self, *, model_id: str, user_id: str):
-        _ = (model_id, user_id)
+    async def update_selected_model(
+        self, *, model_id: str, organization_id: str, updated_by: str
+    ):
+        _ = (model_id, organization_id, updated_by)
         if self.settings_delay:
             await asyncio.sleep(self.settings_delay)
         return model_id
@@ -139,13 +144,16 @@ def client(monkeypatch):
 
 
 def _context(
-    *, user_id: str = "alice", deadline: datetime | None = None
+    *,
+    user_id: str = "alice",
+    organization_id: str = "organization-120",
+    deadline: datetime | None = None,
 ) -> dict[str, object]:
     resolved_deadline = deadline or datetime.now(UTC) + timedelta(seconds=10)
     return build_internal_context(
         principal=InternalPrincipal(
             subject_id=user_id,
-            organization_id="organization-120",
+            organization_id=organization_id,
             membership_id="membership-120",
         ),
         correlation_id="correlation-120",
@@ -346,12 +354,18 @@ async def test_provider_key_list_and_test_are_scoped_to_authenticated_user(
         other_list = await http.post(
             "/v1/provider-keys/list",
             headers=headers,
-            json={"context": _context(user_id="bob"), "input": {}},
+            json={
+                "context": _context(user_id="bob", organization_id="organization-220"),
+                "input": {},
+            },
         )
         other_test = await http.post(
             "/v1/provider-keys/test",
             headers=headers,
-            json={"context": _context(user_id="bob"), "input": {"key_id": "key-a"}},
+            json={
+                "context": _context(user_id="bob", organization_id="organization-220"),
+                "input": {"key_id": "key-a"},
+            },
         )
     finally:
         await http.aclose()
@@ -359,7 +373,7 @@ async def test_provider_key_list_and_test_are_scoped_to_authenticated_user(
     assert other_list.status_code == 200
     assert other_list.json()["result"]["keys"] == []
     assert other_test.status_code == 404
-    assert settings.owners["key-a"] == "alice"
+    assert settings.owners["key-a"] == "organization-120"
 
 
 @pytest.mark.asyncio

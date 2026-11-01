@@ -222,13 +222,6 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
     cleanup_task: asyncio.Task[None] | None = None
     try:
         await runtime.start()
-        try:
-            await runtime.synchronize_model()
-        except Exception as exc:
-            logger.warning(
-                "LLM selected model synchronization failed (%s)",
-                type(exc).__name__,
-            )
         cleanup_task = asyncio.create_task(_replacement_cleanup_loop(runtime))
         yield
     finally:
@@ -517,13 +510,14 @@ async def provider_keys(action: str, request: Request) -> JSONResponse:
                 retryable=True,
             )
         timeout = _deadline_timeout(context, 10.0)
-        user_id = context.principal.subject_id
+        organization_id = context.principal.organization_id
         result: KeyListResult | KeyMutationResult | KeyTestResult | KeyDeleteResult
         payload: KeyReplaceInput | KeyIdInput
         async with asyncio.timeout(timeout):
             if action == "list":
                 keys = await _as_principal(
-                    context, lambda: runtime.settings.list_keys(user_id=user_id)
+                    context,
+                    lambda: runtime.settings.list_keys(organization_id=organization_id),
                 )
                 result = KeyListResult(keys=tuple(_summary(key) for key in keys))
             elif action == "replace":
@@ -531,7 +525,7 @@ async def provider_keys(action: str, request: Request) -> JSONResponse:
                 key = await _as_principal(
                     context,
                     lambda: runtime.settings.replace_key(
-                        user_id=user_id,
+                        organization_id=organization_id,
                         key_id=payload.key_id,
                         key=payload.api_key.get_secret_value(),
                         label=payload.label,
@@ -543,7 +537,7 @@ async def provider_keys(action: str, request: Request) -> JSONResponse:
                 passed = await _as_principal(
                     context,
                     lambda: runtime.settings.test_key(
-                        user_id=user_id, key_id=payload.key_id
+                        organization_id=organization_id, key_id=payload.key_id
                     ),
                 )
                 result = KeyTestResult(
@@ -556,7 +550,7 @@ async def provider_keys(action: str, request: Request) -> JSONResponse:
                 await _as_principal(
                     context,
                     lambda: runtime.settings.delete_key(
-                        user_id=user_id, key_id=payload.key_id
+                        organization_id=organization_id, key_id=payload.key_id
                     ),
                 )
                 result = KeyDeleteResult()
@@ -612,12 +606,12 @@ async def provider_key_imports(action: str, request: Request) -> JSONResponse:
                 retryable=True,
             )
         timeout = _deadline_timeout(context, 10.0)
-        user_id = context.principal.subject_id
+        organization_id = context.principal.organization_id
         async with asyncio.timeout(timeout):
             if action == "create":
                 payload = KeyImportCreateInput.model_validate(raw_input)
                 snapshot = await imports.create_import(
-                    user_id=user_id,
+                    organization_id=organization_id,
                     idempotency_key=payload.idempotency_key,
                     items=tuple(
                         (item.source_line, item.label, item.api_key)
@@ -626,7 +620,7 @@ async def provider_key_imports(action: str, request: Request) -> JSONResponse:
                 )
                 result = KeyImportResult(import_batch=_key_import_summary(snapshot))
             elif action == "list":
-                snapshots = await imports.list_imports(user_id=user_id)
+                snapshots = await imports.list_imports(organization_id=organization_id)
                 result = KeyImportListResult(
                     imports=tuple(_key_import_summary(item) for item in snapshots)
                 )
@@ -634,11 +628,11 @@ async def provider_key_imports(action: str, request: Request) -> JSONResponse:
                 payload = KeyImportBatchIdInput.model_validate(raw_input)
                 snapshot = (
                     await imports.retry_import(
-                        user_id=user_id, batch_id=payload.batch_id
+                        organization_id=organization_id, batch_id=payload.batch_id
                     )
                     if action == "retry"
                     else await imports.get_import(
-                        user_id=user_id, batch_id=payload.batch_id
+                        organization_id=organization_id, batch_id=payload.batch_id
                     )
                 )
                 if snapshot is None:
@@ -699,17 +693,22 @@ async def settings(action: str, request: Request) -> JSONResponse:
         timeout = _deadline_timeout(context, 10.0)
         async with asyncio.timeout(timeout):
             if action == "read":
-                selected, models = await runtime.settings.selected_model_settings()
+                selected, models = await runtime.settings.selected_model_settings(
+                    organization_id=context.principal.organization_id
+                )
             elif action == "update":
                 payload = SettingsUpdateInput.model_validate(raw_input)
                 await _as_principal(
                     context,
                     lambda: runtime.settings.update_selected_model(
                         model_id=payload.selected_model,
-                        user_id=context.principal.subject_id,
+                        organization_id=context.principal.organization_id,
+                        updated_by=context.principal.subject_id,
                     ),
                 )
-                selected, models = await runtime.settings.selected_model_settings()
+                selected, models = await runtime.settings.selected_model_settings(
+                    organization_id=context.principal.organization_id
+                )
             else:
                 return _error(
                     correlation_id,

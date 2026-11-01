@@ -8,10 +8,12 @@ from starlette.requests import Request as StarletteRequest
 
 from src.audit.application.recording import record_best_effort
 from src.audit.domain.entities import AuditOutcome
-from src.auth.entrypoint import (
-    Principal,
-    require_current_user,
-    require_current_user_mutation,
+from src.auth.domain.authorization import OrganizationPermission
+from src.auth.domain.entities import AuthenticatedContext
+from src.auth.entrypoint import Principal
+from src.auth.interface.dependencies import (
+    require_current_context_mutation,
+    require_organization_permission,
 )
 from src.llm_provider.application.key_import_file import (
     MAX_IMPORT_FILE_BYTES,
@@ -58,6 +60,26 @@ provider_keys_router = APIRouter(
 )
 llm_settings_router = APIRouter(prefix="/api/v1/llm/settings", tags=["LLM settings"])
 
+_provider_config_read = require_organization_permission(
+    OrganizationPermission.PROVIDER_CONFIG_READ
+)
+_provider_config_write = require_organization_permission(
+    OrganizationPermission.PROVIDER_CONFIG_WRITE,
+    context_dependency=require_current_context_mutation,
+)
+
+
+async def _read_principal(
+    context: AuthenticatedContext = Depends(_provider_config_read),
+) -> Principal:
+    return Principal.from_context(context)
+
+
+async def _write_principal(
+    context: AuthenticatedContext = Depends(_provider_config_write),
+) -> Principal:
+    return Principal.from_context(context)
+
 
 def _key_response(key: ManagedProviderKey) -> ProviderKeyResponse:
     return ProviderKeyResponse(
@@ -82,6 +104,8 @@ def _raise_http_error(error: ProviderSettingsError) -> None:
         raise HTTPException(
             status_code=404, detail="managed key was not found"
         ) from error
+    if code in {"permission_denied", "organization_context_required"}:
+        raise HTTPException(status_code=403, detail=code) from error
     if code == "invalid_key_id":
         raise HTTPException(status_code=400, detail="invalid managed key id") from error
     if code == "replacement_must_differ":
@@ -183,7 +207,7 @@ def _parse_upload(filename: str, data: bytes):
 
 @provider_keys_router.get("", response_model=list[ProviderKeyResponse])
 async def list_provider_keys(
-    principal: Principal = Depends(require_current_user),
+    principal: Principal = Depends(_read_principal),
     service: LLMProviderServiceSettingsClient = Depends(get_provider_settings_service),
 ) -> list[ProviderKeyResponse]:
     try:
@@ -213,7 +237,7 @@ async def list_provider_keys(
 )
 async def submit_provider_key(
     request: ProviderKeyCreateRequest,
-    principal: Principal = Depends(require_current_user_mutation),
+    principal: Principal = Depends(_write_principal),
     service: LLMProviderServiceSettingsClient = Depends(get_provider_settings_service),
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ) -> ProviderKeyImportBatchResponse:
@@ -255,7 +279,7 @@ async def submit_provider_key(
 )
 async def preview_provider_key_import(
     request: Request,
-    _principal: Principal = Depends(require_current_user_mutation),
+    _principal: Principal = Depends(_read_principal),
 ) -> ProviderKeyImportPreviewResponse:
     filename, data = await _read_import_file(request)
     parsed = _parse_upload(filename, data)
@@ -282,7 +306,7 @@ async def preview_provider_key_import(
 )
 async def create_provider_key_import(
     request: Request,
-    principal: Principal = Depends(require_current_user_mutation),
+    principal: Principal = Depends(_write_principal),
     service: LLMProviderServiceSettingsClient = Depends(get_provider_settings_service),
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ) -> ProviderKeyImportBatchResponse:
@@ -340,7 +364,7 @@ async def create_provider_key_import(
     "/imports", response_model=list[ProviderKeyImportBatchResponse]
 )
 async def list_provider_key_imports(
-    principal: Principal = Depends(require_current_user),
+    principal: Principal = Depends(_read_principal),
     service: LLMProviderServiceSettingsClient = Depends(get_provider_settings_service),
 ) -> list[ProviderKeyImportBatchResponse]:
     try:
@@ -358,7 +382,7 @@ async def list_provider_key_imports(
 )
 async def get_provider_key_import(
     batch_id: str,
-    principal: Principal = Depends(require_current_user),
+    principal: Principal = Depends(_read_principal),
     service: LLMProviderServiceSettingsClient = Depends(get_provider_settings_service),
 ) -> ProviderKeyImportBatchResponse:
     try:
@@ -377,7 +401,7 @@ async def get_provider_key_import(
 )
 async def retry_provider_key_import(
     batch_id: str,
-    principal: Principal = Depends(require_current_user_mutation),
+    principal: Principal = Depends(_write_principal),
     service: LLMProviderServiceSettingsClient = Depends(get_provider_settings_service),
 ) -> ProviderKeyImportBatchResponse:
     try:
@@ -406,7 +430,7 @@ async def retry_provider_key_import(
 async def replace_provider_key(
     key_id: str,
     request: ProviderKeyCreateRequest,
-    principal: Principal = Depends(require_current_user_mutation),
+    principal: Principal = Depends(_write_principal),
     service: LLMProviderServiceSettingsClient = Depends(get_provider_settings_service),
 ) -> ProviderKeyResponse:
     try:
@@ -434,7 +458,7 @@ async def replace_provider_key(
 @provider_keys_router.post("/{key_id}/test", response_model=ProviderKeyTestResponse)
 async def test_provider_key(
     key_id: str,
-    principal: Principal = Depends(require_current_user_mutation),
+    principal: Principal = Depends(_write_principal),
     service: LLMProviderServiceSettingsClient = Depends(get_provider_settings_service),
 ) -> ProviderKeyTestResponse:
     try:
@@ -469,7 +493,7 @@ async def test_provider_key(
 @provider_keys_router.delete("/{key_id}", status_code=204)
 async def delete_provider_key(
     key_id: str,
-    principal: Principal = Depends(require_current_user_mutation),
+    principal: Principal = Depends(_write_principal),
     service: LLMProviderServiceSettingsClient = Depends(get_provider_settings_service),
 ) -> None:
     try:
@@ -493,7 +517,7 @@ async def delete_provider_key(
 
 @llm_settings_router.get("", response_model=LlmSettingsResponse)
 async def read_llm_settings(
-    _principal: Principal = Depends(require_current_user),
+    _principal: Principal = Depends(_read_principal),
     service: LLMProviderServiceSettingsClient = Depends(get_provider_settings_service),
 ) -> LlmSettingsResponse:
     try:
@@ -522,7 +546,7 @@ async def read_llm_settings(
 @llm_settings_router.put("", response_model=LlmSettingsResponse)
 async def update_llm_settings(
     request: LlmSettingsUpdateRequest,
-    principal: Principal = Depends(require_current_user_mutation),
+    principal: Principal = Depends(_write_principal),
     service: LLMProviderServiceSettingsClient = Depends(get_provider_settings_service),
 ) -> LlmSettingsResponse:
     try:

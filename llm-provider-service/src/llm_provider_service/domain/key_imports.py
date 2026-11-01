@@ -30,7 +30,7 @@ class KeyImportInput:
 class ClaimedKeyImportItem:
     id: str
     batch_id: str
-    user_id: str
+    organization_id: str
     source_line: int
     label: str
     fingerprint: str

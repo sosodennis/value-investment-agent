@@ -41,7 +41,14 @@ async def test_llm_settings_client_forwards_request_correlation() -> None:
     )
     token = _with_correlation("request-llm-210")
     try:
-        assert await service.list_keys(user_id="user-1") == []
+        assert (
+            await service.list_keys(
+                user_id="user-1",
+                organization_id="organization-1",
+                membership_id="membership-1",
+            )
+            == []
+        )
     finally:
         reset_correlation_id(token)
         await service.aclose()
