@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from contextlib import asynccontextmanager
 
 import uvicorn
@@ -39,7 +40,7 @@ from src.llm_provider.entrypoint import (
     provider_keys_router,
 )
 from src.model_inference.entrypoint import close_model_inference
-from src.notifications.entrypoint import notifications_router
+from src.notifications.entrypoint import get_notification_worker, notifications_router
 from src.observability.routes import router as observability_router
 from src.search_settings import search_settings_router
 from src.search_settings.composition.routes import close_search_service
@@ -77,9 +78,16 @@ async def lifespan(app: FastAPI):
     await runtime.recover_pending_retries()
     app.state.market_movers_service = MarketMoversService(YahooMarketMoversProvider())
     app.state.readiness_provider = HttpReadinessProvider()
+    notification_stop = asyncio.Event()
+    notification_worker_task = asyncio.create_task(
+        get_notification_worker().serve(stop_event=notification_stop)
+    )
+    app.state.notification_worker_task = notification_worker_task
     try:
         yield
     finally:
+        notification_stop.set()
+        await notification_worker_task
         await close_search_service()
         await close_llm_provider()
         await close_model_inference()

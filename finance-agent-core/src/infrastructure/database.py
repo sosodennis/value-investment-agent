@@ -43,6 +43,7 @@ async def init_db():
         from src.notifications.infrastructure.models import (  # noqa: F401
             NotificationEventModel,
             NotificationInboxItemModel,
+            NotificationOutboxModel,
         )
 
         from .models import (  # noqa: F401
