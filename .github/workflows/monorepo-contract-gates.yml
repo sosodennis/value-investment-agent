@@ -80,6 +80,32 @@ jobs:
       - name: Validate production secret wiring
         run: bash scripts/check_production_compose.sh
 
+  search-service-contract-gate:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: search-service
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Install service test dependencies
+        run: uv sync --group dev
+
+      - name: Check service formatting and lint
+        run: uv run ruff check src tests && uv run ruff format --check src tests
+
+      - name: Run service contract tests
+        run: uv run pytest
+
   llm-provider-service-contract-gate:
     runs-on: ubuntu-latest
     defaults:
@@ -658,8 +684,8 @@ jobs:
 
       - name: Ensure generated contracts are committed
         run: |
-          if [[ -n "$(git status --porcelain -- contracts/openapi.json frontend/src/types/generated/api-contract.ts)" ]]; then
+          if [[ -n "$(git status --porcelain -- contracts/openapi.json contracts/search-service-openapi.json frontend/src/types/generated/api-contract.ts)" ]]; then
             echo "Generated contract artifacts are out of sync. Run: bash scripts/generate-contracts.sh"
-            git status --porcelain -- contracts/openapi.json frontend/src/types/generated/api-contract.ts
+            git status --porcelain -- contracts/openapi.json contracts/search-service-openapi.json frontend/src/types/generated/api-contract.ts
             exit 1
           fi
