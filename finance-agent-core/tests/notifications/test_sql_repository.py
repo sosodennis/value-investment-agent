@@ -8,7 +8,8 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from sqlalchemy import delete, select
 
-from src.auth.infrastructure.models import OrganizationLifecycleEventModel, UserModel
+from src.audit.infrastructure.models import AuditEventModel
+from src.auth.infrastructure.models import UserModel
 from src.auth.infrastructure.repositories import SqlAlchemyUserRepository
 from src.infrastructure.database import AsyncSessionLocal, init_db
 from src.notifications.application.service import NotificationService
@@ -318,12 +319,15 @@ async def test_notification_transaction_rolls_back_event_and_outbox_together() -
         async with AsyncSessionLocal() as session:
             with pytest.raises(RuntimeError, match="source transaction failure"):
                 async with session.begin():
-                    source_event = OrganizationLifecycleEventModel(
-                        event_type="organization.invitation.created",
+                    source_event = AuditEventModel(
                         organization_id=user.organization.id,
+                        actor_type="user",
                         actor_user_id=user.user.id,
+                        action="organization.invitation.created",
+                        outcome="success",
+                        correlation_id=event_key,
                         payload={"notification_event_key": event_key},
-                        occurred_at=now.replace(tzinfo=None),
+                        occurred_at=now,
                     )
                     session.add(source_event)
                     await session.flush()
@@ -362,9 +366,8 @@ async def test_notification_transaction_rolls_back_event_and_outbox_together() -
             )
             assert (
                 await session.scalar(
-                    select(OrganizationLifecycleEventModel.id).where(
-                        OrganizationLifecycleEventModel.event_type
-                        == "organization.invitation.created"
+                    select(AuditEventModel.id).where(
+                        AuditEventModel.action == "organization.invitation.created"
                     )
                 )
                 is None

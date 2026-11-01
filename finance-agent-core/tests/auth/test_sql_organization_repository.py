@@ -6,9 +6,9 @@ import uuid
 from datetime import datetime
 
 import pytest
-from sqlalchemy import delete, func, select
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy import delete, func, select, text
 
+from src.audit.infrastructure.models import AuditEventModel
 from src.auth.application.authorization_service import AuthorizationService
 from src.auth.application.errors import (
     AuthorizationDeniedError,
@@ -32,7 +32,6 @@ from src.auth.domain.events import (
 )
 from src.auth.infrastructure.models import (
     MembershipModel,
-    OrganizationLifecycleEventModel,
     OrganizationModel,
     SessionModel,
     UserModel,
@@ -57,8 +56,16 @@ pytestmark = pytest.mark.skipif(
 async def _cleanup(*, user_ids: set[str], organization_ids: set[str]) -> None:
     async with AsyncSessionLocal() as session:
         await session.execute(
-            delete(OrganizationLifecycleEventModel).where(
-                OrganizationLifecycleEventModel.organization_id.in_(organization_ids)
+            text(
+                "ALTER TABLE auth_audit_events "
+                "DISABLE TRIGGER auth_audit_events_no_truncate"
+            )
+        )
+        await session.execute(text("TRUNCATE TABLE auth_audit_events"))
+        await session.execute(
+            text(
+                "ALTER TABLE auth_audit_events "
+                "ENABLE TRIGGER auth_audit_events_no_truncate"
             )
         )
         await session.execute(
@@ -207,14 +214,16 @@ async def test_lifecycle_repository_locks_owner_transfer_and_persists_events() -
         )
 
 
-async def _create_organization_fixture() -> tuple[
-    SqlAlchemyUserRepository,
-    SqlAlchemyOrganizationLifecycleRepository,
-    RegistrationRecord,
-    RegistrationRecord,
-    OrganizationMembership,
-    datetime,
-]:
+async def _create_organization_fixture() -> (
+    tuple[
+        SqlAlchemyUserRepository,
+        SqlAlchemyOrganizationLifecycleRepository,
+        RegistrationRecord,
+        RegistrationRecord,
+        OrganizationMembership,
+        datetime,
+    ]
+):
     users = SqlAlchemyUserRepository()
     repository = SqlAlchemyOrganizationLifecycleRepository()
     now = datetime.utcnow()
@@ -542,7 +551,7 @@ async def test_lifecycle_event_failure_rolls_back_the_membership_mutation() -> N
             or 0
         )
     try:
-        with pytest.raises(IntegrityError):
+        with pytest.raises(ValueError, match="audit actor user does not exist"):
             await repository.create_organization(
                 owner_user_id=owner.user.id,
                 name="must rollback",
@@ -589,7 +598,7 @@ async def test_membership_event_failure_rolls_back_the_membership_mutation() -> 
         target_id=target.user.id,
     )
     try:
-        with pytest.raises(IntegrityError):
+        with pytest.raises(ValueError, match="audit actor user does not exist"):
             await repository.change_membership(
                 organization_id=organization_id,
                 user_id=target.user.id,
@@ -828,10 +837,8 @@ async def session_count_events(*, organization_id: str) -> int:
         return int(
             await session.scalar(
                 select(func.count())
-                .select_from(OrganizationLifecycleEventModel)
-                .where(
-                    OrganizationLifecycleEventModel.organization_id == organization_id
-                )
+                .select_from(AuditEventModel)
+                .where(AuditEventModel.organization_id == organization_id)
             )
             or 0
         )

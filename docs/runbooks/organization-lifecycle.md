@@ -33,11 +33,13 @@ under an organization row lock. At least one active owner must remain.
 
 ## Events
 
-Lifecycle mutations append `auth_organization_lifecycle_events` records for
-organization creation and rename, membership role/status changes, and ownership
-transfer. Events contain actor, organization, target, typed event name, payload,
-and UTC time; they do not contain credentials, invitation tokens, or provider
-secrets. Issue #210 owns the later audit query and retention contract.
+Lifecycle mutations append organization audit events in
+`auth_audit_events` for organization creation and rename, membership
+role/status changes, and ownership transfer. The audit contract records actor,
+organization, target, action, outcome, correlation ID, redacted payload, and
+UTC time. The table is append-only and has no application update/delete API;
+query authorization, redaction, retention, and recovery are defined in the
+[`organization audit trail runbook`](organization-audit-trail.md).
 
 ## Verification
 

@@ -20,6 +20,7 @@ from src.analysis_runtime.infrastructure import (
     SqlAlchemyActivityRepository,
 )
 from src.analysis_runtime.interface.routes import router as analysis_runtime_router
+from src.audit.entrypoint import audit_router
 from src.auth.entrypoint import (
     auth_router,
     get_ownership_service,
@@ -134,6 +135,7 @@ app.include_router(dashboard_router)
 app.include_router(observability_router)
 app.include_router(artifact_router)
 app.include_router(notifications_router)
+app.include_router(audit_router)
 
 
 def _openapi() -> dict[str, object]:

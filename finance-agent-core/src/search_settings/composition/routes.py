@@ -4,6 +4,8 @@ from functools import lru_cache
 
 from fastapi import APIRouter, Depends, HTTPException
 
+from src.audit.application.recording import record_best_effort
+from src.audit.domain.entities import AuditOutcome
 from src.auth.entrypoint import (
     Principal,
     require_current_user,
@@ -70,6 +72,15 @@ async def update_search_settings(
         settings = await service.update(
             principal=principal.user_id, providers=request.providers
         )
+        await record_best_effort(
+            organization_id=principal.organization_id,
+            actor_user_id=principal.user_id,
+            action="provider.config.updated",
+            outcome=AuditOutcome.SUCCESS,
+            target_type="provider_config",
+            target_id="search",
+            payload={"provider_count": len(request.providers)},
+        )
         return SearchSettingsResponse(providers=catalog, settings=settings)
     except SearchServiceError as exc:
         _raise(exc)
@@ -89,6 +100,15 @@ async def add_search_key(
             provider=request.provider,
             api_key=request.api_key.get_secret_value(),
             label=request.label,
+        )
+        await record_best_effort(
+            organization_id=principal.organization_id,
+            actor_user_id=principal.user_id,
+            action="provider.key.created",
+            outcome=AuditOutcome.SUCCESS,
+            target_type="provider",
+            target_id="search",
+            payload={"provider": request.provider},
         )
         return ProviderKeyResponse(**result.model_dump())
     except SearchServiceError as exc:
@@ -111,6 +131,15 @@ async def replace_search_key(
             api_key=request.api_key.get_secret_value(),
             label=request.label,
         )
+        await record_best_effort(
+            organization_id=principal.organization_id,
+            actor_user_id=principal.user_id,
+            action="provider.key.replaced",
+            outcome=AuditOutcome.SUCCESS,
+            target_type="provider_key",
+            target_id=request.key_id,
+            payload={"provider": request.provider},
+        )
         return ProviderKeyResponse(**result.model_dump())
     except SearchServiceError as exc:
         _raise(exc)
@@ -124,6 +153,14 @@ async def delete_search_key(
 ) -> None:
     try:
         await service.delete_key(principal=principal.user_id, key_id=key_id)
+        await record_best_effort(
+            organization_id=principal.organization_id,
+            actor_user_id=principal.user_id,
+            action="provider.key.deleted",
+            outcome=AuditOutcome.SUCCESS,
+            target_type="provider_key",
+            target_id=key_id,
+        )
     except SearchServiceError as exc:
         _raise(exc)
 
@@ -138,6 +175,16 @@ async def set_search_key_enabled(
     try:
         result = await service.set_key_enabled(
             principal=principal.user_id, key_id=key_id, enabled=request.enabled
+        )
+        await record_best_effort(
+            organization_id=principal.organization_id,
+            actor_user_id=principal.user_id,
+            action="provider.key.enabled"
+            if request.enabled
+            else "provider.key.disabled",
+            outcome=AuditOutcome.SUCCESS,
+            target_type="provider_key",
+            target_id=key_id,
         )
         return ProviderKeyResponse(**result.model_dump())
     except SearchServiceError as exc:

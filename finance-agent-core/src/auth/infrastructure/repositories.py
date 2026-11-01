@@ -5,6 +5,8 @@ from datetime import datetime
 from sqlalchemy import delete, select, update
 from sqlalchemy.exc import IntegrityError
 
+from src.audit.domain.entities import AuditEventDraft, AuditOutcome
+from src.audit.infrastructure.repository import SqlAlchemyAuditRepository
 from src.auth.application.errors import RegistrationConflictError
 from src.auth.domain.entities import (
     MembershipRecord,
@@ -27,6 +29,11 @@ from src.infrastructure.database import AsyncSessionLocal
 
 
 class SqlAlchemyUserRepository:
+    def __init__(
+        self, *, audit_repository: SqlAlchemyAuditRepository | None = None
+    ) -> None:
+        self._audit = audit_repository or SqlAlchemyAuditRepository()
+
     async def get_by_email(self, email: str) -> UserRecord | None:
         async with AsyncSessionLocal() as session:
             result = await session.execute(
@@ -66,6 +73,20 @@ class SqlAlchemyUserRepository:
                     status=MembershipStatus.ACTIVE.value,
                 )
                 session.add(membership_model)
+                await session.flush()
+                await self._audit.append_in_session(
+                    session,
+                    event=AuditEventDraft(
+                        organization_id=organization_model.id,
+                        actor_user_id=user_model.id,
+                        action="organization.created",
+                        outcome=AuditOutcome.SUCCESS,
+                        target_type="organization",
+                        target_id=organization_model.id,
+                        payload={"source": "registration"},
+                        occurred_at=datetime.utcnow(),
+                    ),
+                )
                 await session.commit()
                 await session.refresh(user_model)
                 await session.refresh(organization_model)

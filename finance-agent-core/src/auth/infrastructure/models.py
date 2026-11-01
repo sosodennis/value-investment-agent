@@ -4,7 +4,6 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import (
-    JSON,
     CheckConstraint,
     DateTime,
     ForeignKey,
@@ -198,34 +197,6 @@ class InvitationOperationModel(Base):
             "operation",
             "created_at",
         ),
-    )
-
-
-class OrganizationLifecycleEventModel(Base):
-    __tablename__ = "auth_organization_lifecycle_events"
-
-    id: Mapped[str] = mapped_column(
-        String, primary_key=True, default=lambda: str(uuid.uuid4())
-    )
-    event_type: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
-    organization_id: Mapped[str] = mapped_column(
-        String,
-        ForeignKey("auth_organizations.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
-    )
-    actor_user_id: Mapped[str] = mapped_column(
-        String,
-        ForeignKey("auth_users.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
-    )
-    target_user_id: Mapped[str | None] = mapped_column(
-        String, ForeignKey("auth_users.id", ondelete="SET NULL"), nullable=True
-    )
-    payload: Mapped[dict[str, str]] = mapped_column(JSON, nullable=False, default=dict)
-    occurred_at: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, default=datetime.utcnow, index=True
     )
 
 

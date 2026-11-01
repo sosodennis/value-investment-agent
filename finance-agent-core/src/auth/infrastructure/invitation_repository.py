@@ -6,6 +6,9 @@ from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.audit.application.ports import AuditRepository
+from src.audit.domain.entities import AuditEventDraft, AuditOutcome
+from src.audit.infrastructure.repository import SqlAlchemyAuditRepository
 from src.auth.application.invitation_errors import (
     InvitationConflictError,
     InvitationMutationConflictError,
@@ -22,7 +25,6 @@ from src.auth.infrastructure.models import (
     InvitationModel,
     InvitationOperationModel,
     MembershipModel,
-    OrganizationLifecycleEventModel,
     OrganizationModel,
     UserModel,
 )
@@ -33,11 +35,15 @@ from src.notifications.infrastructure.repository import SqlAlchemyNotificationRe
 
 class SqlAlchemyInvitationRepository:
     def __init__(
-        self, *, notification_repository: SqlAlchemyNotificationRepository | None = None
+        self,
+        *,
+        notification_repository: SqlAlchemyNotificationRepository | None = None,
+        audit_repository: AuditRepository | None = None,
     ) -> None:
         self._notifications = (
             notification_repository or SqlAlchemyNotificationRepository()
         )
+        self._audit = audit_repository or SqlAlchemyAuditRepository()
 
     async def create(
         self,
@@ -162,12 +168,11 @@ class SqlAlchemyInvitationRepository:
                             created_at=now,
                         )
                     )
-                    self._add_event(
+                    await self._add_event(
                         session,
                         organization_id=organization_id,
                         actor_user_id=inviter_user_id,
-                        target_user_id=recipient_user_id,
-                        event_type="organization.invitation.created",
+                        operation=InvitationOperation.CREATE,
                         invitation=invitation,
                         now=now,
                     )
@@ -410,12 +415,11 @@ class SqlAlchemyInvitationRepository:
                             created_at=now,
                         )
                     )
-                    self._add_event(
+                    await self._add_event(
                         session,
                         organization_id=organization_id,
                         actor_user_id=actor_user_id,
-                        target_user_id=invitation.recipient_user_id,
-                        event_type=f"organization.invitation.{invitation.status}",
+                        operation=operation,
                         invitation=invitation,
                         now=now,
                     )
@@ -679,28 +683,30 @@ class SqlAlchemyInvitationRepository:
             "outcome": invitation.status,
         }
 
-    @staticmethod
-    def _add_event(
+    async def _add_event(
+        self,
         session: AsyncSession,
         *,
         organization_id: str,
         actor_user_id: str,
-        target_user_id: str,
-        event_type: str,
+        operation: InvitationOperation,
         invitation: InvitationModel,
         now: datetime,
     ) -> None:
-        session.add(
-            OrganizationLifecycleEventModel(
-                event_type=event_type,
+        await self._audit.append_in_session(
+            session,
+            event=AuditEventDraft(
                 organization_id=organization_id,
                 actor_user_id=actor_user_id,
-                target_user_id=target_user_id,
+                action=f"organization.invitation.{operation.value}",
+                outcome=AuditOutcome.SUCCESS,
+                target_type="invitation",
+                target_id=invitation.id,
                 payload={
                     "invitation_id": invitation.id,
                     "status": invitation.status,
                     "requested_role": invitation.requested_role,
                 },
-                occurred_at=now.replace(tzinfo=None),
-            )
+                occurred_at=now,
+            ),
         )
