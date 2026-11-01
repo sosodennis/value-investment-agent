@@ -23,6 +23,7 @@ from src.analysis_runtime.interface.routes import router as analysis_runtime_rou
 from src.auth.entrypoint import (
     auth_router,
     get_ownership_service,
+    invitation_router,
     organization_router,
 )
 from src.dashboard.infrastructure import (
@@ -124,6 +125,7 @@ app.add_middleware(
 )
 app.include_router(auth_router)
 app.include_router(organization_router)
+app.include_router(invitation_router)
 app.include_router(provider_keys_router)
 app.include_router(llm_settings_router)
 app.include_router(search_settings_router)
