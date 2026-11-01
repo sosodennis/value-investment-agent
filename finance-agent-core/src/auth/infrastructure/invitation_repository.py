@@ -674,7 +674,6 @@ class SqlAlchemyInvitationRepository:
         recipient_display_name: str,
     ) -> dict[str, object]:
         return {
-            "invitation_id": invitation.id,
             "organization_name": organization_name,
             "inviter_display_name": inviter_display_name,
             "recipient_display_name": recipient_display_name,
@@ -703,7 +702,6 @@ class SqlAlchemyInvitationRepository:
                 target_type="invitation",
                 target_id=invitation.id,
                 payload={
-                    "invitation_id": invitation.id,
                     "status": invitation.status,
                     "requested_role": invitation.requested_role,
                 },

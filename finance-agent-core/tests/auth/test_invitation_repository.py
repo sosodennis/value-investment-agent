@@ -7,6 +7,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from sqlalchemy import delete, func, select, text
 
+from src.audit.infrastructure.models import AuditEventModel
 from src.auth.application.invitation_errors import InvitationNotFoundError
 from src.auth.domain.invitations import InvitationOperation
 from src.auth.infrastructure.invitation_repository import SqlAlchemyInvitationRepository
@@ -177,6 +178,16 @@ async def test_invitation_lifecycle_is_recipient_bound_idempotent_and_exactly_on
                 .where(MembershipModel.user_id == recipient.user.id)
             )
         assert membership_count == 1
+        async with AsyncSessionLocal() as session:
+            audit_payloads = (
+                await session.scalars(
+                    select(AuditEventModel.payload).where(
+                        AuditEventModel.target_id == invitation.id
+                    )
+                )
+            ).all()
+        assert audit_payloads
+        assert all("invitation_id" not in payload for payload in audit_payloads)
         updated_inbox = await notification_repository.list_for_recipient(
             recipient_user_id=recipient.user.id, limit=10, now=now
         )

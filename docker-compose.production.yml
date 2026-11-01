@@ -4,6 +4,7 @@ services:
       APP_ENV: production
       LLM_PROVIDER_SERVICE_TOKEN: ${LLM_PROVIDER_SERVICE_TOKEN:?Set LLM_PROVIDER_SERVICE_TOKEN to a production secret}
       DIRECTORY_CURSOR_SECRET: ${DIRECTORY_CURSOR_SECRET:?Set DIRECTORY_CURSOR_SECRET to a production secret}
+      AUDIT_CURSOR_SECRET: ${AUDIT_CURSOR_SECRET:?Set AUDIT_CURSOR_SECRET to a production secret}
 
   llm-provider-service:
     environment:

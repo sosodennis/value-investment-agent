@@ -174,3 +174,8 @@ def test_audit_payload_redaction_removes_credentials_and_action_material() -> No
     assert payload["invitation_action_ref"] == REDACTED
     assert payload["nested"]["password"] == REDACTED
     assert payload["nested"]["status"] == "accepted"
+
+
+def test_audit_payload_does_not_expose_invitation_identifiers() -> None:
+    payload = redact_payload({"status": "accepted", "requested_role": "member"})
+    assert "invitation_id" not in payload

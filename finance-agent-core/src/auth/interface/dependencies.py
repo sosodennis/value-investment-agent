@@ -92,7 +92,7 @@ def require_organization_permission(
                 resource=resource,
             )
         except HTTPException as error:
-            await _record_denied_permission(
+            await record_denied_permission(
                 request=request,
                 context=context,
                 permission=permission,
@@ -127,7 +127,7 @@ def _require_permission(
         raise HTTPException(status_code=status_code, detail=exc.code) from exc
 
 
-async def _record_denied_permission(
+async def record_denied_permission(
     *,
     request: Request,
     context: AuthenticatedContext,
@@ -135,24 +135,25 @@ async def _record_denied_permission(
     resource: AuthorizationResource,
     failure_code: str,
 ) -> None:
-    organization_id = resource.organization_id
-    if organization_id is None:
+    verified_organization_id = context.membership.organization_id
+    if not verified_organization_id:
         return
     try:
         from src.audit.application.recording import record_best_effort
         from src.audit.domain.entities import AuditOutcome
 
         await record_best_effort(
-            organization_id=organization_id,
+            organization_id=verified_organization_id,
             actor_user_id=context.user.id,
             action="authorization.denied",
             outcome=AuditOutcome.DENIED,
             target_type="organization",
-            target_id=organization_id,
+            target_id=resource.organization_id,
             correlation_id=request.headers.get("X-Request-ID"),
             payload={
                 "permission": permission.value,
                 "failure_code": failure_code,
+                "requested_organization_id": resource.organization_id,
             },
         )
     except Exception:

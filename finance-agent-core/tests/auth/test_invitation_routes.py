@@ -6,6 +6,7 @@ import httpx
 import pytest
 from fastapi import FastAPI
 
+from src.auth.application.errors import AuthorizationDeniedError
 from src.auth.application.invitation_errors import InvitationNotFoundError
 from src.auth.application.wiring import get_invitation_service
 from src.auth.domain.entities import (
@@ -185,3 +186,40 @@ async def test_invitation_lookup_hides_non_recipient() -> None:
 
     assert response.status_code == 404
     assert response.json() == {"detail": "invitation_not_found"}
+
+
+@pytest.mark.asyncio
+async def test_invitation_service_denial_records_verified_organization(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service = StubInvitationService()
+
+    async def denied_create(**_kwargs):
+        raise AuthorizationDeniedError("role_transition_not_allowed")
+
+    service.create = denied_create  # type: ignore[method-assign]
+    context = _context()
+    denied_events: list[dict[str, object]] = []
+
+    async def capture_denied_event(**kwargs: object) -> None:
+        denied_events.append(kwargs)
+
+    monkeypatch.setattr(
+        "src.audit.application.recording.record_best_effort", capture_denied_event
+    )
+    app = FastAPI()
+    app.include_router(router)
+    app.dependency_overrides[get_invitation_service] = lambda: service
+    app.dependency_overrides[require_current_context_mutation] = lambda: context
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://testserver"
+    ) as client:
+        response = await client.post(
+            "/api/v1/organizations/organization-1/invitations",
+            headers={"Idempotency-Key": "create-denied-1"},
+            json={"recipient_user_id": "recipient", "role": "member"},
+        )
+
+    assert response.status_code == 403
+    assert denied_events[-1]["organization_id"] == "organization-1"

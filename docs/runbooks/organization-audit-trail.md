@@ -14,6 +14,11 @@ forged actors, and cross-organization requests are denied or hidden by the
 authorization contract. Results are capped at 100 records and use a signed
 cursor ordered by `(occurred_at DESC, id DESC)`.
 
+Production deployments must provide the required `AUDIT_CURSOR_SECRET` to the
+backend. The production Compose overlay fails before startup when it is absent;
+staging and local environments generate or explicitly configure an equivalent
+per-environment secret.
+
 ## Data handling
 
 The writer redacts keys containing secrets, tokens, passwords, credentials,

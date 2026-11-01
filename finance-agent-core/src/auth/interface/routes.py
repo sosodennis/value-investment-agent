@@ -147,15 +147,20 @@ async def select_active_organization(
             now=datetime.utcnow(),
         )
     except InvalidOrganizationContextError as exc:
-        await record_best_effort(
-            organization_id=body.organization_id,
-            actor_user_id=actor.user.id,
-            action="context.organization.selection_denied",
-            outcome=AuditOutcome.DENIED,
-            target_type="organization",
-            target_id=body.organization_id,
-            correlation_id=request.headers.get("X-Request-ID"),
+        current_context = await get_auth_service().authenticate(
+            session_token=token, now=datetime.utcnow()
         )
+        if current_context is not None:
+            await record_best_effort(
+                organization_id=current_context.membership.organization_id,
+                actor_user_id=actor.user.id,
+                action="context.organization.selection_denied",
+                outcome=AuditOutcome.DENIED,
+                target_type="organization",
+                target_id=body.organization_id,
+                correlation_id=request.headers.get("X-Request-ID"),
+                payload={"requested_organization_id": body.organization_id},
+            )
         raise HTTPException(
             status_code=404, detail="organization context not found"
         ) from exc

@@ -16,8 +16,8 @@ STAGING_SOURCE_ENV_FILE=/absolute/path/to/.env ./scripts/prepare_staging_env.sh
 ```
 
 The script creates `.env.staging` with mode `0600`. It generates the database
-password, internal service tokens, the directory cursor signing secret, and
-Fernet encryption keys. It refuses to overwrite an existing file. Keep the
+password, internal service tokens, the directory and audit cursor signing
+secrets, and Fernet encryption keys. It refuses to overwrite an existing file. Keep the
 file on the host and do not commit it.
 
 Check the file mode and ignore rule without printing its contents:

@@ -315,8 +315,18 @@ async def test_permission_dependency_enforces_policy_at_http_boundary() -> None:
 
 
 @pytest.mark.asyncio
-async def test_permission_dependency_binds_route_resource_context() -> None:
+async def test_permission_dependency_binds_route_resource_context(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     app = FastAPI()
+    denied_events: list[dict[str, object]] = []
+
+    async def capture_denied_event(**kwargs: object) -> None:
+        denied_events.append(kwargs)
+
+    monkeypatch.setattr(
+        "src.audit.application.recording.record_best_effort", capture_denied_event
+    )
 
     def resource_from_path(
         request: Request, _context: AuthenticatedContext
@@ -347,6 +357,8 @@ async def test_permission_dependency_binds_route_resource_context() -> None:
     assert same_organization.status_code == 200
     assert cross_organization.status_code == 404
     assert cross_organization.json() == {"detail": "resource_not_found"}
+    assert denied_events[-1]["organization_id"] == "organization-a"
+    assert denied_events[-1]["target_id"] == "organization-b"
 
 
 @pytest.mark.asyncio
