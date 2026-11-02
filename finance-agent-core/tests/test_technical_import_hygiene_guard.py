@@ -214,6 +214,55 @@ def test_no_legacy_generic_technical_module_files() -> None:
     )
 
 
+def test_migrated_technical_capabilities_have_no_subdomain_paths() -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    technical_root = repo_root / "finance-agent-core" / "src" / "agents" / "technical"
+    migrated = (
+        "alerts",
+        "features",
+        "market_data",
+        "patterns",
+        "regime",
+        "signal_fusion",
+        "verification",
+    )
+
+    legacy_paths = [technical_root / "subdomains" / name for name in migrated]
+    assert not [path for path in legacy_paths if path.exists()]
+    assert all((technical_root / "capabilities" / name).is_dir() for name in migrated)
+
+    violations: list[str] = []
+    for root in (
+        technical_root / "application",
+        technical_root / "interface",
+        technical_root / "workflow",
+        technical_root / "capabilities",
+        repo_root / "finance-agent-core" / "tests",
+        repo_root / "finance-agent-core" / "scripts",
+    ):
+        for path in root.rglob("*.py"):
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+            for node in ast.walk(tree):
+                modules: list[str] = []
+                if isinstance(node, ast.ImportFrom) and node.module:
+                    modules.append(node.module)
+                elif isinstance(node, ast.Import):
+                    modules.extend(alias.name for alias in node.names)
+                for module in modules:
+                    if any(
+                        module == f"src.agents.technical.subdomains.{name}"
+                        or module.startswith(f"src.agents.technical.subdomains.{name}.")
+                        for name in migrated
+                    ):
+                        violations.append(
+                            f"{path.relative_to(repo_root)}:{node.lineno}: {module}"
+                        )
+
+    assert not violations, "Migrated technical subdomain imports remain:\n" + "\n".join(
+        sorted(violations)
+    )
+
+
 def test_backtest_runtime_port_has_no_object_typed_boundaries() -> None:
     repo_root = Path(__file__).resolve().parents[2]
     target = (

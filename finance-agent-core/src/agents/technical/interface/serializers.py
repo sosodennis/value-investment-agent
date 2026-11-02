@@ -6,17 +6,17 @@ from datetime import datetime
 
 from pydantic import BaseModel
 
-from src.agents.technical.domain.shared import FeatureSummary
-from src.agents.technical.subdomains.signal_fusion import (
+from src.agents.technical.capabilities.signal_fusion.public import (
     DirectionScorecard,
     IndicatorContribution,
     safe_float,
 )
-from src.agents.technical.subdomains.verification.public import (
+from src.agents.technical.capabilities.verification.public import (
     BacktestSummary,
     VerificationGateResult,
     WfaSummary,
 )
+from src.agents.technical.domain.shared import FeatureSummary
 from src.interface.artifacts.artifact_data_models import (
     TechnicalFeaturePackArtifactData,
     TechnicalFusionReportArtifactData,

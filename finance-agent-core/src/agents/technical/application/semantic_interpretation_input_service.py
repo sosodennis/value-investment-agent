@@ -20,10 +20,12 @@ from src.agents.technical.application.technical_evidence_bundle_service import (
 from src.agents.technical.application.technical_report_projection_service import (
     build_report_projection_context,
 )
+from src.agents.technical.capabilities.signal_fusion.public import (
+    SemanticTagPolicyResult,
+)
 from src.agents.technical.interface.evidence_bundle_projection_service import (
     build_setup_context_from_evidence,
 )
-from src.agents.technical.subdomains.signal_fusion import SemanticTagPolicyResult
 from src.interface.artifacts.artifact_data_models import (
     TechnicalFusionReportArtifactData,
 )

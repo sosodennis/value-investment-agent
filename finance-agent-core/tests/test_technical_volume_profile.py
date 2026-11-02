@@ -5,14 +5,14 @@ from datetime import UTC, datetime, timedelta
 from src.agents.technical.application.use_cases.run_pattern_compute_use_case import (
     _pattern_pack_to_payload,
 )
-from src.agents.technical.domain.shared import PriceSeries
-from src.agents.technical.subdomains.patterns import (
+from src.agents.technical.capabilities.patterns.domain.pattern_detection_service import (
+    detect_pattern_frame,
+)
+from src.agents.technical.capabilities.patterns.public import (
     PatternRuntimeRequest,
     PatternRuntimeService,
 )
-from src.agents.technical.subdomains.patterns.domain.pattern_detection_service import (
-    detect_pattern_frame,
-)
+from src.agents.technical.domain.shared import PriceSeries
 from src.interface.artifacts.artifact_data_models import (
     TechnicalPatternPackArtifactData,
 )

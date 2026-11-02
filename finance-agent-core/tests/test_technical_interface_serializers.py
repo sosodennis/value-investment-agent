@@ -2,6 +2,12 @@ from __future__ import annotations
 
 import pytest
 
+from src.agents.technical.capabilities.signal_fusion.public import (
+    FUSION_SCORECARD_MODEL_VERSION,
+    DirectionScorecard,
+    IndicatorContribution,
+    ScorecardFrame,
+)
 from src.agents.technical.domain.shared import (
     FeatureFrame,
     FeaturePack,
@@ -13,12 +19,6 @@ from src.agents.technical.interface.serializers import (
     build_direction_scorecard_artifact_payload,
     build_feature_pack_artifact_payload,
     build_fracdiff_progress_preview,
-)
-from src.agents.technical.subdomains.signal_fusion import (
-    FUSION_SCORECARD_MODEL_VERSION,
-    DirectionScorecard,
-    IndicatorContribution,
-    ScorecardFrame,
 )
 
 

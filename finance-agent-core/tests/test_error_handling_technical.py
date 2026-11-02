@@ -24,7 +24,7 @@ async def test_data_fetch_node_error():
     }
 
     with patch(
-        "src.agents.technical.subdomains.market_data.infrastructure.yahoo_market_data_provider.YahooMarketDataProvider.fetch_ohlcv"
+        "src.agents.technical.capabilities.market_data.infrastructure.yahoo_market_data_provider.YahooMarketDataProvider.fetch_ohlcv"
     ) as mock_fetch:
         mock_fetch.side_effect = Exception("YF API Error")
 

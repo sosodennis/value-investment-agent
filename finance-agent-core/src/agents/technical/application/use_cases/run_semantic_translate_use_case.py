@@ -23,7 +23,7 @@ from src.agents.technical.application.semantic_translate_context_service import 
 from src.agents.technical.application.state_updates import (
     build_semantic_error_update,
 )
-from src.agents.technical.subdomains.signal_fusion import (
+from src.agents.technical.capabilities.signal_fusion.public import (
     SemanticTagPolicyInput,
     SemanticTagPolicyResult,
 )

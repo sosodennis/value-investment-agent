@@ -13,13 +13,13 @@ from src.agents.technical.application.state_updates import (
     build_data_fetch_error_update,
     build_data_fetch_success_update,
 )
-from src.agents.technical.interface.serializers import build_data_fetch_preview
-from src.agents.technical.subdomains.market_data.public import (
+from src.agents.technical.capabilities.market_data.public import (
     IMarketDataProvider,
     MarketDataCacheMetadata,
     MultiTimeframeFetchRequest,
     fetch_timeseries_bundle,
 )
+from src.agents.technical.interface.serializers import build_data_fetch_preview
 from src.shared.kernel.tools.logger import get_logger, log_event
 from src.shared.kernel.types import JSONObject
 from src.shared.kernel.workflow_contracts import WorkflowNodeResult

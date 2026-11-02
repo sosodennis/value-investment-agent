@@ -12,7 +12,7 @@ from src.agents.technical.application.fracdiff_runtime_contracts import (
 from src.agents.technical.application.semantic_backtest_context_service import (
     assemble_backtest_context,
 )
-from src.agents.technical.subdomains.market_data.application.ports import (
+from src.agents.technical.capabilities.market_data.application.ports import (
     MarketDataRiskFreeRateFetchResult,
 )
 from src.interface.artifacts.artifact_data_models import (
