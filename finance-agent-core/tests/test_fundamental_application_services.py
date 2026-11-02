@@ -10,11 +10,11 @@ from src.agents.fundamental.application.workflow_orchestrator.services.valuation
     build_valuation_missing_inputs_update,
     build_valuation_success_update,
 )
-from src.agents.fundamental.subdomains.forward_signals.interface.contracts import (
+from src.agents.fundamental.capabilities.forward_signals.interface.contracts import (
     ForwardSignalEvidence,
     ForwardSignalPayload,
 )
-from src.agents.fundamental.subdomains.forward_signals.interface.serializers import (
+from src.agents.fundamental.capabilities.forward_signals.interface.serializers import (
     serialize_forward_signals,
 )
 

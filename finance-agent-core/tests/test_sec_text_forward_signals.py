@@ -6,36 +6,36 @@ from unittest.mock import patch
 import pytest
 from pydantic import BaseModel
 
-from src.agents.fundamental.subdomains.financial_statements.infrastructure.sec_xbrl.cache.filing_cache_service import (
+from src.agents.fundamental.capabilities.financial_statements.infrastructure.sec_xbrl.cache.filing_cache_service import (
     FilingCacheService,
 )
-from src.agents.fundamental.subdomains.financial_statements.infrastructure.sec_xbrl.extract.financial_payload_service import (
+from src.agents.fundamental.capabilities.financial_statements.infrastructure.sec_xbrl.extract.financial_payload_service import (
     reset_filing_cache_service_for_tests,
     set_filing_cache_service_for_tests,
 )
-from src.agents.fundamental.subdomains.financial_statements.infrastructure.sec_xbrl.fetch.provider import (
+from src.agents.fundamental.capabilities.financial_statements.infrastructure.sec_xbrl.fetch.provider import (
     fetch_financial_reports_payload,
 )
-from src.agents.fundamental.subdomains.forward_signals.application.extraction_service import (
+from src.agents.fundamental.capabilities.forward_signals.application.extraction_service import (
     extract_forward_signals,
 )
-from src.agents.fundamental.subdomains.forward_signals.infrastructure.sec_xbrl.forward_signals_text import (
+from src.agents.fundamental.capabilities.forward_signals.infrastructure.sec_xbrl.forward_signals_text import (
     _apply_finbert_direction_reviews,
     _extract_focus_text_from_filing,
     _normalize_text,
     extract_forward_signals_from_sec_text,
 )
-from src.agents.fundamental.subdomains.forward_signals.infrastructure.sec_xbrl.matching.matchers.regex_signal_extractor import (
+from src.agents.fundamental.capabilities.forward_signals.infrastructure.sec_xbrl.matching.matchers.regex_signal_extractor import (
     MetricRegexHits,
     PatternHit,
 )
-from src.agents.fundamental.subdomains.forward_signals.infrastructure.sec_xbrl.matching.pipeline_evidence_service import (
+from src.agents.fundamental.capabilities.forward_signals.infrastructure.sec_xbrl.matching.pipeline_evidence_service import (
     _extract_snippet,
 )
-from src.agents.fundamental.subdomains.forward_signals.infrastructure.sec_xbrl.postprocess.finbert_direction import (
+from src.agents.fundamental.capabilities.forward_signals.infrastructure.sec_xbrl.postprocess.finbert_direction import (
     FinbertDirectionReview,
 )
-from src.agents.fundamental.subdomains.forward_signals.infrastructure.sec_xbrl.retrieval.text_record import (
+from src.agents.fundamental.capabilities.forward_signals.infrastructure.sec_xbrl.retrieval.text_record import (
     FilingTextRecord,
 )
 
@@ -337,7 +337,7 @@ def test_fetch_financial_reports_payload_normalizes_reports_to_canonical_json() 
     )
 
     with patch(
-        "src.agents.fundamental.subdomains.financial_statements.infrastructure.sec_xbrl.fetch.provider._fetch_financial_reports_payload",
+        "src.agents.fundamental.capabilities.financial_statements.infrastructure.sec_xbrl.fetch.provider._fetch_financial_reports_payload",
         return_value={
             "financial_reports": [report_model],
             "diagnostics": {"cache": {"cache_hit": False}},
@@ -368,7 +368,7 @@ def test_fetch_financial_reports_payload_rejects_extension_without_extension_typ
     )
 
     with patch(
-        "src.agents.fundamental.subdomains.financial_statements.infrastructure.sec_xbrl.fetch.provider._fetch_financial_reports_payload",
+        "src.agents.fundamental.capabilities.financial_statements.infrastructure.sec_xbrl.fetch.provider._fetch_financial_reports_payload",
         return_value={
             "financial_reports": [report_model],
         },
@@ -397,7 +397,7 @@ def test_extract_forward_signals_from_sec_text_logs_focus_diagnostics() -> None:
     ]
 
     with patch(
-        "src.agents.fundamental.subdomains.forward_signals.infrastructure.sec_xbrl.forward_signals_text.log_event"
+        "src.agents.fundamental.capabilities.forward_signals.infrastructure.sec_xbrl.forward_signals_text.log_event"
     ) as mock_log:
         signals = extract_forward_signals_from_sec_text(
             ticker="AAPL",
@@ -463,13 +463,13 @@ def test_extract_forward_signals_from_sec_text_fast_skips_fls_without_cues() -> 
 
     with (
         patch(
-            "src.agents.fundamental.subdomains.forward_signals.infrastructure.sec_xbrl.forward_signals_text.filter_forward_looking_sentences_with_stats",
+            "src.agents.fundamental.capabilities.forward_signals.infrastructure.sec_xbrl.forward_signals_text.filter_forward_looking_sentences_with_stats",
             side_effect=AssertionError(
                 "FLS should be skipped when no cues are present"
             ),
         ),
         patch(
-            "src.agents.fundamental.subdomains.forward_signals.infrastructure.sec_xbrl.forward_signals_text.log_event"
+            "src.agents.fundamental.capabilities.forward_signals.infrastructure.sec_xbrl.forward_signals_text.log_event"
         ) as mock_log,
     ):
         signals = extract_forward_signals_from_sec_text(
@@ -594,7 +594,7 @@ def test_extract_forward_signals_from_sec_text_tracks_8k_section_diagnostics() -
     ]
 
     with patch(
-        "src.agents.fundamental.subdomains.forward_signals.infrastructure.sec_xbrl.forward_signals_text.log_event"
+        "src.agents.fundamental.capabilities.forward_signals.infrastructure.sec_xbrl.forward_signals_text.log_event"
     ) as mock_log:
         signals = extract_forward_signals_from_sec_text(
             ticker="AAPL",
@@ -644,11 +644,11 @@ def test_extract_forward_signals_from_sec_text_accepts_dependency_hits() -> None
 
     with (
         patch(
-            "src.agents.fundamental.subdomains.forward_signals.infrastructure.sec_xbrl.forward_signals_text.find_metric_dependency_hits",
+            "src.agents.fundamental.capabilities.forward_signals.infrastructure.sec_xbrl.forward_signals_text.find_metric_dependency_hits",
             side_effect=_dependency_stub,
         ),
         patch(
-            "src.agents.fundamental.subdomains.forward_signals.infrastructure.sec_xbrl.forward_signals_text.log_event"
+            "src.agents.fundamental.capabilities.forward_signals.infrastructure.sec_xbrl.forward_signals_text.log_event"
         ) as mock_log,
     ):
         signals = extract_forward_signals_from_sec_text(
@@ -785,7 +785,7 @@ def test_extract_forward_signals_from_sec_text_deduplicates_similar_evidence() -
     ]
     with (
         patch(
-            "src.agents.fundamental.subdomains.forward_signals.infrastructure.sec_xbrl.forward_signals_text.extract_metric_regex_hits",
+            "src.agents.fundamental.capabilities.forward_signals.infrastructure.sec_xbrl.forward_signals_text.extract_metric_regex_hits",
             return_value=MetricRegexHits(
                 up_hits=[hit_primary, hit_shifted],
                 down_hits=[],
@@ -793,11 +793,11 @@ def test_extract_forward_signals_from_sec_text_deduplicates_similar_evidence() -
             ),
         ),
         patch(
-            "src.agents.fundamental.subdomains.forward_signals.infrastructure.sec_xbrl.forward_signals_text.find_metric_lemma_hits",
+            "src.agents.fundamental.capabilities.forward_signals.infrastructure.sec_xbrl.forward_signals_text.find_metric_lemma_hits",
             return_value=([], []),
         ),
         patch(
-            "src.agents.fundamental.subdomains.forward_signals.infrastructure.sec_xbrl.forward_signals_text.find_metric_dependency_hits",
+            "src.agents.fundamental.capabilities.forward_signals.infrastructure.sec_xbrl.forward_signals_text.find_metric_dependency_hits",
             return_value=([], []),
         ),
     ):

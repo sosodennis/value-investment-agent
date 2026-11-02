@@ -1,15 +1,15 @@
 from __future__ import annotations
 
-from src.agents.fundamental.domain.shared.contracts.traceable import (
-    ManualProvenance,
-    TraceableField,
-)
-from src.agents.fundamental.subdomains.financial_statements.infrastructure.sec_xbrl.extract.report_contracts import (
+from src.agents.fundamental.capabilities.financial_statements.infrastructure.sec_xbrl.extract.report_contracts import (
     BaseFinancialModel,
     FinancialReport,
 )
-from src.agents.fundamental.subdomains.forward_signals.infrastructure.sec_xbrl.forward_signals import (
+from src.agents.fundamental.capabilities.forward_signals.infrastructure.sec_xbrl.forward_signals import (
     extract_forward_signals_from_xbrl_reports,
+)
+from src.agents.fundamental.domain.shared.contracts.traceable import (
+    ManualProvenance,
+    TraceableField,
 )
 
 

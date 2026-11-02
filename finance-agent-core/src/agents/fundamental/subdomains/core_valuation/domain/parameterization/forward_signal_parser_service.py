@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from src.agents.fundamental.subdomains.forward_signals.public import (
+from src.agents.fundamental.capabilities.forward_signals.public import (
     ForwardSignal,
     parse_forward_signals,
 )

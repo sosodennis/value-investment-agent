@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from src.agents.fundamental.subdomains.financial_statements.interface.contracts import (
+from src.agents.fundamental.capabilities.financial_statements.interface.contracts import (
     parse_financial_reports_model,
 )
 from src.interface.artifacts.artifact_model_shared import as_mapping

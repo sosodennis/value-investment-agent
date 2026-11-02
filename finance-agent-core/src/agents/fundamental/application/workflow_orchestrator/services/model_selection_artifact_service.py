@@ -13,7 +13,7 @@ from src.agents.fundamental.application.workflow_orchestrator.dto import (
 from src.agents.fundamental.application.workflow_orchestrator.ports import (
     IFundamentalReportRepo,
 )
-from src.agents.fundamental.subdomains.forward_signals.public import (
+from src.agents.fundamental.capabilities.forward_signals.public import (
     ForwardSignalPayload,
 )
 from src.agents.fundamental.subdomains.model_selection.public import (

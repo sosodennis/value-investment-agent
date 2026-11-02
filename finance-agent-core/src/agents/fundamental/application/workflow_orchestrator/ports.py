@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Protocol, TypedDict
 
-from src.agents.fundamental.subdomains.forward_signals.public import (
+from src.agents.fundamental.capabilities.forward_signals.public import (
     ForwardSignalPayload,
 )
 from src.shared.kernel.types import JSONObject

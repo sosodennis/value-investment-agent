@@ -17,7 +17,7 @@ Align the planned Technical calibration pipeline contract with the existing Fund
 ### 1) Contracts
 
 Reference files:
-- `finance-agent-core/src/agents/fundamental/subdomains/forward_signals/domain/calibration/contracts.py`
+- `finance-agent-core/src/agents/fundamental/capabilities/forward_signals/domain/calibration/contracts.py`
 
 Key contracts:
 - `ForwardSignalCalibrationObservation`
@@ -36,7 +36,7 @@ Key contracts:
 ### 2) Calibration Policy & Config
 
 Reference file:
-- `finance-agent-core/src/agents/fundamental/subdomains/forward_signals/domain/policies/forward_signal_calibration_service.py`
+- `finance-agent-core/src/agents/fundamental/capabilities/forward_signals/domain/policies/forward_signal_calibration_service.py`
 
 Key policy details:
 - `ForwardSignalCalibrationConfig`
@@ -50,7 +50,7 @@ Key policy details:
 ### 3) Fitting Service
 
 Reference file:
-- `finance-agent-core/src/agents/fundamental/subdomains/forward_signals/domain/calibration/fitting_service.py`
+- `finance-agent-core/src/agents/fundamental/capabilities/forward_signals/domain/calibration/fitting_service.py`
 
 Key behavior:
 - Uses `min_samples` threshold (default 120).
@@ -60,7 +60,7 @@ Key behavior:
 ### 4) IO and Artifact Storage
 
 Reference file:
-- `finance-agent-core/src/agents/fundamental/subdomains/forward_signals/domain/calibration/io_service.py`
+- `finance-agent-core/src/agents/fundamental/capabilities/forward_signals/domain/calibration/io_service.py`
 
 Key behavior:
 - Load observations from JSON array or JSONL.

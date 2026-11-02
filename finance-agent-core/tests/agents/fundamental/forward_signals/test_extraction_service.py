@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from src.agents.fundamental.subdomains.financial_statements.public import (
+from src.agents.fundamental.capabilities.financial_statements.public import (
     FinancialReportModel,
 )
-from src.agents.fundamental.subdomains.forward_signals.application.extraction_service import (
+from src.agents.fundamental.capabilities.forward_signals.application.extraction_service import (
     extract_forward_signals,
 )
 

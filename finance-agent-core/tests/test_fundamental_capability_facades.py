@@ -89,7 +89,17 @@ FACADE_EXPORTS: dict[str, set[str]] = {
 
 
 def _load_facade(name: str) -> ModuleType:
-    return import_module(f"src.agents.fundamental.subdomains.{name}.public")
+    root = (
+        "capabilities"
+        if name
+        in {
+            "financial_statements",
+            "forward_signals",
+            "market_data",
+        }
+        else "subdomains"
+    )
+    return import_module(f"src.agents.fundamental.{root}.{name}.public")
 
 
 def test_fundamental_public_facades_export_stable_contracts_only() -> None:

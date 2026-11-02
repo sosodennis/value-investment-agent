@@ -34,7 +34,7 @@ not a compatibility alias.
 | Intent | `build_intent_extraction_graph` | `agents/intent/workflow/` | Retain public name; remove activity fields through #148/#145 |
 | News | `build_financial_news_subgraph` | `agents/news/workflow/` | Retain public name; emit normalized activity through runtime adapter |
 | Debate | `build_debate_subgraph` | `agents/debate/workflow/` | Retain public name; model parallel bull/bear activity as a set |
-| Fundamental | `build_fundamental_subgraph` | `agents/fundamental/workflow/` plus `subdomains/` | Retain entrypoint; migrate migration-era `subdomains/` ownership under #145 |
+| Fundamental | `build_fundamental_subgraph` | `agents/fundamental/workflow/` plus `capabilities/` | Retain entrypoint; #246 owns financial statements, forward signals, and market data under `agents/fundamental/capabilities/`; remaining valuation subdomains migrate under later child issues |
 | Technical | `build_technical_subgraph` | `agents/technical/workflow/` plus `subdomains/` | Retain entrypoint; migrate migration-era `subdomains/` ownership under #145 |
 
 All agent callers use the public entrypoint or a shared contract. Private
@@ -157,7 +157,7 @@ target map assigns to a capability boundary:
 | API imports news shared HTTP client directly | `api/server.py:39-40` | Close through the news application wiring boundary |
 | API imports technical observability subdomain | `api/server.py:40-43,246-438` | Register a technical observability router/facade at composition root |
 | Agent repositories import root `src.services` and `src.interface` modules | e.g. `agents/news/infrastructure/artifacts/news_artifact_repository.py`, `agents/debate/infrastructure/artifacts/*`, technical use cases | Move stable artifact/event contracts to owned public ports; delete private root imports as callers migrate |
-| Fundamental/technical code imports migration-era `subdomains/` | `agents/fundamental/subdomains/`, `agents/technical/subdomains/` | Re-home under agent capabilities or delete; no new subdomain imports |
+| Fundamental/technical code imports migration-era `subdomains/` | `agents/fundamental/subdomains/` (remaining valuation/artifact/model-selection packages), `agents/technical/subdomains/` | #246 re-homes fundamental financial statements, forward signals, and market data under `agents/fundamental/capabilities/`; later child issues re-home the remaining migration-era packages; no new subdomain imports |
 
 The guard result is a baseline fact, not permission to preserve these edges.
 The deletion ledger gives the concrete migration action and owner.
