@@ -1747,6 +1747,10 @@ export interface components {
             valuation_diagnostics?: {
                 [key: string]: unknown;
             } | null;
+            /** Valuation Preview */
+            valuation_preview?: {
+                [key: string]: unknown;
+            } | null;
         };
         /** FinancialReportsEnvelope */
         FinancialReportsEnvelope: {

@@ -2650,6 +2650,18 @@
               }
             ],
             "title": "Valuation Diagnostics"
+          },
+          "valuation_preview": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Valuation Preview"
           }
         },
         "required": [
