@@ -32,6 +32,7 @@ from src.agents.fundamental.capabilities.model_selection.domain.model_selection 
     select_valuation_model,
 )
 from src.artifacts.public import AgentOutputArtifactPayload
+from src.shared.artifacts.traceable import ManualProvenance, TraceableField
 from src.shared.kernel.types import JSONObject
 
 
@@ -100,6 +101,28 @@ class _FailingSavePort(_FakePort):
     ) -> str:
         _ = (data, produced_by, key_prefix)
         raise RuntimeError("artifact save failed")
+
+
+class _TransientSavePort(_FakePort):
+    def __init__(self) -> None:
+        super().__init__()
+        self.save_attempts = 0
+
+    async def save_financial_reports(
+        self,
+        data: JSONObject,
+        *,
+        produced_by: str,
+        key_prefix: str | None = None,
+    ) -> str:
+        self.save_attempts += 1
+        if self.save_attempts == 1:
+            raise RuntimeError("transient artifact save failure")
+        return await super().save_financial_reports(
+            data,
+            produced_by=produced_by,
+            key_prefix=key_prefix,
+        )
 
 
 class _ValuationParams(BaseModel):
@@ -1287,7 +1310,16 @@ async def test_run_valuation_saves_snapshot_and_rewrites_reference() -> None:
         ),
         get_model_runtime_fn=lambda _model_type: {
             "schema": _ValuationParams,
-            "calculator": lambda _params: {"intrinsic_value": 123.0},
+            "calculator": lambda _params: {
+                "intrinsic_value": 123.0,
+                "details": {
+                    "source_metric": TraceableField(
+                        name="source_metric",
+                        value=120.0,
+                        provenance=ManualProvenance(description="test assumption"),
+                    )
+                },
+            },
             "auditor": lambda _params: _AuditResult(True, []),
         },
     )
@@ -1300,6 +1332,9 @@ async def test_run_valuation_saves_snapshot_and_rewrites_reference() -> None:
     assert fake_port.saved_data["valuation_diagnostics"][
         "terminal_growth_effective"
     ] == pytest.approx(0.02)
+    valuation_preview = fake_port.saved_data["valuation_preview"]
+    assert isinstance(valuation_preview, dict)
+    assert valuation_preview["intrinsic_value"] == pytest.approx(123.0)
     assert (
         fake_port.saved_data["replay_schema_version"] == VALUATION_REPLAY_SCHEMA_VERSION
     )
@@ -1310,6 +1345,11 @@ async def test_run_valuation_saves_snapshot_and_rewrites_reference() -> None:
     }
     assert isinstance(fake_port.saved_data["replay_params_dump"], dict)
     assert isinstance(fake_port.saved_data["replay_calculation_metrics"], dict)
+    source_metric = fake_port.saved_data["replay_calculation_metrics"]["details"][
+        "source_metric"
+    ]
+    assert isinstance(source_metric, dict)
+    assert source_metric["provenance"]["type"] == "MANUAL"
     assert isinstance(fake_port.saved_data["replay_assumptions"], list)
     assert isinstance(fake_port.saved_data["replay_build_metadata"], dict)
 
@@ -1325,8 +1365,9 @@ async def test_run_valuation_saves_snapshot_and_rewrites_reference() -> None:
 
 
 @pytest.mark.asyncio
-async def test_run_valuation_keeps_success_when_snapshot_save_fails() -> None:
-    orchestrator = _build_orchestrator_with_port(_FailingSavePort())
+async def test_run_valuation_retries_transient_snapshot_save_failure() -> None:
+    port = _TransientSavePort()
+    orchestrator = _build_orchestrator_with_port(port)
 
     result = await orchestrator.run_valuation(
         _build_state(),
@@ -1343,11 +1384,44 @@ async def test_run_valuation_keeps_success_when_snapshot_save_fails() -> None:
     )
 
     assert result.goto == "END"
+    assert port.save_attempts == 2
     assert result.update["workflow_activity_updates"]["calculation"] == "done"
-    assert (
-        result.update["fundamental_analysis"]["financial_reports_artifact_id"]
-        == "fa-report-1"
-    )
+    assert port.saved_data is not None
+
+
+@pytest.mark.asyncio
+async def test_run_valuation_reports_error_when_snapshot_save_fails() -> None:
+    orchestrator = _build_orchestrator_with_port(_FailingSavePort())
+
+    with patch(
+        "src.agents.fundamental.application.workflow_orchestrator.valuation_flow.log_event"
+    ) as mock_log:
+        result = await orchestrator.run_valuation(
+            _build_state(),
+            request_approval_fn=_approve_valuation,
+            build_params_fn=lambda _model_type,
+            _ticker,
+            _reports,
+            _forward_signals: _build_params_result(),
+            get_model_runtime_fn=lambda _model_type: {
+                "schema": _ValuationParams,
+                "calculator": lambda _params: {"intrinsic_value": 123.0},
+                "auditor": lambda _params: _AuditResult(True, []),
+            },
+        )
+
+    assert result.goto == "END"
+    assert result.update["workflow_activity_updates"]["calculation"] == "error"
+    error_logs = result.update.get("error_logs")
+    assert isinstance(error_logs, list)
+    assert "after 2 attempts" in str(error_logs[0]["error"])
+    completion_calls = [
+        call
+        for call in mock_log.call_args_list
+        if call.kwargs["event"] == "fundamental_valuation_completed"
+    ]
+    assert completion_calls
+    assert completion_calls[-1].kwargs["fields"]["status"] == "error"
 
 
 @pytest.mark.asyncio

@@ -7,6 +7,7 @@ from typing import Protocol, cast
 from src.agents.fundamental.capabilities.financial_statements.interface.contracts import (
     parse_financial_reports_model,
 )
+from src.shared.artifacts.model_shared import to_json
 from src.shared.kernel.types import JSONObject, JSONValue
 
 
@@ -125,6 +126,7 @@ def parse_valuation_model_runtime(
 
 
 def parse_calculation_metrics(value: object, *, context: str) -> JSONObject:
-    if not isinstance(value, Mapping):
+    parsed = to_json(value, context)
+    if not isinstance(parsed, dict):
         raise TypeError(f"{context} must serialize to an object")
-    return dict(value)
+    return parsed
