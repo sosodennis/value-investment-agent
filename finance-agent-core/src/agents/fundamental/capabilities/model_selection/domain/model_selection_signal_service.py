@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from src.agents.fundamental.subdomains.model_selection.domain.entities import (
+from src.agents.fundamental.capabilities.model_selection.domain.entities import (
     FundamentalSelectionReport,
 )
-from src.agents.fundamental.subdomains.model_selection.domain.financial_math_service import (
+from src.agents.fundamental.capabilities.model_selection.domain.financial_math_service import (
     calculate_cagr,
 )
 from src.shared.cross_agent.domain.market_identity import CompanyProfile

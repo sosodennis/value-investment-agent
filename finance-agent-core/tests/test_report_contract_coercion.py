@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import pytest
 
+from src.agents.fundamental.capabilities.core_valuation.domain.report_contract import (
+    parse_domain_financial_reports,
+)
 from src.agents.fundamental.domain.shared.contracts.traceable import (
     ManualProvenance,
     TraceableField,
-)
-from src.agents.fundamental.subdomains.core_valuation.domain.report_contract import (
-    parse_domain_financial_reports,
 )
 
 

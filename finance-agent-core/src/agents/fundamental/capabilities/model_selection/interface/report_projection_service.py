@@ -7,10 +7,10 @@ from src.agents.fundamental.capabilities.financial_statements.public import (
     FinancialReportModel,
     TraceableFieldModel,
 )
-from src.agents.fundamental.subdomains.model_selection.domain.entities import (
+from src.agents.fundamental.capabilities.model_selection.domain.entities import (
     FundamentalSelectionReport,
 )
-from src.agents.fundamental.subdomains.model_selection.domain.financial_math_service import (
+from src.agents.fundamental.capabilities.model_selection.domain.financial_math_service import (
     safe_ratio,
 )
 from src.shared.kernel.types import JSONObject

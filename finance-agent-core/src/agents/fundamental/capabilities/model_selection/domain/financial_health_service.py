@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from src.agents.fundamental.subdomains.model_selection.domain.entities import (
+from src.agents.fundamental.capabilities.model_selection.domain.entities import (
     FinancialHealthInsights,
     FundamentalSelectionReport,
 )
-from src.agents.fundamental.subdomains.model_selection.domain.financial_math_service import (
+from src.agents.fundamental.capabilities.model_selection.domain.financial_math_service import (
     calculate_cagr,
     safe_ratio,
 )

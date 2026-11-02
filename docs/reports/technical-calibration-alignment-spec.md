@@ -69,8 +69,8 @@ Key behavior:
 ### 5) Runtime Consumption
 
 Reference file:
-- `finance-agent-core/src/agents/fundamental/subdomains/core_valuation/domain/parameterization/forward_signal_calibration_mapping_service.py`
-- `finance-agent-core/src/agents/fundamental/subdomains/core_valuation/domain/parameterization/forward_signal_adjustment_service.py`
+- `finance-agent-core/src/agents/fundamental/capabilities/core_valuation/domain/parameterization/forward_signal_calibration_mapping_service.py`
+- `finance-agent-core/src/agents/fundamental/capabilities/core_valuation/domain/parameterization/forward_signal_adjustment_service.py`
 
 Key behavior:
 - Env override for mapping path: `FUNDAMENTAL_FORWARD_SIGNAL_CALIBRATION_MAPPING_PATH`.

@@ -13,6 +13,16 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.append(str(PROJECT_ROOT))
 
+from src.agents.fundamental.capabilities.core_valuation.domain.parameterization.orchestrator import (  # noqa: E402
+    build_params,
+)
+from src.agents.fundamental.capabilities.core_valuation.domain.valuation_model_registry import (  # noqa: E402
+    ValuationModelRegistry,
+)
+from src.agents.fundamental.capabilities.core_valuation.interface.replay_contracts import (  # noqa: E402
+    ValuationReplayInputModel,
+    parse_valuation_replay_input_model,
+)
 from src.agents.fundamental.capabilities.financial_statements.interface.contracts import (  # noqa: E402
     parse_financial_reports_model,
 )
@@ -22,16 +32,6 @@ from src.agents.fundamental.capabilities.financial_statements.interface.parsers 
 )
 from src.agents.fundamental.capabilities.market_data.application.market_data_service import (  # noqa: E402
     recompute_market_snapshot_staleness,
-)
-from src.agents.fundamental.subdomains.core_valuation.domain.parameterization.orchestrator import (  # noqa: E402
-    build_params,
-)
-from src.agents.fundamental.subdomains.core_valuation.domain.valuation_model_registry import (  # noqa: E402
-    ValuationModelRegistry,
-)
-from src.agents.fundamental.subdomains.core_valuation.interface.replay_contracts import (  # noqa: E402
-    ValuationReplayInputModel,
-    parse_valuation_replay_input_model,
 )
 from src.shared.kernel.types import JSONObject  # noqa: E402
 

@@ -8,24 +8,6 @@ from src.agents.fundamental.capabilities.forward_signals.public import (
 from src.shared.kernel.types import JSONObject
 
 
-class IFundamentalReportRepo(Protocol):
-    async def save_financial_reports(
-        self,
-        data: JSONObject,
-        *,
-        produced_by: str,
-        key_prefix: str | None = None,
-    ) -> str: ...
-
-    async def load_financial_reports(
-        self, artifact_id: str
-    ) -> list[JSONObject] | None: ...
-
-    async def load_financial_reports_bundle(
-        self, artifact_id: str
-    ) -> tuple[list[JSONObject], list[ForwardSignalPayload] | None] | None: ...
-
-
 class FundamentalFinancialStatementsPayload(TypedDict):
     financial_reports: list[JSONObject]
     diagnostics: JSONObject | None

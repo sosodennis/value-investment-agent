@@ -1,14 +1,14 @@
 from __future__ import annotations
 
+from src.agents.fundamental.capabilities.artifacts_provenance.public import (
+    parse_fundamental_artifact_model,
+)
 from src.agents.fundamental.capabilities.financial_statements.public import (
     parse_financial_reports_model,
 )
 from src.agents.fundamental.capabilities.forward_signals.public import (
     ForwardSignalPayload,
     serialize_forward_signals,
-)
-from src.agents.fundamental.subdomains.artifacts_provenance.public import (
-    parse_fundamental_artifact_model,
 )
 from src.interface.artifacts.output_schemas import (
     ArtifactReference,

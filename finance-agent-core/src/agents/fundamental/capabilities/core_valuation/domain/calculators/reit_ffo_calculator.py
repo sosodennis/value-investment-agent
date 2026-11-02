@@ -5,7 +5,7 @@ from typing import Literal, Protocol
 
 import numpy as np
 
-from src.agents.fundamental.subdomains.core_valuation.domain.parameterization.types import (
+from src.agents.fundamental.capabilities.core_valuation.domain.parameterization.types import (
     TraceInput,
 )
 

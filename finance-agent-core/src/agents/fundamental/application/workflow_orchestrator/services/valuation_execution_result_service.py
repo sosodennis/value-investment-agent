@@ -3,14 +3,14 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 
+from src.agents.fundamental.capabilities.core_valuation.public import (
+    ParamBuildResult,
+)
 from src.agents.fundamental.capabilities.financial_statements.public import (
     parse_calculation_metrics,
 )
 from src.agents.fundamental.capabilities.forward_signals.public import (
     ForwardSignalPayload,
-)
-from src.agents.fundamental.subdomains.core_valuation.public import (
-    ParamBuildResult,
 )
 from src.shared.kernel.types import JSONObject
 
