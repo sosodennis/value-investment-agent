@@ -3,13 +3,13 @@ from __future__ import annotations
 import logging
 from collections.abc import Mapping
 
-from src.agents.fundamental.subdomains.financial_statements.public import (
+from src.agents.fundamental.capabilities.financial_statements.public import (
     FinancialReportModel,
 )
-from src.agents.fundamental.subdomains.forward_signals.interface.contracts import (
+from src.agents.fundamental.capabilities.forward_signals.interface.contracts import (
     ForwardSignalPayload,
 )
-from src.agents.fundamental.subdomains.forward_signals.interface.parsers import (
+from src.agents.fundamental.capabilities.forward_signals.interface.parsers import (
     parse_forward_signals,
 )
 from src.shared.kernel.tools.logger import get_logger, log_event

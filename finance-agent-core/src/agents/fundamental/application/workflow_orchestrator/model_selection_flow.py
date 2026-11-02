@@ -13,11 +13,11 @@ from src.agents.fundamental.application.workflow_orchestrator.state_updates impo
     build_model_selection_waiting_update,
     build_node_error_update,
 )
+from src.agents.fundamental.capabilities.forward_signals.public import (
+    ForwardSignalPayload,
+)
 from src.agents.fundamental.subdomains.core_valuation.public import (
     resolve_calculator_model_type,
-)
-from src.agents.fundamental.subdomains.forward_signals.public import (
-    ForwardSignalPayload,
 )
 from src.agents.fundamental.subdomains.model_selection.public import (
     FundamentalSelectionReport,

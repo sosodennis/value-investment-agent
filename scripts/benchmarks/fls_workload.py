@@ -105,7 +105,7 @@ def main() -> None:
         module = cast(
             FLSModule,
             import_module(
-                "src.agents.fundamental.subdomains.forward_signals.infrastructure.sec_xbrl.filtering.fls_filter"
+                "src.agents.fundamental.capabilities.forward_signals.infrastructure.sec_xbrl.filtering.fls_filter"
             ),
         )
         load_started = time.perf_counter()

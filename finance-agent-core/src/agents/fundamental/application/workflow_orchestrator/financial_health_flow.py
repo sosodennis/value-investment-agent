@@ -19,10 +19,10 @@ from src.agents.fundamental.application.workflow_orchestrator.state_updates impo
     build_financial_health_success_update,
     build_node_error_update,
 )
-from src.agents.fundamental.subdomains.financial_statements.public import (
+from src.agents.fundamental.capabilities.financial_statements.public import (
     FinancialStatementsPayload,
 )
-from src.agents.fundamental.subdomains.forward_signals.public import (
+from src.agents.fundamental.capabilities.forward_signals.public import (
     ForwardSignalPayload,
     serialize_forward_signals,
 )

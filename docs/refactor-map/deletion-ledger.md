@@ -67,7 +67,7 @@ use listed in the ownership inventory.
 | `src/services/history.py` | Move under analysis runtime message repository | #145 | Generic services have no feature owner |
 | `src/services/artifact_manager.py` | Move under artifact capability | #145 | Artifact persistence and API projection need one owner |
 | Root `src/interface/events/` | Replace with runtime-owned event contract | #145 | Current location mixes wire protocol and LangGraph adapter details |
-| `agents/fundamental/subdomains/` | Re-home or delete each module | #145 | Migration-era path; new capabilities belong under owning agent |
+| `agents/fundamental/subdomains/` | Re-home or delete remaining modules; #246 moved `financial_statements`, `forward_signals`, and `market_data` to `agents/fundamental/capabilities/` | #246, #249 | Migration-era path; new capabilities belong under owning agent |
 | `agents/technical/subdomains/` | Re-home or delete each module | #145 | Migration-era path; new capabilities belong under owning agent |
 | API imports of SEC/news/technical private modules | Move behind wiring/facades | #145 | Composition root must not implement capability behavior |
 | Agent imports of root `src.services`/`src.interface` implementations | Replace with typed ports/public contracts | #145 | Private cross-slice dependencies increase change blast radius |

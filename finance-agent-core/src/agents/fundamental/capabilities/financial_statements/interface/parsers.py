@@ -4,7 +4,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Protocol, cast
 
-from src.agents.fundamental.subdomains.financial_statements.interface.contracts import (
+from src.agents.fundamental.capabilities.financial_statements.interface.contracts import (
     parse_financial_reports_model,
 )
 from src.shared.kernel.types import JSONObject, JSONValue

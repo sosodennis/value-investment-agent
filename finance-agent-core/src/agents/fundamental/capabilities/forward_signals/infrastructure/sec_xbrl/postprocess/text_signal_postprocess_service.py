@@ -7,7 +7,7 @@ from typing import Protocol
 
 from pydantic import ValidationError
 
-from src.agents.fundamental.subdomains.forward_signals.interface.contracts import (
+from src.agents.fundamental.capabilities.forward_signals.interface.contracts import (
     ForwardSignalEvidence,
     ForwardSignalPayload,
 )

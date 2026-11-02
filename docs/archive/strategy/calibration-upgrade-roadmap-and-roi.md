@@ -67,9 +67,9 @@ Fundamental calibration is primarily an impact or parameter-adjustment calibrati
 
 Current local implementation:
 
-- [`forward_signal_calibration_service.py`](../../../finance-agent-core/src/agents/fundamental/subdomains/forward_signals/domain/policies/forward_signal_calibration_service.py)
+- [`forward_signal_calibration_service.py`](../../../finance-agent-core/src/agents/fundamental/capabilities/forward_signals/domain/policies/forward_signal_calibration_service.py)
 - [`forward_signal_adjustment_service.py`](../../../finance-agent-core/src/agents/fundamental/subdomains/core_valuation/domain/parameterization/forward_signal_adjustment_service.py)
-- [`dataset_builder_service.py`](../../../finance-agent-core/src/agents/fundamental/subdomains/forward_signals/domain/calibration/dataset_builder_service.py)
+- [`dataset_builder_service.py`](../../../finance-agent-core/src/agents/fundamental/capabilities/forward_signals/domain/calibration/dataset_builder_service.py)
 
 What it tries to answer:
 

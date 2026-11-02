@@ -5,10 +5,10 @@ from dataclasses import dataclass
 
 from pydantic import ValidationError
 
-from src.agents.fundamental.subdomains.financial_statements.public import (
+from src.agents.fundamental.capabilities.financial_statements.public import (
     FinancialReportModel,
 )
-from src.agents.fundamental.subdomains.forward_signals.public import (
+from src.agents.fundamental.capabilities.forward_signals.public import (
     ForwardSignalPayload,
 )
 from src.interface.artifacts.artifact_data_models import FinancialReportsArtifactData

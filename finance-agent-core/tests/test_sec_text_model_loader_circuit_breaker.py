@@ -5,10 +5,10 @@ import types
 
 import numpy as np
 
-from src.agents.fundamental.subdomains.forward_signals.infrastructure.sec_xbrl.filtering.fls_filter import (
+from src.agents.fundamental.capabilities.forward_signals.infrastructure.sec_xbrl.filtering.fls_filter import (
     _FLSClassifier,
 )
-from src.agents.fundamental.subdomains.forward_signals.infrastructure.sec_xbrl.retrieval.hybrid_retriever import (
+from src.agents.fundamental.capabilities.forward_signals.infrastructure.sec_xbrl.retrieval.hybrid_retriever import (
     _DenseRetriever,
 )
 from src.model_inference.entrypoint import (

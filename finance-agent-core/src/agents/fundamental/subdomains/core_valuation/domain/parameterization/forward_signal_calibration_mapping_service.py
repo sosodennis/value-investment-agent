@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 
-from src.agents.fundamental.subdomains.forward_signals.public import (
+from src.agents.fundamental.capabilities.forward_signals.public import (
     DEFAULT_FORWARD_SIGNAL_CALIBRATION_CONFIG,
     ForwardSignalCalibrationConfig,
     parse_forward_signal_calibration_config,

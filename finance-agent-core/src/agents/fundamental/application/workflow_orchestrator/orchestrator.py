@@ -28,11 +28,11 @@ from src.agents.fundamental.application.workflow_orchestrator.services.valuation
 from src.agents.fundamental.application.workflow_orchestrator.valuation_flow import (
     run_valuation_flow,
 )
+from src.agents.fundamental.capabilities.forward_signals.public import (
+    ForwardSignalPayload,
+)
 from src.agents.fundamental.subdomains.core_valuation.public import (
     ParamBuildResult,
-)
-from src.agents.fundamental.subdomains.forward_signals.public import (
-    ForwardSignalPayload,
 )
 from src.agents.fundamental.subdomains.model_selection.public import (
     FundamentalSelectionReport,

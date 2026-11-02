@@ -4,11 +4,11 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, model_validator
 
-from src.agents.fundamental.subdomains.financial_statements.public import (
+from src.agents.fundamental.capabilities.financial_statements.public import (
     FinancialReportModel,
     FundamentalText,
 )
-from src.agents.fundamental.subdomains.forward_signals.public import (
+from src.agents.fundamental.capabilities.forward_signals.public import (
     ForwardSignalPayload,
 )
 from src.interface.artifacts.artifact_model_shared import (

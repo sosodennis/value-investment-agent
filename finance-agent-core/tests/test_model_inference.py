@@ -13,7 +13,7 @@ from threading import Barrier, Event, Lock
 import httpx
 import pytest
 
-from src.agents.fundamental.subdomains.forward_signals.infrastructure.sec_xbrl.postprocess import (
+from src.agents.fundamental.capabilities.forward_signals.infrastructure.sec_xbrl.postprocess import (
     finbert_direction,
 )
 from src.model_inference.application.context import set_inference_principal
