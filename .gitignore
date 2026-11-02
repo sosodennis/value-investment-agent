@@ -58,6 +58,9 @@ cover/
 # by default; the curated results live in documentation and are not committed.
 /reports/
 
+# Local audit artifacts. These may contain transient evidence or sensitive data.
+.audit/
+
 # Translations
 *.mo
 *.pot
