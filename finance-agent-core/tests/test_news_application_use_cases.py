@@ -569,7 +569,7 @@ def test_run_fetch_node_use_case_keeps_partial_success_when_one_fetch_fails() ->
     result = asyncio.run(
         run_fetch_node_use_case(
             state={
-                "intent_extraction": {"resolved_ticker": "GOOG"},
+                "company_profile": {"ticker": "GOOG", "name": "Alphabet Inc."},
                 "financial_news_research": {
                     "search_artifact_id": "s1",
                     "selection_artifact_id": "sel1",
@@ -680,7 +680,7 @@ def test_run_selector_node_use_case_marks_degraded_when_context_load_fails() -> 
     result = asyncio.run(
         run_selector_node_use_case(
             state={
-                "intent_extraction": {"resolved_ticker": "GOOG"},
+                "company_profile": {"ticker": "GOOG", "name": "Alphabet Inc."},
                 "financial_news_research": {"search_artifact_id": "search-1"},
             },
             port=_SelectorContextFailPort(),
@@ -697,11 +697,11 @@ def test_run_selector_node_use_case_marks_degraded_when_context_load_fails() -> 
     assert "selector context" in result.update["error_logs"][0]["error"]
 
 
-def test_aggregator_ticker_from_state_prefers_resolved_ticker() -> None:
+def test_aggregator_ticker_from_state_uses_company_profile() -> None:
     ticker = aggregator_ticker_from_state(
         {
             "ticker": "STATE_TICKER",
-            "intent_extraction": {"resolved_ticker": "GOOG"},
+            "company_profile": {"ticker": "GOOG", "name": "Alphabet Inc."},
         }
     )
     assert ticker == "GOOG"
@@ -729,7 +729,7 @@ class _SearchSaveFailPort:
 def test_run_search_node_use_case_stops_when_search_artifact_save_fails() -> None:
     result = asyncio.run(
         run_search_node_use_case(
-            state={"intent_extraction": {"resolved_ticker": "GOOG"}},
+            state={"company_profile": {"ticker": "GOOG", "name": "Alphabet Inc."}},
             port=_SearchSaveFailPort(),
             build_output_artifact=lambda _summary, _preview, _report_id: None,
             news_search_multi_timeframe_fn=lambda _ticker, _name: asyncio.sleep(

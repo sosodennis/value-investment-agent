@@ -41,6 +41,7 @@ class DebateSourceData:
     financial_reports: list[JSONObject]
     news_items: list[JSONObject]
     technical_payload: JSONObject | None
+    valuation_preview: JSONObject | None
     load_issues: list[DebateSourceLoadIssue]
 
     @property

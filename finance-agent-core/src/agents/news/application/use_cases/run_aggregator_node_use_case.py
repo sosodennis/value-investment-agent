@@ -20,7 +20,12 @@ from src.agents.news.domain.aggregation.summary_message_service import (
 )
 from src.agents.news.interface.contracts import parse_news_artifact_model
 from src.agents.news.interface.parsers import parse_news_items
-from src.artifacts.public import AgentOutputArtifactPayload
+from src.artifacts.public import (
+    ARTIFACT_KIND_NEWS_ANALYSIS_REPORT,
+    AgentOutputArtifactPayload,
+    ArtifactReference,
+    to_artifact_reference_payload,
+)
 from src.shared.kernel.tools.incident_logging import (
     CONTRACT_KIND_ARTIFACT_JSON,
     build_replay_diagnostics,
@@ -274,6 +279,17 @@ async def run_aggregator_node_use_case(
         report_id=report_id,
         artifact=artifact,
     )
+    if report_id:
+        references_raw = state.get("artifact_references", {})
+        references = dict(references_raw) if isinstance(references_raw, Mapping) else {}
+        references["news_analysis"] = to_artifact_reference_payload(
+            ArtifactReference(
+                artifact_id=report_id,
+                download_url=f"/api/v1/artifacts/{report_id}",
+                type=ARTIFACT_KIND_NEWS_ANALYSIS_REPORT,
+            )
+        )
+        update["artifact_references"] = references
     if degrade_messages:
         update["error_logs"] = [
             {

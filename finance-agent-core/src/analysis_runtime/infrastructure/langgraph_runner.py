@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from collections.abc import AsyncGenerator, AsyncIterator, Mapping
+from collections.abc import AsyncGenerator, AsyncIterator, Awaitable, Callable, Mapping
 from typing import Literal, Protocol
 from uuid import UUID
 
@@ -88,16 +88,18 @@ def _callback_id(value: object) -> str | None:
 
 
 def _activity_scope(metadata: Mapping[str, object]) -> tuple[str, ...]:
-    """Build public scope from application agent and graph-node metadata only."""
+    """Read the application-owned public scope, never LangGraph node names."""
+    scope = metadata.get("workflow_scope_path")
+    if (
+        isinstance(scope, tuple | list)
+        and scope
+        and all(isinstance(value, str) and value.strip() for value in scope)
+    ):
+        return tuple(value.strip() for value in scope)
     agent_id = metadata.get("agent_id")
-    node_id = metadata.get("langgraph_node")
-    if not isinstance(node_id, str) or not node_id.strip():
-        node_id = metadata.get("agent_node")
-    return tuple(
-        value.strip()
-        for value in (agent_id, node_id)
-        if isinstance(value, str) and value.strip()
-    )
+    if isinstance(agent_id, str) and agent_id.strip():
+        return (agent_id.strip(),)
+    return ("workflow",)
 
 
 def _activity_attempt(metadata: Mapping[str, object]) -> int:
@@ -123,11 +125,7 @@ def _activity_kind(event_type: str, metadata: Mapping[str, object]) -> ActivityK
     event_family, _ = _LIFECYCLE_EVENTS[event_type]
     if event_family == "tool":
         return "tool"
-    if (
-        event_family == "chain"
-        and metadata.get("agent_scope") == "agent"
-        and metadata.get("langgraph_node") == metadata.get("agent_node")
-    ):
+    if event_family == "chain" and metadata.get("workflow_activity_kind") == "agent":
         return "subgraph"
     return "node"
 
@@ -168,8 +166,7 @@ def _completed_agent_output(
 ) -> WorkflowAgentOutput | None:
     agent_id = metadata.get("agent_id")
     if (
-        metadata.get("agent_scope") != "agent"
-        or metadata.get("langgraph_node") != metadata.get("agent_node")
+        metadata.get("workflow_activity_kind") != "agent"
         or not isinstance(agent_id, str)
         or agent_id not in _AGENT_OUTPUT_CONTEXTS
         or not scope_path
@@ -249,8 +246,22 @@ def _completed_agent_output(
 class LangGraphRunner(GraphRunner):
     """Translate LangGraph lifecycle callbacks to application activities."""
 
-    def __init__(self, graph: EventGraph) -> None:
+    def __init__(
+        self,
+        graph: EventGraph,
+        *,
+        close_graph_resources: Callable[[], Awaitable[None]] | None = None,
+    ) -> None:
         self._graph = graph
+        self._close_graph_resources = close_graph_resources
+        self._closed = False
+
+    async def aclose(self) -> None:
+        if self._closed:
+            return
+        if self._close_graph_resources is not None:
+            await self._close_graph_resources()
+        self._closed = True
 
     async def run(
         self,
@@ -298,6 +309,12 @@ class LangGraphRunner(GraphRunner):
             graph_input: Command[object] | dict[str, object] = {
                 "messages": [HumanMessage(content=message)],
                 "user_query": message,
+                "company_profile": None,
+                "artifact_references": None,
+                "workflow_activity_statuses": None,
+                "active_activity_id": None,
+                "workflow_activity_updates": None,
+                "error_logs": None,
             }
         elif isinstance(interrupt_response, Mapping):
             graph_input = Command(resume=dict(interrupt_response))
@@ -386,9 +403,9 @@ class LangGraphRunner(GraphRunner):
                             thread_id=thread_id,
                             run_id=run_id,
                             activity_id=(
-                                f"langgraph:{parent_callback_id}"
+                                f"activity:{parent_callback_id}"
                                 if parent_callback_id is not None
-                                else f"langgraph:{callback_run_id}"
+                                else f"activity:{callback_run_id}"
                             ),
                             scope_path=scope_path,
                         )
@@ -413,7 +430,7 @@ class LangGraphRunner(GraphRunner):
                 activity_id = (
                     resuming_activity_id
                     if is_resumed_activity
-                    else f"langgraph:{callback_run_id}"
+                    else f"activity:{callback_run_id}"
                 )
                 attempt = (
                     resuming_attempt + 1
@@ -433,7 +450,7 @@ class LangGraphRunner(GraphRunner):
                         None,
                     )
                 parent_activity_id = (
-                    f"langgraph:{visible_parent_id}"
+                    f"activity:{visible_parent_id}"
                     if visible_parent_id is not None
                     else None
                 )
@@ -763,7 +780,7 @@ class LangGraphRunner(GraphRunner):
             parent_activity_id = callback[2]
             visited: set[str] = set()
             while parent_activity_id is not None:
-                parent_callback_id = parent_activity_id.removeprefix("langgraph:")
+                parent_callback_id = parent_activity_id.removeprefix("activity:")
                 if (
                     parent_callback_id not in active_callbacks
                     or parent_callback_id in visited
@@ -824,7 +841,7 @@ class LangGraphRunner(GraphRunner):
             activity_id=(
                 resuming_activity_id
                 if is_resumed_activity
-                else f"langgraph:{callback_run_id}"
+                else f"activity:{callback_run_id}"
             ),
             parent_activity_id=parent_activity_id,
             thread_id=thread_id,

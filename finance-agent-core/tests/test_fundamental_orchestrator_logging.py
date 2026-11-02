@@ -265,7 +265,10 @@ def _build_params_result(
 
 def _build_state() -> dict[str, object]:
     return {
-        "intent_extraction": {"resolved_ticker": "GOOG"},
+        "company_profile": {
+            "ticker": "GOOG",
+            "name": "Alphabet Inc.",
+        },
         "fundamental_analysis": {
             "model_type": "dcf_growth",
             "financial_reports_artifact_id": "fa-report-1",
@@ -275,15 +278,11 @@ def _build_state() -> dict[str, object]:
 
 def _build_health_state() -> dict[str, object]:
     return {
-        "intent_extraction": {
-            "resolved_ticker": "AAPL",
-            "company_profile": {
-                "ticker": "AAPL",
-                "name": "Apple Inc.",
-                "sector": "Technology",
-                "industry": "Consumer Electronics",
-                "sic_code": 3571,
-            },
+        "company_profile": {
+            "ticker": "AAPL",
+            "name": "Apple Inc.",
+            "sector": "Technology",
+            "industry": "Consumer Electronics",
         },
         "fundamental_analysis": {},
     }

@@ -47,6 +47,10 @@ def test_source_reader_handles_valid_empty_news_and_preserves_other_sources() ->
             "industry": None,
             "reasoning": None,
             "status": "done",
+            "valuation_preview": {
+                "model_type": "dcf_standard",
+                "intrinsic_value": 123.4,
+            },
             "financial_reports": [
                 {
                     "industry_type": "General",
@@ -102,6 +106,10 @@ def test_source_reader_handles_valid_empty_news_and_preserves_other_sources() ->
     )
 
     assert len(source.financial_reports) == 1
+    assert source.valuation_preview == {
+        "model_type": "dcf_standard",
+        "intrinsic_value": 123.4,
+    }
     assert source.news_items == []
     assert source.technical_payload is not None
     assert source.technical_payload["ticker"] == "AAPL"

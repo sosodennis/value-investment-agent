@@ -263,6 +263,7 @@ class IntentOrchestrator:
 
         return {
             "intent_extraction": intent_ctx,
+            "company_profile": profile,
             "messages": [
                 AIMessage(
                     content="",
@@ -750,6 +751,7 @@ class IntentOrchestrator:
             return IntentNodeResult(
                 update={
                     "intent_extraction": resolved_ctx,
+                    "company_profile": profile,
                     "active_activity_id": "deciding",
                     "workflow_activity_updates": {"deciding": "done"},
                 },

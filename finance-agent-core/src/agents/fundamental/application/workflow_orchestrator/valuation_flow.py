@@ -34,6 +34,11 @@ from src.agents.fundamental.capabilities.forward_signals.public import (
     ForwardSignalPayload,
     serialize_forward_signals,
 )
+from src.artifacts.public import (
+    ARTIFACT_KIND_FINANCIAL_REPORTS,
+    ArtifactReference,
+    to_artifact_reference_payload,
+)
 from src.shared.kernel.tools.logger import get_logger, log_event
 from src.shared.kernel.types import JSONObject
 from src.shared.kernel.workflow_contracts import WorkflowNodeResult
@@ -1243,6 +1248,13 @@ def _build_valuation_snapshot_payload(
     if isinstance(diagnostics, Mapping):
         payload["valuation_diagnostics"] = dict(diagnostics)
 
+    artifact_raw = success_update.get("artifact")
+    preview_raw = (
+        artifact_raw.get("preview") if isinstance(artifact_raw, Mapping) else None
+    )
+    if isinstance(preview_raw, Mapping):
+        payload["valuation_preview"] = dict(preview_raw)
+
     ticker = execution_context.ticker
     if isinstance(ticker, str) and ticker:
         payload["ticker"] = ticker
@@ -1874,6 +1886,15 @@ async def run_valuation_flow(
                 success_update=success_update,
                 snapshot_artifact_id=snapshot_artifact_id,
             )
+            success_update["artifact_references"] = {
+                "financial_reports": to_artifact_reference_payload(
+                    ArtifactReference(
+                        artifact_id=snapshot_artifact_id,
+                        download_url=(f"/api/v1/artifacts/{snapshot_artifact_id}"),
+                        type=ARTIFACT_KIND_FINANCIAL_REPORTS,
+                    )
+                )
+            }
             log_event(
                 logger,
                 event="fundamental_valuation_snapshot_saved",

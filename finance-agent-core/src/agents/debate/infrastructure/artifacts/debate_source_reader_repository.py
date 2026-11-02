@@ -25,6 +25,7 @@ from src.shared.kernel.types import JSONObject
 class _ArtifactLoadResult:
     payload: list[JSONObject] | JSONObject | None
     issue: DebateSourceLoadIssue | None
+    valuation_preview: JSONObject | None = None
 
 
 async def _load_financial_reports(
@@ -70,7 +71,13 @@ async def _load_financial_reports(
                 artifact_id=artifact_id,
             ),
         )
-    return _ArtifactLoadResult(payload=reports, issue=None)
+    preview_raw = dumped.get("valuation_preview")
+    valuation_preview = dict(preview_raw) if isinstance(preview_raw, dict) else None
+    return _ArtifactLoadResult(
+        payload=reports,
+        issue=None,
+        valuation_preview=valuation_preview,
+    )
 
 
 async def _load_news_items(
@@ -195,6 +202,7 @@ class DebateSourceReaderRepository:
             financial_reports=cast(list[JSONObject], financial_reports_result.payload),
             news_items=cast(list[JSONObject], news_items_result.payload),
             technical_payload=cast(JSONObject | None, technical_payload_result.payload),
+            valuation_preview=financial_reports_result.valuation_preview,
             load_issues=load_issues,
         )
 

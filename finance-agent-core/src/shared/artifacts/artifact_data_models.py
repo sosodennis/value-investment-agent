@@ -22,6 +22,7 @@ class FinancialReportsArtifactData(BaseModel):
     diagnostics: dict[str, object] | None = None
     quality_gates: dict[str, object] | None = None
     valuation_diagnostics: dict[str, object] | None = None
+    valuation_preview: dict[str, object] | None = None
     ticker: str | None = None
     model_type: str | None = None
     company_name: str | None = None

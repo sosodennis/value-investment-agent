@@ -19,8 +19,7 @@ def _nodes() -> dict[str, TechnicalNode]:
 @pytest.mark.asyncio
 async def test_data_fetch_node_error():
     state = {
-        "ticker": "AAPL",
-        "intent_extraction": {"resolved_ticker": "AAPL"},
+        "company_profile": {"ticker": "AAPL", "name": "Apple Inc."},
     }
 
     with patch(
@@ -62,7 +61,7 @@ async def test_verification_compute_node_crash():
             "feature_pack_id": "features-1",
             "fusion_report_id": "fusion-1",
         },
-        "intent_extraction": {"resolved_ticker": "AAPL"},
+        "company_profile": {"ticker": "AAPL", "name": "Apple Inc."},
     }
 
     with patch(
@@ -84,7 +83,7 @@ async def test_semantic_translate_node_error():
             "price_artifact_id": "p1",
             "chart_data_id": "c1",
         },
-        "intent_extraction": {"resolved_ticker": "AAPL"},
+        "company_profile": {"ticker": "AAPL", "name": "Apple Inc."},
     }
 
     # Simulate Assembler Crash

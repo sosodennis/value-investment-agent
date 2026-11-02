@@ -7,7 +7,8 @@ from langgraph.graph import add_messages
 from pydantic import BaseModel, ConfigDict, Field
 from typing_extensions import TypedDict
 
-from src.artifacts.public import AgentOutputArtifactPayload
+from src.artifacts.public import AgentOutputArtifactPayload, ArtifactReferencePayload
+from src.shared.cross_agent.domain.market_identity import CompanyProfile
 from src.shared.kernel.types import JSONObject
 
 
@@ -41,12 +42,19 @@ class IntentExtractionInput(BaseModel):
 
     user_query: str | None = None
     messages: list[AnyMessage] = Field(default_factory=list)
-    intent_extraction: IntentExtractionContext = Field(default_factory=dict)
+    workflow_activity_statuses: dict[str, str] = Field(default_factory=dict)
+    workflow_activity_updates: dict[str, str] = Field(default_factory=dict)
+    active_activity_id: str | None = None
+    error_logs: list[dict[str, object]] = Field(default_factory=list)
 
 
 class IntentExtractionOutput(BaseModel):
     intent_extraction: IntentExtractionContext
     messages: list[AnyMessage] = Field(default_factory=list)
+    company_profile: CompanyProfile | None = None
+    artifact_references: dict[str, ArtifactReferencePayload] = Field(
+        default_factory=dict
+    )
     workflow_activity_statuses: dict[str, str] = Field(default_factory=dict)
     error_logs: list[dict[str, object]] = Field(default_factory=list)
 
@@ -55,6 +63,8 @@ class IntentExtractionState(TypedDict):
     user_query: str | None
     intent_extraction: Annotated[IntentExtractionContext, merge_dict]
     messages: Annotated[list[AnyMessage], add_messages]
+    company_profile: Annotated[CompanyProfile | None, last_value]
+    artifact_references: Annotated[dict[str, ArtifactReferencePayload], merge_dict]
     workflow_activity_updates: Annotated[dict[str, str], merge_dict]
     active_activity_id: Annotated[str, last_value]
     workflow_activity_statuses: Annotated[dict[str, str], merge_dict]

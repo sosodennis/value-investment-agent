@@ -43,7 +43,11 @@ class _EventGraph:
 
 def _metadata(**values: object) -> dict[str, object]:
     return {
-        "agent_id": "news",
+        "agent_id": values.get("agent_id", "news"),
+        "workflow_scope_path": values.get(
+            "workflow_scope_path", (values.get("agent_id", "news"),)
+        ),
+        "activity_label": values.get("activity_label", "Workflow activity"),
         "langgraph_node": "fetch",
         "langgraph_checkpoint_ns": "private-checkpoint-namespace",
         **values,
@@ -76,50 +80,75 @@ async def test_runner_uses_callback_ids_and_parent_ids_for_repeated_invocations(
                 "run_id": "parent-node",
                 "parent_ids": [],
                 "metadata": _metadata(
+                    agent_id="financial_news_research",
+                    workflow_scope_path=("financial_news_research",),
+                    activity_label="Research financial news",
                     langgraph_node="news_agent",
-                    agent_node="news_agent",
-                    agent_scope="agent",
+                    workflow_activity_kind="agent",
                 ),
             },
             {
                 "event": "on_chain_start",
                 "run_id": "node-1",
                 "parent_ids": ["parent-node"],
-                "metadata": _metadata(activity_label="First fetch"),
+                "metadata": _metadata(
+                    agent_id="financial_news_research",
+                    workflow_scope_path=("financial_news_research", "fetch-articles"),
+                    activity_label="Fetch selected articles",
+                ),
             },
             {
                 "event": "on_chain_end",
                 "run_id": "node-1",
                 "parent_ids": ["parent-node"],
-                "metadata": _metadata(progress=71, activity_progress=37),
+                "metadata": _metadata(
+                    agent_id="financial_news_research",
+                    workflow_scope_path=("financial_news_research", "fetch-articles"),
+                    activity_label="Fetch selected articles",
+                    progress=71,
+                    activity_progress=37,
+                ),
             },
             {
                 "event": "on_chain_start",
                 "run_id": "node-2",
                 "parent_ids": ["parent-node"],
-                "metadata": _metadata(attempt=2),
+                "metadata": _metadata(
+                    agent_id="financial_news_research",
+                    workflow_scope_path=("financial_news_research", "analyze-articles"),
+                    activity_label="Analyze selected articles",
+                    attempt=2,
+                ),
             },
             {
                 "event": "on_tool_start",
                 "run_id": "tool-1",
                 "parent_ids": ["node-2"],
-                "metadata": _metadata(langgraph_node="search_provider"),
+                "metadata": _metadata(
+                    agent_id="financial_news_research",
+                    workflow_scope_path=(
+                        "financial_news_research",
+                        "analyze-articles",
+                        "search-provider",
+                    ),
+                    langgraph_node="search_provider",
+                ),
             },
         ]
     )
 
     assert [activity.activity_id for activity in activities] == [
-        "langgraph:parent-node",
-        "langgraph:node-1",
-        "langgraph:node-1",
-        "langgraph:node-2",
-        "langgraph:tool-1",
+        "activity:parent-node",
+        "activity:node-1",
+        "activity:node-1",
+        "activity:node-2",
+        "activity:tool-1",
     ]
     assert activities[0].parent_activity_id is None
     assert activities[0].kind == "subgraph"
-    assert activities[1].parent_activity_id == "langgraph:parent-node"
-    assert activities[3].parent_activity_id == "langgraph:parent-node"
-    assert activities[4].parent_activity_id == "langgraph:node-2"
+    assert activities[1].parent_activity_id == "activity:parent-node"
+    assert activities[3].parent_activity_id == "activity:parent-node"
+    assert activities[4].parent_activity_id == "activity:node-2"
     assert activities[1].status == "running"
     assert activities[2].status == "completed"
     assert activities[3].attempt == 2
@@ -130,6 +159,57 @@ async def test_runner_uses_callback_ids_and_parent_ids_for_repeated_invocations(
         for activity in activities
         for part in activity.scope_path
     )
+
+
+@pytest.mark.asyncio
+async def test_runner_projects_application_scope_instead_of_langgraph_node_name() -> (
+    None
+):
+    activities = await _run(
+        [
+            {
+                "event": "on_chain_start",
+                "run_id": "private-node-id",
+                "parent_ids": [],
+                "metadata": _metadata(
+                    agent_id="financial_news_research",
+                    langgraph_node="implementation_detail",
+                    workflow_scope_path=("financial_news_research", "fetch-articles"),
+                    activity_label="Fetch selected articles",
+                ),
+            }
+        ]
+    )
+
+    assert len(activities) == 1
+    assert activities[0].scope_path == (
+        "financial_news_research",
+        "fetch-articles",
+    )
+    assert activities[0].label == "Fetch selected articles"
+    assert "implementation_detail" not in activities[0].scope_path
+
+
+@pytest.mark.asyncio
+async def test_runner_starts_each_new_run_with_explicit_transport_resets() -> None:
+    graph = _EventGraph([])
+    runner = LangGraphRunner(graph)
+
+    async for _ in runner.run(
+        thread_id="thread-1",
+        run_id="runtime-run-1",
+        input_data={"message": "find news"},
+        principal_id="principal-1",
+    ):
+        pass
+
+    graph_input = graph.calls[0][0]
+    assert graph_input["company_profile"] is None
+    assert graph_input["artifact_references"] is None
+    assert graph_input["workflow_activity_statuses"] is None
+    assert graph_input["active_activity_id"] is None
+    assert graph_input["workflow_activity_updates"] is None
+    assert graph_input["error_logs"] is None
 
 
 @pytest.mark.asyncio
@@ -173,8 +253,7 @@ async def test_runner_collapses_same_scope_wrappers_and_keeps_children_under_vis
             "metadata": _metadata(
                 agent_id="intent_extraction",
                 langgraph_node="intent_agent",
-                agent_node="intent_agent",
-                agent_scope="agent",
+                workflow_activity_kind="agent",
             ),
         },
         {
@@ -184,8 +263,7 @@ async def test_runner_collapses_same_scope_wrappers_and_keeps_children_under_vis
             "metadata": _metadata(
                 agent_id="intent_extraction",
                 langgraph_node="intent_agent",
-                agent_node="intent_agent",
-                agent_scope="agent",
+                workflow_activity_kind="agent",
             ),
         },
         {
@@ -193,7 +271,10 @@ async def test_runner_collapses_same_scope_wrappers_and_keeps_children_under_vis
             "run_id": "extraction-node",
             "parent_ids": ["agent-wrapper", "agent-wrapper-child"],
             "metadata": _metadata(
-                agent_id="intent_extraction", langgraph_node="extraction"
+                agent_id="intent_extraction",
+                workflow_scope_path=("intent_extraction", "extract-request"),
+                activity_label="Extract request",
+                langgraph_node="extraction",
             ),
         },
         {
@@ -201,7 +282,10 @@ async def test_runner_collapses_same_scope_wrappers_and_keeps_children_under_vis
             "run_id": "extraction-node",
             "parent_ids": ["agent-wrapper", "agent-wrapper-child"],
             "metadata": _metadata(
-                agent_id="intent_extraction", langgraph_node="extraction"
+                agent_id="intent_extraction",
+                workflow_scope_path=("intent_extraction", "extract-request"),
+                activity_label="Extract request",
+                langgraph_node="extraction",
             ),
         },
         {
@@ -211,8 +295,7 @@ async def test_runner_collapses_same_scope_wrappers_and_keeps_children_under_vis
             "metadata": _metadata(
                 agent_id="intent_extraction",
                 langgraph_node="intent_agent",
-                agent_node="intent_agent",
-                agent_scope="agent",
+                workflow_activity_kind="agent",
             ),
         },
         {
@@ -222,8 +305,7 @@ async def test_runner_collapses_same_scope_wrappers_and_keeps_children_under_vis
             "metadata": _metadata(
                 agent_id="intent_extraction",
                 langgraph_node="intent_agent",
-                agent_node="intent_agent",
-                agent_scope="agent",
+                workflow_activity_kind="agent",
             ),
         },
     ]
@@ -231,12 +313,12 @@ async def test_runner_collapses_same_scope_wrappers_and_keeps_children_under_vis
     activities = await _run(events)
 
     assert [activity.activity_id for activity in activities] == [
-        "langgraph:agent-wrapper",
-        "langgraph:extraction-node",
-        "langgraph:extraction-node",
-        "langgraph:agent-wrapper",
+        "activity:agent-wrapper",
+        "activity:extraction-node",
+        "activity:extraction-node",
+        "activity:agent-wrapper",
     ]
-    assert activities[1].parent_activity_id == "langgraph:agent-wrapper"
+    assert activities[1].parent_activity_id == "activity:agent-wrapper"
     assert activities[2].status == "completed"
 
 
@@ -410,8 +492,8 @@ async def test_runner_emits_tool_and_model_lifecycle_events_but_skips_stream_chu
         "failed",
     ]
     assert activities[1].activity_id == activities[2].activity_id
-    assert activities[1].parent_activity_id == "langgraph:node-1"
-    assert activities[3].parent_activity_id == "langgraph:model-1"
+    assert activities[1].parent_activity_id == "activity:node-1"
+    assert activities[3].parent_activity_id == "activity:model-1"
     assert all(activity.progress is None for activity in activities)
 
 
@@ -425,8 +507,7 @@ async def test_runner_emits_compact_output_on_completed_agent_subgraph() -> None
                 "parent_ids": [],
                 "metadata": _metadata(
                     agent_id="intent_extraction",
-                    agent_scope="agent",
-                    agent_node="intent_agent",
+                    workflow_activity_kind="agent",
                     langgraph_node="intent_agent",
                 ),
                 "data": {
@@ -475,8 +556,7 @@ async def test_runner_rejects_oversized_preview_without_artifact_reference() -> 
                     "parent_ids": [],
                     "metadata": _metadata(
                         agent_id="financial_news_research",
-                        agent_scope="agent",
-                        agent_node="news_agent",
+                        workflow_activity_kind="agent",
                         langgraph_node="news_agent",
                     ),
                     "data": {
@@ -563,7 +643,7 @@ async def test_runner_projects_typed_interrupt_and_stops_at_suspension() -> None
     waiting = activities[-1]
     assert len(activities) == 2
     assert isinstance(waiting, InteractionRequested)
-    assert waiting.activity.activity_id == "langgraph:clarifying-node"
+    assert waiting.activity.activity_id == "activity:clarifying-node"
     assert waiting.activity.status == "waiting"
     assert waiting.identity.interaction_id == "interaction-1"
     assert waiting.request.candidates[0].symbol == "AAPL"
@@ -579,6 +659,8 @@ async def test_runner_projects_versioned_valuation_approval_interrupt() -> None:
                 "parent_ids": [],
                 "metadata": _metadata(
                     agent_id="fundamental_analysis",
+                    workflow_scope_path=("fundamental_analysis", "calculate-valuation"),
+                    activity_label="Calculate intrinsic value",
                     langgraph_node="calculation",
                 ),
             },
@@ -588,6 +670,8 @@ async def test_runner_projects_versioned_valuation_approval_interrupt() -> None:
                 "parent_ids": [],
                 "metadata": _metadata(
                     agent_id="fundamental_analysis",
+                    workflow_scope_path=("fundamental_analysis", "calculate-valuation"),
+                    activity_label="Calculate intrinsic value",
                     langgraph_node="calculation",
                 ),
                 "data": {
@@ -643,8 +727,7 @@ async def test_runner_assigns_interrupt_to_event_callback_when_parallel_callback
                 "metadata": _metadata(
                     agent_id="financial_news_research",
                     langgraph_node="news_agent",
-                    agent_scope="agent",
-                    agent_node="news_agent",
+                    workflow_activity_kind="agent",
                 ),
             },
             {
@@ -653,6 +736,8 @@ async def test_runner_assigns_interrupt_to_event_callback_when_parallel_callback
                 "parent_ids": [],
                 "metadata": _metadata(
                     agent_id="fundamental_analysis",
+                    workflow_scope_path=("fundamental_analysis", "calculate-valuation"),
+                    activity_label="Calculate intrinsic value",
                     langgraph_node="calculation",
                 ),
             },
@@ -662,6 +747,8 @@ async def test_runner_assigns_interrupt_to_event_callback_when_parallel_callback
                 "parent_ids": [],
                 "metadata": _metadata(
                     agent_id="fundamental_analysis",
+                    workflow_scope_path=("fundamental_analysis", "calculate-valuation"),
+                    activity_label="Calculate intrinsic value",
                     langgraph_node="calculation",
                 ),
                 "data": {
@@ -699,8 +786,11 @@ async def test_runner_assigns_interrupt_to_event_callback_when_parallel_callback
 
     waiting = activities[-1]
     assert isinstance(waiting, InteractionRequested)
-    assert waiting.activity.activity_id == "langgraph:calculation-node"
-    assert waiting.activity.scope_path == ("fundamental_analysis", "calculation")
+    assert waiting.activity.activity_id == "activity:calculation-node"
+    assert waiting.activity.scope_path == (
+        "fundamental_analysis",
+        "calculate-valuation",
+    )
 
 
 @pytest.mark.asyncio
@@ -716,8 +806,7 @@ async def test_runner_uses_nearest_active_parent_for_bubbled_parallel_interrupt(
                 "metadata": _metadata(
                     agent_id="financial_news_research",
                     langgraph_node="news_agent",
-                    agent_scope="agent",
-                    agent_node="news_agent",
+                    workflow_activity_kind="agent",
                 ),
             },
             {
@@ -726,6 +815,8 @@ async def test_runner_uses_nearest_active_parent_for_bubbled_parallel_interrupt(
                 "parent_ids": ["workflow-root"],
                 "metadata": _metadata(
                     agent_id="fundamental_analysis",
+                    workflow_scope_path=("fundamental_analysis", "calculate-valuation"),
+                    activity_label="Calculate intrinsic value",
                     langgraph_node="calculation",
                 ),
             },
@@ -769,8 +860,11 @@ async def test_runner_uses_nearest_active_parent_for_bubbled_parallel_interrupt(
 
     waiting = activities[-1]
     assert isinstance(waiting, InteractionRequested)
-    assert waiting.activity.activity_id == "langgraph:calculation-node"
-    assert waiting.activity.scope_path == ("fundamental_analysis", "calculation")
+    assert waiting.activity.activity_id == "activity:calculation-node"
+    assert waiting.activity.scope_path == (
+        "fundamental_analysis",
+        "calculate-valuation",
+    )
 
 
 @pytest.mark.asyncio
@@ -786,8 +880,7 @@ async def test_runner_assigns_unscoped_interrupt_by_typed_owner_with_parallel_ag
                 "metadata": _metadata(
                     agent_id="financial_news_research",
                     langgraph_node="news_agent",
-                    agent_scope="agent",
-                    agent_node="news_agent",
+                    workflow_activity_kind="agent",
                 ),
             },
             {
@@ -796,6 +889,8 @@ async def test_runner_assigns_unscoped_interrupt_by_typed_owner_with_parallel_ag
                 "parent_ids": [],
                 "metadata": _metadata(
                     agent_id="fundamental_analysis",
+                    workflow_scope_path=("fundamental_analysis", "calculate-valuation"),
+                    activity_label="Calculate intrinsic value",
                     langgraph_node="calculation",
                 ),
             },
@@ -839,8 +934,11 @@ async def test_runner_assigns_unscoped_interrupt_by_typed_owner_with_parallel_ag
 
     waiting = activities[-1]
     assert isinstance(waiting, InteractionRequested)
-    assert waiting.activity.activity_id == "langgraph:calculation-node"
-    assert waiting.activity.scope_path == ("fundamental_analysis", "calculation")
+    assert waiting.activity.activity_id == "activity:calculation-node"
+    assert waiting.activity.scope_path == (
+        "fundamental_analysis",
+        "calculate-valuation",
+    )
 
 
 @pytest.mark.asyncio
@@ -856,8 +954,7 @@ async def test_runner_uses_interrupt_scope_when_inner_callback_id_is_not_active(
                 "metadata": _metadata(
                     agent_id="financial_news_research",
                     langgraph_node="news_agent",
-                    agent_scope="agent",
-                    agent_node="news_agent",
+                    workflow_activity_kind="agent",
                 ),
             },
             {
@@ -866,6 +963,8 @@ async def test_runner_uses_interrupt_scope_when_inner_callback_id_is_not_active(
                 "parent_ids": [],
                 "metadata": _metadata(
                     agent_id="fundamental_analysis",
+                    workflow_scope_path=("fundamental_analysis", "calculate-valuation"),
+                    activity_label="Calculate intrinsic value",
                     langgraph_node="calculation",
                 ),
             },
@@ -875,6 +974,8 @@ async def test_runner_uses_interrupt_scope_when_inner_callback_id_is_not_active(
                 "parent_ids": [],
                 "metadata": _metadata(
                     agent_id="fundamental_analysis",
+                    workflow_scope_path=("fundamental_analysis", "calculate-valuation"),
+                    activity_label="Calculate intrinsic value",
                     langgraph_node="calculation",
                 ),
                 "data": {
@@ -912,8 +1013,11 @@ async def test_runner_uses_interrupt_scope_when_inner_callback_id_is_not_active(
 
     waiting = activities[-1]
     assert isinstance(waiting, InteractionRequested)
-    assert waiting.activity.activity_id == "langgraph:calculation-node"
-    assert waiting.activity.scope_path == ("fundamental_analysis", "calculation")
+    assert waiting.activity.activity_id == "activity:calculation-node"
+    assert waiting.activity.scope_path == (
+        "fundamental_analysis",
+        "calculate-valuation",
+    )
 
 
 @pytest.mark.asyncio
@@ -996,7 +1100,7 @@ async def test_runner_uses_pinned_langgraph_stream_for_wait_and_resume() -> None
     waiting = first[-1]
     assert isinstance(waiting, InteractionRequested)
     assert waiting.activity.status == "waiting"
-    assert waiting.activity.scope_path == ("clarifying",)
+    assert waiting.activity.scope_path == ("workflow",)
     assert waiting.request.candidates[0].symbol == "AAPL"
 
     resumed = [
@@ -1050,7 +1154,16 @@ async def test_runner_assigns_bubbled_interrupt_to_nested_agent_node() -> None:
         return {"selected": selection["selected_symbol"]}
 
     child_builder = StateGraph(State)
-    child_builder.add_node("clarifying", clarify)
+    child_builder.add_node(
+        "clarifying",
+        clarify,
+        metadata={
+            "agent_id": "intent_extraction",
+            "workflow_activity_kind": "node",
+            "workflow_scope_path": ("intent_extraction", "confirm-company"),
+            "activity_label": "Confirm company",
+        },
+    )
     child_builder.add_edge(START, "clarifying")
     child_builder.add_edge("clarifying", END)
 
@@ -1060,8 +1173,9 @@ async def test_runner_assigns_bubbled_interrupt_to_nested_agent_node() -> None:
         child_builder.compile(),
         metadata={
             "agent_id": "intent_extraction",
-            "agent_scope": "agent",
-            "agent_node": "intent_agent",
+            "workflow_activity_kind": "agent",
+            "workflow_scope_path": ("intent_extraction",),
+            "activity_label": "Resolve company",
         },
     )
     root_builder.add_edge(START, "intent_agent")
@@ -1081,7 +1195,10 @@ async def test_runner_assigns_bubbled_interrupt_to_nested_agent_node() -> None:
     waiting = activities[-1]
     assert isinstance(waiting, InteractionRequested)
     assert waiting.activity.status == "waiting"
-    assert waiting.activity.scope_path == ("intent_extraction", "clarifying")
+    assert waiting.activity.scope_path == (
+        "intent_extraction",
+        "confirm-company",
+    )
     assert [candidate.symbol for candidate in waiting.request.candidates] == [
         "AAPL",
         "AAPL.TO",

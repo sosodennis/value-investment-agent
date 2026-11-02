@@ -111,7 +111,7 @@ class DebateOrchestrator:
                     "error_logs": [
                         {
                             "node": "debate_aggregator",
-                            "error": "Missing intent_extraction.resolved_ticker",
+                            "error": "Missing company_profile.ticker",
                             "severity": "error",
                             "error_code": "DEBATE_MISSING_TICKER",
                             "contract_kind": CONTRACT_KIND_WORKFLOW_STATE,
@@ -218,7 +218,7 @@ class DebateOrchestrator:
                     "error_logs": [
                         {
                             "node": "fact_extractor",
-                            "error": "Missing intent_extraction.resolved_ticker",
+                            "error": "Missing company_profile.ticker",
                             "severity": "error",
                             "error_code": "DEBATE_MISSING_TICKER",
                             "contract_kind": CONTRACT_KIND_WORKFLOW_STATE,
@@ -582,7 +582,7 @@ class DebateOrchestrator:
                     "error_logs": [
                         {
                             "node": "verdict",
-                            "error": "Missing intent_extraction.resolved_ticker",
+                            "error": "Missing company_profile.ticker",
                             "severity": "error",
                         }
                     ],

@@ -37,7 +37,7 @@ def resolve_semantic_translate_context(
             event="technical_semantic_translate_missing_ticker",
             log_message="technical semantic translation failed due to missing ticker",
             error_code="TECHNICAL_SEMANTIC_TICKER_MISSING",
-            user_message="Missing intent_extraction.resolved_ticker",
+            user_message="Missing company_profile.ticker",
         )
 
     technical_state = technical_state_from_state(state)
