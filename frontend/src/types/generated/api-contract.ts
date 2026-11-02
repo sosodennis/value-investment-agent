@@ -106,6 +106,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/client-debug/captures/{capture_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read Capture */
+        get: operations["read_capture_api_v1_client_debug_captures__capture_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/client-debug/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Ingest Events */
+        post: operations["ingest_events_api_v1_client_debug_events_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/dashboard/capabilities": {
         parameters: {
             query?: never;
@@ -1192,6 +1226,177 @@ export interface components {
              */
             namespace: string;
         };
+        /** ClientDebugAcceptedResponse */
+        ClientDebugAcceptedResponse: {
+            /** Accepted */
+            accepted: number;
+            /**
+             * Capture Id
+             * Format: uuid
+             */
+            capture_id: string;
+            /** Dropped */
+            dropped: number;
+            /** Duplicates */
+            duplicates: number;
+            /** Request Id */
+            request_id?: string | null;
+            /**
+             * Schema Version
+             * @default client_debug.v1
+             * @constant
+             */
+            schema_version: "client_debug.v1";
+        };
+        /** ClientDebugBatchRequest */
+        ClientDebugBatchRequest: {
+            /**
+             * Capture Id
+             * Format: uuid
+             */
+            capture_id: string;
+            /** Events */
+            events: components["schemas"]["ClientDebugEvent"][];
+            /**
+             * Schema Version
+             * @constant
+             */
+            schema_version: "client_debug.v1";
+        };
+        /** ClientDebugCaptureResponse */
+        ClientDebugCaptureResponse: {
+            /**
+             * Capture Id
+             * Format: uuid
+             */
+            capture_id: string;
+            /** Events */
+            events: components["schemas"]["ClientDebugEventResponse"][];
+            /**
+             * Expires At
+             * Format: date-time
+             */
+            expires_at: string;
+            /** Next Seq */
+            next_seq: number;
+            /**
+             * Schema Version
+             * @default client_debug.v1
+             * @constant
+             */
+            schema_version: "client_debug.v1";
+        };
+        /** ClientDebugContext */
+        ClientDebugContext: {
+            /**
+             * Reduced Motion
+             * @default false
+             */
+            reduced_motion: boolean;
+            /** Request Id */
+            request_id?: string | null;
+            /** Route */
+            route: string;
+            /** Run Id */
+            run_id?: string | null;
+            scroll?: components["schemas"]["ClientDebugScroll"] | null;
+            /** Thread Id */
+            thread_id?: string | null;
+            /** Traceparent */
+            traceparent?: string | null;
+            viewport: components["schemas"]["ClientDebugViewport"];
+            /**
+             * Visibility State
+             * @default visible
+             * @enum {string}
+             */
+            visibility_state: "visible" | "hidden" | "prerender";
+        };
+        /** ClientDebugEvent */
+        ClientDebugEvent: {
+            /** Component */
+            component?: string | null;
+            context: components["schemas"]["ClientDebugContext"];
+            /** Details */
+            details?: {
+                [key: string]: components["schemas"]["JsonValue"];
+            };
+            /** Elapsed Ms */
+            elapsed_ms: number;
+            /**
+             * Event Id
+             * Format: uuid
+             */
+            event_id: string;
+            /** Name */
+            name: string;
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            /** Sequence */
+            sequence: number;
+            /**
+             * Severity
+             * @default debug
+             * @enum {string}
+             */
+            severity: "debug" | "info" | "warn" | "error";
+        };
+        /** ClientDebugEventResponse */
+        ClientDebugEventResponse: {
+            /** Component */
+            component?: string | null;
+            context: components["schemas"]["ClientDebugContext"];
+            /** Details */
+            details?: {
+                [key: string]: components["schemas"]["JsonValue"];
+            };
+            /** Elapsed Ms */
+            elapsed_ms: number;
+            /**
+             * Event Id
+             * Format: uuid
+             */
+            event_id: string;
+            /** Name */
+            name: string;
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            /**
+             * Received At
+             * Format: date-time
+             */
+            received_at: string;
+            /** Sequence */
+            sequence: number;
+            /**
+             * Severity
+             * @default debug
+             * @enum {string}
+             */
+            severity: "debug" | "info" | "warn" | "error";
+        };
+        /** ClientDebugScroll */
+        ClientDebugScroll: {
+            /** X */
+            x: number;
+            /** Y */
+            y: number;
+        };
+        /** ClientDebugViewport */
+        ClientDebugViewport: {
+            /** Dpr */
+            dpr: number;
+            /** Height */
+            height: number;
+            /** Width */
+            width: number;
+        };
         /** ConfidenceCalibrationModel */
         ConfidenceCalibrationModel: {
             /** Calibration Applied */
@@ -1674,6 +1879,7 @@ export interface components {
              */
             updated_at: string;
         };
+        JsonValue: unknown;
         /** KeyFactModel */
         KeyFactModel: {
             /** Citation */
@@ -4422,6 +4628,129 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
+            };
+        };
+    };
+    read_capture_api_v1_client_debug_captures__capture_id__get: {
+        parameters: {
+            query?: {
+                after_seq?: number;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                capture_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClientDebugCaptureResponse"];
+                };
+            };
+            /** @description Authentication is required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Capture is disabled or not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    ingest_events_api_v1_client_debug_events_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClientDebugBatchRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClientDebugAcceptedResponse"];
+                };
+            };
+            /** @description Authentication is required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description CSRF validation failed. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Capture is disabled or not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Event identity conflicts with an existing event. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The request or batch is too large. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description The runtime capture buffer is full. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

@@ -25,6 +25,7 @@ Root `AGENTS.md` contains finance-domain constraints, agent skill routing, and r
 - [Search Service contract](search-service-contract.md)
 - [Internal capability service contract](../finance-agent-core/src/shared/internal_services/README.md)
 - Service-specific deployment and operating instructions live in each service README and in [`runbooks/`](runbooks/).
+- [Client debug capture](runbooks/client-debug-capture.md) describes the runtime-only browser diagnostics channel, event contract, privacy rules, and verification steps.
 - [`Organization authorization matrix`](runbooks/authorization-matrix.md) defines the server-side role, relationship, and failure contract for organization actions.
 - [`Organization lifecycle`](runbooks/organization-lifecycle.md) defines organization and membership operations, status transitions, ownership invariants, lifecycle events, and verification commands.
 - [`Notification inbox and outbox`](runbooks/notification-inbox.md) defines the durable recipient-private inbox, payload safety, action references, delivery boundary, outbox leases, and verification commands.

@@ -28,6 +28,8 @@ EXPOSE 3000
 
 # Enable hot reload by polling (required in Docker)
 ENV WATCHPACK_POLLING=true
+ARG NEXT_PUBLIC_ENABLE_CLIENT_DEBUG_CAPTURE=false
+ENV NEXT_PUBLIC_ENABLE_CLIENT_DEBUG_CAPTURE=${NEXT_PUBLIC_ENABLE_CLIENT_DEBUG_CAPTURE}
 
 # Start development server with hot reload
 CMD ["npm", "run", "dev"]

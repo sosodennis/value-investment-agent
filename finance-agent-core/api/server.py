@@ -28,6 +28,8 @@ from src.auth.entrypoint import (
     invitation_router,
     organization_router,
 )
+from src.client_debug.entrypoint import client_debug_router
+from src.client_debug.interface.middleware import ClientDebugRequestSizeMiddleware
 from src.dashboard.infrastructure import (
     HttpReadinessProvider,
     MarketMoversService,
@@ -123,6 +125,7 @@ async def request_validation_error_handler(
 app.add_middleware(
     CorrelationIdMiddleware,
 )
+app.add_middleware(ClientDebugRequestSizeMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins(),
@@ -140,6 +143,7 @@ app.include_router(search_settings_router)
 app.include_router(analysis_runtime_router)
 app.include_router(dashboard_router)
 app.include_router(observability_router)
+app.include_router(client_debug_router)
 app.include_router(artifact_router)
 app.include_router(notifications_router)
 app.include_router(audit_router)
