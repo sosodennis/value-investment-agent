@@ -5,15 +5,17 @@ from datetime import UTC, datetime
 import pandas as pd
 import pytest
 
-from src.agents.technical.subdomains.decision_observability import (
-    SqlAlchemyTechnicalDecisionObservabilityRepository,
+from src.infrastructure.models import TechnicalOutcomePath
+from src.observability.technical import (
     build_outcome_labeling_request,
     build_prediction_event_record,
     compute_outcome_label,
     filter_matured_events,
     resolve_horizon,
 )
-from src.infrastructure.models import TechnicalOutcomePath
+from src.observability.technical.infrastructure import (
+    SqlAlchemyTechnicalDecisionObservabilityRepository,
+)
 
 
 def _build_event(
@@ -153,7 +155,7 @@ async def test_repository_fetch_unlabeled_prediction_events_returns_unresolved_r
             return None
 
     monkeypatch.setattr(
-        "src.agents.technical.subdomains.decision_observability.infrastructure.repository.AsyncSessionLocal",
+        "src.observability.technical.infrastructure.repository.AsyncSessionLocal",
         lambda: _FakeSessionContext(),
     )
 
@@ -210,7 +212,7 @@ async def test_repository_append_outcome_path_if_missing_returns_false_when_exis
 
     fake_session = _FakeSession()
     monkeypatch.setattr(
-        "src.agents.technical.subdomains.decision_observability.infrastructure.repository.AsyncSessionLocal",
+        "src.observability.technical.infrastructure.repository.AsyncSessionLocal",
         lambda: _FakeSessionContext(fake_session),
     )
 
@@ -269,7 +271,7 @@ async def test_repository_append_outcome_path_if_missing_inserts_when_absent(
 
     fake_session = _FakeSession()
     monkeypatch.setattr(
-        "src.agents.technical.subdomains.decision_observability.infrastructure.repository.AsyncSessionLocal",
+        "src.observability.technical.infrastructure.repository.AsyncSessionLocal",
         lambda: _FakeSessionContext(fake_session),
     )
 

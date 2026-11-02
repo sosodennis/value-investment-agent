@@ -20,7 +20,7 @@ not a compatibility alias.
 | Technical agent | `src/agents/technical/entrypoint.py` | `src/agents/technical/` | Market data, features, patterns, regime, fusion, verification, observability inputs |
 | Artifact store and API projection | `src/services/artifact_manager.py`; `src/interface/artifacts/`; `api/server.py:1292-1319` | `src/artifacts/` | Artifact persistence, typed artifact references, and `GET /api/v1/artifacts/{artifact_id}` |
 | Workflow activity projection | `src/runtime/workspace_runtime_projection/`; `WorkspaceRuntime*` models | `src/analysis_runtime/` activity projection | Owns durable `workflow.activity` records and snapshots; never reads raw frontend shapes |
-| Technical observability | `src/agents/technical/subdomains/decision_observability/`; `api/server.py:250-438` | `src/observability/technical/` | DB-backed read model and calibration/monitoring queries |
+| Technical observability | `src/observability/technical/`; `api/server.py:250-438` | `src/observability/technical/` | DB-backed read model and calibration/monitoring queries |
 | LLM settings facade and client | `src/llm_provider/` and `src/llm_provider/composition/routes.py` | `src/llm_provider/` | Browser settings facade plus typed client to independent LLM Provider service |
 | Model Inference client | `src/model_inference/` | `src/model_inference/` | Typed inference operation client and trusted internal principal context |
 | Search client and settings facade | `src/search/`, `src/search_settings/` | `src/search/` and `src/search_settings/` | Typed Search client; organization-scoped provider settings |

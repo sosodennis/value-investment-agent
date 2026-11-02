@@ -10,10 +10,10 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.append(str(PROJECT_ROOT))
 
-from src.agents.technical.subdomains.calibration.domain.fitting_service import (  # noqa: E402
+from src.agents.technical.capabilities.calibration.domain.fitting_service import (  # noqa: E402
     fit_technical_direction_calibration_config,
 )
-from src.agents.technical.subdomains.calibration.domain.io_service import (  # noqa: E402
+from src.agents.technical.capabilities.calibration.domain.io_service import (  # noqa: E402
     load_technical_direction_calibration_observations,
     write_technical_direction_calibration_artifact,
 )

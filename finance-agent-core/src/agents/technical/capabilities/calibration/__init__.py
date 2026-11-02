@@ -1,4 +1,4 @@
-"""calibration subdomain facade."""
+"""Stable contracts for technical calibration."""
 
 from .domain import (
     TECHNICAL_DIRECTION_CALIBRATION_MAPPING_PATH_ENV,

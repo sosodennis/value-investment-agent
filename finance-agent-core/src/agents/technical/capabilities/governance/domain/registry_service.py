@@ -3,15 +3,15 @@ from __future__ import annotations
 from dataclasses import asdict
 from datetime import datetime
 
-from src.agents.technical.capabilities.signal_fusion.public import (
-    FUSION_SCORECARD_MODEL_VERSION,
-)
-from src.agents.technical.subdomains.calibration import (
+from src.agents.technical.capabilities.calibration import (
     TECHNICAL_DIRECTION_CALIBRATION_METHOD,
     load_technical_direction_calibration_mapping,
 )
-from src.agents.technical.subdomains.interpretation import (
+from src.agents.technical.capabilities.interpretation import (
     INTERPRETATION_GUARDRAIL_VERSION,
+)
+from src.agents.technical.capabilities.signal_fusion.public import (
+    FUSION_SCORECARD_MODEL_VERSION,
 )
 
 from .contracts import TechnicalGovernanceRegistry

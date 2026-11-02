@@ -4,7 +4,7 @@ import argparse
 import json
 from pathlib import Path
 
-from src.agents.technical.subdomains.governance import (
+from src.agents.technical.capabilities.governance import (
     build_technical_governance_registry,
     build_technical_governance_report,
     registry_from_payload,

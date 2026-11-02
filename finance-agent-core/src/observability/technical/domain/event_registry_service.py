@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime
 
-from src.agents.technical.subdomains.decision_observability.domain.contracts import (
+from src.observability.technical.domain.contracts import (
     TechnicalPredictionEventRecord,
 )
 from src.shared.kernel.types import JSONObject, JSONValue

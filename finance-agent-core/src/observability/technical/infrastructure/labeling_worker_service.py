@@ -12,14 +12,14 @@ from src.agents.technical.capabilities.market_data.public import (
     MarketDataRuntimeService,
     build_default_market_data_provider,
 )
-from src.agents.technical.subdomains.decision_observability.application import (
+from src.observability.technical.application import (
     OutcomeLabelingBatchResult,
     OutcomeLabelingMarketDataReader,
     TechnicalDecisionObservabilityRuntimeService,
 )
 from src.shared.kernel.tools.logger import get_logger, log_event
 
-from .runtime_factory import (
+from ..application.wiring import (
     build_default_technical_decision_observability_runtime_service,
 )
 

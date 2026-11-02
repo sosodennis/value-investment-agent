@@ -5,7 +5,7 @@ from typing import Protocol
 from src.agents.technical.capabilities.market_data.public import (
     MarketDataOhlcvFetchResult,
 )
-from src.agents.technical.subdomains.decision_observability.domain.contracts import (
+from src.observability.technical.domain.contracts import (
     MonitoringQueryScope,
     OutcomeLabelingRequest,
     TechnicalMonitoringEventDetail,

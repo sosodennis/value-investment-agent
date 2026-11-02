@@ -1,4 +1,4 @@
-from src.agents.technical.subdomains.interpretation.domain import (
+from src.agents.technical.capabilities.interpretation.domain import (
     apply_interpretation_guardrail,
 )
 from src.shared.artifacts.technical_contracts import (

@@ -11,7 +11,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.append(str(PROJECT_ROOT))
 
-from src.agents.technical.subdomains.decision_observability import (  # noqa: E402
+from src.observability.technical.infrastructure import (  # noqa: E402
     build_default_technical_outcome_labeling_worker_service,
 )
 from src.shared.kernel.tools.logger import get_logger, log_event  # noqa: E402

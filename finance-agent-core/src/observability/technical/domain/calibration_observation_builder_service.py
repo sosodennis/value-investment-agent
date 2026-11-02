@@ -5,7 +5,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from math import isnan
 
-from src.agents.technical.subdomains.calibration.public import (
+from src.agents.technical.capabilities.calibration.public import (
     TechnicalDirectionCalibrationObservation,
     resolve_direction_family,
 )

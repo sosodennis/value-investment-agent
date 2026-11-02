@@ -18,7 +18,7 @@ import pytest
             },
         ),
         (
-            "src.agents.technical.subdomains.calibration.public",
+            "src.agents.technical.capabilities.calibration.public",
             {
                 "TechnicalDirectionCalibrationConfig",
                 "TechnicalDirectionCalibrationObservation",
@@ -27,7 +27,7 @@ import pytest
             },
         ),
         (
-            "src.agents.technical.subdomains.decision_observability.public",
+            "src.observability.technical.public",
             {
                 "TechnicalPredictionEventRecord",
                 "OutcomeLabelingRequest",
@@ -47,8 +47,16 @@ import pytest
             },
         ),
         (
-            "src.agents.technical.subdomains.interpretation.public",
+            "src.agents.technical.capabilities.interpretation.public",
             {"InterpretationGuardrailOutcome", "apply_interpretation_guardrail"},
+        ),
+        (
+            "src.agents.technical.capabilities.artifacts",
+            {"build_default_technical_artifact_repository"},
+        ),
+        (
+            "src.agents.technical.capabilities.governance",
+            {"TechnicalGovernanceRegistry", "build_technical_governance_registry"},
         ),
         (
             "src.agents.technical.capabilities.market_data.public",
@@ -112,3 +120,23 @@ def test_market_data_package_facade_does_not_expose_provider_adapter() -> None:
     assert set(facade.__all__) == set(public.__all__)
     assert all(hasattr(facade, name) for name in facade.__all__)
     assert not hasattr(facade, "YahooMarketDataProvider")
+
+
+def test_technical_capability_roots_do_not_expose_infrastructure_adapters() -> None:
+    artifacts = import_module("src.agents.technical.capabilities.artifacts")
+    interpretation = import_module("src.agents.technical.capabilities.interpretation")
+
+    assert not hasattr(artifacts, "TechnicalArtifactRepository")
+    assert not hasattr(interpretation, "TechnicalInterpretationProvider")
+
+
+def test_observability_facade_matches_public_contract_without_infrastructure() -> None:
+    facade = import_module("src.observability.technical")
+    public = import_module("src.observability.technical.public")
+
+    assert facade.__all__ == public.__all__
+    assert all(hasattr(facade, name) for name in facade.__all__)
+    assert "TechnicalDecisionObservabilityRepository" in facade.__all__
+    assert not any(name.startswith("SqlAlchemy") for name in facade.__all__)
+    assert not any("Worker" in name for name in facade.__all__)
+    assert not any(name.startswith("build_default") for name in facade.__all__)

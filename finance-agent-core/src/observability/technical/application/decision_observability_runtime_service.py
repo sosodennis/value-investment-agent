@@ -3,11 +3,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 
-from src.agents.technical.subdomains.decision_observability.application.ports import (
+from src.observability.technical.application.ports import (
     OutcomeLabelingMarketDataReader,
     TechnicalDecisionObservabilityRepository,
 )
-from src.agents.technical.subdomains.decision_observability.domain import (
+from src.observability.technical.domain import (
     MonitoringQueryScope,
     TechnicalCalibrationObservationBuildResult,
     TechnicalMonitoringAggregate,
