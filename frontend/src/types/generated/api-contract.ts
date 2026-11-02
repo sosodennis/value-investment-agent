@@ -1237,6 +1237,10 @@ export interface components {
             capture_id: string;
             /** Dropped */
             dropped: number;
+            /** Dropped Capacity */
+            dropped_capacity: number;
+            /** Dropped Rate Limited */
+            dropped_rate_limited: number;
             /** Duplicates */
             duplicates: number;
             /** Request Id */

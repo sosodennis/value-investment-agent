@@ -115,6 +115,8 @@ def test_runtime_buffer_enforces_bytes_and_owner_capture_limits() -> None:
     )
     assert result.accepted == ()
     assert result.dropped == 1
+    assert result.dropped_capacity == 1
+    assert result.dropped_rate_limited == 0
 
     owner_settings = ClientDebugSettings(
         enabled=True,
@@ -153,6 +155,28 @@ def test_runtime_buffer_accounts_for_retained_event_indexes() -> None:
     assert result.dropped == 1
 
 
+def test_runtime_buffer_accounts_for_pending_batch_bytes() -> None:
+    event = _event(sequence=1)
+    event_bytes = len(event.model_dump_json().encode("utf-8")) + 512
+    buffer = ClientDebugBuffer(
+        settings=ClientDebugSettings(
+            enabled=True,
+            max_bytes_per_capture=event_bytes * 2,
+            max_total_bytes=event_bytes * 2 - 1,
+        )
+    )
+    owner = ClientDebugOwner(user_id="user-1", organization_id="org-1")
+
+    result = buffer.append(
+        owner=owner,
+        capture_id=uuid4(),
+        events=(event, _event(sequence=2)),
+    )
+
+    assert len(result.accepted) == 1
+    assert result.dropped_capacity == 1
+
+
 def test_runtime_buffer_rate_limits_owner_events() -> None:
     buffer = ClientDebugBuffer(
         settings=ClientDebugSettings(
@@ -170,6 +194,8 @@ def test_runtime_buffer_rate_limits_owner_events() -> None:
     assert len(first.accepted) == 1
     assert second.accepted == ()
     assert second.dropped == 1
+    assert second.dropped_rate_limited == 1
+    assert second.dropped_capacity == 0
 
 
 def test_runtime_buffer_rate_limit_reopens_after_one_minute() -> None:
@@ -204,3 +230,69 @@ def test_runtime_buffer_rate_limit_reopens_after_one_minute() -> None:
     assert len(first.accepted) == 2
     assert blocked.dropped == 1
     assert len(reopened.accepted) == 1
+
+
+def test_runtime_buffer_counts_each_batch_once_in_rate_window() -> None:
+    buffer = ClientDebugBuffer(
+        settings=ClientDebugSettings(
+            enabled=True,
+            max_events_per_owner_per_minute=3,
+            max_bytes_per_capture=10_000,
+        )
+    )
+    owner = ClientDebugOwner(user_id="user-1", organization_id="org-1")
+    first = buffer.append(
+        owner=owner,
+        capture_id=uuid4(),
+        events=(_event(sequence=1), _event(sequence=2)),
+    )
+    second = buffer.append(
+        owner=owner,
+        capture_id=uuid4(),
+        events=(_event(sequence=3),),
+    )
+
+    assert len(first.accepted) == 2
+    assert len(second.accepted) == 1
+    assert second.dropped == 0
+
+
+def test_runtime_buffer_allows_eight_sixty_fps_samplers_inside_rate_window() -> None:
+    samples = 8 * 60 * 60
+    buffer = ClientDebugBuffer(
+        settings=ClientDebugSettings(
+            enabled=True,
+            max_events_per_capture=samples + 1,
+            max_bytes_per_capture=64 * 1024 * 1024,
+            max_total_bytes=64 * 1024 * 1024,
+        )
+    )
+    owner = ClientDebugOwner(user_id="user-1", organization_id="org-1")
+    capture_id = uuid4()
+    events = tuple(_event(sequence=index) for index in range(1, samples + 1))
+
+    result = buffer.append(owner=owner, capture_id=capture_id, events=events)
+
+    assert len(result.accepted) == samples
+    assert result.dropped == 0
+
+
+def test_runtime_buffer_reports_capture_capacity_before_rate_limit() -> None:
+    buffer = ClientDebugBuffer(
+        settings=ClientDebugSettings(
+            enabled=True,
+            max_events_per_owner_per_minute=10_000,
+            max_events_per_capture=2,
+            max_bytes_per_capture=64 * 1024,
+        )
+    )
+    owner = ClientDebugOwner(user_id="user-1", organization_id="org-1")
+    result = buffer.append(
+        owner=owner,
+        capture_id=uuid4(),
+        events=(_event(sequence=1), _event(sequence=2), _event(sequence=3)),
+    )
+
+    assert len(result.accepted) == 2
+    assert result.dropped_capacity == 1
+    assert result.dropped_rate_limited == 0

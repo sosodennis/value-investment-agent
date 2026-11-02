@@ -173,4 +173,65 @@ describe('debugCapture', () => {
         const terminalBody: unknown = JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body));
         expect(terminalBody).toMatchObject({ events: [{ name: 'interaction.before' }, { name: 'interaction.after' }] });
     });
+
+    it('drains an eight-sampler 60fps equivalent workload when transport is healthy', async () => {
+        vi.stubEnv('NEXT_PUBLIC_ENABLE_CLIENT_DEBUG_CAPTURE', 'true');
+        const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 202 }));
+        vi.stubGlobal('fetch', fetchMock);
+        Object.defineProperty(window, 'matchMedia', {
+            configurable: true,
+            value: () => ({ matches: false }),
+        });
+
+        const { debugCapture } = await import('./index');
+        const samplesPerMinute = 8 * 60 * 60;
+        for (let offset = 0; offset < samplesPerMinute; offset += 400) {
+            for (let sample = offset; sample < Math.min(offset + 400, samplesPerMinute); sample += 1) {
+                debugCapture.emit('animation.sample', {
+                    sampler: sample % 8,
+                    progress: (sample % 60) / 60,
+                });
+            }
+            await debugCapture.flush();
+        }
+
+        const sentEvents = fetchMock.mock.calls.reduce((total, [, init]) => {
+            const body = JSON.parse(String(init?.body)) as { events?: unknown[] };
+            return total + (body.events?.length ?? 0);
+        }, 0);
+        expect(sentEvents).toBe(samplesPerMinute);
+        expect(fetchMock.mock.calls.length).toBe(576);
+    });
+
+    it('keeps up with the sampler rate when healthy requests take 120ms', async () => {
+        vi.stubEnv('NEXT_PUBLIC_ENABLE_CLIENT_DEBUG_CAPTURE', 'true');
+        const fetchMock = vi.fn().mockImplementation(async () => {
+            await new Promise((resolve) => setTimeout(resolve, 120));
+            return new Response(null, { status: 202 });
+        });
+        vi.stubGlobal('fetch', fetchMock);
+        Object.defineProperty(window, 'matchMedia', {
+            configurable: true,
+            value: () => ({ matches: false }),
+        });
+
+        const { debugCapture } = await import('./index');
+        const sampleCount = 8 * 60 * 2;
+        for (let offset = 0; offset < sampleCount; offset += 400) {
+            for (let sample = offset; sample < Math.min(offset + 400, sampleCount); sample += 1) {
+                debugCapture.emit('animation.sample', {
+                    sampler: sample % 8,
+                    progress: (sample % 60) / 60,
+                });
+            }
+            await debugCapture.flush();
+        }
+
+        const sentEvents = fetchMock.mock.calls.reduce((total, [, init]) => {
+            const body = JSON.parse(String(init?.body)) as { events?: unknown[] };
+            return total + (body.events?.length ?? 0);
+        }, 0);
+        expect(sentEvents).toBe(sampleCount);
+        expect(fetchMock.mock.calls.length).toBe(20);
+    });
 });

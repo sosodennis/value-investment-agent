@@ -85,6 +85,8 @@ test('captures browser layout, interaction, animation, and performance evidence 
                 accepted: payload.events.length,
                 duplicates: 0,
                 dropped: 0,
+                dropped_rate_limited: 0,
+                dropped_capacity: 0,
                 request_id: 'browser-debug-request',
             }),
         });

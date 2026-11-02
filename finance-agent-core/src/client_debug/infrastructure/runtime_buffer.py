@@ -46,7 +46,12 @@ class _StoredEventRecord:
 class ClientDebugAppendResult:
     accepted: tuple[ClientDebugStoredEvent, ...]
     duplicates: int
-    dropped: int
+    dropped_rate_limited: int
+    dropped_capacity: int
+
+    @property
+    def dropped(self) -> int:
+        return self.dropped_rate_limited + self.dropped_capacity
 
 
 @dataclass(slots=True)
@@ -71,7 +76,10 @@ class ClientDebugBuffer:
         self._clock = clock or (lambda: datetime.now(UTC))
         self._captures: OrderedDict[UUID, _Capture] = OrderedDict()
         self._total_bytes = 0
-        self._owner_event_times: dict[ClientDebugOwner, deque[datetime]] = {}
+        self._owner_event_times: dict[
+            ClientDebugOwner, deque[tuple[datetime, int]]
+        ] = {}
+        self._owner_event_counts: dict[ClientDebugOwner, int] = {}
         self._lock = RLock()
 
     def append(
@@ -90,13 +98,14 @@ class ClientDebugBuffer:
 
             accepted_events: list[tuple[ClientDebugEvent, bytes, int]] = []
             duplicates = 0
-            dropped = 0
-            owner_event_times = self._owner_event_times.get(owner)
-            owner_event_count = len(owner_event_times) if owner_event_times else 0
+            dropped_rate_limited = 0
+            dropped_capacity = 0
+            owner_event_count = self._owner_event_counts.get(owner, 0)
             pending_ids: dict[UUID, bytes] = {}
             pending_sequences: set[int] = set()
             event_count = len(capture.events) if capture is not None else 0
             bytes_used = capture.bytes_used if capture is not None else 0
+            total_bytes_used = self._total_bytes
             for event in events:
                 event_payload = event.model_dump_json().encode("utf-8")
                 existing = capture.events.get(event.event_id) if capture else None
@@ -125,30 +134,34 @@ class ClientDebugBuffer:
                     )
 
                 if event_count >= self._settings.max_events_per_capture:
-                    dropped += 1
+                    dropped_capacity += 1
                     continue
                 if owner_event_count >= self._settings.max_events_per_owner_per_minute:
-                    dropped += 1
+                    dropped_rate_limited += 1
                     continue
 
                 event_bytes = len(event_payload) + self._EVENT_INDEX_OVERHEAD_BYTES
                 if (
                     bytes_used + event_bytes > self._settings.max_bytes_per_capture
-                    or self._total_bytes + event_bytes > self._settings.max_total_bytes
+                    or total_bytes_used + event_bytes > self._settings.max_total_bytes
                 ):
-                    dropped += 1
+                    dropped_capacity += 1
                     continue
                 pending_ids[event.event_id] = event_payload
                 pending_sequences.add(event.sequence)
                 accepted_events.append((event, event_payload, event_bytes))
                 event_count += 1
                 bytes_used += event_bytes
+                total_bytes_used += event_bytes
                 owner_event_count += 1
 
             if capture is None:
                 if not accepted_events:
                     return ClientDebugAppendResult(
-                        accepted=(), duplicates=duplicates, dropped=dropped
+                        accepted=(),
+                        duplicates=duplicates,
+                        dropped_rate_limited=dropped_rate_limited,
+                        dropped_capacity=dropped_capacity,
                     )
                 self._make_capture(owner=owner, capture_id=capture_id, now=now)
                 capture = self._captures[capture_id]
@@ -167,12 +180,14 @@ class ClientDebugBuffer:
                 accepted.append(stored)
             if accepted_events:
                 event_times = self._owner_event_times.setdefault(owner, deque())
-                event_times.extend(now for _ in accepted_events)
+                event_times.append((now, len(accepted_events)))
+                self._owner_event_counts[owner] = owner_event_count
 
             return ClientDebugAppendResult(
                 accepted=tuple(accepted),
                 duplicates=duplicates,
-                dropped=dropped,
+                dropped_rate_limited=dropped_rate_limited,
+                dropped_capacity=dropped_capacity,
             )
 
     def read(
@@ -210,6 +225,7 @@ class ClientDebugBuffer:
             self._captures.clear()
             self._total_bytes = 0
             self._owner_event_times.clear()
+            self._owner_event_counts.clear()
 
     def _make_capture(
         self,
@@ -252,7 +268,9 @@ class ClientDebugBuffer:
             self._total_bytes -= capture.bytes_used
         cutoff = now - timedelta(seconds=60)
         for owner, event_times in list(self._owner_event_times.items()):
-            while event_times and event_times[0] <= cutoff:
-                event_times.popleft()
+            while event_times and event_times[0][0] <= cutoff:
+                _, count = event_times.popleft()
+                self._owner_event_counts[owner] -= count
             if not event_times:
                 del self._owner_event_times[owner]
+                del self._owner_event_counts[owner]

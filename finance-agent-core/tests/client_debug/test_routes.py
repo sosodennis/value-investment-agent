@@ -82,6 +82,8 @@ async def test_client_debug_routes_ingest_and_read_runtime_events() -> None:
 
     assert ingested.status_code == 202
     assert ingested.json()["accepted"] == 1
+    assert ingested.json()["dropped_rate_limited"] == 0
+    assert ingested.json()["dropped_capacity"] == 0
     assert ingested.json()["request_id"] == "server-request-1"
     assert listed.status_code == 200
     assert listed.json()["events"][0]["details"]["access_token"] == "[REDACTED]"

@@ -138,6 +138,8 @@ class ClientDebugAcceptedResponse(BaseModel):
     accepted: int = Field(ge=0)
     duplicates: int = Field(ge=0)
     dropped: int = Field(ge=0)
+    dropped_rate_limited: int = Field(ge=0)
+    dropped_capacity: int = Field(ge=0)
     request_id: str | None = None
 
 
