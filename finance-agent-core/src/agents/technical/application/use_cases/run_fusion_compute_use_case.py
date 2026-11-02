@@ -15,6 +15,11 @@ from src.agents.technical.application.state_updates import (
     build_fusion_compute_error_update,
     build_fusion_compute_success_update,
 )
+from src.agents.technical.capabilities.regime.public import RegimeFrame, RegimePack
+from src.agents.technical.capabilities.signal_fusion.public import (
+    FusionRuntimeRequest,
+    FusionRuntimeService,
+)
 from src.agents.technical.domain.shared import (
     AlignmentReport,
     FeatureFrame,
@@ -40,11 +45,6 @@ from src.agents.technical.subdomains.calibration.public import (
     calibrate_direction_confidence,
     load_technical_direction_calibration_mapping,
     resolve_direction_family,
-)
-from src.agents.technical.subdomains.regime.contracts import RegimeFrame, RegimePack
-from src.agents.technical.subdomains.signal_fusion import (
-    FusionRuntimeRequest,
-    FusionRuntimeService,
 )
 from src.interface.artifacts.artifact_data_models import (
     TechnicalFeaturePackArtifactData,

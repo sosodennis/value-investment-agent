@@ -192,7 +192,7 @@ def test_guard_accepts_capability_facade_import(tmp_path: Path) -> None:
     _write_module(
         src_root,
         "src.agents.technical.application.runner",
-        "from src.agents.technical.capabilities.features import FeatureRuntime\n",
+        "from src.agents.technical.capabilities.features.public import FeatureRuntime\n",
     )
 
     violations = architecture_guard.collect_violations(src_root)

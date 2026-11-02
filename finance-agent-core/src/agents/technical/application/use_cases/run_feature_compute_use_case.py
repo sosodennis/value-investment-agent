@@ -14,19 +14,19 @@ from src.agents.technical.application.state_updates import (
     build_feature_compute_error_update,
     build_feature_compute_success_update,
 )
-from src.agents.technical.domain.shared import PriceSeries
-from src.agents.technical.interface.serializers import (
-    build_feature_compute_preview,
-    build_feature_pack_artifact_payload,
-    build_indicator_series_artifact_payload,
-)
-from src.agents.technical.subdomains.features import (
+from src.agents.technical.capabilities.features.public import (
     FeatureRuntimeRequest,
     FeatureRuntimeService,
     IndicatorSeriesFrameResult,
     IndicatorSeriesRuntimeRequest,
     IndicatorSeriesRuntimeResult,
     IndicatorSeriesRuntimeService,
+)
+from src.agents.technical.domain.shared import PriceSeries
+from src.agents.technical.interface.serializers import (
+    build_feature_compute_preview,
+    build_feature_pack_artifact_payload,
+    build_indicator_series_artifact_payload,
 )
 from src.interface.artifacts.artifact_data_models import (
     TechnicalTimeseriesBundleArtifactData,

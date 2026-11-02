@@ -3,6 +3,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Protocol
 
+from src.agents.technical.capabilities.signal_fusion.public import (
+    SemanticTagPolicyResult,
+)
 from src.agents.technical.interface.contracts import (
     AnalystPerspectiveModel,
     EvidenceBreakoutSignalModel,
@@ -12,7 +15,6 @@ from src.agents.technical.interface.contracts import (
     StructureConfluenceSummaryModel,
     VolumeProfileSummaryModel,
 )
-from src.agents.technical.subdomains.signal_fusion import SemanticTagPolicyResult
 from src.interface.artifacts.artifact_data_models import (
     TechnicalAlertsArtifactData,
     TechnicalDirectionScorecardArtifactData,

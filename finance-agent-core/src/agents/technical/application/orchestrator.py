@@ -18,20 +18,22 @@ from src.agents.technical.application.use_cases import (
     run_semantic_translate_use_case,
     run_verification_compute_use_case,
 )
-from src.agents.technical.subdomains.alerts import AlertRuntimeService
-from src.agents.technical.subdomains.features import (
+from src.agents.technical.capabilities.alerts.public import AlertRuntimeService
+from src.agents.technical.capabilities.features.public import (
     FeatureRuntimeService,
     IndicatorSeriesRuntimeService,
 )
-from src.agents.technical.subdomains.market_data.public import IMarketDataProvider
-from src.agents.technical.subdomains.patterns import PatternRuntimeService
-from src.agents.technical.subdomains.regime import RegimeRuntimeService
-from src.agents.technical.subdomains.signal_fusion import (
+from src.agents.technical.capabilities.market_data.public import IMarketDataProvider
+from src.agents.technical.capabilities.patterns.public import PatternRuntimeService
+from src.agents.technical.capabilities.regime.public import RegimeRuntimeService
+from src.agents.technical.capabilities.signal_fusion.public import (
     FusionRuntimeService,
     SemanticTagPolicyInput,
     SemanticTagPolicyResult,
 )
-from src.agents.technical.subdomains.verification import VerificationRuntimeService
+from src.agents.technical.capabilities.verification.public import (
+    VerificationRuntimeService,
+)
 from src.interface.artifacts.artifact_data_models import (
     TechnicalFeaturePackArtifactData,
     TechnicalIndicatorSeriesArtifactData,

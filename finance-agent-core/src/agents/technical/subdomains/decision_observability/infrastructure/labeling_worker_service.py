@@ -5,19 +5,17 @@ import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
+from src.agents.technical.capabilities.market_data.public import (
+    MarketDataCacheConfig,
+    MarketDataOhlcvFetchResult,
+    MarketDataRetryPolicy,
+    MarketDataRuntimeService,
+    build_default_market_data_provider,
+)
 from src.agents.technical.subdomains.decision_observability.application import (
     OutcomeLabelingBatchResult,
     OutcomeLabelingMarketDataReader,
     TechnicalDecisionObservabilityRuntimeService,
-)
-from src.agents.technical.subdomains.market_data import (
-    MarketDataRuntimeService,
-)
-from src.agents.technical.subdomains.market_data.public import (
-    MarketDataCacheConfig,
-    MarketDataOhlcvFetchResult,
-    MarketDataRetryPolicy,
-    build_default_market_data_provider,
 )
 from src.shared.kernel.tools.logger import get_logger, log_event
 

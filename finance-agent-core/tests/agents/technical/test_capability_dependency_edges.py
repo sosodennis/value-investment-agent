@@ -4,7 +4,7 @@ import math
 
 import pandas as pd
 
-from src.agents.technical.subdomains.features.public import serialize_fracdiff_outputs
+from src.agents.technical.capabilities.features.public import serialize_fracdiff_outputs
 
 
 def test_fracdiff_serialization_keeps_finite_number_contract() -> None:

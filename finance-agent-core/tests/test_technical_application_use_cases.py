@@ -65,6 +65,36 @@ from src.agents.technical.application.use_cases.run_regime_compute_use_case impo
 from src.agents.technical.application.use_cases.run_semantic_translate_use_case import (
     run_semantic_translate_use_case,
 )
+from src.agents.technical.capabilities.alerts.public import AlertRuntimeService
+from src.agents.technical.capabilities.features.application.indicator_series_runtime_service import (
+    IndicatorSeriesFrameMetadata,
+)
+from src.agents.technical.capabilities.features.domain import (
+    serialize_fracdiff_outputs,
+)
+from src.agents.technical.capabilities.features.public import (
+    FeatureRuntimeResult,
+    FeatureRuntimeService,
+    IndicatorSeriesFrameResult,
+    IndicatorSeriesRuntimeResult,
+)
+from src.agents.technical.capabilities.market_data.application.ports import (
+    MarketDataCacheMetadata,
+    MarketDataOhlcvFetchResult,
+    MarketDataProviderFailure,
+)
+from src.agents.technical.capabilities.regime.application.regime_runtime_service import (
+    RegimeRuntimeResult,
+)
+from src.agents.technical.capabilities.regime.contracts import RegimeFrame, RegimePack
+from src.agents.technical.capabilities.signal_fusion.public import (
+    FusionRuntimeService,
+    SemanticConfluenceResult,
+    SemanticTagPolicyResult,
+    derive_memory_strength,
+    derive_statistical_state,
+    safe_float,
+)
 from src.agents.technical.domain.shared import FeatureFrame, FeaturePack, FeatureSummary
 from src.agents.technical.interface.contracts import (
     AnalystPerspectiveModel,
@@ -74,36 +104,6 @@ from src.agents.technical.interface.contracts import (
     StructureConfluenceSummaryModel,
 )
 from src.agents.technical.interface.serializers import build_full_report_payload
-from src.agents.technical.subdomains.alerts import AlertRuntimeService
-from src.agents.technical.subdomains.features import (
-    FeatureRuntimeResult,
-    FeatureRuntimeService,
-    IndicatorSeriesFrameResult,
-    IndicatorSeriesRuntimeResult,
-)
-from src.agents.technical.subdomains.features.application.indicator_series_runtime_service import (
-    IndicatorSeriesFrameMetadata,
-)
-from src.agents.technical.subdomains.features.domain import (
-    serialize_fracdiff_outputs,
-)
-from src.agents.technical.subdomains.market_data.application.ports import (
-    MarketDataCacheMetadata,
-    MarketDataOhlcvFetchResult,
-    MarketDataProviderFailure,
-)
-from src.agents.technical.subdomains.regime.application.regime_runtime_service import (
-    RegimeRuntimeResult,
-)
-from src.agents.technical.subdomains.regime.contracts import RegimeFrame, RegimePack
-from src.agents.technical.subdomains.signal_fusion import (
-    FusionRuntimeService,
-    SemanticConfluenceResult,
-    SemanticTagPolicyResult,
-    derive_memory_strength,
-    derive_statistical_state,
-    safe_float,
-)
 from src.interface.artifacts.artifact_data_models import (
     PriceSeriesArtifactData,
     TechnicalAlertPolicyMetadataData,

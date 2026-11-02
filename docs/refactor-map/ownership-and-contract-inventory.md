@@ -35,7 +35,7 @@ not a compatibility alias.
 | News | `build_financial_news_subgraph` | `agents/news/workflow/` | Retain public name; emit normalized activity through runtime adapter |
 | Debate | `build_debate_subgraph` | `agents/debate/workflow/` | Retain public name; model parallel bull/bear activity as a set |
 | Fundamental | `build_fundamental_subgraph` | `agents/fundamental/workflow/` plus `capabilities/` | Retain entrypoint; #246 and #249 own all fundamental capabilities under `agents/fundamental/capabilities/` |
-| Technical | `build_technical_subgraph` | `agents/technical/workflow/` plus `subdomains/` | Retain entrypoint; migrate migration-era `subdomains/` ownership under #145 |
+| Technical | `build_technical_subgraph` | `agents/technical/workflow/` plus `capabilities/` | Retain entrypoint; #250 owns market data, features, patterns, regime, fusion, verification, and alerts under `capabilities/`; #247 owns remaining observability, governance, and technical artifact concerns |
 
 All agent callers use the public entrypoint or a shared contract. Private
 imports from the API composition root, another agent, or migration-era
@@ -157,7 +157,7 @@ target map assigns to a capability boundary:
 | API imports news shared HTTP client directly | `api/server.py:39-40` | Close through the news application wiring boundary |
 | API imports technical observability subdomain | `api/server.py:40-43,246-438` | Register a technical observability router/facade at composition root |
 | Agent repositories import root `src.services` and `src.interface` modules | e.g. `agents/news/infrastructure/artifacts/news_artifact_repository.py`, `agents/debate/infrastructure/artifacts/*`, technical use cases | Move stable artifact/event contracts to owned public ports; delete private root imports as callers migrate |
-| Fundamental/technical code imports migration-era `subdomains/` | `agents/technical/subdomains/` (fundamental `subdomains/` retired by #246 and #249) | #246 and #249 re-home all fundamental capabilities under `agents/fundamental/capabilities/`; later technical child issues re-home technical packages; no new subdomain imports |
+| Fundamental/technical code imports migration-era `subdomains/` | `agents/technical/subdomains/` (fundamental `subdomains/` retired by #246 and #249) | #246 and #249 re-home all fundamental capabilities under `agents/fundamental/capabilities/`; #250 re-homes the seven compute capabilities under `agents/technical/capabilities/`; #247 owns remaining technical observability and governance packages; no new subdomain imports |
 
 The guard result is a baseline fact, not permission to preserve these edges.
 The deletion ledger gives the concrete migration action and owner.

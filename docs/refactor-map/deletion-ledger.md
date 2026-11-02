@@ -68,7 +68,8 @@ use listed in the ownership inventory.
 | `src/services/artifact_manager.py` | Move under artifact capability | #145 | Artifact persistence and API projection need one owner |
 | Root `src/interface/events/` | Replace with runtime-owned event contract | #145 | Current location mixes wire protocol and LangGraph adapter details |
 | `agents/fundamental/subdomains/` | Deleted after #246 moved financial statements, forward signals, and market data and #249 moved core valuation, model selection, and artifact provenance to `agents/fundamental/capabilities/` | #246, #249 | Migration-era path retired; all fundamental capability ownership is canonical |
-| `agents/technical/subdomains/` | Re-home or delete each module | #145 | Migration-era path; new capabilities belong under owning agent |
+| `agents/technical/subdomains/{alerts,features,market_data,patterns,regime,signal_fusion,verification}/` | Deleted after re-home under `agents/technical/capabilities/` | #250 | Technical compute capabilities now have canonical owners and public facades |
+| `agents/technical/subdomains/{calibration,decision_observability,governance,interpretation,artifacts}/` | Re-home or delete each module | #247 | Remaining technical observability, governance, and technical artifact ownership is handled by #247 |
 | API imports of SEC/news/technical private modules | Move behind wiring/facades | #145 | Composition root must not implement capability behavior |
 | Agent imports of root `src.services`/`src.interface` implementations | Replace with typed ports/public contracts | #145 | Private cross-slice dependencies increase change blast radius |
 | `finance-agent-core/src/agents/ARCHITECTURE_MODULE_ACTIONS.md` stale actions | Regenerate after migration | #145 | Guard report must describe the resulting graph |

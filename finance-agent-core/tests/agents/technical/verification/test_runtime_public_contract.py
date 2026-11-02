@@ -4,12 +4,12 @@ from dataclasses import dataclass
 
 import pandas as pd
 
-from src.agents.technical.subdomains.features.public import (
+from src.agents.technical.capabilities.features.public import (
     BollingerIndicator,
     ObvIndicator,
     StatisticalStrengthSeries,
 )
-from src.agents.technical.subdomains.verification import (
+from src.agents.technical.capabilities.verification.public import (
     BacktestResult,
     BacktestResults,
     VerificationRuntimeRequest,
