@@ -17,8 +17,7 @@ def _fundamental_nodes() -> dict[str, FundamentalNode]:
 async def test_financial_health_node_error_log():
     # Simulate a network error during data fetching
     state = {
-        "ticker": "AAPL",
-        "intent_extraction": {"resolved_ticker": "AAPL"},
+        "company_profile": {"ticker": "AAPL", "name": "Apple Inc."},
     }
 
     with patch(
@@ -41,15 +40,11 @@ async def test_financial_health_node_error_log():
 async def test_model_selection_node_error_log():
     # Simulate an error in model selection (e.g., missing profile in a way that triggers exception)
     state = {
-        "ticker": "AAPL",
-        "intent_extraction": {
-            "resolved_ticker": "AAPL",
-            "company_profile": {
-                "ticker": "AAPL",
-                "name": "Apple Inc.",
-                "sector": "Technology",
-                "industry": "Consumer Electronics",
-            },
+        "company_profile": {
+            "ticker": "AAPL",
+            "name": "Apple Inc.",
+            "sector": "Technology",
+            "industry": "Consumer Electronics",
         },
     }
 
@@ -70,15 +65,11 @@ async def test_model_selection_node_error_log():
 @pytest.mark.asyncio
 async def test_model_selection_node_accepts_canonical_report_shape():
     state = {
-        "ticker": "GME",
-        "intent_extraction": {
-            "resolved_ticker": "GME",
-            "company_profile": {
-                "ticker": "GME",
-                "name": "GameStop Corp.",
-                "sector": "Consumer Discretionary",
-                "industry": "Specialty Retail",
-            },
+        "company_profile": {
+            "ticker": "GME",
+            "name": "GameStop Corp.",
+            "sector": "Consumer Discretionary",
+            "industry": "Specialty Retail",
         },
         "fundamental_analysis": {"financial_reports_artifact_id": "artifact_1"},
     }

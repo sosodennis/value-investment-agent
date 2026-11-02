@@ -1,25 +1,16 @@
 from __future__ import annotations
 
-import logging
-import os
 from dataclasses import dataclass
 
-from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
-from psycopg_pool import AsyncConnectionPool
 
-from src.agents.debate.entrypoint import build_debate_subgraph
-from src.agents.fundamental.entrypoint import build_fundamental_subgraph
-from src.agents.intent.entrypoint import build_intent_extraction_graph
-from src.agents.news.entrypoint import build_financial_news_subgraph
-from src.agents.technical.entrypoint import build_technical_subgraph
-from src.shared.kernel.tools.logger import get_logger, log_event
-
-from .nodes.consolidate_research import consolidate_research_node
 from .state import AgentState
 
-logger = get_logger(__name__)
+
+def _mark_research_consolidated(_state: AgentState) -> dict[str, object]:
+    """Record the root-level fan-in after all research agents have completed."""
+    return {"workflow_activity_statuses": {"consolidate_research": "done"}}
 
 
 @dataclass(frozen=True)
@@ -38,8 +29,9 @@ def build_root_graph(graphs: RootAgentGraphs) -> StateGraph:
         graphs.intent,
         metadata={
             "agent_id": "intent_extraction",
-            "agent_scope": "agent",
-            "agent_node": "intent_agent",
+            "workflow_activity_kind": "agent",
+            "workflow_scope_path": ("intent_extraction",),
+            "activity_label": "Resolve company",
         },
     )
     builder.add_node(
@@ -47,8 +39,9 @@ def build_root_graph(graphs: RootAgentGraphs) -> StateGraph:
         graphs.fundamental,
         metadata={
             "agent_id": "fundamental_analysis",
-            "agent_scope": "agent",
-            "agent_node": "fundamental_agent",
+            "workflow_activity_kind": "agent",
+            "workflow_scope_path": ("fundamental_analysis",),
+            "activity_label": "Analyze fundamentals",
         },
     )
     builder.add_node(
@@ -56,8 +49,9 @@ def build_root_graph(graphs: RootAgentGraphs) -> StateGraph:
         graphs.news,
         metadata={
             "agent_id": "financial_news_research",
-            "agent_scope": "agent",
-            "agent_node": "news_agent",
+            "workflow_activity_kind": "agent",
+            "workflow_scope_path": ("financial_news_research",),
+            "activity_label": "Research financial news",
         },
     )
     builder.add_node(
@@ -65,18 +59,27 @@ def build_root_graph(graphs: RootAgentGraphs) -> StateGraph:
         graphs.technical,
         metadata={
             "agent_id": "technical_analysis",
-            "agent_scope": "agent",
-            "agent_node": "technical_agent",
+            "workflow_activity_kind": "agent",
+            "workflow_scope_path": ("technical_analysis",),
+            "activity_label": "Analyze technical signals",
         },
     )
-    builder.add_node("consolidate_research", consolidate_research_node)
+    builder.add_node(
+        "consolidate_research",
+        _mark_research_consolidated,
+        metadata={
+            "workflow_scope_path": ("research", "consolidate"),
+            "activity_label": "Consolidate research",
+        },
+    )
     builder.add_node(
         "debate_agent",
         graphs.debate,
         metadata={
             "agent_id": "debate",
-            "agent_scope": "agent",
-            "agent_node": "debate_agent",
+            "workflow_activity_kind": "agent",
+            "workflow_scope_path": ("debate",),
+            "activity_label": "Review the investment case",
         },
     )
 
@@ -91,56 +94,3 @@ def build_root_graph(graphs: RootAgentGraphs) -> StateGraph:
     builder.add_edge("consolidate_research", "debate_agent")
     builder.add_edge("debate_agent", END)
     return builder
-
-
-_compiled_graph: CompiledStateGraph | None = None
-_saver: AsyncPostgresSaver | None = None
-
-
-async def get_graph() -> CompiledStateGraph:
-    """Lazy-initialize and return the compiled graph with persistent checkpointer."""
-    global _compiled_graph, _saver
-    if _compiled_graph is None:
-        try:
-            graphs = RootAgentGraphs(
-                intent=build_intent_extraction_graph(),
-                fundamental=build_fundamental_subgraph(),
-                news=build_financial_news_subgraph(),
-                technical=build_technical_subgraph(),
-                debate=build_debate_subgraph(),
-            )
-            builder = build_root_graph(graphs)
-
-            pg_user = os.environ.get("POSTGRES_USER", "postgres")
-            pg_pass = os.environ.get("POSTGRES_PASSWORD", "postgres")
-            pg_host = os.environ.get("POSTGRES_HOST", "localhost")
-            pg_port = os.environ.get("POSTGRES_PORT", "5432")
-            pg_db = os.environ.get("POSTGRES_DB", "langgraph")
-
-            db_uri = f"postgresql://{pg_user}:{pg_pass}@{pg_host}:{pg_port}/{pg_db}"
-            log_event(
-                logger,
-                event="workflow_graph_postgres_connecting",
-                message="workflow graph connecting to postgres",
-                fields={"host": pg_host, "port": pg_port, "database": pg_db},
-            )
-
-            pool = AsyncConnectionPool(
-                conninfo=db_uri, max_size=10, open=False, kwargs={"autocommit": True}
-            )
-            await pool.open()
-            _saver = AsyncPostgresSaver(pool)
-            await _saver.setup()
-            _compiled_graph = builder.compile(checkpointer=_saver)
-        except Exception as exc:
-            log_event(
-                logger,
-                event="workflow_graph_build_failed",
-                message="workflow graph build failed",
-                level=logging.ERROR,
-                error_code="WORKFLOW_GRAPH_BUILD_FAILED",
-                fields={"exception": str(exc)},
-            )
-            raise
-
-    return _compiled_graph

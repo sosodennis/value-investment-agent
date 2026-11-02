@@ -4,6 +4,7 @@ import json
 import logging
 from collections.abc import Mapping
 
+from src.shared.cross_agent.domain.market_identity import CompanyProfile
 from src.shared.kernel.boundary_contracts import (
     CONTRACT_KIND_ARTIFACT_JSON,
     CONTRACT_KIND_INTERRUPT_PAYLOAD,
@@ -26,6 +27,7 @@ __all__ = [
 
 def _is_artifact_ref_key(key: str) -> bool:
     return key.endswith("_artifact_id") or key in {
+        "artifact_id",
         "report_id",
         "transcript_id",
         "chart_data_id",
@@ -56,9 +58,13 @@ def _string_map(value: object) -> dict[str, str]:
 
 
 def _resolved_ticker_from_state(state: Mapping[str, object]) -> str | None:
-    intent_raw = state.get("intent_extraction")
-    intent_ctx = intent_raw if isinstance(intent_raw, Mapping) else {}
-    resolved_ticker = intent_ctx.get("resolved_ticker")
+    profile_raw = state.get("company_profile")
+    if isinstance(profile_raw, CompanyProfile):
+        resolved_ticker = profile_raw.ticker
+    elif isinstance(profile_raw, Mapping):
+        resolved_ticker = profile_raw.get("ticker")
+    else:
+        return None
     if isinstance(resolved_ticker, str) and resolved_ticker.strip():
         return resolved_ticker
     return None

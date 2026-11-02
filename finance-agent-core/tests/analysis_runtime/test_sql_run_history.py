@@ -387,6 +387,8 @@ async def test_completed_output_references_survive_later_run_and_restart() -> No
             status="running",
             now=started_at,
             principal_id=owner_id,
+            organization_id="organization-history",
+            membership_id="membership-history",
             input_data={"message": "AAPL"},
         )
         await repository.append_atomic(
@@ -427,6 +429,8 @@ async def test_completed_output_references_survive_later_run_and_restart() -> No
             status="running",
             now=started_at + timedelta(seconds=3),
             principal_id=owner_id,
+            organization_id="organization-history",
+            membership_id="membership-history",
             input_data={"message": "MSFT"},
         )
         await repository.append_atomic(
@@ -471,7 +475,11 @@ async def test_completed_output_references_survive_later_run_and_restart() -> No
 
         app.dependency_overrides[require_current_user] = current_principal
         app.state.analysis_runtime = service
-        history = await service.list_run_history(principal_id=owner_id, limit=10)
+        history = await service.list_run_history(
+            principal_id=owner_id,
+            organization_id="organization-history",
+            limit=10,
+        )
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=app), base_url="http://testserver"
         ) as client:

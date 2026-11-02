@@ -292,6 +292,93 @@ async def test_event_route_streams_replayed_workflow_events_without_transform_he
 
 
 @pytest.mark.asyncio
+async def test_event_stream_reconnects_from_cursor_and_emits_idle_heartbeats() -> None:
+    app = FastAPI()
+    service = AnalysisRuntimeService(
+        repository=InMemoryActivityRepository(),
+        owner=Owner(),
+        runner=Runner(),
+        heartbeat_seconds=0.001,
+    )
+    app.state.analysis_runtime = service
+    run_id = await service.start(
+        principal_id="user-1",
+        thread_id="thread-1",
+        input_data={"message": "AAPL"},
+        organization_id="organization-1",
+        membership_id="membership-1",
+    )
+    await service._tasks["thread-1"]
+
+    response = await activity_events(
+        thread_id="thread-1",
+        request=SimpleNamespace(app=app),
+        principal=Principal(
+            user_id="user-1",
+            subject="user-1",
+            email="user@example.test",
+            organization_id="organization-1",
+            membership_id="membership-1",
+        ),
+        after_seq=1,
+        run_id=run_id,
+    )
+
+    try:
+        resumed_frame = await anext(response.body_iterator)
+        initial_heartbeat = await anext(response.body_iterator)
+        idle_heartbeat = await anext(response.body_iterator)
+    finally:
+        await response.body_iterator.aclose()
+
+    assert resumed_frame.startswith("id: 2\nevent: workflow.activity\ndata: ")
+    assert "id: 1" not in resumed_frame
+    assert initial_heartbeat == ": heartbeat\n\n"
+    assert idle_heartbeat == ": heartbeat\n\n"
+    assert not service.hub._subscribers
+
+
+@pytest.mark.asyncio
+async def test_event_stream_ends_cleanly_when_runtime_hub_closes() -> None:
+    app = FastAPI()
+    service = AnalysisRuntimeService(
+        repository=InMemoryActivityRepository(), owner=Owner(), runner=Runner()
+    )
+    app.state.analysis_runtime = service
+    run_id = await service.start(
+        principal_id="user-1",
+        thread_id="thread-1",
+        input_data={"message": "AAPL"},
+        organization_id="organization-1",
+        membership_id="membership-1",
+    )
+    await service._tasks["thread-1"]
+    response = await activity_events(
+        thread_id="thread-1",
+        request=SimpleNamespace(app=app),
+        principal=Principal(
+            user_id="user-1",
+            subject="user-1",
+            email="user@example.test",
+            organization_id="organization-1",
+            membership_id="membership-1",
+        ),
+        after_seq=0,
+        run_id=run_id,
+    )
+
+    try:
+        await anext(response.body_iterator)
+        await anext(response.body_iterator)
+        assert await anext(response.body_iterator) == ": heartbeat\n\n"
+        await service.hub.close()
+        with pytest.raises(StopAsyncIteration):
+            await anext(response.body_iterator)
+    finally:
+        await response.body_iterator.aclose()
+
+
+@pytest.mark.asyncio
 async def test_http_interaction_snapshot_resume_and_completion_contract() -> None:
     app = FastAPI()
     app.include_router(router)

@@ -28,6 +28,8 @@ def _read_non_empty_string(value: object) -> str | None:
 
 
 def _read_company_profile(profile_data: object) -> CompanyProfile | None:
+    if isinstance(profile_data, CompanyProfile):
+        return profile_data
     if not isinstance(profile_data, Mapping):
         return None
     try:
@@ -38,12 +40,13 @@ def _read_company_profile(profile_data: object) -> CompanyProfile | None:
 
 
 def read_intent_state(state: Mapping[str, object]) -> IntentState:
-    intent_ctx_raw = state.get("intent_extraction", {})
-    intent_ctx = intent_ctx_raw if isinstance(intent_ctx_raw, Mapping) else {}
-    context = dict(intent_ctx)
+    profile = _read_company_profile(state.get("company_profile"))
+    context: dict[str, object] = {}
+    if profile is not None:
+        context["company_profile"] = profile.model_dump(mode="json")
+        context["resolved_ticker"] = profile.ticker
 
-    resolved_ticker = _read_non_empty_string(context.get("resolved_ticker"))
-    profile = _read_company_profile(context.get("company_profile"))
+    resolved_ticker = profile.ticker if profile is not None else None
 
     return IntentState(
         context=context,

@@ -27,7 +27,12 @@ def build_fundamental_workflow(
     builder.add_node(
         "financial_health",
         nodes["financial_health"],
-        metadata={"agent_id": "fundamental_analysis"},
+        metadata={
+            "agent_id": "fundamental_analysis",
+            "workflow_activity_kind": "node",
+            "workflow_scope_path": ("fundamental_analysis", "review-financial-health"),
+            "activity_label": "Review financial health",
+        },
         retry_policy=RetryPolicy(
             max_attempts=3,
             backoff_factor=2.0,
@@ -38,12 +43,22 @@ def build_fundamental_workflow(
     builder.add_node(
         "model_selection",
         nodes["model_selection"],
-        metadata={"agent_id": "fundamental_analysis"},
+        metadata={
+            "agent_id": "fundamental_analysis",
+            "workflow_activity_kind": "node",
+            "workflow_scope_path": ("fundamental_analysis", "select-model"),
+            "activity_label": "Select valuation model",
+        },
     )
     builder.add_node(
         "calculation",
         nodes["calculation"],
-        metadata={"agent_id": "fundamental_analysis"},
+        metadata={
+            "agent_id": "fundamental_analysis",
+            "workflow_activity_kind": "node",
+            "workflow_scope_path": ("fundamental_analysis", "calculate-valuation"),
+            "activity_label": "Calculate intrinsic value",
+        },
     )
     builder.add_edge(START, "financial_health")
     builder.add_edge("financial_health", "model_selection")

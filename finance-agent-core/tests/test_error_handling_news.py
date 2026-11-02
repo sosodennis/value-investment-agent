@@ -17,8 +17,7 @@ selector_node = news_nodes["selector_node"]
 @pytest.mark.asyncio
 async def test_search_node_error_log():
     state = {
-        "ticker": "AAPL",
-        "intent_extraction": {"resolved_ticker": "AAPL"},
+        "company_profile": {"ticker": "AAPL", "name": "Apple Inc."},
         "error_logs": [],
     }
 
@@ -38,7 +37,6 @@ async def test_search_node_error_log():
 @pytest.mark.asyncio
 async def test_selector_node_error_log():
     state = {
-        "ticker": "AAPL",
         "financial_news_research": {"search_artifact_id": "art_123"},
     }
 
@@ -97,7 +95,6 @@ async def test_fetch_node_error_log():
 @pytest.mark.asyncio
 async def test_analyst_node_error_log():
     state = {
-        "ticker": "AAPL",
         "financial_news_research": {"news_items_artifact_id": "n1"},
     }
 
@@ -155,7 +152,6 @@ async def test_analyst_node_error_log():
 @pytest.mark.asyncio
 async def test_aggregator_node_payload_build_failure_returns_error_update() -> None:
     state = {
-        "ticker": "AAPL",
         "financial_news_research": {"news_items_artifact_id": "news-items-1"},
     }
 

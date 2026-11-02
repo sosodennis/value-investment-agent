@@ -1,7 +1,6 @@
 from langchain_core.messages import AIMessage, HumanMessage
 
 from src.agents.debate.application.state_readers import (
-    artifact_ref_id_from_context,
     bear_thesis_from_state,
     bull_thesis_from_state,
     debate_context_from_state,
@@ -9,16 +8,12 @@ from src.agents.debate.application.state_readers import (
     history_from_state,
     resolved_ticker_from_state,
 )
+from src.shared.cross_agent.domain.market_identity import CompanyProfile
 
 
 def test_resolved_ticker_from_state():
-    state = {"intent_extraction": {"resolved_ticker": "  AAPL  "}}
+    state = {"company_profile": CompanyProfile(ticker="  AAPL  ", name="Apple")}
     assert resolved_ticker_from_state(state) == "AAPL"
-
-
-def test_artifact_ref_id_from_context():
-    ctx = {"artifact": {"reference": {"artifact_id": "art-123"}}}
-    assert artifact_ref_id_from_context(ctx) == "art-123"
 
 
 def test_history_and_last_message_reader():

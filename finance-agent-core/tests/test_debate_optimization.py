@@ -22,10 +22,8 @@ r1_bull_node = debate_nodes["r1_bull"]
 async def test_debate_aggregator_caches_reports():
     # Mock pre-requisites
     state = {
-        "intent_extraction": {"resolved_ticker": "AAPL"},
-        "financial_news_research": {},
-        "technical_analysis": {},
-        "fundamental_analysis": {},
+        "company_profile": {"ticker": "AAPL", "name": "Apple Inc."},
+        "artifact_references": {},
     }
 
     with (
@@ -58,10 +56,8 @@ async def test_debate_aggregator_caches_reports():
 @pytest.mark.asyncio
 async def test_debate_aggregator_exposes_degraded_source_state() -> None:
     state = {
-        "intent_extraction": {"resolved_ticker": "AAPL"},
-        "financial_news_research": {},
-        "technical_analysis": {},
-        "fundamental_analysis": {},
+        "company_profile": {"ticker": "AAPL", "name": "Apple Inc."},
+        "artifact_references": {},
     }
     with (
         patch(
@@ -93,10 +89,9 @@ async def test_debate_aggregator_exposes_degraded_source_state() -> None:
 @pytest.mark.asyncio
 async def test_agent_uses_cached_reports():
     state = {
-        "ticker": "AAPL",
         "context_summary_text": "cached_data",
         "facts_registry_text": "FACTS_REGISTRY (STRICT CITATION REQUIRED):\n[F001] data",
-        "intent_extraction": {"resolved_ticker": "AAPL"},
+        "company_profile": {"ticker": "AAPL", "name": "Apple Inc."},
         "debate": {"history": []},
         "workflow_activity_updates": {},
     }
@@ -128,7 +123,7 @@ async def test_agent_uses_cached_reports():
 @pytest.mark.asyncio
 async def test_moderator_history_exposes_its_round_number():
     state = {
-        "intent_extraction": {"resolved_ticker": "AAPL"},
+        "company_profile": {"ticker": "AAPL", "name": "Apple Inc."},
         "history": [],
         "bull_thesis": "Revenue growth remains durable.",
         "bear_thesis": "Valuation limits upside.",
@@ -166,9 +161,8 @@ async def test_moderator_history_exposes_its_round_number():
 @pytest.mark.asyncio
 async def test_agent_fallbacks_if_no_cache():
     state = {
-        "ticker": "AAPL",
         # no context_summary_text
-        "intent_extraction": {"resolved_ticker": "AAPL"},
+        "company_profile": {"ticker": "AAPL", "name": "Apple Inc."},
         "debate": {"history": []},
         "workflow_activity_updates": {},
     }

@@ -365,7 +365,8 @@ async def activity_events(
                     yield ": heartbeat\n\n"
                     continue
                 if event is None:
-                    yield 'event: error\ndata: {"code":"subscriber_overloaded"}\n\n'
+                    if subscriber.overloaded:
+                        yield 'event: error\ndata: {"code":"subscriber_overloaded"}\n\n'
                     break
                 if run_id is not None and event.run_id != run_id:
                     continue

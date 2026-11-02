@@ -5,7 +5,7 @@ import json
 import logging
 from collections.abc import Awaitable, Callable
 from datetime import timezone
-from typing import Any
+from typing import Protocol
 
 import asyncpg
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
@@ -15,6 +15,26 @@ from src.analysis_runtime.domain.errors import SubscriberOverloadedError
 
 logger = logging.getLogger(__name__)
 _EVENT_ADAPTER = TypeAdapter(WorkflowEvent)
+
+
+class NotificationConnection(Protocol):
+    def is_closed(self) -> bool: ...
+
+    async def add_listener(
+        self,
+        channel: str,
+        callback: Callable[[NotificationConnection, int, str, str], None],
+    ) -> object: ...
+
+    async def remove_listener(
+        self,
+        channel: str,
+        callback: Callable[[NotificationConnection, int, str, str], None],
+    ) -> object: ...
+
+    async def execute(self, query: str, *args: object) -> object: ...
+
+    async def close(self) -> None: ...
 
 
 class _EventPointer(BaseModel):
@@ -32,6 +52,11 @@ class QueueSubscriber:
             maxsize=maxsize
         )
         self._closed = False
+        self._close_reason: str | None = None
+
+    @property
+    def overloaded(self) -> bool:
+        return self._close_reason == "overloaded"
 
     def push(self, event: WorkflowEvent) -> None:
         if self._closed:
@@ -39,12 +64,8 @@ class QueueSubscriber:
         try:
             self._queue.put_nowait(event)
         except asyncio.QueueFull as exc:
-            self._closed = True
-            try:
-                self._queue.get_nowait()
-                self._queue.put_nowait(None)
-            except asyncio.QueueFull:
-                pass
+            self._close_reason = "overloaded"
+            self.close()
             raise SubscriberOverloadedError("subscriber queue is full") from exc
 
     async def receive(self) -> WorkflowEvent | None:
@@ -52,10 +73,14 @@ class QueueSubscriber:
 
     def close(self) -> None:
         self._closed = True
-        try:
-            self._queue.put_nowait(None)
-        except asyncio.QueueFull:
-            pass
+        if self._close_reason is None:
+            self._close_reason = "closed"
+        if self._queue.full():
+            try:
+                self._queue.get_nowait()
+            except asyncio.QueueEmpty:
+                pass
+        self._queue.put_nowait(None)
 
 
 class BoundedNotificationHub:
@@ -123,7 +148,7 @@ class PostgresNotificationHub(BoundedNotificationHub):
         channel: str = "workflow_activity",
         queue_size: int = 128,
         max_payload_bytes: int = 7900,
-        connect: Callable[..., Awaitable[Any]] | None = None,
+        connect: Callable[[str], Awaitable[NotificationConnection]] | None = None,
         load_event: Callable[[str], Awaitable[WorkflowEvent | None]] | None = None,
     ) -> None:
         super().__init__(queue_size=queue_size)
@@ -132,8 +157,9 @@ class PostgresNotificationHub(BoundedNotificationHub):
         self._max_payload_bytes = max_payload_bytes
         self._connect = connect or asyncpg.connect
         self._load_event = load_event or _load_committed_event
-        self._connection: Any | None = None
+        self._connection: NotificationConnection | None = None
         self._lifecycle_lock = asyncio.Lock()
+        self._dispatch_tasks: set[asyncio.Task[None]] = set()
 
     async def start(self) -> None:
         async with self._lifecycle_lock:
@@ -177,9 +203,15 @@ class PostgresNotificationHub(BoundedNotificationHub):
             )
 
     def _on_notification(
-        self, _connection: Any, _pid: int, _channel: str, payload: str
+        self,
+        _connection: NotificationConnection,
+        _pid: int,
+        _channel: str,
+        payload: str,
     ) -> None:
-        asyncio.create_task(self._dispatch_payload(payload))
+        task = asyncio.create_task(self._dispatch_payload(payload))
+        self._dispatch_tasks.add(task)
+        task.add_done_callback(self._dispatch_tasks.discard)
 
     async def _dispatch_payload(self, payload: str) -> None:
         try:
@@ -219,6 +251,8 @@ class PostgresNotificationHub(BoundedNotificationHub):
                     logger.debug(
                         "workflow activity notification close failed", exc_info=True
                     )
+        if self._dispatch_tasks:
+            await asyncio.gather(*tuple(self._dispatch_tasks), return_exceptions=True)
         await super().close()
 
 
