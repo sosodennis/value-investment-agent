@@ -34,7 +34,7 @@ from src.agents.technical.capabilities.signal_fusion.public import (
 from src.agents.technical.capabilities.verification.public import (
     VerificationRuntimeService,
 )
-from src.interface.artifacts.artifact_data_models import (
+from src.shared.artifacts.artifact_data_models import (
     TechnicalFeaturePackArtifactData,
     TechnicalIndicatorSeriesArtifactData,
     TechnicalPatternPackArtifactData,

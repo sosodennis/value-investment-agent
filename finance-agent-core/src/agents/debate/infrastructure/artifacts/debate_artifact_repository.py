@@ -3,13 +3,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from src.agents.debate.interface.contracts import DebateArtifactModel
-from src.interface.artifacts.artifact_data_models import DebateFactsArtifactData
-from src.services.artifact_manager import artifact_manager
-from src.shared.cross_agent.data.typed_artifact_port import TypedArtifactPort
-from src.shared.kernel.contracts import (
+from src.artifacts.public import (
     ARTIFACT_KIND_DEBATE_FACTS,
     ARTIFACT_KIND_DEBATE_FINAL_REPORT,
+    TypedArtifactPort,
+    build_typed_artifact_port,
 )
+from src.shared.artifacts.artifact_data_models import DebateFactsArtifactData
 from src.shared.kernel.types import JSONObject
 
 
@@ -54,13 +54,11 @@ class DebateArtifactRepository:
 
 
 debate_artifact_repository = DebateArtifactRepository(
-    facts_port=TypedArtifactPort(
-        manager=artifact_manager,
+    facts_port=build_typed_artifact_port(
         kind=ARTIFACT_KIND_DEBATE_FACTS,
         model=DebateFactsArtifactData,
     ),
-    final_report_port=TypedArtifactPort(
-        manager=artifact_manager,
+    final_report_port=build_typed_artifact_port(
         kind=ARTIFACT_KIND_DEBATE_FINAL_REPORT,
         model=DebateArtifactModel,
     ),

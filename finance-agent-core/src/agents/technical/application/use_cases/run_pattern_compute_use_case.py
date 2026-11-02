@@ -26,7 +26,7 @@ from src.agents.technical.domain.shared import (
     VolumeProfileSummary,
 )
 from src.agents.technical.interface.serializers import build_pattern_compute_preview
-from src.interface.artifacts.artifact_data_models import (
+from src.shared.artifacts.artifact_data_models import (
     TechnicalTimeseriesBundleArtifactData,
 )
 from src.shared.kernel.tools.logger import get_logger, log_event

@@ -22,17 +22,16 @@ from src.agents.news.interface.prompt_specs import (
     build_selector_prompt_spec,
 )
 from src.agents.news.interface.serializers import build_news_report_payload
-from src.interface.artifacts.output_schemas import (
+from src.artifacts.public import (
+    ARTIFACT_KIND_NEWS_ANALYSIS_REPORT,
+    OUTPUT_KIND_FINANCIAL_NEWS_RESEARCH,
+    AgentOutputArtifactPayload,
     ArtifactReference,
     build_artifact_payload,
 )
 from src.llm_provider.entrypoint import LLMProviderPort, ModelRoute
 from src.model_inference.entrypoint import ModelInference
-from src.shared.kernel.contracts import (
-    ARTIFACT_KIND_NEWS_ANALYSIS_REPORT,
-    OUTPUT_KIND_FINANCIAL_NEWS_RESEARCH,
-)
-from src.shared.kernel.types import AgentOutputArtifactPayload, JSONObject
+from src.shared.kernel.types import JSONObject
 
 
 def _build_news_output_artifact(

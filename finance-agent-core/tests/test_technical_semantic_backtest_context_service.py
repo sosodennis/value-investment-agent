@@ -15,7 +15,7 @@ from src.agents.technical.application.semantic_backtest_context_service import (
 from src.agents.technical.capabilities.market_data.application.ports import (
     MarketDataRiskFreeRateFetchResult,
 )
-from src.interface.artifacts.artifact_data_models import (
+from src.shared.artifacts.artifact_data_models import (
     PriceSeriesArtifactData,
     TechnicalChartArtifactData,
 )

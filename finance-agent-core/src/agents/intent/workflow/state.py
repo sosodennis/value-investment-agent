@@ -7,7 +7,8 @@ from langgraph.graph import add_messages
 from pydantic import BaseModel, ConfigDict, Field
 from typing_extensions import TypedDict
 
-from src.shared.kernel.types import AgentOutputArtifactPayload, JSONObject
+from src.artifacts.public import AgentOutputArtifactPayload
+from src.shared.kernel.types import JSONObject
 
 
 class IntentExtractionContext(TypedDict):

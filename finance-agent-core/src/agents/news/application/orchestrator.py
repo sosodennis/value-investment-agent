@@ -25,9 +25,10 @@ from src.agents.news.application.use_cases.run_selector_node_use_case import (
     run_selector_node_use_case,
 )
 from src.agents.news.domain.aggregation.contracts import NewsAggregationResult
+from src.artifacts.public import AgentOutputArtifactPayload
 from src.llm_provider.entrypoint import LLMProviderPort, ModelRoute
 from src.model_inference.entrypoint import ModelInference
-from src.shared.kernel.types import AgentOutputArtifactPayload, JSONObject
+from src.shared.kernel.types import JSONObject
 from src.shared.kernel.workflow_contracts import WorkflowNodeResult
 
 NewsNodeResult = WorkflowNodeResult

@@ -36,7 +36,7 @@ from src.agents.technical.interface.serializers import (
     build_verification_compute_preview,
     build_verification_report_payload,
 )
-from src.interface.artifacts.artifact_data_models import (
+from src.shared.artifacts.artifact_data_models import (
     TechnicalTimeseriesBundleArtifactData,
 )
 from src.shared.kernel.tools.logger import get_logger, log_event

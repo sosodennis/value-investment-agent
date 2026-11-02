@@ -4,7 +4,7 @@ from src.agents.technical.capabilities.alerts.public import (
     AlertRuntimeRequest,
     AlertRuntimeService,
 )
-from src.interface.artifacts.artifact_data_models import (
+from src.shared.artifacts.artifact_data_models import (
     TechnicalIndicatorSeriesArtifactData,
     TechnicalIndicatorSeriesFrameData,
     TechnicalIndicatorSeriesFrameMetadataData,

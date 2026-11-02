@@ -17,7 +17,7 @@ from src.agents.technical.application.state_updates import (
     build_fracdiff_success_update,
 )
 from src.agents.technical.interface.serializers import build_fracdiff_progress_preview
-from src.interface.artifacts.artifact_data_models import PriceSeriesArtifactData
+from src.shared.artifacts.artifact_data_models import PriceSeriesArtifactData
 from src.shared.kernel.tools.logger import get_logger, log_event
 from src.shared.kernel.types import JSONObject
 from src.shared.kernel.workflow_contracts import WorkflowNodeResult

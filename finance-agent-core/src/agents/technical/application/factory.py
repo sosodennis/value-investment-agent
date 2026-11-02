@@ -32,13 +32,11 @@ from src.agents.technical.interface.preview_projection_service import (
     summarize_ta_for_preview,
 )
 from src.agents.technical.interface.serializers import build_full_report_payload
-from src.interface.artifacts.output_schemas import (
-    ArtifactReference,
-    build_artifact_payload,
-)
-from src.shared.kernel.contracts import (
+from src.artifacts.public import (
     ARTIFACT_KIND_TA_FULL_REPORT,
     OUTPUT_KIND_TECHNICAL_ANALYSIS,
+    ArtifactReference,
+    build_artifact_payload,
 )
 from src.shared.kernel.types import JSONObject
 

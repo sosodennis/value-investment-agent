@@ -13,7 +13,7 @@ from src.agents.technical.capabilities.patterns.public import (
     PatternRuntimeService,
 )
 from src.agents.technical.domain.shared import PriceSeries
-from src.interface.artifacts.artifact_data_models import (
+from src.shared.artifacts.artifact_data_models import (
     TechnicalPatternPackArtifactData,
 )
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, patch
+from dataclasses import dataclass
+from unittest.mock import AsyncMock
 
 import httpx
 import pytest
@@ -11,16 +12,20 @@ from src.agents.fundamental.capabilities.artifacts_provenance.interface.contract
     parse_fundamental_artifact_model,
 )
 from src.agents.news.interface.contracts import parse_news_artifact_model
-from src.agents.technical.interface.contracts import (
-    parse_technical_artifact_model,
-)
-from src.auth.interface.contracts import Principal
-from src.auth.interface.dependencies import require_current_user
-from src.interface.artifacts.artifact_envelope import build_artifact_envelope
+from src.agents.technical.interface.contracts import parse_technical_artifact_model
+from src.artifacts.application.wiring import build_default_artifact_service
+from src.artifacts.public import build_artifact_envelope
+from src.auth.entrypoint import Principal, require_current_user
 
 
-@pytest.fixture(autouse=True)
-def authenticated_api(monkeypatch: pytest.MonkeyPatch) -> AsyncMock:
+@dataclass(frozen=True)
+class ArtifactApiDoubles:
+    service: AsyncMock
+    ownership: AsyncMock
+
+
+@pytest.fixture
+def authenticated_api(monkeypatch: pytest.MonkeyPatch) -> ArtifactApiDoubles:
     app.dependency_overrides[require_current_user] = lambda: Principal(
         user_id="test-user",
         subject="test-user",
@@ -28,44 +33,80 @@ def authenticated_api(monkeypatch: pytest.MonkeyPatch) -> AsyncMock:
         organization_id="organization-test",
         membership_id="membership-test",
     )
+    service = AsyncMock()
+    service.get_artifact_thread_id.return_value = "test-thread"
+    service.get_run_thread_id.return_value = "test-thread"
+    service.belongs_to_organization.return_value = True
+    service.is_agent_output_reference.return_value = False
+    service.is_referenced_artifact_reference.return_value = False
+    service.is_agent_output_for_run.return_value = True
+    service.is_referenced_artifact_for_run.return_value = False
+
     ownership = AsyncMock()
-    ownership.owns = AsyncMock(return_value=True)
+    ownership.owns.return_value = True
     monkeypatch.setattr(
-        "src.interface.artifacts.routes.get_ownership_service", lambda: ownership
+        "src.artifacts.interface.routes.get_ownership_service",
+        lambda: ownership,
     )
-    monkeypatch.setattr(
-        "src.interface.artifacts.routes.artifact_manager.get_artifact_thread_id",
-        AsyncMock(return_value="test-thread"),
-    )
-    monkeypatch.setattr(
-        "src.interface.artifacts.routes.artifact_manager.belongs_to_organization",
-        AsyncMock(return_value=True),
-    )
-    monkeypatch.setattr(
-        "src.interface.artifacts.routes.artifact_manager.get_artifact_envelope",
-        AsyncMock(),
-    )
-    monkeypatch.setattr(
-        "src.interface.artifacts.routes.artifact_manager.is_agent_output_reference_any_thread",
-        AsyncMock(return_value=False),
-    )
-    monkeypatch.setattr(
-        "src.interface.artifacts.routes.artifact_manager.is_agent_output_for_run",
-        AsyncMock(return_value=True),
-    )
-    monkeypatch.setattr(
-        "src.interface.artifacts.routes.artifact_manager.is_referenced_artifact_reference",
-        AsyncMock(return_value=False),
-    )
-    yield ownership
+    app.dependency_overrides[build_default_artifact_service] = lambda: service
+    yield ArtifactApiDoubles(service=service, ownership=ownership)
     app.dependency_overrides.clear()
 
 
+async def _get_artifact(
+    artifact_id: str,
+    *,
+    run_id: str | None = None,
+) -> httpx.Response:
+    params = {} if run_id is None else {"run_id": run_id}
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app),
+        base_url="http://testserver",
+    ) as client:
+        return await client.get(f"/api/v1/artifacts/{artifact_id}", params=params)
+
+
+def _news_payload() -> dict[str, object]:
+    return {
+        "ticker": "AAPL",
+        "news_items": [],
+        "overall_sentiment": "neutral",
+        "sentiment_score": 0.0,
+        "key_themes": [],
+    }
+
+
 @pytest.mark.asyncio
-async def test_get_artifact_returns_canonical_fundamental_payload(
-    authenticated_api: AsyncMock,
+async def test_get_artifact_preserves_versioned_api_response_and_empty_payload(
+    authenticated_api: ArtifactApiDoubles,
 ) -> None:
-    payload = parse_fundamental_artifact_model(
+    envelope = build_artifact_envelope(
+        kind="news_analysis_report",
+        produced_by="tests",
+        data=parse_news_artifact_model(_news_payload()),
+    )
+    authenticated_api.service.get_artifact_envelope.return_value = envelope
+
+    response = await _get_artifact("art_news")
+
+    assert response.status_code == 200
+    assert response.json()["kind"] == "news_analysis_report"
+    assert response.json()["version"] == "v1"
+    assert response.json()["data"]["news_items"] == []
+    assert response.headers["cache-control"] == "private, max-age=3600"
+    assert response.headers["etag"] == '"art_news"'
+    authenticated_api.ownership.owns.assert_awaited_once_with(
+        user_id="test-user",
+        resource_type="thread",
+        resource_id="test-thread",
+    )
+
+
+@pytest.mark.asyncio
+async def test_get_artifact_returns_canonical_fundamental_news_debate_and_technical_data(
+    authenticated_api: ArtifactApiDoubles,
+) -> None:
+    fundamental = parse_fundamental_artifact_model(
         {
             "ticker": "AAPL",
             "model_type": "saas",
@@ -83,104 +124,10 @@ async def test_get_artifact_returns_canonical_fundamental_payload(
                     },
                 }
             ],
-            "valuation_diagnostics": {
-                "forward_signal_mapping_version": "forward_signal_calibration_v2_2026_03_05",
-                "forward_signal_calibration_applied": True,
-            },
         }
     )
-    envelope = build_artifact_envelope(
-        kind="financial_reports",
-        produced_by="tests",
-        data=payload,
-    )
-    with patch(
-        "src.interface.artifacts.routes.artifact_manager.get_artifact_envelope",
-        new=AsyncMock(return_value=envelope),
-    ):
-        async with httpx.AsyncClient(
-            transport=httpx.ASGITransport(app=app),
-            base_url="http://testserver",
-        ) as client:
-            response = await client.get("/api/v1/artifacts/art_fa")
-
-    assert response.status_code == 200
-    assert response.json()["kind"] == "financial_reports"
-    assert response.json()["data"]["company_name"] == "AAPL"
-    assert (
-        response.json()["data"]["financial_reports"][0]["base"]["fiscal_year"]["value"]
-        == "2024"
-    )
-    assert (
-        response.json()["data"]["valuation_diagnostics"][
-            "forward_signal_mapping_version"
-        ]
-        == "forward_signal_calibration_v2_2026_03_05"
-    )
-    assert (
-        response.json()["data"]["valuation_diagnostics"][
-            "forward_signal_calibration_applied"
-        ]
-        is True
-    )
-    assert response.headers["cache-control"] == "private, max-age=3600"
-    assert response.headers["etag"] == '"art_fa"'
-    authenticated_api.owns.assert_awaited_once_with(
-        user_id="test-user", resource_type="thread", resource_id="test-thread"
-    )
-
-
-@pytest.mark.asyncio
-async def test_get_artifact_returns_canonical_news_and_debate_payload(
-    authenticated_api: AsyncMock,
-) -> None:
-    news_payload = parse_news_artifact_model(
-        {
-            "ticker": "NVDA",
-            "news_items": [
-                {
-                    "id": "n1",
-                    "url": "https://example.com/news",
-                    "fetched_at": "2026-02-12T12:00:00Z",
-                    "title": "Headline",
-                    "snippet": "Snippet",
-                    "source": {
-                        "name": "Reuters",
-                        "domain": "reuters.com",
-                        "reliability_score": 0.9,
-                    },
-                    "related_tickers": [
-                        {
-                            "ticker": "NVDA",
-                            "company_name": "NVIDIA",
-                            "relevance_score": 0.95,
-                        }
-                    ],
-                    "categories": ["trusted_news", "bullish"],
-                    "tags": ["earnings"],
-                    "analysis": {
-                        "summary": "Positive",
-                        "sentiment": "bullish",
-                        "sentiment_score": 0.8,
-                        "impact_level": "high",
-                        "reasoning": "Beat guidance",
-                        "key_facts": [
-                            {
-                                "content": "Revenue up",
-                                "is_quantitative": True,
-                                "sentiment": "bullish",
-                            }
-                        ],
-                    },
-                }
-            ],
-            "overall_sentiment": "bullish",
-            "sentiment_score": 0.8,
-            "key_themes": ["AI demand"],
-        }
-    )
-
-    debate_payload = parse_debate_artifact_model(
+    news = parse_news_artifact_model(_news_payload())
+    debate = parse_debate_artifact_model(
         {
             "scenario_analysis": {
                 "bull_case": {
@@ -208,8 +155,7 @@ async def test_get_artifact_returns_canonical_news_and_debate_payload(
             "debate_rounds": 3,
         }
     )
-
-    technical_payload = parse_technical_artifact_model(
+    technical = parse_technical_artifact_model(
         {
             "schema_version": "2.0",
             "ticker": "TSLA",
@@ -218,331 +164,212 @@ async def test_get_artifact_returns_canonical_news_and_debate_payload(
             "risk_level": "medium",
             "confidence": 0.66,
             "llm_interpretation": "Trend remains constructive.",
-            "artifact_refs": {
-                "chart_data_id": "chart-1",
-                "timeseries_bundle_id": "bundle-1",
-                "feature_pack_id": "feature-1",
-                "pattern_pack_id": "pattern-1",
-                "fusion_report_id": "fusion-1",
-                "verification_report_id": "verification-1",
-            },
+            "artifact_refs": {"chart_data_id": "chart-1"},
             "summary_tags": ["TREND_ACTIVE"],
             "diagnostics": {"is_degraded": False, "degraded_reasons": []},
         }
     )
 
     for artifact_id, kind, payload, expected_key in (
-        ("art_news", "news_analysis_report", news_payload, "overall_sentiment"),
-        ("art_debate", "debate_final_report", debate_payload, "final_verdict"),
-        ("art_ta", "ta_full_report", technical_payload, "artifact_refs"),
+        ("art_fa", "financial_reports", fundamental, "financial_reports"),
+        ("art_news", "news_analysis_report", news, "news_items"),
+        ("art_debate", "debate_final_report", debate, "final_verdict"),
+        ("art_ta", "ta_full_report", technical, "artifact_refs"),
     ):
-        envelope = build_artifact_envelope(
-            kind=kind,
-            produced_by="tests",
-            data=payload,
+        authenticated_api.service.get_artifact_envelope.return_value = (
+            build_artifact_envelope(
+                kind=kind,
+                produced_by="tests",
+                data=payload,
+            )
         )
-        with patch(
-            "src.interface.artifacts.routes.artifact_manager.get_artifact_envelope",
-            new=AsyncMock(return_value=envelope),
-        ):
-            async with httpx.AsyncClient(
-                transport=httpx.ASGITransport(app=app),
-                base_url="http://testserver",
-            ) as client:
-                response = await client.get(f"/api/v1/artifacts/{artifact_id}")
-
+        response = await _get_artifact(artifact_id)
         assert response.status_code == 200
         assert response.json()["kind"] == kind
         assert expected_key in response.json()["data"]
-    assert authenticated_api.owns.await_count == 3
 
 
 @pytest.mark.asyncio
-async def test_get_output_artifact_uses_run_event_when_artifact_row_has_no_thread(
-    authenticated_api: AsyncMock,
+async def test_run_scoped_artifact_checks_owner_before_reference_and_payload_reads(
+    authenticated_api: ArtifactApiDoubles,
 ) -> None:
-    artifact_id = "art_output"
-    run_id = "run_output"
+    calls: list[str] = []
+
+    async def run_thread(**_: object) -> str:
+        calls.append("run")
+        return "test-thread"
+
+    async def owns(**_: object) -> bool:
+        calls.append("owner")
+        return True
+
+    async def artifact_thread(_: str) -> str:
+        calls.append("artifact_thread")
+        return "test-thread"
+
+    async def direct_reference(**_: object) -> bool:
+        calls.append("reference")
+        return True
+
+    async def read_envelope(_: str):
+        calls.append("payload")
+        return build_artifact_envelope(
+            kind="news_analysis_report",
+            produced_by="tests",
+            data=_news_payload(),
+        )
+
+    authenticated_api.service.get_run_thread_id.side_effect = run_thread
+    authenticated_api.ownership.owns.side_effect = owns
+    authenticated_api.service.get_artifact_thread_id.side_effect = artifact_thread
+    authenticated_api.service.is_agent_output_for_run.side_effect = direct_reference
+    authenticated_api.service.get_artifact_envelope.side_effect = read_envelope
+
+    response = await _get_artifact("art_output", run_id="run-output")
+
+    assert response.status_code == 200
+    assert calls == ["run", "owner", "artifact_thread", "reference", "payload"]
+    authenticated_api.service.get_run_thread_id.assert_awaited_once_with(
+        run_id="run-output",
+        organization_id="organization-test",
+    )
+    authenticated_api.service.get_artifact_thread_id.assert_awaited_once_with(
+        "art_output"
+    )
+
+
+@pytest.mark.asyncio
+async def test_run_scoped_child_reference_is_checked_after_owner(
+    authenticated_api: ArtifactApiDoubles,
+) -> None:
+    authenticated_api.service.get_artifact_thread_id.return_value = None
     envelope = build_artifact_envelope(
         kind="news_analysis_report",
         produced_by="tests",
-        data={
-            "ticker": "AAPL",
-            "news_items": [],
-            "overall_sentiment": "neutral",
-            "sentiment_score": 0.0,
-            "key_themes": [],
-        },
+        data=_news_payload(),
     )
-    with (
-        patch(
-            "src.interface.artifacts.routes.artifact_manager.get_artifact_thread_id",
-            new=AsyncMock(return_value=None),
-        ) as get_artifact_thread_id,
-        patch(
-            "src.interface.artifacts.routes.artifact_manager.get_agent_output_thread_id",
-            new=AsyncMock(return_value="test-thread"),
-        ) as get_agent_output_thread_id,
-        patch(
-            "src.interface.artifacts.routes.artifact_manager.is_agent_output_reference_any_thread",
-            new=AsyncMock(return_value=True),
-        ),
-        patch(
-            "src.interface.artifacts.routes.artifact_manager.is_agent_output_for_run",
-            new=AsyncMock(return_value=True),
-        ),
-        patch(
-            "src.interface.artifacts.routes.artifact_manager.get_artifact_envelope",
-            new=AsyncMock(return_value=envelope),
-        ),
-        patch(
-            "src.interface.artifacts.routes.artifact_manager.belongs_to_organization",
-            new=AsyncMock(return_value=True),
-        ) as belongs_to_organization,
-    ):
-        async with httpx.AsyncClient(
-            transport=httpx.ASGITransport(app=app),
-            base_url="http://testserver",
-        ) as client:
-            response = await client.get(
-                f"/api/v1/artifacts/{artifact_id}?run_id={run_id}"
-            )
+    authenticated_api.service.is_agent_output_for_run.return_value = False
+    authenticated_api.service.is_referenced_artifact_for_run.return_value = True
+    authenticated_api.service.get_artifact_envelope.return_value = envelope
+
+    response = await _get_artifact("child-artifact", run_id="run-output")
 
     assert response.status_code == 200
-    assert response.json()["kind"] == "news_analysis_report"
-    assert response.json()["data"]["ticker"] == "AAPL"
-    get_artifact_thread_id.assert_awaited_once_with(artifact_id)
-    get_agent_output_thread_id.assert_awaited_once_with(
-        artifact_id=artifact_id,
-        run_id=run_id,
-    )
-    authenticated_api.owns.assert_awaited_once_with(
-        user_id="test-user", resource_type="thread", resource_id="test-thread"
-    )
-    belongs_to_organization.assert_awaited_once_with(
+    authenticated_api.ownership.owns.assert_awaited_once()
+    authenticated_api.service.is_referenced_artifact_for_run.assert_awaited_once_with(
+        artifact_id="child-artifact",
         thread_id="test-thread",
-        organization_id="organization-test",
-        run_id=run_id,
+        run_id="run-output",
     )
+
+
+@pytest.mark.parametrize("reference_kind", ["direct", "child"])
+@pytest.mark.asyncio
+async def test_run_scoped_reference_cannot_read_artifact_from_another_thread(
+    authenticated_api: ArtifactApiDoubles,
+    reference_kind: str,
+) -> None:
+    authenticated_api.service.get_artifact_thread_id.return_value = "other-thread"
+    if reference_kind == "child":
+        authenticated_api.service.is_agent_output_for_run.return_value = False
+        authenticated_api.service.is_referenced_artifact_for_run.return_value = True
+
+    response = await _get_artifact("cross-thread-artifact", run_id="run-output")
+
+    assert response.status_code == 404
+    authenticated_api.ownership.owns.assert_awaited_once()
+    authenticated_api.service.get_artifact_thread_id.assert_awaited_once_with(
+        "cross-thread-artifact"
+    )
+    authenticated_api.service.is_agent_output_for_run.assert_not_awaited()
+    authenticated_api.service.is_referenced_artifact_for_run.assert_not_awaited()
+    authenticated_api.service.get_artifact_envelope.assert_not_awaited()
 
 
 @pytest.mark.asyncio
-async def test_get_supplementary_artifact_uses_parent_report_run_scope(
-    authenticated_api: AsyncMock,
+async def test_run_scoped_threadless_output_is_available_through_its_run_reference(
+    authenticated_api: ArtifactApiDoubles,
 ) -> None:
-    artifact_id = "ta_chart_data"
-    run_id = "run_output"
-    envelope = build_artifact_envelope(
-        kind="news_analysis_report",
-        produced_by="tests",
-        data={
-            "ticker": "AAPL",
-            "news_items": [],
-            "overall_sentiment": "neutral",
-            "sentiment_score": 0.0,
-            "key_themes": [],
-        },
+    authenticated_api.service.get_artifact_thread_id.return_value = None
+    authenticated_api.service.get_artifact_envelope.return_value = (
+        build_artifact_envelope(
+            kind="news_analysis_report",
+            produced_by="tests",
+            data=_news_payload(),
+        )
     )
-    with (
-        patch(
-            "src.interface.artifacts.routes.artifact_manager.get_artifact_thread_id",
-            new=AsyncMock(return_value=None),
-        ),
-        patch(
-            "src.interface.artifacts.routes.artifact_manager.get_agent_output_thread_id",
-            new=AsyncMock(return_value=None),
-        ),
-        patch(
-            "src.interface.artifacts.routes.artifact_manager.get_referenced_artifact_thread_id",
-            new=AsyncMock(return_value="test-thread"),
-        ) as get_referenced_thread_id,
-        patch(
-            "src.interface.artifacts.routes.artifact_manager.is_agent_output_reference_any_thread",
-            new=AsyncMock(return_value=False),
-        ),
-        patch(
-            "src.interface.artifacts.routes.artifact_manager.get_artifact_envelope",
-            new=AsyncMock(return_value=envelope),
-        ),
-    ):
-        async with httpx.AsyncClient(
-            transport=httpx.ASGITransport(app=app),
-            base_url="http://testserver",
-        ) as client:
-            response = await client.get(
-                f"/api/v1/artifacts/{artifact_id}?run_id={run_id}"
-            )
+
+    response = await _get_artifact("threadless-output", run_id="run-output")
 
     assert response.status_code == 200
-    assert response.json()["kind"] == "news_analysis_report"
-    get_referenced_thread_id.assert_awaited_once_with(
-        artifact_id=artifact_id,
-        run_id=run_id,
-    )
-    authenticated_api.owns.assert_awaited_once_with(
-        user_id="test-user", resource_type="thread", resource_id="test-thread"
-    )
-
-
-@pytest.mark.asyncio
-async def test_get_unlisted_supplementary_artifact_remains_hidden(
-    authenticated_api: AsyncMock,
-) -> None:
-    with (
-        patch(
-            "src.interface.artifacts.routes.artifact_manager.get_artifact_thread_id",
-            new=AsyncMock(return_value="test-thread"),
-        ),
-        patch(
-            "src.interface.artifacts.routes.artifact_manager.get_referenced_artifact_thread_id",
-            new=AsyncMock(return_value=None),
-        ),
-        patch(
-            "src.interface.artifacts.routes.artifact_manager.is_agent_output_reference",
-            new=AsyncMock(return_value=False),
-        ),
-        patch(
-            "src.interface.artifacts.routes.artifact_manager.is_agent_output_for_run",
-            new=AsyncMock(return_value=False),
-        ),
-        patch(
-            "src.interface.artifacts.routes.artifact_manager.is_referenced_artifact_for_run",
-            new=AsyncMock(return_value=False),
-        ),
-    ):
-        async with httpx.AsyncClient(
-            transport=httpx.ASGITransport(app=app),
-            base_url="http://testserver",
-        ) as client:
-            response = await client.get("/api/v1/artifacts/unlisted?run_id=wrong-run")
-
-    assert response.status_code == 404
-    assert response.json() == {"detail": "artifact_not_found"}
-    authenticated_api.owns.assert_awaited_once_with(
-        user_id="test-user", resource_type="thread", resource_id="test-thread"
-    )
-
-
-@pytest.mark.asyncio
-async def test_get_referenced_artifact_requires_run_scope(
-    authenticated_api: AsyncMock,
-) -> None:
-    with (
-        patch(
-            "src.interface.artifacts.routes.artifact_manager.get_artifact_thread_id",
-            new=AsyncMock(return_value="test-thread"),
-        ),
-        patch(
-            "src.interface.artifacts.routes.artifact_manager.is_agent_output_reference",
-            new=AsyncMock(return_value=False),
-        ),
-        patch(
-            "src.interface.artifacts.routes.artifact_manager.is_referenced_artifact_reference",
-            new=AsyncMock(return_value=True),
-        ),
-    ):
-        async with httpx.AsyncClient(
-            transport=httpx.ASGITransport(app=app),
-            base_url="http://testserver",
-        ) as client:
-            response = await client.get("/api/v1/artifacts/child-artifact")
-
-    assert response.status_code == 404
-    assert response.json() == {"detail": "artifact_not_found"}
-
-
-@pytest.mark.asyncio
-async def test_get_artifact_returns_404_when_missing(
-    authenticated_api: AsyncMock,
-) -> None:
-    with (
-        patch(
-            "src.interface.artifacts.routes.artifact_manager.get_artifact_thread_id",
-            new=AsyncMock(return_value=None),
-        ),
-        patch(
-            "src.interface.artifacts.routes.artifact_manager.get_artifact_envelope",
-            new=AsyncMock(return_value=None),
-        ),
-    ):
-        async with httpx.AsyncClient(
-            transport=httpx.ASGITransport(app=app),
-            base_url="http://testserver",
-        ) as client:
-            response = await client.get("/api/v1/artifacts/missing")
-
-    assert response.status_code == 404
-    assert response.json() == {"detail": "artifact_not_found"}
-    authenticated_api.owns.assert_not_awaited()
-
-
-@pytest.mark.asyncio
-async def test_get_artifact_rejects_active_organization_mismatch(
-    authenticated_api: AsyncMock,
-) -> None:
-    with (
-        patch(
-            "src.interface.artifacts.routes.artifact_manager.belongs_to_organization",
-            new=AsyncMock(return_value=False),
-        ) as belongs_to_organization,
-        patch(
-            "src.interface.artifacts.routes.artifact_manager.get_artifact_envelope",
-            new=AsyncMock(),
-        ) as get_artifact_envelope,
-    ):
-        async with httpx.AsyncClient(
-            transport=httpx.ASGITransport(app=app),
-            base_url="http://testserver",
-        ) as client:
-            response = await client.get("/api/v1/artifacts/tenant-private")
-
-    assert response.status_code == 404
-    assert response.json() == {"detail": "artifact_not_found"}
-    belongs_to_organization.assert_awaited_once_with(
+    authenticated_api.service.is_agent_output_for_run.assert_awaited_once_with(
+        artifact_id="threadless-output",
         thread_id="test-thread",
-        organization_id="organization-test",
-        run_id=None,
+        run_id="run-output",
     )
-    authenticated_api.owns.assert_not_awaited()
-    get_artifact_envelope.assert_not_awaited()
 
 
 @pytest.mark.asyncio
-async def test_get_run_scoped_artifact_rejects_active_organization_mismatch(
-    authenticated_api: AsyncMock,
+async def test_organization_or_user_mismatch_returns_safe_404_before_payload_read(
+    authenticated_api: ArtifactApiDoubles,
 ) -> None:
-    with (
-        patch(
-            "src.interface.artifacts.routes.artifact_manager.get_artifact_thread_id",
-            new=AsyncMock(return_value=None),
-        ),
-        patch(
-            "src.interface.artifacts.routes.artifact_manager.get_agent_output_thread_id",
-            new=AsyncMock(return_value="test-thread"),
-        ),
-        patch(
-            "src.interface.artifacts.routes.artifact_manager.belongs_to_organization",
-            new=AsyncMock(return_value=False),
-        ) as belongs_to_organization,
-        patch(
-            "src.interface.artifacts.routes.artifact_manager.get_artifact_envelope",
-            new=AsyncMock(),
-        ) as get_artifact_envelope,
-    ):
-        async with httpx.AsyncClient(
-            transport=httpx.ASGITransport(app=app),
-            base_url="http://testserver",
-        ) as client:
-            response = await client.get(
-                "/api/v1/artifacts/tenant-private?run_id=run-private"
-            )
+    authenticated_api.service.belongs_to_organization.return_value = False
+    response = await _get_artifact("tenant-private")
 
     assert response.status_code == 404
     assert response.json() == {"detail": "artifact_not_found"}
-    belongs_to_organization.assert_awaited_once_with(
-        thread_id="test-thread",
-        organization_id="organization-test",
-        run_id="run-private",
-    )
-    authenticated_api.owns.assert_not_awaited()
-    get_artifact_envelope.assert_not_awaited()
+    authenticated_api.ownership.owns.assert_not_awaited()
+    authenticated_api.service.is_agent_output_reference.assert_not_awaited()
+    authenticated_api.service.get_artifact_envelope.assert_not_awaited()
+
+    authenticated_api.service.belongs_to_organization.return_value = True
+    authenticated_api.ownership.owns.return_value = False
+    response = await _get_artifact("user-private")
+
+    assert response.status_code == 404
+    authenticated_api.service.is_agent_output_reference.assert_not_awaited()
+    authenticated_api.service.get_artifact_envelope.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_run_organization_or_user_mismatch_returns_404_before_payload_read(
+    authenticated_api: ArtifactApiDoubles,
+) -> None:
+    authenticated_api.service.get_run_thread_id.return_value = None
+    response = await _get_artifact("private", run_id="foreign-run")
+
+    assert response.status_code == 404
+    authenticated_api.ownership.owns.assert_not_awaited()
+    authenticated_api.service.is_agent_output_for_run.assert_not_awaited()
+    authenticated_api.service.get_artifact_envelope.assert_not_awaited()
+
+    authenticated_api.service.get_run_thread_id.return_value = "test-thread"
+    authenticated_api.ownership.owns.return_value = False
+    response = await _get_artifact("private", run_id="user-private-run")
+
+    assert response.status_code == 404
+    authenticated_api.service.is_agent_output_for_run.assert_not_awaited()
+    authenticated_api.service.is_referenced_artifact_for_run.assert_not_awaited()
+    authenticated_api.service.get_artifact_envelope.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_missing_artifact_and_unlisted_references_remain_hidden(
+    authenticated_api: ArtifactApiDoubles,
+) -> None:
+    authenticated_api.service.get_artifact_thread_id.return_value = None
+    response = await _get_artifact("missing")
+    assert response.status_code == 404
+    authenticated_api.ownership.owns.assert_not_awaited()
+
+    authenticated_api.service.get_artifact_thread_id.return_value = "test-thread"
+    authenticated_api.service.is_agent_output_reference.return_value = True
+    response = await _get_artifact("output-without-run")
+    assert response.status_code == 404
+    authenticated_api.service.get_artifact_envelope.assert_not_awaited()
+
+    authenticated_api.service.is_agent_output_reference.return_value = False
+    authenticated_api.service.is_agent_output_for_run.return_value = False
+    response = await _get_artifact("unlisted", run_id="wrong-run")
+    assert response.status_code == 404
+    authenticated_api.service.get_artifact_envelope.assert_not_awaited()

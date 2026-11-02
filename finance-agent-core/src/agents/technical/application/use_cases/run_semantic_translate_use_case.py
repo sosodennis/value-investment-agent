@@ -27,7 +27,7 @@ from src.agents.technical.capabilities.signal_fusion.public import (
     SemanticTagPolicyInput,
     SemanticTagPolicyResult,
 )
-from src.interface.artifacts.artifact_data_models import (
+from src.shared.artifacts.artifact_data_models import (
     TechnicalDirectionScorecardArtifactData,
     TechnicalFusionReportArtifactData,
     TechnicalPatternPackArtifactData,

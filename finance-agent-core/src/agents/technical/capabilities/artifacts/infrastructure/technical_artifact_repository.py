@@ -6,22 +6,7 @@ from src.agents.technical.interface.contracts import (
     TechnicalArtifactModel,
     parse_technical_artifact_model,
 )
-from src.interface.artifacts.artifact_data_models import (
-    PriceSeriesArtifactData,
-    TechnicalAlertsArtifactData,
-    TechnicalChartArtifactData,
-    TechnicalDirectionScorecardArtifactData,
-    TechnicalFeaturePackArtifactData,
-    TechnicalFusionReportArtifactData,
-    TechnicalIndicatorSeriesArtifactData,
-    TechnicalPatternPackArtifactData,
-    TechnicalRegimePackArtifactData,
-    TechnicalTimeseriesBundleArtifactData,
-    TechnicalVerificationReportArtifactData,
-)
-from src.services.artifact_manager import artifact_manager
-from src.shared.cross_agent.data.typed_artifact_port import TypedArtifactPort
-from src.shared.kernel.contracts import (
+from src.artifacts.public import (
     ARTIFACT_KIND_PRICE_SERIES,
     ARTIFACT_KIND_TA_ALERTS,
     ARTIFACT_KIND_TA_CHART_DATA,
@@ -34,6 +19,21 @@ from src.shared.kernel.contracts import (
     ARTIFACT_KIND_TA_REGIME_PACK,
     ARTIFACT_KIND_TA_TIMESERIES_BUNDLE,
     ARTIFACT_KIND_TA_VERIFICATION_REPORT,
+    TypedArtifactPort,
+    build_typed_artifact_port,
+)
+from src.shared.artifacts.artifact_data_models import (
+    PriceSeriesArtifactData,
+    TechnicalAlertsArtifactData,
+    TechnicalChartArtifactData,
+    TechnicalDirectionScorecardArtifactData,
+    TechnicalFeaturePackArtifactData,
+    TechnicalFusionReportArtifactData,
+    TechnicalIndicatorSeriesArtifactData,
+    TechnicalPatternPackArtifactData,
+    TechnicalRegimePackArtifactData,
+    TechnicalTimeseriesBundleArtifactData,
+    TechnicalVerificationReportArtifactData,
 )
 from src.shared.kernel.types import JSONObject
 
@@ -323,63 +323,51 @@ class TechnicalArtifactRepository:
 
 def build_default_technical_artifact_repository() -> TechnicalArtifactRepository:
     return TechnicalArtifactRepository(
-        price_series_port=TypedArtifactPort(
-            manager=artifact_manager,
+        price_series_port=build_typed_artifact_port(
             kind=ARTIFACT_KIND_PRICE_SERIES,
             model=PriceSeriesArtifactData,
         ),
-        chart_data_port=TypedArtifactPort(
-            manager=artifact_manager,
+        chart_data_port=build_typed_artifact_port(
             kind=ARTIFACT_KIND_TA_CHART_DATA,
             model=TechnicalChartArtifactData,
         ),
-        indicator_series_port=TypedArtifactPort(
-            manager=artifact_manager,
+        indicator_series_port=build_typed_artifact_port(
             kind=ARTIFACT_KIND_TA_INDICATOR_SERIES,
             model=TechnicalIndicatorSeriesArtifactData,
         ),
-        alerts_port=TypedArtifactPort(
-            manager=artifact_manager,
+        alerts_port=build_typed_artifact_port(
             kind=ARTIFACT_KIND_TA_ALERTS,
             model=TechnicalAlertsArtifactData,
         ),
-        timeseries_bundle_port=TypedArtifactPort(
-            manager=artifact_manager,
+        timeseries_bundle_port=build_typed_artifact_port(
             kind=ARTIFACT_KIND_TA_TIMESERIES_BUNDLE,
             model=TechnicalTimeseriesBundleArtifactData,
         ),
-        feature_pack_port=TypedArtifactPort(
-            manager=artifact_manager,
+        feature_pack_port=build_typed_artifact_port(
             kind=ARTIFACT_KIND_TA_FEATURE_PACK,
             model=TechnicalFeaturePackArtifactData,
         ),
-        pattern_pack_port=TypedArtifactPort(
-            manager=artifact_manager,
+        pattern_pack_port=build_typed_artifact_port(
             kind=ARTIFACT_KIND_TA_PATTERN_PACK,
             model=TechnicalPatternPackArtifactData,
         ),
-        regime_pack_port=TypedArtifactPort(
-            manager=artifact_manager,
+        regime_pack_port=build_typed_artifact_port(
             kind=ARTIFACT_KIND_TA_REGIME_PACK,
             model=TechnicalRegimePackArtifactData,
         ),
-        fusion_report_port=TypedArtifactPort(
-            manager=artifact_manager,
+        fusion_report_port=build_typed_artifact_port(
             kind=ARTIFACT_KIND_TA_FUSION_REPORT,
             model=TechnicalFusionReportArtifactData,
         ),
-        direction_scorecard_port=TypedArtifactPort(
-            manager=artifact_manager,
+        direction_scorecard_port=build_typed_artifact_port(
             kind=ARTIFACT_KIND_TA_DIRECTION_SCORECARD,
             model=TechnicalDirectionScorecardArtifactData,
         ),
-        verification_report_port=TypedArtifactPort(
-            manager=artifact_manager,
+        verification_report_port=build_typed_artifact_port(
             kind=ARTIFACT_KIND_TA_VERIFICATION_REPORT,
             model=TechnicalVerificationReportArtifactData,
         ),
-        full_report_port=TypedArtifactPort(
-            manager=artifact_manager,
+        full_report_port=build_typed_artifact_port(
             kind=ARTIFACT_KIND_TA_FULL_REPORT,
             model=TechnicalArtifactModel,
         ),

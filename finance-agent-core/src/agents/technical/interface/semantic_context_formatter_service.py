@@ -4,7 +4,7 @@ from src.agents.technical.capabilities.verification.public import (
     BacktestResults,
     WalkForwardResult,
 )
-from src.interface.artifacts.artifact_data_models import (
+from src.shared.artifacts.artifact_data_models import (
     TechnicalBacktestSummaryData,
     TechnicalVerificationReportArtifactData,
     TechnicalWfaSummaryData,

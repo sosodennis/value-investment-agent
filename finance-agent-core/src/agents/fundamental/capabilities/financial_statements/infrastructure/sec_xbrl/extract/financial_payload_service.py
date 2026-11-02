@@ -10,7 +10,7 @@ from src.agents.fundamental.domain.shared.contracts.traceable import (
     ManualProvenance,
     TraceableField,
 )
-from src.interface.artifacts.artifact_model_shared import to_json
+from src.shared.artifacts.model_shared import to_json
 from src.shared.kernel.tools.logger import get_logger, log_event
 from src.shared.kernel.types import JSONObject
 

@@ -4,7 +4,7 @@ from typing import Annotated, Literal, TypeAlias
 
 from pydantic import BeforeValidator
 
-from src.interface.artifacts.artifact_model_shared import (
+from src.shared.artifacts.model_shared import (
     normalize_series_map,
     symbol,
     to_number,

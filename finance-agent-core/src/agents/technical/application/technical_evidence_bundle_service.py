@@ -15,7 +15,7 @@ from src.agents.technical.interface.contracts import (
     VolumeProfileLevelModel,
     VolumeProfileSummaryModel,
 )
-from src.interface.artifacts.artifact_data_models import (
+from src.shared.artifacts.artifact_data_models import (
     TechnicalDirectionScorecardArtifactData,
     TechnicalFeatureIndicatorData,
     TechnicalFeaturePackArtifactData,

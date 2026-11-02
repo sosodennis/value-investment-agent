@@ -46,7 +46,7 @@ from src.agents.technical.interface.serializers import (
     build_fusion_compute_preview,
     build_fusion_report_artifact_payload,
 )
-from src.interface.artifacts.artifact_data_models import (
+from src.shared.artifacts.artifact_data_models import (
     TechnicalFeaturePackArtifactData,
     TechnicalPatternPackArtifactData,
     TechnicalRegimePackArtifactData,

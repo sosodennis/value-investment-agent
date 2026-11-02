@@ -11,7 +11,7 @@ from src.agents.fundamental.capabilities.financial_statements.public import (
 from src.agents.fundamental.capabilities.forward_signals.public import (
     ForwardSignalPayload,
 )
-from src.interface.artifacts.artifact_model_shared import (
+from src.shared.artifacts.model_shared import (
     as_mapping,
     to_optional_string,
     to_string,

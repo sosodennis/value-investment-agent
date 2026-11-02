@@ -4,7 +4,7 @@ from collections.abc import Mapping
 from typing import Protocol
 
 from src.agents.debate.application.dto import DebateSourceData
-from src.interface.artifacts.artifact_data_models import DebateFactsArtifactData
+from src.shared.artifacts.artifact_data_models import DebateFactsArtifactData
 from src.shared.kernel.types import JSONObject
 from src.shared.kernel.workflow_contracts import WorkflowFanoutNodeResult
 

@@ -5,7 +5,7 @@ from typing import Annotated, TypeAlias
 
 from pydantic import BeforeValidator
 
-from src.interface.artifacts.artifact_model_shared import (
+from src.shared.artifacts.model_shared import (
     to_json,
     to_number,
     to_optional_string,

@@ -31,7 +31,8 @@ from src.agents.fundamental.capabilities.forward_signals.interface.serializers i
 from src.agents.fundamental.capabilities.model_selection.domain.model_selection import (
     select_valuation_model,
 )
-from src.shared.kernel.types import AgentOutputArtifactPayload, JSONObject
+from src.artifacts.public import AgentOutputArtifactPayload
+from src.shared.kernel.types import JSONObject
 
 
 def _build_forward_signal(

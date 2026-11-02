@@ -3,7 +3,7 @@ from __future__ import annotations
 from src.agents.fundamental.capabilities.financial_statements.interface.contracts import (
     parse_financial_reports_model,
 )
-from src.interface.artifacts.artifact_model_shared import as_mapping
+from src.shared.artifacts.model_shared import as_mapping
 from src.shared.kernel.types import JSONObject
 
 from .extension_token_normalizer import normalize_extension_type_token
