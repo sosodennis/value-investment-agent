@@ -55,9 +55,12 @@ def test_rehomed_fundamental_capabilities_have_no_legacy_imports() -> None:
         repo_root / "finance-agent-core" / "scripts",
     ]
     moved_capabilities = (
+        "artifacts_provenance",
+        "core_valuation",
         "financial_statements",
         "forward_signals",
         "market_data",
+        "model_selection",
     )
     violations: list[str] = []
     for root in scan_roots:
@@ -101,6 +104,17 @@ def test_rehomed_fundamental_capabilities_have_no_legacy_imports() -> None:
             / "public.py"
         ).is_file()
 
+    legacy_root = (
+        repo_root
+        / "finance-agent-core"
+        / "src"
+        / "agents"
+        / "fundamental"
+        / "subdomains"
+    )
+    legacy_files = [path for path in legacy_root.rglob("*") if path.is_file()]
+    assert not legacy_files, "Fundamental subdomains must not contain files"
+
 
 def test_domain_report_semantics_has_no_source_label_normalizer() -> None:
     repo_root = Path(__file__).resolve().parents[2]
@@ -143,11 +157,11 @@ def test_no_legacy_generic_fundamental_imports() -> None:
         "src.agents.fundamental.domain.rules",
         "src.agents.fundamental.domain.services",
         "src.agents.fundamental.capabilities.financial_statements.infrastructure.sec_xbrl.models",
-        "src.agents.fundamental.subdomains.core_valuation.domain.backtest_contracts",
-        "src.agents.fundamental.subdomains.core_valuation.domain.backtest_io_service",
-        "src.agents.fundamental.subdomains.core_valuation.domain.backtest_runtime_service",
-        "src.agents.fundamental.subdomains.core_valuation.domain.backtest_drift_service",
-        "src.agents.fundamental.subdomains.core_valuation.domain.backtest_report_service",
+        "src.agents.fundamental.capabilities.core_valuation.domain.backtest_contracts",
+        "src.agents.fundamental.capabilities.core_valuation.domain.backtest_io_service",
+        "src.agents.fundamental.capabilities.core_valuation.domain.backtest_runtime_service",
+        "src.agents.fundamental.capabilities.core_valuation.domain.backtest_drift_service",
+        "src.agents.fundamental.capabilities.core_valuation.domain.backtest_report_service",
     ]
 
     violations: list[str] = []

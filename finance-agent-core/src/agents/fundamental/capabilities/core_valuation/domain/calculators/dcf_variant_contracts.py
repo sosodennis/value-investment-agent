@@ -4,7 +4,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
-from src.agents.fundamental.subdomains.core_valuation.domain.parameterization.types import (
+from src.agents.fundamental.capabilities.core_valuation.domain.parameterization.types import (
     TraceInput,
 )
 

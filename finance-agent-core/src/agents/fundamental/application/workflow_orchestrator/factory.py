@@ -15,13 +15,20 @@ from src.agents.fundamental.application.workflow_orchestrator.ports import (
     IFundamentalFinancialStatementsProvider,
     IFundamentalForwardSignalsProvider,
     IFundamentalMarketDataService,
-    IFundamentalReportRepo,
 )
 from src.agents.fundamental.application.workflow_orchestrator.services.valuation_replay_contracts import (
     INTERNAL_REPLAY_MARKET_SNAPSHOT_KEY,
 )
 from src.agents.fundamental.application.workflow_orchestrator.state_readers import (
     read_intent_state,
+)
+from src.agents.fundamental.capabilities.artifacts_provenance.public import (
+    IFundamentalReportRepo,
+)
+from src.agents.fundamental.capabilities.core_valuation.public import (
+    ParamBuildResult,
+    ValuationModelRegistry,
+    build_params,
 )
 from src.agents.fundamental.capabilities.financial_statements.public import (
     parse_financial_reports_model,
@@ -30,6 +37,9 @@ from src.agents.fundamental.capabilities.financial_statements.public import (
 from src.agents.fundamental.capabilities.forward_signals.public import (
     ForwardSignalPayload,
     serialize_forward_signals,
+)
+from src.agents.fundamental.capabilities.model_selection.public import (
+    select_valuation_model,
 )
 from src.agents.fundamental.interface.workflow_orchestrator.contracts import (
     FundamentalPreviewInputModel,
@@ -42,14 +52,6 @@ from src.agents.fundamental.interface.workflow_orchestrator.serializers import (
     build_model_selection_report_payload,
     build_valuation_artifact,
     normalize_model_selection_reports,
-)
-from src.agents.fundamental.subdomains.core_valuation.public import (
-    ParamBuildResult,
-    ValuationModelRegistry,
-    build_params,
-)
-from src.agents.fundamental.subdomains.model_selection.public import (
-    select_valuation_model,
 )
 from src.interface.artifacts.output_schemas import build_artifact_payload
 from src.shared.kernel.contracts import OUTPUT_KIND_FUNDAMENTAL_ANALYSIS

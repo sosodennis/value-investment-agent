@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from src.agents.fundamental.domain.shared.contracts.traceable import TraceableField
-from src.agents.fundamental.subdomains.core_valuation.domain.parameterization.types import (
+from src.agents.fundamental.capabilities.core_valuation.domain.parameterization.types import (
     TraceInput,
 )
+from src.agents.fundamental.domain.shared.contracts.traceable import TraceableField
 
 
 def unwrap_traceable_value(

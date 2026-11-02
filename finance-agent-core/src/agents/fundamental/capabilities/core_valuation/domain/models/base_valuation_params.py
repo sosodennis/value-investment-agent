@@ -1,6 +1,6 @@
 from pydantic import BaseModel, Field
 
-from src.agents.fundamental.subdomains.core_valuation.domain.parameterization.types import (
+from src.agents.fundamental.capabilities.core_valuation.domain.parameterization.types import (
     TraceInput,
 )
 

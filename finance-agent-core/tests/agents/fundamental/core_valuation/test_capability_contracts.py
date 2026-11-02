@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import pytest
 
-from src.agents.fundamental.subdomains.core_valuation.domain.parameterization.forward_signal_adjustment_service import (
+from src.agents.fundamental.capabilities.core_valuation.domain.parameterization.forward_signal_adjustment_service import (
     apply_forward_signal_adjustments,
 )
-from src.agents.fundamental.subdomains.core_valuation.domain.parameterization.forward_signal_parser_service import (
+from src.agents.fundamental.capabilities.core_valuation.domain.parameterization.forward_signal_parser_service import (
     parse_market_forward_signals,
 )
-from src.agents.fundamental.subdomains.core_valuation.interface.replay_contracts import (
+from src.agents.fundamental.capabilities.core_valuation.interface.replay_contracts import (
     parse_valuation_replay_input_model,
 )
 

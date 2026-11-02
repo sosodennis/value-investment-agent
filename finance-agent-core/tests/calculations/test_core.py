@@ -1,6 +1,6 @@
 import pytest
 
-from src.agents.fundamental.subdomains.core_valuation.domain.engine.core import (
+from src.agents.fundamental.capabilities.core_valuation.domain.engine.core import (
     CalculationGraph,
 )
 

@@ -15,6 +15,9 @@ from src.agents.fundamental.application.workflow_orchestrator.services.valuation
     INTERNAL_REPLAY_MARKET_SNAPSHOT_KEY,
     VALUATION_REPLAY_SCHEMA_VERSION,
 )
+from src.agents.fundamental.capabilities.core_valuation.domain.parameterization.contracts import (
+    ParamBuildResult,
+)
 from src.agents.fundamental.capabilities.financial_statements.interface.parsers import (
     parse_financial_statements_payload,
 )
@@ -25,10 +28,7 @@ from src.agents.fundamental.capabilities.forward_signals.interface.contracts imp
 from src.agents.fundamental.capabilities.forward_signals.interface.serializers import (
     serialize_forward_signals,
 )
-from src.agents.fundamental.subdomains.core_valuation.domain.parameterization.contracts import (
-    ParamBuildResult,
-)
-from src.agents.fundamental.subdomains.model_selection.domain.model_selection import (
+from src.agents.fundamental.capabilities.model_selection.domain.model_selection import (
     select_valuation_model,
 )
 from src.shared.kernel.types import AgentOutputArtifactPayload, JSONObject

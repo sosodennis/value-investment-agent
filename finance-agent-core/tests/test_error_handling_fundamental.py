@@ -102,11 +102,11 @@ async def test_model_selection_node_accepts_canonical_report_shape():
 
     with (
         patch(
-            "src.agents.fundamental.subdomains.artifacts_provenance.infrastructure.fundamental_artifact_repository.FundamentalArtifactRepository.load_financial_reports_bundle",
+            "src.agents.fundamental.capabilities.artifacts_provenance.infrastructure.fundamental_artifact_repository.FundamentalArtifactRepository.load_financial_reports_bundle",
             new=AsyncMock(return_value=(canonical_reports, None)),
         ),
         patch(
-            "src.agents.fundamental.subdomains.artifacts_provenance.infrastructure.fundamental_artifact_repository.FundamentalArtifactRepository.save_financial_reports",
+            "src.agents.fundamental.capabilities.artifacts_provenance.infrastructure.fundamental_artifact_repository.FundamentalArtifactRepository.save_financial_reports",
             new=AsyncMock(return_value="artifact_saved"),
         ),
     ):

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from src.agents.fundamental.subdomains.core_valuation.domain.value_objects import (
+from src.agents.fundamental.capabilities.core_valuation.domain.value_objects import (
     MODEL_TYPE_BY_SELECTION,
 )
 

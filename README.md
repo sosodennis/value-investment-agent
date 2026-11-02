@@ -61,7 +61,7 @@ graph TD
 
 ### 2. Calculation Engine (The "Math")
 
-The deterministic side is handled by the **`CalculationGraph`** (`src/agents/fundamental/subdomains/core_valuation/domain/engine/core.py`).
+The deterministic side is handled by the **`CalculationGraph`** (`src/agents/fundamental/capabilities/core_valuation/domain/engine/core.py`).
 
 *   **Dependency Inference**: It automatically builds a Directed Acyclic Graph (DAG) by inspecting function signatures.
 *   **Topological Execution**: Uses NetworkX to determine the correct order of operations, ensuring variable dependencies (e.g., `revenue` -> `ebit` -> `fcff`) are resolved before calculation.
