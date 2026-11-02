@@ -27,12 +27,12 @@ def _bounded_int(name: str, default: int, *, minimum: int, maximum: int) -> int:
 class ClientDebugSettings:
     enabled: bool
     max_events_per_request: int = 50
-    max_events_per_capture: int = 10_000
-    max_bytes_per_capture: int = 1 * 1024 * 1024
+    max_events_per_capture: int = 100_000
+    max_bytes_per_capture: int = 4 * 1024 * 1024
     max_total_bytes: int = 32 * 1024 * 1024
     max_captures: int = 128
     max_captures_per_owner: int = 8
-    max_events_per_owner_per_minute: int = 30_000
+    max_events_per_owner_per_minute: int = 120_000
     ttl_seconds: int = _DEFAULT_TTL_SECONDS
 
     @classmethod
@@ -47,13 +47,13 @@ class ClientDebugSettings:
             ),
             max_events_per_capture=_bounded_int(
                 "CLIENT_DEBUG_MAX_EVENTS_PER_CAPTURE",
-                10_000,
+                100_000,
                 minimum=1,
                 maximum=100_000,
             ),
             max_bytes_per_capture=_bounded_int(
                 "CLIENT_DEBUG_MAX_BYTES_PER_CAPTURE",
-                1 * 1024 * 1024,
+                4 * 1024 * 1024,
                 minimum=64 * 1024,
                 maximum=16 * 1024 * 1024,
             ),
@@ -77,7 +77,7 @@ class ClientDebugSettings:
             ),
             max_events_per_owner_per_minute=_bounded_int(
                 "CLIENT_DEBUG_MAX_EVENTS_PER_OWNER_PER_MINUTE",
-                30_000,
+                120_000,
                 minimum=1_000,
                 maximum=1_000_000,
             ),

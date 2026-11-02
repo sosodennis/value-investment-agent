@@ -231,15 +231,17 @@ runtime mode 使用 bounded limits，避免 probe 阻塞 UI 或填滿 backend pr
 
 - 每個 request 最多 50 events
 - 每個 request 最大 256 KiB
-- 每個 capture 最多 10,000 events；在預設 1 MiB capture budget 下，較小的 animation samples 可以保留更長的除錯窗口
-- 每個 capture 最多 1 MiB accounted memory；所有 active captures 共用 32 MiB accounted process budget。每個 event 按序列化 payload 大小加 512 bytes index allowance 計費，以包含 compact record、索引和 rate-window reference 的估算成本；這是有界估算，不等同 process RSS
+- 每個 capture 最多 100,000 events；預設 4 MiB capture budget 讓單一 60fps sampler 有約一分鐘的實用窗口，實際時間取決於 event payload 大小
+- 每個 capture 最多 4 MiB accounted memory；所有 active captures 共用 32 MiB accounted process budget。每個 event 按序列化 payload 大小加 512 bytes index allowance 計費，以包含 compact record、索引和 rate-window reference 的估算成本；這是有界估算，不等同 process RSS
 - 每個 owner 最多 8 個 active captures
-- 每個 owner 每分鐘最多 30,000 個 accepted events；這約等於 60fps 下 8 個並行 sampler 的一分鐘容量
+- 每個 owner 每分鐘最多 120,000 個 accepted events，使用 rolling 60-second window；8 個 60fps sampler 一分鐘只需要 28,800 events，因此 event quota 不會成為這個 profile 的先行瓶頸
 - default in-memory TTL 是 24 小時
-- client queue 有上限；超出上限時會丟棄新的 event，避免 debug channel 影響 UI
-- animation samples 由 client sampler 限制
+- client queue 上限是 2,000；健康 transport 下 client 每次 drain 最多送 8 個 50-event batches，足以排空 8 個 60fps sampler 的 480 events/s 等價負載；實際吞吐取決於 request latency
+- animation samples 仍應由 client sampler 控制；需要更長或更密的 raw capture 時，先按 payload 大小調高 `CLIENT_DEBUG_MAX_BYTES_PER_CAPTURE`，但不超過 16 MiB，並確認 process budget
 
-queue 或 capture 達到上限時，系統會丟棄新 events。server response 的 `dropped` 是該 batch 被 per-capture event/byte、owner rate 或 process accounted-memory 上限拒收的總數；不提供逐原因計數。建立 capture 時遇到 active-capture quota 會回傳 429。client queue 滿載、pagehide terminal batch 超出 48 KiB，或非 retryable HTTP error 的丟棄不會計入 server `dropped`。傳送不會阻塞 rendering。
+容量計算使用同一個公式：`accepted_events = sampler_count × samples_per_second × duration_seconds`。例如 8 × 60 × 60 = 28,800，低於預設 120,000/min。這只證明 rate admission；每個 event 還會按 `serialized_payload_bytes + 512` 計入 capture/process byte budget。以約 1 KiB accounted event 估算，4 MiB capture 約可保留 4,000 events，8 個 raw 60fps sampler 約 8 秒；要保留一分鐘，應降低 sampler rate、聚合 frame，或提高 capture byte budget。byte budget 是有意的硬界線，避免只調高事件數而讓 process memory 無界增長。
+
+queue 或 capture 達到上限時，系統會丟棄新 events。server response 的 `dropped` 是該 batch 被拒收的總數，並同時提供 `dropped_rate_limited` 和 `dropped_capacity`，分別表示 rolling owner rate 與 per-capture/process event 或 byte budget。建立 capture 時遇到 active-capture quota 會回傳 429。client queue 滿載、pagehide terminal batch 超出 48 KiB，或非 retryable HTTP error 的丟棄不會計入 server counters。傳送不會阻塞 rendering。
 
 ## Privacy rules
 

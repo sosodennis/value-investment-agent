@@ -946,6 +946,16 @@
             "title": "Dropped",
             "type": "integer"
           },
+          "dropped_capacity": {
+            "minimum": 0.0,
+            "title": "Dropped Capacity",
+            "type": "integer"
+          },
+          "dropped_rate_limited": {
+            "minimum": 0.0,
+            "title": "Dropped Rate Limited",
+            "type": "integer"
+          },
           "duplicates": {
             "minimum": 0.0,
             "title": "Duplicates",
@@ -973,7 +983,9 @@
           "capture_id",
           "accepted",
           "duplicates",
-          "dropped"
+          "dropped",
+          "dropped_rate_limited",
+          "dropped_capacity"
         ],
         "title": "ClientDebugAcceptedResponse",
         "type": "object"

@@ -68,6 +68,8 @@ class ClientDebugService:
             accepted=len(result.accepted),
             duplicates=result.duplicates,
             dropped=result.dropped,
+            dropped_rate_limited=result.dropped_rate_limited,
+            dropped_capacity=result.dropped_capacity,
             request_id=request_id,
         )
 

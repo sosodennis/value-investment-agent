@@ -40,12 +40,13 @@ const MAX_DEPTH = 6;
 const MAX_STRING_LENGTH = 4096;
 const MAX_ARRAY_ITEMS = 100;
 const MAX_DETAILS_BYTES = 32 * 1024;
-const MAX_QUEUE_SIZE = 200;
-const MAX_BATCH_SIZE = 20;
+const MAX_QUEUE_SIZE = 2000;
+const MAX_BATCH_SIZE = 50;
 const MAX_KEEPALIVE_BATCH_BYTES = 48 * 1024;
 const MAX_BATCH_BYTES = 192 * 1024;
 const MAX_RETRY_ATTEMPTS = 3;
-const FLUSH_DELAY_MS = 250;
+const FLUSH_DELAY_MS = 50;
+const MAX_BATCHES_PER_FLUSH = 8;
 
 const enabled = process.env.NEXT_PUBLIC_ENABLE_CLIENT_DEBUG_CAPTURE === 'true';
 type QueuedEvent = {
@@ -226,36 +227,51 @@ async function flushNow(keepalive: boolean): Promise<void> {
     if (inFlight) return inFlight;
 
     inFlight = (async () => {
+        let batchesSent = 0;
         do {
-            const batch: QueuedEvent[] = [];
+            if (batchesSent >= MAX_BATCHES_PER_FLUSH && !keepalive) break;
             const maxBytes = keepalive ? MAX_KEEPALIVE_BATCH_BYTES : MAX_BATCH_BYTES;
-            while (batch.length < MAX_BATCH_SIZE && queue.length > 0) {
-                if (batchBytes([...batch, queue[0]]) > maxBytes && batch.length > 0) break;
-                const next = queue.shift();
-                if (!next) break;
-                batch.push(next);
+            const batches: QueuedEvent[][] = [];
+            while (batches.length < MAX_BATCHES_PER_FLUSH && queue.length > 0) {
+                const batch: QueuedEvent[] = [];
+                while (batch.length < MAX_BATCH_SIZE && queue.length > 0) {
+                    if (batchBytes([...batch, queue[0]]) > maxBytes && batch.length > 0) break;
+                    const next = queue.shift();
+                    if (!next) break;
+                    batch.push(next);
+                }
+                if (batch.length > 0) batches.push(batch);
             }
-            inFlightBatch = batch;
+            if (batches.length === 0) break;
+            inFlightBatch = batches.flat();
+            let failed = false;
             try {
-                await send(batch, keepalive);
-            } catch (error) {
-                const transportError = error instanceof ClientDebugTransportError ? error : null;
-                const retryable =
-                    transportError === null ||
-                    transportError.status === 429 ||
-                    (transportError.status !== null && transportError.status >= 500);
-                const retryBatch = retryable && !unloading
-                    ? batch
-                          .filter(({ attempts }) => attempts < MAX_RETRY_ATTEMPTS)
-                          .map(({ event, attempts }) => ({ event, attempts: attempts + 1 }))
-                    : [];
-                queue.unshift(...retryBatch);
-                if (queue.length > MAX_QUEUE_SIZE) queue.splice(MAX_QUEUE_SIZE);
-                break;
+                const outcomes = await Promise.allSettled(
+                    batches.map((batch) => send(batch, keepalive)),
+                );
+                for (const [index, outcome] of outcomes.entries()) {
+                    if (outcome.status !== 'rejected') continue;
+                    failed = true;
+                    const error = outcome.reason;
+                    const transportError = error instanceof ClientDebugTransportError ? error : null;
+                    const retryable =
+                        transportError === null ||
+                        transportError.status === 429 ||
+                        (transportError.status !== null && transportError.status >= 500);
+                    const retryBatch = retryable && !unloading
+                        ? batches[index]
+                              .filter(({ attempts }) => attempts < MAX_RETRY_ATTEMPTS)
+                              .map(({ event, attempts }) => ({ event, attempts: attempts + 1 }))
+                        : [];
+                    queue.unshift(...retryBatch);
+                    if (queue.length > MAX_QUEUE_SIZE) queue.splice(MAX_QUEUE_SIZE);
+                }
             } finally {
                 inFlightBatch = null;
             }
-        } while (queue.length > 0 && keepalive && !unloading);
+            batchesSent += batches.length;
+            if (failed) break;
+        } while (queue.length > 0 && !unloading && (keepalive || batchesSent < MAX_BATCHES_PER_FLUSH));
     })().finally(() => {
         inFlight = null;
         if (queue.length > 0 && !unloading) {
