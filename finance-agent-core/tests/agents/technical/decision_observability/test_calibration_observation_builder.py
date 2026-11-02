@@ -1,9 +1,9 @@
 from datetime import datetime
 
-from src.agents.technical.subdomains.calibration import (
+from src.agents.technical.capabilities.calibration import (
     TechnicalDirectionCalibrationObservation,
 )
-from src.agents.technical.subdomains.decision_observability.public import (
+from src.observability.technical.public import (
     TechnicalMonitoringReadModelRow,
     build_technical_direction_calibration_observations,
 )

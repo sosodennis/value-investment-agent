@@ -66,7 +66,7 @@ async def test_verification_compute_node_crash():
     }
 
     with patch(
-        "src.agents.technical.subdomains.artifacts.infrastructure.technical_artifact_repository.TechnicalArtifactRepository.load_timeseries_bundle",
+        "src.agents.technical.capabilities.artifacts.infrastructure.technical_artifact_repository.TechnicalArtifactRepository.load_timeseries_bundle",
         new=AsyncMock(side_effect=Exception("Load Error")),
     ):
         command = await _nodes()["verification_compute"](state)

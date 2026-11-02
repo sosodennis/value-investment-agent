@@ -1,16 +1,17 @@
 from __future__ import annotations
 
-from src.agents.technical.subdomains.decision_observability.application import (
+from .decision_observability_runtime_service import (
     TechnicalDecisionObservabilityRuntimeService,
-)
-from src.agents.technical.subdomains.decision_observability.infrastructure.repository import (
-    build_default_technical_decision_observability_repository,
 )
 
 
 def build_default_technical_decision_observability_runtime_service() -> (
     TechnicalDecisionObservabilityRuntimeService
 ):
+    from ..infrastructure.repository import (
+        build_default_technical_decision_observability_repository,
+    )
+
     return TechnicalDecisionObservabilityRuntimeService(
         repository=build_default_technical_decision_observability_repository()
     )

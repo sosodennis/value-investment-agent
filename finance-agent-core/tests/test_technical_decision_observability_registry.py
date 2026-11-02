@@ -4,15 +4,17 @@ from datetime import datetime
 
 import pytest
 
-from src.agents.technical.subdomains.decision_observability import (
-    SqlAlchemyTechnicalDecisionObservabilityRepository,
-    build_prediction_event_record,
-)
 from src.infrastructure.database import Base
 from src.infrastructure.models import (
     TechnicalApprovedLabelSnapshot,
     TechnicalOutcomePath,
     TechnicalPredictionEvent,
+)
+from src.observability.technical import (
+    build_prediction_event_record,
+)
+from src.observability.technical.infrastructure import (
+    SqlAlchemyTechnicalDecisionObservabilityRepository,
 )
 
 
@@ -105,7 +107,7 @@ async def test_repository_appends_prediction_event(
     fake_session = _FakeSession()
 
     monkeypatch.setattr(
-        "src.agents.technical.subdomains.decision_observability.infrastructure.repository.AsyncSessionLocal",
+        "src.observability.technical.infrastructure.repository.AsyncSessionLocal",
         lambda: _FakeSessionContext(fake_session),
     )
 

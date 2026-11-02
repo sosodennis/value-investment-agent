@@ -1,4 +1,4 @@
-"""governance subdomain facade."""
+"""Stable contracts for technical governance."""
 
 from .domain import (
     GovernanceDrift,

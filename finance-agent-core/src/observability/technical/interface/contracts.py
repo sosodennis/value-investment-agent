@@ -4,7 +4,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict
 
-from src.agents.technical.subdomains.decision_observability.domain import (
+from src.observability.technical.domain import (
     TechnicalCalibrationObservationBuildResult,
     TechnicalMonitoringAggregate,
     TechnicalMonitoringEventDetail,

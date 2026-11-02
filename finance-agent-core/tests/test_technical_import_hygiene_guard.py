@@ -225,11 +225,25 @@ def test_migrated_technical_capabilities_have_no_subdomain_paths() -> None:
         "regime",
         "signal_fusion",
         "verification",
+        "calibration",
+        "interpretation",
+        "governance",
+        "artifacts",
+        "decision_observability",
     )
 
     legacy_paths = [technical_root / "subdomains" / name for name in migrated]
     assert not [path for path in legacy_paths if path.exists()]
-    assert all((technical_root / "capabilities" / name).is_dir() for name in migrated)
+    assert all(
+        (
+            (technical_root / "capabilities" / name).is_dir()
+            if name != "decision_observability"
+            else (
+                repo_root / "finance-agent-core" / "src" / "observability" / "technical"
+            ).is_dir()
+        )
+        for name in migrated
+    )
 
     violations: list[str] = []
     for root in (
@@ -260,6 +274,39 @@ def test_migrated_technical_capabilities_have_no_subdomain_paths() -> None:
 
     assert not violations, "Migrated technical subdomain imports remain:\n" + "\n".join(
         sorted(violations)
+    )
+
+
+def test_observability_route_uses_public_and_application_wiring_only() -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    route_path = (
+        repo_root / "finance-agent-core" / "src" / "observability" / "routes.py"
+    )
+    tree = ast.parse(route_path.read_text(encoding="utf-8"))
+    allowed = {
+        "src.auth.entrypoint",
+        "src.observability.technical.public",
+        "src.observability.technical.application.wiring",
+    }
+    violations: list[str] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module:
+            if (
+                node.module.startswith("src.observability.technical")
+                and node.module not in allowed
+            ):
+                violations.append(f"{node.lineno}: {node.module}")
+        elif isinstance(node, ast.Import):
+            for alias in node.names:
+                if (
+                    alias.name.startswith("src.observability.technical")
+                    and alias.name not in allowed
+                ):
+                    violations.append(f"{node.lineno}: {alias.name}")
+
+    assert not violations, (
+        "Observability route imports private implementation:\n"
+        + "\n".join(sorted(violations))
     )
 
 

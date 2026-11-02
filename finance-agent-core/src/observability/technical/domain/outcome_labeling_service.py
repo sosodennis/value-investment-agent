@@ -7,7 +7,7 @@ from datetime import UTC, datetime, timedelta
 
 import pandas as pd
 
-from src.agents.technical.subdomains.decision_observability.domain.contracts import (
+from src.observability.technical.domain.contracts import (
     HorizonResolution,
     OutcomeLabelingRequest,
     OutcomeLabelingResult,

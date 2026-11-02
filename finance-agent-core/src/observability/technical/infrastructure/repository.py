@@ -4,19 +4,19 @@ from dataclasses import dataclass
 
 from sqlalchemy import Select, and_, select
 
-from src.agents.technical.subdomains.decision_observability.domain.contracts import (
+from src.infrastructure.database import AsyncSessionLocal
+from src.infrastructure.models import (
+    TechnicalOutcomePath,
+    TechnicalPredictionEvent,
+    WorkflowActivityEvent,
+)
+from src.observability.technical.domain.contracts import (
     MonitoringQueryScope,
     OutcomeLabelingRequest,
     TechnicalMonitoringEventDetail,
     TechnicalMonitoringReadModelRow,
     TechnicalOutcomePathRecord,
     TechnicalPredictionEventRecord,
-)
-from src.infrastructure.database import AsyncSessionLocal
-from src.infrastructure.models import (
-    TechnicalOutcomePath,
-    TechnicalPredictionEvent,
-    WorkflowActivityEvent,
 )
 
 

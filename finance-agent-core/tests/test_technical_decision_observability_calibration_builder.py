@@ -3,17 +3,17 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 
-from src.agents.technical.subdomains.calibration import (
+from src.agents.technical.capabilities.calibration import (
     TechnicalDirectionCalibrationObservation,
 )
-from src.agents.technical.subdomains.decision_observability import (
+from src.observability.technical import (
     TechnicalDecisionObservabilityRuntimeService,
     build_monitoring_query_scope,
 )
-from src.agents.technical.subdomains.decision_observability.domain import (
+from src.observability.technical.domain import (
     build_technical_direction_calibration_observations,
 )
-from src.agents.technical.subdomains.decision_observability.domain.contracts import (
+from src.observability.technical.domain.contracts import (
     MonitoringQueryScope,
     TechnicalMonitoringReadModelRow,
 )

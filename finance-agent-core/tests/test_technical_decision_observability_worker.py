@@ -13,10 +13,12 @@ from src.agents.technical.capabilities.market_data.application.ports import (
     MarketDataOhlcvFetchResult,
     MarketDataProviderFailure,
 )
-from src.agents.technical.subdomains.decision_observability import (
+from src.observability.technical import (
     TechnicalDecisionObservabilityRuntimeService,
-    TechnicalOutcomeLabelingWorkerService,
     build_prediction_event_record,
+)
+from src.observability.technical.infrastructure import (
+    TechnicalOutcomeLabelingWorkerService,
 )
 
 
@@ -273,7 +275,7 @@ async def test_default_market_data_reader_preserves_labeling_cache_and_retries(
         _fake_fetch_ohlcv,
     )
 
-    from src.agents.technical.subdomains.decision_observability import (
+    from src.observability.technical.infrastructure import (
         build_default_technical_outcome_labeling_worker_service,
     )
 
