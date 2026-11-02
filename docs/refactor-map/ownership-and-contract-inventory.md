@@ -1,13 +1,13 @@
 # Ownership and contract inventory
 
-This is the implementation map for #145 and #146. Current paths are evidence
-from baseline `1f9d0745fa0625684c98506c89d750cb8c98161b`; target paths are the
-canonical names workers must implement. A target name is one contract owner,
-not a compatibility alias.
+This inventory records the final ownership map after the #244 child issues.
+Paths in the evidence columns describe the pre-cutover layout. The canonical
+owner and boundary columns describe the verified final commit. A canonical name
+identifies one contract owner and is not a compatibility alias.
 
 ## Backend capability ownership
 
-| Capability | Current evidence | Canonical owner after cutover | Boundary |
+| Capability | Former evidence | Canonical owner | Boundary |
 | --- | --- | --- | --- |
 | Application composition and lifecycle | `finance-agent-core/api/server.py:125-230` | `finance-agent-core/api/server.py` composition root | FastAPI lifespan, router assembly, dependency wiring, and boundary error mapping only |
 | Auth and authenticated principal | `finance-agent-core/src/auth/` and `src/auth/interface/routes.py:24-116` | `src/auth/` | `AuthPrincipal`/`Principal`; browser session and CSRF remain here |
@@ -29,27 +29,26 @@ not a compatibility alias.
 
 ### Agent entrypoint inventory
 
-| Agent | Public entrypoint | Current graph state | Action |
+| Agent | Public entrypoint | Final graph state | Ownership |
 | --- | --- | --- | --- |
-| Intent | `build_intent_extraction_graph` | `agents/intent/workflow/` | Retain public name; remove activity fields through #148/#145 |
-| News | `build_financial_news_subgraph` | `agents/news/workflow/` | Retain public name; emit normalized activity through runtime adapter |
-| Debate | `build_debate_subgraph` | `agents/debate/workflow/` | Retain public name; model parallel bull/bear activity as a set |
-| Fundamental | `build_fundamental_subgraph` | `agents/fundamental/workflow/` plus `capabilities/` | Retain entrypoint; #246 and #249 own all fundamental capabilities under `agents/fundamental/capabilities/` |
-| Technical | `build_technical_subgraph` | `agents/technical/workflow/` plus `capabilities/` | Retain entrypoint; #250 owns market data, features, patterns, regime, fusion, verification, and alerts under `capabilities/`; #247 owns remaining observability, governance, and technical artifact concerns |
+| Intent | `build_intent_extraction_graph` | `agents/intent/workflow/` | Public graph entrypoint with normalized runtime activity |
+| News | `build_financial_news_subgraph` | `agents/news/workflow/` | Public graph entrypoint with normalized runtime activity |
+| Debate | `build_debate_subgraph` | `agents/debate/workflow/` | Public graph entrypoint with parallel activity scopes |
+| Fundamental | `build_fundamental_subgraph` | `agents/fundamental/workflow/` plus `capabilities/` | Fundamental capabilities own their state, ports, facades, and adapters |
+| Technical | `build_technical_subgraph` | `agents/technical/workflow/` plus `capabilities/` | Technical compute, interpretation, governance, and artifact capabilities use public facades |
 
-All agent callers use the public entrypoint or a shared contract. Private
-imports from the API composition root, another agent, or migration-era
-subdomains are deletion-ledger items even when the architecture guard has no
-current exception.
+All agent callers use public entrypoints, capability facades, or shared
+contracts. The architecture guard scans the API composition root and agent
+packages. It reports zero forbidden imports, migration-only paths, and
+capability cycles at the verified final commit.
 
 ## Frozen public REST contract
 
-The current API has unversioned paths and mixed composition ownership. The
-canonical public contract is `/api/v1`, with plural resource names and
+The final API uses `/api/v1`, with plural resource names and
 lowercase kebab-case segments. The backend owns Pydantic schemas and generated
 OpenAPI; the frontend consumes generated types and feature parsers.
 
-| Capability | Canonical method and path | Current path(s) | Owner |
+| Capability | Canonical method and path | Former path(s) | Owner |
 | --- | --- | --- | --- |
 | Health | `GET /health` | `/health` | Composition root/operations |
 | Readiness | `GET /ready` | `/ready` | Composition root/operations |
@@ -100,7 +99,7 @@ the API boundary; provider and LangGraph exception text never crosses it.
 
 ## Persistence inventory and fresh baseline
 
-| Current table | Current model | Action | Canonical owner |
+| Former table | Former model | Action | Canonical owner |
 | --- | --- | --- | --- |
 | `llm_settings` | `LlmSetting` | Retain/rebuild with verified organization ownership | LLM settings facade/service |
 | `chat_history` | `ChatMessage` | Retain/rebuild as thread message repository; add explicit ownership through thread/run boundary | Analysis runtime |
@@ -118,7 +117,7 @@ No old rows, checkpoints, migration readers, or dual writes are required.
 
 ## Service-client boundaries
 
-| Client | Current evidence | Canonical owner and contract |
+| Client | Former evidence | Canonical owner and contract |
 | --- | --- | --- |
 | LLM Provider | `src/llm_provider/infrastructure/remote_client.py`; `src/llm_provider/domain/contracts.py` | `LLMProviderClient`; operation schemas `provider.v1`/completion and settings operations; service owns provider credentials/runtime |
 | Model Inference | `src/model_inference/infrastructure/http_adapter.py`; `src/model_inference/domain/contracts.py` | `ModelInferenceClient`; operation schemas `inference.v1`; trusted internal principal and one absolute deadline |
@@ -130,7 +129,7 @@ remain inside the owning adapter/service.
 
 ## Frontend feature ownership
 
-| Feature | Current paths | Canonical target | Owned boundary |
+| Feature | Former paths | Canonical owner | Owned boundary |
 | --- | --- | --- | --- |
 | Auth | `app/login`, `app/register`, `components/auth`, `lib/auth-api.ts` | `src/features/auth/` | Auth API parser, session state, protected route, login/register |
 | Workspace/run | `app/workspace`, `hooks/useAgent*`, `lib/agent-session-state.ts`, `components/workspace` | `src/features/workspace/` | Thread/run API, snapshot parser, activity reducer, SSE recovery, activity UI |
@@ -145,19 +144,22 @@ Every browser boundary parses `unknown` into a feature view model. Components
 never construct URLs, read raw REST/SSE payloads, or infer a current node from
 event order. Generated contract files remain outputs of backend OpenAPI.
 
-## Current private-edge inventory
+## Final dependency inventory
 
-The baseline `python3 scripts/architecture_guard.py` reports zero violations,
-but the current composition still imports implementation details that the
-target map assigns to a capability boundary:
+The final dependency report is generated by
+`python3 scripts/architecture_guard.py --write-dependency-report`.
+The report scans `finance-agent-core/src` and `finance-agent-core/api`.
+The verified final commit has zero forbidden imports, migration-only paths, and
+capability cycles. It records the observed ownership edges and capability graph
+in `docs/refactor-map/architecture-dependency-report.md`.
 
-| Edge | Evidence | #145 action |
+| Check | Final result | Evidence |
 | --- | --- | --- |
-| API imports SEC XBRL infrastructure directly | `api/server.py:35-38` | Move readiness/close behavior behind the owned fundamental or runtime wiring port |
-| API imports news shared HTTP client directly | `api/server.py:39-40` | Close through the news application wiring boundary |
-| API imports technical observability subdomain | `api/server.py:40-43,246-438` | Register a technical observability router/facade at composition root |
-| Agent repositories import root `src.services` and `src.interface` modules | e.g. `agents/news/infrastructure/artifacts/news_artifact_repository.py`, `agents/debate/infrastructure/artifacts/*`, technical use cases | Move stable artifact/event contracts to owned public ports; delete private root imports as callers migrate |
-| Fundamental/technical code imports migration-era `subdomains/` | `agents/technical/subdomains/` (fundamental `subdomains/` retired by #246 and #249) | #246 and #249 re-home all fundamental capabilities under `agents/fundamental/capabilities/`; #250 re-homes the seven compute capabilities under `agents/technical/capabilities/`; #247 owns remaining technical observability and governance packages; no new subdomain imports |
+| Root workflow imports | Public agent entrypoints and shared contracts only | `src/workflow/graph.py`; architecture dependency report |
+| API composition imports | Public routers, entrypoints, and owned wiring only | `api/server.py`; architecture guard |
+| Agent cross-slice imports | No private `src.services` or root `src.interface` imports | Architecture guard and import hygiene tests |
+| Migration-era package paths | No `subdomains/`, `workflow/nodes/<agent>/`, or `application/subgraph.py` files | Architecture guard and import hygiene tests |
+| Capability graph | Acyclic; 18 capability packages and 13 cross-capability edges | Architecture dependency report |
 
-The guard result is a baseline fact, not permission to preserve these edges.
-The deletion ledger gives the concrete migration action and owner.
+The dependency report and module action report are generated artifacts. Rerun
+their commands after an ownership or import change.

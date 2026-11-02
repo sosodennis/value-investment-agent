@@ -304,3 +304,186 @@ def test_cycle_findings_use_the_scanned_capability_root(tmp_path: Path) -> None:
     assert cycles
     assert all(".capabilities." in item.source for item in cycles)
     assert all(".capabilities." in item.target for item in cycles)
+
+
+def test_guard_rejects_shared_imports_into_agent_packages(tmp_path: Path) -> None:
+    src_root = tmp_path / "src"
+    _write_module(
+        src_root,
+        "src.shared.contracts.workflow",
+        "from src.agents.intent.entrypoint import build_graph\n",
+    )
+
+    violations = architecture_guard.collect_violations(src_root)
+
+    assert {item.rule for item in violations} == {"SHARED_IMPORTS_AGENT"}
+
+
+def test_guard_rejects_agent_imports_from_private_root_modules(tmp_path: Path) -> None:
+    src_root = tmp_path / "src"
+    _write_module(
+        src_root,
+        "src.agents.intent.application.runner",
+        "from src.services.history import load_history\n"
+        "from src.interface.events.adapters import normalize_event\n",
+    )
+
+    violations = architecture_guard.collect_violations(src_root)
+
+    assert {item.rule for item in violations} == {"CROSS_SLICE_PRIVATE_IMPORT"}
+    assert {item.target for item in violations} == {
+        "src.services.history",
+        "src.interface.events.adapters",
+    }
+
+
+def test_guard_rejects_fastapi_imports_from_private_agent_modules(
+    tmp_path: Path,
+) -> None:
+    src_root = tmp_path / "src"
+    _write_module(
+        src_root,
+        "src.agents.intent.application.runner",
+        "def build_graph(): pass\n",
+    )
+    api_root = tmp_path / "api"
+    api_root.mkdir()
+    (api_root / "server.py").write_text(
+        "from src.agents.intent.application.runner import build_graph\n",
+        encoding="utf-8",
+    )
+
+    violations = architecture_guard.collect_violations(src_root, api_root)
+
+    assert [(item.rule, item.source, item.target) for item in violations] == [
+        (
+            "API_COMPOSITION_PRIVATE_IMPORT",
+            "api.server",
+            "src.agents.intent.application.runner",
+        )
+    ]
+
+
+def test_guard_rejects_fastapi_imports_from_private_root_modules(
+    tmp_path: Path,
+) -> None:
+    src_root = tmp_path / "src"
+    _write_module(src_root, "src.workflow.graph", "def build_graph(): pass\n")
+    _write_module(src_root, "src.services.history", "def load_history(): pass\n")
+    _write_module(
+        src_root,
+        "src.interface.events.adapters",
+        "def normalize_event(): pass\n",
+    )
+    api_root = tmp_path / "api"
+    api_root.mkdir()
+    (api_root / "server.py").write_text(
+        "from src.workflow.graph import build_graph\n"
+        "from src.services.history import load_history\n"
+        "from src.interface.events.adapters import normalize_event\n"
+        "from src.interface.origins import frontend_origins\n",
+        encoding="utf-8",
+    )
+
+    violations = architecture_guard.collect_violations(src_root, api_root)
+
+    assert {(item.rule, item.source, item.target) for item in violations} == {
+        (
+            "API_COMPOSITION_PRIVATE_IMPORT",
+            "api.server",
+            "src.workflow.graph",
+        ),
+        (
+            "API_COMPOSITION_PRIVATE_IMPORT",
+            "api.server",
+            "src.services.history",
+        ),
+        (
+            "API_COMPOSITION_PRIVATE_IMPORT",
+            "api.server",
+            "src.interface.events.adapters",
+        ),
+    }
+
+
+def test_guard_rejects_migration_only_agent_paths(tmp_path: Path) -> None:
+    src_root = tmp_path / "src"
+    _write_module(
+        src_root,
+        "src.agents.intent.subdomains.legacy_policy",
+        "VALUE = 1\n",
+    )
+    _write_module(
+        src_root,
+        "src.agents.news.application.subgraph",
+        "VALUE = 1\n",
+    )
+    _write_module(
+        src_root,
+        "src.workflow.nodes.intent_extraction.legacy_node",
+        "VALUE = 1\n",
+    )
+    _write_module(
+        src_root,
+        "src.workflow.nodes.portfolio.legacy_node",
+        "VALUE = 1\n",
+    )
+
+    violations = architecture_guard.collect_violations(src_root)
+
+    assert {item.rule for item in violations} == {"MIGRATION_PATH"}
+    assert {item.source for item in violations} == {
+        "src.agents.intent.subdomains.legacy_policy",
+        "src.agents.news.application.subgraph",
+        "src.workflow.nodes.intent_extraction.legacy_node",
+        "src.workflow.nodes.portfolio.legacy_node",
+    }
+
+
+def test_dependency_report_lists_observed_ownership_and_capability_edges(
+    tmp_path: Path,
+) -> None:
+    src_root = tmp_path / "src"
+    _write_module(
+        src_root,
+        "src.workflow.graph",
+        "from src.agents.intent.entrypoint import build_graph\n",
+    )
+    _write_module(
+        src_root,
+        "src.agents.intent.entrypoint",
+        "from src.agents.intent.application.wiring import build_runner\n"
+        "from src.agents.intent.workflow.graph import build_graph\n",
+    )
+    _write_module(
+        src_root,
+        "src.agents.intent.application.wiring",
+        "def build_runner(): pass\n",
+    )
+    _write_module(
+        src_root,
+        "src.agents.intent.workflow.graph",
+        "def build_graph(): pass\n",
+    )
+    _write_module(
+        src_root,
+        "src.agents.technical.capabilities.alpha.application.runner",
+        "from src.agents.technical.capabilities.beta.public import BetaPort\n",
+    )
+    _write_module(
+        src_root,
+        "src.agents.technical.capabilities.beta.public",
+        "class BetaPort: pass\n",
+    )
+    report_path = tmp_path / "architecture-dependency-report.md"
+
+    architecture_guard.write_dependency_report(src_root, report_path)
+    first_report = report_path.read_text(encoding="utf-8")
+    architecture_guard.write_dependency_report(src_root, report_path)
+    second_report = report_path.read_text(encoding="utf-8")
+
+    assert first_report == second_report
+    assert "Architecture findings: 0." in first_report
+    assert "`root workflow` | `intent entrypoint`" in first_report
+    assert "technical.alpha capability" in first_report
+    assert "technical.beta capability" in first_report

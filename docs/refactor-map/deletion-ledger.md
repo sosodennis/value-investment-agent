@@ -8,7 +8,7 @@ use listed in the ownership inventory.
 
 ## Public routes
 
-| Current path or route | Action | Owner/issue | Reason |
+| Former path or route | Action | Owner/issue | Reason |
 | --- | --- | --- | --- |
 | `/history/{thread_id}` | Rename to `/api/v1/threads/{thread_id}/messages` | Analysis runtime / #145 | Versioned plural resource; history is a message view |
 | `/thread/{thread_id}` | Rename to `/api/v1/threads/{thread_id}` | Analysis runtime / #145 | Versioned thread resource |
@@ -26,7 +26,7 @@ use listed in the ownership inventory.
 
 ## Events, state, and parsers
 
-| Current item | Action | Owner/issue | Reason |
+| Former item | Action | Owner/issue | Reason |
 | --- | --- | --- | --- |
 | `internal_progress` in root `AgentState` | Delete | #148 then #145 | Arbitrary flat node/status map is not a product contract |
 | `internal_progress` in intent/news/debate/fundamental/technical state | Delete | #148 then #145 | Same field has multiple unowned writers |
@@ -48,7 +48,7 @@ use listed in the ownership inventory.
 
 ## Persistence and database
 
-| Current item | Action | Owner/issue | Reason |
+| Former item | Action | Owner/issue | Reason |
 | --- | --- | --- | --- |
 | `workspace_runtime_activity_segments` table/model | Delete | #145 | Scalar segment cannot represent nested/repeated activity |
 | `workspace_runtime_run_statuses` table/model | Replace | #145 | Run projection must use typed lifecycle and owner boundary |
@@ -60,23 +60,23 @@ use listed in the ownership inventory.
 
 ## Modules and imports
 
-| Current item | Action | Owner/issue | Reason |
+| Former item | Action | Owner/issue | Reason |
 | --- | --- | --- | --- |
 | Graph/run/replay/SSE policy in `finance-agent-core/api/server.py` | Move then delete private helpers | #145 | Composition root must remain thin |
 | `src/runtime/workspace_runtime_projection/` | Move/rename under analysis runtime | #145 | Projection is part of one run capability, not a generic workspace runtime |
 | `src/services/history.py` | Move under analysis runtime message repository | #145 | Generic services have no feature owner |
 | `src/services/artifact_manager.py` | Move under artifact capability | #145 | Artifact persistence and API projection need one owner |
 | Root `src/interface/events/` | Replace with runtime-owned event contract | #145 | Current location mixes wire protocol and LangGraph adapter details |
-| `agents/fundamental/subdomains/` | Deleted after #246 moved financial statements, forward signals, and market data and #249 moved core valuation, model selection, and artifact provenance to `agents/fundamental/capabilities/` | #246, #249 | Migration-era path retired; all fundamental capability ownership is canonical |
-| `agents/technical/subdomains/{alerts,features,market_data,patterns,regime,signal_fusion,verification}/` | Deleted after re-home under `agents/technical/capabilities/` | #250 | Technical compute capabilities now have canonical owners and public facades |
-| `agents/technical/subdomains/{calibration,decision_observability,governance,interpretation,artifacts}/` | Re-home or delete each module | #247 | Remaining technical observability, governance, and technical artifact ownership is handled by #247 |
+| `agents/fundamental/subdomains/` | Delete | #246, #249 | Completed. All fundamental capabilities now live under `agents/fundamental/capabilities/`. |
+| `agents/technical/subdomains/{alerts,features,market_data,patterns,regime,signal_fusion,verification}/` | Delete | #250 | Completed. Technical compute capabilities now live under `agents/technical/capabilities/`. |
+| `agents/technical/subdomains/{calibration,decision_observability,governance,interpretation,artifacts}/` | Delete or re-home | #247 | Completed. Technical observability, governance, interpretation, and artifact ownership now use canonical capability packages. |
 | API imports of SEC/news/technical private modules | Move behind wiring/facades | #145 | Composition root must not implement capability behavior |
 | Agent imports of root `src.services`/`src.interface` implementations | Replace with typed ports/public contracts | #145 | Private cross-slice dependencies increase change blast radius |
-| `finance-agent-core/src/agents/ARCHITECTURE_MODULE_ACTIONS.md` stale actions | Regenerate after migration | #145 | Guard report must describe the resulting graph |
+| `finance-agent-core/src/agents/ARCHITECTURE_MODULE_ACTIONS.md` | Regenerate after migration | #252 | Current report has zero documented findings. |
 
 ## Frontend paths
 
-| Current item | Action | Owner/issue | Reason |
+| Former item | Action | Owner/issue | Reason |
 | --- | --- | --- | --- |
 | Route components that build API URLs | Move URL construction to feature API modules | #146 | Routes are composition shells |
 | `src/lib/auth-api.ts` | Move to `src/features/auth/` | #146 | Auth owns parser and session contract |

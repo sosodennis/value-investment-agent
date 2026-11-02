@@ -1,1 +1,1 @@
-"""Shared contracts for fundamental subdomains."""
+"""Shared contracts for fundamental capabilities."""
