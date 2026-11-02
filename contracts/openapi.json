@@ -928,6 +928,430 @@
         "title": "CheckpointIdentity",
         "type": "object"
       },
+      "ClientDebugAcceptedResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "accepted": {
+            "minimum": 0.0,
+            "title": "Accepted",
+            "type": "integer"
+          },
+          "capture_id": {
+            "format": "uuid",
+            "title": "Capture Id",
+            "type": "string"
+          },
+          "dropped": {
+            "minimum": 0.0,
+            "title": "Dropped",
+            "type": "integer"
+          },
+          "duplicates": {
+            "minimum": 0.0,
+            "title": "Duplicates",
+            "type": "integer"
+          },
+          "request_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Request Id"
+          },
+          "schema_version": {
+            "const": "client_debug.v1",
+            "default": "client_debug.v1",
+            "title": "Schema Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "capture_id",
+          "accepted",
+          "duplicates",
+          "dropped"
+        ],
+        "title": "ClientDebugAcceptedResponse",
+        "type": "object"
+      },
+      "ClientDebugBatchRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "capture_id": {
+            "format": "uuid",
+            "title": "Capture Id",
+            "type": "string"
+          },
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/ClientDebugEvent"
+            },
+            "maxItems": 50,
+            "minItems": 1,
+            "title": "Events",
+            "type": "array"
+          },
+          "schema_version": {
+            "const": "client_debug.v1",
+            "title": "Schema Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "schema_version",
+          "capture_id",
+          "events"
+        ],
+        "title": "ClientDebugBatchRequest",
+        "type": "object"
+      },
+      "ClientDebugCaptureResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "capture_id": {
+            "format": "uuid",
+            "title": "Capture Id",
+            "type": "string"
+          },
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/ClientDebugEventResponse"
+            },
+            "title": "Events",
+            "type": "array"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "next_seq": {
+            "minimum": 0.0,
+            "title": "Next Seq",
+            "type": "integer"
+          },
+          "schema_version": {
+            "const": "client_debug.v1",
+            "default": "client_debug.v1",
+            "title": "Schema Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "capture_id",
+          "events",
+          "next_seq",
+          "expires_at"
+        ],
+        "title": "ClientDebugCaptureResponse",
+        "type": "object"
+      },
+      "ClientDebugContext": {
+        "additionalProperties": false,
+        "properties": {
+          "reduced_motion": {
+            "default": false,
+            "title": "Reduced Motion",
+            "type": "boolean"
+          },
+          "request_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Request Id"
+          },
+          "route": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Route",
+            "type": "string"
+          },
+          "run_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Id"
+          },
+          "scroll": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ClientDebugScroll"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "thread_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thread Id"
+          },
+          "traceparent": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Traceparent"
+          },
+          "viewport": {
+            "$ref": "#/components/schemas/ClientDebugViewport"
+          },
+          "visibility_state": {
+            "default": "visible",
+            "enum": [
+              "visible",
+              "hidden",
+              "prerender"
+            ],
+            "title": "Visibility State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "route",
+          "viewport"
+        ],
+        "title": "ClientDebugContext",
+        "type": "object"
+      },
+      "ClientDebugEvent": {
+        "additionalProperties": false,
+        "properties": {
+          "component": {
+            "anyOf": [
+              {
+                "maxLength": 160,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Component"
+          },
+          "context": {
+            "$ref": "#/components/schemas/ClientDebugContext"
+          },
+          "details": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "title": "Details",
+            "type": "object"
+          },
+          "elapsed_ms": {
+            "minimum": 0.0,
+            "title": "Elapsed Ms",
+            "type": "number"
+          },
+          "event_id": {
+            "format": "uuid",
+            "title": "Event Id",
+            "type": "string"
+          },
+          "name": {
+            "pattern": "^[a-z][a-z0-9_.-]{1,95}$",
+            "title": "Name",
+            "type": "string"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "sequence": {
+            "maximum": 1000000000.0,
+            "minimum": 1.0,
+            "title": "Sequence",
+            "type": "integer"
+          },
+          "severity": {
+            "default": "debug",
+            "enum": [
+              "debug",
+              "info",
+              "warn",
+              "error"
+            ],
+            "title": "Severity",
+            "type": "string"
+          }
+        },
+        "required": [
+          "event_id",
+          "sequence",
+          "occurred_at",
+          "elapsed_ms",
+          "name",
+          "context"
+        ],
+        "title": "ClientDebugEvent",
+        "type": "object"
+      },
+      "ClientDebugEventResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "component": {
+            "anyOf": [
+              {
+                "maxLength": 160,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Component"
+          },
+          "context": {
+            "$ref": "#/components/schemas/ClientDebugContext"
+          },
+          "details": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "title": "Details",
+            "type": "object"
+          },
+          "elapsed_ms": {
+            "minimum": 0.0,
+            "title": "Elapsed Ms",
+            "type": "number"
+          },
+          "event_id": {
+            "format": "uuid",
+            "title": "Event Id",
+            "type": "string"
+          },
+          "name": {
+            "pattern": "^[a-z][a-z0-9_.-]{1,95}$",
+            "title": "Name",
+            "type": "string"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "received_at": {
+            "format": "date-time",
+            "title": "Received At",
+            "type": "string"
+          },
+          "sequence": {
+            "maximum": 1000000000.0,
+            "minimum": 1.0,
+            "title": "Sequence",
+            "type": "integer"
+          },
+          "severity": {
+            "default": "debug",
+            "enum": [
+              "debug",
+              "info",
+              "warn",
+              "error"
+            ],
+            "title": "Severity",
+            "type": "string"
+          }
+        },
+        "required": [
+          "event_id",
+          "sequence",
+          "occurred_at",
+          "elapsed_ms",
+          "name",
+          "context",
+          "received_at"
+        ],
+        "title": "ClientDebugEventResponse",
+        "type": "object"
+      },
+      "ClientDebugScroll": {
+        "additionalProperties": false,
+        "properties": {
+          "x": {
+            "title": "X",
+            "type": "number"
+          },
+          "y": {
+            "title": "Y",
+            "type": "number"
+          }
+        },
+        "required": [
+          "x",
+          "y"
+        ],
+        "title": "ClientDebugScroll",
+        "type": "object"
+      },
+      "ClientDebugViewport": {
+        "additionalProperties": false,
+        "properties": {
+          "dpr": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 10.0,
+            "title": "Dpr",
+            "type": "number"
+          },
+          "height": {
+            "maximum": 10000.0,
+            "minimum": 0.0,
+            "title": "Height",
+            "type": "integer"
+          },
+          "width": {
+            "maximum": 10000.0,
+            "minimum": 0.0,
+            "title": "Width",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "width",
+          "height",
+          "dpr"
+        ],
+        "title": "ClientDebugViewport",
+        "type": "object"
+      },
       "ConfidenceCalibrationModel": {
         "properties": {
           "calibration_applied": {
@@ -2757,6 +3181,7 @@
         "title": "InvitationResponse",
         "type": "object"
       },
+      "JsonValue": {},
       "KeyFactModel": {
         "properties": {
           "citation": {
@@ -11436,6 +11861,137 @@
         "summary": "Select Active Organization",
         "tags": [
           "Authentication"
+        ]
+      }
+    },
+    "/api/v1/client-debug/captures/{capture_id}": {
+      "get": {
+        "operationId": "read_capture_api_v1_client_debug_captures__capture_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "capture_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Capture Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "after_seq",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "After Seq",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 200,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientDebugCaptureResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Authentication is required."
+          },
+          "404": {
+            "description": "Capture is disabled or not found."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Read Capture",
+        "tags": [
+          "Client Debug"
+        ]
+      }
+    },
+    "/api/v1/client-debug/events": {
+      "post": {
+        "operationId": "ingest_events_api_v1_client_debug_events_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClientDebugBatchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientDebugAcceptedResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Authentication is required."
+          },
+          "403": {
+            "description": "CSRF validation failed."
+          },
+          "404": {
+            "description": "Capture is disabled or not found."
+          },
+          "409": {
+            "description": "Event identity conflicts with an existing event."
+          },
+          "413": {
+            "description": "The request or batch is too large."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "429": {
+            "description": "The runtime capture buffer is full."
+          }
+        },
+        "summary": "Ingest Events",
+        "tags": [
+          "Client Debug"
         ]
       }
     },
