@@ -10,17 +10,18 @@ from src.agents.fundamental.application.workflow_orchestrator.context_mapper_ser
 from src.agents.fundamental.application.workflow_orchestrator.dto import (
     FundamentalAppContextDTO,
 )
-from src.agents.fundamental.application.workflow_orchestrator.ports import (
+from src.agents.fundamental.capabilities.artifacts_provenance.public import (
     IFundamentalReportRepo,
 )
-from src.agents.fundamental.subdomains.forward_signals.public import (
+from src.agents.fundamental.capabilities.forward_signals.public import (
     ForwardSignalPayload,
 )
-from src.agents.fundamental.subdomains.model_selection.public import (
+from src.agents.fundamental.capabilities.model_selection.public import (
     FundamentalSelectionReport,
     build_latest_health_context,
 )
-from src.shared.kernel.types import AgentOutputArtifactPayload, JSONObject
+from src.artifacts.public import AgentOutputArtifactPayload
+from src.shared.kernel.types import JSONObject
 
 
 def _build_mapper_context(

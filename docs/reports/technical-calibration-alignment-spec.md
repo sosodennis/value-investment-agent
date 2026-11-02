@@ -17,7 +17,7 @@ Align the planned Technical calibration pipeline contract with the existing Fund
 ### 1) Contracts
 
 Reference files:
-- `finance-agent-core/src/agents/fundamental/subdomains/forward_signals/domain/calibration/contracts.py`
+- `finance-agent-core/src/agents/fundamental/capabilities/forward_signals/domain/calibration/contracts.py`
 
 Key contracts:
 - `ForwardSignalCalibrationObservation`
@@ -36,7 +36,7 @@ Key contracts:
 ### 2) Calibration Policy & Config
 
 Reference file:
-- `finance-agent-core/src/agents/fundamental/subdomains/forward_signals/domain/policies/forward_signal_calibration_service.py`
+- `finance-agent-core/src/agents/fundamental/capabilities/forward_signals/domain/policies/forward_signal_calibration_service.py`
 
 Key policy details:
 - `ForwardSignalCalibrationConfig`
@@ -50,7 +50,7 @@ Key policy details:
 ### 3) Fitting Service
 
 Reference file:
-- `finance-agent-core/src/agents/fundamental/subdomains/forward_signals/domain/calibration/fitting_service.py`
+- `finance-agent-core/src/agents/fundamental/capabilities/forward_signals/domain/calibration/fitting_service.py`
 
 Key behavior:
 - Uses `min_samples` threshold (default 120).
@@ -60,7 +60,7 @@ Key behavior:
 ### 4) IO and Artifact Storage
 
 Reference file:
-- `finance-agent-core/src/agents/fundamental/subdomains/forward_signals/domain/calibration/io_service.py`
+- `finance-agent-core/src/agents/fundamental/capabilities/forward_signals/domain/calibration/io_service.py`
 
 Key behavior:
 - Load observations from JSON array or JSONL.
@@ -69,8 +69,8 @@ Key behavior:
 ### 5) Runtime Consumption
 
 Reference file:
-- `finance-agent-core/src/agents/fundamental/subdomains/core_valuation/domain/parameterization/forward_signal_calibration_mapping_service.py`
-- `finance-agent-core/src/agents/fundamental/subdomains/core_valuation/domain/parameterization/forward_signal_adjustment_service.py`
+- `finance-agent-core/src/agents/fundamental/capabilities/core_valuation/domain/parameterization/forward_signal_calibration_mapping_service.py`
+- `finance-agent-core/src/agents/fundamental/capabilities/core_valuation/domain/parameterization/forward_signal_adjustment_service.py`
 
 Key behavior:
 - Env override for mapping path: `FUNDAMENTAL_FORWARD_SIGNAL_CALIBRATION_MAPPING_PATH`.
@@ -86,7 +86,7 @@ Technical calibration should mirror the above structure while keeping technical-
 ### A) Contracts
 
 Create parallel contracts under:
-- `finance-agent-core/src/agents/technical/subdomains/calibration/domain/contracts.py`
+- `finance-agent-core/src/agents/technical/capabilities/calibration/domain/contracts.py`
 
 Proposed contracts:
 - `TechnicalDirectionCalibrationObservation`
@@ -105,7 +105,7 @@ Rationale: identical report shape enables shared governance and monitoring tooli
 ### B) Calibration Config
 
 Create parallel policy/config under:
-- `finance-agent-core/src/agents/technical/subdomains/calibration/domain/policies/technical_direction_calibration_service.py`
+- `finance-agent-core/src/agents/technical/capabilities/calibration/domain/policies/technical_direction_calibration_service.py`
 
 Proposed config:
 - `mapping_version: str`
@@ -118,7 +118,7 @@ Decision: if we adopt sigmoid (Platt) for small-sample stability, store `sigmoid
 ### C) IO Pattern
 
 Create parallel IO service under:
-- `finance-agent-core/src/agents/technical/subdomains/calibration/domain/io_service.py`
+- `finance-agent-core/src/agents/technical/capabilities/calibration/domain/io_service.py`
 
 Behavior should mirror fundamental:
 - Accept JSON array or JSONL observations.
@@ -128,7 +128,7 @@ Behavior should mirror fundamental:
 
 Create technical equivalent of `forward_signal_calibration_mapping_service`:
 - `TECHNICAL_DIRECTION_CALIBRATION_MAPPING_PATH` env var
-- Default path: `finance-agent-core/src/agents/technical/subdomains/calibration/domain/config/technical_direction_calibration.default.json`
+- Default path: `finance-agent-core/src/agents/technical/capabilities/calibration/domain/config/technical_direction_calibration.default.json`
 - Load with caching; fallback to embedded defaults with `degraded_reason`.
 
 ### E) Metadata Envelope (must align)

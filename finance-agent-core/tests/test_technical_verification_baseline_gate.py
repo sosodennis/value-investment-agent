@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from src.agents.technical.subdomains.verification import (
+from src.agents.technical.capabilities.verification.public import (
     BacktestSummary,
     WfaSummary,
     evaluate_verification_baseline,

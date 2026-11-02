@@ -26,15 +26,15 @@ from src.agents.technical.application.semantic_policy_input_service import (
 from src.agents.technical.application.semantic_verification_context_service import (
     assemble_verification_context,
 )
-from src.agents.technical.interface.evidence_bundle_projection_service import (
-    serialize_evidence_bundle,
-)
-from src.agents.technical.subdomains.interpretation.public import (
+from src.agents.technical.capabilities.interpretation.public import (
     apply_interpretation_guardrail,
 )
-from src.agents.technical.subdomains.signal_fusion import (
+from src.agents.technical.capabilities.signal_fusion.public import (
     SemanticTagPolicyInput,
     SemanticTagPolicyResult,
+)
+from src.agents.technical.interface.evidence_bundle_projection_service import (
+    serialize_evidence_bundle,
 )
 from src.shared.kernel.tools.logger import get_logger, log_event
 from src.shared.kernel.types import JSONObject

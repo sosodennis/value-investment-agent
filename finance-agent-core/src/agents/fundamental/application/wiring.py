@@ -8,20 +8,20 @@ from src.agents.fundamental.application.workflow_orchestrator.factory import (
 from src.agents.fundamental.application.workflow_orchestrator.ports import (
     FundamentalFinancialStatementsPayload,
 )
-from src.agents.fundamental.subdomains.artifacts_provenance.public import (
+from src.agents.fundamental.capabilities.artifacts_provenance.public import (
     fundamental_artifact_repository,
 )
-from src.agents.fundamental.subdomains.financial_statements.public import (
+from src.agents.fundamental.capabilities.financial_statements.public import (
     fetch_financial_reports_payload,
 )
-from src.agents.fundamental.subdomains.forward_signals.public import (
+from src.agents.fundamental.capabilities.forward_signals.public import (
     build_finbert_direction_reviewer,
     build_forward_looking_filter,
     extract_forward_signals,
     extract_forward_signals_from_sec_text,
     extract_forward_signals_from_xbrl_reports,
 )
-from src.agents.fundamental.subdomains.market_data.public import (
+from src.agents.fundamental.capabilities.market_data.public import (
     market_data_service,
 )
 from src.model_inference.entrypoint import get_model_inference

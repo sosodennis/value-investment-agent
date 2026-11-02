@@ -2,14 +2,14 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
-from src.agents.technical.domain.shared import PriceSeries
-from src.agents.technical.subdomains.patterns import (
+from src.agents.technical.capabilities.patterns.domain.pattern_detection_service import (
+    detect_pattern_frame,
+)
+from src.agents.technical.capabilities.patterns.public import (
     PatternRuntimeRequest,
     PatternRuntimeService,
 )
-from src.agents.technical.subdomains.patterns.domain.pattern_detection_service import (
-    detect_pattern_frame,
-)
+from src.agents.technical.domain.shared import PriceSeries
 
 
 def test_pattern_runtime_exposes_atr_adaptive_thresholds() -> None:

@@ -15,6 +15,29 @@ from src.agents.technical.workflow.state import (
     TechnicalAnalysisState,
 )
 
+_ACTIVITY_METADATA = {
+    "data_fetch": (("technical_analysis", "fetch-market-data"), "Fetch market data"),
+    "feature_compute": (
+        ("technical_analysis", "compute-features"),
+        "Compute indicators",
+    ),
+    "pattern_compute": (("technical_analysis", "detect-patterns"), "Detect patterns"),
+    "alerts_compute": (("technical_analysis", "evaluate-alerts"), "Evaluate alerts"),
+    "regime_compute": (
+        ("technical_analysis", "classify-regime"),
+        "Classify market regime",
+    ),
+    "fusion_compute": (("technical_analysis", "fuse-signals"), "Fuse signals"),
+    "verification_compute": (
+        ("technical_analysis", "verify-signals"),
+        "Verify signals",
+    ),
+    "semantic_translate": (
+        ("technical_analysis", "summarize-signals"),
+        "Summarize signals",
+    ),
+}
+
 
 def build_technical_workflow(
     runner: TechnicalWorkflowRunnerPort,
@@ -34,15 +57,26 @@ def build_technical_workflow(
         "fusion_compute",
         "verification_compute",
     ):
+        scope_path, activity_label = _ACTIVITY_METADATA[name]
         builder.add_node(
             name,
             RunnableLambda(nodes[name]).with_config(tags=["hide_stream"]),
-            metadata={"agent_id": "technical_analysis"},
+            metadata={
+                "agent_id": "technical_analysis",
+                "workflow_activity_kind": "node",
+                "workflow_scope_path": scope_path,
+                "activity_label": activity_label,
+            },
         )
     builder.add_node(
         "semantic_translate",
         nodes["semantic_translate"],
-        metadata={"agent_id": "technical_analysis"},
+        metadata={
+            "agent_id": "technical_analysis",
+            "workflow_activity_kind": "node",
+            "workflow_scope_path": _ACTIVITY_METADATA["semantic_translate"][0],
+            "activity_label": _ACTIVITY_METADATA["semantic_translate"][1],
+        },
         retry_policy=RetryPolicy(max_attempts=3),
     )
 

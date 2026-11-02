@@ -1,11 +1,11 @@
 import pandas as pd
 
-from src.agents.technical.domain.shared import PriceSeries
-from src.agents.technical.subdomains.features.application.indicator_series_runtime_service import (
+from src.agents.technical.capabilities.features.application.indicator_series_runtime_service import (
     IndicatorSeriesRuntimeRequest,
     IndicatorSeriesRuntimeService,
     _downsample_index,
 )
+from src.agents.technical.domain.shared import PriceSeries
 
 
 def test_downsample_index_noop_when_under_limit() -> None:

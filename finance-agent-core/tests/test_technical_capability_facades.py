@@ -9,7 +9,16 @@ import pytest
     ("module_name", "required_exports"),
     [
         (
-            "src.agents.technical.subdomains.calibration.public",
+            "src.agents.technical.capabilities.alerts.public",
+            {
+                "AlertRuntimeRequest",
+                "AlertRuntimeResult",
+                "AlertRuntimeService",
+                "AlertSignal",
+            },
+        ),
+        (
+            "src.agents.technical.capabilities.calibration.public",
             {
                 "TechnicalDirectionCalibrationConfig",
                 "TechnicalDirectionCalibrationObservation",
@@ -18,7 +27,7 @@ import pytest
             },
         ),
         (
-            "src.agents.technical.subdomains.decision_observability.public",
+            "src.observability.technical.public",
             {
                 "TechnicalPredictionEventRecord",
                 "OutcomeLabelingRequest",
@@ -27,7 +36,7 @@ import pytest
             },
         ),
         (
-            "src.agents.technical.subdomains.features.public",
+            "src.agents.technical.capabilities.features.public",
             {
                 "FeatureRuntimeService",
                 "IIndicatorEngine",
@@ -38,11 +47,19 @@ import pytest
             },
         ),
         (
-            "src.agents.technical.subdomains.interpretation.public",
+            "src.agents.technical.capabilities.interpretation.public",
             {"InterpretationGuardrailOutcome", "apply_interpretation_guardrail"},
         ),
         (
-            "src.agents.technical.subdomains.market_data.public",
+            "src.agents.technical.capabilities.artifacts",
+            {"build_default_technical_artifact_repository"},
+        ),
+        (
+            "src.agents.technical.capabilities.governance",
+            {"TechnicalGovernanceRegistry", "build_technical_governance_registry"},
+        ),
+        (
+            "src.agents.technical.capabilities.market_data.public",
             {
                 "IMarketDataProvider",
                 "MarketDataCacheConfig",
@@ -54,11 +71,15 @@ import pytest
             },
         ),
         (
-            "src.agents.technical.subdomains.regime.public",
+            "src.agents.technical.capabilities.patterns.public",
+            {"PatternRuntimeRequest", "PatternRuntimeResult", "PatternRuntimeService"},
+        ),
+        (
+            "src.agents.technical.capabilities.regime.public",
             {"RegimeFrame", "RegimePack", "RegimeRuntimeService"},
         ),
         (
-            "src.agents.technical.subdomains.signal_fusion.public",
+            "src.agents.technical.capabilities.signal_fusion.public",
             {
                 "FusionRuntimeService",
                 "SemanticTagPolicyInput",
@@ -67,7 +88,7 @@ import pytest
             },
         ),
         (
-            "src.agents.technical.subdomains.verification.public",
+            "src.agents.technical.capabilities.verification.public",
             {
                 "VerificationRuntimeService",
                 "VerificationGateResult",
@@ -90,3 +111,32 @@ def test_technical_capability_facade_exports_stable_contracts(
     assert not any(
         "infrastructure" in name.lower() or "node" in name.lower() for name in exports
     )
+
+
+def test_market_data_package_facade_does_not_expose_provider_adapter() -> None:
+    facade = import_module("src.agents.technical.capabilities.market_data")
+    public = import_module("src.agents.technical.capabilities.market_data.public")
+
+    assert set(facade.__all__) == set(public.__all__)
+    assert all(hasattr(facade, name) for name in facade.__all__)
+    assert not hasattr(facade, "YahooMarketDataProvider")
+
+
+def test_technical_capability_roots_do_not_expose_infrastructure_adapters() -> None:
+    artifacts = import_module("src.agents.technical.capabilities.artifacts")
+    interpretation = import_module("src.agents.technical.capabilities.interpretation")
+
+    assert not hasattr(artifacts, "TechnicalArtifactRepository")
+    assert not hasattr(interpretation, "TechnicalInterpretationProvider")
+
+
+def test_observability_facade_matches_public_contract_without_infrastructure() -> None:
+    facade = import_module("src.observability.technical")
+    public = import_module("src.observability.technical.public")
+
+    assert facade.__all__ == public.__all__
+    assert all(hasattr(facade, name) for name in facade.__all__)
+    assert "TechnicalDecisionObservabilityRepository" in facade.__all__
+    assert not any(name.startswith("SqlAlchemy") for name in facade.__all__)
+    assert not any("Worker" in name for name in facade.__all__)
+    assert not any(name.startswith("build_default") for name in facade.__all__)

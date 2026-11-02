@@ -13,7 +13,7 @@ We will implement a new agent-local technical capability named `decision_observa
 - calibration observation building for the existing Technical calibration domain
 
 This capability will live under:
-- `/Users/denniswong/Desktop/Project/value-investment-agent/finance-agent-core/src/agents/technical/subdomains/decision_observability`
+- `/Users/denniswong/Desktop/Project/value-investment-agent/finance-agent-core/src/observability/technical`
 
 It will not be placed under `calibration`, and it will not be extracted into a cross-agent shared infrastructure in phase 1.
 
@@ -73,7 +73,7 @@ Supporting references:
 ### 1. New subdomain placement
 
 Create a new sibling subdomain:
-- `technical/subdomains/decision_observability`
+- `observability/technical`
 
 This subdomain will own:
 - event registry

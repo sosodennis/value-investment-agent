@@ -13,9 +13,6 @@ from src.agents.fundamental.application.workflow_orchestrator.financial_health_f
 from src.agents.fundamental.application.workflow_orchestrator.model_selection_flow import (
     run_model_selection_flow,
 )
-from src.agents.fundamental.application.workflow_orchestrator.ports import (
-    IFundamentalReportRepo,
-)
 from src.agents.fundamental.application.workflow_orchestrator.services.model_selection_artifact_service import (
     build_and_store_model_selection_artifact,
     enrich_reasoning_with_health_context,
@@ -28,17 +25,21 @@ from src.agents.fundamental.application.workflow_orchestrator.services.valuation
 from src.agents.fundamental.application.workflow_orchestrator.valuation_flow import (
     run_valuation_flow,
 )
-from src.agents.fundamental.subdomains.core_valuation.public import (
+from src.agents.fundamental.capabilities.artifacts_provenance.public import (
+    IFundamentalReportRepo,
+)
+from src.agents.fundamental.capabilities.core_valuation.public import (
     ParamBuildResult,
 )
-from src.agents.fundamental.subdomains.forward_signals.public import (
+from src.agents.fundamental.capabilities.forward_signals.public import (
     ForwardSignalPayload,
 )
-from src.agents.fundamental.subdomains.model_selection.public import (
+from src.agents.fundamental.capabilities.model_selection.public import (
     FundamentalSelectionReport,
 )
+from src.artifacts.public import AgentOutputArtifactPayload
 from src.shared.cross_agent.domain.market_identity import CompanyProfile
-from src.shared.kernel.types import AgentOutputArtifactPayload, JSONObject
+from src.shared.kernel.types import JSONObject
 from src.shared.kernel.workflow_contracts import WorkflowNodeResult
 
 FundamentalNodeResult = WorkflowNodeResult

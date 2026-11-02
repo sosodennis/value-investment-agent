@@ -33,9 +33,12 @@ from src.agents.intent.interface.serializers import (
     serialize_ticker_selection_interrupt_payload,
 )
 from src.agents.intent.interface.ticker_candidate_mapper import to_ticker_candidate
-from src.interface.artifacts.output_schemas import build_artifact_payload
+from src.artifacts.public import (
+    OUTPUT_KIND_INTENT_EXTRACTION,
+    AgentOutputArtifactPayload,
+    build_artifact_payload,
+)
 from src.shared.cross_agent.domain.market_identity import CompanyProfile
-from src.shared.kernel.contracts import OUTPUT_KIND_INTENT_EXTRACTION
 from src.shared.kernel.tools.incident_logging import (
     CONTRACT_KIND_INTERRUPT_PAYLOAD,
     CONTRACT_KIND_WORKFLOW_STATE,
@@ -43,7 +46,7 @@ from src.shared.kernel.tools.incident_logging import (
     log_boundary_event,
 )
 from src.shared.kernel.tools.logger import bounded_text, get_logger, log_event
-from src.shared.kernel.types import AgentOutputArtifactPayload, JSONObject
+from src.shared.kernel.types import JSONObject
 from src.shared.kernel.workflow_contracts import WorkflowNodeResult
 
 logger = get_logger(__name__)
@@ -260,6 +263,7 @@ class IntentOrchestrator:
 
         return {
             "intent_extraction": intent_ctx,
+            "company_profile": profile,
             "messages": [
                 AIMessage(
                     content="",
@@ -747,6 +751,7 @@ class IntentOrchestrator:
             return IntentNodeResult(
                 update={
                     "intent_extraction": resolved_ctx,
+                    "company_profile": profile,
                     "active_activity_id": "deciding",
                     "workflow_activity_updates": {"deciding": "done"},
                 },

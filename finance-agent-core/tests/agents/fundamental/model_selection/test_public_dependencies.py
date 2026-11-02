@@ -1,8 +1,8 @@
-from src.agents.fundamental.subdomains.core_valuation.public import ValuationModel
-from src.agents.fundamental.subdomains.model_selection.domain.model_selection import (
+from src.agents.fundamental.capabilities.core_valuation.public import ValuationModel
+from src.agents.fundamental.capabilities.model_selection.domain.model_selection import (
     select_valuation_model,
 )
-from src.agents.fundamental.subdomains.model_selection.interface.report_projection_service import (
+from src.agents.fundamental.capabilities.model_selection.interface.report_projection_service import (
     project_selection_reports,
 )
 from src.shared.cross_agent.domain.market_identity import CompanyProfile

@@ -19,8 +19,7 @@ verdict_node = debate_nodes["verdict"]
 @pytest.mark.asyncio
 async def test_r1_bull_node_error_resilience():
     state = {
-        "ticker": "AAPL",
-        "intent_extraction": {"resolved_ticker": "AAPL"},
+        "company_profile": {"ticker": "AAPL", "name": "Apple Inc."},
     }
 
     with patch(
@@ -54,8 +53,7 @@ async def test_verdict_provider_errors_propagate_with_retryability(
     error_code: LLMErrorCode, retryable: bool
 ):
     state = {
-        "ticker": "AAPL",
-        "intent_extraction": {"resolved_ticker": "AAPL"},
+        "company_profile": {"ticker": "AAPL", "name": "Apple Inc."},
         "history": [AIMessage(content="Arg1", name="GrowthHunter")],
     }
 
@@ -92,7 +90,7 @@ async def test_moderator_error_message_keeps_its_round_number():
     ):
         command = await r1_moderator_node(
             {
-                "intent_extraction": {"resolved_ticker": "AAPL"},
+                "company_profile": {"ticker": "AAPL", "name": "Apple Inc."},
                 "history": [],
             }
         )

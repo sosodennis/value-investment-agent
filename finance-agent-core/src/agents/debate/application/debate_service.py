@@ -68,9 +68,7 @@ async def extract_debate_facts(
     artifact_context = build_debate_artifact_context(state)
     ticker = artifact_context.ticker
     if ticker is None:
-        raise ValueError(
-            "Missing intent_extraction.resolved_ticker for fact extraction"
-        )
+        raise ValueError("Missing company_profile.ticker for fact extraction")
 
     source_data = await source_reader.load_debate_source_data(
         financial_reports_artifact_id=artifact_context.financial_reports_artifact_id,
@@ -92,7 +90,7 @@ async def extract_debate_facts(
     )
     facts.extend(
         build_valuation_facts(
-            artifact_context.fundamental_valuation_preview,
+            source_data.valuation_preview,
             start_index=len(facts) + 1,
         )
     )
@@ -135,7 +133,7 @@ async def execute_bull_round(
     conversation_context = build_debate_conversation_context(state)
     ticker = conversation_context.ticker
     if ticker is None:
-        raise ValueError("Missing intent_extraction.resolved_ticker for bull agent")
+        raise ValueError("Missing company_profile.ticker for bull agent")
 
     log_llm_config("BULL_AGENT", round_num, llm_route)
     prompt_context = await get_debate_prompt_context_text(
@@ -200,7 +198,7 @@ async def execute_bear_round(
     conversation_context = build_debate_conversation_context(state)
     ticker = conversation_context.ticker
     if ticker is None:
-        raise ValueError("Missing intent_extraction.resolved_ticker for bear agent")
+        raise ValueError("Missing company_profile.ticker for bear agent")
 
     log_llm_config("BEAR_AGENT", round_num, llm_route)
     prompt_context = await get_debate_prompt_context_text(
@@ -265,7 +263,7 @@ async def execute_moderator_round(
     conversation_context = build_debate_conversation_context(state)
     ticker = conversation_context.ticker
     if ticker is None:
-        raise ValueError("Missing intent_extraction.resolved_ticker for moderator")
+        raise ValueError("Missing company_profile.ticker for moderator")
 
     log_llm_config("MODERATOR", round_num, llm_route)
 

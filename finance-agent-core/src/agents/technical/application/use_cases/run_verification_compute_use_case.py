@@ -15,12 +15,7 @@ from src.agents.technical.application.state_updates import (
     build_verification_compute_error_update,
     build_verification_compute_success_update,
 )
-from src.agents.technical.domain.shared import PriceSeries
-from src.agents.technical.interface.serializers import (
-    build_verification_compute_preview,
-    build_verification_report_payload,
-)
-from src.agents.technical.subdomains.features.public import (
+from src.agents.technical.capabilities.features.public import (
     calculate_fd_bollinger,
     calculate_fd_macd,
     calculate_fd_obv,
@@ -30,13 +25,18 @@ from src.agents.technical.subdomains.features.public import (
     compute_z_score,
     serialize_fracdiff_outputs,
 )
-from src.agents.technical.subdomains.verification import (
+from src.agents.technical.capabilities.verification.public import (
     VerificationRuntimeRequest,
     VerificationRuntimeResult,
     VerificationRuntimeService,
     evaluate_verification_baseline,
 )
-from src.interface.artifacts.artifact_data_models import (
+from src.agents.technical.domain.shared import PriceSeries
+from src.agents.technical.interface.serializers import (
+    build_verification_compute_preview,
+    build_verification_report_payload,
+)
+from src.shared.artifacts.artifact_data_models import (
     TechnicalTimeseriesBundleArtifactData,
 )
 from src.shared.kernel.tools.logger import get_logger, log_event

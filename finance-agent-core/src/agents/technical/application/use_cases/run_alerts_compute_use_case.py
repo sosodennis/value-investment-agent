@@ -13,13 +13,13 @@ from src.agents.technical.application.state_updates import (
     build_alerts_compute_error_update,
     build_alerts_compute_success_update,
 )
-from src.agents.technical.interface.serializers import build_alerts_compute_preview
-from src.agents.technical.subdomains.alerts import (
+from src.agents.technical.capabilities.alerts.public import (
     AlertRuntimeRequest,
     AlertRuntimeResult,
     AlertRuntimeService,
 )
-from src.interface.artifacts.artifact_data_models import (
+from src.agents.technical.interface.serializers import build_alerts_compute_preview
+from src.shared.artifacts.artifact_data_models import (
     TechnicalIndicatorSeriesArtifactData,
     TechnicalPatternPackArtifactData,
 )

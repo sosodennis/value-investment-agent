@@ -4,7 +4,7 @@ from src.agents.technical.application.ports import TechnicalSignalExplainerInput
 from src.agents.technical.interface.indicator_explainer_catalog import (
     iter_indicator_explainer_entries,
 )
-from src.interface.artifacts.artifact_data_models import (
+from src.shared.artifacts.artifact_data_models import (
     TechnicalFeatureIndicatorData,
     TechnicalFeaturePackArtifactData,
 )

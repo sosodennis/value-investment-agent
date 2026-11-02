@@ -23,11 +23,12 @@ from src.agents.technical.application.semantic_translate_context_service import 
 from src.agents.technical.application.state_updates import (
     build_semantic_error_update,
 )
-from src.agents.technical.subdomains.signal_fusion import (
+from src.agents.technical.capabilities.signal_fusion.public import (
     SemanticTagPolicyInput,
     SemanticTagPolicyResult,
 )
-from src.interface.artifacts.artifact_data_models import (
+from src.artifacts.public import ArtifactReference, to_artifact_reference_payload
+from src.shared.artifacts.artifact_data_models import (
     TechnicalDirectionScorecardArtifactData,
     TechnicalFusionReportArtifactData,
     TechnicalPatternPackArtifactData,
@@ -157,6 +158,24 @@ async def run_semantic_translate_use_case(
             is_degraded=is_degraded,
             degraded_reasons=degraded_reasons,
         )
+        artifact_raw = ta_update.get("artifact")
+        reference_raw = (
+            artifact_raw.get("reference") if isinstance(artifact_raw, Mapping) else None
+        )
+        artifact_id = (
+            reference_raw.get("artifact_id")
+            if isinstance(reference_raw, Mapping)
+            else None
+        )
+        if isinstance(artifact_id, str) and artifact_id:
+            references_raw = state.get("artifact_references", {})
+            references = (
+                dict(references_raw) if isinstance(references_raw, Mapping) else {}
+            )
+            references["technical_analysis"] = to_artifact_reference_payload(
+                ArtifactReference.model_validate(reference_raw)
+            )
+            success_update.update["artifact_references"] = references
         if is_degraded:
             log_event(
                 logger,

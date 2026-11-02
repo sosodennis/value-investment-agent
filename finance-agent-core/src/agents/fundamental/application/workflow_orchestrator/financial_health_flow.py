@@ -19,15 +19,16 @@ from src.agents.fundamental.application.workflow_orchestrator.state_updates impo
     build_financial_health_success_update,
     build_node_error_update,
 )
-from src.agents.fundamental.subdomains.financial_statements.public import (
+from src.agents.fundamental.capabilities.financial_statements.public import (
     FinancialStatementsPayload,
 )
-from src.agents.fundamental.subdomains.forward_signals.public import (
+from src.agents.fundamental.capabilities.forward_signals.public import (
     ForwardSignalPayload,
     serialize_forward_signals,
 )
+from src.artifacts.public import AgentOutputArtifactPayload
 from src.shared.kernel.tools.logger import get_logger, log_event
-from src.shared.kernel.types import AgentOutputArtifactPayload, JSONObject
+from src.shared.kernel.types import JSONObject
 from src.shared.kernel.workflow_contracts import WorkflowNodeResult
 
 logger = get_logger(__name__)

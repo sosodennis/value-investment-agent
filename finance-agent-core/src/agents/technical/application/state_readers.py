@@ -3,6 +3,8 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 
+from src.shared.cross_agent.domain.market_identity import CompanyProfile
+
 
 @dataclass(frozen=True)
 class TechnicalStateContext:
@@ -49,9 +51,12 @@ def _read_string_list(value: object) -> list[str]:
 
 
 def resolved_ticker_from_state(state: Mapping[str, object]) -> str | None:
-    intent_ctx_raw = state.get("intent_extraction", {})
-    intent_ctx = intent_ctx_raw if isinstance(intent_ctx_raw, Mapping) else {}
-    return _read_non_empty_string(intent_ctx.get("resolved_ticker"))
+    profile_raw = state.get("company_profile")
+    if isinstance(profile_raw, CompanyProfile):
+        return _read_non_empty_string(profile_raw.ticker)
+    if isinstance(profile_raw, Mapping):
+        return _read_non_empty_string(profile_raw.get("ticker"))
+    return None
 
 
 def technical_state_from_state(state: Mapping[str, object]) -> TechnicalStateContext:

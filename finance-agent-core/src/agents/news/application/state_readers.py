@@ -2,12 +2,22 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
+from src.shared.cross_agent.domain.market_identity import CompanyProfile
+
 
 def intent_context_from_state(state: Mapping[str, object]) -> Mapping[str, object]:
-    context = state.get("intent_extraction")
-    if isinstance(context, Mapping):
-        return context
-    return {}
+    profile_raw = state.get("company_profile")
+    if isinstance(profile_raw, CompanyProfile):
+        profile: Mapping[str, object] = profile_raw.model_dump(mode="json")
+    elif isinstance(profile_raw, Mapping):
+        profile = profile_raw
+    else:
+        return {}
+    ticker = profile.get("ticker")
+    return {
+        "resolved_ticker": ticker,
+        "company_profile": profile,
+    }
 
 
 def news_context_from_state(state: Mapping[str, object]) -> Mapping[str, object]:

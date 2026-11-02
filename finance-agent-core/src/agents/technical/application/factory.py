@@ -12,31 +12,31 @@ from src.agents.technical.application.ports import (
     ITechnicalDecisionObservabilityPort,
     ITechnicalInterpretationProvider,
 )
-from src.agents.technical.interface.preview_projection_service import (
-    summarize_ta_for_preview,
-)
-from src.agents.technical.interface.serializers import build_full_report_payload
-from src.agents.technical.subdomains.alerts import AlertRuntimeService
-from src.agents.technical.subdomains.features import (
+from src.agents.technical.capabilities.alerts.public import AlertRuntimeService
+from src.agents.technical.capabilities.features.public import (
     FeatureRuntimeService,
     IndicatorSeriesRuntimeService,
 )
-from src.agents.technical.subdomains.market_data.public import IMarketDataProvider
-from src.agents.technical.subdomains.patterns import PatternRuntimeService
-from src.agents.technical.subdomains.regime import RegimeRuntimeService
-from src.agents.technical.subdomains.signal_fusion import (
+from src.agents.technical.capabilities.market_data.public import IMarketDataProvider
+from src.agents.technical.capabilities.patterns.public import PatternRuntimeService
+from src.agents.technical.capabilities.regime.public import RegimeRuntimeService
+from src.agents.technical.capabilities.signal_fusion.public import (
     FusionRuntimeService,
     SemanticTagPolicyInput,
     SemanticTagPolicyResult,
 )
-from src.agents.technical.subdomains.verification import VerificationRuntimeService
-from src.interface.artifacts.output_schemas import (
-    ArtifactReference,
-    build_artifact_payload,
+from src.agents.technical.capabilities.verification.public import (
+    VerificationRuntimeService,
 )
-from src.shared.kernel.contracts import (
+from src.agents.technical.interface.preview_projection_service import (
+    summarize_ta_for_preview,
+)
+from src.agents.technical.interface.serializers import build_full_report_payload
+from src.artifacts.public import (
     ARTIFACT_KIND_TA_FULL_REPORT,
     OUTPUT_KIND_TECHNICAL_ANALYSIS,
+    ArtifactReference,
+    build_artifact_payload,
 )
 from src.shared.kernel.types import JSONObject
 

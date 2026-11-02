@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from src.agents.technical.subdomains.signal_fusion import (
+from src.agents.technical.capabilities.signal_fusion.public import (
     SemanticConfluenceInput,
     SemanticTagPolicyInput,
     SemanticTagPolicyResult,

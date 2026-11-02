@@ -65,6 +65,36 @@ from src.agents.technical.application.use_cases.run_regime_compute_use_case impo
 from src.agents.technical.application.use_cases.run_semantic_translate_use_case import (
     run_semantic_translate_use_case,
 )
+from src.agents.technical.capabilities.alerts.public import AlertRuntimeService
+from src.agents.technical.capabilities.features.application.indicator_series_runtime_service import (
+    IndicatorSeriesFrameMetadata,
+)
+from src.agents.technical.capabilities.features.domain import (
+    serialize_fracdiff_outputs,
+)
+from src.agents.technical.capabilities.features.public import (
+    FeatureRuntimeResult,
+    FeatureRuntimeService,
+    IndicatorSeriesFrameResult,
+    IndicatorSeriesRuntimeResult,
+)
+from src.agents.technical.capabilities.market_data.application.ports import (
+    MarketDataCacheMetadata,
+    MarketDataOhlcvFetchResult,
+    MarketDataProviderFailure,
+)
+from src.agents.technical.capabilities.regime.application.regime_runtime_service import (
+    RegimeRuntimeResult,
+)
+from src.agents.technical.capabilities.regime.contracts import RegimeFrame, RegimePack
+from src.agents.technical.capabilities.signal_fusion.public import (
+    FusionRuntimeService,
+    SemanticConfluenceResult,
+    SemanticTagPolicyResult,
+    derive_memory_strength,
+    derive_statistical_state,
+    safe_float,
+)
 from src.agents.technical.domain.shared import FeatureFrame, FeaturePack, FeatureSummary
 from src.agents.technical.interface.contracts import (
     AnalystPerspectiveModel,
@@ -74,37 +104,7 @@ from src.agents.technical.interface.contracts import (
     StructureConfluenceSummaryModel,
 )
 from src.agents.technical.interface.serializers import build_full_report_payload
-from src.agents.technical.subdomains.alerts import AlertRuntimeService
-from src.agents.technical.subdomains.features import (
-    FeatureRuntimeResult,
-    FeatureRuntimeService,
-    IndicatorSeriesFrameResult,
-    IndicatorSeriesRuntimeResult,
-)
-from src.agents.technical.subdomains.features.application.indicator_series_runtime_service import (
-    IndicatorSeriesFrameMetadata,
-)
-from src.agents.technical.subdomains.features.domain import (
-    serialize_fracdiff_outputs,
-)
-from src.agents.technical.subdomains.market_data.application.ports import (
-    MarketDataCacheMetadata,
-    MarketDataOhlcvFetchResult,
-    MarketDataProviderFailure,
-)
-from src.agents.technical.subdomains.regime.application.regime_runtime_service import (
-    RegimeRuntimeResult,
-)
-from src.agents.technical.subdomains.regime.contracts import RegimeFrame, RegimePack
-from src.agents.technical.subdomains.signal_fusion import (
-    FusionRuntimeService,
-    SemanticConfluenceResult,
-    SemanticTagPolicyResult,
-    derive_memory_strength,
-    derive_statistical_state,
-    safe_float,
-)
-from src.interface.artifacts.artifact_data_models import (
+from src.shared.artifacts.artifact_data_models import (
     PriceSeriesArtifactData,
     TechnicalAlertPolicyMetadataData,
     TechnicalAlertsArtifactData,
@@ -1433,7 +1433,9 @@ class _RegimeRuntimeSpy:
 @pytest.mark.asyncio
 async def test_run_data_fetch_handles_typed_provider_failure() -> None:
     runtime = _FakeDataFetchRuntime()
-    state: dict[str, object] = {"intent_extraction": {"resolved_ticker": "AAPL"}}
+    state: dict[str, object] = {
+        "company_profile": {"ticker": "AAPL", "name": "Apple Inc."}
+    }
     result = await run_data_fetch_use_case(
         runtime,
         state,
@@ -1448,7 +1450,9 @@ async def test_run_data_fetch_handles_typed_provider_failure() -> None:
 @pytest.mark.asyncio
 async def test_run_data_fetch_marks_partial_bundle_as_degraded() -> None:
     runtime = _FakeDataFetchRuntime()
-    state: dict[str, object] = {"intent_extraction": {"resolved_ticker": "AAPL"}}
+    state: dict[str, object] = {
+        "company_profile": {"ticker": "AAPL", "name": "Apple Inc."}
+    }
 
     with patch(
         "src.agents.technical.application.use_cases.run_data_fetch_use_case.log_event"
@@ -1485,7 +1489,7 @@ async def test_run_fracdiff_compute_uses_resolved_ticker_for_artifact_key_prefix
     runtime = _FracdiffUseCaseRuntime()
     state: dict[str, object] = {
         "ticker": "ROOT_TICKER_SHOULD_NOT_BE_USED",
-        "intent_extraction": {"resolved_ticker": "AAPL"},
+        "company_profile": {"ticker": "AAPL", "name": "Apple Inc."},
         "technical_analysis": {"price_artifact_id": "price-1"},
     }
 
@@ -1503,7 +1507,7 @@ async def test_run_fracdiff_compute_uses_resolved_ticker_for_artifact_key_prefix
 async def test_run_feature_compute_writes_indicator_series_id() -> None:
     runtime = _FeatureComputeRuntimeStub()
     state: dict[str, object] = {
-        "intent_extraction": {"resolved_ticker": "AAPL"},
+        "company_profile": {"ticker": "AAPL", "name": "Apple Inc."},
         "technical_analysis": {"timeseries_bundle_id": "bundle-1"},
     }
 
@@ -1532,7 +1536,7 @@ async def test_run_feature_compute_writes_indicator_series_id() -> None:
 async def test_run_feature_compute_dedupes_degraded_reasons() -> None:
     runtime = _FeatureComputeRuntimeStub()
     state: dict[str, object] = {
-        "intent_extraction": {"resolved_ticker": "AAPL"},
+        "company_profile": {"ticker": "AAPL", "name": "Apple Inc."},
         "technical_analysis": {"timeseries_bundle_id": "bundle-1"},
     }
 
@@ -1673,7 +1677,7 @@ async def test_run_feature_compute_serializes_volatility_regime_quant_features()
 ):
     runtime = _FeatureComputeLongSeriesRuntimeStub()
     state: dict[str, object] = {
-        "intent_extraction": {"resolved_ticker": "AAPL"},
+        "company_profile": {"ticker": "AAPL", "name": "Apple Inc."},
         "technical_analysis": {"timeseries_bundle_id": "bundle-1"},
     }
 
@@ -1704,7 +1708,7 @@ async def test_run_feature_compute_serializes_volatility_regime_quant_features()
 async def test_run_feature_compute_serializes_liquidity_proxy_quant_features() -> None:
     runtime = _FeatureComputeLongSeriesRuntimeStub()
     state: dict[str, object] = {
-        "intent_extraction": {"resolved_ticker": "AAPL"},
+        "company_profile": {"ticker": "AAPL", "name": "Apple Inc."},
         "technical_analysis": {"timeseries_bundle_id": "bundle-1"},
     }
 
@@ -1740,7 +1744,7 @@ async def test_run_feature_compute_serializes_normalized_distance_quant_features
 ):
     runtime = _FeatureComputeLongSeriesRuntimeStub()
     state: dict[str, object] = {
-        "intent_extraction": {"resolved_ticker": "AAPL"},
+        "company_profile": {"ticker": "AAPL", "name": "Apple Inc."},
         "technical_analysis": {"timeseries_bundle_id": "bundle-1"},
     }
 
@@ -1769,7 +1773,7 @@ async def test_run_feature_compute_serializes_cross_timeframe_alignment_quant_fe
 ):
     runtime = _FeatureComputeMultiTimeframeLongSeriesRuntimeStub()
     state: dict[str, object] = {
-        "intent_extraction": {"resolved_ticker": "AAPL"},
+        "company_profile": {"ticker": "AAPL", "name": "Apple Inc."},
         "technical_analysis": {"timeseries_bundle_id": "bundle-1"},
     }
 
@@ -1850,7 +1854,7 @@ async def test_run_alerts_compute_writes_alerts_id() -> None:
     runtime.load_indicator_series = _load_alert_indicator_series_ready  # type: ignore[method-assign]
     runtime.load_pattern_pack = _load_alert_pattern_pack_ready  # type: ignore[method-assign]
     state: dict[str, object] = {
-        "intent_extraction": {"resolved_ticker": "AAPL"},
+        "company_profile": {"ticker": "AAPL", "name": "Apple Inc."},
         "technical_analysis": {
             "indicator_series_id": "series-1",
             "pattern_pack_id": "pattern-1",
@@ -1880,7 +1884,7 @@ async def test_run_alerts_compute_serializes_composite_policy_alert() -> None:
     runtime.load_indicator_series = _load_alert_indicator_series_oversold  # type: ignore[method-assign]
     runtime.load_pattern_pack = _load_alert_pattern_pack_support_confirmed  # type: ignore[method-assign]
     state: dict[str, object] = {
-        "intent_extraction": {"resolved_ticker": "AAPL"},
+        "company_profile": {"ticker": "AAPL", "name": "Apple Inc."},
         "technical_analysis": {
             "indicator_series_id": "series-1",
             "pattern_pack_id": "pattern-1",
@@ -1911,7 +1915,7 @@ async def test_run_alerts_compute_serializes_composite_policy_alert() -> None:
 async def test_run_regime_compute_writes_regime_pack_id() -> None:
     runtime = _RegimeComputeRuntimeStub()
     state: dict[str, object] = {
-        "intent_extraction": {"resolved_ticker": "AAPL"},
+        "company_profile": {"ticker": "AAPL", "name": "Apple Inc."},
         "technical_analysis": {"timeseries_bundle_id": "bundle-1"},
     }
 
@@ -1969,7 +1973,7 @@ async def test_run_regime_compute_prefers_canonical_feature_and_series_inputs() 
     )
     regime_runtime = _RegimeRuntimeSpy()
     state: dict[str, object] = {
-        "intent_extraction": {"resolved_ticker": "AAPL"},
+        "company_profile": {"ticker": "AAPL", "name": "Apple Inc."},
         "technical_analysis": {
             "timeseries_bundle_id": "bundle-1",
             "feature_pack_id": "feature-1",
@@ -2007,7 +2011,7 @@ async def test_run_regime_compute_records_timeseries_fallback_reasons_when_input
 ):
     runtime = _RegimeComputeRuntimeStub()
     state: dict[str, object] = {
-        "intent_extraction": {"resolved_ticker": "AAPL"},
+        "company_profile": {"ticker": "AAPL", "name": "Apple Inc."},
         "technical_analysis": {"timeseries_bundle_id": "bundle-1"},
     }
 
@@ -2068,7 +2072,7 @@ async def test_run_regime_compute_rejects_mismatched_canonical_artifacts() -> No
     )
     regime_runtime = _RegimeRuntimeSpy()
     state: dict[str, object] = {
-        "intent_extraction": {"resolved_ticker": "AAPL"},
+        "company_profile": {"ticker": "AAPL", "name": "Apple Inc."},
         "technical_analysis": {
             "timeseries_bundle_id": "bundle-1",
             "feature_pack_id": "feature-1",
@@ -2114,7 +2118,7 @@ async def test_run_regime_compute_rejects_mismatched_canonical_artifacts() -> No
 async def test_run_fusion_compute_handles_pydantic_payloads() -> None:
     runtime = _FusionComputeRuntimeStub()
     state: dict[str, object] = {
-        "intent_extraction": {"resolved_ticker": "AAPL"},
+        "company_profile": {"ticker": "AAPL", "name": "Apple Inc."},
         "technical_analysis": {
             "feature_pack_id": "feature-1",
             "pattern_pack_id": "pattern-1",
@@ -2409,14 +2413,18 @@ class _FakeSemanticRuntime:
             "kind": "technical_analysis.output",
             "summary": summary,
             "preview": preview,
-            "reference": {"artifact_id": report_id},
+            "reference": {
+                "artifact_id": report_id,
+                "download_url": f"/api/v1/artifacts/{report_id}",
+                "type": "technical_analysis.output",
+            },
         }
 
 
 @pytest.mark.asyncio
 async def test_run_semantic_translate_marks_degraded_when_pipeline_degraded() -> None:
     context_state: dict[str, object] = {
-        "intent_extraction": {"resolved_ticker": "AAPL"},
+        "company_profile": {"ticker": "AAPL", "name": "Apple Inc."},
         "technical_analysis": {"optimal_d": 0.5, "z_score_latest": 1.2},
     }
     pipeline_result = SemanticPipelineResult(
@@ -2490,7 +2498,13 @@ async def test_run_semantic_translate_marks_degraded_when_pipeline_degraded() ->
             "src.agents.technical.application.use_cases.run_semantic_translate_use_case.build_semantic_report_update",
             return_value={
                 "signal": "BULLISH_EXTENSION",
-                "artifact": {"reference": {"artifact_id": "report-1"}},
+                "artifact": {
+                    "reference": {
+                        "artifact_id": "report-1",
+                        "download_url": "/api/v1/artifacts/report-1",
+                        "type": "technical_analysis.output",
+                    }
+                },
             },
         ),
         patch(
@@ -2591,7 +2605,13 @@ async def test_run_semantic_translate_registers_prediction_event_after_report_ar
             "src.agents.technical.application.use_cases.run_semantic_translate_use_case.build_semantic_report_update",
             return_value={
                 "signal": "BULLISH_EXTENSION",
-                "artifact": {"reference": {"artifact_id": "report-1"}},
+                "artifact": {
+                    "reference": {
+                        "artifact_id": "report-1",
+                        "download_url": "/api/v1/artifacts/report-1",
+                        "type": "technical_analysis.output",
+                    }
+                },
             },
         ),
         patch(
@@ -2601,7 +2621,7 @@ async def test_run_semantic_translate_registers_prediction_event_after_report_ar
         result = await run_semantic_translate_use_case(
             runtime,
             {
-                "intent_extraction": {"resolved_ticker": "AAPL"},
+                "company_profile": {"ticker": "AAPL", "name": "Apple Inc."},
                 "technical_analysis": {"confidence_calibrated": 0.71},
             },
             assemble_fn=lambda _payload: pipeline_result.tags_result,
@@ -2628,6 +2648,11 @@ async def test_run_semantic_translate_registers_prediction_event_after_report_ar
         for call in mock_log.call_args_list
     )
     assert result.update["technical_analysis"]["is_degraded"] is False
+    assert result.update["artifact_references"]["technical_analysis"] == {
+        "artifact_id": "report-1",
+        "download_url": "/api/v1/artifacts/report-1",
+        "type": "technical_analysis.output",
+    }
 
 
 @pytest.mark.asyncio
@@ -2700,7 +2725,13 @@ async def test_run_semantic_translate_degrades_when_prediction_event_write_fails
             "src.agents.technical.application.use_cases.run_semantic_translate_use_case.build_semantic_report_update",
             return_value={
                 "signal": "BULLISH_EXTENSION",
-                "artifact": {"reference": {"artifact_id": "report-1"}},
+                "artifact": {
+                    "reference": {
+                        "artifact_id": "report-1",
+                        "download_url": "/api/v1/artifacts/report-1",
+                        "type": "technical_analysis.output",
+                    }
+                },
             },
         ),
         patch(
@@ -2710,7 +2741,7 @@ async def test_run_semantic_translate_degrades_when_prediction_event_write_fails
         result = await run_semantic_translate_use_case(
             runtime,
             {
-                "intent_extraction": {"resolved_ticker": "AAPL"},
+                "company_profile": {"ticker": "AAPL", "name": "Apple Inc."},
                 "technical_analysis": {"confidence_calibrated": 0.71},
             },
             assemble_fn=lambda _payload: pipeline_result.tags_result,

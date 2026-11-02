@@ -13,13 +13,13 @@ from src.agents.technical.application.state_updates import (
     build_regime_compute_error_update,
     build_regime_compute_success_update,
 )
-from src.agents.technical.domain.shared import PriceSeries
-from src.agents.technical.interface.serializers import build_regime_compute_preview
-from src.agents.technical.subdomains.regime import (
+from src.agents.technical.capabilities.regime.public import (
     RegimeRuntimeRequest,
     RegimeRuntimeService,
 )
-from src.interface.artifacts.artifact_data_models import (
+from src.agents.technical.domain.shared import PriceSeries
+from src.agents.technical.interface.serializers import build_regime_compute_preview
+from src.shared.artifacts.artifact_data_models import (
     TechnicalFeaturePackArtifactData,
     TechnicalIndicatorSeriesArtifactData,
     TechnicalRegimePackArtifactData,

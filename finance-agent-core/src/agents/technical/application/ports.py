@@ -13,12 +13,12 @@ from src.agents.technical.application.fracdiff_runtime_contracts import (
     ObvInput,
     StatisticalStrengthInput,
 )
-from src.agents.technical.interface.contracts import AnalystPerspectiveModel
-from src.agents.technical.subdomains.verification import (
+from src.agents.technical.capabilities.verification.public import (
     BacktestResults,
     WalkForwardResult,
 )
-from src.interface.artifacts.artifact_data_models import (
+from src.agents.technical.interface.contracts import AnalystPerspectiveModel
+from src.shared.artifacts.artifact_data_models import (
     PriceSeriesArtifactData,
     TechnicalAlertsArtifactData,
     TechnicalChartArtifactData,

@@ -1,24 +1,23 @@
 from __future__ import annotations
 
-from src.agents.fundamental.subdomains.artifacts_provenance.public import (
+from src.agents.fundamental.capabilities.artifacts_provenance.public import (
     parse_fundamental_artifact_model,
 )
-from src.agents.fundamental.subdomains.financial_statements.public import (
+from src.agents.fundamental.capabilities.financial_statements.public import (
     parse_financial_reports_model,
 )
-from src.agents.fundamental.subdomains.forward_signals.public import (
+from src.agents.fundamental.capabilities.forward_signals.public import (
     ForwardSignalPayload,
     serialize_forward_signals,
 )
-from src.interface.artifacts.output_schemas import (
+from src.artifacts.public import (
+    ARTIFACT_KIND_FINANCIAL_REPORTS,
+    OUTPUT_KIND_FUNDAMENTAL_ANALYSIS,
+    AgentOutputArtifactPayload,
     ArtifactReference,
     build_artifact_payload,
 )
-from src.shared.kernel.contracts import (
-    ARTIFACT_KIND_FINANCIAL_REPORTS,
-    OUTPUT_KIND_FUNDAMENTAL_ANALYSIS,
-)
-from src.shared.kernel.types import AgentOutputArtifactPayload, JSONObject
+from src.shared.kernel.types import JSONObject
 
 
 def normalize_model_selection_reports(

@@ -5,7 +5,8 @@ from datetime import UTC, datetime
 
 import pytest
 
-from src.agents.technical.subdomains.decision_observability import (
+from src.infrastructure.models import TechnicalOutcomePath, TechnicalPredictionEvent
+from src.observability.technical import (
     MonitoringQueryScope,
     TechnicalDecisionObservabilityRuntimeService,
     TechnicalMonitoringReadModelRow,
@@ -15,10 +16,9 @@ from src.agents.technical.subdomains.decision_observability import (
     build_technical_monitoring_row_model,
     compute_monitoring_aggregates,
 )
-from src.agents.technical.subdomains.decision_observability.infrastructure import (
+from src.observability.technical.infrastructure import (
     SqlAlchemyTechnicalDecisionObservabilityRepository,
 )
-from src.infrastructure.models import TechnicalOutcomePath, TechnicalPredictionEvent
 
 
 def _row(
@@ -220,7 +220,7 @@ async def test_repository_fetch_monitoring_rows_returns_joined_truth_rows(
             return None
 
     monkeypatch.setattr(
-        "src.agents.technical.subdomains.decision_observability.infrastructure.repository.AsyncSessionLocal",
+        "src.observability.technical.infrastructure.repository.AsyncSessionLocal",
         lambda: _FakeSessionContext(),
     )
 
@@ -280,7 +280,7 @@ async def test_repository_event_detail_resolves_report_run_scope(
             return None
 
     monkeypatch.setattr(
-        "src.agents.technical.subdomains.decision_observability.infrastructure.repository.AsyncSessionLocal",
+        "src.observability.technical.infrastructure.repository.AsyncSessionLocal",
         lambda: _FakeSessionContext(),
     )
 

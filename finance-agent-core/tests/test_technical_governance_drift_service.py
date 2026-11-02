@@ -1,4 +1,4 @@
-from src.agents.technical.subdomains.governance.domain.drift_service import (
+from src.agents.technical.capabilities.governance.domain.drift_service import (
     compare_registry_payloads,
 )
 

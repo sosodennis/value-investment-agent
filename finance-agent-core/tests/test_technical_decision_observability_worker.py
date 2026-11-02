@@ -8,15 +8,17 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from src.agents.technical.subdomains.decision_observability import (
-    TechnicalDecisionObservabilityRuntimeService,
-    TechnicalOutcomeLabelingWorkerService,
-    build_prediction_event_record,
-)
-from src.agents.technical.subdomains.market_data.application.ports import (
+from src.agents.technical.capabilities.market_data.application.ports import (
     MarketDataCacheMetadata,
     MarketDataOhlcvFetchResult,
     MarketDataProviderFailure,
+)
+from src.observability.technical import (
+    TechnicalDecisionObservabilityRuntimeService,
+    build_prediction_event_record,
+)
+from src.observability.technical.infrastructure import (
+    TechnicalOutcomeLabelingWorkerService,
 )
 
 
@@ -269,11 +271,11 @@ async def test_default_market_data_reader_preserves_labeling_cache_and_retries(
         return MarketDataOhlcvFetchResult(data=pd.DataFrame())
 
     monkeypatch.setattr(
-        "src.agents.technical.subdomains.market_data.infrastructure.yahoo_market_data_provider.fetch_ohlcv",
+        "src.agents.technical.capabilities.market_data.infrastructure.yahoo_market_data_provider.fetch_ohlcv",
         _fake_fetch_ohlcv,
     )
 
-    from src.agents.technical.subdomains.decision_observability import (
+    from src.observability.technical.infrastructure import (
         build_default_technical_outcome_labeling_worker_service,
     )
 

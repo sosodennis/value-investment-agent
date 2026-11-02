@@ -99,6 +99,64 @@ class AnalysisRuntimeService:
         self.heartbeat_seconds = heartbeat_seconds
         self._tasks: dict[str, asyncio.Task[None]] = {}
         self._subscription_gate = asyncio.Lock()
+        self._lifecycle_lock = asyncio.Lock()
+        self._closing = False
+        self._closed = False
+
+    async def aclose(self) -> None:
+        """Cancel active runs and close every runtime-owned resource once."""
+        async with self._lifecycle_lock:
+            if self._closed:
+                return
+            self._closing = True
+            errors: list[Exception] = []
+            active_tasks = tuple(self._tasks.items())
+            for thread_id, task in active_tasks:
+                if task.done():
+                    continue
+                try:
+                    run = await self.repository.get_run(thread_id=thread_id)
+                    if run is not None and run.status in {"queued", "running"}:
+                        async with self._subscription_gate:
+                            events = await self.repository.cancel_run_with_interaction(
+                                thread_id=thread_id,
+                                run_id=run.run_id,
+                                principal_id=run.principal_id,
+                                organization_id=run.organization_id,
+                                now=datetime.now(timezone.utc),
+                            )
+                            for event in events:
+                                await self.hub.publish(event)
+                except Exception as exc:
+                    errors.append(exc)
+                    logger.exception(
+                        "workflow cancellation during runtime shutdown failed",
+                        extra={"thread_id": thread_id},
+                    )
+                finally:
+                    task.cancel()
+
+            task_results = await asyncio.gather(
+                *(task for _, task in active_tasks), return_exceptions=True
+            )
+            errors.extend(
+                result
+                for result in task_results
+                if isinstance(result, Exception)
+                and not isinstance(result, asyncio.CancelledError)
+            )
+            for close_resource in (self.hub.close, self.runner.aclose):
+                try:
+                    await close_resource()
+                except Exception as exc:
+                    errors.append(exc)
+                    logger.exception("analysis runtime resource close failed")
+
+            self._closed = not errors
+            if errors:
+                raise RuntimeError(
+                    f"analysis runtime shutdown had {len(errors)} error(s)"
+                ) from errors[0]
 
     async def _check_owner(self, *, principal_id: str, thread_id: str) -> None:
         if not await self.owner.owns(principal_id=principal_id, thread_id=thread_id):
@@ -114,39 +172,45 @@ class AnalysisRuntimeService:
         organization_id: str = "unscoped",
         membership_id: str = "unscoped",
     ) -> str:
-        if not await self.owner.claim(principal_id=principal_id, thread_id=thread_id):
-            raise ThreadNotFoundError("thread was not found")
-        if thread_id in self._tasks and not self._tasks[thread_id].done():
-            raise RunAlreadyActiveError("thread already has an active run")
-        previous = await self.repository.get_run(thread_id=thread_id)
-        if previous and previous.organization_id != organization_id:
-            raise ThreadNotFoundError("thread was not found")
-        if previous and previous.status in {"running", "waiting", "queued"}:
-            raise RunAlreadyActiveError("thread already has an active run")
-        selected_run_id = run_id or str(uuid.uuid4())
-        now = datetime.now(timezone.utc)
-        await self.repository.set_run(
-            thread_id=thread_id,
-            run_id=selected_run_id,
-            status="queued",
-            now=now,
-            principal_id=principal_id,
-            organization_id=organization_id,
-            membership_id=membership_id,
-            input_data=input_data,
-        )
-        task = asyncio.create_task(
-            self._execute(
+        async with self._lifecycle_lock:
+            if self._closing or self._closed:
+                raise RuntimeError("analysis runtime is shutting down")
+            if not await self.owner.claim(
+                principal_id=principal_id,
+                thread_id=thread_id,
+            ):
+                raise ThreadNotFoundError("thread was not found")
+            if thread_id in self._tasks and not self._tasks[thread_id].done():
+                raise RunAlreadyActiveError("thread already has an active run")
+            previous = await self.repository.get_run(thread_id=thread_id)
+            if previous and previous.organization_id != organization_id:
+                raise ThreadNotFoundError("thread was not found")
+            if previous and previous.status in {"running", "waiting", "queued"}:
+                raise RunAlreadyActiveError("thread already has an active run")
+            selected_run_id = run_id or str(uuid.uuid4())
+            now = datetime.now(timezone.utc)
+            await self.repository.set_run(
+                thread_id=thread_id,
+                run_id=selected_run_id,
+                status="queued",
+                now=now,
                 principal_id=principal_id,
                 organization_id=organization_id,
                 membership_id=membership_id,
-                thread_id=thread_id,
-                run_id=selected_run_id,
                 input_data=input_data,
             )
-        )
-        self._tasks[thread_id] = task
-        return selected_run_id
+            task = asyncio.create_task(
+                self._execute(
+                    principal_id=principal_id,
+                    organization_id=organization_id,
+                    membership_id=membership_id,
+                    thread_id=thread_id,
+                    run_id=selected_run_id,
+                    input_data=input_data,
+                )
+            )
+            self._tasks[thread_id] = task
+            return selected_run_id
 
     async def retry(
         self,
@@ -159,57 +223,62 @@ class AnalysisRuntimeService:
         organization_id: str = "unscoped",
         membership_id: str = "unscoped",
     ) -> RetryOperation:
-        if not idempotency_key.strip():
-            raise RetryNotAvailableError("Idempotency-Key is required")
-        await self._check_owner(principal_id=principal_id, thread_id=thread_id)
-        request_hash = hashlib.sha256(
-            json.dumps(
-                {
-                    "contract_version": "v1",
-                    "thread_id": thread_id,
-                    "source_run_id": source_run_id,
-                    "checkpoint": checkpoint.model_dump(mode="json"),
-                },
-                sort_keys=True,
-                separators=(",", ":"),
-            ).encode("utf-8")
-        ).hexdigest()
-        operation, _ = await self.repository.begin_retry(
-            principal_id=principal_id,
-            organization_id=organization_id,
-            membership_id=membership_id,
-            thread_id=thread_id,
-            source_run_id=source_run_id,
-            checkpoint=checkpoint,
-            idempotency_key=idempotency_key.strip(),
-            request_hash=request_hash,
-            now=datetime.now(timezone.utc),
-        )
-        claimed = await self.repository.claim_retry(
-            operation_id=operation.operation_id,
-            now=datetime.now(timezone.utc),
-            lease_seconds=_RETRY_LEASE_SECONDS,
-        )
-        task = self._tasks.get(thread_id)
-        if claimed is not None and (task is None or task.done()):
-            self._tasks[thread_id] = asyncio.create_task(
-                self._execute(
-                    principal_id=principal_id,
-                    organization_id=claimed.organization_id,
-                    membership_id=claimed.membership_id,
-                    thread_id=thread_id,
-                    run_id=claimed.target_run_id,
-                    input_data={
-                        "retry": {
-                            "operation_id": claimed.operation_id,
-                            "source_run_id": claimed.source_run_id,
-                            "checkpoint": claimed.checkpoint.model_dump(mode="json"),
-                            "attempt": claimed.attempt,
-                        }
+        async with self._lifecycle_lock:
+            if self._closing or self._closed:
+                raise RuntimeError("analysis runtime is shutting down")
+            if not idempotency_key.strip():
+                raise RetryNotAvailableError("Idempotency-Key is required")
+            await self._check_owner(principal_id=principal_id, thread_id=thread_id)
+            request_hash = hashlib.sha256(
+                json.dumps(
+                    {
+                        "contract_version": "v1",
+                        "thread_id": thread_id,
+                        "source_run_id": source_run_id,
+                        "checkpoint": checkpoint.model_dump(mode="json"),
                     },
-                )
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ).encode("utf-8")
+            ).hexdigest()
+            operation, _ = await self.repository.begin_retry(
+                principal_id=principal_id,
+                organization_id=organization_id,
+                membership_id=membership_id,
+                thread_id=thread_id,
+                source_run_id=source_run_id,
+                checkpoint=checkpoint,
+                idempotency_key=idempotency_key.strip(),
+                request_hash=request_hash,
+                now=datetime.now(timezone.utc),
             )
-        return claimed or operation
+            claimed = await self.repository.claim_retry(
+                operation_id=operation.operation_id,
+                now=datetime.now(timezone.utc),
+                lease_seconds=_RETRY_LEASE_SECONDS,
+            )
+            task = self._tasks.get(thread_id)
+            if claimed is not None and (task is None or task.done()):
+                self._tasks[thread_id] = asyncio.create_task(
+                    self._execute(
+                        principal_id=principal_id,
+                        organization_id=claimed.organization_id,
+                        membership_id=claimed.membership_id,
+                        thread_id=thread_id,
+                        run_id=claimed.target_run_id,
+                        input_data={
+                            "retry": {
+                                "operation_id": claimed.operation_id,
+                                "source_run_id": claimed.source_run_id,
+                                "checkpoint": claimed.checkpoint.model_dump(
+                                    mode="json"
+                                ),
+                                "attempt": claimed.attempt,
+                            }
+                        },
+                    )
+                )
+            return claimed or operation
 
     async def resume(
         self,
@@ -220,38 +289,43 @@ class AnalysisRuntimeService:
         organization_id: str = "unscoped",
         membership_id: str = "unscoped",
     ) -> str:
-        await self._check_owner(principal_id=principal_id, thread_id=identity.thread_id)
-        task = self._tasks.get(identity.thread_id)
-        if task and not task.done():
-            raise RunAlreadyActiveError("thread already has an active run")
-        async with self._subscription_gate:
-            claimed = await self.repository.claim_interaction_response(
-                identity=identity,
-                response=response,
-                principal_id=principal_id,
-                organization_id=organization_id,
-                membership_id=membership_id,
-                now=datetime.now(timezone.utc),
+        async with self._lifecycle_lock:
+            if self._closing or self._closed:
+                raise RuntimeError("analysis runtime is shutting down")
+            await self._check_owner(
+                principal_id=principal_id, thread_id=identity.thread_id
             )
-            for event in claimed.events:
-                await self.hub.publish(event)
-        resume_input = {
-            "interrupt_response": response.model_dump(mode="json"),
-            "resuming_activity_id": identity.activity_id,
-            "resuming_scope_path": list(claimed.scope_path),
-            "resuming_attempt": claimed.attempt - 1,
-        }
-        self._tasks[identity.thread_id] = asyncio.create_task(
-            self._execute(
-                principal_id=principal_id,
-                organization_id=claimed.organization_id,
-                membership_id=claimed.membership_id,
-                thread_id=identity.thread_id,
-                run_id=identity.run_id,
-                input_data=resume_input,
+            task = self._tasks.get(identity.thread_id)
+            if task and not task.done():
+                raise RunAlreadyActiveError("thread already has an active run")
+            async with self._subscription_gate:
+                claimed = await self.repository.claim_interaction_response(
+                    identity=identity,
+                    response=response,
+                    principal_id=principal_id,
+                    organization_id=organization_id,
+                    membership_id=membership_id,
+                    now=datetime.now(timezone.utc),
+                )
+                for event in claimed.events:
+                    await self.hub.publish(event)
+            resume_input = {
+                "interrupt_response": response.model_dump(mode="json"),
+                "resuming_activity_id": identity.activity_id,
+                "resuming_scope_path": list(claimed.scope_path),
+                "resuming_attempt": claimed.attempt - 1,
+            }
+            self._tasks[identity.thread_id] = asyncio.create_task(
+                self._execute(
+                    principal_id=principal_id,
+                    organization_id=claimed.organization_id,
+                    membership_id=claimed.membership_id,
+                    thread_id=identity.thread_id,
+                    run_id=identity.run_id,
+                    input_data=resume_input,
+                )
             )
-        )
-        return identity.run_id
+            return identity.run_id
 
     async def recover_pending_resumes(self) -> int:
         """Restart resume commands durably claimed before a process stopped."""
@@ -342,6 +416,7 @@ class AnalysisRuntimeService:
                 raise RunNotFoundError("run was not found")
         if task and not task.done():
             task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
 
     async def snapshot(
         self,

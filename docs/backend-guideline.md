@@ -45,6 +45,61 @@ Keep one stable identifier for each concept. Agent IDs, artifact kinds, output k
 
 Existing public field and route names remain part of their contracts. Use `snake_case` for new JSON fields. When correcting an existing contract, update the backend schema, OpenAPI, generated client types, frontend parser, service clients, fixtures, and tests in one change. This project is pre-release, so remove obsolete aliases after all in-repository callers move.
 
+### Required architecture change procedure
+
+Every backend change that adds or moves code must record these decisions in its issue or pull request before implementation:
+
+1. Name the feature owner and the public contract being changed or introduced.
+2. Identify the package that owns state, policy, I/O, serialization, and composition.
+3. Draw the intended dependency edges and list any cross-slice or cross-capability contract.
+4. Name the side effects, resource lifecycle, failure/degradation behavior, and boundary tests.
+5. State whether the change is a module edit, package split, capability, shared contract, or deployable service, and why.
+
+Use this placement table when deciding where code belongs:
+
+| Code responsibility | Canonical owner | Boundary rule |
+| --- | --- | --- |
+| Graph state, nodes, routing, subgraph construction | Agent `workflow/` | Owns orchestration state; does not construct concrete providers |
+| Use-case sequencing and ports | Agent `application/` | Depends on domain, typed ports, facades, and shared contracts |
+| Deterministic rules, models, calculators, policies | Agent `domain/` or capability domain | No network, database, framework, LangGraph, or LLM imports |
+| Provider/client/repository adapters | Agent `infrastructure/` or capability infrastructure | Implements application ports; owns external I/O and persistence |
+| HTTP/prompt schemas, mapping, serialization | Agent `interface/` | Converts boundary data; does not coordinate use cases |
+| Independently bounded business capability | Agent `capabilities/<name>/` | Requires an owner, stable facade, independent tests, and an acyclic dependency edge |
+| Cross-agent transport or domain-neutral contract | `src/shared/` | Must have more than one real consumer and no feature policy |
+| Root graph, FastAPI router assembly, lifespan wiring | Composition root | May assemble public entrypoints and resources only |
+
+Do not add a layer or package because a file is large. A module may stay together when it has one owner, one main reason to change, and no public boundary. Create a package when its modules share an owner but need an independent import and test seam. Create a capability only when the concept has an independently useful contract or state machine, a stable facade, an owner, and a distinct change or release boundary. If those conditions are not met, keep the code in the owning slice.
+
+The following imports are prohibited for new code:
+
+- Root workflow or API composition into another slice's `application`, `domain`, `workflow`, `interface`, or `infrastructure` implementation.
+- Agent code into another agent's private modules, `src.services`, or private root `src.interface` implementations.
+- Capability code into another capability's implementation file; use its facade or move the shared contract to `src/shared/`.
+- Domain code into clients, providers, repositories, FastAPI, SQLAlchemy, LangGraph, or LLM adapters.
+- New `subdomains/` paths. Existing paths are migration debt and must be re-homed or deleted as part of the owning issue.
+
+For a public or internal contract change, update the owning Pydantic model or protocol, OpenAPI or service schema, generated client types, mappers/serializers, fixtures, and boundary tests in the same change. Version incompatible wire changes; do not add aliases or dual parsers to preserve disposable pre-release data.
+
+The issue and pull request must include the validation evidence for the changed boundary. At minimum run `python3 scripts/architecture_guard.py`, `uv run ruff check src api`, the focused owner tests, and the public-entrypoint fake-adapter graph tests. Add service contract, authorization, persistence, cancellation, replay, or Docker checks when those boundaries change. Record exact commands, exit codes, final commit SHA, skipped checks, and any remaining limitation. A passing architecture guard is necessary but does not prove ownership, contract, or runtime behavior; the owning tests and dependency review are also required.
+
+## Verified final ownership
+
+The final backend tree keeps `api/server.py` as the FastAPI composition root.
+It assembles routers, lifespan resources, and public entrypoints. The root
+workflow in `src/workflow/` composes the five agent entrypoints and shared
+transport contracts. `src/analysis_runtime/` owns graph resources, run
+admission, activity persistence, replay, subscribers, and shutdown cleanup.
+Each agent owns its workflow and application contracts. Fundamental and
+technical capabilities live under their `capabilities/` packages and expose
+facades for cross-capability imports.
+
+The architecture guard scans `finance-agent-core/src` and `finance-agent-core/api`.
+At the verified #252 commit it reports zero forbidden imports, migration-only
+paths, and capability cycles. The generated [architecture dependency report](refactor-map/architecture-dependency-report.md)
+records the observed ownership edges. The generated
+`finance-agent-core/src/agents/ARCHITECTURE_MODULE_ACTIONS.md` report contains
+zero documented findings.
+
 ## 3. Version public and internal contracts
 
 - Put public REST and SSE routes under `/api/v1`. Use lowercase plural resources and `kebab-case` path segments. Use an action subpath only when the operation is a command rather than resource CRUD.
@@ -114,7 +169,7 @@ The transport recommendation is browser to FastAPI. Do not add a Next.js proxy o
 - Persist replayable `content.delta` events as well as lifecycle events. Coalesce high-frequency deltas before persisting them; never advance the durable cursor past an event that replay cannot restore.
 - Return a resume cursor when a run starts or resumes. Attach and reconnect from the last event the client applied.
 - Retain replayable SSE events for 24 hours by default. Make retention, maximum replay count, and maximum replay bytes configurable and bounded. This event-log TTL does not delete run records, LangGraph checkpoints, or final artifacts; each has its own retention policy.
-- Bound each replay response by 200 events or 1 MiB, whichever comes first, unless deployment configuration sets a lower limit. If the cursor predates retained data or exceeds replay limits, return an explicit `replay_gap` result and let the client hydrate `GET /thread/{thread_id}`, which is the snapshot recovery endpoint. The snapshot includes the current cursor and run state. The client then attaches after that cursor; never imply that a truncated replay is complete.
+- Bound each replay response by 200 events or 1 MiB, whichever comes first, unless deployment configuration sets a lower limit. If the cursor predates retained data or exceeds replay limits, return an explicit `replay_gap` result and let the client hydrate `GET /api/v1/threads/{thread_id}`, which is the snapshot recovery endpoint. The snapshot includes the current cursor and run state. The client then attaches after that cursor; never imply that a truncated replay is complete.
 - Subscribe and replay without a gap. Deduplicate events that appear in both paths and test the race between live publication and replay.
 
 ### Ownership, backpressure, and cancellation
@@ -134,9 +189,9 @@ The transport recommendation is browser to FastAPI. Do not add a Next.js proxy o
 - A proxy idle/read timeout limits how long the proxy waits without receiving another upstream byte; it is not the maximum allowed duration of the whole run. Set it longer than the heartbeat interval with operational margin. If traffic passes through NGINX, disable proxy buffering for the SSE route.
 - If traffic uses a Next.js rewrite, send `Cache-Control: no-cache, no-transform` and test the exact deployed path. Do not rely on one header to configure every CDN or ingress product.
 - During local development, validate the direct browser-to-FastAPI path with event IDs, timestamps, heartbeats, terminal events, and a forced disconnect/reconnect. Defer the production ingress, proxy, and CDN smoke test until the deployment path exists; local results do not establish production behavior.
-- Issue [#145](https://github.com/sosodennis/value-investment-agent/issues/145) tracks moving run and stream orchestration out of `api/server.py` as part of the canonical backend reset. Keep that refactor aligned with the event contract instead of making a second SSE abstraction.
+- `src/analysis_runtime/` owns run and stream orchestration. Keep the event contract there and keep `api/server.py` limited to route assembly and lifespan wiring.
 
-The current implementation audit in [Discussion #131](https://github.com/sosodennis/value-investment-agent/discussions/131) supports direct browser-to-FastAPI transport. It also documents the difference between transport behavior, user ownership, durable replay, and multi-worker support. The full-stack reset is tracked by [#143](https://github.com/sosodennis/value-investment-agent/issues/143): backend runtime, ownership, and local replay are owned by [#145](https://github.com/sosodennis/value-investment-agent/issues/145), frontend recovery by [#146](https://github.com/sosodennis/value-investment-agent/issues/146), and shared delivery/final cutover by [#147](https://github.com/sosodennis/value-investment-agent/issues/147).
+The implementation audit in [Discussion #131](https://github.com/sosodennis/value-investment-agent/discussions/131) covers direct browser-to-FastAPI transport, ownership, durable replay, and multi-worker support. The local runtime acceptance for #252 covers startup, shutdown, cancellation, replay, backpressure, and disconnect behavior. Production multi-worker delivery remains outside this local acceptance and requires a separate deployment check.
 
 ## 8. Handle errors and observe behavior safely
 
@@ -161,23 +216,24 @@ Add tests at the boundary that owns the behavior:
 
 Run focused tests first, then the relevant service suite. The backend test command is `uv run pytest` from `finance-agent-core/`. Run Ruff checks for changed Python packages when the project configuration applies.
 
-## 10. Current module alignment snapshot
+## 10. Verified module alignment snapshot
 
-This table records the 2026-10-24 code and issue review. It is an audit snapshot, not a substitute for GitHub issue status. The detailed research is in [Discussion #140](https://github.com/sosodennis/value-investment-agent/discussions/140).
+This table records the final ownership checks for #252. The detailed dependency
+edges are in the [architecture dependency report](refactor-map/architecture-dependency-report.md).
 
 | Feature or module | Action | Target and validation |
 | --- | --- | --- |
-| `api/server.py` and application composition | Refactor | Keep app lifespan and router assembly at the composition root. Move run policy and stream delivery behind owned modules. Track with [#145](https://github.com/sosodennis/value-investment-agent/issues/145). |
-| Agent slices and root workflow | Align | Use public agent entrypoints and shared contracts. Keep the architecture guard and module action report current. |
-| Auth and run ownership | Verify | Enforce the same owner check for REST, artifacts, and SSE attach before reading or registering resources. The backend cutover and ownership checks are part of [#145](https://github.com/sosodennis/value-investment-agent/issues/145). |
+| `api/server.py` and application composition | Verified | Lifespan and router assembly stay at the composition root. Run policy and stream delivery live in `src/analysis_runtime/`. |
+| Agent slices and root workflow | Verified | The root graph uses public agent entrypoints and shared contracts. The architecture guard and module action report are current. |
+| Auth and run ownership | Verified | REST, artifacts, and SSE attach perform the same owner check before reading or registering resources. |
 | LLM Provider facade and service | Align | Separate the agent-facing client, product settings facade, and provider runtime. Keep provider SDK types in its adapter and test service lifecycle and retry ownership. |
 | Model Inference client and service | Align | Bound model concurrency, deadlines, cancellation, and blocking work. Keep domain-specific fallback in the caller that owns the decision. |
 | Search client, settings, and service | Align | Keep provider response types inside provider adapters. Normalize search results before returning them to agents and preserve organization scoping for keys and preferences. |
 | `shared/internal_services` | Keep narrow | Share principal, correlation, deadline, authentication, error, and readiness primitives. Keep every operation schema with its service. |
 | LangGraph checkpoint and runtime projection | Align | Keep graph resume state separate from durable product events and read projections. Define retention for each store. |
 | HTTP and internal-service contracts | Align | Use explicit Pydantic schemas, generated OpenAPI types, stable error codes, UTC timestamps, and operation-specific schema versions. |
-| SSE replay and fan-out | Refactor | Run one API worker per container by default. Complete local replay, snapshot recovery, reconnect, and bounded queues under [#145](https://github.com/sosodennis/value-investment-agent/issues/145). Use PostgreSQL as the durable event source and test shared run state and delivery across workers under [#147](https://github.com/sosodennis/value-investment-agent/issues/147) before claiming horizontal scale. Keep the notification mechanism behind an adapter. |
-| Tests and telemetry | Extend | Cover ownership, contract drift, partial failures, deadlines, redaction, replay, and disconnect behavior at the owning boundary. |
+| SSE replay and fan-out | Verified locally | Run one API worker per container by default. PostgreSQL stores the durable event source, and the notification mechanism stays behind an adapter. Local replay, snapshot recovery, reconnect, bounded queues, cancellation, and disconnect tests pass. |
+| Tests and telemetry | Verified | Ownership, contract drift, partial failures, deadlines, redaction, replay, and disconnect behavior are covered at the owning boundary. |
 
 ## 11. External references
 

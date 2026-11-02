@@ -68,6 +68,18 @@ class Owner:
         return True
 
 
+class BlockingClaimOwner(Owner):
+    def __init__(self) -> None:
+        super().__init__()
+        self.claim_started = asyncio.Event()
+        self.release_claim = asyncio.Event()
+
+    async def claim(self, *, principal_id: str, thread_id: str) -> bool:
+        self.claim_started.set()
+        await self.release_claim.wait()
+        return await super().claim(principal_id=principal_id, thread_id=thread_id)
+
+
 class Runner:
     async def run(self, **kwargs):
         yield Activity(
@@ -80,6 +92,38 @@ class Runner:
             label="Resolve intent",
             attempt=1,
         )
+
+
+class BlockingClosableRunner:
+    def __init__(self) -> None:
+        self.started = asyncio.Event()
+        self.cancelled = asyncio.Event()
+        self.started_after_close = asyncio.Event()
+        self.closed = 0
+
+    async def run(self, **kwargs):
+        if self.closed:
+            self.started_after_close.set()
+            return
+        self.started.set()
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            self.cancelled.set()
+            raise
+        yield Activity(
+            activity_id="workflow.blocking",
+            thread_id=kwargs["thread_id"],
+            run_id=kwargs["run_id"],
+            scope_path=("workflow", "blocking"),
+            kind="node",
+            status="completed",
+            label="Blocking activity",
+            attempt=1,
+        )
+
+    async def aclose(self) -> None:
+        self.closed += 1
 
 
 class OutputRunner:
@@ -532,6 +576,107 @@ async def test_cancel_waiting_run_closes_interaction_and_rejects_late_response()
 
 
 @pytest.mark.asyncio
+async def test_cancel_waits_until_active_runner_has_stopped() -> None:
+    runner = BlockingClosableRunner()
+    service = AnalysisRuntimeService(
+        repository=InMemoryActivityRepository(),
+        owner=Owner(),
+        runner=runner,
+    )
+    run_id = await service.start(
+        principal_id="user", thread_id="thread", input_data={"message": "Apple"}
+    )
+    await asyncio.wait_for(runner.started.wait(), timeout=0.5)
+
+    await service.cancel(principal_id="user", thread_id="thread", run_id=run_id)
+
+    assert runner.cancelled.is_set()
+    assert "thread" not in service._tasks
+    cancelled = await service.snapshot(
+        principal_id="user", thread_id="thread", run_id=run_id
+    )
+    assert cancelled.run_status == "cancelled"
+    await service.aclose()
+    assert runner.closed == 1
+
+
+@pytest.mark.asyncio
+async def test_shutdown_cancels_active_run_and_closes_runtime_resources_once() -> None:
+    runner = BlockingClosableRunner()
+    repository = InMemoryActivityRepository()
+    hub = BoundedNotificationHub(queue_size=8)
+    subscriber = await hub.subscribe(thread_id="thread")
+    service = AnalysisRuntimeService(
+        repository=repository,
+        owner=Owner(),
+        runner=runner,
+        hub=hub,
+    )
+    run_id = await service.start(
+        principal_id="user", thread_id="thread", input_data={"message": "Apple"}
+    )
+    await asyncio.wait_for(runner.started.wait(), timeout=0.5)
+
+    await service.aclose()
+
+    assert runner.cancelled.is_set()
+    assert runner.closed == 1
+    cancelled = await service.snapshot(
+        principal_id="user", thread_id="thread", run_id=run_id
+    )
+    assert cancelled.run_status == "cancelled"
+    cancellation_event = await asyncio.wait_for(subscriber.receive(), timeout=0.5)
+    assert isinstance(cancellation_event, ActivityEvent)
+    assert cancellation_event.payload.status == "cancelled"
+    assert await asyncio.wait_for(subscriber.receive(), timeout=0.5) is None
+    await service.aclose()
+    assert runner.closed == 1
+    with pytest.raises(RuntimeError, match="shutting down"):
+        await service.start(
+            principal_id="user",
+            thread_id="other-thread",
+            input_data={"message": "Microsoft"},
+        )
+
+
+@pytest.mark.asyncio
+async def test_shutdown_waits_for_inflight_start_before_closing_runtime() -> None:
+    owner = BlockingClaimOwner()
+    repository = InMemoryActivityRepository()
+    runner = BlockingClosableRunner()
+    service = AnalysisRuntimeService(
+        repository=repository,
+        owner=owner,
+        runner=runner,
+    )
+    start_task = asyncio.create_task(
+        service.start(
+            principal_id="user",
+            thread_id="thread",
+            input_data={"message": "Apple"},
+        )
+    )
+    await asyncio.wait_for(owner.claim_started.wait(), timeout=0.5)
+    close_task = asyncio.create_task(service.aclose())
+
+    try:
+        with pytest.raises(asyncio.TimeoutError):
+            await asyncio.wait_for(asyncio.shield(close_task), timeout=0.01)
+    finally:
+        owner.release_claim.set()
+
+    run_id = await start_task
+    await close_task
+    run = await repository.get_run(thread_id="thread")
+    assert run is not None and run.run_id == run_id
+    assert run.status == "cancelled"
+    assert runner.closed == 1
+    assert not runner.started_after_close.is_set()
+    task = service._tasks.get("thread")
+    assert task is None or task.done()
+
+
+@pytest.mark.asyncio
 async def test_claimed_resume_recovers_after_runtime_restart() -> None:
     repository = InMemoryActivityRepository()
     initial_runner = InterruptingRunner()
@@ -949,6 +1094,19 @@ async def test_slow_subscriber_is_bounded() -> None:
     await hub.publish(event)
     await hub.publish(event.model_copy(update={"event_id": "evt-2", "seq_id": 2}))
     assert await subscriber.receive() is None
+    assert subscriber.overloaded
+
+
+@pytest.mark.asyncio
+async def test_hub_close_wakes_subscriber_even_when_its_queue_is_full() -> None:
+    hub = BoundedNotificationHub(queue_size=1)
+    subscriber = await hub.subscribe(thread_id="thread")
+    await hub.publish(activity_event(thread_id="thread", seq_id=1, event_id="evt"))
+
+    await hub.close()
+
+    assert await subscriber.receive() is None
+    assert not subscriber.overloaded
 
 
 @pytest.mark.asyncio

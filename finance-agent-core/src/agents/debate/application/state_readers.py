@@ -4,29 +4,19 @@ from collections.abc import Mapping
 
 from langchain_core.messages import AIMessage, BaseMessage
 
+from src.shared.cross_agent.domain.market_identity import CompanyProfile
+
 
 def resolved_ticker_from_state(state: Mapping[str, object]) -> str | None:
-    intent = state.get("intent_extraction", {})
-    if not isinstance(intent, Mapping):
-        return None
-    ticker = intent.get("resolved_ticker")
-    if not isinstance(ticker, str):
-        return None
-    ticker = ticker.strip()
-    return ticker or None
-
-
-def artifact_ref_id_from_context(ctx: Mapping[str, object]) -> str | None:
-    artifact = ctx.get("artifact")
-    if not isinstance(artifact, Mapping):
-        return None
-    reference = artifact.get("reference")
-    if not isinstance(reference, Mapping):
-        return None
-    artifact_id = reference.get("artifact_id")
-    if not isinstance(artifact_id, str):
-        return None
-    return artifact_id
+    profile = state.get("company_profile")
+    if isinstance(profile, CompanyProfile):
+        ticker = profile.ticker.strip()
+        return ticker or None
+    if isinstance(profile, Mapping):
+        ticker = profile.get("ticker")
+        if isinstance(ticker, str) and ticker.strip():
+            return ticker.strip()
+    return None
 
 
 def history_from_state(state: Mapping[str, object]) -> list[BaseMessage]:

@@ -3,7 +3,7 @@
 - [ ] Explain why this change is needed.
 
 ## Scope
-- [ ] This PR follows the backend guideline: `finance-agent-core/docs/development_guidelines.md`.
+- [ ] This PR follows the backend guideline: `docs/backend-guideline.md`.
 - [ ] Any out-of-scope changes are explicitly listed.
 
 ## Architecture / Contracts
@@ -30,7 +30,7 @@
 - [ ] No Pydantic model objects are stored directly in workflow state.
 
 ## Provenance Imports
-- [ ] `ComputedProvenance`, `ManualProvenance`, `XBRLProvenance`, `TraceableField` are imported from `src/common/traceable.py`.
+- [ ] `ComputedProvenance`, `ManualProvenance`, `XBRLProvenance`, `TraceableField` are imported from `src/shared/artifacts/traceable.py`.
 
 ## Validation
 - [ ] Lint passed (`uv run ruff check ...`).

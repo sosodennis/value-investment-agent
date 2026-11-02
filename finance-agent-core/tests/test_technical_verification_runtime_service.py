@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 import pandas as pd
 
-from src.agents.technical.subdomains.verification import (
+from src.agents.technical.capabilities.verification.public import (
     BacktestResult,
     VerificationRuntimeRequest,
     VerificationRuntimeService,

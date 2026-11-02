@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from src.agents.fundamental.subdomains.market_data.domain.consensus_anchor_aggregator import (
+from src.agents.fundamental.capabilities.market_data.domain.consensus_anchor_aggregator import (
     FREE_CONSENSUS_AGGREGATE_SOURCE,
     build_target_consensus_anchor_datums,
 )
-from src.agents.fundamental.subdomains.market_data.domain.market_datum import (
+from src.agents.fundamental.capabilities.market_data.domain.market_datum import (
     MarketDatum,
 )
 

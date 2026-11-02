@@ -14,12 +14,10 @@ from fastapi.responses import JSONResponse
 
 from src.analysis_runtime.application.ports import OwnerPort
 from src.analysis_runtime.application.runtime_service import AnalysisRuntimeService
-from src.analysis_runtime.infrastructure import (
-    BoundedNotificationHub,
-    LangGraphRunner,
-    SqlAlchemyActivityRepository,
-)
+from src.analysis_runtime.application.wiring import build_analysis_runtime_service
+from src.analysis_runtime.infrastructure import SqlAlchemyActivityRepository
 from src.analysis_runtime.interface.routes import router as analysis_runtime_router
+from src.artifacts.entrypoint import router as artifact_router
 from src.audit.entrypoint import audit_router
 from src.audit.interface.middleware import CorrelationIdMiddleware
 from src.auth.entrypoint import (
@@ -37,7 +35,6 @@ from src.dashboard.infrastructure import (
 )
 from src.dashboard.routes import router as dashboard_router
 from src.infrastructure.migrations import assert_migrations_complete
-from src.interface.artifacts.routes import router as artifact_router
 from src.interface.origins import frontend_origins
 from src.llm_provider.entrypoint import (
     close_llm_provider,
@@ -50,7 +47,6 @@ from src.observability.routes import router as observability_router
 from src.search_settings import search_settings_router
 from src.search_settings.composition.routes import close_search_service
 from src.shared.kernel.rate_limit import close_rate_limiter
-from src.workflow.graph import get_graph
 
 
 class OwnedThreadPort(OwnerPort):
@@ -71,33 +67,57 @@ def _cors_origins() -> list[str]:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    await assert_migrations_complete()
-    graph = await get_graph()
-    runtime = AnalysisRuntimeService(
-        repository=SqlAlchemyActivityRepository(),
-        owner=OwnedThreadPort(),
-        runner=LangGraphRunner(graph),
-        hub=BoundedNotificationHub(),
-    )
-    app.state.analysis_runtime = runtime
-    await runtime.recover_pending_resumes()
-    await runtime.recover_pending_retries()
-    app.state.market_movers_service = MarketMoversService(YahooMarketMoversProvider())
-    app.state.readiness_provider = HttpReadinessProvider()
     notification_stop = asyncio.Event()
-    notification_worker_task = asyncio.create_task(
-        get_notification_worker().serve(stop_event=notification_stop)
-    )
-    app.state.notification_worker_task = notification_worker_task
+    runtime: AnalysisRuntimeService | None = None
+    notification_worker_task: asyncio.Task[None] | None = None
     try:
+        await assert_migrations_complete()
+        runtime = await build_analysis_runtime_service(
+            repository=SqlAlchemyActivityRepository(),
+            owner=OwnedThreadPort(),
+        )
+        app.state.analysis_runtime = runtime
+        await runtime.recover_pending_resumes()
+        await runtime.recover_pending_retries()
+        app.state.market_movers_service = MarketMoversService(
+            YahooMarketMoversProvider()
+        )
+        app.state.readiness_provider = HttpReadinessProvider()
+        notification_worker_task = asyncio.create_task(
+            get_notification_worker().serve(stop_event=notification_stop)
+        )
+        app.state.notification_worker_task = notification_worker_task
         yield
     finally:
         notification_stop.set()
-        await notification_worker_task
-        await close_search_service()
-        await close_llm_provider()
-        await close_model_inference()
-        await close_rate_limiter()
+        cleanup_actions = []
+        if notification_worker_task is not None:
+            cleanup_actions.append(notification_worker_task)
+        if runtime is not None:
+            cleanup_actions.append(runtime)
+        cleanup_errors: list[Exception] = []
+        for resource in cleanup_actions:
+            try:
+                if isinstance(resource, asyncio.Task):
+                    await resource
+                else:
+                    await resource.aclose()
+            except Exception as exc:
+                cleanup_errors.append(exc)
+        for close_service in (
+            close_search_service,
+            close_llm_provider,
+            close_model_inference,
+            close_rate_limiter,
+        ):
+            try:
+                await close_service()
+            except Exception as exc:
+                cleanup_errors.append(exc)
+        if cleanup_errors:
+            raise RuntimeError(
+                f"application shutdown had {len(cleanup_errors)} error(s)"
+            ) from cleanup_errors[0]
 
 
 app = FastAPI(

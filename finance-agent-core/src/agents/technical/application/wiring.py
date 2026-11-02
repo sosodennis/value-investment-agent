@@ -6,32 +6,34 @@ from src.agents.technical.application.factory import (
     build_technical_orchestrator,
     build_technical_workflow_runner,
 )
-from src.agents.technical.subdomains.alerts import AlertRuntimeService
-from src.agents.technical.subdomains.artifacts import (
+from src.agents.technical.capabilities.alerts.public import AlertRuntimeService
+from src.agents.technical.capabilities.artifacts.public import (
     build_default_technical_artifact_repository,
 )
-from src.agents.technical.subdomains.decision_observability import (
-    build_default_technical_decision_observability_runtime_service,
-)
-from src.agents.technical.subdomains.features.public import (
+from src.agents.technical.capabilities.features.public import (
     FeatureRuntimeService,
     IndicatorSeriesRuntimeService,
     PandasTaIndicatorEngine,
 )
-from src.agents.technical.subdomains.interpretation import (
-    TechnicalInterpretationProvider,
+from src.agents.technical.capabilities.interpretation.public import (
+    build_default_technical_interpretation_provider,
 )
-from src.agents.technical.subdomains.market_data.public import (
+from src.agents.technical.capabilities.market_data.public import (
     build_default_market_data_provider,
 )
-from src.agents.technical.subdomains.patterns import PatternRuntimeService
-from src.agents.technical.subdomains.regime import RegimeRuntimeService
-from src.agents.technical.subdomains.signal_fusion import (
+from src.agents.technical.capabilities.patterns.public import PatternRuntimeService
+from src.agents.technical.capabilities.regime.public import RegimeRuntimeService
+from src.agents.technical.capabilities.signal_fusion.public import (
     FusionRuntimeService,
     assemble_semantic_tags,
 )
-from src.agents.technical.subdomains.verification import VerificationRuntimeService
+from src.agents.technical.capabilities.verification.public import (
+    VerificationRuntimeService,
+)
 from src.llm_provider.entrypoint import get_default_model_route, get_llm_provider
+from src.observability.technical.application.wiring import (
+    build_default_technical_decision_observability_runtime_service,
+)
 
 
 def _assemble_semantic_tags_default(*args, **kwargs):
@@ -48,7 +50,7 @@ def build_default_technical_workflow_runner() -> TechnicalWorkflowRunner:
         decision_observability=decision_observability,
     )
     market_data_provider = build_default_market_data_provider()
-    interpretation_provider = TechnicalInterpretationProvider(
+    interpretation_provider = build_default_technical_interpretation_provider(
         llm_provider=get_llm_provider(),
         llm_route=get_default_model_route(),
     )

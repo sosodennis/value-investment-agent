@@ -6,6 +6,7 @@ from types import ModuleType
 FACADE_EXPORTS: dict[str, set[str]] = {
     "artifacts_provenance": {
         "FundamentalArtifactModel",
+        "IFundamentalReportRepo",
         "fundamental_artifact_repository",
         "parse_fundamental_artifact_model",
     },
@@ -89,7 +90,7 @@ FACADE_EXPORTS: dict[str, set[str]] = {
 
 
 def _load_facade(name: str) -> ModuleType:
-    return import_module(f"src.agents.fundamental.subdomains.{name}.public")
+    return import_module(f"src.agents.fundamental.capabilities.{name}.public")
 
 
 def test_fundamental_public_facades_export_stable_contracts_only() -> None:

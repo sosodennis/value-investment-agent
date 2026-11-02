@@ -7,20 +7,20 @@ from pydantic import BaseModel
 
 from src.agents.news.application.ports import ArtifactNotFoundError
 from src.agents.news.interface.contracts import NewsArtifactModel
-from src.interface.artifacts.artifact_data_models import (
-    NewsArticleArtifactData,
-    NewsItemsListArtifactData,
-    NewsSelectionArtifactData,
-    SearchResultsArtifactData,
-)
-from src.services.artifact_manager import artifact_manager
-from src.shared.cross_agent.data.typed_artifact_port import TypedArtifactPort
-from src.shared.kernel.contracts import (
+from src.artifacts.public import (
     ARTIFACT_KIND_NEWS_ANALYSIS_REPORT,
     ARTIFACT_KIND_NEWS_ARTICLE,
     ARTIFACT_KIND_NEWS_ITEMS_LIST,
     ARTIFACT_KIND_NEWS_SELECTION,
     ARTIFACT_KIND_SEARCH_RESULTS,
+    TypedArtifactPort,
+    build_typed_artifact_port,
+)
+from src.shared.artifacts.artifact_data_models import (
+    NewsArticleArtifactData,
+    NewsItemsListArtifactData,
+    NewsSelectionArtifactData,
+    SearchResultsArtifactData,
 )
 from src.shared.kernel.types import JSONObject
 
@@ -251,28 +251,23 @@ class NewsArtifactRepository:
 
 def build_default_news_artifact_repository() -> NewsArtifactRepository:
     return NewsArtifactRepository(
-        search_results_port=TypedArtifactPort(
-            manager=artifact_manager,
+        search_results_port=build_typed_artifact_port(
             kind=ARTIFACT_KIND_SEARCH_RESULTS,
             model=SearchResultsArtifactData,
         ),
-        news_selection_port=TypedArtifactPort(
-            manager=artifact_manager,
+        news_selection_port=build_typed_artifact_port(
             kind=ARTIFACT_KIND_NEWS_SELECTION,
             model=NewsSelectionArtifactData,
         ),
-        news_article_port=TypedArtifactPort(
-            manager=artifact_manager,
+        news_article_port=build_typed_artifact_port(
             kind=ARTIFACT_KIND_NEWS_ARTICLE,
             model=NewsArticleArtifactData,
         ),
-        news_items_port=TypedArtifactPort(
-            manager=artifact_manager,
+        news_items_port=build_typed_artifact_port(
             kind=ARTIFACT_KIND_NEWS_ITEMS_LIST,
             model=NewsItemsListArtifactData,
         ),
-        news_report_port=TypedArtifactPort(
-            manager=artifact_manager,
+        news_report_port=build_typed_artifact_port(
             kind=ARTIFACT_KIND_NEWS_ANALYSIS_REPORT,
             model=NewsArtifactModel,
         ),

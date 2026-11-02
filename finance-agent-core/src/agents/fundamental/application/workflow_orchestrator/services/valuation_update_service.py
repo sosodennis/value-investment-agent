@@ -9,7 +9,8 @@ from src.agents.fundamental.application.workflow_orchestrator.context_mapper_ser
 from src.agents.fundamental.application.workflow_orchestrator.dto import (
     FundamentalAppContextDTO,
 )
-from src.shared.kernel.types import AgentOutputArtifactPayload, JSONObject
+from src.artifacts.public import AgentOutputArtifactPayload
+from src.shared.kernel.types import JSONObject
 
 from .valuation_assumption_breakdown_service import build_assumption_breakdown
 from .valuation_data_freshness_service import build_data_freshness

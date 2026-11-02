@@ -53,9 +53,9 @@ Technical calibration is primarily a score-to-confidence style calibration.
 
 Current local implementation:
 
-- [`technical_direction_calibration_service.py`](../../../finance-agent-core/src/agents/technical/subdomains/calibration/domain/policies/technical_direction_calibration_service.py)
+- [`technical_direction_calibration_service.py`](../../../finance-agent-core/src/agents/technical/capabilities/calibration/domain/policies/technical_direction_calibration_service.py)
 - [`run_fusion_compute_use_case.py`](../../../finance-agent-core/src/agents/technical/application/use_cases/run_fusion_compute_use_case.py)
-- [`fitting_service.py`](../../../finance-agent-core/src/agents/technical/subdomains/calibration/domain/fitting_service.py)
+- [`fitting_service.py`](../../../finance-agent-core/src/agents/technical/capabilities/calibration/domain/fitting_service.py)
 
 What it tries to answer:
 
@@ -67,9 +67,9 @@ Fundamental calibration is primarily an impact or parameter-adjustment calibrati
 
 Current local implementation:
 
-- [`forward_signal_calibration_service.py`](../../../finance-agent-core/src/agents/fundamental/subdomains/forward_signals/domain/policies/forward_signal_calibration_service.py)
-- [`forward_signal_adjustment_service.py`](../../../finance-agent-core/src/agents/fundamental/subdomains/core_valuation/domain/parameterization/forward_signal_adjustment_service.py)
-- [`dataset_builder_service.py`](../../../finance-agent-core/src/agents/fundamental/subdomains/forward_signals/domain/calibration/dataset_builder_service.py)
+- [`forward_signal_calibration_service.py`](../../../finance-agent-core/src/agents/fundamental/capabilities/forward_signals/domain/policies/forward_signal_calibration_service.py)
+- [`forward_signal_adjustment_service.py`](../../../finance-agent-core/src/agents/fundamental/capabilities/core_valuation/domain/parameterization/forward_signal_adjustment_service.py)
+- [`dataset_builder_service.py`](../../../finance-agent-core/src/agents/fundamental/capabilities/forward_signals/domain/calibration/dataset_builder_service.py)
 
 What it tries to answer:
 

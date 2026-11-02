@@ -87,7 +87,7 @@ def _probe(workload: str) -> dict[str, object]:
         module = cast(
             WarmupModule,
             import_module(
-                "src.agents.fundamental.subdomains.forward_signals.infrastructure.sec_xbrl"
+                "src.agents.fundamental.capabilities.forward_signals.infrastructure.sec_xbrl"
             ),
         )
         started = time.perf_counter()
@@ -102,7 +102,7 @@ def _probe(workload: str) -> dict[str, object]:
         module = cast(
             DenseModule,
             import_module(
-                "src.agents.fundamental.subdomains.forward_signals.infrastructure.sec_xbrl.retrieval.hybrid_retriever_dense_service"
+                "src.agents.fundamental.capabilities.forward_signals.infrastructure.sec_xbrl.retrieval.hybrid_retriever_dense_service"
             ),
         )
         retriever = module._DenseRetriever()
@@ -120,7 +120,7 @@ def _probe(workload: str) -> dict[str, object]:
         module = cast(
             WarmupModule,
             import_module(
-                "src.agents.fundamental.subdomains.forward_signals.infrastructure.sec_xbrl"
+                "src.agents.fundamental.capabilities.forward_signals.infrastructure.sec_xbrl"
             ),
         )
         started = time.perf_counter()

@@ -5,8 +5,8 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-import src.agents.technical.subdomains.market_data.public as market_data_public
-from src.agents.technical.subdomains.market_data.public import (
+import src.agents.technical.capabilities.market_data.public as market_data_public
+from src.agents.technical.capabilities.market_data.public import (
     IMarketDataProvider,
     MarketDataCacheConfig,
     MarketDataOhlcvFetchResult,
@@ -44,7 +44,7 @@ def test_default_factory_preserves_default_retry_and_cache_options(
         return MarketDataOhlcvFetchResult(data=None)
 
     monkeypatch.setattr(
-        "src.agents.technical.subdomains.market_data.infrastructure.yahoo_market_data_provider.fetch_ohlcv",
+        "src.agents.technical.capabilities.market_data.infrastructure.yahoo_market_data_provider.fetch_ohlcv",
         fake_fetch_ohlcv,
     )
 
@@ -101,11 +101,11 @@ def test_public_factory_applies_retry_policy_and_cache_namespace(
         return FakeTicker()
 
     monkeypatch.setattr(
-        "src.agents.technical.subdomains.market_data.infrastructure.yahoo_ohlcv_provider.yf.Ticker",
+        "src.agents.technical.capabilities.market_data.infrastructure.yahoo_ohlcv_provider.yf.Ticker",
         fake_ticker,
     )
     monkeypatch.setattr(
-        "src.agents.technical.subdomains.market_data.infrastructure.yahoo_ohlcv_provider.time.sleep",
+        "src.agents.technical.capabilities.market_data.infrastructure.yahoo_ohlcv_provider.time.sleep",
         delays.append,
     )
 

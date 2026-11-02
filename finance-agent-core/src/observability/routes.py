@@ -5,20 +5,22 @@ from functools import lru_cache
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from src.agents.technical.subdomains.decision_observability import (
+from src.auth.entrypoint import Principal, require_current_user
+from src.observability.technical.application.wiring import (
+    build_default_technical_decision_observability_runtime_service,
+)
+from src.observability.technical.public import (
     TechnicalCalibrationObservationBuildResultModel,
     TechnicalDecisionObservabilityRuntimeService,
     TechnicalMonitoringAggregateModel,
     TechnicalMonitoringEventDetailModel,
     TechnicalMonitoringRowModel,
-    build_default_technical_decision_observability_runtime_service,
     build_monitoring_query_scope,
     build_technical_calibration_observation_build_result_model,
     build_technical_monitoring_aggregate_model,
     build_technical_monitoring_event_detail_model,
     build_technical_monitoring_row_model,
 )
-from src.auth.entrypoint import Principal, require_current_user
 
 router = APIRouter(prefix="/api/v1/observability", tags=["Observability"])
 

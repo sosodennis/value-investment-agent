@@ -1,19 +1,15 @@
-"""
-Isolated state class for Debate subgraph.
-Shared workflow_activity_statuses with parent.
-"""
+"""State private to the debate subgraph plus shared root transport fields."""
 
-from typing import Annotated, NotRequired
+from typing import Annotated
 
 from langgraph.graph import add_messages
 from pydantic import BaseModel, ConfigDict, Field
 from typing_extensions import TypedDict
 
-IntentExtractionContext = dict[str, object]
+from src.artifacts.public import ArtifactReferencePayload
+from src.shared.cross_agent.domain.market_identity import CompanyProfile
+
 DebateContext = dict[str, object]
-FundamentalAnalysisContext = dict[str, object]
-FinancialNewsContext = dict[str, object]
-TechnicalAnalysisContext = dict[str, object]
 
 
 def merge_dict(left: dict[str, object], right: dict[str, object]) -> dict[str, object]:
@@ -31,18 +27,19 @@ def append_logs(
 
 
 class DebateInput(BaseModel):
-    """
-    Input schema for debate subgraph.
-    """
+    """Inputs shared with the root graph; debate state remains private."""
 
     model_config = ConfigDict(extra="ignore")
 
-    ticker: str | None = None
-    intent_extraction: IntentExtractionContext = Field(default_factory=dict)
-    debate: DebateContext = Field(default_factory=dict)
-    fundamental_analysis: FundamentalAnalysisContext = Field(default_factory=dict)
-    financial_news_research: FinancialNewsContext = Field(default_factory=dict)
-    technical_analysis: TechnicalAnalysisContext = Field(default_factory=dict)
+    company_profile: CompanyProfile | None = None
+    artifact_references: dict[str, ArtifactReferencePayload] = Field(
+        default_factory=dict
+    )
+    messages: list[object] = Field(default_factory=list)
+    workflow_activity_statuses: dict[str, str] = Field(default_factory=dict)
+    workflow_activity_updates: dict[str, str] = Field(default_factory=dict)
+    active_activity_id: str | None = None
+    error_logs: list[dict[str, object]] = Field(default_factory=list)
 
 
 class DebateOutput(BaseModel):
@@ -53,6 +50,10 @@ class DebateOutput(BaseModel):
     debate: DebateContext
     model_type: str | None = None
     messages: list[object] = Field(default_factory=list)
+    company_profile: CompanyProfile | None = None
+    artifact_references: dict[str, ArtifactReferencePayload] = Field(
+        default_factory=dict
+    )
     workflow_activity_statuses: dict[str, str] = Field(default_factory=dict)
     error_logs: list[dict] = Field(default_factory=list)
 
@@ -63,12 +64,9 @@ class DebateState(TypedDict):
     Converted to TypedDict per Engineering Charter v3.1.
     """
 
-    # --- From Input ---
-    ticker: NotRequired[str | None]
-    intent_extraction: NotRequired[IntentExtractionContext]
-    fundamental_analysis: NotRequired[FundamentalAnalysisContext]
-    financial_news_research: NotRequired[FinancialNewsContext]
-    technical_analysis: NotRequired[TechnicalAnalysisContext]
+    # --- Shared root transport ---
+    company_profile: Annotated[CompanyProfile | None, last_value]
+    artifact_references: Annotated[dict[str, ArtifactReferencePayload], merge_dict]
 
     # --- Core State (Reducers applied) ---
     # Use Annotated with reducer to handle concurrent updates from Bull & Bear in Round 1

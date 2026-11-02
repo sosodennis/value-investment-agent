@@ -15,23 +15,24 @@ from src.agents.fundamental.application.workflow_orchestrator.services.valuation
     INTERNAL_REPLAY_MARKET_SNAPSHOT_KEY,
     VALUATION_REPLAY_SCHEMA_VERSION,
 )
-from src.agents.fundamental.subdomains.core_valuation.domain.parameterization.contracts import (
+from src.agents.fundamental.capabilities.core_valuation.domain.parameterization.contracts import (
     ParamBuildResult,
 )
-from src.agents.fundamental.subdomains.financial_statements.interface.parsers import (
+from src.agents.fundamental.capabilities.financial_statements.interface.parsers import (
     parse_financial_statements_payload,
 )
-from src.agents.fundamental.subdomains.forward_signals.interface.contracts import (
+from src.agents.fundamental.capabilities.forward_signals.interface.contracts import (
     ForwardSignalEvidence,
     ForwardSignalPayload,
 )
-from src.agents.fundamental.subdomains.forward_signals.interface.serializers import (
+from src.agents.fundamental.capabilities.forward_signals.interface.serializers import (
     serialize_forward_signals,
 )
-from src.agents.fundamental.subdomains.model_selection.domain.model_selection import (
+from src.agents.fundamental.capabilities.model_selection.domain.model_selection import (
     select_valuation_model,
 )
-from src.shared.kernel.types import AgentOutputArtifactPayload, JSONObject
+from src.artifacts.public import AgentOutputArtifactPayload
+from src.shared.kernel.types import JSONObject
 
 
 def _build_forward_signal(
@@ -264,7 +265,10 @@ def _build_params_result(
 
 def _build_state() -> dict[str, object]:
     return {
-        "intent_extraction": {"resolved_ticker": "GOOG"},
+        "company_profile": {
+            "ticker": "GOOG",
+            "name": "Alphabet Inc.",
+        },
         "fundamental_analysis": {
             "model_type": "dcf_growth",
             "financial_reports_artifact_id": "fa-report-1",
@@ -274,15 +278,11 @@ def _build_state() -> dict[str, object]:
 
 def _build_health_state() -> dict[str, object]:
     return {
-        "intent_extraction": {
-            "resolved_ticker": "AAPL",
-            "company_profile": {
-                "ticker": "AAPL",
-                "name": "Apple Inc.",
-                "sector": "Technology",
-                "industry": "Consumer Electronics",
-                "sic_code": 3571,
-            },
+        "company_profile": {
+            "ticker": "AAPL",
+            "name": "Apple Inc.",
+            "sector": "Technology",
+            "industry": "Consumer Electronics",
         },
         "fundamental_analysis": {},
     }

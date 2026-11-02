@@ -4,13 +4,13 @@ from typing import cast
 
 import pytest
 
-from src.agents.fundamental.subdomains.artifacts_provenance.infrastructure.fundamental_artifact_repository import (
+from src.agents.fundamental.capabilities.artifacts_provenance.infrastructure.fundamental_artifact_repository import (
     FundamentalArtifactRepository,
 )
-from src.agents.fundamental.subdomains.artifacts_provenance.interface.contracts import (
+from src.agents.fundamental.capabilities.artifacts_provenance.interface.contracts import (
     parse_fundamental_artifact_model,
 )
-from src.shared.cross_agent.data.typed_artifact_port import TypedArtifactPort
+from src.artifacts.public import TypedArtifactPort
 from src.shared.kernel.types import JSONObject
 
 

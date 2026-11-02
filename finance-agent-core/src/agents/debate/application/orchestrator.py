@@ -43,6 +43,7 @@ from src.agents.debate.domain.pragmatic_verdict_policy import (
 )
 from src.agents.debate.domain.validators import FactValidator
 from src.agents.debate.interface.serializers import build_final_report_payload
+from src.artifacts.public import AgentOutputArtifactPayload
 from src.llm_provider.entrypoint import (
     ChatMessage,
     ChatRole,
@@ -59,7 +60,7 @@ from src.shared.kernel.tools.incident_logging import (
     log_boundary_event,
 )
 from src.shared.kernel.tools.logger import bounded_text, get_logger, log_event
-from src.shared.kernel.types import AgentOutputArtifactPayload, JSONObject
+from src.shared.kernel.types import JSONObject
 from src.shared.kernel.workflow_contracts import WorkflowFanoutNodeResult
 
 logger = get_logger(__name__)
@@ -110,7 +111,7 @@ class DebateOrchestrator:
                     "error_logs": [
                         {
                             "node": "debate_aggregator",
-                            "error": "Missing intent_extraction.resolved_ticker",
+                            "error": "Missing company_profile.ticker",
                             "severity": "error",
                             "error_code": "DEBATE_MISSING_TICKER",
                             "contract_kind": CONTRACT_KIND_WORKFLOW_STATE,
@@ -217,7 +218,7 @@ class DebateOrchestrator:
                     "error_logs": [
                         {
                             "node": "fact_extractor",
-                            "error": "Missing intent_extraction.resolved_ticker",
+                            "error": "Missing company_profile.ticker",
                             "severity": "error",
                             "error_code": "DEBATE_MISSING_TICKER",
                             "contract_kind": CONTRACT_KIND_WORKFLOW_STATE,
@@ -581,7 +582,7 @@ class DebateOrchestrator:
                     "error_logs": [
                         {
                             "node": "verdict",
-                            "error": "Missing intent_extraction.resolved_ticker",
+                            "error": "Missing company_profile.ticker",
                             "severity": "error",
                         }
                     ],

@@ -1,10 +1,10 @@
+from src.agents.technical.capabilities.interpretation.domain.interpretation_guardrail_service import (
+    apply_interpretation_guardrail,
+)
 from src.agents.technical.interface.contracts import (
     AnalystPerspectiveEvidenceItemModel,
     AnalystPerspectiveModel,
     AnalystPerspectiveSignalExplainerModel,
-)
-from src.agents.technical.subdomains.interpretation.domain.interpretation_guardrail_service import (
-    apply_interpretation_guardrail,
 )
 
 

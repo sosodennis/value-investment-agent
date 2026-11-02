@@ -17,8 +17,7 @@ selector_node = news_nodes["selector_node"]
 @pytest.mark.asyncio
 async def test_search_node_error_log():
     state = {
-        "ticker": "AAPL",
-        "intent_extraction": {"resolved_ticker": "AAPL"},
+        "company_profile": {"ticker": "AAPL", "name": "Apple Inc."},
         "error_logs": [],
     }
 
@@ -38,16 +37,15 @@ async def test_search_node_error_log():
 @pytest.mark.asyncio
 async def test_selector_node_error_log():
     state = {
-        "ticker": "AAPL",
         "financial_news_research": {"search_artifact_id": "art_123"},
     }
 
     with patch(
-        "src.services.artifact_manager.artifact_manager.get_artifact_data"
+        "src.artifacts.application.service.ArtifactService.get_artifact_data"
     ) as mock_get:
         mock_get.return_value = {"raw_results": [], "formatted_results": ""}
         with patch(
-            "src.services.artifact_manager.artifact_manager.save_artifact",
+            "src.artifacts.application.service.ArtifactService.save_artifact",
             new=AsyncMock(return_value="selection-artifact-1"),
         ):
             provider = get_news_workflow_runner().deps.llm_provider
@@ -79,7 +77,7 @@ async def test_fetch_node_error_log():
     # We simulate an artifact store error which should now be caught
     # and added to article_errors, making the status degraded.
     with patch(
-        "src.services.artifact_manager.artifact_manager.get_artifact_data"
+        "src.artifacts.application.service.ArtifactService.get_artifact_data"
     ) as mock_get:
         mock_get.side_effect = Exception("Artifact Store Error")
 
@@ -97,7 +95,6 @@ async def test_fetch_node_error_log():
 @pytest.mark.asyncio
 async def test_analyst_node_error_log():
     state = {
-        "ticker": "AAPL",
         "financial_news_research": {"news_items_artifact_id": "n1"},
     }
 
@@ -122,7 +119,7 @@ async def test_analyst_node_error_log():
         return None
 
     with patch(
-        "src.services.artifact_manager.artifact_manager.get_artifact_data",
+        "src.artifacts.application.service.ArtifactService.get_artifact_data",
         side_effect=mock_get_artifact_data,
     ):
         provider = get_news_workflow_runner().deps.llm_provider
@@ -155,7 +152,6 @@ async def test_analyst_node_error_log():
 @pytest.mark.asyncio
 async def test_aggregator_node_payload_build_failure_returns_error_update() -> None:
     state = {
-        "ticker": "AAPL",
         "financial_news_research": {"news_items_artifact_id": "news-items-1"},
     }
 

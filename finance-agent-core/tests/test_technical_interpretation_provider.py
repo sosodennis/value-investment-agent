@@ -5,12 +5,12 @@ from src.agents.technical.application.ports import (
     TechnicalInterpretationInput,
     TechnicalSignalExplainerInput,
 )
-from src.agents.technical.interface.contracts import AnalystPerspectiveModel
-from src.agents.technical.subdomains.interpretation.infrastructure.technical_interpretation_provider import (
+from src.agents.technical.capabilities.interpretation.infrastructure.technical_interpretation_provider import (
     TechnicalInterpretationProvider,
     _build_fallback_perspective,
     _finalize_perspective,
 )
+from src.agents.technical.interface.contracts import AnalystPerspectiveModel
 from src.llm_provider.entrypoint import ModelRoute, StructuredRequest
 
 

@@ -7,7 +7,7 @@ import pytest
 from src.agents.technical.application.semantic_verification_context_service import (
     assemble_verification_context,
 )
-from src.interface.artifacts.artifact_data_models import (
+from src.shared.artifacts.artifact_data_models import (
     TechnicalBacktestSummaryData,
     TechnicalVerificationReportArtifactData,
     TechnicalWfaSummaryData,

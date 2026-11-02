@@ -19,12 +19,11 @@ def _nodes() -> dict[str, TechnicalNode]:
 @pytest.mark.asyncio
 async def test_data_fetch_node_error():
     state = {
-        "ticker": "AAPL",
-        "intent_extraction": {"resolved_ticker": "AAPL"},
+        "company_profile": {"ticker": "AAPL", "name": "Apple Inc."},
     }
 
     with patch(
-        "src.agents.technical.subdomains.market_data.infrastructure.yahoo_market_data_provider.YahooMarketDataProvider.fetch_ohlcv"
+        "src.agents.technical.capabilities.market_data.infrastructure.yahoo_market_data_provider.YahooMarketDataProvider.fetch_ohlcv"
     ) as mock_fetch:
         mock_fetch.side_effect = Exception("YF API Error")
 
@@ -62,11 +61,11 @@ async def test_verification_compute_node_crash():
             "feature_pack_id": "features-1",
             "fusion_report_id": "fusion-1",
         },
-        "intent_extraction": {"resolved_ticker": "AAPL"},
+        "company_profile": {"ticker": "AAPL", "name": "Apple Inc."},
     }
 
     with patch(
-        "src.agents.technical.subdomains.artifacts.infrastructure.technical_artifact_repository.TechnicalArtifactRepository.load_timeseries_bundle",
+        "src.agents.technical.capabilities.artifacts.infrastructure.technical_artifact_repository.TechnicalArtifactRepository.load_timeseries_bundle",
         new=AsyncMock(side_effect=Exception("Load Error")),
     ):
         command = await _nodes()["verification_compute"](state)
@@ -84,7 +83,7 @@ async def test_semantic_translate_node_error():
             "price_artifact_id": "p1",
             "chart_data_id": "c1",
         },
-        "intent_extraction": {"resolved_ticker": "AAPL"},
+        "company_profile": {"ticker": "AAPL", "name": "Apple Inc."},
     }
 
     # Simulate Assembler Crash

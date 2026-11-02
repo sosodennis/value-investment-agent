@@ -6,6 +6,21 @@ from src.agents.technical.application.use_cases.run_fusion_compute_use_case impo
     _resolve_confidence_eligibility,
     _resolve_effective_signal_strength,
 )
+from src.agents.technical.capabilities.features.public import (
+    FeatureRuntimeRequest,
+    FeatureRuntimeService,
+    IndicatorSeriesRuntimeRequest,
+    IndicatorSeriesRuntimeService,
+)
+from src.agents.technical.capabilities.regime.application.regime_runtime_service import (
+    RegimeRuntimeRequest,
+    RegimeRuntimeService,
+)
+from src.agents.technical.capabilities.regime.contracts import RegimeFrame, RegimePack
+from src.agents.technical.capabilities.signal_fusion.public import (
+    FusionRuntimeRequest,
+    FusionRuntimeService,
+)
 from src.agents.technical.domain.shared import (
     FeatureFrame,
     FeaturePack,
@@ -14,21 +29,6 @@ from src.agents.technical.domain.shared import (
     PatternFrame,
     PatternPack,
     PriceSeries,
-)
-from src.agents.technical.subdomains.features import (
-    FeatureRuntimeRequest,
-    FeatureRuntimeService,
-    IndicatorSeriesRuntimeRequest,
-    IndicatorSeriesRuntimeService,
-)
-from src.agents.technical.subdomains.regime.application.regime_runtime_service import (
-    RegimeRuntimeRequest,
-    RegimeRuntimeService,
-)
-from src.agents.technical.subdomains.regime.contracts import RegimeFrame, RegimePack
-from src.agents.technical.subdomains.signal_fusion import (
-    FusionRuntimeRequest,
-    FusionRuntimeService,
 )
 
 

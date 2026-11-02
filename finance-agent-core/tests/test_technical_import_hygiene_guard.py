@@ -214,6 +214,102 @@ def test_no_legacy_generic_technical_module_files() -> None:
     )
 
 
+def test_migrated_technical_capabilities_have_no_subdomain_paths() -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    technical_root = repo_root / "finance-agent-core" / "src" / "agents" / "technical"
+    migrated = (
+        "alerts",
+        "features",
+        "market_data",
+        "patterns",
+        "regime",
+        "signal_fusion",
+        "verification",
+        "calibration",
+        "interpretation",
+        "governance",
+        "artifacts",
+        "decision_observability",
+    )
+
+    legacy_paths = [technical_root / "subdomains" / name for name in migrated]
+    assert not [path for path in legacy_paths if path.exists()]
+    assert all(
+        (
+            (technical_root / "capabilities" / name).is_dir()
+            if name != "decision_observability"
+            else (
+                repo_root / "finance-agent-core" / "src" / "observability" / "technical"
+            ).is_dir()
+        )
+        for name in migrated
+    )
+
+    violations: list[str] = []
+    for root in (
+        technical_root / "application",
+        technical_root / "interface",
+        technical_root / "workflow",
+        technical_root / "capabilities",
+        repo_root / "finance-agent-core" / "tests",
+        repo_root / "finance-agent-core" / "scripts",
+    ):
+        for path in root.rglob("*.py"):
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+            for node in ast.walk(tree):
+                modules: list[str] = []
+                if isinstance(node, ast.ImportFrom) and node.module:
+                    modules.append(node.module)
+                elif isinstance(node, ast.Import):
+                    modules.extend(alias.name for alias in node.names)
+                for module in modules:
+                    if any(
+                        module == f"src.agents.technical.subdomains.{name}"
+                        or module.startswith(f"src.agents.technical.subdomains.{name}.")
+                        for name in migrated
+                    ):
+                        violations.append(
+                            f"{path.relative_to(repo_root)}:{node.lineno}: {module}"
+                        )
+
+    assert not violations, "Migrated technical subdomain imports remain:\n" + "\n".join(
+        sorted(violations)
+    )
+
+
+def test_observability_route_uses_public_and_application_wiring_only() -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    route_path = (
+        repo_root / "finance-agent-core" / "src" / "observability" / "routes.py"
+    )
+    tree = ast.parse(route_path.read_text(encoding="utf-8"))
+    allowed = {
+        "src.auth.entrypoint",
+        "src.observability.technical.public",
+        "src.observability.technical.application.wiring",
+    }
+    violations: list[str] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module:
+            if (
+                node.module.startswith("src.observability.technical")
+                and node.module not in allowed
+            ):
+                violations.append(f"{node.lineno}: {node.module}")
+        elif isinstance(node, ast.Import):
+            for alias in node.names:
+                if (
+                    alias.name.startswith("src.observability.technical")
+                    and alias.name not in allowed
+                ):
+                    violations.append(f"{node.lineno}: {alias.name}")
+
+    assert not violations, (
+        "Observability route imports private implementation:\n"
+        + "\n".join(sorted(violations))
+    )
+
+
 def test_backtest_runtime_port_has_no_object_typed_boundaries() -> None:
     repo_root = Path(__file__).resolve().parents[2]
     target = (
