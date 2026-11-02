@@ -6,12 +6,13 @@ from __future__ import annotations
 import argparse
 import ast
 import re
-from collections import defaultdict
+from collections import Counter, defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SRC_ROOT = REPO_ROOT / "finance-agent-core" / "src"
+API_ROOT = REPO_ROOT / "finance-agent-core" / "api"
 EXCEPTIONS_DIR = REPO_ROOT / "scripts" / "architecture_guard_exceptions"
 REPORT_PATH = (
     REPO_ROOT
@@ -19,6 +20,9 @@ REPORT_PATH = (
     / "src"
     / "agents"
     / "ARCHITECTURE_MODULE_ACTIONS.md"
+)
+DEPENDENCY_REPORT_PATH = (
+    REPO_ROOT / "docs" / "refactor-map" / "architecture-dependency-report.md"
 )
 
 LEGACY_WORKFLOW_AGENTS = {
@@ -70,11 +74,16 @@ class Violation:
         return f"{self.rule}|{self.source}|{self.target}"
 
 
-def module_name_from_path(path: Path, src_root: Path = SRC_ROOT) -> str:
+def module_name_from_path(
+    path: Path,
+    src_root: Path = SRC_ROOT,
+    *,
+    module_prefix: str = "src",
+) -> str:
     parts = list(path.relative_to(src_root).with_suffix("").parts)
     if parts[-1] == "__init__":
         parts.pop()
-    return "src" + ("." + ".".join(parts) if parts else "")
+    return module_prefix + ("." + ".".join(parts) if parts else "")
 
 
 def resolve_import(
@@ -104,8 +113,18 @@ def _module_exists(module_name: str, src_root: Path) -> bool:
     )
 
 
-def extract_imports(path: Path, src_root: Path = SRC_ROOT) -> list[ImportRef]:
-    source = module_name_from_path(path, src_root)
+def extract_imports(
+    path: Path,
+    src_root: Path = SRC_ROOT,
+    *,
+    source_root: Path | None = None,
+    module_prefix: str = "src",
+) -> list[ImportRef]:
+    source = module_name_from_path(
+        path,
+        source_root or src_root,
+        module_prefix=module_prefix,
+    )
     tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
     imports: list[ImportRef] = []
     for node in ast.walk(tree):
@@ -132,8 +151,66 @@ def extract_imports(path: Path, src_root: Path = SRC_ROOT) -> list[ImportRef]:
     return imports
 
 
+def collect_imports(
+    src_root: Path = SRC_ROOT,
+    api_root: Path | None = None,
+) -> list[ImportRef]:
+    imports = [
+        ref
+        for path in sorted(src_root.rglob("*.py"))
+        for ref in extract_imports(path, src_root)
+    ]
+    if api_root is None and src_root == SRC_ROOT:
+        api_root = API_ROOT
+    if api_root is not None and api_root.exists():
+        imports.extend(
+            ref
+            for path in sorted(api_root.rglob("*.py"))
+            for ref in extract_imports(
+                path,
+                src_root,
+                source_root=api_root,
+                module_prefix="api",
+            )
+        )
+    return imports
+
+
+def _is_migration_module_path(module_name: str) -> bool:
+    parts = module_name.split(".")
+    if parts[:2] == ["src", "agents"] and "subdomains" in parts[3:]:
+        return True
+    if parts[:3] == ["src", "workflow", "nodes"] and len(parts) >= 4 and parts[3]:
+        return True
+    return (
+        parts[:2] == ["src", "agents"]
+        and len(parts) >= 5
+        and parts[3:5] == ["application", "subgraph"]
+    )
+
+
+def _migration_path_violations(src_root: Path) -> list[Violation]:
+    violations: dict[str, Violation] = {}
+    for path in sorted(src_root.rglob("*.py")):
+        module_name = module_name_from_path(path, src_root)
+        if not _is_migration_module_path(module_name):
+            continue
+        violation = Violation(
+            rule="MIGRATION_PATH",
+            source=module_name,
+            target=module_name,
+            file=str(path),
+            line=1,
+            message="migration-only package paths must be removed after callers move",
+        )
+        violations.setdefault(violation.key(), violation)
+    return list(violations.values())
+
+
 def classify_module(module_name: str) -> ModuleOwner:
     parts = module_name.split(".")
+    if parts[0] == "api":
+        return ModuleOwner(layer="api_composition")
     if len(parts) >= 3 and parts[:2] == ["src", "llm_provider"]:
         remainder = parts[2:]
         layer = remainder[0] if remainder and remainder[0] in LAYERS else None
@@ -214,6 +291,18 @@ def _is_shared_or_interface_module(module_name: str) -> bool:
         module_name == prefix or module_name.startswith(prefix + ".")
         for prefix in ("src.shared", "src.interface")
     )
+
+
+def _is_api_private_import(ref: ImportRef, target: ModuleOwner) -> bool:
+    if target.layer == "root_workflow":
+        return True
+    if target.agent and not _is_agent_entrypoint(ref.target, target.agent):
+        return True
+    if ref.target == "src.services" or ref.target.startswith("src.services."):
+        return True
+    if ref.target == "src.interface" or ref.target.startswith("src.interface."):
+        return ref.target != "src.interface.origins"
+    return False
 
 
 def _layer_violation(source: ModuleOwner, target: ModuleOwner) -> str | None:
@@ -328,12 +417,11 @@ def _strongly_connected_components(
     return components
 
 
-def collect_violations(src_root: Path = SRC_ROOT) -> list[Violation]:
-    refs = [
-        ref
-        for path in sorted(src_root.rglob("*.py"))
-        for ref in extract_imports(path, src_root)
-    ]
+def collect_violations(
+    src_root: Path = SRC_ROOT,
+    api_root: Path | None = None,
+) -> list[Violation]:
+    refs = collect_imports(src_root, api_root)
     violations: dict[str, Violation] = {}
     capability_graph: dict[tuple[str, str], set[tuple[str, str]]] = defaultdict(set)
     capability_edges: dict[tuple[tuple[str, str], tuple[str, str]], list[ImportRef]] = (
@@ -343,9 +431,21 @@ def collect_violations(src_root: Path = SRC_ROOT) -> list[Violation]:
     def add(violation: Violation) -> None:
         violations.setdefault(violation.key(), violation)
 
+    for violation in _migration_path_violations(src_root):
+        add(violation)
+
     for ref in refs:
         source = classify_module(ref.source)
         target = classify_module(ref.target)
+
+        if source.layer == "api_composition" and _is_api_private_import(ref, target):
+            add(
+                _make_violation(
+                    ref,
+                    "API_COMPOSITION_PRIVATE_IMPORT",
+                    "FastAPI composition must import public entrypoints and owned boundary contracts only",
+                )
+            )
 
         if source.layer == "root_workflow" and target.agent:
             if not _is_agent_entrypoint(ref.target, target.agent):
@@ -413,6 +513,20 @@ def collect_violations(src_root: Path = SRC_ROOT) -> list[Violation]:
                 target_capability = (target.agent, target.capability)
                 capability_graph[source_capability].add(target_capability)
                 capability_edges[(source_capability, target_capability)].append(ref)
+
+        if source.agent and (
+            ref.target == "src.services"
+            or ref.target.startswith("src.services.")
+            or ref.target == "src.interface"
+            or ref.target.startswith("src.interface.")
+        ):
+            add(
+                _make_violation(
+                    ref,
+                    "CROSS_SLICE_PRIVATE_IMPORT",
+                    "agent code must use shared contracts instead of private root implementations",
+                )
+            )
 
     for component in _strongly_connected_components(capability_graph):
         if len(component) < 2:
@@ -525,6 +639,15 @@ def validate_exception_actions(
 
 def _remediation_for(rule: str) -> str:
     return {
+        "API_COMPOSITION_PRIVATE_IMPORT": (
+            "Move behavior behind the agent's public entrypoint or an owned route."
+        ),
+        "CROSS_SLICE_PRIVATE_IMPORT": (
+            "Move the shared contract to `src/shared/` or use the owning public entrypoint."
+        ),
+        "MIGRATION_PATH": (
+            "Move callers to the current workflow or capability owner, then delete this path."
+        ),
         "ROOT_WORKFLOW_PRIVATE_IMPORT": (
             "Route root graph composition through the agent's public entrypoint."
         ),
@@ -591,6 +714,175 @@ def write_module_report(violations: list[Violation], path: Path = REPORT_PATH) -
     path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
 
 
+def _ownership_node(module_name: str) -> str | None:
+    owner = classify_module(module_name)
+    if owner.layer == "root_workflow":
+        return "root workflow"
+    if owner.layer == "api_composition":
+        return "FastAPI composition"
+    if owner.agent:
+        if owner.capability:
+            return f"{owner.agent}.{owner.capability} capability"
+        if owner.layer:
+            return f"{owner.agent} {owner.layer}"
+        return f"{owner.agent} agent"
+    if module_name == "src.shared" or module_name.startswith("src.shared."):
+        return "shared contracts"
+    if module_name == "src.services" or module_name.startswith("src.services."):
+        return "root services"
+    if module_name == "src.interface" or module_name.startswith("src.interface."):
+        return "root interface"
+    if module_name.startswith("src."):
+        parts = module_name.split(".")
+        return f"{parts[1]} feature" if len(parts) > 1 else None
+    return None
+
+
+def _dependency_report(src_root: Path = SRC_ROOT, api_root: Path | None = None) -> str:
+    refs = collect_imports(src_root, api_root)
+    modules = {ref.source for ref in refs}
+    internal_refs = [
+        ref
+        for ref in refs
+        if ref.target.startswith("src.") and _module_exists(ref.target, src_root)
+    ]
+    ownership_edges: Counter[tuple[str, str]] = Counter()
+    capability_edges: Counter[tuple[str, str]] = Counter()
+    capability_nodes: set[str] = set()
+    agents_root = src_root / "agents"
+    if agents_root.is_dir():
+        for agent_root in sorted(
+            path for path in agents_root.iterdir() if path.is_dir()
+        ):
+            for capability_root_name in CAPABILITY_ROOTS:
+                capability_root = agent_root / capability_root_name
+                if not capability_root.is_dir():
+                    continue
+                for capability_path in sorted(
+                    path for path in capability_root.iterdir() if path.is_dir()
+                ):
+                    if any(capability_path.rglob("*.py")):
+                        capability_nodes.add(
+                            f"{agent_root.name}.{capability_path.name}"
+                        )
+    for ref in internal_refs:
+        source_node = _ownership_node(ref.source)
+        target_node = _ownership_node(ref.target)
+        if source_node and target_node and source_node != target_node:
+            ownership_edges[(source_node, target_node)] += 1
+
+        source = classify_module(ref.source)
+        target = classify_module(ref.target)
+        if source.agent and source.capability:
+            capability_nodes.add(f"{source.agent}.{source.capability}")
+        if target.agent and target.capability:
+            capability_nodes.add(f"{target.agent}.{target.capability}")
+        if (
+            source.agent
+            and source.agent == target.agent
+            and source.capability
+            and target.capability
+            and source.capability != target.capability
+        ):
+            capability_edges[
+                (
+                    f"{source.agent}.{source.capability}",
+                    f"{target.agent}.{target.capability}",
+                )
+            ] += 1
+
+    violations = collect_violations(src_root, api_root)
+    by_rule = Counter(item.rule for item in violations)
+    lines = [
+        "# Architecture dependency report",
+        "",
+        "Generated by `python3 scripts/architecture_guard.py --write-dependency-report`.",
+        "The report scans Python imports in `finance-agent-core/src` and `finance-agent-core/api`.",
+        "It groups internal imports by their owning workflow, agent layer, capability, or shared contract.",
+        "",
+        "## Scan result",
+        "",
+        f"- Python modules with imports scanned: {len(modules)}.",
+        f"- Resolved internal `src.*` imports: {len(internal_refs)}.",
+        f"- Architecture findings: {len(violations)}.",
+        f"- Capability packages observed: {len(capability_nodes)}.",
+        f"- Cross-capability dependency edges: {len(capability_edges)}.",
+        "",
+    ]
+    if by_rule:
+        lines.extend(["Findings by rule:", ""])
+        lines.extend(f"- `{rule}`: {count}." for rule, count in sorted(by_rule.items()))
+        lines.append("")
+    else:
+        lines.extend(
+            [
+                "The architecture guard found no forbidden imports, migration-only paths, or capability cycles.",
+                "All observed ownership edges satisfy the guard rules.",
+                "",
+            ]
+        )
+
+    lines.extend(["## Observed ownership edges", ""])
+    if ownership_edges:
+        lines.extend(
+            [
+                "| Source owner | Target owner | Internal import count |",
+                "| --- | --- | ---: |",
+            ]
+        )
+        lines.extend(
+            f"| `{source}` | `{target}` | {count} |"
+            for (source, target), count in sorted(ownership_edges.items())
+        )
+        lines.append("")
+    else:
+        lines.extend(["No cross-owner internal imports were found.", ""])
+
+    lines.extend(["## Capability dependency graph", ""])
+    if capability_nodes:
+        lines.append(
+            "Each node names a capability package. Edges show observed imports between capabilities."
+        )
+        lines.append("")
+        lines.append("```mermaid")
+        lines.append("flowchart LR")
+        for node in sorted(capability_nodes):
+            node_id = re.sub(r"[^a-zA-Z0-9]+", "_", node).strip("_").lower()
+            lines.append(f'    {node_id}["{node}"]')
+        for (source, target), _count in sorted(capability_edges.items()):
+            source_id = re.sub(r"[^a-zA-Z0-9]+", "_", source).strip("_").lower()
+            target_id = re.sub(r"[^a-zA-Z0-9]+", "_", target).strip("_").lower()
+            lines.append(f"    {source_id} --> {target_id}")
+        lines.append("```")
+        lines.append("")
+        if capability_edges:
+            lines.extend(
+                [
+                    "| Source capability | Target capability | Import count |",
+                    "| --- | --- | ---: |",
+                ]
+            )
+            lines.extend(
+                f"| `{source}` | `{target}` | {count} |"
+                for (source, target), count in sorted(capability_edges.items())
+            )
+            lines.append("")
+        else:
+            lines.extend(["No cross-capability imports were found.", ""])
+    else:
+        lines.extend(["No agent capability packages were found.", ""])
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def write_dependency_report(
+    src_root: Path = SRC_ROOT,
+    path: Path = DEPENDENCY_REPORT_PATH,
+    api_root: Path | None = None,
+) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(_dependency_report(src_root, api_root), encoding="utf-8")
+
+
 def print_findings(violations: list[Violation]) -> None:
     for item in violations:
         print(f"{item.key()}\t{Path(item.file).as_posix()}:{item.line}\t{item.message}")
@@ -610,8 +902,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--print-current", action="store_true")
     parser.add_argument("--summary", action="store_true")
     parser.add_argument("--write-module-report", action="store_true")
+    parser.add_argument("--write-dependency-report", action="store_true")
     parser.add_argument("--exceptions-dir", type=Path, default=EXCEPTIONS_DIR)
     parser.add_argument("--report", type=Path, default=REPORT_PATH)
+    parser.add_argument(
+        "--dependency-report", type=Path, default=DEPENDENCY_REPORT_PATH
+    )
     args = parser.parse_args(argv)
 
     violations = collect_violations()
@@ -646,6 +942,11 @@ def main(argv: list[str] | None = None) -> int:
             print(f"  {error}")
     if unapproved or stale or action_errors:
         return 1
+
+    if args.write_dependency_report:
+        write_dependency_report(path=args.dependency_report)
+        print(f"Wrote dependency report to {args.dependency_report}")
+        return 0
 
     by_rule: dict[str, int] = defaultdict(int)
     for item in violations:
