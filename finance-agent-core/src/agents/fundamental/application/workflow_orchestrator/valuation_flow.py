@@ -46,6 +46,7 @@ from src.shared.kernel.workflow_contracts import WorkflowNodeResult
 logger = get_logger(__name__)
 FundamentalNodeResult = WorkflowNodeResult
 _VALUATION_COMPUTE_CONCURRENCY_LIMIT = 2
+_VALUATION_SNAPSHOT_SAVE_ATTEMPTS = 2
 _valuation_compute_semaphore: asyncio.Semaphore | None = None
 _XBRL_QUALITY_BLOCKED_CODE = "FUNDAMENTAL_XBRL_QUALITY_BLOCKED"
 _WARN_ONLY_MISSING_INPUT_FIELDS = (
@@ -113,6 +114,43 @@ async def _offload_valuation_compute(
 ) -> object:
     async with _get_valuation_compute_semaphore():
         return await asyncio.to_thread(func, *args, **kwargs)
+
+
+async def _save_valuation_snapshot_with_retry(
+    runtime: ValuationRuntime,
+    *,
+    data: JSONObject,
+) -> str:
+    last_error: Exception | None = None
+    for attempt in range(1, _VALUATION_SNAPSHOT_SAVE_ATTEMPTS + 1):
+        try:
+            return await runtime.save_financial_reports(
+                data=data,
+                produced_by="fundamental_analysis.valuation",
+                key_prefix="valuation",
+            )
+        except Exception as exc:
+            last_error = exc
+            if attempt >= _VALUATION_SNAPSHOT_SAVE_ATTEMPTS:
+                break
+            log_event(
+                logger,
+                event="fundamental_valuation_snapshot_save_retry",
+                message="retrying valuation snapshot artifact save",
+                level=logging.WARNING,
+                error_code="FUNDAMENTAL_VALUATION_SNAPSHOT_SAVE_RETRY",
+                fields={
+                    "attempt": attempt,
+                    "next_attempt": attempt + 1,
+                    "max_attempts": _VALUATION_SNAPSHOT_SAVE_ATTEMPTS,
+                    "exception": str(exc),
+                },
+            )
+
+    raise RuntimeError(
+        "valuation snapshot persistence failed after "
+        f"{_VALUATION_SNAPSHOT_SAVE_ATTEMPTS} attempts: {last_error}"
+    ) from last_error
 
 
 def _extract_numeric_metric(
@@ -1837,23 +1875,6 @@ async def run_valuation_flow(
             assumptions=build_result.assumptions,
             parameter_source_completion_fields=parameter_source_completion_fields,
         )
-        log_event(
-            logger,
-            event="fundamental_valuation_completed",
-            message="fundamental valuation completed",
-            fields={
-                "ticker": ticker,
-                "model_type": model_type,
-                "status": "done",
-                "audit_passed": execution_result.audit_passed is True,
-                "audit_message_count": len(execution_result.audit_messages),
-                **mc_completion_fields,
-                **forward_signal_completion_fields,
-                **parameter_source_completion_fields,
-                **completion_quality_fields,
-            },
-        )
-
         success_update = runtime.build_valuation_success_update(
             fundamental=execution_context.fundamental,
             intent_ctx=execution_context.intent_ctx,
@@ -1877,10 +1898,9 @@ async def run_valuation_flow(
             replay_market_snapshot=replay_market_snapshot,
         )
         try:
-            snapshot_artifact_id = await runtime.save_financial_reports(
+            snapshot_artifact_id = await _save_valuation_snapshot_with_retry(
+                runtime,
                 data=snapshot_payload,
-                produced_by="fundamental_analysis.valuation",
-                key_prefix="valuation",
             )
             _apply_snapshot_artifact_reference(
                 success_update=success_update,
@@ -1918,6 +1938,24 @@ async def run_valuation_flow(
                     "exception": str(exc),
                 },
             )
+            raise
+
+        log_event(
+            logger,
+            event="fundamental_valuation_completed",
+            message="fundamental valuation completed",
+            fields={
+                "ticker": ticker,
+                "model_type": model_type,
+                "status": "done",
+                "audit_passed": execution_result.audit_passed is True,
+                "audit_message_count": len(execution_result.audit_messages),
+                **mc_completion_fields,
+                **forward_signal_completion_fields,
+                **parameter_source_completion_fields,
+                **completion_quality_fields,
+            },
+        )
 
         return FundamentalNodeResult(update=success_update, goto="END")
     except GraphInterrupt:

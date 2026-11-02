@@ -10,6 +10,7 @@ from src.agents.fundamental.capabilities.financial_statements.interface.parsers 
     parse_financial_statements_payload,
     parse_valuation_model_runtime,
 )
+from src.shared.artifacts.traceable import ManualProvenance, TraceableField
 
 
 def test_parse_valuation_model_runtime_accepts_mapping() -> None:
@@ -55,6 +56,39 @@ def test_parse_calculation_metrics_requires_object() -> None:
 
     with pytest.raises(TypeError):
         parse_calculation_metrics(["bad"], context="valuation result")
+
+
+def test_parse_calculation_metrics_serializes_nested_traceable_fields() -> None:
+    parsed = parse_calculation_metrics(
+        {
+            "intrinsic_value": 123.0,
+            "details": {
+                "source_metric": TraceableField(
+                    name="source_metric",
+                    value=120.0,
+                    provenance=ManualProvenance(description="test assumption"),
+                )
+            },
+        },
+        context="valuation result",
+    )
+
+    source_metric = parsed["details"]["source_metric"]
+    assert isinstance(source_metric, dict)
+    assert source_metric["name"] == "source_metric"
+    assert source_metric["value"] == 120.0
+    provenance = source_metric["provenance"]
+    assert isinstance(provenance, dict)
+    assert provenance["type"] == "MANUAL"
+    assert provenance["description"] == "test assumption"
+
+
+def test_parse_calculation_metrics_rejects_unsupported_nested_output() -> None:
+    with pytest.raises(TypeError, match="valuation result.details.unsupported"):
+        parse_calculation_metrics(
+            {"details": {"unsupported": object()}},
+            context="valuation result",
+        )
 
 
 def test_parse_financial_reports_model_returns_json_dto_list() -> None:
