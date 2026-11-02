@@ -53,8 +53,10 @@ from src.agents.fundamental.interface.workflow_orchestrator.serializers import (
     build_valuation_artifact,
     normalize_model_selection_reports,
 )
-from src.interface.artifacts.output_schemas import build_artifact_payload
-from src.shared.kernel.contracts import OUTPUT_KIND_FUNDAMENTAL_ANALYSIS
+from src.artifacts.public import (
+    OUTPUT_KIND_FUNDAMENTAL_ANALYSIS,
+    build_artifact_payload,
+)
 
 
 def _summarize_preview(

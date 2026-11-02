@@ -19,7 +19,7 @@ from src.agents.technical.capabilities.regime.public import (
 )
 from src.agents.technical.domain.shared import PriceSeries
 from src.agents.technical.interface.serializers import build_regime_compute_preview
-from src.interface.artifacts.artifact_data_models import (
+from src.shared.artifacts.artifact_data_models import (
     TechnicalFeaturePackArtifactData,
     TechnicalIndicatorSeriesArtifactData,
     TechnicalRegimePackArtifactData,

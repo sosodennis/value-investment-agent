@@ -7,11 +7,16 @@ from src.agents.debate.interface.contracts import (
 from src.agents.fundamental.domain.shared.contracts.traceable import (
     ManualProvenance as AgentManualProvenance,
 )
-from src.interface.artifacts.artifact_contract_registry import (
+from src.artifacts.public import (
+    ARTIFACT_KIND_DEBATE_FINAL_REPORT,
+    ARTIFACT_KIND_FINANCIAL_REPORTS,
+    ARTIFACT_KIND_NEWS_ANALYSIS_REPORT,
+    ARTIFACT_KIND_PRICE_SERIES,
+    ARTIFACT_KIND_TA_FULL_REPORT,
     parse_artifact_data_json,
     parse_artifact_data_model_as,
 )
-from src.interface.artifacts.artifact_data_models import PriceSeriesArtifactData
+from src.shared.artifacts.artifact_data_models import PriceSeriesArtifactData
 from src.shared.artifacts.debate_contracts import (
     DebateArtifactModel as SharedDebateArtifactModel,
 )
@@ -19,13 +24,6 @@ from src.shared.artifacts.debate_contracts import (
     EvidenceFactModel as SharedEvidenceFactModel,
 )
 from src.shared.artifacts.traceable import ManualProvenance as SharedManualProvenance
-from src.shared.kernel.contracts import (
-    ARTIFACT_KIND_DEBATE_FINAL_REPORT,
-    ARTIFACT_KIND_FINANCIAL_REPORTS,
-    ARTIFACT_KIND_NEWS_ANALYSIS_REPORT,
-    ARTIFACT_KIND_PRICE_SERIES,
-    ARTIFACT_KIND_TA_FULL_REPORT,
-)
 
 
 def _news_item_minimal() -> dict[str, object]:

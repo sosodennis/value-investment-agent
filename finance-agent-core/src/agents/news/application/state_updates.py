@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from src.shared.kernel.types import AgentOutputArtifactPayload, JSONObject
+from src.artifacts.public import AgentOutputArtifactPayload
+from src.shared.kernel.types import JSONObject
 
 
 def _clear_news_context() -> JSONObject:

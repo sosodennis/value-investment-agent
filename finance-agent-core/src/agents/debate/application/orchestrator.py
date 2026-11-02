@@ -43,6 +43,7 @@ from src.agents.debate.domain.pragmatic_verdict_policy import (
 )
 from src.agents.debate.domain.validators import FactValidator
 from src.agents.debate.interface.serializers import build_final_report_payload
+from src.artifacts.public import AgentOutputArtifactPayload
 from src.llm_provider.entrypoint import (
     ChatMessage,
     ChatRole,
@@ -59,7 +60,7 @@ from src.shared.kernel.tools.incident_logging import (
     log_boundary_event,
 )
 from src.shared.kernel.tools.logger import bounded_text, get_logger, log_event
-from src.shared.kernel.types import AgentOutputArtifactPayload, JSONObject
+from src.shared.kernel.types import JSONObject
 from src.shared.kernel.workflow_contracts import WorkflowFanoutNodeResult
 
 logger = get_logger(__name__)

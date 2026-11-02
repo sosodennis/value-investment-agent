@@ -26,7 +26,7 @@ from src.agents.technical.capabilities.signal_fusion.public import (
 from src.agents.technical.interface.evidence_bundle_projection_service import (
     build_setup_context_from_evidence,
 )
-from src.interface.artifacts.artifact_data_models import (
+from src.shared.artifacts.artifact_data_models import (
     TechnicalFusionReportArtifactData,
 )
 from src.shared.kernel.types import JSONObject

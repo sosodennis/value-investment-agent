@@ -18,7 +18,7 @@ from src.agents.technical.capabilities.verification.public import (
     WalkForwardResult,
 )
 from src.agents.technical.interface.contracts import AnalystPerspectiveModel
-from src.interface.artifacts.artifact_data_models import (
+from src.shared.artifacts.artifact_data_models import (
     PriceSeriesArtifactData,
     TechnicalAlertsArtifactData,
     TechnicalChartArtifactData,

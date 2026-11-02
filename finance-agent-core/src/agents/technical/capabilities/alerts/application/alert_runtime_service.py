@@ -4,7 +4,7 @@ import math
 from dataclasses import dataclass
 from datetime import datetime
 
-from src.interface.artifacts.artifact_data_models import (
+from src.shared.artifacts.artifact_data_models import (
     TechnicalIndicatorSeriesArtifactData,
     TechnicalIndicatorSeriesFrameData,
     TechnicalPatternPackArtifactData,

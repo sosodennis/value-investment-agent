@@ -37,8 +37,9 @@ from src.agents.fundamental.capabilities.forward_signals.public import (
 from src.agents.fundamental.capabilities.model_selection.public import (
     FundamentalSelectionReport,
 )
+from src.artifacts.public import AgentOutputArtifactPayload
 from src.shared.cross_agent.domain.market_identity import CompanyProfile
-from src.shared.kernel.types import AgentOutputArtifactPayload, JSONObject
+from src.shared.kernel.types import JSONObject
 from src.shared.kernel.workflow_contracts import WorkflowNodeResult
 
 FundamentalNodeResult = WorkflowNodeResult

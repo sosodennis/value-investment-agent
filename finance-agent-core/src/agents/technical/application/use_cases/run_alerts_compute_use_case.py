@@ -19,7 +19,7 @@ from src.agents.technical.capabilities.alerts.public import (
     AlertRuntimeService,
 )
 from src.agents.technical.interface.serializers import build_alerts_compute_preview
-from src.interface.artifacts.artifact_data_models import (
+from src.shared.artifacts.artifact_data_models import (
     TechnicalIndicatorSeriesArtifactData,
     TechnicalPatternPackArtifactData,
 )

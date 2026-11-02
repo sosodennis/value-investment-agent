@@ -11,10 +11,12 @@ from src.agents.fundamental.capabilities.financial_statements.public import (
 from src.agents.fundamental.capabilities.forward_signals.public import (
     ForwardSignalPayload,
 )
-from src.interface.artifacts.artifact_data_models import FinancialReportsArtifactData
-from src.services.artifact_manager import artifact_manager
-from src.shared.cross_agent.data.typed_artifact_port import TypedArtifactPort
-from src.shared.kernel.contracts import ARTIFACT_KIND_FINANCIAL_REPORTS
+from src.artifacts.public import (
+    ARTIFACT_KIND_FINANCIAL_REPORTS,
+    TypedArtifactPort,
+    build_typed_artifact_port,
+)
+from src.shared.artifacts.artifact_data_models import FinancialReportsArtifactData
 from src.shared.kernel.types import JSONObject
 
 
@@ -100,8 +102,7 @@ class FundamentalArtifactRepository:
 
 
 fundamental_artifact_repository = FundamentalArtifactRepository(
-    financial_reports_port=TypedArtifactPort(
-        manager=artifact_manager,
+    financial_reports_port=build_typed_artifact_port(
         kind=ARTIFACT_KIND_FINANCIAL_REPORTS,
         model=FinancialReportsArtifactData,
     )

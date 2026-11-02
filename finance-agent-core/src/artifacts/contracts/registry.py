@@ -4,7 +4,7 @@ from typing import TypeVar, cast
 
 from pydantic import BaseModel, ValidationError
 
-from src.interface.artifacts.artifact_contract_specs import (
+from src.artifacts.contracts.specs import (
     ARTIFACT_CONTRACT_SPEC_BY_KIND,
     ArtifactContractSpec,
 )
@@ -18,6 +18,10 @@ def _get_spec(kind: str, *, context: str) -> ArtifactContractSpec:
     if spec is None:
         raise TypeError(f"{context} has unsupported artifact kind: {kind!r}")
     return spec
+
+
+def artifact_contract_dump_exclude_none(kind: str) -> bool:
+    return _get_spec(kind, context="artifact contract").dump_exclude_none
 
 
 def parse_artifact_data_model_as(

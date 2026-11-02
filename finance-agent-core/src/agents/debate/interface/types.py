@@ -4,7 +4,7 @@ from typing import Annotated, Literal, TypeAlias
 
 from pydantic import BeforeValidator
 
-from src.interface.artifacts.artifact_model_shared import (
+from src.shared.artifacts.model_shared import (
     symbol,
     to_number,
     to_optional_number,

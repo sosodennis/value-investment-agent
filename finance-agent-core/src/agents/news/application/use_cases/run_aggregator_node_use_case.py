@@ -20,13 +20,14 @@ from src.agents.news.domain.aggregation.summary_message_service import (
 )
 from src.agents.news.interface.contracts import parse_news_artifact_model
 from src.agents.news.interface.parsers import parse_news_items
+from src.artifacts.public import AgentOutputArtifactPayload
 from src.shared.kernel.tools.incident_logging import (
     CONTRACT_KIND_ARTIFACT_JSON,
     build_replay_diagnostics,
     log_boundary_event,
 )
 from src.shared.kernel.tools.logger import get_logger, log_event
-from src.shared.kernel.types import AgentOutputArtifactPayload, JSONObject
+from src.shared.kernel.types import JSONObject
 from src.shared.kernel.workflow_contracts import WorkflowNodeResult
 
 logger = get_logger(__name__)

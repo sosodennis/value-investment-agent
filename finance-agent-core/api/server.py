@@ -20,6 +20,7 @@ from src.analysis_runtime.infrastructure import (
     SqlAlchemyActivityRepository,
 )
 from src.analysis_runtime.interface.routes import router as analysis_runtime_router
+from src.artifacts.entrypoint import router as artifact_router
 from src.audit.entrypoint import audit_router
 from src.audit.interface.middleware import CorrelationIdMiddleware
 from src.auth.entrypoint import (
@@ -37,7 +38,6 @@ from src.dashboard.infrastructure import (
 )
 from src.dashboard.routes import router as dashboard_router
 from src.infrastructure.migrations import assert_migrations_complete
-from src.interface.artifacts.routes import router as artifact_router
 from src.interface.origins import frontend_origins
 from src.llm_provider.entrypoint import (
     close_llm_provider,

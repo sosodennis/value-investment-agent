@@ -17,7 +17,7 @@ from src.agents.technical.capabilities.verification.public import (
     WfaSummary,
 )
 from src.agents.technical.domain.shared import FeatureSummary
-from src.interface.artifacts.artifact_data_models import (
+from src.shared.artifacts.artifact_data_models import (
     TechnicalFeaturePackArtifactData,
     TechnicalFusionReportArtifactData,
 )

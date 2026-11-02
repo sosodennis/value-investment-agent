@@ -1,332 +1,153 @@
-"""
-Unit tests for ArtifactManager service.
-Tests artifact storage, retrieval, and edge cases.
-"""
+from __future__ import annotations
 
-import json
-import uuid
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from src.interface.artifacts.artifact_envelope import ArtifactEnvelope
-from src.services.artifact_manager import _artifact_content, artifact_manager
+from src.artifacts.application.service import ArtifactService
+from src.artifacts.domain.deduplication import artifact_content
+from src.artifacts.domain.record import ArtifactRecord
+
+
+class InMemoryArtifactRepository:
+    def __init__(self) -> None:
+        self.records: dict[str, ArtifactRecord] = {}
+        self.dedupe_ids: dict[str, str] = {}
+
+    async def save(self, artifact: ArtifactRecord) -> str:
+        if artifact.dedupe_key is not None:
+            existing_id = self.dedupe_ids.get(artifact.dedupe_key)
+            if existing_id is not None:
+                existing = self.records[existing_id]
+                if artifact_content(existing.envelope) != artifact_content(
+                    artifact.envelope
+                ):
+                    raise ValueError("artifact dedupe key has conflicting payload")
+                return existing_id
+            self.dedupe_ids[artifact.dedupe_key] = artifact.artifact_id
+        self.records[artifact.artifact_id] = artifact
+        return artifact.artifact_id
+
+    async def get_by_id(self, artifact_id: str) -> ArtifactRecord | None:
+        return self.records.get(artifact_id)
+
+
+@pytest.fixture
+def repository() -> InMemoryArtifactRepository:
+    return InMemoryArtifactRepository()
+
+
+@pytest.fixture
+def service(repository: InMemoryArtifactRepository) -> ArtifactService:
+    return ArtifactService(repository=repository)  # type: ignore[arg-type]
 
 
 @pytest.mark.anyio
-async def test_save_and_retrieve_artifact():
-    """Test basic save and retrieve flow."""
-    # Arrange
-    test_data = {
+async def test_save_and_retrieve_artifact(service: ArtifactService) -> None:
+    payload = {
         "ticker": "AAPL",
-        "news_items": [
-            {"title": "Apple announces new product", "sentiment": 0.8},
-            {"title": "Market analysis", "sentiment": 0.5},
-        ],
+        "news_items": [{"title": "Headline", "sentiment": 0.8}],
     }
 
-    # Act
-    artifact_id = await artifact_manager.save_artifact(
-        data=test_data,
+    artifact_id = await service.save_artifact(
+        data=payload,
         artifact_type="news_items",
-        produced_by="tests.artifact_manager",
+        produced_by="tests.artifact_service",
         key_prefix="AAPL",
-        thread_id="test_thread_123",
+        thread_id="thread-123",
     )
 
-    # Assert
-    assert artifact_id is not None
-    assert isinstance(artifact_id, str)
-    assert len(artifact_id) == 36  # UUID format
-
-    # Retrieve
-    artifact = await artifact_manager.get_artifact(artifact_id)
-    assert artifact is not None
-    assert artifact.type == "news_items"
-    assert artifact.data["kind"] == "news_items"
-    assert artifact.data["version"] == "v1"
-    assert artifact.data["produced_by"] == "tests.artifact_manager"
-    assert artifact.data["data"] == test_data
-    assert artifact.thread_id == "test_thread_123"
-    assert "AAPL" in artifact.key
+    record = await service.get_artifact(artifact_id)
+    assert record is not None
+    assert record.artifact_id == artifact_id
+    assert record.kind == "news_items"
+    assert record.envelope.data == payload
+    assert record.envelope.version == "v1"
+    assert record.thread_id == "thread-123"
+    assert record.key == "news_items_AAPL"
 
 
 @pytest.mark.anyio
-async def test_save_artifact_without_optional_fields():
-    """Test saving artifact without key_prefix and thread_id."""
-    # Arrange
-    test_data = {"calculation": "DCF", "result": 150.25}
-
-    # Act
-    artifact_id = await artifact_manager.save_artifact(
-        data=test_data,
+async def test_save_without_optional_fields_keeps_them_empty(
+    service: ArtifactService,
+) -> None:
+    artifact_id = await service.save_artifact(
+        data={"result": 150.25},
         artifact_type="calculation_result",
-        produced_by="tests.artifact_manager",
+        produced_by="tests.artifact_service",
     )
 
-    # Assert
-    artifact = await artifact_manager.get_artifact(artifact_id)
-    assert artifact is not None
-    assert artifact.type == "calculation_result"
-    assert artifact.data["data"] == test_data
-    assert artifact.key is None
-    assert artifact.thread_id is None
+    record = await service.get_artifact(artifact_id)
+    assert record is not None
+    assert record.key is None
+    assert record.thread_id is None
 
 
 @pytest.mark.anyio
-async def test_large_artifact_5mb():
-    """Test storing a large ~5MB JSON payload."""
-    # Arrange: Create a large dataset
-    large_data = {
-        "price_history": [
-            {"date": f"2024-{i:04d}", "open": 100 + i * 0.1, "close": 101 + i * 0.1}
-            for i in range(100000)  # ~10MB of data
-        ]
-    }
-
-    # Verify size is approximately 5MB
-    json_str = json.dumps(large_data)
-    size_mb = len(json_str.encode("utf-8")) / (1024 * 1024)
-    assert size_mb > 4.5  # Should be around 5MB
-
-    # Act
-    artifact_id = await artifact_manager.save_artifact(
-        data=large_data,
-        artifact_type="price_data",
-        produced_by="tests.artifact_manager",
-        key_prefix="LARGE_TEST",
+async def test_save_list_payload_and_read_distinguishes_missing_from_empty(
+    service: ArtifactService,
+) -> None:
+    artifact_id = await service.save_artifact(
+        data=[],
+        artifact_type="news_items",
+        produced_by="tests.artifact_service",
     )
 
-    # Assert
-    artifact = await artifact_manager.get_artifact(artifact_id)
-    assert artifact is not None
-    assert artifact.type == "price_data"
-    assert len(artifact.data["data"]["price_history"]) == 100000
+    assert await service.get_artifact_data(artifact_id, "news_items") == []
+    assert await service.get_artifact_data("missing", "news_items") is None
 
 
 @pytest.mark.anyio
-async def test_artifact_not_found():
-    """Test retrieval of non-existent artifact."""
-    # Act
-    fake_id = str(uuid.uuid4())
-    artifact = await artifact_manager.get_artifact(fake_id)
-
-    # Assert
-    assert artifact is None
-
-
-@pytest.mark.anyio
-async def test_get_agent_output_thread_id_uses_the_matching_run_event():
-    session = AsyncMock()
-    session.scalar.return_value = "thread_123"
-    session_context = MagicMock()
-    session_context.__aenter__ = AsyncMock(return_value=session)
-    session_context.__aexit__ = AsyncMock(return_value=None)
-
-    with patch(
-        "src.services.artifact_manager.AsyncSessionLocal",
-        return_value=session_context,
-    ):
-        thread_id = await artifact_manager.get_agent_output_thread_id(
-            artifact_id="artifact_123",
-            run_id="run_123",
-        )
-
-    assert thread_id == "thread_123"
-    statement = session.scalar.await_args.args[0]
-    compiled = statement.compile()
-    assert "workflow_activity_events.run_id" in str(compiled)
-    assert "workflow_activity_events.event_name" in str(compiled)
-    assert "workflow_activity_events.payload" in str(compiled)
-    assert {"run_123", "workflow.agent_output", "artifact_123"}.issubset(
-        set(compiled.params.values())
-    )
-
-
-@pytest.mark.anyio
-async def test_get_referenced_artifact_thread_id_uses_parent_output_scope():
-    output_event = SimpleNamespace(
-        thread_id="thread_123",
-        payload={"artifact_id": "parent_report"},
-    )
-    parent_artifact = SimpleNamespace(
-        id="parent_report",
-        data={
-            "kind": "ta_full_report",
-            "data": {
-                "artifact_refs": {
-                    "chart_data_id": "child_chart",
-                    "verification_report_id": "child_verification",
-                }
-            },
-        },
-    )
-    events_result = MagicMock()
-    events_result.all.return_value = [output_event]
-    artifacts_result = MagicMock()
-    artifacts_result.all.return_value = [parent_artifact]
-    session = MagicMock()
-    session.scalars = AsyncMock(side_effect=[events_result, artifacts_result])
-    session_context = MagicMock()
-    session_context.__aenter__ = AsyncMock(return_value=session)
-    session_context.__aexit__ = AsyncMock(return_value=None)
-
-    with patch(
-        "src.services.artifact_manager.AsyncSessionLocal",
-        return_value=session_context,
-    ):
-        thread_id = await artifact_manager.get_referenced_artifact_thread_id(
-            artifact_id="child_chart",
-            run_id="run_123",
-        )
-
-    assert thread_id == "thread_123"
-    first_statement = session.scalars.await_args_list[0].args[0]
-    assert "workflow_activity_events.run_id" in str(first_statement.compile())
-    assert "run_123" in set(first_statement.compile().params.values())
-
-
-@pytest.mark.anyio
-async def test_get_referenced_artifact_thread_id_rejects_unlisted_child():
-    output_event = SimpleNamespace(
-        thread_id="thread_123",
-        payload={"artifact_id": "parent_report"},
-    )
-    parent_artifact = SimpleNamespace(
-        id="parent_report",
-        data={"data": {"artifact_refs": {"chart_data_id": "other_child"}}},
-    )
-    events_result = MagicMock()
-    events_result.all.return_value = [output_event]
-    artifacts_result = MagicMock()
-    artifacts_result.all.return_value = [parent_artifact]
-    session = MagicMock()
-    session.scalars = AsyncMock(side_effect=[events_result, artifacts_result])
-    session_context = MagicMock()
-    session_context.__aenter__ = AsyncMock(return_value=session)
-    session_context.__aexit__ = AsyncMock(return_value=None)
-
-    with patch(
-        "src.services.artifact_manager.AsyncSessionLocal",
-        return_value=session_context,
-    ):
-        thread_id = await artifact_manager.get_referenced_artifact_thread_id(
-            artifact_id="child_chart",
-            run_id="run_123",
-        )
-
-    assert thread_id is None
-
-
-@pytest.mark.anyio
-async def test_is_referenced_artifact_reference_scopes_lookup_to_thread():
-    output_event = SimpleNamespace(
-        thread_id="thread_123",
-        payload={"artifact_id": "parent_report"},
-    )
-    parent_artifact = SimpleNamespace(
-        id="parent_report",
-        data={"data": {"artifact_refs": {"chart_data_id": "child_chart"}}},
-    )
-    events_result = MagicMock()
-    events_result.all.return_value = [output_event]
-    artifacts_result = MagicMock()
-    artifacts_result.all.return_value = [parent_artifact]
-    session = MagicMock()
-    session.scalars = AsyncMock(side_effect=[events_result, artifacts_result])
-    session_context = MagicMock()
-    session_context.__aenter__ = AsyncMock(return_value=session)
-    session_context.__aexit__ = AsyncMock(return_value=None)
-
-    with patch(
-        "src.services.artifact_manager.AsyncSessionLocal",
-        return_value=session_context,
-    ):
-        is_referenced = await artifact_manager.is_referenced_artifact_reference(
-            artifact_id="child_chart",
-            thread_id="thread_123",
-        )
-
-    assert is_referenced is True
-    event_query = session.scalars.await_args_list[0].args[0].compile()
-    assert "workflow_activity_events.thread_id" in str(event_query)
-    assert "thread_123" in set(event_query.params.values())
-
-
-@pytest.mark.anyio
-async def test_save_list_artifact():
-    """Test saving a list instead of a dict."""
-    # Arrange
-    test_data = [
-        {"symbol": "AAPL", "weight": 0.3},
-        {"symbol": "GOOGL", "weight": 0.4},
-        {"symbol": "MSFT", "weight": 0.3},
-    ]
-
-    # Act
-    artifact_id = await artifact_manager.save_artifact(
-        data=test_data,
-        artifact_type="portfolio_allocation",
-        produced_by="tests.artifact_manager",
-    )
-
-    # Assert
-    artifact = await artifact_manager.get_artifact(artifact_id)
-    assert artifact is not None
-    assert artifact.data["data"] == test_data
-    assert isinstance(artifact.data["data"], list)
-
-
-@pytest.mark.anyio
-async def test_multiple_artifacts_same_type():
-    """Test creating multiple artifacts of the same type."""
-    # Act
-    id1 = await artifact_manager.save_artifact(
+async def test_get_artifact_data_rejects_a_different_kind(
+    service: ArtifactService,
+) -> None:
+    artifact_id = await service.save_artifact(
         data={"ticker": "AAPL"},
         artifact_type="news_items",
-        produced_by="tests.artifact_manager",
-        key_prefix="AAPL",
-    )
-    id2 = await artifact_manager.save_artifact(
-        data={"ticker": "GOOGL"},
-        artifact_type="news_items",
-        produced_by="tests.artifact_manager",
-        key_prefix="GOOGL",
+        produced_by="tests.artifact_service",
     )
 
-    # Assert
-    assert id1 != id2
-
-    artifact1 = await artifact_manager.get_artifact(id1)
-    artifact2 = await artifact_manager.get_artifact(id2)
-
-    assert artifact1.data["data"]["ticker"] == "AAPL"
-    assert artifact2.data["data"]["ticker"] == "GOOGL"
-    assert "AAPL" in artifact1.key
-    assert "GOOGL" in artifact2.key
+    with pytest.raises(TypeError, match="expected 'financial_reports'"):
+        await service.get_artifact_data(artifact_id, "financial_reports")
 
 
 @pytest.mark.anyio
-async def test_get_artifact_data_validates_expected_kind():
-    artifact_id = await artifact_manager.save_artifact(
+async def test_save_is_idempotent_for_same_workflow_context_and_payload(
+    service: ArtifactService,
+    repository: InMemoryArtifactRepository,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    context = SimpleNamespace(
+        thread_id="thread-123",
+        run_id="run-456",
+        source_run_id="source-run-123",
+    )
+    monkeypatch.setattr(
+        "src.artifacts.application.service.get_workflow_execution_context",
+        lambda: context,
+    )
+
+    first_id = await service.save_artifact(
         data={"ticker": "AAPL"},
         artifact_type="news_items",
-        produced_by="tests.artifact_manager",
+        produced_by="news.fetch",
+    )
+    second_id = await service.save_artifact(
+        data={"ticker": "AAPL"},
+        artifact_type="news_items",
+        produced_by="news.fetch",
     )
 
-    payload = await artifact_manager.get_artifact_data(
-        artifact_id, expected_kind="news_items"
-    )
-    assert payload == {"ticker": "AAPL"}
-
-    with pytest.raises(TypeError):
-        await artifact_manager.get_artifact_data(
-            artifact_id, expected_kind="financial_reports"
-        )
+    assert first_id == second_id
+    assert len(repository.records) == 1
+    record = repository.records[first_id]
+    assert record.thread_id == "thread-123"
+    assert record.dedupe_key is not None
 
 
-def test_artifact_dedupe_content_ignores_run_generated_timestamp():
+def test_artifact_dedupe_content_ignores_envelope_timestamp() -> None:
+    from src.artifacts.public import ArtifactEnvelope
+
     first = ArtifactEnvelope(
         kind="news_items",
         produced_by="news.fetch",
@@ -335,4 +156,4 @@ def test_artifact_dedupe_content_ignores_run_generated_timestamp():
     )
     replay = first.model_copy(update={"created_at": "2026-10-30T10:01:00+00:00"})
 
-    assert _artifact_content(first) == _artifact_content(replay)
+    assert artifact_content(first) == artifact_content(replay)

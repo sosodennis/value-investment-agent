@@ -10,7 +10,7 @@ from src.agents.fundamental.capabilities.artifacts_provenance.infrastructure.fun
 from src.agents.fundamental.capabilities.artifacts_provenance.interface.contracts import (
     parse_fundamental_artifact_model,
 )
-from src.shared.cross_agent.data.typed_artifact_port import TypedArtifactPort
+from src.artifacts.public import TypedArtifactPort
 from src.shared.kernel.types import JSONObject
 
 

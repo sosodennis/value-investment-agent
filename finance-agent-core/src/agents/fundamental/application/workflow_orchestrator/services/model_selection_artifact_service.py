@@ -20,7 +20,8 @@ from src.agents.fundamental.capabilities.model_selection.public import (
     FundamentalSelectionReport,
     build_latest_health_context,
 )
-from src.shared.kernel.types import AgentOutputArtifactPayload, JSONObject
+from src.artifacts.public import AgentOutputArtifactPayload
+from src.shared.kernel.types import JSONObject
 
 
 def _build_mapper_context(

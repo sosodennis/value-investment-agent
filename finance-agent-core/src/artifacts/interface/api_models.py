@@ -4,7 +4,7 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field, TypeAdapter, ValidationError, create_model
 
-from src.interface.artifacts.artifact_contract_specs import (
+from src.artifacts.contracts.specs import (
     ARTIFACT_CONTRACT_SPECS,
     ArtifactContractSpec,
 )

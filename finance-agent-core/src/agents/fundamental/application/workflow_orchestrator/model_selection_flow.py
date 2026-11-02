@@ -23,9 +23,10 @@ from src.agents.fundamental.capabilities.model_selection.public import (
     FundamentalSelectionReport,
     project_selection_reports,
 )
+from src.artifacts.public import AgentOutputArtifactPayload
 from src.shared.cross_agent.domain.market_identity import CompanyProfile
 from src.shared.kernel.tools.logger import get_logger, log_event
-from src.shared.kernel.types import AgentOutputArtifactPayload, JSONObject
+from src.shared.kernel.types import JSONObject
 from src.shared.kernel.workflow_contracts import WorkflowNodeResult
 
 logger = get_logger(__name__)
