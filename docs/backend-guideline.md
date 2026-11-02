@@ -45,6 +45,43 @@ Keep one stable identifier for each concept. Agent IDs, artifact kinds, output k
 
 Existing public field and route names remain part of their contracts. Use `snake_case` for new JSON fields. When correcting an existing contract, update the backend schema, OpenAPI, generated client types, frontend parser, service clients, fixtures, and tests in one change. This project is pre-release, so remove obsolete aliases after all in-repository callers move.
 
+### Required architecture change procedure
+
+Every backend change that adds or moves code must record these decisions in its issue or pull request before implementation:
+
+1. Name the feature owner and the public contract being changed or introduced.
+2. Identify the package that owns state, policy, I/O, serialization, and composition.
+3. Draw the intended dependency edges and list any cross-slice or cross-capability contract.
+4. Name the side effects, resource lifecycle, failure/degradation behavior, and boundary tests.
+5. State whether the change is a module edit, package split, capability, shared contract, or deployable service, and why.
+
+Use this placement table when deciding where code belongs:
+
+| Code responsibility | Canonical owner | Boundary rule |
+| --- | --- | --- |
+| Graph state, nodes, routing, subgraph construction | Agent `workflow/` | Owns orchestration state; does not construct concrete providers |
+| Use-case sequencing and ports | Agent `application/` | Depends on domain, typed ports, facades, and shared contracts |
+| Deterministic rules, models, calculators, policies | Agent `domain/` or capability domain | No network, database, framework, LangGraph, or LLM imports |
+| Provider/client/repository adapters | Agent `infrastructure/` or capability infrastructure | Implements application ports; owns external I/O and persistence |
+| HTTP/prompt schemas, mapping, serialization | Agent `interface/` | Converts boundary data; does not coordinate use cases |
+| Independently bounded business capability | Agent `capabilities/<name>/` | Requires an owner, stable facade, independent tests, and an acyclic dependency edge |
+| Cross-agent transport or domain-neutral contract | `src/shared/` | Must have more than one real consumer and no feature policy |
+| Root graph, FastAPI router assembly, lifespan wiring | Composition root | May assemble public entrypoints and resources only |
+
+Do not add a layer or package because a file is large. A module may stay together when it has one owner, one main reason to change, and no public boundary. Create a package when its modules share an owner but need an independent import and test seam. Create a capability only when the concept has an independently useful contract or state machine, a stable facade, an owner, and a distinct change or release boundary. If those conditions are not met, keep the code in the owning slice.
+
+The following imports are prohibited for new code:
+
+- Root workflow or API composition into another slice's `application`, `domain`, `workflow`, `interface`, or `infrastructure` implementation.
+- Agent code into another agent's private modules, `src.services`, or private root `src.interface` implementations.
+- Capability code into another capability's implementation file; use its facade or move the shared contract to `src/shared/`.
+- Domain code into clients, providers, repositories, FastAPI, SQLAlchemy, LangGraph, or LLM adapters.
+- New `subdomains/` paths. Existing paths are migration debt and must be re-homed or deleted as part of the owning issue.
+
+For a public or internal contract change, update the owning Pydantic model or protocol, OpenAPI or service schema, generated client types, mappers/serializers, fixtures, and boundary tests in the same change. Version incompatible wire changes; do not add aliases or dual parsers to preserve disposable pre-release data.
+
+The issue and pull request must include the validation evidence for the changed boundary. At minimum run `python3 scripts/architecture_guard.py`, `uv run ruff check src api`, the focused owner tests, and the public-entrypoint fake-adapter graph tests. Add service contract, authorization, persistence, cancellation, replay, or Docker checks when those boundaries change. Record exact commands, exit codes, final commit SHA, skipped checks, and any remaining limitation. A passing architecture guard is necessary but does not prove ownership, contract, or runtime behavior; the owning tests and dependency review are also required.
+
 ## 3. Version public and internal contracts
 
 - Put public REST and SSE routes under `/api/v1`. Use lowercase plural resources and `kebab-case` path segments. Use an action subpath only when the operation is a command rather than resource CRUD.
