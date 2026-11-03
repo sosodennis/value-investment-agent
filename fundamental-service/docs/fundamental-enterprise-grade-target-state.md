@@ -93,7 +93,7 @@ Every change to this target state must include:
 
 ## 6. Target architecture
 
-The target architecture is a vertical pipeline with explicit ownership. Each layer emits a typed artifact and a quality report.
+The target architecture is a vertical pipeline with explicit ownership, split into a persistent data plane and a stateless compute plane. Each layer emits a typed artifact and a quality report.
 
 ```text
 identity resolution
@@ -108,6 +108,8 @@ identity resolution
     -> calibration and out-of-sample validation
     -> provenance graph and report
 ```
+
+The service keeps public financial evidence, canonical facts, taxonomy and mapping releases, model specifications, and policy releases as immutable or versioned data. The calculation plane reads those records and executes a complete request without creating a valuation session, workflow row, approval state, or server-owned job. A content-addressed response cache may be used as an optimization, but it is never the source of truth and a cache miss has exactly the same semantics as a cache hit.
 
 | Layer | Owns | Must not own |
 | --- | --- | --- |
@@ -129,13 +131,13 @@ Agents call these capabilities through interfaces. They may propose a value, but
 
 The first service release uses the repository's existing backend conventions: Python 3.11 or later, FastAPI, Pydantic v2, `httpx`, and asynchronous SQLAlchemy with PostgreSQL. The service has its own database, database role, schema namespace, migrations, cache keys, and artifact records. It must not share tables with `finance-agent-core`.
 
-PostgreSQL stores operation state, canonical metadata, mapping decisions, model and policy releases, artifact manifests, and content hashes. V1 stores immutable raw source bytes and large artifacts in a service-owned content-addressed filesystem volume. The storage port uses `(sha256, media_type)` as the object key, verifies the hash on read, and records the volume in the release manifest. A later object store adapter may replace the volume without changing a contract. The service must not require a paid object store for local or first-release operation.
+PostgreSQL stores canonical metadata, mapping decisions, model and policy releases, source-snapshot manifests, release manifests, and content hashes. V1 stores immutable raw source bytes and large artifacts in a service-owned content-addressed filesystem volume. The storage port uses `(sha256, media_type)` as the object key, verifies the hash on read, and records the volume in the release manifest. A later object store adapter may replace the volume without changing a contract. The service must not require a paid object store for local or first-release operation. It must not store per-request valuation operation state or run a service-owned valuation queue.
 
-V1 uses a durable PostgreSQL operation queue with an API process and a worker process. The worker claims work with a lease and `FOR UPDATE SKIP LOCKED`, renews the lease under the request deadline, and records a terminal outcome. FastAPI background tasks are not the durable execution mechanism. Redis, Kafka, and a separate broker are deferred until measured queue or fan-out needs justify them.
+The calculation process is stateless per request: it receives an immutable `data_snapshot_id`, a model, explicit assumptions and uncertainty specification, and returns a result or a stable refusal before the request ends. Long-running or batched work is caller-owned orchestration. If a future deployment needs asynchronous execution, it must introduce a separately versioned computation contract without changing the deterministic calculation semantics; it must not reintroduce a hidden approval workflow.
 
 The service exposes `GET /livez` for process liveness and `GET /readyz` for dependency readiness. Readiness requires the service schema, content-addressed store, and required signing configuration to be usable. Readiness returns only the shared `internal.v1` status shape and never exposes provider, database, or credential details.
 
-`fundamental-json-v1` is the canonical artifact serialization. It uses UTF-8 JSON with sorted object keys, no insignificant whitespace, UTC RFC 3339 timestamps, decimal values as canonical base-10 strings, explicit `null` only where the schema permits it, and arrays sorted by their declared identity when they represent sets. It rejects JSON NaN and Infinity. SHA-256 over these bytes produces every prepared-input, artifact, and release digest. The implementation must use one shared serializer for hashing, storage, and replay.
+`fundamental-json-v1` is the canonical artifact serialization. It uses UTF-8 JSON with sorted object keys, no insignificant whitespace, UTC RFC 3339 timestamps, decimal values as canonical base-10 strings, explicit `null` only where the schema permits it, and arrays sorted by their declared identity when they represent sets. It rejects JSON NaN and Infinity. SHA-256 over these bytes produces every input, calculation artifact, and release digest. The implementation must use one shared serializer for hashing, response caching, storage, and replay.
 
 ## 7. Free public data policy
 
@@ -531,7 +533,7 @@ Every released valuation contains:
 - the share of value contributed by terminal value and the top assumptions by value sensitivity;
 - a deterministic random seed and distribution specification for Monte Carlo runs.
 
-Monte Carlo is not a substitute for model validation. The simulation must record the joint distribution, parameter correlations, truncation rules, number of draws, seed, and convergence diagnostics. The report must distinguish a model-implied interval from a historically calibrated prediction interval.
+Monte Carlo is not a substitute for model validation. In the stateless API, a range alone is invalid: the caller must provide the distribution type, bounds and mode/mean where applicable, sample count, deterministic random seed, parameter dependencies or correlation specification, and the invalid-draw policy. The service validates these inputs against economic invariants and rejects them when they are incomplete, contradictory, or outside the model contract. It never silently clamps, replaces, or fills a caller-supplied range. The simulation records the joint distribution, parameter correlations, truncation rules, number of requested and valid draws, seed, sampler version, invalid-draw counts and reasons, and convergence diagnostics. If the valid sample count is below the declared minimum, the result is `abstain` or `provisional` according to the model policy rather than a fabricated interval. The report must distinguish a model-implied interval from a historically calibrated prediction interval.
 
 Intervals must be checked for coverage, sharpness, interval score, and stability by cohort. A narrow interval that misses the realized label is worse than a wider interval with honest coverage.
 
@@ -754,7 +756,7 @@ All model families use the same versioned contract from the first service releas
 "Fully tested before integration" means that every model and path advertised by the intended service release passes that release's gates. It does not mean that unsupported future families must exist before the first agent call. The first integration may expose only the pragmatic profile, with all other families returning explicit `unsupported` or `abstain` states.
 
 1. **Freeze the canonical specification.** Register this file as the only normative Fundamental document. Mark older design documents non-authoritative and remove conflicting index entries.
-2. **Create the service boundary.** Add a private internal-service contract with `internal.v1` context, `fundamental.v1` operation schemas, the prepare/approve/reject state machine, deadlines, idempotency, stable errors, readiness, and correlation IDs.
+2. **Create the service boundary.** Add a private internal-service contract with `internal.v1` context, `fundamental.v1` data and calculation schemas, explicit input digests, deadlines, stable errors, readiness, and correlation IDs. The contract has no service-owned approval or valuation-operation state.
 3. **Build the service-owned source snapshot.** Persist raw SEC, filing-referenced DTS, selected Treasury/ALFRED/Damodaran observations, and optional market observations with content hashes, timestamps, provider metadata, legal-use references, and service-owned cache keys.
 4. **Build the point-in-time fact and taxonomy registry.** Add canonical facts, accession and amendment selection, complete DTS manifests, content-addressed taxonomy packages, reviewed canonical mapping decisions, dimensions, units, and replay without network access.
 5. **Harden Arelle validation.** Load pinned EFM/DQC plugins and rule packages; make taxonomy, plugin, validation-rule signatures and normalized findings first-class artifacts with block and warn gates. Do not add custom plugins in the first release.
@@ -844,7 +846,7 @@ Implement the first service release in these ownership slices. Keep each slice i
 | Model registry and deterministic engine | `ModelSpecV1`, eligibility, calculation graphs, capital bridges, and abstention | Positive, negative, boundary, and independent node-level fixtures pass for each supported model. |
 | Provenance, cache, and replay | Immutable manifests, content-addressed cache, artifact references, and offline replay | Cache lifecycle tests pass and a clean replay matches the release hash. |
 | Forecast calibration and uncertainty | Point-in-time labels, chronological evaluation, intervals, baselines, and promotion policy | Reports show raw, calibrated, and naive metrics. Calibration remains inactive when evidence is insufficient. |
-| Service operations | Authentication, deadlines, idempotency, readiness, logs, metrics, retention, and recovery | Container tests cover startup, health, timeout, restart, and artifact preservation. |
+| Service operations | Authentication, deadlines, readiness, logs, metrics, retention, and recovery | Container tests cover startup, health, timeout, restart, and artifact preservation. |
 
 Keep implementation commands and incident steps in service runbooks. Keep domain contracts and pass or fail rules in this specification.
 
@@ -865,7 +867,7 @@ The realized label is the first subsequently published eligible filing fact afte
 
 ### 24.4.2 Minimum V1 contract freeze
 
-Before implementing each service slice, freeze the machine-readable V1 contract for the artifacts that slice produces. At minimum, the first release must define schemas for `SourceSnapshotV1`, `CanonicalFactV1`, `ValuationInputV1`, `EligibilityReportV1`, `CalculationArtifactV1`, `ReleaseManifestV1`, and the stable error catalog. Each schema must define required fields, unknown-field policy, version compatibility, status transitions, provenance references, idempotency behavior where applicable, and deterministic serialization. Enterprise-only artifacts such as a full `ProvenanceGraphV1` or broad `CalibrationArtifactV1` may be implemented in later slices, but their first released contract must not contradict these V1 semantics.
+Before implementing each service slice, freeze the machine-readable V1 contract for the artifacts that slice produces. At minimum, the first release must define schemas for `SourceSnapshotV1`, `CanonicalFactV1`, `ValuationInputV1`, `EligibilityReportV1`, `CalculationArtifactV1`, `ReleaseManifestV1`, and the stable error catalog. Each schema must define required fields, unknown-field policy, version compatibility, provenance references, deterministic serialization, and whether it is persistent data or a per-request response. There is no service-owned status transition for a valuation request. Enterprise-only artifacts such as a full `ProvenanceGraphV1` or broad `CalibrationArtifactV1` may be implemented in later slices, but their first released contract must not contradict these V1 semantics.
 
 ### 24.4.3 Binding initial implementation decisions
 
@@ -888,10 +890,10 @@ The following decisions are binding for `us-gaap-public-v1`; implementation does
 | Reconciliation tolerance | After unit and currency normalization, a reported accounting residual must be no greater than the greater of one unit of the least precise contributing fact, USD 1, or 1e-9 times the largest absolute side. A larger residual needs a named presentation, FX, rounding, or mapping exception and cannot be `verified` without reviewer approval. |
 | Arithmetic | Use `Decimal` with precision 34 and `ROUND_HALF_EVEN`; preserve full precision through the calculation and round only for display. Same-runtime golden replay must match the canonical serialized result exactly. Independent challenger tolerance is at most the greater of USD 1 absolute or 1e-9 relative for equity value, and USD 0.000001 per share. |
 | Calibration | Forecast calibration is not required to activate the first release. For V1 revenue-growth and operating-margin targets, the primary metric is MAE in percentage points and the interval is an 80% central interval. Calibration remains inactive until its predeclared, time-separated OOS cohort contains at least 30 eligible labels for the target and model, at least 10 labels in each promoted industry cohort, improves the raw and naive baselines by at least 10% on the primary metric with a two-sided 95% bootstrap interval for the improvement above zero, and has an observed interval coverage whose two-sided 95% Wilson interval has a lower bound of at least 70%. The report still shows raw and naive metrics and uncertainty. The 20-case engineering corpus is never calibration evidence. |
-| Human approval | Data preparation and eligibility may run before approval. Deterministic valuation calculation may run only after an authenticated reviewer approves the exact prepared-input and assumption digest. A changed digest invalidates the approval. |
+| Human approval | Approval belongs to the caller's workflow. The caller may send an optional `CallerApprovalEnvelopeV1` containing the exact `input_digest`, approver identity, decision, and authorization evidence. The service may validate and echo that envelope, but it does not persist, transition, or manage approval state. A digest mismatch is rejected; the calculator itself remains stateless and never waits for or creates approval. |
 | Free-data rule | No paid API, subscription, or data license is required. If a free source's terms do not permit the intended use, it is excluded; the service degrades or abstains instead of scraping around the restriction. |
 
-`ValuationInputV1` has six top-level required groups: `identity` (CIK, issuer name, domicile, reporting basis, security/share-class identity, currency); `valuation_context` (valuation timestamp, source-selection policy, coverage profile); `historical_facts` (canonical fact references for the required field set below); `assumptions` (five-year forecast drivers, WACC components, terminal growth, tax normalization, dilution and scenario); `quality` (fact statuses, issue codes, and eligibility state); and `provenance` (snapshot, mapping, parser, taxonomy, and policy versions). It does not contain approval state or approver identity. The service computes `prepared_input_digest` over a canonical `fundamental-json-v1` serialization of these groups and stores approval in a separate immutable `ApprovalRecordV1`. Missing groups are schema errors. Missing required economic inputs are eligibility failures, never zeroes.
+`ValuationInputV1` has seven top-level required groups: `identity` (CIK, issuer name, domicile, reporting basis, security/share-class identity, currency); `valuation_context` (valuation timestamp, immutable `data_snapshot_id`, source-selection policy, coverage profile); `historical_facts` (canonical fact references for the required field set below); `assumptions` (five-year forecast drivers, WACC components, terminal growth, tax normalization, dilution and scenario); `uncertainty` (explicit scenario and Monte Carlo specification when requested); `quality` (fact statuses, issue codes, and eligibility state); and `provenance` (snapshot, mapping, parser, taxonomy, and policy versions). It contains no service approval state or approver identity. The service computes `input_digest` over the complete canonical `fundamental-json-v1` request, including the immutable snapshot, model, assumptions, uncertainty, and resolved policy versions. A caller may bind its own approval envelope to that digest, but the service does not store an `ApprovalRecordV1`. Missing groups are schema errors. Missing required economic inputs are eligibility failures, never zeroes.
 
 The initial required canonical field set is: revenue; cost of revenue; operating income; income before tax; income tax expense; net income; depreciation and amortization; capital expenditure; operating current assets and liabilities needed for working-capital change; cash and equivalents; current and long-term interest-bearing debt; operating and finance lease costs and liabilities by current/long-term scope; SBC expense; basic and diluted weighted-average shares; and point-in-time common shares outstanding. Preferred claims, non-controlling interests, convertibles, and other share classes must be represented as present/confirmed-absent/unknown even when the model ultimately rejects the issuer. Every fact includes period, unit, currency, scale, dimensions, source accession and context, availability timestamp, original QName, canonical mapping decision, and quality status.
 
@@ -905,13 +907,14 @@ The first schemas use strict unknown-field rejection and no implicit defaults. T
 | --- | --- |
 | `SourceSnapshotV1` | schema and snapshot IDs; issuer/security identity; valuation timestamp; captured-at time; source records with URI, role, availability/capture time, HTTP status, content hash, media type and terms reference; accession/form/filed-at records and amendment links; taxonomy manifest reference; parser and policy versions. |
 | `CanonicalFactV1` | fact ID; issuer/security; original concept QName; canonical field and mapping decision ID; typed value or explicit missing state; unit/scale/currency; structured context and dimensions; economic period; available/filed/captured times; accession; taxonomy package hash; source content hash; quality status and issue references. |
-| `ValuationInputV1` | the six top-level groups defined above, excluding approval; references to immutable facts; explicit assumption provenance; requested model/profile; canonical serialized form and prepared digest. |
-| `ApprovalRecordV1` | valuation ID; prepared-input digest; approver identity and authorization evidence; approved-at time; decision; rejection reason when applicable; service contract and policy versions. |
+| `ValuationInputV1` | the required groups defined above; immutable snapshot and fact references; explicit assumption and uncertainty provenance; requested model/profile; canonical serialized form and `input_digest`. |
+| `CallerApprovalEnvelopeV1` | optional caller-owned approval evidence: `input_digest`; approver identity or external authorization reference; approved-at time; decision; rejection reason when applicable; caller workflow version. The service validates the binding but does not persist or transition this record. |
+| `PolicyResolutionV1` | pinned policy ID/version; every resolved field; caller value, policy value, precedence decision, and provenance; resulting assumptions and resulting `input_digest`. |
 | `EligibilityReportV1` | input digest; every candidate model/version; required and missing fields; forbidden conditions; quality issues; eligibility status; selected model or abstention code; policy version. |
-| `CalculationArtifactV1` | approved input digest; approval-record reference; model/schema/calculation/policy versions; named DAG nodes with formula ID, input references, Decimal result, unit and provenance; enterprise/equity bridge; per-share result; scenarios/sensitivity; output hash and quality state. |
+| `CalculationArtifactV1` | input digest; optional caller-approval envelope reference; model/schema/calculation/policy versions; named DAG nodes with formula ID, input references, Decimal result, unit and provenance; enterprise/equity bridge; per-share result; scenarios/sensitivity; output hash and quality state. |
 | `ReleaseManifestV1` | artifact and input hashes; source snapshot IDs; taxonomy/DTS package hash; Arelle, EFM/DQC plugin and rule signatures; mapping, model, calculation, assumption, quality and calibration versions; runtime/build identity; replay result. |
 
-Stable boundary error codes for V1 are `IDENTITY_AMBIGUOUS`, `SOURCE_UNAVAILABLE`, `SOURCE_RATE_LIMITED`, `FILING_NOT_AVAILABLE_AS_OF`, `TAXONOMY_PACKAGE_INVALID`, `XBRL_VALIDATION_BLOCKED`, `FACT_MAPPING_UNRESOLVED`, `FACT_CONFLICT`, `MODEL_UNSUPPORTED`, `MODEL_INELIGIBLE`, `APPROVAL_REQUIRED`, `APPROVAL_DIGEST_MISMATCH`, `IDEMPOTENCY_CONFLICT`, `REPLAY_MISMATCH`, `DEPENDENCY_INCOMPATIBLE`, and `INTERNAL_FAILURE`. Each error also carries a retryable flag, correlation ID, and safe diagnostic reference. Message text is not a programmatic contract.
+Stable boundary error codes for V1 are `IDENTITY_AMBIGUOUS`, `SNAPSHOT_NOT_FOUND`, `POLICY_NOT_FOUND`, `SOURCE_UNAVAILABLE`, `SOURCE_RATE_LIMITED`, `FILING_NOT_AVAILABLE_AS_OF`, `TAXONOMY_PACKAGE_INVALID`, `XBRL_VALIDATION_BLOCKED`, `FACT_MAPPING_UNRESOLVED`, `FACT_CONFLICT`, `MODEL_UNSUPPORTED`, `MODEL_INELIGIBLE`, `INPUT_DIGEST_MISMATCH`, `CALLER_APPROVAL_DIGEST_MISMATCH`, `UNCERTAINTY_INVALID`, `CALCULATION_BUDGET_EXCEEDED`, `REPLAY_MISMATCH`, `DEPENDENCY_INCOMPATIBLE`, and `INTERNAL_FAILURE`. Each error also carries a retryable flag, correlation ID, and safe diagnostic reference. Message text is not a programmatic contract.
 
 The initial taxonomy path uses Arelle with pinned `validate/EFM` and `validate/DQC` plugins and the filing's complete DTS. It does not introduce a custom Arelle plugin. For every filing, create `TaxonomyPackageManifestV1` with the entrypoint, all schema/linkbase/import resources, namespace URIs, taxonomy/package identifiers, source locations, byte hashes, Arelle version, plugin versions, validation profile and package hash. Resolve the DTS into a content-addressed local package; offline replay must not fetch taxonomy resources from the network. Never substitute the newest taxonomy release for the taxonomy referenced by a historical filing. The service maintains an allowlisted taxonomy-package registry from SEC/XBRL-published releases and filing-referenced issuer extensions; a new package or rule release is an additive version, never an in-place update to prior artifacts.
 
@@ -919,7 +922,7 @@ Issuer extensions remain first-class source concepts. The service-owned `Canonic
 
 The first release uses Arelle's existing EFM/DQC plugins for filing validation. Custom Arelle plugins are deferred. Add one only when a reproducible validation rule requires Arelle lifecycle hooks or model/DTS access that cannot be expressed in the service-owned post-parse quality rules; the plugin must emit normalized findings and may not own canonical accounting mappings, model selection, or valuation policy. Pin plugin code and rule resources by release identifier and content hash. A rule or plugin update creates a new validation profile and requires the affected release cohort to be rerun.
 
-The service operation state machine is `accepted -> preparing -> awaiting_approval -> approved -> calculating -> completed`, with terminal `rejected`, `abstained`, `failed`, and `unavailable` outcomes. `POST /v1/valuations` prepares source evidence, canonical facts, proposed assumptions, quality results, and an eligibility report, then returns `awaiting_approval` only when at least one requested model is eligible. If no model is eligible, preparation ends in `abstained` and no approval is requested. Preparation never runs the valuation graph. `POST /v1/valuations/{id}/approve` requires the approver identity and prepared digest and is the only transition that starts deterministic calculation. `POST /v1/valuations/{id}/reject` records the reason and ends the run without calculating. `GET` returns operation state and artifacts. Replay is permitted only for completed runs and uses the stored manifest offline; it never refetches or changes the approved input.
+There is no service-owned valuation operation state machine. `validate` checks a complete request against the selected snapshot, model, policy, assumptions, uncertainty specification, and quality gates without calculating a value. `calculate` executes the deterministic graph synchronously within a declared compute budget. `calculate-with-policy` first resolves a pinned policy into concrete assumptions, returns those resolved assumptions and provenance, and then invokes the exact same calculator. All three paths return a result, an explicit `abstain`/`unsupported`/`degraded` quality status, or a stable error in the same response; none creates a valuation session, approval row, queue item, or server-owned job. A caller may compare the returned `input_digest` with its own approval envelope before presenting or persisting the result. Replay uses the immutable manifest and input snapshot offline, and is a pure calculation request rather than a lookup of operation state.
 
 Do not use current price, analyst target price, or consensus as the realized label for intrinsic value. Those observations may remain in a separate market-signal evaluation.
 
@@ -1015,7 +1018,7 @@ Use the following methods as the default technical approach. Each method must pr
 | Forecast evaluation | Rolling-origin chronological splits, cohort analysis, proper scoring rules, confidence intervals, and purge or embargo when outcome windows overlap | point-in-time labels, raw and naive baselines, reliability reports, and promotion gates |
 | Uncertainty | Scenario analysis, sensitivity, empirical error distributions, calibrated prediction intervals | deterministic seeds, interval coverage, interval score, dominant-driver report |
 | Software verification | Contract tests, property-based tests, mutation tests for critical formulas, differential tests, offline replay | Pydantic contracts, Hypothesis or equivalent property tests, reference engine, replay manifests |
-| Operations | Immutable artifacts, idempotent processing, bounded retries, source-health monitoring | artifact repository, source snapshot manifest, cache keys, structured diagnostics and SLO metrics |
+| Operations | Immutable artifacts, content-addressed ingestion, repeatable calculation, bounded retries, source-health monitoring | artifact repository, source snapshot manifest, cache keys, structured diagnostics and SLO metrics |
 
 Do not introduce a tool only because it is common in another organization. The tool must close a named evidence gap, have a clear owner, and produce a repeatable check in this repository.
 
@@ -1054,7 +1057,7 @@ SourceSnapshotV1
     -> ProvenanceGraphV1 and ReleaseManifestV1
 ```
 
-The service may use internal adapters between its source, domain, and persistence layers, but the operation IDs, version fields, timestamps, status codes, and provenance references must be stable from the first release.
+The service may use internal adapters between its source, domain, and persistence layers, but the request/response fields, input and result digests, timestamps, status codes, and provenance references must be stable from the first release. No per-request operation ID is part of the calculation contract.
 
 ### 25.6 Existing agent to service boundary
 
@@ -1063,8 +1066,8 @@ The service may use internal adapters between its source, domain, and persistenc
 | SEC and market source access | `SourceSnapshotV1` owned by the service | the service fetches and caches source data; the agent does not pass raw filing dictionaries |
 | `FinancialReportModel` and `FinancialStatementsPayload` | `FinancialHealthArtifactV1` response reference | the agent maps the typed response summary into its own DTO; it never becomes the service's data store |
 | `TraceableField` and `TraceableFieldModel` | service-owned provenance envelope | the service returns provenance references and report projections, not shared internal trace objects |
-| `ParamBuilderPayload` and `ParamBuildResult` | `ValuationRequestV1` and `ValuationInputV1` | the service builds inputs from its own canonical facts and policy versions |
-| `ModelSpec`, `ModelCandidate`, `ModelSelectionResult` | service-owned `ModelSpecV1`, `EligibilityReportV1`, `SelectionArtifactV1` | the agent receives the selected model and eligibility evidence through the operation response |
+| `ParamBuilderPayload` and `ParamBuildResult` | `ValuationInputV1` and `PolicyResolutionV1` | the service reads its own canonical facts and policy versions; explicit caller assumptions remain visible and authoritative |
+| `ModelSpec`, `ModelCandidate`, `ModelSelectionResult` | service-owned `ModelSpecV1`, `EligibilityReportV1`, `SelectionArtifactV1` | the agent receives the selected model and eligibility evidence through the calculation response |
 | `CalculationGraph` and model graph functions | service-owned calculation engine and `CalculationArtifactV1` | no runtime import from the old agent; independent formula fixtures are mandatory |
 | `valuation_flow.py` and `JSONObject` report assembly | service client plus response mapper | the agent keeps only request orchestration, approval, and product projection |
 | existing replay reports and cohort gates | service-owned `ReleaseManifestV1` and `ReplayReportV1` | the service owns replay and release evidence; the agent stores references and user-visible summaries |
@@ -1074,11 +1077,11 @@ The service may use internal adapters between its source, domain, and persistenc
 
 Each service-build slice must satisfy all of these conditions before it is considered complete:
 
-1. The operation contract is defined in the service boundary and uses the shared `internal.v1` context contract.
-2. The service owns its source snapshots, cache, canonical facts, model registry, calculation artifacts, and calibration artifacts.
+1. The data and calculation contracts are defined in the service boundary and use the shared `internal.v1` context contract.
+2. The service owns its source snapshots, cache, canonical facts, model registry, policies, and release artifacts; it does not own caller workflow state.
 3. The existing Fundamental agent can call the service through a typed client and map the response without importing service internals.
 4. Fixed fixtures, independent expected outputs, and the service replay manifest agree within declared tolerances.
-5. The service exposes stable error codes, deadlines, idempotency, readiness, correlation IDs, and explicit degraded or abstain outcomes.
+5. The service exposes stable error codes, deadlines, readiness, correlation IDs, input/result digests, and explicit degraded or abstain outcomes. Repeated calculation requests are safe because the calculator is pure; no request idempotency table is required.
 6. No service domain code imports the old agent's `JSONObject`, concrete provider, workflow, or private domain modules.
 7. The service passes architecture, contract, behavior, offline replay, independent formula, and cache lifecycle tests.
 8. A failed service request cannot cause the agent to calculate a second hidden valuation locally.
@@ -1087,7 +1090,7 @@ The new service may replace formulas because it is a greenfield implementation. 
 
 ### 25.8 Enterprise service phases and exit gates
 
-1. **Contract freeze and service ownership.** Register the service operation schemas, model-risk inventory, ownership map, retention policy, and error catalog. Exit when every service operation has a version and owner.
+1. **Contract freeze and service ownership.** Register the data, policy-resolution, validation, and calculation schemas, model-risk inventory, ownership map, retention policy, and error catalog. Exit when every service contract has a version and owner.
 2. **Source snapshot and point-in-time facts.** Build immutable raw snapshots, filing selection, taxonomy metadata, and canonical facts. Exit when amended filings and later restatements replay correctly.
 3. **Quality and accounting validation.** Normalize Arelle, EFM, DQC, unit, period, dimension, and reconciliation issues. Exit when block and warn behavior is deterministic on golden fixtures.
 4. **Typed valuation input and calculation engine.** Build `ValuationInputV1`, formula invariants, and independent reference cases. Exit when the engine has no I/O or LLM dependency and every output has a trace.
@@ -1109,60 +1112,100 @@ Ownership is fixed as follows: contracts and canonical facts remain under the Fu
 
 ### 26.1 Decision
 
-Build the new enterprise Fundamental implementation as an independently deployable service. Keep the existing Fundamental agent unchanged while the service is built and verified. The agent calls the service through a typed internal-service client and maps the response into product-facing domain data.
+Build the new enterprise Fundamental implementation as an independently deployable service with two logical planes in one initial deployable: a persistent public-data/policy plane and a stateless calculation plane. Keep the existing Fundamental agent unchanged while the service is built and verified. The agent calls the service through a typed internal-service client and maps the response into product-facing domain data.
 
-This decision is worth the extra boundary for this project. Fundamental valuation is a critical component, the current agent contains mixed orchestration and valuation responsibilities, and the new design needs independent source caching, point-in-time storage, replay, calibration, and release control. An isolated service gives those concerns one owner and lets the service be tested against immutable data without booting the whole agent graph.
+This decision is worth the extra boundary for this project. Fundamental valuation is a critical component, the current agent contains mixed orchestration and valuation responsibilities, and the new design needs independent source caching, point-in-time storage, replay, calibration, and release control. An isolated service gives those concerns one owner and lets the service be tested against immutable data without booting the whole agent graph. The boundary is not a second workflow engine: the caller owns conversation state, human approval, retries, and presentation, while the service owns evidence and deterministic computation.
 
-This is not a claim that a service boundary removes work. It changes the work from an in-place refactor to a greenfield implementation plus a contract cutover. The project still needs service tests, contract tests, deployment checks, failure handling, and independent validation.
+This is not a claim that a service boundary removes work. It changes the work from an in-place refactor to a greenfield implementation plus a contract cutover. The project still needs service tests, contract tests, deployment checks, failure handling, and independent validation. A request that cannot be completed within the synchronous compute budget returns a stable budget or deadline error; it does not become a hidden server-side job.
 
 ### 26.2 Ownership boundary
 
 | Existing product backend | Fundamental service |
 | --- | --- |
-| user authentication and authorization context | service authentication and operation authorization |
-| conversation, workflow state, approval pause, and user-facing projection | valuation request lifecycle and valuation run state |
-| agent-facing client and response mapping | operation schemas and stable error catalog |
-| product artifact references and display summaries | raw source snapshots and content-addressed cache |
+| user authentication and authorization context | service authentication and data/calculation authorization |
+| conversation, workflow state, approval pause, and user-facing projection | stateless data and calculation contracts; no valuation workflow state |
+| agent-facing client and response mapping | request/response schemas and stable error catalog |
+| product artifact references and display summaries | raw source snapshots, canonical facts, policy registry, and content-addressed data cache |
 | product UI and user decisions | canonical facts, XBRL validation, model registry, calculations, calibration, provenance, replay, and release artifacts |
 
 The service owns its database tables, cache keys, schema versions, and artifact lifecycle. The agent must not read the service database, pass raw filing dictionaries, or implement a local valuation fallback after a service failure. A service failure is an explicit unavailable or degraded outcome.
 
 ### 26.3 Service contract
 
-Use the existing internal-service pattern from [`src/shared/internal_services`](../../finance-agent-core/src/shared/internal_services/README.md): `internal.v1` signed context plus a service-owned `fundamental.v1` operation schema.
+Use the existing internal-service pattern from [`src/shared/internal_services`](../../finance-agent-core/src/shared/internal_services/README.md): `internal.v1` signed context plus service-owned `fundamental.v1` data and calculation schemas. A correlation ID and request digest are observability and integrity fields; they are not identifiers for a server-side valuation session.
 
-The first operation set is intentionally small:
+The first API set is intentionally small and separates persistent data reads from stateless computation:
 
-- `POST /v1/valuations`: create and prepare a valuation request with issuer or security identity, valuation timestamp, requested coverage, scenario policy, and idempotency key. It returns `awaiting_approval` with the prepared-input digest, resolved identity, model eligibility, proposed assumptions, quality findings, and evidence references; it does not calculate value.
-- `POST /v1/valuations/{valuation_id}/approve`: require an authenticated approver and the exact prepared-input digest; an approved request starts the deterministic calculation once.
-- `POST /v1/valuations/{valuation_id}/reject`: record the approver and reason, then terminate without calculation.
-- `GET /v1/valuations/{valuation_id}`: return the typed operation state, quality status, evidence references, and artifact references. Include an intrinsic-value projection only after successful calculation.
-- `POST /v1/valuations/{valuation_id}/replay`: replay a completed artifact from the stored manifest without network access and return the first differing node when replay fails;
-- `GET /readyz`: report service readiness without exposing source, cache, or database details.
+- `GET /v1/data/facts`: read canonical facts and their quality/provenance references from a caller-selected immutable snapshot.
+- `GET /v1/data/snapshots/{snapshot_id}`: inspect the snapshot manifest, source hashes, availability cut-off, taxonomy and parser versions, and coverage status.
+- `GET /v1/policies/{policy_id}`: inspect the exact versioned assumption and quality policy that a convenience calculation may resolve.
+- `POST /v1/valuation/validate`: validate a complete `ValuationInputV1` and return eligibility, missing evidence, normalized assumptions, and `input_digest`; it never calculates a value.
+- `POST /v1/valuation/calculate`: calculate from a complete explicit `ValuationInputV1` using the immutable `data_snapshot_id` and caller-supplied assumptions and uncertainty specification.
+- `POST /v1/valuation/calculate-with-policy`: resolve a caller-pinned `policy_id` against the immutable data snapshot, apply only fields not explicitly supplied by the caller, return the resolved assumptions and provenance, and invoke the same deterministic calculator used by `/calculate`.
+- `GET /livez` and `GET /readyz`: report process liveness and dependency readiness without exposing source, cache, database, or credential details.
 
-The request schema must not accept a precomputed intrinsic value or an unverified raw financial report. The calculation command must bind to the approved input digest. Any input, assumption, model, or source-selection change invalidates prior approval and returns the request to `awaiting_approval`. The response must include:
+External provider access belongs only to the data-ingestion path that creates a new immutable snapshot. Validation and calculation read the selected snapshot and policy registry; they never fetch a current filing, price, macro series, or taxonomy resource as a hidden side effect.
+
+The explicit calculation body is shaped like this (the concrete field schemas are versioned and reject unknown fields):
+
+```json
+{
+  "contract_version": "fundamental.v1",
+  "data_snapshot_id": "snapshot-abc",
+  "model_id": "fcff_dcf",
+  "valuation_timestamp": "2026-11-03T00:00:00Z",
+  "assumptions": {
+    "forecast": {},
+    "wacc": {},
+    "terminal_growth": "0.02"
+  },
+  "uncertainty": {
+    "mode": "monte_carlo",
+    "samples": 10000,
+    "seed": 12345,
+    "parameters": [
+      {
+        "path": "assumptions.forecast.revenue_growth[0]",
+        "distribution": "triangular",
+        "lower": "0.05",
+        "mode": "0.08",
+        "upper": "0.12"
+      }
+    ],
+    "correlations": [],
+    "invalid_draw_policy": "reject"
+  },
+  "caller_approval": null
+}
+```
+
+`calculate-with-policy` uses the same body but replaces or supplements `assumptions` with a pinned `policy_id` and explicit caller overrides. The resolver applies policy values only to omitted fields, records the precedence decision for every field, and passes the resulting `ValuationInputV1` to the same calculator. It is a convenience input builder, not a second valuation implementation.
+
+The calculation request must not accept a precomputed intrinsic value or an unverified raw financial report. It must contain an immutable `data_snapshot_id`, `model_id`, `valuation_timestamp`, complete explicit assumptions, and an uncertainty specification whenever scenarios or Monte Carlo are requested. The policy endpoint may provide system parameters, but `/calculate-with-policy` must return the exact resolved values and provenance and must never silently override explicit caller fields. Verified calculations require a pinned `policy_id`; an unpinned active/latest policy is exploratory only and must be marked accordingly. The request digest binds every input that can change the result:
 
 ```text
-valuation_id
+input_digest
 contract_version and service_version
 issuer and security identity
 valuation_timestamp and source_snapshot_id
-operation_state: accepted, preparing, awaiting_approval, approved, calculating, completed, rejected, abstained, failed, or unavailable
+model_id and model_version
+policy_id and resolved policy version, when used
+calculation_status: completed, abstained, rejected, unavailable, or error
 quality_status: verified, provisional, degraded, unsupported, abstain, or error
-selected_model and eligibility report reference
-intrinsic-value projection and uncertainty projection only when calculation completed
+selected model and eligibility report
+resolved assumptions and caller-provided assumptions with provenance
+intrinsic-value projection and uncertainty projection when calculation completes
 quality issue codes and missing-evidence list
 provenance graph reference and release manifest reference
-prepared_input_digest, approval reference, correlation_id, created_at, completed_at, and retryability
+Monte Carlo seed, sampler version, requested/valid/invalid sample counts, and convergence diagnostics when applicable
+result_hash, correlation_id, evaluated_at, and retryability
 ```
 
 Large provenance graphs, filing packages, and calibration reports remain behind artifact references. The agent converts the response projection, not the entire service domain graph, into its own DTO.
 
-`operation_state` describes execution lifecycle. `quality_status` describes the evidence and result quality. They are independent fields. For example, an operation can be `completed` with `quality_status: abstain`, or `awaiting_approval` with `quality_status: provisional`; the service must not infer one from the other. `abstained`, `failed`, and `unavailable` are terminal operation states. `unsupported`, `abstain`, and `error` are quality statuses that explain why no verified result exists.
+`calculation_status` describes the outcome of this synchronous request only; it is not persisted state. `quality_status` describes the evidence and result quality, and they are independent. For example, a request can return `calculation_status: completed` with `quality_status: abstain`, or `calculation_status: rejected` with `quality_status: unsupported`. Repeating the same request is safe because the calculator is pure over the pinned snapshot and complete input; the service does not need an idempotency key or a request record. The caller may persist the response or artifact reference in its own workflow.
 
-Idempotency is part of the operation contract. A repeated `POST /v1/valuations` with the same authenticated caller, idempotency key, and canonical request returns the original `valuation_id`. Reusing the key with a different canonical request returns `IDEMPOTENCY_CONFLICT`. Repeating approval with the same digest and approver returns the existing operation state and artifact reference. A different digest, a conflicting decision, or an expired approval returns the relevant stable error and never starts a second calculation. The service propagates the caller's absolute `deadline_at`; retries may repeat only an operation that is safe under these idempotency rules.
-
-The HTTP adapter uses `202 Accepted` for create, approve, reject, or replay commands that are queued or still running. It uses `200 OK` for a completed `GET` or completed offline replay. It maps malformed contracts to `400`, failed internal authentication to `401`, missing operations to `404`, idempotency or state conflicts to `409`, and stable domain refusals to `422`. Every non-success response includes the operation error code, `correlation_id`, and retryability. The service never places a numeric value in an error or abstention response.
+The HTTP adapter uses `200 OK` for a validated response, including explicit abstention or degraded quality, `400` for malformed contracts, `401` for failed internal authentication, `404` for missing snapshots or policies, `409` for a caller approval or input-digest conflict, `422` for stable domain refusals such as model ineligibility or invalid uncertainty, `408`/`504` for deadline exhaustion, and `503` for unavailable dependencies. Every non-success response includes the error code, `correlation_id`, and retryability. The service never places a numeric value in an error or abstention response; calculation responses are synchronous and have no asynchronous operation status.
 
 ### 26.4 Cache and data lifecycle
 
@@ -1175,6 +1218,8 @@ Keep these stores separate:
 - canonical fact store, which is versioned and point-in-time addressable;
 - valuation and calibration artifacts, which reference input snapshots and policy versions;
 - operational cache and locks, which may expire and must never be the only copy of a valuation result.
+
+Calculation artifacts may be persisted as immutable, content-addressed release evidence or returned for caller-owned persistence. They are records of completed pure computations, not mutable operation state, approval state, retry state, or a prerequisite for repeating the calculation.
 
 The service must be able to rebuild derived stores from retained raw snapshots. A cache reset must not destroy the evidence needed to reproduce a released valuation.
 
@@ -1198,9 +1243,11 @@ Do not map each service fact into an old `TraceableField` tree. The agent needs 
 The isolated service must have its own test pyramid:
 
 - domain tests for accounting normalization, model eligibility, formulas, units, and quality severity;
-- contract tests for request, response, error, readiness, deadline, idempotency, and version rejection;
+- contract tests for request, response, error, readiness, deadline, digest binding, and version rejection;
+- policy-resolution tests proving explicit caller values win, resolved values are returned, and both API paths invoke the same calculator;
 - source-adapter tests with recorded SEC and macro fixtures, including amended filings and provider failures;
 - golden valuation tests with node-level expected values and independent formulas;
+- seeded Monte Carlo tests for reproducibility, convergence, correlation handling, and invalid-draw refusal;
 - cache lifecycle tests for hit, miss, stale, invalidation, rebuild, and concurrent population;
 - offline replay tests from an immutable manifest;
 - calibration tests with point-in-time splits, OOS labels, raw baselines, and rejected-fit behavior;
@@ -1215,7 +1262,7 @@ Do not use production traffic until all of these pass on the fixed initial cohor
 
 1. The service builds from a clean checkout and passes its architecture guard.
 2. The service can run without network access from stored source snapshots.
-3. Every response has a valid `fundamental.v1` schema, status, issue catalog, and artifact reference.
+3. Every response has a valid `fundamental.v1` schema, status, issue catalog, `input_digest`, and `result_hash`; a persisted artifact reference is present when the service stores release evidence, otherwise the caller can persist the returned artifact.
 4. Independent calculation fixtures match at every declared critical node.
 5. Replay reproduces the release artifact hash.
 6. The client maps the response without importing service internals.
