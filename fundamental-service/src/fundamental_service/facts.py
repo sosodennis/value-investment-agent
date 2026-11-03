@@ -278,13 +278,13 @@ def select_fact(
     selected = sorted(precise, key=lambda item: item.candidate_id)[0]
     quality = QualityStatus.VERIFIED
     issues: list[IssueV1] = []
-    if selected.mapping is not None and selected.mapping.status != "approved":
+    if selected.mapping is None or selected.mapping.status != "approved":
         quality = QualityStatus.PROVISIONAL
         issues.append(
             IssueV1(
                 code="MAPPING_UNRESOLVED",
                 severity=Severity.ERROR,
-                message="canonical mapping is not approved",
+                message="canonical mapping is missing or not approved",
                 field=selected.normalized_field,
             )
         )

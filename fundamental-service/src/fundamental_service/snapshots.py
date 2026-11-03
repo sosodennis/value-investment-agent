@@ -19,7 +19,7 @@ from .contracts import (
     IssueV1,
     Severity,
 )
-from .serialization import canonical_bytes, sha256_digest
+from .serialization import canonical_bytes, is_digest, sha256_digest
 
 
 class SnapshotError(RuntimeError):
@@ -46,8 +46,17 @@ class FilesystemContentStore:
         self.root.mkdir(parents=True, exist_ok=True)
 
     def _path(self, content_hash: str, media_type: str) -> Path:
+        if not is_digest(content_hash) or content_hash != content_hash.lower():
+            raise SnapshotError(
+                "SOURCE_HASH_INVALID", "content hash must be lowercase SHA-256"
+            )
         suffix = ".json" if media_type == "application/json" else ".bin"
-        return self.root / content_hash[:2] / f"{content_hash}{suffix}"
+        path = (self.root / content_hash[:2] / f"{content_hash}{suffix}").resolve()
+        if self.root.resolve() not in path.parents:
+            raise SnapshotError(
+                "SOURCE_PATH_INVALID", "content path escapes store root"
+            )
+        return path
 
     def put(self, content: bytes, *, media_type: str) -> str:
         content_hash = hashlib.sha256(content).hexdigest()
@@ -157,7 +166,11 @@ class SourceRegister:
     def __init__(self, entries: tuple[LegalSource, ...] = ()) -> None:
         self._entries = {entry.source_id: entry for entry in entries}
 
-    def require(self, source_id: str) -> LegalSource:
+    @property
+    def entries(self) -> tuple[LegalSource, ...]:
+        return tuple(self._entries.values())
+
+    def require(self, source_id: str, *, role: SourceRole | None = None) -> LegalSource:
         entry = self._entries.get(source_id)
         if entry is None:
             raise SnapshotError(
@@ -166,6 +179,11 @@ class SourceRegister:
         if not entry.permitted:
             raise SnapshotError(
                 "SOURCE_TERMS_EXCLUDED", f"source {source_id} is excluded by its terms"
+            )
+        if role is not None and entry.role is not role:
+            raise SnapshotError(
+                "SOURCE_ROLE_MISMATCH",
+                f"source {source_id} is registered as {entry.role.value}, not {role.value}",
             )
         return entry
 
@@ -238,6 +256,15 @@ class SnapshotBuilder:
             raise SnapshotError(
                 "SNAPSHOT_EMPTY", "a snapshot requires at least one source"
             )
+        for timestamp_name, timestamp in (
+            ("valuation_timestamp", valuation_timestamp),
+            ("captured_at", captured_at),
+        ):
+            if timestamp.tzinfo is None or timestamp.utcoffset() is None:
+                raise SnapshotError(
+                    "SNAPSHOT_TIMESTAMP_TIMEZONE_REQUIRED",
+                    f"{timestamp_name} must include a timezone",
+                )
         records: list[SourceRecordV1] = []
         issues: list[IssueV1] = []
         for source in sources:
@@ -246,7 +273,19 @@ class SnapshotBuilder:
                     "SOURCE_REGISTER_REQUIRED",
                     "snapshot publication requires a legal source register",
                 )
-            legal_source = self.source_register.require(source.source_id)
+            legal_source = self.source_register.require(
+                source.source_id, role=source.role
+            )
+            for timestamp_name, timestamp in (
+                ("available_at", source.available_at),
+                ("publication_at", source.publication_at),
+                ("filed_at", source.filed_at),
+            ):
+                if timestamp is not None and timestamp.tzinfo is None:
+                    raise SnapshotError(
+                        "SOURCE_TIMESTAMP_TIMEZONE_REQUIRED",
+                        f"{timestamp_name} must include a timezone",
+                    )
             if source.available_at > captured_at:
                 issues.append(
                     IssueV1(

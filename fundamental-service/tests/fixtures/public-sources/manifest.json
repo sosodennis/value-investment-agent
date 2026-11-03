@@ -1,0 +1,71 @@
+{
+  "capture_version": "public-source-capture-v1",
+  "captured_at": "2026-11-03T16:42:20.769326+00:00",
+  "sources": [
+    {
+      "available_at": "2026-11-03T16:42:16.970335+00:00",
+      "bytes": 20155,
+      "http_status": 200,
+      "media_type": "text/csv",
+      "path": "public-sources/treasury-yields-2025.csv",
+      "publication_at": "2026-11-03T16:42:16.970335+00:00",
+      "role": "macro",
+      "sha256": "cf2fa3da7f160384b63d2ead698532b1d76cd9f789ce4911e2304db85b14e6d5",
+      "source_id": "treasury-yields",
+      "terms_reference": "https://fiscaldata.treasury.gov/terms-of-use/",
+      "uri": "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv/2025/all?type=daily_treasury_yield_curve&field_tdr_date_value=2025"
+    },
+    {
+      "available_at": "2026-11-03T16:42:17.227752+00:00",
+      "bytes": 55,
+      "http_status": 200,
+      "media_type": "application/csv",
+      "path": "public-sources/fred-dgs10-2025.csv",
+      "publication_at": "2026-11-03T16:42:17.227752+00:00",
+      "role": "macro",
+      "sha256": "1cf8c2d38f773142b58b772bde5028d12f00dfd72bf37b40c2327e15d418ea28",
+      "source_id": "fred-observations",
+      "terms_reference": "https://fred.stlouisfed.org/terms-of-use/",
+      "uri": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=DGS10&cosd=2025-01-01&coed=2025-01-03"
+    },
+    {
+      "available_at": "2026-11-03T16:42:17.721083+00:00",
+      "bytes": 261720,
+      "http_status": 200,
+      "media_type": "application/csv",
+      "path": "public-sources/alfred-dgs10-vintage-2025-01-03.csv",
+      "publication_at": "2026-11-03T16:42:17.721083+00:00",
+      "role": "macro",
+      "sha256": "c73ae286332cb1d3f94ebb4b11ccfb3fc65b79bade134dad703ab1af044587da",
+      "source_id": "alfred-vintage",
+      "terms_reference": "https://fred.stlouisfed.org/terms-of-use/",
+      "uri": "https://alfred.stlouisfed.org/graph/alfredgraph.csv?id=DGS10&vintage_date=2025-01-03"
+    },
+    {
+      "available_at": "2026-11-03T16:42:18.400500+00:00",
+      "bytes": 1251,
+      "http_status": 200,
+      "media_type": "application/json",
+      "path": "public-sources/bls-cpi-2025.json",
+      "publication_at": "2026-11-03T16:42:18.400500+00:00",
+      "role": "macro",
+      "sha256": "f91047aa12a2afa222894daade7bf26a5e4a3de88503fc5ba33941f20da1660e",
+      "source_id": "bls-public-api",
+      "terms_reference": "https://www.bls.gov/developers/",
+      "uri": "https://api.bls.gov/publicAPI/v2/timeseries/data/CUSR0000SA0?startyear=2025&endyear=2025"
+    },
+    {
+      "available_at": "2026-11-03T16:42:20.768064+00:00",
+      "bytes": 1851,
+      "http_status": 200,
+      "media_type": "application/json",
+      "path": "public-sources/fdic-institution-sample.json",
+      "publication_at": "2026-11-03T16:42:20.768064+00:00",
+      "role": "macro",
+      "sha256": "b0819cf25f2dfecf3bf9d6600d7843765f781128b1c587b924f371a08cc16e25",
+      "source_id": "fdic-bankfind",
+      "terms_reference": "https://banks.data.fdic.gov/docs/",
+      "uri": "https://banks.data.fdic.gov/api/institutions?limit=1"
+    }
+  ]
+}
