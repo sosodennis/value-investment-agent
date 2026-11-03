@@ -225,6 +225,7 @@ class CanonicalFactV1(StrictModel):
 
 
 class ForecastAssumptionsV1(StrictModel):
+    base_revenue: Decimal | None = None
     revenue_growth: tuple[Decimal, ...] = Field(min_length=1)
     operating_margin: tuple[Decimal, ...] = Field(min_length=1)
     reinvestment_rate: tuple[Decimal, ...] = Field(min_length=1)
@@ -279,6 +280,14 @@ class DistributionParameterV1(StrictModel):
             raise ValueError("distribution mode is outside bounds")
         if self.mean is not None and not self.lower <= self.mean <= self.upper:
             raise ValueError("distribution mean is outside bounds")
+        if self.distribution in {"normal", "lognormal"} and self.mean is None:
+            raise ValueError(f"{self.distribution} distribution requires mean")
+        if self.distribution == "triangular" and self.mode is None:
+            raise ValueError("triangular distribution requires mode")
+        if self.distribution == "uniform" and (
+            self.mean is not None or self.mode is not None
+        ):
+            raise ValueError("uniform distribution does not accept mean or mode")
         return self
 
 
@@ -293,15 +302,31 @@ class UncertaintyV1(StrictModel):
     @model_validator(mode="after")
     def sampling_requirements(self) -> "UncertaintyV1":
         if self.mode == "monte_carlo" and (
-            self.samples is None
+            not self.parameters
+            or self.samples is None
             or self.seed is None
             or self.invalid_draw_policy is None
         ):
             raise ValueError(
-                "monte_carlo requires samples, seed, and invalid_draw_policy"
+                "monte_carlo requires parameters, samples, seed, and invalid_draw_policy"
             )
+        paths = {parameter.path for parameter in self.parameters}
+        if len(paths) != len(self.parameters):
+            raise ValueError("uncertainty parameter paths must be unique")
+        for parameter in self.parameters:
+            if not parameter.path.startswith("assumptions."):
+                raise ValueError("uncertainty paths must target assumptions")
+        for left, right, correlation in self.correlations:
+            if left == right or left not in paths or right not in paths:
+                raise ValueError("correlations must reference distinct parameter paths")
+            if not Decimal("-1") <= correlation <= Decimal("1"):
+                raise ValueError("correlations must be between -1 and 1")
         if self.mode == "none" and (
-            self.parameters or self.samples is not None or self.seed is not None
+            self.parameters
+            or self.samples is not None
+            or self.seed is not None
+            or self.correlations
+            or self.invalid_draw_policy is not None
         ):
             raise ValueError("mode none cannot include sampling controls")
         return self
@@ -371,6 +396,15 @@ class ValuationInputV1(StrictModel):
             self.model_dump(exclude={"input_digest", "caller_approval"})
         )
         return self.model_copy(update={"input_digest": digest})
+
+
+class ValidationResponseV1(StrictModel):
+    contract_version: Literal["fundamental.v1"]
+    input: ValuationInputV1
+    input_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    quality_status: QualityStatus
+    issue_codes: tuple[str, ...] = ()
+    missing_evidence: tuple[str, ...] = ()
 
 
 class PolicyResolutionV1(StrictModel):

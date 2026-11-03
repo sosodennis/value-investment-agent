@@ -130,7 +130,11 @@ def resolve_policy(
             **{**defaults["forecast"], **caller["forecast"]}
         ),
         wacc=WaccAssumptionsV1(**{**defaults["wacc"], **caller["wacc"]}),
-        terminal_growth=caller.get("terminal_growth") or defaults["terminal_growth"],
+        terminal_growth=(
+            caller["terminal_growth"]
+            if caller.get("terminal_growth") is not None
+            else defaults["terminal_growth"]
+        ),
         capital_bridge=policy.assumptions.capital_bridge.model_copy(
             update=caller.get("capital_bridge", {})
         ),
