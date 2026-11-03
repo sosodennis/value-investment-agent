@@ -460,14 +460,80 @@ class ReleaseManifestV1(StrictModel):
     release_id: str = Field(min_length=1)
     schema_version: str = Field(min_length=1)
     service_version: str = Field(min_length=1)
-    snapshot_ids: tuple[str, ...] = ()
+    decision_timestamp: datetime
+    issuer_id: str = Field(min_length=1)
+    security_id: str = Field(min_length=1)
+    snapshot_ids: tuple[str, ...] = Field(min_length=1)
+    input_hashes: tuple[str, ...] = Field(min_length=1)
+    canonical_fact_ids: tuple[str, ...] = Field(min_length=1)
+    assumption_ids: tuple[str, ...] = Field(min_length=1)
+    calibration_artifact_ids: tuple[str, ...] = Field(min_length=1)
     policy_versions: tuple[str, ...] = ()
     model_versions: tuple[str, ...] = ()
     parser_version: str = Field(min_length=1)
     taxonomy_version: str = Field(min_length=1)
     quality_policy_version: str = Field(min_length=1)
-    artifact_hashes: tuple[str, ...] = ()
+    runtime_version: str = Field(min_length=1)
+    calculation_version: str = Field(min_length=1)
+    source_content_hashes: tuple[str, ...] = Field(min_length=1)
+    random_seed: int | None = None
+    numerical_settings: dict[str, str] = Field(min_length=1)
+    quality_issue_codes: tuple[str, ...] = ()
+    release_profile_thresholds: dict[str, str] = Field(min_length=1)
+    artifact_hashes: tuple[str, ...] = Field(min_length=1)
+    artifact_ids: tuple[str, ...] = Field(min_length=1)
     manifest_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+    @field_validator("decision_timestamp")
+    @classmethod
+    def decision_timestamp_is_utc(cls, value: datetime) -> datetime:
+        if value.tzinfo is None:
+            raise ValueError("decision_timestamp must include timezone")
+        return value.astimezone(timezone.utc)
+
+    @field_validator(
+        "input_hashes",
+        "source_content_hashes",
+        mode="before",
+    )
+    @classmethod
+    def normalize_hashes(cls, value: object) -> tuple[str, ...]:
+        values = tuple(value or ())
+        if any(not is_digest(item) for item in values):
+            raise ValueError("manifest hash fields must contain SHA-256 digests")
+        return tuple(sorted(set(values)))
+
+    @field_validator("artifact_hashes", mode="before")
+    @classmethod
+    def preserve_artifact_hash_order(cls, value: object) -> tuple[str, ...]:
+        values = tuple(value or ())
+        if any(not is_digest(item) for item in values):
+            raise ValueError("manifest hash fields must contain SHA-256 digests")
+        if len(values) != len(set(values)):
+            raise ValueError("artifact_hashes must be unique")
+        return values
+
+    @field_validator(
+        "snapshot_ids",
+        "canonical_fact_ids",
+        "assumption_ids",
+        "calibration_artifact_ids",
+        "policy_versions",
+        "model_versions",
+        "quality_issue_codes",
+        mode="before",
+    )
+    @classmethod
+    def normalize_identifiers(cls, value: object) -> tuple[str, ...]:
+        return tuple(sorted(set(value or ())))
+
+    @field_validator("artifact_ids", mode="before")
+    @classmethod
+    def preserve_artifact_order(cls, value: object) -> tuple[str, ...]:
+        values = tuple(value or ())
+        if len(values) != len(set(values)):
+            raise ValueError("artifact_ids must be unique")
+        return values
 
     @model_validator(mode="after")
     def digest(self) -> "ReleaseManifestV1":
