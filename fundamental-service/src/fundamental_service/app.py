@@ -6,7 +6,7 @@ are integrated; the boundary and health contracts are stable from the first slic
 
 from __future__ import annotations
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, Response
 
 from .contracts import (
     CalculationArtifactV1,
@@ -17,6 +17,13 @@ from .contracts import (
 )
 from .calculator import CalculationRefusal, calculate, validate
 from .snapshots import SnapshotError, SnapshotRepository
+from .replay import (
+    ArtifactRecordV1,
+    ArtifactStore,
+    ReplayEnvelopeV1,
+    ReplayReportV1,
+    replay_manifest,
+)
 from .uncertainty import (
     MonteCarloRequestV1,
     ScenarioV1,
@@ -34,7 +41,10 @@ class UncertaintyRequestV1(ValuationInputV1):
     monte_carlo: MonteCarloRequestV1 | None = None
 
 
-def create_app(snapshot_repository: SnapshotRepository | None = None) -> FastAPI:
+def create_app(
+    snapshot_repository: SnapshotRepository | None = None,
+    artifact_store: ArtifactStore | None = None,
+) -> FastAPI:
     app = FastAPI(title="Fundamental service", version="0.1.0")
 
     @app.get("/livez", response_model=StatusResponseV1)
@@ -45,7 +55,9 @@ def create_app(snapshot_repository: SnapshotRepository | None = None) -> FastAPI
     async def readyz() -> StatusResponseV1:
         return StatusResponseV1(
             contract_version="internal.v1",
-            status="ok" if snapshot_repository is not None else "not_ready",
+            status="ok"
+            if snapshot_repository is not None and artifact_store is not None
+            else "not_ready",
         )
 
     @app.get("/v1/data/snapshots/{snapshot_id}", response_model=SourceSnapshotV1)
@@ -58,6 +70,37 @@ def create_app(snapshot_repository: SnapshotRepository | None = None) -> FastAPI
             return snapshot_repository.get(snapshot_id)
         except SnapshotError as error:
             status_code = 404 if error.code == "SNAPSHOT_NOT_FOUND" else 503
+            raise HTTPException(
+                status_code=status_code,
+                detail={"code": error.code, "message": error.message},
+            ) from error
+
+    @app.get("/v1/artifacts/{artifact_id}", response_model=ArtifactRecordV1)
+    async def get_artifact(artifact_id: str) -> ArtifactRecordV1:
+        if artifact_store is None:
+            raise HTTPException(status_code=503, detail="artifact store unavailable")
+        try:
+            return artifact_store.get(artifact_id)
+        except SnapshotError as error:
+            status_code = 404 if error.code == "ARTIFACT_NOT_FOUND" else 503
+            raise HTTPException(
+                status_code=status_code,
+                detail={"code": error.code, "message": error.message},
+            ) from error
+
+    @app.get("/v1/artifacts/{artifact_id}/content")
+    async def get_artifact_content(artifact_id: str) -> Response:
+        if artifact_store is None:
+            raise HTTPException(status_code=503, detail="artifact store unavailable")
+        try:
+            record = artifact_store.get(artifact_id)
+            return Response(
+                content=artifact_store.read(artifact_id),
+                media_type=record.media_type,
+                headers={"ETag": record.content_hash},
+            )
+        except SnapshotError as error:
+            status_code = 404 if error.code == "ARTIFACT_NOT_FOUND" else 503
             raise HTTPException(
                 status_code=status_code,
                 detail={"code": error.code, "message": error.message},
@@ -86,6 +129,26 @@ def create_app(snapshot_repository: SnapshotRepository | None = None) -> FastAPI
                 status_code=422,
                 detail={
                     "code": error.code,
+                    "message": str(error),
+                    "correlation_id": "http",
+                    "retryable": False,
+                },
+            ) from error
+
+    @app.post("/v1/valuation/replay", response_model=ReplayReportV1)
+    async def replay_valuation(request: Request) -> ReplayReportV1:
+        try:
+            envelope = ReplayEnvelopeV1.model_validate_json(await request.body())
+            return replay_manifest(
+                envelope,
+                artifact_store=artifact_store,
+                snapshot_repository=snapshot_repository,
+            )
+        except (ValueError, SnapshotError) as error:
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "code": getattr(error, "code", "REPLAY_MISMATCH"),
                     "message": str(error),
                     "correlation_id": "http",
                     "retryable": False,
