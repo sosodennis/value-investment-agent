@@ -8,7 +8,13 @@ from __future__ import annotations
 
 from fastapi import FastAPI, HTTPException
 
-from .contracts import SourceSnapshotV1, StatusResponseV1
+from .contracts import (
+    CalculationArtifactV1,
+    SourceSnapshotV1,
+    StatusResponseV1,
+    ValuationInputV1,
+)
+from .calculator import CalculationRefusal, calculate, validate
 from .snapshots import SnapshotError, SnapshotRepository
 
 
@@ -36,6 +42,19 @@ def create_app(snapshot_repository: SnapshotRepository | None = None) -> FastAPI
             raise HTTPException(
                 status_code=status_code,
                 detail={"code": error.code, "message": error.message},
+            ) from error
+
+    @app.post("/v1/valuation/validate", response_model=ValuationInputV1)
+    async def validate_valuation(request: ValuationInputV1) -> ValuationInputV1:
+        return validate(request)
+
+    @app.post("/v1/valuation/calculate", response_model=CalculationArtifactV1)
+    async def calculate_valuation(request: ValuationInputV1) -> CalculationArtifactV1:
+        try:
+            return calculate(request)
+        except CalculationRefusal as error:
+            raise HTTPException(
+                status_code=422, detail={"code": error.code, "message": str(error)}
             ) from error
 
     return app
