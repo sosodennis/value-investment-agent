@@ -1,0 +1,42 @@
+name: ${COMPOSE_PROJECT_NAME:-value-investment-agent-270-integration}
+
+services:
+  fundamental-service:
+    build:
+      context: ../..
+      dockerfile: fundamental-service/Dockerfile
+    environment:
+      FUNDAMENTAL_SERVICE_DATA_ROOT: /var/lib/fundamental
+      FUNDAMENTAL_SERVICE_REQUIRE_AUTH: "true"
+      FUNDAMENTAL_SERVICE_AUTH_TOKEN: ${FUNDAMENTAL_SERVICE_AUTH_TOKEN:-integration-token}
+      FUNDAMENTAL_SERVICE_SIGNING_KEY: ${FUNDAMENTAL_SERVICE_SIGNING_KEY:-integration-signing-key}
+      FUNDAMENTAL_SERVICE_MAX_CALCULATION_SAMPLES: ${FUNDAMENTAL_SERVICE_MAX_CALCULATION_SAMPLES:-10000}
+      FUNDAMENTAL_SERVICE_MAX_REQUEST_MS: ${FUNDAMENTAL_SERVICE_MAX_REQUEST_MS:-5000}
+    ports:
+      - "${FUNDAMENTAL_SERVICE_HOST_PORT:-18080}:8080"
+    volumes:
+      - fundamental-service-data:/var/lib/fundamental
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+    mem_limit: 512m
+    cpus: 1.0
+    stop_grace_period: 10s
+    init: true
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - >-
+          import urllib.request;
+          urllib.request.urlopen('http://127.0.0.1:8080/readyz', timeout=2)
+      interval: 10s
+      timeout: 3s
+      start_period: 20s
+      retries: 5
+
+volumes:
+  fundamental-service-data:
