@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from decimal import Decimal
 
 import pytest
 
@@ -62,3 +63,16 @@ def test_policy_digest_is_immutable():
     altered = first.model_copy(update={"policy_version": "policy-v2"})
     with pytest.raises(ValueError):
         PolicyRecordV1.model_validate(altered.model_dump())
+
+
+def test_zero_caller_terminal_growth_wins():
+    request = make_valuation().model_copy(
+        update={
+            "assumptions": make_valuation().assumptions.model_copy(
+                update={"terminal_growth": Decimal("0")}
+            )
+        }
+    )
+    resolved, resolution = resolve_policy(request=request, policy=policy())
+    assert resolved.assumptions.terminal_growth == Decimal("0")
+    assert resolution.precedence["assumptions.terminal_growth"] == "caller"

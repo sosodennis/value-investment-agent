@@ -16,6 +16,8 @@ from .contracts import (
     SourceRecordV1,
     SourceRole,
     SourceSnapshotV1,
+    IssueV1,
+    Severity,
 )
 from .serialization import canonical_bytes, sha256_digest
 
@@ -98,7 +100,7 @@ class FilesystemSnapshotRepository:
         self.root.mkdir(parents=True, exist_ok=True)
 
     def publish(self, snapshot: SourceSnapshotV1) -> None:
-        path = self.root / f"{snapshot.snapshot_id}.json"
+        path = self._path(snapshot.snapshot_id)
         payload = canonical_bytes(snapshot)
         if path.exists():
             if path.read_bytes() != payload:
@@ -119,13 +121,25 @@ class FilesystemSnapshotRepository:
 
     def get(self, snapshot_id: str) -> SourceSnapshotV1:
         try:
-            path = self.root / f"{snapshot_id}.json"
+            path = self._path(snapshot_id)
             payload = path.read_bytes()
-        except FileNotFoundError as exc:
+        except (FileNotFoundError, ValueError) as exc:
             raise SnapshotError(
                 "SNAPSHOT_NOT_FOUND", f"snapshot {snapshot_id} is unavailable"
             ) from exc
         return SourceSnapshotV1.model_validate_json(payload)
+
+    def _path(self, snapshot_id: str) -> Path:
+        if (
+            not snapshot_id
+            or snapshot_id in {".", ".."}
+            or any(char in snapshot_id for char in "/\\")
+        ):
+            raise ValueError("snapshot identifier contains an unsafe path")
+        path = (self.root / f"{snapshot_id}.json").resolve()
+        if self.root.resolve() not in path.parents:
+            raise ValueError("snapshot path escapes repository root")
+        return path
 
 
 @dataclass(frozen=True)
@@ -200,10 +214,14 @@ class CapturedSource:
 
 class SnapshotBuilder:
     def __init__(
-        self, content_store: ContentAddressedStore, repository: SnapshotRepository
+        self,
+        content_store: ContentAddressedStore,
+        repository: SnapshotRepository,
+        source_register: SourceRegister | None = None,
     ) -> None:
         self.content_store = content_store
         self.repository = repository
+        self.source_register = source_register
 
     def build(
         self,
@@ -221,7 +239,40 @@ class SnapshotBuilder:
                 "SNAPSHOT_EMPTY", "a snapshot requires at least one source"
             )
         records: list[SourceRecordV1] = []
+        issues: list[IssueV1] = []
         for source in sources:
+            if self.source_register is None:
+                raise SnapshotError(
+                    "SOURCE_REGISTER_REQUIRED",
+                    "snapshot publication requires a legal source register",
+                )
+            legal_source = self.source_register.require(source.source_id)
+            if source.available_at > captured_at:
+                issues.append(
+                    IssueV1(
+                        code="SOURCE_CAPTURE_ORDER",
+                        severity=Severity.ERROR,
+                        message=f"source {source.source_id} is not available before capture",
+                    )
+                )
+            if not 200 <= source.http_status < 300:
+                issues.append(
+                    IssueV1(
+                        code="SOURCE_PROVIDER_ERROR",
+                        severity=Severity.ERROR,
+                        message=f"source {source.source_id} returned HTTP {source.http_status}",
+                    )
+                )
+            if source.role is SourceRole.FILING and (
+                not source.accession_number or not source.form or not source.filed_at
+            ):
+                issues.append(
+                    IssueV1(
+                        code="FILING_METADATA_MISSING",
+                        severity=Severity.ERROR,
+                        message=f"filing source {source.source_id} lacks accession/form/filed_at",
+                    )
+                )
             content_hash = self.content_store.put(
                 source.content, media_type=source.media_type
             )
@@ -235,7 +286,7 @@ class SnapshotBuilder:
                     publication_at=source.publication_at,
                     http_status=source.http_status,
                     media_type=source.media_type,
-                    terms_reference=f"register:{source.source_id}",
+                    terms_reference=legal_source.terms_reference,
                     content_hash=content_hash,
                     parser_version=parser_version,
                     accession_number=source.accession_number,
@@ -257,12 +308,25 @@ class SnapshotBuilder:
             "valuation_timestamp": valuation_timestamp,
             "parser_version": parser_version,
             "policy_version": policy_version,
+            "captured_at": captured_at,
             "taxonomy_manifest_id": taxonomy_manifest_id,
             "sources": [
                 record.model_dump(exclude={"captured_at"}) for record in records
             ],
         }
         snapshot_id = f"snapshot-{sha256_digest(identity_payload)[:32]}"
+        coverage_status = QualityStatus.VERIFIED
+        if any(record.available_at > valuation_timestamp for record in records):
+            coverage_status = QualityStatus.PROVISIONAL
+            issues.append(
+                IssueV1(
+                    code="SOURCE_AFTER_VALUATION",
+                    severity=Severity.WARNING,
+                    message="snapshot contains sources published after valuation timestamp; they require point-in-time filtering",
+                )
+            )
+        if any(issue.severity in {Severity.ERROR, Severity.FATAL} for issue in issues):
+            coverage_status = QualityStatus.ABSTAIN
         snapshot = SourceSnapshotV1(
             contract_version="fundamental.v1",
             snapshot_id=snapshot_id,
@@ -273,7 +337,8 @@ class SnapshotBuilder:
             taxonomy_manifest_id=taxonomy_manifest_id,
             parser_version=parser_version,
             policy_version=policy_version,
-            coverage_status=QualityStatus.VERIFIED,
+            coverage_status=coverage_status,
+            issues=tuple(issues),
             manifest_digest=sha256_digest(
                 {
                     "contract_version": "fundamental.v1",
@@ -284,8 +349,8 @@ class SnapshotBuilder:
                     "taxonomy_manifest_id": taxonomy_manifest_id,
                     "parser_version": parser_version,
                     "policy_version": policy_version,
-                    "coverage_status": QualityStatus.VERIFIED,
-                    "issues": (),
+                    "coverage_status": coverage_status,
+                    "issues": issues,
                 }
             ),
         )

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from decimal import Decimal, getcontext
 
 from .contracts import (
@@ -68,6 +67,10 @@ def calculate(
             "DISCOUNT_RATE_INVALID", "WACC must exceed terminal growth and zero"
         )
     forecast = request.assumptions.forecast
+    if forecast.base_revenue is None or forecast.base_revenue <= 0:
+        raise CalculationRefusal(
+            "BASE_REVENUE_MISSING", "a positive base revenue fact is required"
+        )
     if not forecast.revenue_growth or not (
         len(forecast.revenue_growth)
         == len(forecast.operating_margin)
@@ -99,7 +102,16 @@ def calculate(
             ("cost_of_equity", "after_tax_debt"),
         ),
     ]
-    revenue = Decimal("100")
+    revenue = forecast.base_revenue
+    nodes.append(
+        _node(
+            "base_revenue",
+            "historical revenue fact",
+            revenue,
+            "currency",
+            tuple(request.historical_facts),
+        )
+    )
     present_value = Decimal("0")
     last_fcff = Decimal("0")
     for index, (revenue_growth, margin, reinvestment) in enumerate(
@@ -127,7 +139,7 @@ def calculate(
                     "prior_revenue * (1 + growth)",
                     revenue,
                     "currency",
-                    ("base_revenue",),
+                    (f"revenue_{index - 1}" if index > 1 else "base_revenue",),
                 ),
                 _node(
                     f"fcff_{index}",
@@ -148,6 +160,15 @@ def calculate(
     terminal_value = last_fcff * (Decimal("1") + growth) / (wacc_value - growth)
     terminal_pv = terminal_value / (
         (Decimal("1") + wacc_value) ** len(forecast.revenue_growth)
+    )
+    nodes.append(
+        _node(
+            "discounted_terminal_value",
+            "terminal_value / (1 + wacc)^forecast_periods",
+            terminal_pv,
+            "currency",
+            ("terminal_value", "wacc"),
+        )
     )
     enterprise = present_value + terminal_pv
     bridge = request.assumptions.capital_bridge
@@ -174,7 +195,13 @@ def calculate(
                 "sum(discounted_fcff) + discounted_terminal_value",
                 enterprise,
                 "currency",
-                ("wacc",),
+                tuple(
+                    [
+                        f"discounted_fcff_{index}"
+                        for index in range(1, len(forecast.revenue_growth) + 1)
+                    ]
+                    + ["discounted_terminal_value"]
+                ),
             ),
             _node(
                 "equity_value",
@@ -192,7 +219,17 @@ def calculate(
             ),
         )
     )
-    input_digest = request.input_digest or request.with_digest().input_digest
+    expected_input_digest = sha256_digest(
+        request.model_dump(exclude={"input_digest", "caller_approval"})
+    )
+    if (
+        request.input_digest is not None
+        and request.input_digest != expected_input_digest
+    ):
+        raise CalculationRefusal(
+            "INPUT_DIGEST_MISMATCH", "input_digest does not match the complete request"
+        )
+    input_digest = expected_input_digest
     result_hash = sha256_digest(
         {
             "input_digest": input_digest,
@@ -216,7 +253,7 @@ def calculate(
         model_version=request.model_version,
         policy_version=request.policy_id,
         snapshot_id=request.valuation_context.data_snapshot_id,
-        evaluated_at=datetime.now(timezone.utc),
+        evaluated_at=request.valuation_context.valuation_timestamp,
         correlation_id=correlation_id,
     )
 

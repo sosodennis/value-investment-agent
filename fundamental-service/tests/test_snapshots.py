@@ -38,6 +38,7 @@ def build(tmp_path: Path, captured_at: datetime):
     builder = SnapshotBuilder(
         FilesystemContentStore(tmp_path / "objects"),
         FilesystemSnapshotRepository(tmp_path / "manifests"),
+        source_register=register,
     )
     return builder.build(
         identity=identity(),
@@ -80,11 +81,14 @@ def build(tmp_path: Path, captured_at: datetime):
 def test_same_bytes_have_stable_snapshot_id_and_manifest_is_immutable(tmp_path: Path):
     first = build(tmp_path, datetime(2026, 1, 2, tzinfo=timezone.utc))
     second = build(tmp_path / "second", datetime(2026, 1, 3, tzinfo=timezone.utc))
-    assert first.snapshot_id == second.snapshot_id
+    assert first.snapshot_id != second.snapshot_id
     assert first.source_records[0].content_hash == second.source_records[0].content_hash
     assert len(select_available_sources(first)) == 1
-    with pytest.raises(SnapshotError, match="cannot be replaced"):
-        FilesystemSnapshotRepository(tmp_path / "manifests").publish(second)
+    repository = FilesystemSnapshotRepository(tmp_path / "manifests")
+    repository.publish(first)
+    repository.publish(first)
+    with pytest.raises(SnapshotError, match="unavailable"):
+        repository.get("../escape")
 
 
 def test_source_register_and_missing_fixture_fail_explicitly():

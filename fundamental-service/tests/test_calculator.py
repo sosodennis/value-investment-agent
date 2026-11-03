@@ -25,3 +25,23 @@ def test_unverified_quality_refuses_calculation():
     )
     with pytest.raises(CalculationRefusal, match="verified"):
         calculate(request)
+
+
+def test_missing_base_revenue_and_forged_digest_refuse():
+    request = make_valuation().with_digest()
+    missing = request.model_copy(
+        update={
+            "assumptions": request.assumptions.model_copy(
+                update={
+                    "forecast": request.assumptions.forecast.model_copy(
+                        update={"base_revenue": None}
+                    )
+                }
+            )
+        }
+    ).with_digest()
+    with pytest.raises(CalculationRefusal, match="base revenue"):
+        calculate(missing)
+    forged = request.model_copy(update={"input_digest": "0" * 64})
+    with pytest.raises(CalculationRefusal, match="input_digest"):
+        calculate(forged)

@@ -37,6 +37,7 @@ def make_valuation() -> ValuationInputV1:
         historical_facts=("revenue",),
         assumptions=AssumptionsV1(
             forecast=ForecastAssumptionsV1(
+                base_revenue=Decimal("100"),
                 revenue_growth=(Decimal("0.05"),),
                 operating_margin=(Decimal("0.15"),),
                 reinvestment_rate=(Decimal("0.20"),),
