@@ -16,6 +16,7 @@ Root `AGENTS.md` contains finance-domain constraints, agent skill routing, and r
 - [Agent Architecture Standard](../.agents/skills/architecture-standard-enforcer/references/cross-agent-architecture-standard.md) defines hard dependency and graph rules for agent work.
 - [Cross-agent refactor playbook](../finance-agent-core/docs/standards/refactor_lessons_and_cross_agent_playbook.md) records implementation lessons and review steps. It does not replace the standard.
 - [Frontend UI design guide](frontend-ui-guideline.md) describes the product's visual direction and semantic token usage.
+- [Fundamental service target state](../fundamental-service/docs/fundamental-enterprise-grade-target-state.md) is the single normative source for the isolated service's valuation data, model definitions, calculations, calibration, provenance, and release gates.
 
 ## Contracts and service references
 
@@ -39,6 +40,8 @@ Root `AGENTS.md` contains finance-domain constraints, agent skill routing, and r
 - [Discussion #140: backend guidelines, module boundaries, and SSE](https://github.com/sosodennis/value-investment-agent/discussions/140)
 - Accepted architecture decisions include the [Analysis Workspace runtime durability ADR](analysis-workspace-runtime-durability-adr-2026-03-21.md), its [detailed companion](analysis-workspace-runtime-durability-detailed-adr-2026-03-21.md), and the [observability backbone ADR](technical-decision-observability-backbone-adr-2026-03-21.md).
 - Research and audit reports live in [`research-paper/`](research-paper/) and [`reports/`](reports/). Verification scripts write raw benchmark outputs to the ignored root `reports/` directory.
+
+Fundamental-specific backlog, runbook, research, and report files under `finance-agent-core/docs/`, `research-paper/`, and `reports/` are supporting or historical references. They do not define a second Fundamental contract. Resolve conflicts in favor of the [Fundamental service target state](../fundamental-service/docs/fundamental-enterprise-grade-target-state.md).
 
 ADRs record decisions for a specific system change. Contracts describe a service or data boundary. Reports record evidence and a dated code review. These references do not create a competing general coding standard.
 
