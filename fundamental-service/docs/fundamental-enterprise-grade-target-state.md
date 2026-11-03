@@ -189,7 +189,9 @@ Every fact and derived observation carries:
 - `taxonomy_version`, parser version, and policy version;
 - `point_in_time_policy`: the rule that selected this version.
 
-For a historical valuation, `available_at` must be less than or equal to the valuation timestamp. A restated fact filed later cannot replace the fact that was available at the historical decision time.
+For a historical valuation, `available_at` must be less than or equal to the valuation timestamp. A later filing cannot replace an earlier fact merely because it has the same reporting period. The source snapshot must preserve filing identity and amendment relationships, including `filing_version`, `is_amendment`, `amends_accession`, `supersedes_accession`, `publication_at` (the source-specific time at which the document became usable), and an amendment-scope classification.
+
+Point-in-time selection is fact-level, not period-level. For each requested concept, context, unit, and dimension set, select only candidates available at the valuation timestamp, then apply the versioned source-selection policy to the eligible candidates. A later amendment supersedes an earlier fact only when its scope covers that fact. An amendment that changes unrelated disclosure must not rewrite historical financial facts. All candidates and the selection decision remain in the immutable snapshot so a replay can explain why a fact was chosen.
 
 ### 8.2 Canonical fact contract
 
@@ -220,6 +222,8 @@ class CanonicalFact:
 
 The canonical layer must keep both the original XBRL concept and the normalized field. A normalized `revenue` value without the original concept, context, and unit is not auditable.
 
+The XBRL portion of the contract must also provide a structured `XbrlContextV1` containing the full concept QName, period type (`instant` or `duration`), start and end dates or instant, unit QName and measure, dimensions with explicit members, consolidation and entity scope, and the source context identifier. Duplicate candidates are retained with their validation outcome and selection reason; they are never silently collapsed by period end alone.
+
 The canonical fact contract belongs to the new Fundamental service. It is not a reason to rewrite the existing Fundamental agent. The service owns the source and fact boundary:
 
 ```text
@@ -235,10 +239,10 @@ The service must not read raw `FinancialReportModel` dictionaries from the exist
 - Store currency and scale explicitly. Never infer millions or billions from a label.
 - Store period type, duration, and instant separately. Do not combine quarterly and annual facts by matching dates alone.
 - Resolve dimensions such as segment, geography, class of stock, and continuing operations before aggregation.
-- Prefer issuer extension concepts when they are anchored to a standard concept. Record the anchor and mapping confidence.
+- Prefer issuer extension concepts when they are anchored to a standard concept. Record the anchor, mapping rule, and mapping confidence. An unanchored or low-confidence mapping for a valuation-critical input cannot feed a `verified` intrinsic-value artifact; it may feed a separately labelled `provisional` path only when the model policy permits it.
 - Treat negative expenses, contra accounts, and sign inversions as explicit policy decisions.
 - Do not coerce a missing value to zero. Use `missing`, `not_applicable`, or `unsupported`.
-- Use a declared selection policy for duplicate facts. The policy must explain why a fact was preferred.
+- Use a declared selection policy for duplicate facts. The policy must explain why a fact was preferred and must retain rejected candidates and the reason code.
 
 ## 9. Provenance and quality contracts
 
@@ -363,7 +367,7 @@ The selector must not choose a model solely because its score is highest. A cand
 | Company type | Primary model family | Required evidence | Models that are limited or forbidden |
 | --- | --- | --- | --- |
 | Mature non-financial | FCFF DCF, EVA cross-formulation, EV-based cross-check | multi-year revenue, EBIT, tax, D&A, capex, working capital, debt, cash, shares | terminal-value-only result without a stable cash-flow history |
-| High-growth or SaaS | unit-economics forecast plus FCFF or revenue-to-margin transition | retention or cohort evidence when available, gross margin, SBC, dilution, cash runway, path to operating margin | mature-margin DCF without a transition path |
+| High-growth or SaaS | unit-economics forecast plus FCFF or revenue-to-margin transition | a declared forecast path backed by issuer facts or an approved dated assumption policy; gross margin, SBC, dilution, cash runway, and path to operating margin; retention or cohort evidence when that driver is used | mature-margin DCF without a transition path; a `verified` result when a material transition or dilution input is unknown |
 | Bank | excess-return or dividend model using regulatory capital | RWA, CET1 or equivalent, payout, book value, asset quality, net interest and provision data | FCFF, enterprise-value bridge, synthetic RWA from net income |
 | Insurance | statutory excess-return or dividend model | statutory capital, book value, reserve development, underwriting result, investment income, and legal-entity structure | FCFF without a justified debt and operating separation; an embedded-value cross-check requires an issuer-published, auditable actuarial bridge |
 | REIT | NAV plus AFFO or dividend cross-check | property value, occupancy, rent, debt maturity, interest cost, maintenance capex, shares | AFFO multiple presented as full NAV valuation |
@@ -432,6 +436,7 @@ The new service owns its calculation engine and model registry. It may reuse rev
 - Record whether debt is gross or net, whether leases are included, and whether preferred stock and non-controlling interests are deducted.
 - Keep equity value and enterprise value distinct. The bridge must show cash, debt, preferred stock, lease liabilities, minority interest, and other adjustments separately.
 - Use diluted weighted-average shares for per-share earnings and an as-of diluted share count for equity value. Do not mix the two without a policy record.
+- Represent each capital-bridge input as `present`, `confirmed_absent`, `unknown`, or `unsupported`, with source and policy provenance. A material `unknown` in debt, cash, preferred stock, lease liabilities, non-controlling interests, SBC dilution, or the selected share scope blocks a `verified` intrinsic-value artifact. A model may return `provisional`, `degraded`, or `abstain` only under its declared policy; callers must not convert `unknown` to zero.
 - Make mid-year versus end-year discounting explicit.
 - Store monetary inputs and outputs as typed decimal amounts with an explicit currency and scale. If an intermediate function uses binary floating point, pin its runtime and precision, quantify the output error, and enforce the declared tolerance.
 - Record all rounding only at presentation boundaries. Never round intermediate values.
@@ -646,7 +651,7 @@ Minimum cohorts:
 - at least one pre-profit or pipeline company;
 - at least one conglomerate or SOTP case;
 - one issuer with material SBC and multiple share classes;
-- one issuer with a filing restatement or amended filing.
+- one issuer with a filing restatement or amended filing. The fixture must distinguish an amendment that changes a valuation-relevant fact from an amendment that only changes unrelated disclosure; both cases exercise the fact-level amendment-scope policy.
 
 Each case has a point-in-time input snapshot, expected facts, expected validation issues, expected model eligibility, expected calculation nodes, and expected abstention or degraded state when applicable. The dataset contains no hidden future facts.
 
@@ -683,6 +688,8 @@ An artifact or code release is blocked when any required gate fails.
 - the release includes the calibration artifact, split manifest, and cohort report;
 - a rejected calibration remains rejected and cannot silently become active.
 
+The fixed golden cohort is an engineering regression and replay corpus. It is not, by itself, evidence that a calibration mapping or prediction interval is reliable. Calibration and OOS cohorts are separate, chronological datasets with their own split manifest, label-availability rule, missingness report, and uncertainty estimates. The release profile must declare the minimum evidence required for each model and target, but there is no universal sample-size threshold: when a cohort is too small or too sparse for a defensible estimate, calibration remains inactive and the report states that limitation. A proposed threshold such as 30 OOS labels is a reviewable policy choice, not a domain fact, and requires justification for the target and cohort.
+
 ### 19.4 Governance gates
 
 - model, policy, parser, taxonomy, and calibration versions are pinned;
@@ -708,6 +715,8 @@ Version these independently:
 A breaking change increments the relevant major version and invalidates incompatible historical artifacts. A policy change creates a new artifact version and preserves old outputs. A source correction creates a new point-in-time snapshot. Do not rewrite historical reports in place.
 
 The release manifest must state which versions are compatible. The loader must reject an incompatible combination rather than silently coerce it.
+
+Every release profile must pin its tolerances, blocking rule set, calibration promotion rule, cohort minimums, interval metrics, missingness limits, and drift limits before evaluation begins. Changing one of these thresholds creates a new quality-policy version and requires the affected fixtures, reports, and release decision to be rerun. A threshold is not evidence merely because a previous implementation passed it.
 
 ## 21. Ordered service-build phases
 
@@ -804,6 +813,8 @@ Implement the following slices in order. Do not start calibration or user-interf
 7. **Small calibration loop.** Calibrate one or two forecast metrics, such as revenue growth and operating margin, against first subsequently published filing values. Keep consensus-relative adjustment in a separate diagnostic path.
 8. **Cohort monitoring.** Start with a fixed cohort of at least 20 cases across the initial coverage boundary. Track missingness, abstention, provider fallback, signed bias, median absolute error, and replay pass rate.
 
+The 20-case cohort is a pragmatic engineering and replay minimum, not a statistical claim that calibration is reliable. Keep it separate from the chronological calibration/OOS cohort. For every promoted calibration artifact, report the target, model and sector cohort, `N`, label availability, missingness, abstention, raw/calibrated/naive metrics, uncertainty intervals, and the policy version that defines promotion. If the evidence is insufficient for a stable estimate, leave calibration inactive. Do not use a universal sample-size number without documenting why it is suitable for that target and cohort.
+
 ### 24.3 First implementation slices
 
 Implement the first service release in these ownership slices. Keep each slice inside `fundamental-service`; do not import the existing agent's internal modules.
@@ -831,6 +842,14 @@ Use a narrow, auditable calibration loop before fitting a broad valuation adjust
 5. Promote only when the out-of-sample error improves, the sample count is sufficient, and no sector cohort breaches the quality limit.
 6. Expire the artifact when its source, schema, or point-in-time policy changes.
 
+### 24.4.1 Point-in-time label and amendment rules
+
+The realized label is the first subsequently published eligible filing fact after the valuation timestamp, subject to the same fact-level availability and amendment-scope rules as the input dataset. A later restatement may be retained as a separate diagnostic label, but it must not overwrite the label used for the original OOS evaluation. The dataset records the selected accession, publication time, amendment scope, and reason for rejecting any later candidate.
+
+### 24.4.2 Minimum V1 contract freeze
+
+Before implementing each service slice, freeze the machine-readable V1 contract for the artifacts that slice produces. At minimum, the first release must define schemas for `SourceSnapshotV1`, `CanonicalFactV1`, `ValuationInputV1`, `EligibilityReportV1`, `CalculationArtifactV1`, `ReleaseManifestV1`, and the stable error catalog. Each schema must define required fields, unknown-field policy, version compatibility, status transitions, provenance references, idempotency behavior where applicable, and deterministic serialization. Enterprise-only artifacts such as a full `ProvenanceGraphV1` or broad `CalibrationArtifactV1` may be implemented in later slices, but their first released contract must not contradict these V1 semantics.
+
 Do not use current price, analyst target price, or consensus as the realized label for intrinsic value. Those observations may remain in a separate market-signal evaluation.
 
 ### 24.5 Practical release thresholds
@@ -846,6 +865,8 @@ The first profile must enforce these hard requirements:
 - calibration reports show raw, calibrated, and naive metrics, even when calibration is rejected;
 - every unsupported or abstained case contains a machine-readable reason and missing-evidence list.
 
+The release profile must be declared before running the cohort. It pins numeric tolerances, blocking issue codes, missingness and fallback limits, calibration promotion rules, and interval metrics. Any change creates a new quality-policy version and requires the affected cohort and replay evidence to be rerun.
+
 These thresholds are the minimum release profile. A deployment may tighten them, but it may not loosen them without a versioned policy change and new evidence.
 
 ### 24.6 Deliberately deferred work
@@ -855,6 +876,7 @@ The following work belongs to the target state but should not block the first de
 - full insurer, REIT NAV, regulated utility, cyclical, biotech, and conglomerate model families;
 - broad Monte Carlo distributions with learned cross-parameter correlations;
 - automated model-selection learning across all sectors;
+- full component-level error decomposition across extraction, accounting, forecast, discount rate, terminal value, and capital bridge;
 - market-outcome portfolio optimization;
 - free-web consensus scraping as a primary input;
 - LLM-generated numeric assumptions without a source or approved policy;
@@ -932,7 +954,7 @@ No single external source can prove an intrinsic value is correct. Independent c
 
 Use these external references and verification channels:
 
-- **SEC and XBRL.** Reconcile canonical facts with the issuer's filing, XBRL contexts, units, dimensions, accession, and filing date. Use Arelle's validation output and the applicable EFM or DQC rules.
+- **SEC and XBRL.** Reconcile canonical facts with the issuer's filing, XBRL contexts, units, dimensions, accession, and filing date. Use Arelle's validation output and the applicable EFM or DQC rules. SEC Company Facts is an index and aggregation of non-custom taxonomy facts for an entity; it cannot replace the complete filing or the issuer's extension taxonomy, so valuation-critical custom facts must be checked against the original Inline XBRL package.
 - **Official macro sources.** Use FRED or ALFRED vintages, Treasury yields, BEA, BLS, Federal Reserve, and FDIC data for their declared domains. Store the vintage or publication time.
 - **Accounting standards.** Use the public SEC reporting guidance, FASB or IFRS taxonomy references, and issuer filing presentation for concept meaning. Do not use a market-data page to resolve accounting semantics.
 - **Model-risk governance.** [SR 26-2](https://www.federalreserve.gov/supervisionreg/srletters/SR2602.htm) replaced SR 11-7 on April 17, 2026. It applies as supervisory guidance to its banking scope and is a reference, not a certification or direct requirement for this service. Use the [NIST AI RMF](https://www.nist.gov/itl/ai-risk-management-framework) when an ML component affects a decision or confidence label.
@@ -1082,6 +1104,8 @@ Keep these stores separate:
 - operational cache and locks, which may expire and must never be the only copy of a valuation result.
 
 The service must be able to rebuild derived stores from retained raw snapshots. A cache reset must not destroy the evidence needed to reproduce a released valuation.
+
+Derived artifacts carry a dependency manifest listing the source snapshot IDs, parser and taxonomy versions, mapping package, quality profile, model and calculation versions, assumption policy, and calibration artifact used to create them. When one dependency changes or is invalidated, the service marks only dependent derived artifacts as stale and records the reason; unrelated artifacts remain valid. Rebuild is explicit and append-only. A stale artifact cannot retain `verified` status, and a cache miss or provider error cannot silently promote a rebuilt artifact.
 
 ### 26.5 Why the response mapping cost is acceptable
 
