@@ -1,0 +1,302 @@
+"""Immutable public-source snapshots and point-in-time selection primitives."""
+
+from __future__ import annotations
+
+import hashlib
+import os
+import tempfile
+from dataclasses import dataclass
+from datetime import datetime
+from pathlib import Path
+from typing import Protocol
+
+from .contracts import (
+    IdentityV1,
+    QualityStatus,
+    SourceRecordV1,
+    SourceRole,
+    SourceSnapshotV1,
+)
+from .serialization import canonical_bytes, sha256_digest
+
+
+class SnapshotError(RuntimeError):
+    """Stable source-plane failures exposed to callers and operational logs."""
+
+    def __init__(self, code: str, message: str, *, retryable: bool = False) -> None:
+        super().__init__(message)
+        self.code = code
+        self.message = message
+        self.retryable = retryable
+
+
+class ContentAddressedStore(Protocol):
+    def put(self, content: bytes, *, media_type: str) -> str: ...
+
+    def get(self, content_hash: str, *, media_type: str) -> bytes: ...
+
+
+class FilesystemContentStore:
+    """A service-owned SHA-256 store. Writes are atomic and never overwrite bytes."""
+
+    def __init__(self, root: Path) -> None:
+        self.root = root
+        self.root.mkdir(parents=True, exist_ok=True)
+
+    def _path(self, content_hash: str, media_type: str) -> Path:
+        suffix = ".json" if media_type == "application/json" else ".bin"
+        return self.root / content_hash[:2] / f"{content_hash}{suffix}"
+
+    def put(self, content: bytes, *, media_type: str) -> str:
+        content_hash = hashlib.sha256(content).hexdigest()
+        path = self._path(content_hash, media_type)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if path.exists():
+            if path.read_bytes() != content:
+                raise SnapshotError(
+                    "CONTENT_HASH_COLLISION",
+                    "stored content hash does not match existing bytes",
+                )
+            return content_hash
+        fd, temporary = tempfile.mkstemp(prefix="snapshot-", dir=path.parent)
+        try:
+            with os.fdopen(fd, "wb") as handle:
+                handle.write(content)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temporary, path)
+        finally:
+            if os.path.exists(temporary):
+                os.unlink(temporary)
+        return content_hash
+
+    def get(self, content_hash: str, *, media_type: str) -> bytes:
+        path = self._path(content_hash, media_type)
+        try:
+            content = path.read_bytes()
+        except FileNotFoundError as exc:
+            raise SnapshotError(
+                "SOURCE_BYTES_UNAVAILABLE", f"content {content_hash} is unavailable"
+            ) from exc
+        actual = hashlib.sha256(content).hexdigest()
+        if actual != content_hash:
+            raise SnapshotError(
+                "SOURCE_HASH_MISMATCH", f"content {content_hash} failed verification"
+            )
+        return content
+
+
+class SnapshotRepository(Protocol):
+    def publish(self, snapshot: SourceSnapshotV1) -> None: ...
+
+    def get(self, snapshot_id: str) -> SourceSnapshotV1: ...
+
+
+class FilesystemSnapshotRepository:
+    def __init__(self, root: Path) -> None:
+        self.root = root
+        self.root.mkdir(parents=True, exist_ok=True)
+
+    def publish(self, snapshot: SourceSnapshotV1) -> None:
+        path = self.root / f"{snapshot.snapshot_id}.json"
+        payload = canonical_bytes(snapshot)
+        if path.exists():
+            if path.read_bytes() != payload:
+                raise SnapshotError(
+                    "SNAPSHOT_IMMUTABLE", "published snapshot cannot be replaced"
+                )
+            return
+        fd, temporary = tempfile.mkstemp(prefix="manifest-", dir=self.root)
+        try:
+            with os.fdopen(fd, "wb") as handle:
+                handle.write(payload)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temporary, path)
+        finally:
+            if os.path.exists(temporary):
+                os.unlink(temporary)
+
+    def get(self, snapshot_id: str) -> SourceSnapshotV1:
+        try:
+            path = self.root / f"{snapshot_id}.json"
+            payload = path.read_bytes()
+        except FileNotFoundError as exc:
+            raise SnapshotError(
+                "SNAPSHOT_NOT_FOUND", f"snapshot {snapshot_id} is unavailable"
+            ) from exc
+        return SourceSnapshotV1.model_validate_json(payload)
+
+
+@dataclass(frozen=True)
+class LegalSource:
+    source_id: str
+    role: SourceRole
+    terms_reference: str
+    retention: str
+    permitted: bool = True
+
+
+class SourceRegister:
+    """Explicit free/public source terms; disallowed sources fail before capture."""
+
+    def __init__(self, entries: tuple[LegalSource, ...] = ()) -> None:
+        self._entries = {entry.source_id: entry for entry in entries}
+
+    def require(self, source_id: str) -> LegalSource:
+        entry = self._entries.get(source_id)
+        if entry is None:
+            raise SnapshotError(
+                "SOURCE_NOT_REGISTERED", f"source {source_id} has no legal-use entry"
+            )
+        if not entry.permitted:
+            raise SnapshotError(
+                "SOURCE_TERMS_EXCLUDED", f"source {source_id} is excluded by its terms"
+            )
+        return entry
+
+
+class RecordedSourceAdapter(Protocol):
+    def fetch(
+        self, source: LegalSource, uri: str
+    ) -> tuple[bytes, int, str, datetime]: ...
+
+
+class FixtureSourceAdapter:
+    """Offline adapter for fixtures; it never performs network access."""
+
+    def __init__(self, responses: dict[str, tuple[bytes, int, str, datetime]]) -> None:
+        self.responses = responses
+
+    def fetch(self, source: LegalSource, uri: str) -> tuple[bytes, int, str, datetime]:
+        try:
+            return self.responses[uri]
+        except KeyError as exc:
+            raise SnapshotError(
+                "SOURCE_UNAVAILABLE", f"no recorded response for {uri}", retryable=True
+            ) from exc
+
+
+@dataclass(frozen=True)
+class CapturedSource:
+    source_id: str
+    uri: str
+    role: SourceRole
+    content: bytes
+    media_type: str
+    http_status: int
+    available_at: datetime
+    publication_at: datetime | None = None
+    accession_number: str | None = None
+    form: str | None = None
+    filed_at: datetime | None = None
+    filing_version: str | None = None
+    is_amendment: bool = False
+    amends_accession: str | None = None
+    supersedes_accession: str | None = None
+    amendment_scope: str | None = None
+    taxonomy_manifest_id: str | None = None
+
+
+class SnapshotBuilder:
+    def __init__(
+        self, content_store: ContentAddressedStore, repository: SnapshotRepository
+    ) -> None:
+        self.content_store = content_store
+        self.repository = repository
+
+    def build(
+        self,
+        *,
+        identity: IdentityV1,
+        valuation_timestamp: datetime,
+        captured_at: datetime,
+        parser_version: str,
+        policy_version: str,
+        sources: tuple[CapturedSource, ...],
+        taxonomy_manifest_id: str | None = None,
+    ) -> SourceSnapshotV1:
+        if not sources:
+            raise SnapshotError(
+                "SNAPSHOT_EMPTY", "a snapshot requires at least one source"
+            )
+        records: list[SourceRecordV1] = []
+        for source in sources:
+            content_hash = self.content_store.put(
+                source.content, media_type=source.media_type
+            )
+            records.append(
+                SourceRecordV1(
+                    source_id=source.source_id,
+                    uri=source.uri,
+                    role=source.role,
+                    available_at=source.available_at,
+                    captured_at=captured_at,
+                    publication_at=source.publication_at,
+                    http_status=source.http_status,
+                    media_type=source.media_type,
+                    terms_reference=f"register:{source.source_id}",
+                    content_hash=content_hash,
+                    parser_version=parser_version,
+                    accession_number=source.accession_number,
+                    form=source.form,
+                    filed_at=source.filed_at,
+                    filing_version=source.filing_version,
+                    is_amendment=source.is_amendment,
+                    amends_accession=source.amends_accession,
+                    supersedes_accession=source.supersedes_accession,
+                    amendment_scope=source.amendment_scope,
+                    taxonomy_manifest_id=source.taxonomy_manifest_id,
+                )
+            )
+        records.sort(
+            key=lambda record: (record.source_id, record.uri, record.content_hash)
+        )
+        identity_payload = {
+            "identity": identity,
+            "valuation_timestamp": valuation_timestamp,
+            "parser_version": parser_version,
+            "policy_version": policy_version,
+            "taxonomy_manifest_id": taxonomy_manifest_id,
+            "sources": [
+                record.model_dump(exclude={"captured_at"}) for record in records
+            ],
+        }
+        snapshot_id = f"snapshot-{sha256_digest(identity_payload)[:32]}"
+        snapshot = SourceSnapshotV1(
+            contract_version="fundamental.v1",
+            snapshot_id=snapshot_id,
+            identity=identity,
+            valuation_timestamp=valuation_timestamp,
+            captured_at=captured_at,
+            source_records=tuple(records),
+            taxonomy_manifest_id=taxonomy_manifest_id,
+            parser_version=parser_version,
+            policy_version=policy_version,
+            coverage_status=QualityStatus.VERIFIED,
+            manifest_digest=sha256_digest(
+                {
+                    "contract_version": "fundamental.v1",
+                    "identity": identity,
+                    "valuation_timestamp": valuation_timestamp,
+                    "captured_at": captured_at,
+                    "source_records": records,
+                    "taxonomy_manifest_id": taxonomy_manifest_id,
+                    "parser_version": parser_version,
+                    "policy_version": policy_version,
+                    "coverage_status": QualityStatus.VERIFIED,
+                    "issues": (),
+                }
+            ),
+        )
+        self.repository.publish(snapshot)
+        return snapshot
+
+
+def select_available_sources(snapshot: SourceSnapshotV1) -> tuple[SourceRecordV1, ...]:
+    """Select only records known at the requested valuation timestamp."""
+    return tuple(
+        record
+        for record in snapshot.source_records
+        if record.available_at <= snapshot.valuation_timestamp
+    )
