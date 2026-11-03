@@ -9,3 +9,21 @@ The service will own its source snapshots, point-in-time facts, model definition
 The first runtime slice freezes the `internal.v1` context and `fundamental.v1` data/calculation contracts in `src/fundamental_service`. It remains independent of `finance-agent-core`; later slices add source ingestion, facts, policies, deterministic calculations, replay, operations, and the typed agent client.
 
 The parent integration branch is `codex/issue-270-integration` and its dedicated worktree is `../value-investment-agent-issue-270-integration`. Child changes are delivered serially from that tip according to `docs/issue-worktree-lifecycle.md`.
+
+## Independent verification
+
+The fixed release cohort is replayed entirely from captured SEC bytes. It does
+not perform provider access:
+
+```sh
+uv run --python 3.12 python -m fundamental_service.verification_gate \
+  --cohort tests/fixtures/verification/golden_cohort.json \
+  --report /tmp/fundamental-verification-report.json
+```
+
+The gate compares the production graph with equations maintained in
+`src/fundamental_service/verification.py`, checks node tolerances and formula
+invariants, exercises monotonicity/metamorphic and mutation sentinels, and
+requires machine-readable reasons and missing evidence for every abstention or
+degraded case. The engineering cohort is replay evidence only; it is never
+used as calibration ground truth.

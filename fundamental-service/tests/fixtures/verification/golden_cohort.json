@@ -1,0 +1,314 @@
+{
+  "schema_version": "fundamental-verification-cohort-v1",
+  "cohort_id": "fundamental-engineering-cohort-v1",
+  "base_request": {
+    "contract_version": "fundamental.v1",
+    "identity": {
+      "issuer_id": "0000320193",
+      "issuer_name": "Apple Inc.",
+      "domicile": "US",
+      "reporting_basis": "us-gaap",
+      "security_id": "AAPL-COMMON",
+      "share_class": "common",
+      "currency": "USD"
+    },
+    "valuation_context": {
+      "valuation_timestamp": "2024-12-01T00:00:00Z",
+      "data_snapshot_id": "apple-2024-original",
+      "source_selection_policy": "pit-v1",
+      "coverage_profile": "us-gaap-public-v1"
+    },
+    "historical_facts": [
+      "revenue",
+      "operating_income",
+      "cash",
+      "debt",
+      "diluted_shares"
+    ],
+    "assumptions": {
+      "forecast": {
+        "base_revenue": "391035000000",
+        "revenue_growth": ["0.05"],
+        "operating_margin": ["0.25"],
+        "reinvestment_rate": ["0.20"]
+      },
+      "wacc": {
+        "risk_free_rate": "0.04",
+        "beta": "1.1",
+        "equity_risk_premium": "0.05",
+        "pre_tax_cost_of_debt": "0.05",
+        "tax_rate": "0.21",
+        "debt_weight": "0.2",
+        "equity_weight": "0.8"
+      },
+      "terminal_growth": "0.02",
+      "capital_bridge": {
+        "cash": "30000000000",
+        "debt": "100000000000",
+        "preferred_stock": "0",
+        "lease_liabilities": "12000000000",
+        "non_controlling_interest": "0",
+        "diluted_shares": "15000000000"
+      },
+      "trace": {"description": "caller supplied cohort assumptions"}
+    },
+    "uncertainty": {"mode": "none"},
+    "quality": {"status": "verified"},
+    "provenance": {
+      "snapshot_id": "apple-2024-original",
+      "fact_ids": ["sec-aapl-revenue-2024"],
+      "mapping_version": "mapping-v1",
+      "parser_version": "arelle-release==2.47.4",
+      "taxonomy_version": "sec-taxonomy-2024",
+      "policy_version": "quality-policy-v1"
+    },
+    "model_id": "fcff_dcf",
+    "model_version": "fcff_dcf-v1",
+    "policy_id": "policy-fcff-v1",
+    "input_digest": null
+  },
+  "cases": [
+    {
+      "case_id": "positive-fcff-technology",
+      "kind": "positive",
+      "model_id": "fcff_dcf",
+      "sector": "technology",
+      "source_snapshot_id": "apple-2024-original",
+      "source_fixture": "../sec-edgar/apple-2024-original-aapl-20240928.htm",
+      "source_sha256": "a14d584e9804a87e92ddbd2446ade975e926a494671292403c811c1f4fc4b846",
+      "features": ["extension-heavy", "lease-capital-bridge"],
+      "request_overrides": {}
+    },
+    {
+      "case_id": "positive-fcff-consumer",
+      "kind": "positive",
+      "model_id": "fcff_dcf",
+      "sector": "consumer",
+      "source_snapshot_id": "apple-2024-original",
+      "source_fixture": "../sec-edgar/apple-2024-original-aapl-20240928.htm",
+      "source_sha256": "a14d584e9804a87e92ddbd2446ade975e926a494671292403c811c1f4fc4b846",
+      "features": ["share-class", "capital-bridge"],
+      "request_overrides": {"assumptions": {"forecast": {"revenue_growth": ["0.04"], "operating_margin": ["0.23"]}}}
+    },
+    {
+      "case_id": "positive-fcff-healthcare",
+      "kind": "positive",
+      "model_id": "fcff_dcf",
+      "sector": "healthcare",
+      "source_snapshot_id": "apple-2024-original",
+      "source_fixture": "../sec-edgar/apple-2024-original-aapl-20240928.htm",
+      "source_sha256": "a14d584e9804a87e92ddbd2446ade975e926a494671292403c811c1f4fc4b846",
+      "features": ["sbc", "dilution"],
+      "request_overrides": {"historical_facts": ["revenue", "operating_income", "cash", "debt", "diluted_shares", "sbc_expense", "sbc_dilution"]}
+    },
+    {
+      "case_id": "positive-fcff-industrials",
+      "kind": "positive",
+      "model_id": "fcff_dcf",
+      "sector": "industrials",
+      "source_snapshot_id": "tesla-2024-original",
+      "source_fixture": "../sec-edgar/tesla-2024-original-tsla-20231231.htm",
+      "source_sha256": "450428c73c70775ccc288b2ac48ac2d6b81a128357fe6e92f0cf3ab76a05322e",
+      "features": ["extension-heavy", "amended-filing-pair"],
+      "request_overrides": {"identity": {"issuer_id": "0001318605", "issuer_name": "Tesla, Inc.", "security_id": "TSLA-COMMON"}, "valuation_context": {"data_snapshot_id": "tesla-2024-original", "valuation_timestamp": "2024-02-15T00:00:00Z"}, "assumptions": {"forecast": {"base_revenue": "96773000000", "revenue_growth": ["0.12"], "operating_margin": ["0.10"]}}, "provenance": {"snapshot_id": "tesla-2024-original", "fact_ids": ["sec-tsla-revenue-2023"]}}
+    },
+    {
+      "case_id": "positive-fcff-automotive",
+      "kind": "positive",
+      "model_id": "fcff_dcf",
+      "sector": "automotive",
+      "source_snapshot_id": "tesla-2024-original",
+      "source_fixture": "../sec-edgar/tesla-2024-original-tsla-20231231.htm",
+      "source_sha256": "450428c73c70775ccc288b2ac48ac2d6b81a128357fe6e92f0cf3ab76a05322e",
+      "features": ["leases", "capital-bridge", "multiple-share-classes"],
+      "request_overrides": {"identity": {"issuer_id": "0001318605", "issuer_name": "Tesla, Inc.", "security_id": "TSLA-COMMON", "share_class": "common"}, "valuation_context": {"data_snapshot_id": "tesla-2024-original", "valuation_timestamp": "2024-02-15T00:00:00Z"}, "assumptions": {"forecast": {"base_revenue": "96773000000", "revenue_growth": ["0.15"], "operating_margin": ["0.11"]}}, "provenance": {"snapshot_id": "tesla-2024-original", "fact_ids": ["sec-tsla-revenue-2023"]}}
+    },
+    {
+      "case_id": "positive-transition-technology",
+      "kind": "positive",
+      "model_id": "transition_fcff_dcf",
+      "sector": "technology",
+      "source_snapshot_id": "apple-2024-original",
+      "source_fixture": "../sec-edgar/apple-2024-original-aapl-20240928.htm",
+      "source_sha256": "a14d584e9804a87e92ddbd2446ade975e926a494671292403c811c1f4fc4b846",
+      "features": ["guarded-transition", "filed-operating-evidence"],
+      "request_overrides": {"model_id": "transition_fcff_dcf", "model_version": "transition_fcff_dcf-v1", "policy_id": "policy-transition-v1", "historical_facts": ["revenue", "operating_income", "cash", "debt", "diluted_shares", "filed_operating_evidence"]}
+    },
+    {
+      "case_id": "positive-transition-consumer",
+      "kind": "positive",
+      "model_id": "transition_fcff_dcf",
+      "sector": "consumer",
+      "source_snapshot_id": "apple-2024-original",
+      "source_fixture": "../sec-edgar/apple-2024-original-aapl-20240928.htm",
+      "source_sha256": "a14d584e9804a87e92ddbd2446ade975e926a494671292403c811c1f4fc4b846",
+      "features": ["guarded-transition", "sbc"],
+      "request_overrides": {"model_id": "transition_fcff_dcf", "model_version": "transition_fcff_dcf-v1", "policy_id": "policy-transition-v1", "historical_facts": ["revenue", "operating_income", "cash", "debt", "diluted_shares", "filed_operating_evidence", "sbc_expense"], "assumptions": {"forecast": {"revenue_growth": ["0.08"], "operating_margin": ["0.18"]}}}
+    },
+    {
+      "case_id": "positive-transition-healthcare",
+      "kind": "positive",
+      "model_id": "transition_fcff_dcf",
+      "sector": "healthcare",
+      "source_snapshot_id": "apple-2024-original",
+      "source_fixture": "../sec-edgar/apple-2024-original-aapl-20240928.htm",
+      "source_sha256": "a14d584e9804a87e92ddbd2446ade975e926a494671292403c811c1f4fc4b846",
+      "features": ["guarded-transition", "dilution", "share-class"],
+      "request_overrides": {"model_id": "transition_fcff_dcf", "model_version": "transition_fcff_dcf-v1", "policy_id": "policy-transition-v1", "historical_facts": ["revenue", "operating_income", "cash", "debt", "diluted_shares", "filed_operating_evidence", "sbc_dilution"], "assumptions": {"forecast": {"revenue_growth": ["0.09"], "operating_margin": ["0.17"]}}}
+    },
+    {
+      "case_id": "positive-transition-industrials",
+      "kind": "positive",
+      "model_id": "transition_fcff_dcf",
+      "sector": "industrials",
+      "source_snapshot_id": "tesla-2025-amendment",
+      "source_fixture": "../sec-edgar/tesla-2025-amendment-tm252787d2_10ka.htm",
+      "source_sha256": "ac21201742aa3e815678e0f1dad7605b9f659423966981497b1e1e285233a432",
+      "features": ["guarded-transition", "amended-filing", "restatement-diagnostic"],
+      "request_overrides": {"model_id": "transition_fcff_dcf", "identity": {"issuer_id": "0001318605", "issuer_name": "Tesla, Inc.", "security_id": "TSLA-COMMON"}, "valuation_context": {"data_snapshot_id": "tesla-2025-amendment", "valuation_timestamp": "2025-05-10T00:00:00Z"}, "assumptions": {"forecast": {"base_revenue": "97673000000", "revenue_growth": ["0.13"], "operating_margin": ["0.12"]}}, "historical_facts": ["revenue", "operating_income", "cash", "debt", "diluted_shares", "filed_operating_evidence", "amendment_diagnostic"], "provenance": {"snapshot_id": "tesla-2025-amendment", "fact_ids": ["sec-tsla-revenue-2024-amended"]}, "model_version": "transition_fcff_dcf-v1", "policy_id": "policy-transition-v1"}
+    },
+    {
+      "case_id": "positive-transition-automotive",
+      "kind": "positive",
+      "model_id": "transition_fcff_dcf",
+      "sector": "automotive",
+      "source_snapshot_id": "tesla-2025-amendment",
+      "source_fixture": "../sec-edgar/tesla-2025-amendment-tm252787d2_10ka.htm",
+      "source_sha256": "ac21201742aa3e815678e0f1dad7605b9f659423966981497b1e1e285233a432",
+      "features": ["guarded-transition", "leases", "capital-bridge", "amendment"],
+      "request_overrides": {"model_id": "transition_fcff_dcf", "identity": {"issuer_id": "0001318605", "issuer_name": "Tesla, Inc.", "security_id": "TSLA-COMMON"}, "valuation_context": {"data_snapshot_id": "tesla-2025-amendment", "valuation_timestamp": "2025-05-10T00:00:00Z"}, "assumptions": {"forecast": {"base_revenue": "97673000000", "revenue_growth": ["0.10"], "operating_margin": ["0.13"]}}, "historical_facts": ["revenue", "operating_income", "cash", "debt", "diluted_shares", "filed_operating_evidence", "lease_liabilities"], "provenance": {"snapshot_id": "tesla-2025-amendment", "fact_ids": ["sec-tsla-revenue-2024-amended"]}, "model_version": "transition_fcff_dcf-v1", "policy_id": "policy-transition-v1"}
+    },
+    {
+      "case_id": "abstain-unsupported-sector",
+      "kind": "abstain",
+      "model_id": "fcff_dcf",
+      "sector": "banking",
+      "source_snapshot_id": "apple-2024-original",
+      "source_fixture": "../sec-edgar/apple-2024-original-aapl-20240928.htm",
+      "source_sha256": "a14d584e9804a87e92ddbd2446ade975e926a494671292403c811c1f4fc4b846",
+      "features": ["unsupported-sector", "explicit-abstention"],
+      "expected_refusal_code": "QUALITY_NOT_VERIFIED",
+      "request_overrides": {"quality": {"status": "unsupported", "issue_codes": ["UNSUPPORTED_SECTOR"], "missing_evidence": ["bank-model"]}}
+    },
+    {
+      "case_id": "abstain-missing-revenue",
+      "kind": "abstain",
+      "model_id": "fcff_dcf",
+      "sector": "technology",
+      "source_snapshot_id": "apple-2024-original",
+      "source_fixture": "../sec-edgar/apple-2024-original-aapl-20240928.htm",
+      "source_sha256": "a14d584e9804a87e92ddbd2446ade975e926a494671292403c811c1f4fc4b846",
+      "features": ["missing-fact", "explicit-abstention"],
+      "expected_refusal_code": "BASE_REVENUE_MISSING",
+      "request_overrides": {"assumptions": {"forecast": {"base_revenue": null}}, "quality": {"missing_evidence": ["revenue"]}}
+    },
+    {
+      "case_id": "degraded-conflicting-facts",
+      "kind": "degraded",
+      "model_id": "fcff_dcf",
+      "sector": "consumer",
+      "source_snapshot_id": "apple-2024-original",
+      "source_fixture": "../sec-edgar/apple-2024-original-aapl-20240928.htm",
+      "source_sha256": "a14d584e9804a87e92ddbd2446ade975e926a494671292403c811c1f4fc4b846",
+      "features": ["conflicting-facts", "unresolved-mapping"],
+      "expected_refusal_code": "QUALITY_NOT_VERIFIED",
+      "request_overrides": {"quality": {"status": "degraded", "issue_codes": ["CONFLICTING_FACTS", "MAPPING_UNRESOLVED"], "missing_evidence": ["canonical-selection"]}}
+    },
+    {
+      "case_id": "abstain-uncertainty-controls",
+      "kind": "abstain",
+      "model_id": "fcff_dcf",
+      "sector": "technology",
+      "source_snapshot_id": "apple-2024-original",
+      "source_fixture": "../sec-edgar/apple-2024-original-aapl-20240928.htm",
+      "source_sha256": "a14d584e9804a87e92ddbd2446ade975e926a494671292403c811c1f4fc4b846",
+      "features": ["caller-uncertainty", "explicit-abstention"],
+      "expected_refusal_code": "UNCERTAINTY_NOT_IMPLEMENTED",
+      "request_overrides": {"uncertainty": {"mode": "scenarios"}, "quality": {"missing_evidence": ["deterministic-only-calculator"]}}
+    },
+    {
+      "case_id": "abstain-terminal-rate",
+      "kind": "abstain",
+      "model_id": "fcff_dcf",
+      "sector": "industrials",
+      "source_snapshot_id": "tesla-2024-original",
+      "source_fixture": "../sec-edgar/tesla-2024-original-tsla-20231231.htm",
+      "source_sha256": "450428c73c70775ccc288b2ac48ac2d6b81a128357fe6e92f0cf3ab76a05322e",
+      "features": ["invalid-terminal-growth", "explicit-abstention"],
+      "expected_refusal_code": "DISCOUNT_RATE_INVALID",
+      "request_overrides": {"identity": {"issuer_id": "0001318605", "issuer_name": "Tesla, Inc.", "security_id": "TSLA-COMMON"}, "valuation_context": {"data_snapshot_id": "tesla-2024-original", "valuation_timestamp": "2024-02-15T00:00:00Z"}, "assumptions": {"forecast": {"base_revenue": "96773000000"}, "terminal_growth": "0.09"}, "quality": {"missing_evidence": ["discount-rate"]}, "provenance": {"snapshot_id": "tesla-2024-original"}}
+    },
+    {
+      "case_id": "abstain-forecast-shape",
+      "kind": "abstain",
+      "model_id": "fcff_dcf",
+      "sector": "healthcare",
+      "source_snapshot_id": "apple-2024-original",
+      "source_fixture": "../sec-edgar/apple-2024-original-aapl-20240928.htm",
+      "source_sha256": "a14d584e9804a87e92ddbd2446ade975e926a494671292403c811c1f4fc4b846",
+      "features": ["incomplete-forecast", "explicit-abstention"],
+      "expected_refusal_code": "FORECAST_INVALID",
+      "request_overrides": {"assumptions": {"forecast": {"revenue_growth": ["0.05", "0.04"], "operating_margin": ["0.25"], "reinvestment_rate": ["0.20"]}}, "quality": {"missing_evidence": ["forecast-array"]}}
+    },
+    {
+      "case_id": "degraded-transition-without-evidence",
+      "kind": "degraded",
+      "model_id": "transition_fcff_dcf",
+      "sector": "automotive",
+      "source_snapshot_id": "tesla-2024-original",
+      "source_fixture": "../sec-edgar/tesla-2024-original-tsla-20231231.htm",
+      "source_sha256": "450428c73c70775ccc288b2ac48ac2d6b81a128357fe6e92f0cf3ab76a05322e",
+      "features": ["guarded-transition", "missing-filed-evidence"],
+      "expected_refusal_code": "QUALITY_NOT_VERIFIED",
+      "request_overrides": {"model_id": "transition_fcff_dcf", "identity": {"issuer_id": "0001318605", "issuer_name": "Tesla, Inc.", "security_id": "TSLA-COMMON"}, "valuation_context": {"data_snapshot_id": "tesla-2024-original", "valuation_timestamp": "2024-02-15T00:00:00Z"}, "model_version": "transition_fcff_dcf-v1", "policy_id": "policy-transition-v1", "quality": {"status": "provisional", "missing_evidence": ["filed_operating_evidence"]}, "assumptions": {"forecast": {"base_revenue": "96773000000"}}, "provenance": {"snapshot_id": "tesla-2024-original", "fact_ids": ["sec-tsla-revenue-2023"]}}
+    },
+    {
+      "case_id": "abstain-unsupported-ifrs",
+      "kind": "abstain",
+      "model_id": "fcff_dcf",
+      "sector": "technology",
+      "source_snapshot_id": "apple-2024-original",
+      "source_fixture": "../sec-edgar/apple-2024-original-aapl-20240928.htm",
+      "source_sha256": "a14d584e9804a87e92ddbd2446ade975e926a494671292403c811c1f4fc4b846",
+      "features": ["unsupported-reporting-basis", "explicit-abstention"],
+      "expected_refusal_code": "QUALITY_NOT_VERIFIED",
+      "request_overrides": {"identity": {"reporting_basis": "us-gaap"}, "quality": {"status": "unsupported", "issue_codes": ["UNSUPPORTED_PROFILE"], "missing_evidence": ["ifrs-accounting-profile"]}}
+    },
+    {
+      "case_id": "abstain-zero-revenue",
+      "kind": "abstain",
+      "model_id": "fcff_dcf",
+      "sector": "consumer",
+      "source_snapshot_id": "apple-2024-original",
+      "source_fixture": "../sec-edgar/apple-2024-original-aapl-20240928.htm",
+      "source_sha256": "a14d584e9804a87e92ddbd2446ade975e926a494671292403c811c1f4fc4b846",
+      "features": ["non-positive-base", "explicit-abstention"],
+      "expected_refusal_code": "BASE_REVENUE_MISSING",
+      "request_overrides": {"assumptions": {"forecast": {"base_revenue": "0"}}, "quality": {"missing_evidence": ["revenue"]}}
+    },
+    {
+      "case_id": "abstain-monte-carlo-controls",
+      "kind": "abstain",
+      "model_id": "fcff_dcf",
+      "sector": "industrial",
+      "source_snapshot_id": "apple-2024-original",
+      "source_fixture": "../sec-edgar/apple-2024-original-aapl-20240928.htm",
+      "source_sha256": "a14d584e9804a87e92ddbd2446ade975e926a494671292403c811c1f4fc4b846",
+      "features": ["caller-monte-carlo", "explicit-abstention"],
+      "expected_refusal_code": "UNCERTAINTY_NOT_IMPLEMENTED",
+      "request_overrides": {"uncertainty": {"mode": "monte_carlo", "parameters": [{"path": "assumptions.terminal_growth", "distribution": "uniform", "lower": "0.01", "upper": "0.03"}], "samples": 100, "seed": 17, "invalid_draw_policy": "abstain"}, "quality": {"missing_evidence": ["deterministic-only-calculator"]}}
+    },
+    {
+      "case_id": "abstain-wacc-terminal-bound",
+      "kind": "abstain",
+      "model_id": "fcff_dcf",
+      "sector": "technology",
+      "source_snapshot_id": "apple-2024-original",
+      "source_fixture": "../sec-edgar/apple-2024-original-aapl-20240928.htm",
+      "source_sha256": "a14d584e9804a87e92ddbd2446ade975e926a494671292403c811c1f4fc4b846",
+      "features": ["terminal-growth-bound", "explicit-abstention"],
+      "expected_refusal_code": "DISCOUNT_RATE_INVALID",
+      "request_overrides": {"assumptions": {"terminal_growth": "0.10"}, "quality": {"missing_evidence": ["terminal-growth"]}}
+    }
+  ]
+}
