@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import date, datetime, timezone
 from decimal import Decimal
 from enum import Enum
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -376,7 +376,7 @@ class ValuationInputV1(StrictModel):
 class PolicyResolutionV1(StrictModel):
     contract_version: Literal["fundamental.v1"]
     policy_id: str = Field(min_length=1)
-    resolved_fields: dict[str, str | int | bool | None]
+    resolved_fields: dict[str, Any]
     precedence: dict[str, Literal["caller", "policy"]]
     input_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
 
