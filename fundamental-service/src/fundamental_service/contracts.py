@@ -66,6 +66,19 @@ class SourceProvenanceV1(StrictModel):
     taxonomy_version: str | None = None
     terms_reference: str | None = None
 
+    @model_validator(mode="after")
+    def timestamps_have_timezone(self) -> "SourceProvenanceV1":
+        for name, value in (
+            ("captured_at", self.captured_at),
+            ("available_at", self.available_at),
+            ("filed_at", self.filed_at),
+        ):
+            if value is not None and (
+                value.tzinfo is None or value.utcoffset() is None
+            ):
+                raise ValueError(f"{name} must include a timezone")
+        return self
+
 
 class IssueV1(StrictModel):
     code: str = Field(min_length=1, max_length=128)
@@ -152,6 +165,20 @@ class SourceRecordV1(StrictModel):
     amendment_scope: Literal["valuation_relevant", "unrelated", "unknown"] | None = None
     taxonomy_manifest_id: str | None = None
 
+    @model_validator(mode="after")
+    def timestamps_have_timezone(self) -> "SourceRecordV1":
+        for name, value in (
+            ("available_at", self.available_at),
+            ("captured_at", self.captured_at),
+            ("publication_at", self.publication_at),
+            ("filed_at", self.filed_at),
+        ):
+            if value is not None and (
+                value.tzinfo is None or value.utcoffset() is None
+            ):
+                raise ValueError(f"{name} must include a timezone")
+        return self
+
 
 class SourceSnapshotV1(StrictModel):
     contract_version: Literal["fundamental.v1"]
@@ -174,6 +201,16 @@ class SourceSnapshotV1(StrictModel):
             raise ValueError(
                 "manifest_digest does not match canonical snapshot manifest"
             )
+        return self
+
+    @model_validator(mode="after")
+    def timestamps_have_timezone(self) -> "SourceSnapshotV1":
+        for name, value in (
+            ("valuation_timestamp", self.valuation_timestamp),
+            ("captured_at", self.captured_at),
+        ):
+            if value.tzinfo is None or value.utcoffset() is None:
+                raise ValueError(f"{name} must include a timezone")
         return self
 
 
@@ -221,6 +258,20 @@ class CanonicalFactV1(StrictModel):
             self.value, MissingValueV1
         ):
             raise ValueError("verified facts cannot contain a missing value")
+        return self
+
+    @model_validator(mode="after")
+    def timestamps_have_timezone(self) -> "CanonicalFactV1":
+        for name, value in (
+            ("as_of", self.as_of),
+            ("available_at", self.available_at),
+            ("filed_at", self.filed_at),
+            ("captured_at", self.captured_at),
+        ):
+            if value is not None and (
+                value.tzinfo is None or value.utcoffset() is None
+            ):
+                raise ValueError(f"{name} must include a timezone")
         return self
 
 

@@ -91,6 +91,28 @@ def test_equally_precise_conflict_blocks_fact():
     assert result.issues[0].code == "FACT_CONFLICT"
 
 
+def test_missing_mapping_is_provisional_instead_of_verified():
+    result = select_fact(
+        (candidate("unmapped", "100", "2025-12-15", 2),),
+        datetime(2026, 1, 1, tzinfo=timezone.utc),
+    )
+    assert result.fact is not None
+    assert result.fact.quality == "provisional"
+    assert result.issues[0].code == "MAPPING_UNRESOLVED"
+
+
+def test_source_provenance_rejects_naive_timestamps():
+    with pytest.raises(ValueError, match="captured_at"):
+        SourceProvenanceV1(
+            source_url="https://example.test/10-k",
+            content_hash="a" * 64,
+            source_role=SourceRole.FILING,
+            captured_at=datetime(2026, 1, 2),
+            available_at=datetime(2025, 12, 1, tzinfo=timezone.utc),
+            parser_version="fixture-parser-v1",
+        )
+
+
 def test_extension_mapping_requires_review_evidence():
     with pytest.raises(ValueError):
         CanonicalMappingV1(

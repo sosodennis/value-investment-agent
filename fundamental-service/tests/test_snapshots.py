@@ -97,6 +97,69 @@ def test_source_register_and_missing_fixture_fail_explicitly():
     assert error.value.code == "SOURCE_NOT_REGISTERED"
 
 
+def test_snapshot_rejects_source_role_mismatch(tmp_path: Path):
+    register = SourceRegister(
+        (LegalSource("sec", SourceRole.FILING, "sec-terms", "indefinite"),)
+    )
+    with pytest.raises(SnapshotError) as error:
+        SnapshotBuilder(
+            FilesystemContentStore(tmp_path / "objects"),
+            FilesystemSnapshotRepository(tmp_path / "manifests"),
+            register,
+        ).build(
+            identity=identity(),
+            valuation_timestamp=datetime(2026, 1, 1, tzinfo=timezone.utc),
+            captured_at=datetime(2026, 1, 2, tzinfo=timezone.utc),
+            parser_version="fixture-parser-v1",
+            policy_version="source-policy-v1",
+            sources=(
+                CapturedSource(
+                    source_id="sec",
+                    uri="https://example.test/10-k.html",
+                    role=SourceRole.MACRO,
+                    content=b"wrong role",
+                    media_type="text/html",
+                    http_status=200,
+                    available_at=datetime(2025, 12, 1, tzinfo=timezone.utc),
+                ),
+            ),
+        )
+    assert error.value.code == "SOURCE_ROLE_MISMATCH"
+
+
+def test_snapshot_rejects_naive_top_level_timestamps(tmp_path: Path):
+    register = SourceRegister(
+        (LegalSource("sec", SourceRole.FILING, "sec-terms", "indefinite"),)
+    )
+    with pytest.raises(SnapshotError) as error:
+        SnapshotBuilder(
+            FilesystemContentStore(tmp_path / "objects"),
+            FilesystemSnapshotRepository(tmp_path / "manifests"),
+            register,
+        ).build(
+            identity=identity(),
+            valuation_timestamp=datetime(2026, 1, 1),
+            captured_at=datetime(2026, 1, 2, tzinfo=timezone.utc),
+            parser_version="fixture-parser-v1",
+            policy_version="source-policy-v1",
+            sources=(
+                CapturedSource(
+                    source_id="sec",
+                    uri="https://example.test/10-k.html",
+                    role=SourceRole.FILING,
+                    content=b"filing",
+                    media_type="text/html",
+                    http_status=200,
+                    available_at=datetime(2025, 12, 1, tzinfo=timezone.utc),
+                    filed_at=datetime(2025, 12, 1, tzinfo=timezone.utc),
+                    accession_number="0000000001-25-000001",
+                    form="10-K",
+                ),
+            ),
+        )
+    assert error.value.code == "SNAPSHOT_TIMESTAMP_TIMEZONE_REQUIRED"
+
+
 def test_snapshot_manifest_is_readable_without_provider_access(tmp_path: Path):
     snapshot = build(tmp_path, datetime(2026, 1, 2, tzinfo=timezone.utc))
     client = TestClient(
@@ -105,3 +168,10 @@ def test_snapshot_manifest_is_readable_without_provider_access(tmp_path: Path):
     response = client.get(f"/v1/data/snapshots/{snapshot.snapshot_id}")
     assert response.status_code == 200
     assert response.json()["snapshot_id"] == snapshot.snapshot_id
+
+
+def test_content_store_rejects_untrusted_hash_path(tmp_path: Path):
+    store = FilesystemContentStore(tmp_path / "objects")
+    with pytest.raises(SnapshotError) as error:
+        store.get("../escape", media_type="text/plain")
+    assert error.value.code == "SOURCE_HASH_INVALID"
