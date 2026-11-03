@@ -1,0 +1,1165 @@
+# Fundamental valuation service target state
+
+Status: canonical normative specification; package is documentation-only
+Owner: Fundamental service maintainers
+Scope: independently deployable domain service in `fundamental-service/`
+Last reviewed: 2026-11-03
+
+This file is the single source of truth for the new Fundamental domain service. The package has no runtime implementation yet. This file defines its contracts, model families, quality states, valuation boundaries, calibration protocol, verification evidence, and release gates. A backlog item, runbook, research note, or implementation comment may add operational detail, but it must not define a conflicting rule. When another document conflicts with this file, this file wins.
+
+Existing Fundamental documents under `finance-agent-core/docs/` describe the current agent or provide historical and operational context. They do not define the new service. Do not create another design document for the same problem. Update this file first, then update code and any command-level runbook that is still needed to operate the service.
+
+## 1. Purpose
+
+The target system produces an intrinsic-value estimate only when it can answer all of these questions:
+
+1. Which issuer, security, currency, share class, and valuation date were used?
+2. Which raw filing facts and public observations produced each input?
+3. Were those facts available at the valuation time, or did a later restatement leak into the result?
+4. Why is the selected model appropriate for this company and this data coverage?
+5. Which deterministic formulas produced the result, with what units and rounding rules?
+6. How uncertain is the result, and are the stated intervals calibrated on out-of-sample data?
+7. Which checks passed, which warnings remain, and when must the system abstain?
+8. Can another implementation reproduce the result from the recorded inputs and versions?
+
+The system must support free and public data sources. Paid APIs are not a requirement and must not be hidden in a production path. A provider that is free but unstable, scraped, or legally restricted is an optional degraded source, not a foundation for verified valuation.
+
+## 2. Non-goals
+
+This specification does not promise that an intrinsic value is the future market price. Market prices, analyst targets, and consensus estimates are observations or comparison signals. They are not ground truth for intrinsic value.
+
+This specification does not require one universal valuation formula. The system must reject a model that does not fit the company or the available facts, even when a fallback formula could produce a number.
+
+This specification does not allow an LLM to choose or alter a numeric result after the deterministic calculation boundary. Agents may resolve identity, gather evidence, propose assumptions, and explain a result. The calculation engine consumes a validated typed input and executes pure deterministic functions.
+
+## 3. Definition of a reliable Fundamental service
+
+The target is reliable only when all of the following hold for a released valuation artifact:
+
+- **Identity correctness.** The issuer, security, exchange, share class, and currency are resolved and disambiguated.
+- **Point-in-time correctness.** Every observation carries `as_of`, `available_at`, and source filing timestamps. Historical replay uses only information available at the decision time.
+- **Accounting correctness.** XBRL facts retain the concept, unit, period, dimensions, filing accession, taxonomy, and source URL. Extension concepts are mapped with an auditable rule.
+- **Quality visibility.** Missing, contradictory, stale, restated, estimated, or provider-fallback values have machine-readable status codes.
+- **Model applicability.** A model declares required inputs, forbidden conditions, acceptable ranges, and an abstention rule. Selection cannot silently default to `dcf_standard` when no valid candidate exists.
+- **Calculation integrity.** The engine checks units, signs, denominator limits, share scope, capital structure, and formula invariants before emitting a value.
+- **Uncertainty honesty.** Scenarios and intervals come from explicit assumptions and calibrated error distributions. The system does not report false precision.
+- **Traceability.** A user can follow every output field to source facts, transformations, assumptions, code versions, and quality decisions.
+- **Reproducibility.** A pinned input snapshot and runtime manifest reproduce the same artifact or explain any intentional nondeterminism.
+- **External verification.** Golden fixtures, independent formula checks, public-source reconciliation, and out-of-sample monitoring support the release decision.
+
+## 4. Existing agent baseline and known risks
+
+The current workflow is a linear graph:
+
+```text
+financial_health -> model_selection -> calculation
+```
+
+The current agent graph is defined in [`finance-agent-core/src/agents/fundamental/workflow/graph.py`](../../finance-agent-core/src/agents/fundamental/workflow/graph.py), and its state is defined in [`finance-agent-core/src/agents/fundamental/workflow/state.py`](../../finance-agent-core/src/agents/fundamental/workflow/state.py). These files are baseline evidence only. The new service owns its model selection, data quality, calculations, and provenance. The agent calls the service through a versioned contract after the service passes its release gate.
+
+The current registry contains `dcf_standard`, `dcf_growth`, `saas`, `bank`, `reit_ffo`, `residual_income`, `eva`, `ev_revenue`, and `ev_ebitda`. The registry is useful as a starting inventory. It is not proof that each model has complete accounting coverage.
+
+The following risks are current code facts that the target must remove or explicitly expose:
+
+- [`dcf_common.py`](../../finance-agent-core/src/agents/fundamental/capabilities/core_valuation/domain/engine/graphs/dcf_common.py) accepts `sbc_rates_converged`, validates its length, and then does not include SBC in `calculate_fcff`. The target must choose and record one policy for SBC expense, add-back, and dilution.
+- [`bank_ddm.py`](../../finance-agent-core/src/agents/fundamental/capabilities/core_valuation/domain/engine/graphs/bank_ddm.py) derives risk-weighted assets as `net_income / rwa_intensity`. This is a simplified assumption. A bank model must use reported regulatory capital and risk-weighted asset facts or abstain.
+- [`reit_ffo.py`](../../finance-agent-core/src/agents/fundamental/capabilities/core_valuation/domain/engine/graphs/reit_ffo.py) values a REIT as `AFFO * FFO multiple`. A released REIT path needs property-level or portfolio-level NAV, debt, lease, occupancy, and maintenance-capex coverage, or it must state that the result is a limited multiple estimate.
+- [`model_selection.py`](../../finance-agent-core/src/agents/fundamental/capabilities/model_selection/domain/model_selection.py) ranks candidates and has a fallback to `dcf_standard` when no candidates are generated. The target replaces silent fallback with explicit `abstain` or a versioned, justified fallback policy.
+- [`dataset_builder_service.py`](../../finance-agent-core/src/agents/fundamental/capabilities/forward_signals/domain/calibration/dataset_builder_service.py) uses analyst target prices as an anchor. [`fitting_service.py`](../../finance-agent-core/src/agents/fundamental/capabilities/forward_signals/domain/calibration/fitting_service.py) fits a mapping from those observations. This can calibrate a consensus-relative signal, but it cannot calibrate intrinsic value ground truth.
+- [`valuation_flow.py`](../../finance-agent-core/src/agents/fundamental/application/workflow_orchestrator/valuation_flow.py) is highly coupled. The target separates data preparation, model applicability, parameter policy, calculation, uncertainty, and report assembly behind typed contracts.
+
+These findings describe the current implementation baseline. They do not waive the release gates in this document.
+
+## 5. Single-source governance
+
+This file owns:
+
+- domain terms and status enums;
+- public-source priority and point-in-time rules;
+- canonical fact, provenance, model, valuation, calibration, and release contracts;
+- model applicability and abstention requirements;
+- quality severity and release-gate rules;
+- the ordered service-build phases, cutover criteria, and acceptance criteria.
+
+Operational runbooks may contain commands, environment variables, and incident procedures. They must link back to this file and must not restate policy in a way that can drift. Research notes may preserve evidence about a decision, but they are non-normative.
+
+Every change to this target state must include:
+
+1. the changed contract or rule;
+2. the reason and affected artifacts;
+3. a version bump for the relevant schema, policy, or model;
+4. updated golden fixtures or an explicit design decision record;
+5. the verification result for the affected release gates.
+
+## 6. Target architecture
+
+The target architecture is a vertical pipeline with explicit ownership. Each layer emits a typed artifact and a quality report.
+
+```text
+identity resolution
+    -> source acquisition and immutable snapshot
+    -> filing and taxonomy parsing
+    -> point-in-time canonical facts
+    -> accounting normalization and quality evaluation
+    -> forecast and assumption policy
+    -> model applicability and selection
+    -> deterministic valuation graph
+    -> scenarios, sensitivity, and uncertainty
+    -> calibration and out-of-sample validation
+    -> provenance graph and report
+```
+
+| Layer | Owns | Must not own |
+| --- | --- | --- |
+| Identity | issuer, security, exchange, class, currency resolution | valuation assumptions |
+| Source acquisition | HTTP, rate limits, cache, raw bytes, source metadata | semantic interpretation |
+| Filing parser | XBRL facts, contexts, units, dimensions, taxonomy | model selection |
+| Canonical facts | normalized accounting facts and point-in-time selection | narrative reasoning |
+| Quality | validation issues, severity, freshness, contradiction checks | changing a number silently |
+| Forecast policy | explicit forecast inputs and assumption provenance | fetching unrecorded values |
+| Model selection | applicability, candidate ranking, abstention | executing formulas |
+| Calculation engine | pure deterministic graphs and invariants | LLM calls, web search, hidden defaults |
+| Uncertainty | scenario distributions, sensitivity, interval construction | changing the base value without trace |
+| Calibration | labels, splits, metrics, artifact promotion | fitting against future information |
+| Report and provenance | trace graph, status, evidence, reproducibility manifest | inventing missing evidence |
+
+Agents call these capabilities through interfaces. They may propose a value, but the boundary service must reject a value that lacks its required provenance or quality state.
+
+## 7. Free public data policy
+
+The source hierarchy is part of the contract.
+
+### 7.1 Primary accounting sources
+
+- [SEC EDGAR APIs](https://www.sec.gov/edgar/sec-api-documentation) and [SEC Company Facts](https://data.sec.gov/api/xbrl/companyfacts/) provide filings, accession numbers, filing dates, and company facts for U.S. issuers.
+- [XBRL specifications](https://specifications.xbrl.org/) define facts, contexts, units, dimensions, taxonomy references, and calculation relationships.
+- [Arelle](https://arelle.org/) is the parser and validation runtime for filing packages. The runtime version, taxonomy package, validation profile, and plugin versions are part of the artifact.
+- Filing HTML, inline XBRL, and filing exhibits remain available as raw evidence. A normalized fact cannot replace the original source bytes.
+
+### 7.2 Official macro and sector sources
+
+- [FRED](https://fred.stlouisfed.org/docs/api/fred/) and [ALFRED vintages](https://fred.stlouisfed.org/docs/api/fred/alfred_api.html) provide macro series and revision-aware historical observations.
+- [U.S. Treasury rates](https://home.treasury.gov/resource-center/data-chart-center/interest-rates) provide official yield-curve observations.
+- [Federal Reserve data](https://www.federalreserve.gov/data.htm), [BEA](https://www.bea.gov/open-data), and [BLS](https://www.bls.gov/developers/home.htm) provide official macro, national-account, and labor data.
+- [FDIC BankFind](https://banks.data.fdic.gov/) provides public bank data for reconciliation and bank-specific cohorts.
+- [Damodaran public data](https://pages.stern.nyu.edu/~adamodar/) can provide reference assumptions, but it is a reference source rather than issuer-specific ground truth.
+
+### 7.3 Official sector sources
+
+- **Banks.** Use SEC filings and public [FDIC BankFind](https://banks.data.fdic.gov/) or [FFIEC Call Report data](https://www.ffiec.gov/npw/FinancialReport/FinancialDataDownload) for reported regulatory and operating facts. Use the [Basel Framework](https://www.bis.org/basel_framework/) to check capital and risk-weighted asset definitions. Basel rules are not a substitute for the issuer's reported values or the applicable U.S. rule.
+- **Insurers.** Use the insurer's statutory filing and applicable [NAIC risk-based capital guidance](https://content.naic.org/insurance-topics/risk-based-capital). RBC is a regulatory solvency measure, not equity value. Data availability and reuse terms vary by jurisdiction. Do not claim full coverage where the underlying statements are not openly available.
+- **REITs.** Use issuer filings and [Nareit's FFO definition](https://www.reit.com/glossary/funds-operations-ffo) to check FFO. Nareit states that AFFO has no standardized definition, so preserve the issuer's reconciliation and do not compare unreconciled AFFO values as if they shared one definition. See [Nareit's AFFO glossary](https://www.reit.com/glossary/adjusted-funds-operations-affo).
+- **Regulated utilities.** Use [FERC industry forms and data](https://www.ferc.gov/industries-data/data-forms), applicable [FERC electric regulations](https://www.ecfr.gov/current/title-18/chapter-I/subchapter-B/part-35), and the relevant state public utility commission's orders. Rate base, allowed returns, recovery timing, and prudence rules vary by jurisdiction. A single U.S. rate-base assumption is not valid for every utility.
+- **Biotech.** Use FDA materials for [clinical research phases](https://www.fda.gov/patients/drug-development-process/step-3-clinical-research), [Drugs@FDA](https://www.accessdata.fda.gov/scripts/cder/daf/), and the [ClinicalTrials.gov API](https://clinicaltrials.gov/data-api/api) for public trial status and dates. These sources do not supply issuer-specific commercial forecasts or probabilities of success. Record those as explicit assumptions with a dated prior and validation cohort.
+- **Cyclical industries.** Use the [EIA Open Data API](https://www.eia.gov/opendata/documentation.php), [USGS mineral commodity statistics](https://www.usgs.gov/centers/national-minerals-information-center/commodity-statistics-and-information), and [USDA NASS Quick Stats](https://quickstats.nass.usda.gov/api) for public commodity and industry observations. These sources validate market or sector series, not an issuer's realized price, volume, cost, or utilization.
+- **SaaS and other growth companies.** Use issuer filings as the primary source for retention, customer counts, and operating efficiency when disclosed. These metrics do not have complete, uniform public coverage. Do not infer undisclosed cohort data from a peer or vendor page and label it verified.
+
+Public access does not grant unrestricted reuse. Before adding a source, record its terms, rate limits, retention restrictions, and commercial-use conditions. If a required sector input lacks a lawful, reliable free source, the service marks that coverage unsupported or degraded. It does not replace the missing input with paid data or undocumented scraping.
+
+### 7.4 Optional market sources
+
+`yfinance`, public exchange pages, and scraped consensus pages may be used for market price, beta, or analyst-consensus observations only when the source terms permit it. Each observation must record provider, fetch time, URL, parser version, freshness, and warning codes. Provider failure must produce `degraded` or `abstain`; it must not silently become a verified fact. These sources never calibrate intrinsic value.
+
+### 7.5 Acquisition rules
+
+The acquisition layer must:
+
+- send an identifiable User-Agent and obey provider rate limits;
+- persist raw response bytes or a content-addressed equivalent;
+- persist HTTP status, headers needed for freshness, URL, fetch time, and parser version;
+- cache by canonical URL, query parameters, issuer, period, and source version;
+- record retries, truncation, redirects, and provider errors;
+- prohibit a later response from overwriting an earlier snapshot;
+- expose a source health report and stop promoting a provider after repeated schema or freshness failures.
+
+## 8. Point-in-time canonical fact layer
+
+The canonical layer is the boundary between raw public data and valuation logic. It must be append-only for historical snapshots. Corrections create a new version rather than mutating a prior valuation input.
+
+### 8.1 Required timestamps
+
+Every fact and derived observation carries:
+
+- `as_of`: the economic period or date the value describes;
+- `available_at`: the earliest time the system may use it;
+- `filed_at`: the source filing timestamp when applicable;
+- `captured_at`: when the system fetched it;
+- `accession_number` and filing version when applicable;
+- `source_url` and content hash;
+- `taxonomy_version`, parser version, and policy version;
+- `point_in_time_policy`: the rule that selected this version.
+
+For a historical valuation, `available_at` must be less than or equal to the valuation timestamp. A restated fact filed later cannot replace the fact that was available at the historical decision time.
+
+### 8.2 Canonical fact contract
+
+The implementation may use Pydantic, dataclasses, or another typed representation, but it must provide the following fields:
+
+```python
+class CanonicalFact:
+    fact_id: str
+    issuer_id: str
+    security_id: str | None
+    concept: str
+    normalized_field: str
+    value: Decimal | str | bool | None
+    unit: str
+    scale: int
+    period_start: date | None
+    period_end: date
+    instant: date | None
+    dimensions: tuple[Dimension, ...]
+    as_of: datetime
+    available_at: datetime
+    filed_at: datetime | None
+    accession_number: str | None
+    taxonomy_version: str
+    source: Provenance
+    quality: QualityStatus
+```
+
+The canonical layer must keep both the original XBRL concept and the normalized field. A normalized `revenue` value without the original concept, context, and unit is not auditable.
+
+The canonical fact contract belongs to the new Fundamental service. It is not a reason to rewrite the existing Fundamental agent. The service owns the source and fact boundary:
+
+```text
+raw filing snapshot -> CanonicalFactV1 -> service-owned valuation input
+existing agent -> service client -> service-owned valuation response
+```
+
+The service must not read raw `FinancialReportModel` dictionaries from the existing agent. The existing agent sends an identity and valuation request, and maps the typed response into its current domain or UI DTO. The service's internal canonical facts, cache, calculation artifacts, and calibration datasets remain service-owned.
+
+### 8.3 Normalization rules
+
+- Keep `Decimal` for monetary and per-share values. Convert to binary floating point only at a defined calculation boundary, and record that conversion.
+- Store currency and scale explicitly. Never infer millions or billions from a label.
+- Store period type, duration, and instant separately. Do not combine quarterly and annual facts by matching dates alone.
+- Resolve dimensions such as segment, geography, class of stock, and continuing operations before aggregation.
+- Prefer issuer extension concepts when they are anchored to a standard concept. Record the anchor and mapping confidence.
+- Treat negative expenses, contra accounts, and sign inversions as explicit policy decisions.
+- Do not coerce a missing value to zero. Use `missing`, `not_applicable`, or `unsupported`.
+- Use a declared selection policy for duplicate facts. The policy must explain why a fact was preferred.
+
+## 9. Provenance and quality contracts
+
+### 9.1 Traceable fields
+
+Every valuation input and output is a `TraceableField`. The provenance variant tells the reviewer whether the value came from a filing, a computation, or an explicit assumption.
+
+```python
+class XBRLProvenance:
+    source_url: str
+    accession_number: str
+    concept: str
+    context_id: str
+    period: str
+    unit: str
+    filed_at: datetime
+    content_hash: str
+    parser_version: str
+
+class ComputedProvenance:
+    expression: str
+    inputs: tuple[str, ...]
+    code_version: str
+    policy_version: str
+
+class ManualProvenance:
+    description: str
+    author: str
+    created_at: datetime
+    review_status: str
+    evidence_links: tuple[str, ...]
+```
+
+`ManualProvenance` is for a human or an approved assumption policy. It is not a way to hide an agent guess.
+
+The current [`src/shared/artifacts/traceable.py`](../../finance-agent-core/src/shared/artifacts/traceable.py) type is part of the existing agent and does not satisfy the enterprise provenance contract because its XBRL provenance does not require source URL, accession, content hash, filing time, unit, or taxonomy version. The new service must define and own its enterprise provenance envelope. The service client maps only the response summary and artifact references into the existing agent. It must not share the old trace type as an internal service dependency.
+
+### 9.2 Quality status
+
+The quality status is separate from the numeric value. A value can be present and still be unusable.
+
+```text
+verified     source, time, unit, accounting meaning, and validation checks pass
+provisional  source is acceptable but coverage or validation is incomplete
+degraded     a fallback or stale provider was used; result is visible and limited
+unsupported  the requested field or model is outside the supported domain
+abstain      evidence is insufficient or a blocking rule fired
+error        acquisition, parsing, or calculation failed
+```
+
+### 9.3 Severity model
+
+| Severity | Meaning | Required behavior |
+| --- | --- | --- |
+| `block` | The input can change issuer identity, units, periods, capital structure, or formula validity. | Stop the affected valuation path. Emit a machine-readable code. |
+| `warn` | The result remains usable but a reviewer must see a material limitation. | Keep the value with a warning and lower confidence. |
+| `degraded` | A fallback, stale, incomplete, or non-primary source was used. | Mark the artifact degraded. Do not call it verified. |
+| `abstain` | No defensible result can be produced under the selected model. | Return no intrinsic value. Return the reason and the next required evidence. |
+
+Severity is not a log level. A `warn` may still fail a release profile when its cohort rate exceeds a threshold.
+
+## 10. XBRL and accounting validation
+
+The parser pipeline must run Arelle against the complete filing package, including inline XBRL, taxonomy references, linkbases, issuer extensions, and relevant exhibits.
+
+The validation result must include:
+
+- Arelle version and runtime isolation mode;
+- taxonomy package identifiers and hashes;
+- validation profile and plugin versions;
+- EFM and DQC issue code, source, severity, message, field key, and blocking flag;
+- calculation-linkbase inconsistencies;
+- duplicate facts and conflicting contexts;
+- unsupported custom concepts and mapping confidence;
+- parser latency, cache hit, and lock-wait metrics;
+- a deterministic validation-rule signature.
+
+Fatal or valuation-impacting EFM and DQC issues are `block`. Non-critical issues are `warn` unless the release profile promotes them. The same normalized issue schema must feed diagnostics, replay, cohort reports, and release gates.
+
+The accounting layer must reconcile at least these relationships where the filing provides the facts:
+
+- assets = liabilities + equity;
+- beginning cash + operating, investing, and financing cash flows = ending cash, with FX treatment recorded;
+- beginning and ending debt, equity, and share counts reconcile to reported movements;
+- revenue, cost, operating income, and taxes reconcile to the selected statement period;
+- diluted shares reconcile to basic shares, options, restricted units, convertibles, and other dilutive instruments;
+- segment totals reconcile to consolidated totals when the filing reports a complete segment set.
+
+An unreconciled relationship is not automatically a failure. The artifact must state whether the difference is a known presentation issue, an extension mapping issue, a unit mismatch, a rounding tolerance, or an unresolved block.
+
+## 11. Model applicability and selection
+
+Model selection is a contract evaluation problem, not a score-only ranking problem.
+
+The service starts with `ModelSpecV1`. `ModelSpecV2` is not part of this design. The new service has no deployed model schema to preserve, so it starts at version 1 with the complete target contract. Increment `schema_version` only for a breaking contract change. Increment `model_version` when a formula, assumption policy, eligibility rule, or supported cohort changes.
+
+Every `ModelSpecV1` must define these fields before the model enters the registry:
+
+| Field group | Required definition |
+| --- | --- |
+| Identity and ownership | stable `model_id`, `schema_version`, `model_version`, lifecycle state, model owner, accounting reviewer, independent validator, approval date, review date, and retirement trigger |
+| Economic purpose | valuation question, economic mechanism, supported issuer archetypes, jurisdictions, accounting bases, valuation basis (`enterprise`, `equity`, or `asset`), and permitted report label |
+| Input contract | canonical fact IDs, semantic definitions, types, units, currency, period, dimensions, minimum history, `available_at` rule, source hierarchy, minimum quality state, and acceptable proxies for every input |
+| Assumption contract | each forecast and parameter, method, source or derivation, permitted bounds, scenario treatment, convergence rule, terminal policy, and explicit statement that no hidden default is allowed |
+| Formula graph | named calculation nodes, equations, dependency edges, sign conventions, tax treatment, discount timing, capital bridge, and formula version |
+| Numerical policy | arithmetic type, precision, rounding boundary, absolute and relative tolerance, invalid denominator rules, non-finite handling, and currency conversion policy |
+| Eligibility policy | required inputs, minimum quality, acceptable ranges, cross-field invariants, industry and capital-structure rules, forbidden conditions, and deterministic rejection codes |
+| Abstention policy | blocking conditions, degraded-but-usable conditions, missing-evidence response, and the precise conditions that prevent an intrinsic-value result |
+| Uncertainty policy | scenario variables, distributions or bounds, dependency assumptions, interval method, supported horizon, and whether interval coverage has been empirically validated |
+| Calibration contract | forecast target and label source, point-in-time label rule, cohort definition, split manifest, baseline, metrics, sample threshold, promotion rule, and expiry rule |
+| Validation evidence | golden cases, independent challenger, node-level expected values, property tests, known limitations, and latest validation report reference |
+| Reproducibility | source, schema, taxonomy, parser, policy, calculation, and calibration versions needed to replay the model |
+
+Do not make fields optional merely because the first implementation has no value for them. Use a typed `not_applicable` reason for an inapplicable field, a typed `unknown` state for missing evidence, and a versioned policy for any proxy. The registry must reject a model definition that omits a required group.
+
+The selection result must include all candidates, rejected candidates, missing fields, forbidden conditions, quality statuses, score components, selected model, and abstention reason when no candidate passes.
+
+The selector must not choose a model solely because its score is highest. A candidate that violates a required input or forbidden condition is ineligible. If no candidate is eligible, return `abstain`.
+
+### 11.1 Coverage matrix
+
+| Company type | Primary model family | Required evidence | Models that are limited or forbidden |
+| --- | --- | --- | --- |
+| Mature non-financial | FCFF DCF, EVA cross-formulation, EV-based cross-check | multi-year revenue, EBIT, tax, D&A, capex, working capital, debt, cash, shares | terminal-value-only result without a stable cash-flow history |
+| High-growth or SaaS | unit-economics forecast plus FCFF or revenue-to-margin transition | retention or cohort evidence when available, gross margin, SBC, dilution, cash runway, path to operating margin | mature-margin DCF without a transition path |
+| Bank | excess-return or dividend model using regulatory capital | RWA, CET1 or equivalent, payout, book value, asset quality, net interest and provision data | FCFF, enterprise-value bridge, synthetic RWA from net income |
+| Insurance | statutory excess-return or dividend model | statutory capital, book value, reserve development, underwriting result, investment income, and legal-entity structure | FCFF without a justified debt and operating separation; an embedded-value cross-check requires an issuer-published, auditable actuarial bridge |
+| REIT | NAV plus AFFO or dividend cross-check | property value, occupancy, rent, debt maturity, interest cost, maintenance capex, shares | AFFO multiple presented as full NAV valuation |
+| Utility | regulated-asset or FCFF model | rate base, allowed return, capex plan, debt, regulatory jurisdiction, tariff data | high-growth SaaS assumptions |
+| Cyclical | normalized earnings, mid-cycle FCFF, and scenario range | cycle history, utilization, price-volume drivers, replacement capex, balance-sheet stress | one-year peak or trough DCF as base case |
+| Biotech | probability-adjusted pipeline value plus cash runway | trial phase, indication, probability assumptions, milestone timing, dilution, cash burn | revenue multiple before a defensible commercial path |
+| Conglomerate or holding company | segment sum-of-the-parts | segment statements, ownership, holding-company debt, taxes, cross-holdings, discount policy | consolidated DCF that hides segment economics |
+
+The matrix defines the minimum target coverage. A model may produce a provisional estimate for a narrower case, but the report must state the limitation and quality status.
+
+### 11.2 Valuation model definitions
+
+The service uses one model-definition format for every family. A model family is not supported just because the registry contains its ID. It becomes eligible only after its required evidence, formula graph, abstention rules, independent checks, and golden cohort pass the release gates.
+
+| Model ID | Economic method and output | Minimum issuer-specific evidence | Reject or abstain when |
+| --- | --- | --- | --- |
+| `fcff_dcf` | Discount operating free cash flow at WACC, then bridge enterprise value to equity value. | Multi-year revenue, operating profit, taxes, D&A, capex, working capital, debt, cash, leases, share scope, and cost-of-capital inputs. | The business lacks a defensible operating forecast, terminal value dominates without a stable convergence case, or the capital bridge cannot reconcile. |
+| `transition_fcff_dcf` | Forecast explicit growth and margin transition before applying a mature-state terminal policy. SaaS is an issuer archetype under this model, not a separate formula. | Revenue cohorts or retention when disclosed, gross margin, acquisition or sales efficiency when available, SBC, dilution, cash runway, and a supported path to normalized margins. | Growth or margin convergence is guessed, material dilution is omitted, or the company has no supportable path to positive unit economics. |
+| `residual_income` | Value equity as current book equity plus discounted residual income: net income less the required return on beginning book equity. | Reliable book value, earnings, cost of equity, distributions, and a clean-surplus or documented book-value bridge. | Book value is economically meaningless, earnings and book-value movements cannot reconcile, or continuing residual income has no justified convergence policy. |
+| `eva` | Value invested capital plus discounted economic profit: NOPAT less a capital charge on invested capital. Under consistent forecasts, this is a cross-formulation of DCF. | Invested capital, NOPAT, WACC, and documented operating adjustments such as research capitalization or lease treatment. | Adjustments are unsupported, invested capital is incomplete, or EVA and DCF disagree beyond declared tolerance without an explained policy difference. |
+| `dividend_discount` | Discount expected shareholder distributions at cost of equity. | Sustainable distributable earnings, capital requirements, payout policy, diluted shares, and a justified terminal payout or growth policy. | Dividends are temporarily funded by asset sales or unsustainable capital depletion, or the model confuses enterprise and equity cash flows. |
+| `bank_excess_return` | Value bank equity from book value and excess returns over the required return, with regulatory capital and payout constraints. | Reported RWA, CET1 and other required capital ratios, tangible and reported book value, charge-offs, provisions, net interest income, deposits, and payout history. | Required regulatory facts are missing, synthetic RWA is used, asset quality is unresolved, or projected capital breaches a declared constraint. |
+| `insurance_statutory_excess_return` | Value insurer equity from statutory surplus and sustainable excess returns or distributable capital. | Jurisdiction-specific statutory statements, capital and RBC data where applicable, reserve development, underwriting results, investment income, and legal-entity structure. | Reserve adequacy or legal-entity capital cannot be assessed, statutory and GAAP figures are mixed without a bridge, or the model treats RBC as market value. |
+| `reit_nav` | Estimate property-level or portfolio NAV from operating income and market cap-rate assumptions, then reconcile debt and equity claims. Use FFO or AFFO only as a cross-check. | Property or portfolio NOI, occupancy, lease terms, cap-rate evidence, debt and maturities, preferred claims, recurring capital expenditure, and diluted shares. | Property coverage is incomplete, valuation assumptions lack a dated source, or AFFO is presented as standardized when the issuer's reconciliation is unavailable. |
+| `regulated_utility` | Forecast jurisdiction-specific regulated cash flows. Use rate base, allowed return, approved tariffs, and capital plans to constrain operating forecasts. | Regulator orders, rate-base balances, allowed ROE, approved recovery mechanisms, jurisdiction, capex, debt, and disallowance risk. | Jurisdictional data is unavailable, rate base is treated as equity value, or unapproved projects and returns are included as certain. |
+| `normalized_cyclical` | Estimate mid-cycle earnings or cash flows across a full relevant cycle, then report stress and recovery scenarios. | Cycle history, commodity or price-volume drivers, capacity, utilization, replacement capex, working-capital swings, and balance-sheet obligations. | Only peak or trough earnings are available, the cycle regime changed without a new model policy, or liquidity risk is omitted. |
+| `biotech_rnpv` | Sum probability-adjusted, time-discounted cash flows for each pipeline asset and reconcile corporate cash burn, milestones, and dilution. | Trial and indication identity, public trial status, development stage, milestone timing, explicit probability priors, commercial assumptions, patent or exclusivity period, cash runway, and share dilution. | Trial identity or stage is uncertain, probability assumptions are hidden, commercial cash flows lack a dated basis, or funding and dilution are not modeled. |
+| `sum_of_parts` | Value each business segment with a justified method, then reconcile holding-company debt, taxes, cross-holdings, minority claims, and any holding discount. | Segment financials, ownership, segment debt and cash, capital allocation, eliminations, tax basis, and a declared method for each segment. | Material segments are unvalued, consolidated eliminations are duplicated, or a holding discount is applied without an explicit policy. |
+| `relative_multiple_check` | Compare the issuer with a point-in-time peer set using EV/EBITDA, EV/revenue, P/E, or sector-specific multiples. This is a market-relative check, not intrinsic-value ground truth. | Peer identity and date, comparable accounting definitions, capital structure, leases, growth, margins, and outlier policy. | The peer set is selected after seeing the desired output, periods or accounting bases differ without normalization, or the result is labeled intrinsic value. |
+
+`dcf_standard` maps to `fcff_dcf` only after its formula and capital bridge satisfy this definition. `dcf_growth` and `saas` map to `transition_fcff_dcf` only when the transition evidence exists. `ev_revenue`, `ev_ebitda`, and ordinary P/E are cross-checks. The service does not preserve old IDs as aliases unless an explicit mapping is recorded in a versioned registry change.
+
+Do not average model outputs into an ensemble by default. Show model disagreement as a diagnostic. Add an ensemble only when the registry records its economic rationale, combination method, calibration cohort, independent challenger, and abstention behavior.
+
+## 12. Forecast and assumption policy
+
+Forecasts are first-class data. They are not anonymous fields in a model payload.
+
+Each assumption records:
+
+- metric, unit, period, and scenario;
+- raw source facts and source observations;
+- transformation formula;
+- prior, peer, or macro reference if used;
+- lower and upper bounds;
+- convergence rule and terminal policy;
+- whether it is sourced, computed, manual, or calibrated;
+- owner, policy version, and review status;
+- sensitivity weight and uncertainty distribution.
+
+The policy must separate `raw`, `guarded`, and `calibrated` values. The report shows all three when they differ. A guardrail changes a value only through a named policy with a reason code. A calibration mapping never overwrites the raw observation.
+
+Terminal growth must remain below the applicable discount rate by a declared margin and must respect the selected macro or industry ceiling. A terminal growth value that lacks a point-in-time macro reference is provisional or abstained.
+
+## 13. Deterministic valuation engine
+
+The engine is a versioned DAG of pure functions. It accepts a typed `ValuationInput` and returns a typed `CalculationArtifact` with no network, file, LLM, or clock access.
+
+The new service owns its calculation engine and model registry. It may reuse reviewed pure mathematical ideas from [`CalculationGraph`](../../finance-agent-core/src/agents/fundamental/capabilities/core_valuation/domain/engine/core.py), but it must not import the existing agent's application, workflow, or private domain modules at runtime. The new engine has typed inputs, typed outputs, independent formula fixtures, and its own release version. The existing graph is evidence for current behavior, not an internal dependency of the new service.
+
+### 13.1 Common calculation rules
+
+- Use explicit currency, scale, unit, and sign conventions at every node.
+- Reject mixed currencies and mixed share scopes.
+- Reject zero or negative share counts, invalid discount denominators, and non-finite values.
+- Record whether debt is gross or net, whether leases are included, and whether preferred stock and non-controlling interests are deducted.
+- Keep equity value and enterprise value distinct. The bridge must show cash, debt, preferred stock, lease liabilities, minority interest, and other adjustments separately.
+- Use diluted weighted-average shares for per-share earnings and an as-of diluted share count for equity value. Do not mix the two without a policy record.
+- Make mid-year versus end-year discounting explicit.
+- Store monetary inputs and outputs as typed decimal amounts with an explicit currency and scale. If an intermediate function uses binary floating point, pin its runtime and precision, quantify the output error, and enforce the declared tolerance.
+- Record all rounding only at presentation boundaries. Never round intermediate values.
+
+The alternative intrinsic-value formulations must use consistent cash flows, capital charges, and discount rates:
+
+```text
+Residual income_t = Net income_t - Cost of equity * Beginning book equity_t
+Equity value = Current book equity + PV(forecast residual income) + PV(continuing residual income)
+
+EVA_t = NOPAT_t - WACC * Beginning invested capital_t
+Enterprise value = Current invested capital + PV(forecast EVA) + PV(continuing EVA)
+
+Equity value under DDM = PV(forecast shareholder distributions) + PV(continuing distributions)
+```
+
+These formulations provide independent calculation paths only when their input and accounting policies are independently reconciled. They are not independent if they reuse the same unreviewed forecast or capital assumptions.
+
+### 13.2 FCFF and WACC
+
+The FCFF policy must state:
+
+```text
+FCFF = NOPAT + D&A - maintenance and growth capex - change in operating working capital
+Enterprise value = PV(explicit FCFF) + PV(terminal value)
+Equity value = enterprise value + cash - debt - preferred stock - non-controlling interest + or - declared adjustments
+Intrinsic value per share = equity value / selected diluted share scope
+```
+
+The WACC policy must identify debt and equity weights, cost of debt, tax treatment, risk-free tenor, beta source and window, market risk premium source and vintage, country risk treatment, and any company-specific adjustment. A CAPM cost of equity is not a complete WACC by itself.
+
+### 13.3 SBC and dilution
+
+SBC policy must choose one internally consistent treatment:
+
+- treat SBC as an operating expense and model the resulting cash flow;
+- add back SBC only when the model also includes the expected dilution or repurchase cost;
+- or abstain when the filing does not provide enough information to avoid double counting.
+
+The artifact must include SBC expense, SBC add-back, option and award dilution, share repurchase assumptions, basic shares, diluted shares, and the selected share scope. The engine must reject a result that adds back SBC and uses a share count that ignores material dilution without an explicit override.
+
+### 13.4 Bank and insurance models
+
+Bank models use regulatory capital, reported RWA, book value, payout, and return-on-equity or excess-return relationships. They must not infer RWA from net income alone. Forecast capital must satisfy the model's declared regulatory and management buffers. Use a dividend model only when projected distributions remain compatible with those constraints.
+
+Insurance models begin with statutory surplus and legal-entity structure. They separate reserve development, underwriting result, investment income, unrealized gains, reinsurance, and shareholder distributions. Reconcile statutory values to GAAP before using either basis. An RBC ratio constrains solvency and distributions; it is not an equity multiple or an asset value.
+
+### 13.5 REIT and property models
+
+REIT valuation estimates each material property or portfolio component from stabilized net operating income and an explicit cap-rate assumption, then subtracts debt, preferred claims, and other liabilities. It reconciles occupancy, lease expiry, rent growth, tenant improvements, maintenance capital, debt maturities, and diluted shares. FFO follows the Nareit definition. AFFO is not standardized. Use it only after preserving the issuer's reconciliation. If public evidence cannot support property-level cap rates or operating assumptions, report a provisional estimate or abstain.
+
+### 13.6 Cyclical and pipeline models
+
+Cyclical models normalize commodity prices, utilization, margins, and reinvestment across a full relevant cycle. They report peak, trough, and mid-cycle scenarios and test liquidity at the trough. A regime change requires a new model version and cohort.
+
+Biotech models value each asset with probability-adjusted, time-discounted milestones and commercial cash flows. The model states the development-stage prior, event date, indication, trial design, timing, commercial assumptions, exclusivity period, funding needs, and dilution. FDA and ClinicalTrials.gov records validate public trial facts. They do not supply a company's probability of success or market size. A missing, undocumented probability policy forces `provisional` or `abstain`.
+
+### 13.7 Regulated utilities
+
+Utility models use jurisdiction-specific rate-base balances, allowed returns, approved tariffs, recovery timing, capital plans, and disallowance risk to forecast shareholder cash flows. A rate base is not equity value. Model each regulator and material rate mechanism separately. Reconcile the resulting cash flows to debt, preferred claims, and shares.
+
+### 13.8 Sum-of-the-parts and relative multiples
+
+SOTP calculations keep each segment valuation, net debt allocation, holding-company discount, tax leakage, cross-holdings, and non-controlling interest as separate traceable nodes. The consolidated result cannot hide an unvalued segment.
+
+Relative multiples use a peer set fixed at the valuation timestamp. The model records peer selection rules, accounting normalization, leases, growth, margins, and exclusions. Multiples remain a cross-check against market pricing. They do not become intrinsic-value labels or calibration targets.
+
+## 14. Scenarios, sensitivity, and uncertainty
+
+Every released valuation contains:
+
+- a base, downside, and upside scenario with named assumptions;
+- one-way sensitivity for the dominant value drivers;
+- two-way sensitivity for discount rate and terminal growth or the model's equivalent drivers;
+- a distribution or interval for intrinsic value when the model has enough historical error data;
+- the share of value contributed by terminal value and the top assumptions by value sensitivity;
+- a deterministic random seed and distribution specification for Monte Carlo runs.
+
+Monte Carlo is not a substitute for model validation. The simulation must record the joint distribution, parameter correlations, truncation rules, number of draws, seed, and convergence diagnostics. The report must distinguish a model-implied interval from a historically calibrated prediction interval.
+
+Intervals must be checked for coverage, sharpness, interval score, and stability by cohort. A narrow interval that misses the realized label is worse than a wider interval with honest coverage.
+
+## 15. Calibration and backtesting protocol
+
+Calibration has separate targets. The system must not use one score for all of them.
+
+### 15.1 Calibration layers
+
+1. **Extraction calibration.** Does the parser select the right fact, unit, period, dimension, and filing version?
+2. **Forecast calibration.** Do revenue growth, margin, FCF, ROE, FFO, or other forecast distributions match subsequently disclosed outcomes?
+3. **Uncertainty calibration.** Do prediction intervals achieve their stated coverage on out-of-sample labels?
+4. **Model-selection calibration.** Does the selected model outperform eligible alternatives on its declared cohort and horizon?
+5. **Market-outcome evaluation.** Does the valuation signal predict later returns or revisions after costs and risk controls? This is an investment-signal test, not intrinsic-value truth.
+
+The existing forward-signal mapping against analyst target prices belongs to layer 5 as a consensus-relative diagnostic. It must not be used to claim that intrinsic values have been calibrated.
+
+### 15.2 Label construction
+
+Use labels that are available without look-ahead:
+
+- For accounting extraction, compare the point-in-time fact with the first subsequently published filing that reports the same economic period. Keep restatements as a separate restatement label.
+- For forecasts, use the first subsequent filing or official source that discloses the realized metric. Do not replace the historical label with a later restated value in a point-in-time score.
+- For uncertainty, evaluate the declared horizon and label availability time. Do not shorten the horizon after observing the outcome.
+- For market-outcome evaluation, define the return window, corporate-action treatment, delisting handling, benchmark, and transaction-cost assumption before fitting.
+
+### 15.3 Time and leakage controls
+
+Every split is time-based. Use train, validation, and out-of-sample periods in chronological order. When forecast windows overlap, use purged cross-validation and an embargo between training and validation windows. Group observations by issuer when issuer-level leakage is possible. Keep a manifest of included and excluded rows with reasons.
+
+### 15.4 Metrics and baselines
+
+Forecast metrics depend on the metric type and must include a naive baseline:
+
+- continuous values: MAE, RMSE, median absolute error, signed bias, and scaled error;
+- event probabilities: Brier score, log score, calibration slope and intercept, and reliability by cohort;
+- rates and ratios: bounded error, calibration by decile, and sign accuracy where useful;
+- quantiles: pinball loss and empirical coverage;
+- intervals: coverage, interval width, interval score, and coverage by cohort;
+- model selection: eligible-model regret, selection accuracy against a fixed evaluation protocol, and abstention precision;
+- market outcomes: information coefficient, rank correlation, hit rate, drawdown, turnover, and costs, with confidence intervals.
+
+Predeclare the minimum sample and metric acceptance bounds in `ModelSpecV1`. Derive the minimum sample from the precision required for the cohort metric. Do not treat an underpowered result as a pass. Do not promote a calibration artifact unless it improves out-of-sample performance against both the raw model and the declared naive baseline, while staying within data-quality and stability limits.
+
+### 15.5 Calibration artifact
+
+Each promoted calibration artifact records:
+
+```text
+calibration_id and version
+target layer and metric
+training window and point-in-time data snapshot
+feature and label contracts
+split, purge, and embargo policy
+model or mapping class and hyperparameters
+raw versus calibrated metrics
+naive baseline metrics
+cohort metrics and sample counts
+confidence intervals or bootstrap method
+fallback and insufficient-sample policy
+owner, review status, and expiry date
+```
+
+Calibration falls back to the raw policy when its minimum sample, coverage, stability, or OOS improvement gates fail. The fallback is visible in the valuation trace.
+
+## 16. Provenance graph and reproducibility
+
+The report must expose a directed acyclic provenance graph:
+
+```text
+raw response
+  -> filing package
+  -> parsed XBRL fact
+  -> canonical fact
+  -> normalized metric
+  -> forecast or assumption
+  -> model input
+  -> calculation node
+  -> scenario or interval
+  -> reported intrinsic value
+```
+
+Every edge records the transformation expression, input IDs, output ID, code version, policy version, and quality result. Every node records source, time, unit, and status where applicable.
+
+The reproducibility manifest must include:
+
+- valuation request and decision timestamp;
+- issuer and security identity resolution;
+- immutable source snapshot IDs and content hashes;
+- selected model and model version;
+- canonical fact and assumption IDs;
+- calculation graph version and runtime version;
+- calibration artifact IDs;
+- random seeds and numerical settings;
+- quality issues and release-profile thresholds;
+- output hash.
+
+The replay command must accept the manifest and reproduce the calculation without network access. A replay difference must identify the first differing node and the version or input that changed.
+
+## 17. External verification without paid data
+
+Public primary sources and independent tests can verify specific claims. They cannot certify an intrinsic value as objectively true because intrinsic value is not directly observable.
+
+| Claim | Independent evidence | What the evidence establishes | What it does not establish |
+| --- | --- | --- | --- |
+| A reported fact is correct | Issuer filing, accession, XBRL context, unit, period, dimensions, and SEC Company Facts where the concept is covered | The canonical fact matches a public source available at the decision time. | That the fact alone makes a model appropriate. |
+| Filing parsing is correct | Arelle output, SEC EFM or DQC diagnostics, extension-concept review, and accounting reconciliations | The parser and mapping follow the selected taxonomy and validation rules for the tested filing. | That every custom concept has an unambiguous economic meaning. |
+| A macro input is correct | Treasury, FRED or ALFRED vintage, BEA, BLS, Federal Reserve, or FDIC observation with its publication time | The recorded observation and vintage match the public source. | That a selected risk premium, beta window, or forecast is uniquely correct. |
+| A sector input is correct | Basel and regulatory filings for bank capital, NAIC statutory materials for insurers, Nareit definitions for FFO, regulator orders for utilities, FDA and ClinicalTrials.gov records for trial status | The service used the declared sector definition or public event record. | That a solvency ratio, FFO measure, allowed return, or trial status is an equity valuation. |
+| A formula is correct | Independent implementation with node-level expected values, dimensional checks, property tests, and mutation tests | The implementation matches the declared equations and invariants within tolerance. | That the equations and assumptions represent every issuer's economics. |
+| A forecast is calibrated | First subsequently published operating facts, chronological out-of-sample evaluation, raw and naive baselines, proper scoring rules, and confidence intervals on metrics | The declared forecast target has measured out-of-sample error and interval coverage for the tested cohort. | That an intrinsic-value estimate is calibrated to a true value. |
+| A result is reproducible | Immutable source snapshots, pinned versions, offline replay, and matching output hashes | The same recorded inputs and versions reproduce the same artifact. | That the input sources or model assumptions were economically sound. |
+| Model governance is adequate | Independent validation, model inventory, limitations, approval, monitoring, and change history | The service followed its documented governance process. | A regulatory approval or external certification of this project. |
+
+Required free evidence includes source reconciliation for a fixed issuer cohort, Arelle validation, point-in-time macro vintages, independent formulas, property tests, golden fixtures, offline replay, and out-of-sample reports. Store the raw source reference and the exact rule, tool, and version that produced each check.
+
+The [Federal Reserve's SR 26-2](https://www.federalreserve.gov/supervisionreg/srletters/SR2602.htm), issued April 17, 2026, replaces SR 11-7. It is interagency model-risk guidance and is expected to be most relevant to banking organizations with more than $30 billion in assets regulated by the Federal Reserve. Use it as a governance reference where relevant. It does not directly regulate or certify this service. Use the [NIST AI Risk Management Framework](https://www.nist.gov/itl/ai-risk-management-framework) when an ML component affects a decision or confidence label. Neither reference replaces service-specific validation evidence.
+
+Analyst targets, current prices, scraped pages, and LLM explanations may support discovery or comparison. They cannot serve as the sole verification source for an accounting fact, a forecast label, or an intrinsic-value claim.
+
+## 18. Golden datasets and cohorts
+
+The verification corpus must contain fixed, versioned cohorts rather than one-off ticker tests.
+
+Minimum cohorts:
+
+- six large issuers covering technology, consumer, healthcare, industrial, financial, and energy or utility sectors;
+- at least one extension-heavy SEC filing;
+- at least one bank with regulatory capital data;
+- at least one insurer;
+- at least one REIT;
+- at least one cyclical company;
+- at least one pre-profit or pipeline company;
+- at least one conglomerate or SOTP case;
+- one issuer with material SBC and multiple share classes;
+- one issuer with a filing restatement or amended filing.
+
+Each case has a point-in-time input snapshot, expected facts, expected validation issues, expected model eligibility, expected calculation nodes, and expected abstention or degraded state when applicable. The dataset contains no hidden future facts.
+
+Golden fixtures are updated only through a versioned review. A changed expected output requires a reason, a policy or formula version change, and a before-and-after report.
+
+## 19. Release gates
+
+An artifact or code release is blocked when any required gate fails.
+
+### 19.1 Contract and source gates
+
+- schema validation passes for every canonical fact, assumption, valuation, calibration, and report artifact;
+- all required point-in-time fields are present;
+- source hashes, accession numbers, taxonomy versions, and parser versions are present;
+- replay can run from the immutable snapshot without network access;
+- provider warnings and fallback codes are present in the report.
+
+### 19.2 Accounting and calculation gates
+
+- fatal or valuation-impacting EFM and DQC issues are zero for verified artifacts;
+- accounting reconciliation is within the declared tolerance or has a named exception;
+- model inputs meet the selected `ModelSpec` requirements;
+- no mixed units, currencies, periods, or share scopes exist;
+- formula invariants and property tests pass;
+- no hidden default, silent fallback, or untraced manual override exists;
+- deterministic replay output hash matches the release fixture.
+
+### 19.3 Calibration and cohort gates
+
+- OOS metrics beat raw and naive baselines for the declared target;
+- interval coverage and error metrics meet the cohort profile;
+- sample counts meet minimums by model and sector cohort;
+- drift, provider fallback, missingness, and abstention rates stay below profile limits;
+- the release includes the calibration artifact, split manifest, and cohort report;
+- a rejected calibration remains rejected and cannot silently become active.
+
+### 19.4 Governance gates
+
+- model, policy, parser, taxonomy, and calibration versions are pinned;
+- validation-rule signature drift is reviewed;
+- an independent reviewer can inspect the provenance graph and raw evidence;
+- the change has a rollback or explicit data-rebuild procedure;
+- the canonical specification and relevant operational runbook agree.
+
+## 20. Versioning and change control
+
+Version these independently:
+
+- canonical fact schema;
+- source and parser contract;
+- taxonomy mapping package;
+- quality-rule profile;
+- model specification;
+- calculation graph;
+- assumption policy;
+- calibration artifact;
+- report schema.
+
+A breaking change increments the relevant major version and invalidates incompatible historical artifacts. A policy change creates a new artifact version and preserves old outputs. A source correction creates a new point-in-time snapshot. Do not rewrite historical reports in place.
+
+The release manifest must state which versions are compatible. The loader must reject an incompatible combination rather than silently coerce it.
+
+## 21. Ordered service-build phases
+
+The target is large, but the dependency order is fixed. The new service is built as an isolated product. Each phase produces a verifiable contract before the next phase consumes it. The existing Fundamental agent remains unchanged until the service contract passes its cutover gate.
+
+### 21.1 Delivery stages
+
+The service starts with its complete target contracts and adds supported coverage in measured releases. The package being merged now contains documentation only. It makes no runtime or valuation-quality claim.
+
+| Stage | Scope | Exit evidence |
+| --- | --- | --- |
+| Documentation foundation | This package, one canonical specification, complete `ModelSpecV1`, source register, and staged release gates. No runtime code. | Links resolve, domain definitions are internally consistent, and the design review records unresolved assumptions without weakening the required contract. |
+| Pragmatic service release | A deployable service with point-in-time SEC facts, replay, explicit quality states, deterministic calculations, and the limited coverage in section 24.1. | Every section 24.5 threshold passes for the declared profile. Unsupported archetypes abstain. |
+| Controlled family expansion | Add one complete family at a time, starting with insurer, REIT NAV, regulated utility, cyclical, biotech, and SOTP coverage when their public evidence is sufficient. | The family has a complete `ModelSpecV1`, lawful source coverage, positive and negative golden cases, independent node checks, and a predeclared out-of-sample cohort when its forecasts are calibratable. |
+| Enterprise service | Governed model inventory, broader issuer and jurisdiction coverage, source health and retention controls, independent model validation, calibrated forecast intervals where data permits, operational SLOs, incident recovery, and controlled releases. | An independent reviewer can reproduce artifacts, inspect each model's validation record, confirm monitoring and rollback evidence, and verify the stated coverage limits. |
+
+All model families use the same versioned contract from the first service release. A new family adds a registry entry and its own evidence. It does not require a new `ModelSpec` schema or a rewrite of earlier families.
+
+"Fully tested before integration" means that every model and path advertised by the intended service release passes that release's gates. It does not mean that unsupported future families must exist before the first agent call. The first integration may expose only the pragmatic profile, with all other families returning explicit `unsupported` or `abstain` states.
+
+1. **Freeze the canonical specification.** Register this file as the only normative Fundamental document. Mark older design documents non-authoritative and remove conflicting index entries.
+2. **Create the service boundary.** Add a private internal-service contract with `internal.v1` context, `fundamental.v1` operation schemas, deadlines, idempotency, stable errors, readiness, and correlation IDs.
+3. **Build the service-owned source snapshot.** Persist raw SEC, XBRL, macro, and market observations with content hashes, timestamps, provider metadata, and service-owned cache keys.
+4. **Build the point-in-time fact layer.** Add canonical facts, filing versions, accession selection, dimensions, units, and restatement handling inside the new service.
+5. **Harden Arelle validation.** Make taxonomy, EFM, DQC, plugin, and validation-rule signatures first-class artifacts with block and warn gates.
+6. **Build the service calculation boundary.** Implement typed valuation inputs, pure deterministic graphs, capital-structure policy, and explicit quality states without importing the old agent internals.
+7. **Build eligibility and model selection.** Add required fields, forbidden conditions, minimum quality, and explicit abstention to every service-owned `ModelSpec`.
+8. **Build scenarios, uncertainty, provenance, and replay.** Produce versioned artifacts with deterministic seeds, source graphs, release manifests, and offline replay.
+9. **Build point-in-time calibration.** Use first subsequently published labels, chronological splits, purge, embargo, raw and naive baselines, and separate market-signal evaluation.
+10. **Create golden cohorts and independent checks.** Add public-source reconciliation, independent formulas, property tests, and sector coverage.
+11. **Run the service cutover gate.** Compare the new service against fixed fixtures and independently expected outputs. Only after the gate passes does the existing agent call the service in production.
+12. **Expand model families.** Add banks, insurance, REIT NAV, cyclical, biotech, and SOTP one family at a time under the same service contracts.
+
+The phases are architectural dependencies, not a promise that every phase is a small task. A phase is complete only when its service contract, fixtures, replay evidence, and release gate exist. The existing Fundamental agent requires no internal changes before the cutover gate.
+
+## 22. Explicit unsupported and degraded behavior
+
+The user-facing report must use these states consistently:
+
+- `verified`: the requested model and inputs pass all required gates.
+- `provisional`: a result exists, but a declared coverage or assumption limitation remains.
+- `degraded`: a non-primary or stale source, provider fallback, or limited proxy affected the result.
+- `unsupported`: the company archetype or requested metric is outside the implemented model coverage.
+- `abstain`: the system refuses to emit an intrinsic value because evidence or invariants fail.
+- `error`: the process failed before a defensible result could be produced.
+
+An abstention report must include the blocking codes, missing evidence, selected model candidates, and the smallest next action that could make the case eligible. A degraded report must include the provider and freshness limitation. The UI and API must not convert these states into a numeric value with a generic confidence label.
+
+## 23. Final acceptance criteria
+
+The Fundamental service reaches the target state only when all of these statements are true:
+
+- one canonical specification governs the domain and old documents cannot override it;
+- a point-in-time replay never reads a fact that was filed later than the valuation timestamp;
+- every reported number has a source or a formula trace, a unit, a period, a quality status, and a version;
+- Arelle and accounting validation issues are normalized and consumed by release gates;
+- model selection can abstain and explains eligibility and rejection reasons;
+- the deterministic engine has no LLM or network dependency and passes independent formula checks;
+- SBC, dilution, share scope, debt, cash, preferred stock, leases, and non-controlling interests follow one recorded policy;
+- each supported company archetype has a complete model contract, and unsupported archetypes abstain;
+- scenarios, sensitivity, and uncertainty identify dominant assumptions and report calibrated coverage where available;
+- calibration uses point-in-time labels, chronological OOS evaluation, purge and embargo where required, and raw and naive baselines;
+- consensus and market outcomes are kept separate from intrinsic-value ground truth;
+- clean-environment replay reproduces the released artifact from immutable inputs;
+- golden cohorts cover the required industries and failure modes;
+- release gates block invalid artifacts and preserve an auditable decision trail.
+
+## 24. Pragmatic delivery profile
+
+This profile is the first usable service release. It does not reduce the target state. It selects the smallest coverage set that supports a complete, independently tested service release, then adds model families without changing the source-of-truth rule or service boundary.
+
+### 24.1 Initial coverage boundary
+
+The first production profile covers:
+
+- U.S. public issuers with usable SEC filings;
+- mature non-financial companies through FCFF DCF;
+- high-growth companies through a guarded transition-to-margin DCF when the required operating facts exist;
+- banks through a separately validated equity or dividend model when regulatory capital and RWA facts are available;
+- market price and consensus observations as degraded comparison signals only.
+
+The first profile returns `unsupported` or `abstain` for insurers, full REIT NAV, regulated utilities, cyclical normalization, biotech pipeline valuation, and conglomerate SOTP until their complete input contracts and golden cohorts exist. The current REIT FFO multiple may remain available as a clearly labelled provisional proxy, but it must not be presented as a full REIT valuation.
+
+### 24.2 Priority order
+
+Implement the following slices in order. Do not start calibration or user-interface work for a value that fails an earlier slice.
+
+1. **Canonical input and provenance.** Define one typed valuation input, one source snapshot manifest, and one provenance record. Require `as_of`, `available_at`, `filed_at`, accession, source URL, content hash, unit, currency, and policy version.
+2. **Data-quality states.** Add `verified`, `provisional`, `degraded`, `unsupported`, `abstain`, and `error` to the API and report. Replace silent zero-filling and silent provider fallback with explicit codes.
+3. **Accounting correctness.** Make SEC and Arelle output the primary accounting path. Enforce units, periods, dimensions, duplicate-fact selection, filing version, and fatal EFM or DQC blocks for the initial cohort.
+4. **Calculation correctness.** Fix the FCFF SBC policy, WACC composition, share scope, debt and cash bridge, preferred stock, leases, and non-controlling interest. Add invariant tests before adding new models.
+5. **Model eligibility.** Add required fields, forbidden conditions, minimum quality, and abstention to `ModelSpec`. Remove the unconditional `dcf_standard` fallback when no candidate is eligible.
+6. **Replay and release gate.** Generate a manifest from immutable inputs. Re-run the deterministic engine without network access. Block release when replay, provenance, or quality contracts fail.
+7. **Small calibration loop.** Calibrate one or two forecast metrics, such as revenue growth and operating margin, against first subsequently published filing values. Keep consensus-relative adjustment in a separate diagnostic path.
+8. **Cohort monitoring.** Start with a fixed cohort of at least 20 cases across the initial coverage boundary. Track missingness, abstention, provider fallback, signed bias, median absolute error, and replay pass rate.
+
+### 24.3 First implementation slices
+
+Implement the first service release in these ownership slices. Keep each slice inside `fundamental-service`; do not import the existing agent's internal modules.
+
+| Slice | Service-owned responsibility | Completion evidence |
+| --- | --- | --- |
+| Public API and domain contracts | Request, response, identity, quality, model, valuation, and error types | Contract fixtures reject missing versions, invalid statuses, and untraceable values. |
+| Source snapshots and point-in-time facts | SEC acquisition, filing versions, taxonomy metadata, canonical facts, and immutable raw evidence | Amended-filing fixture selects only facts available at the requested timestamp and replays offline. |
+| Accounting quality | Arelle integration, EFM or DQC normalization, concept mapping, and reconciliation | Golden filings produce the declared blocking and warning codes. |
+| Model registry and deterministic engine | `ModelSpecV1`, eligibility, calculation graphs, capital bridges, and abstention | Positive, negative, boundary, and independent node-level fixtures pass for each supported model. |
+| Provenance, cache, and replay | Immutable manifests, content-addressed cache, artifact references, and offline replay | Cache lifecycle tests pass and a clean replay matches the release hash. |
+| Forecast calibration and uncertainty | Point-in-time labels, chronological evaluation, intervals, baselines, and promotion policy | Reports show raw, calibrated, and naive metrics. Calibration remains inactive when evidence is insufficient. |
+| Service operations | Authentication, deadlines, idempotency, readiness, logs, metrics, retention, and recovery | Container tests cover startup, health, timeout, restart, and artifact preservation. |
+
+Keep implementation commands and incident steps in service runbooks. Keep domain contracts and pass or fail rules in this specification.
+
+### 24.4 Practical calibration design
+
+Use a narrow, auditable calibration loop before fitting a broad valuation adjustment:
+
+1. Build a point-in-time dataset from SEC snapshots. Each row contains the valuation timestamp, available facts, forecast metric, and the first later filing that discloses the realized metric.
+2. Split rows by time. Keep the final period as an untouched out-of-sample set.
+3. Fit a bounded mapping for one metric at a time. Store raw, guarded, and calibrated values together.
+4. Compare the mapping with the raw forecast and a naive baseline such as the last reported rate or a trailing median.
+5. Promote only when the out-of-sample error improves, the sample count is sufficient, and no sector cohort breaches the quality limit.
+6. Expire the artifact when its source, schema, or point-in-time policy changes.
+
+Do not use current price, analyst target price, or consensus as the realized label for intrinsic value. Those observations may remain in a separate market-signal evaluation.
+
+### 24.5 Practical release thresholds
+
+The first profile must enforce these hard requirements:
+
+- 100% of released valuation fields have provenance or a computation expression;
+- 100% of historical replay rows pass the `available_at` check;
+- 0 silent model fallbacks and 0 silent provider fallbacks;
+- 100% deterministic replay hash match for the release cohort;
+- 0 blocking XBRL, EFM, DQC, unit, period, or share-scope issues in `verified` artifacts;
+- at least 20 golden cases and at least 5 sector or company-archetype groups;
+- calibration reports show raw, calibrated, and naive metrics, even when calibration is rejected;
+- every unsupported or abstained case contains a machine-readable reason and missing-evidence list.
+
+These thresholds are the minimum release profile. A deployment may tighten them, but it may not loosen them without a versioned policy change and new evidence.
+
+### 24.6 Deliberately deferred work
+
+The following work belongs to the target state but should not block the first dependable profile after the initial coverage boundary is complete:
+
+- full insurer, REIT NAV, regulated utility, cyclical, biotech, and conglomerate model families;
+- broad Monte Carlo distributions with learned cross-parameter correlations;
+- automated model-selection learning across all sectors;
+- market-outcome portfolio optimization;
+- free-web consensus scraping as a primary input;
+- LLM-generated numeric assumptions without a source or approved policy;
+- compatibility shims for disposable legacy payloads.
+
+Deferred work remains visible as `unsupported`, not as a hidden approximation.
+
+### 24.7 Practical completion condition
+
+The practical profile is complete when a fixed cohort can run from public snapshots to a deterministic, traceable report without network access, and every unsupported or degraded path is explicit. At that point the system is usable for the declared coverage boundary and ready to expand one model family at a time.
+
+## 25. Enterprise service design and validation criteria
+
+This section records the enterprise-level questions that govern the service design. It defines what specialists add, which methods and tools they use, and what evidence an independent reviewer can inspect.
+
+### 25.1 Requirement breakdown
+
+The service program has four outcomes that must remain separate:
+
+| Outcome | Question it answers | Evidence required |
+| --- | --- | --- |
+| Data correctness | Did the system use the right issuer fact, at the right time, with the right accounting meaning? | point-in-time snapshot, XBRL context, unit, filing accession, Arelle and reconciliation results |
+| Model correctness | Was the chosen model economically applicable and complete for the company? | versioned `ModelSpec`, eligibility report, forbidden-condition checks, abstention evidence |
+| Calculation correctness | Did deterministic formulas produce the declared result from validated inputs? | typed input, formula graph, invariant tests, independent reference calculation, replay hash |
+| Decision usefulness | Does the result and its uncertainty support a decision without overstating confidence? | scenario and interval report, OOS calibration, market-signal evaluation kept separate |
+
+The project must not use a good result in one column to compensate for a failed result in another. Accurate arithmetic on a future-restated fact is still a data failure. A well-sourced fact passed to an inapplicable model is still a model failure.
+
+### 25.2 What top specialists add without being asked
+
+An experienced valuation, accounting, data, and model-risk team would add these requirements before implementing features:
+
+- **A formal domain vocabulary.** Define issuer, security, share class, economic period, filing version, observation time, accounting fact, assumption, model, scenario, estimate, forecast, and realized label. Reject overloaded fields such as `as_of` when the code needs both economic time and publication time.
+- **A bitemporal data policy.** Store both the period described by a fact and the time the fact became available. Keep original filings and later restatements as different versions.
+- **An accounting ontology and mapping review.** Map standard and extension concepts, units, dimensions, signs, continuing operations, segment scope, and calculation relationships. Record mapping confidence and a human-review path for ambiguous extensions.
+- **A model inventory and risk register.** For each model, record purpose, owner, assumptions, known limitations, supported cohort, input dependencies, validation evidence, change history, and retirement conditions.
+- **A failure policy before a success path.** Decide which missing, stale, contradictory, or degraded values block a valuation, lower its status, or cause abstention. Do not let individual callers invent fallback behavior.
+- **An independent reference implementation.** Calculate a small set of cases with a separate implementation or spreadsheet fixture. Compare node-level values, not only the final per-share result.
+- **A leakage and revision audit.** Prove that backtests, calibration, and model selection never read a future filing, a later restatement, a revised macro series, or a target price that was unavailable at the decision timestamp.
+- **A survivorship and identity audit.** Include delisted issuers, ticker changes, share-class changes, mergers, and bankruptcies where public history permits. Do not build a historical cohort from today's active ticker list.
+- **An error decomposition.** Report extraction, accounting normalization, forecast, discount-rate, terminal-value, and capital-structure contributions separately. A calibration fit must target the component whose error it can measure.
+- **A scenario-dependence policy.** Record dependencies between growth, margins, reinvestment, risk, and dilution. Do not sample correlated assumptions independently without evidence.
+- **A market-expectations diagnostic.** Use reverse DCF to describe the operating assumptions implied by a dated price when useful. Do not use the reverse-DCF result as intrinsic-value ground truth.
+- **A capital-structure policy.** Define basic versus diluted shares, options, restricted units, convertibles, preferred stock, leases, non-controlling interests, repurchases, and SBC treatment before tuning a DCF.
+- **A numerical policy.** Define decimal versus binary floating-point boundaries, currency conversion, scale, rounding, tolerance, overflow, underflow, discounting convention, and non-finite-value handling.
+- **A change and retirement policy.** Version facts, mappings, policies, formulas, schemas, and calibration artifacts independently. Retire a model only after its callers are switched, its fixtures and reports point to the replacement, and its replay manifests remain reproducible.
+- **Operational controls.** Define source-rate limits, cache retention, raw-data access, credential boundaries, incident handling, SLOs, and provider-degradation behavior. A reproducible valuation needs reproducible operations.
+- **Decision-focused reporting.** Show value drivers, model limitations, data quality, uncertainty, abstention reasons, and what evidence would change the result. A single confidence number is not an audit trail.
+
+These are part of the target because they protect the system from the most expensive failure: a plausible number that cannot be explained, reproduced, or corrected.
+
+### 25.3 Professional methods, theories, and hard tools
+
+Use the following methods as the default technical approach. Each method must produce an artifact or test that can be reviewed.
+
+| Area | Method or theory | Tooling and repository application |
+| --- | --- | --- |
+| Architecture | Domain-driven design, hexagonal boundaries, vertical-slice ownership, contract-first service design | service-owned capabilities, internal-service contracts, `architecture_guard.py`, architecture action report |
+| Data time | Bitemporal or point-in-time modeling, append-only snapshots, event-style versioning | `SourceSnapshotV1`, `available_at`, accession selection, immutable content hashes |
+| Accounting | XBRL context and dimensional semantics, calculation-linkbase checks, US GAAP or IFRS concept mapping | SEC EDGAR, Company Facts, Arelle, EFM, DQC, taxonomy package hashes |
+| Data quality | Explicit quality dimensions, severity policy, reconciliation and contradiction checks | typed `QualityStatus`, normalized issue schema, block or warn release gates |
+| Valuation | FCFF, WACC, residual income, regulatory-capital models, NAV, SOTP, normalized-cycle analysis | pure calculation graphs, `ModelSpec`, unit-aware inputs, independent formula fixtures |
+| Numerical correctness | Dimensional analysis, interval bounds, conservation invariants, monotonicity and sensitivity checks | `Decimal` monetary values, declared precision, property tests, finite-value guards, node-level tolerances |
+| Model risk | Risk-based model inventory, independent validation, limitations, monitoring, change control, and challenge | model-risk register, validation report, challenger implementation, approval and expiry fields; use SR 26-2 only as a scoped reference |
+| Forecast evaluation | Rolling-origin chronological splits, cohort analysis, proper scoring rules, confidence intervals, and purge or embargo when outcome windows overlap | point-in-time labels, raw and naive baselines, reliability reports, and promotion gates |
+| Uncertainty | Scenario analysis, sensitivity, empirical error distributions, calibrated prediction intervals | deterministic seeds, interval coverage, interval score, dominant-driver report |
+| Software verification | Contract tests, property-based tests, mutation tests for critical formulas, differential tests, offline replay | Pydantic contracts, Hypothesis or equivalent property tests, reference engine, replay manifests |
+| Operations | Immutable artifacts, idempotent processing, bounded retries, source-health monitoring | artifact repository, source snapshot manifest, cache keys, structured diagnostics and SLO metrics |
+
+Do not introduce a tool only because it is common in another organization. The tool must close a named evidence gap, have a clear owner, and produce a repeatable check in this repository.
+
+### 25.4 Objective standards and external verification
+
+No single external source can prove an intrinsic value is correct. Independent checks establish whether the service used valid evidence, applied the declared method, and reported measured forecast performance without presenting any of those checks as proof of intrinsic value.
+
+Use these external references and verification channels:
+
+- **SEC and XBRL.** Reconcile canonical facts with the issuer's filing, XBRL contexts, units, dimensions, accession, and filing date. Use Arelle's validation output and the applicable EFM or DQC rules.
+- **Official macro sources.** Use FRED or ALFRED vintages, Treasury yields, BEA, BLS, Federal Reserve, and FDIC data for their declared domains. Store the vintage or publication time.
+- **Accounting standards.** Use the public SEC reporting guidance, FASB or IFRS taxonomy references, and issuer filing presentation for concept meaning. Do not use a market-data page to resolve accounting semantics.
+- **Model-risk governance.** [SR 26-2](https://www.federalreserve.gov/supervisionreg/srletters/SR2602.htm) replaced SR 11-7 on April 17, 2026. It applies as supervisory guidance to its banking scope and is a reference, not a certification or direct requirement for this service. Use the [NIST AI RMF](https://www.nist.gov/itl/ai-risk-management-framework) when an ML component affects a decision or confidence label.
+- **Forecast calibration.** Use rolling-origin out-of-sample evaluation and strictly proper scoring rules. Use targets that the service can observe later, such as filed revenue or margin. Do not calibrate intrinsic value to a share price, analyst target, or consensus estimate.
+- **Independent calculation.** Recompute selected cases in a separate module or spreadsheet with independently entered formulas. The challenger must not import the production calculator's internal functions.
+- **Metamorphic and property tests.** Verify that increasing cash cannot reduce equity value when all else is constant, increasing debt cannot increase equity value, terminal growth remains below WACC, a zero growth shock does not change unrelated nodes, and share dilution does not increase per-share value under the declared policy.
+- **Historical replay.** Re-run from immutable snapshots in an offline environment. The result must match the recorded artifact or identify the first changed node and version.
+- **Out-of-sample monitoring.** Compare raw, calibrated, and naive forecasts on a time-separated cohort. Report confidence intervals, sample counts, missingness, abstention, drift, and provider fallback rates.
+- **Reproducible build evidence.** Pin runtime, parser, taxonomy, policy, model, and calibration versions. A clean environment must produce the same output hash for the same manifest.
+
+The acceptance claim is therefore bounded: the system can prove that it followed the declared data, model, formula, and uncertainty contracts. It cannot prove that an intrinsic value equals a future market price.
+
+### 25.5 Target-compatible service contract chain
+
+The isolated service must create the contracts that the enterprise stage will consume from its first release. It must not expose a temporary payload and plan to replace it later.
+
+```text
+SourceSnapshotV1
+    -> CanonicalFactV1
+    -> ValuationInputV1
+    -> ModelSpecV1 and EligibilityReportV1
+    -> CalculationArtifactV1
+    -> UncertaintyArtifactV1
+    -> CalibrationDatasetV1 and CalibrationArtifactV1
+    -> ProvenanceGraphV1 and ReleaseManifestV1
+```
+
+The service may use internal adapters between its source, domain, and persistence layers, but the operation IDs, version fields, timestamps, status codes, and provenance references must be stable from the first release.
+
+### 25.6 Existing agent to service boundary
+
+| Existing agent boundary | New service boundary | Integration rule |
+| --- | --- | --- |
+| SEC and market source access | `SourceSnapshotV1` owned by the service | the service fetches and caches source data; the agent does not pass raw filing dictionaries |
+| `FinancialReportModel` and `FinancialStatementsPayload` | `FinancialHealthArtifactV1` response reference | the agent maps the typed response summary into its own DTO; it never becomes the service's data store |
+| `TraceableField` and `TraceableFieldModel` | service-owned provenance envelope | the service returns provenance references and report projections, not shared internal trace objects |
+| `ParamBuilderPayload` and `ParamBuildResult` | `ValuationRequestV1` and `ValuationInputV1` | the service builds inputs from its own canonical facts and policy versions |
+| `ModelSpec`, `ModelCandidate`, `ModelSelectionResult` | service-owned `ModelSpecV1`, `EligibilityReportV1`, `SelectionArtifactV1` | the agent receives the selected model and eligibility evidence through the operation response |
+| `CalculationGraph` and model graph functions | service-owned calculation engine and `CalculationArtifactV1` | no runtime import from the old agent; independent formula fixtures are mandatory |
+| `valuation_flow.py` and `JSONObject` report assembly | service client plus response mapper | the agent keeps only request orchestration, approval, and product projection |
+| existing replay reports and cohort gates | service-owned `ReleaseManifestV1` and `ReplayReportV1` | the service owns replay and release evidence; the agent stores references and user-visible summaries |
+| current forward-signal calibration | service-owned `CalibrationDatasetV1` | consensus-relative monitoring remains a separate operation and label contract |
+
+### 25.7 No-rebuild service guardrails
+
+Each service-build slice must satisfy all of these conditions before it is considered complete:
+
+1. The operation contract is defined in the service boundary and uses the shared `internal.v1` context contract.
+2. The service owns its source snapshots, cache, canonical facts, model registry, calculation artifacts, and calibration artifacts.
+3. The existing Fundamental agent can call the service through a typed client and map the response without importing service internals.
+4. Fixed fixtures, independent expected outputs, and the service replay manifest agree within declared tolerances.
+5. The service exposes stable error codes, deadlines, idempotency, readiness, correlation IDs, and explicit degraded or abstain outcomes.
+6. No service domain code imports the old agent's `JSONObject`, concrete provider, workflow, or private domain modules.
+7. The service passes architecture, contract, behavior, offline replay, independent formula, and cache lifecycle tests.
+8. A failed service request cannot cause the agent to calculate a second hidden valuation locally.
+
+The new service may replace formulas because it is a greenfield implementation. It must preserve only the externally declared service contract and evidence semantics, not the internal structure of the old agent.
+
+### 25.8 Enterprise service phases and exit gates
+
+1. **Contract freeze and service ownership.** Register the service operation schemas, model-risk inventory, ownership map, retention policy, and error catalog. Exit when every service operation has a version and owner.
+2. **Source snapshot and point-in-time facts.** Build immutable raw snapshots, filing selection, taxonomy metadata, and canonical facts. Exit when amended filings and later restatements replay correctly.
+3. **Quality and accounting validation.** Normalize Arelle, EFM, DQC, unit, period, dimension, and reconciliation issues. Exit when block and warn behavior is deterministic on golden fixtures.
+4. **Typed valuation input and calculation engine.** Build `ValuationInputV1`, formula invariants, and independent reference cases. Exit when the engine has no I/O or LLM dependency and every output has a trace.
+5. **Eligibility and abstention.** Build model specifications and selection artifacts. Exit when an ineligible model cannot reach calculation and an unsupported archetype produces a useful abstention.
+6. **Artifact, cache, and replay contract.** Build provenance graph, release manifest, content-addressed cache behavior, and offline replay. Exit when a clean environment reproduces cohort artifacts.
+7. **Calibration and uncertainty.** Build point-in-time labels, OOS splits, purge or embargo, naive baselines, interval metrics, and promotion or expiry policy. Exit when rejected calibration remains inactive and the report explains why.
+8. **Service boundary verification.** Add the backend client, fake service, contract tests, deadline and retry tests, and one cutover fixture set. Exit when the client can consume the service without importing its implementation.
+9. **Model-family expansion.** Add banks, insurance, REIT NAV, regulated utilities, cyclical, biotech, and SOTP one family at a time. Each family reuses the same service contracts.
+
+No phase may introduce a temporary field that is absent from the target contract, a hidden fallback that cannot be replayed, a shared database table with the agent, or a second source of truth. This is the condition that prevents the isolated service from becoming a wrapper that must later be rebuilt.
+
+### 25.9 Assumptions and open decisions
+
+The plan assumes that the initial production universe is U.S. public issuers and that SEC filing access remains available under its published terms. The following decisions must be recorded before implementation of the affected phase:
+
+- whether `CanonicalFactV1` lives in `src/shared/artifacts` or remains under the Fundamental capability until a second agent needs it;
+- the exact `ValuationInputV1` field set and unit types;
+- the accepted numerical tolerance for each calculation model;
+- the minimum cohort size for each model family beyond the initial profile;
+- the retention and access policy for raw filing bytes and derived artifacts;
+- the human review rule for extension mappings with low confidence;
+- the independent challenger implementation owner.
+
+These are design decisions, not reasons to defer the foundation. Each decision has a default owner and must be resolved before the phase that consumes it.
+
+## 26. Isolated service architecture decision
+
+### 26.1 Decision
+
+Build the new enterprise Fundamental implementation as an independently deployable service. Keep the existing Fundamental agent unchanged while the service is built and verified. The agent calls the service through a typed internal-service client and maps the response into product-facing domain data.
+
+This decision is worth the extra boundary for this project. Fundamental valuation is a critical component, the current agent contains mixed orchestration and valuation responsibilities, and the new design needs independent source caching, point-in-time storage, replay, calibration, and release control. An isolated service gives those concerns one owner and lets the service be tested against immutable data without booting the whole agent graph.
+
+This is not a claim that a service boundary removes work. It changes the work from an in-place refactor to a greenfield implementation plus a contract cutover. The project still needs service tests, contract tests, deployment checks, failure handling, and independent validation.
+
+### 26.2 Ownership boundary
+
+| Existing product backend | Fundamental service |
+| --- | --- |
+| user authentication and authorization context | service authentication and operation authorization |
+| conversation, workflow state, approval pause, and user-facing projection | valuation request lifecycle and valuation run state |
+| agent-facing client and response mapping | operation schemas and stable error catalog |
+| product artifact references and display summaries | raw source snapshots and content-addressed cache |
+| product UI and user decisions | canonical facts, XBRL validation, model registry, calculations, calibration, provenance, replay, and release artifacts |
+
+The service owns its database tables, cache keys, schema versions, and artifact lifecycle. The agent must not read the service database, pass raw filing dictionaries, or implement a local valuation fallback after a service failure. A service failure is an explicit unavailable or degraded outcome.
+
+### 26.3 Service contract
+
+Use the existing internal-service pattern from [`src/shared/internal_services`](../../finance-agent-core/src/shared/internal_services/README.md): `internal.v1` signed context plus a service-owned `fundamental.v1` operation schema.
+
+The first operation set is intentionally small:
+
+- `POST /v1/valuations`: create a valuation request with issuer or security identity, valuation timestamp, requested coverage, scenario policy, and idempotency key;
+- `GET /v1/valuations/{valuation_id}`: return the typed status, value projection, quality status, evidence references, and artifact references;
+- `POST /v1/valuations/{valuation_id}/replay`: run the stored manifest without network access and return the first differing node when replay fails;
+- `GET /readyz`: report service readiness without exposing source, cache, or database details.
+
+The request schema must not accept a precomputed intrinsic value or an unverified raw financial report. The response must include:
+
+```text
+valuation_id
+contract_version and service_version
+issuer and security identity
+valuation_timestamp and source_snapshot_id
+status: verified, provisional, degraded, unsupported, abstain, or error
+selected_model and eligibility report reference
+intrinsic-value projection and uncertainty projection when available
+quality issue codes and missing-evidence list
+provenance graph reference and release manifest reference
+correlation_id, created_at, completed_at, and retryability
+```
+
+Large provenance graphs, filing packages, and calibration reports remain behind artifact references. The agent converts the response projection, not the entire service domain graph, into its own DTO.
+
+### 26.4 Cache and data lifecycle
+
+The service cache is content-addressed and keyed by source URL or filing identity, query parameters, source version, taxonomy package, validation profile, and parser version. A cache hit is valid only when its source and policy versions match the request.
+
+Keep these stores separate:
+
+- raw source snapshots, which are immutable and retained for replay;
+- parsed filing and taxonomy cache, which can be rebuilt from raw snapshots;
+- canonical fact store, which is versioned and point-in-time addressable;
+- valuation and calibration artifacts, which reference input snapshots and policy versions;
+- operational cache and locks, which may expire and must never be the only copy of a valuation result.
+
+The service must be able to rebuild derived stores from retained raw snapshots. A cache reset must not destroy the evidence needed to reproduce a released valuation.
+
+### 26.5 Why the response mapping cost is acceptable
+
+The response mapping is a controlled cost when the service returns a narrow, versioned projection and immutable artifact references. It is a risk when the agent receives service internals or a second copy of the calculation graph.
+
+Keep the mapping at one boundary:
+
+```text
+agent request DTO -> internal.v1 + fundamental.v1 -> service
+service response projection + artifact references -> agent domain/UI DTO
+```
+
+Do not map each service fact into an old `TraceableField` tree. The agent needs status, key values, explanations, and references. Reviewers can open the service artifacts for the full provenance graph.
+
+### 26.6 Service test strategy
+
+The isolated service must have its own test pyramid:
+
+- domain tests for accounting normalization, model eligibility, formulas, units, and quality severity;
+- contract tests for request, response, error, readiness, deadline, idempotency, and version rejection;
+- source-adapter tests with recorded SEC and macro fixtures, including amended filings and provider failures;
+- golden valuation tests with node-level expected values and independent formulas;
+- cache lifecycle tests for hit, miss, stale, invalidation, rebuild, and concurrent population;
+- offline replay tests from an immutable manifest;
+- calibration tests with point-in-time splits, OOS labels, raw baselines, and rejected-fit behavior;
+- service-client tests in `finance-agent-core` using a fake service, without importing service implementation modules;
+- container-level tests for startup, readiness, database schema, cache dependencies, timeout, and graceful shutdown.
+
+The existing agent tests continue to cover workflow and response projection. They do not become the service's domain test suite.
+
+### 26.7 Cutover gate
+
+Do not use production traffic until all of these pass on the fixed initial cohort:
+
+1. The service builds from a clean checkout and passes its architecture guard.
+2. The service can run without network access from stored source snapshots.
+3. Every response has a valid `fundamental.v1` schema, status, issue catalog, and artifact reference.
+4. Independent calculation fixtures match at every declared critical node.
+5. Replay reproduces the release artifact hash.
+6. The client maps the response without importing service internals.
+7. Service failure produces an explicit error or degraded result, and the agent does not calculate locally.
+8. Cache reset and service restart preserve released artifact reproducibility.
+9. The release record includes source, parser, taxonomy, model, policy, calibration, runtime, and schema versions.
+
+The cutover is one integration change in the existing agent. It does not modify the old valuation implementation. The old implementation can remain untouched as a comparison fixture until the service has passed the cutover and the project makes a separate deletion decision.
+
+### 26.8 Costs and limits
+
+The service boundary adds network latency, deployment configuration, authentication, deadlines, retries, observability, and another failure domain. It also requires service-specific storage and Compose or production health checks.
+
+Those costs are justified only if the team enforces the ownership boundary. If the service calls the old agent for its calculations, shares the agent's database, or returns unversioned dictionaries, the project pays the distributed-systems cost without receiving isolation. That design is not acceptable.
+
+## 27. Primary sources and supporting links
+
+Use primary sources to validate definitions, observations, and tool behavior. The service still owns its acceptance rules and validation evidence.
+
+### 27.1 Data and sector definitions
+
+- [SEC EDGAR API documentation](https://www.sec.gov/edgar/sec-api-documentation) and [SEC Company Facts](https://data.sec.gov/api/xbrl/companyfacts/)
+- [XBRL specifications](https://specifications.xbrl.org/) and [Arelle documentation](https://arelle.readthedocs.io/)
+- [XBRL US Data Quality Committee](https://xbrl.us/data-quality/)
+- [FRED API documentation](https://fred.stlouisfed.org/docs/api/fred/) and [ALFRED vintage API](https://fred.stlouisfed.org/docs/api/fred/alfred_api.html)
+- [Federal Reserve SR 26-2](https://www.federalreserve.gov/supervisionreg/srletters/SR2602.htm), [Basel Framework](https://www.bis.org/basel_framework/), and [NAIC Risk-Based Capital](https://content.naic.org/insurance-topics/risk-based-capital)
+- [Nareit FFO definition](https://www.reit.com/glossary/funds-operations-ffo) and [Nareit AFFO definition](https://www.reit.com/glossary/adjusted-funds-operations-affo)
+- [FERC industry forms](https://www.ferc.gov/industries-data/data-forms) and [18 CFR Part 35](https://www.ecfr.gov/current/title-18/chapter-I/subchapter-B/part-35)
+- [FDA clinical research phases](https://www.fda.gov/patients/drug-development-process/step-3-clinical-research) and [ClinicalTrials.gov API](https://clinicaltrials.gov/data-api/api)
+- [NIST AI Risk Management Framework](https://www.nist.gov/itl/ai-risk-management-framework)
+
+### 27.2 Methods and implementation evidence
+
+- [Strictly proper scoring rules, prediction, and estimation](https://doi.org/10.1198/016214506000001437) defines scoring-rule properties for forecast evaluation.
+- [Damodaran valuation data and materials](https://pages.stern.nyu.edu/~adamodar/) provide open valuation references, not issuer-specific truth labels.
+- [Current Fundamental flow research](../../docs/research-paper/fundamental-current-flow-tools.md)
+- [Agent architecture standard](../../.agents/skills/architecture-standard-enforcer/references/cross-agent-architecture-standard.md)
+- [Fundamental source tree](../../finance-agent-core/src/agents/fundamental/)
+- [Fundamental backtest runbook](../../finance-agent-core/docs/fundamental_backtest_runbook.md)
+- [Fundamental replay input contract](../../finance-agent-core/docs/fundamental_replay_input_contract.md)
+- [Fundamental forward-signal calibration runbook](../../finance-agent-core/docs/fundamental_forward_signal_calibration_runbook.md)
+- [Fundamental master backlog](../../finance-agent-core/docs/backlog/fundamental-master-backlog.md)
+
+The service target state remains normative if any linked implementation document or source page differs. Record the source release or retrieval date in valuation artifacts when the source can change.
