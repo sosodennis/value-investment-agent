@@ -125,13 +125,25 @@ identity resolution
 
 Agents call these capabilities through interfaces. They may propose a value, but the boundary service must reject a value that lacks its required provenance or quality state.
 
+### 6.1 V1 implementation baseline
+
+The first service release uses the repository's existing backend conventions: Python 3.11 or later, FastAPI, Pydantic v2, `httpx`, and asynchronous SQLAlchemy with PostgreSQL. The service has its own database, database role, schema namespace, migrations, cache keys, and artifact records. It must not share tables with `finance-agent-core`.
+
+PostgreSQL stores operation state, canonical metadata, mapping decisions, model and policy releases, artifact manifests, and content hashes. V1 stores immutable raw source bytes and large artifacts in a service-owned content-addressed filesystem volume. The storage port uses `(sha256, media_type)` as the object key, verifies the hash on read, and records the volume in the release manifest. A later object store adapter may replace the volume without changing a contract. The service must not require a paid object store for local or first-release operation.
+
+V1 uses a durable PostgreSQL operation queue with an API process and a worker process. The worker claims work with a lease and `FOR UPDATE SKIP LOCKED`, renews the lease under the request deadline, and records a terminal outcome. FastAPI background tasks are not the durable execution mechanism. Redis, Kafka, and a separate broker are deferred until measured queue or fan-out needs justify them.
+
+The service exposes `GET /livez` for process liveness and `GET /readyz` for dependency readiness. Readiness requires the service schema, content-addressed store, and required signing configuration to be usable. Readiness returns only the shared `internal.v1` status shape and never exposes provider, database, or credential details.
+
+`fundamental-json-v1` is the canonical artifact serialization. It uses UTF-8 JSON with sorted object keys, no insignificant whitespace, UTC RFC 3339 timestamps, decimal values as canonical base-10 strings, explicit `null` only where the schema permits it, and arrays sorted by their declared identity when they represent sets. It rejects JSON NaN and Infinity. SHA-256 over these bytes produces every prepared-input, artifact, and release digest. The implementation must use one shared serializer for hashing, storage, and replay.
+
 ## 7. Free public data policy
 
 The source hierarchy is part of the contract.
 
 ### 7.1 Primary accounting sources
 
-- [SEC EDGAR APIs](https://www.sec.gov/edgar/sec-api-documentation) and [SEC Company Facts](https://data.sec.gov/api/xbrl/companyfacts/) provide filings, accession numbers, filing dates, and company facts for U.S. issuers.
+- [SEC EDGAR APIs](https://www.sec.gov/edgar/sec-api-documentation) and the [SEC Company Facts example endpoint](https://data.sec.gov/api/xbrl/companyfacts/CIK0000320193.json) provide filings, accession numbers, filing dates, and company facts for U.S. issuers.
 - [XBRL specifications](https://specifications.xbrl.org/) define facts, contexts, units, dimensions, taxonomy references, and calculation relationships.
 - [Arelle](https://arelle.org/) is the parser and validation runtime for filing packages. The runtime version, taxonomy package, validation profile, and plugin versions are part of the artifact.
 - Filing HTML, inline XBRL, and filing exhibits remain available as raw evidence. A normalized fact cannot replace the original source bytes.
@@ -139,7 +151,7 @@ The source hierarchy is part of the contract.
 ### 7.2 Official macro and sector sources
 
 - [FRED](https://fred.stlouisfed.org/docs/api/fred/) and [ALFRED vintages](https://fred.stlouisfed.org/docs/api/fred/alfred_api.html) provide macro series and revision-aware historical observations.
-- [U.S. Treasury rates](https://home.treasury.gov/resource-center/data-chart-center/interest-rates) provide official yield-curve observations.
+- [U.S. Treasury rates](https://home.treasury.gov/policy-issues/financing-the-government/interest-rate-statistics) provide official yield-curve observations.
 - [Federal Reserve data](https://www.federalreserve.gov/data.htm), [BEA](https://www.bea.gov/open-data), and [BLS](https://www.bls.gov/developers/home.htm) provide official macro, national-account, and labor data.
 - [FDIC BankFind](https://banks.data.fdic.gov/) provides public bank data for reconciliation and bank-specific cohorts.
 - [Damodaran public data](https://pages.stern.nyu.edu/~adamodar/) can provide reference assumptions, but it is a reference source rather than issuer-specific ground truth.
@@ -189,9 +201,9 @@ Every fact and derived observation carries:
 - `taxonomy_version`, parser version, and policy version;
 - `point_in_time_policy`: the rule that selected this version.
 
-For a historical valuation, `available_at` must be less than or equal to the valuation timestamp. A later filing cannot replace an earlier fact merely because it has the same reporting period. The source snapshot must preserve filing identity and amendment relationships, including `filing_version`, `is_amendment`, `amends_accession`, `supersedes_accession`, `publication_at` (the source-specific time at which the document became usable), and an amendment-scope classification.
+For a historical valuation, `available_at` must be less than or equal to the valuation timestamp. For SEC filings, derive `filed_at` from the SEC acceptance timestamp and convert it to UTC. For other sources, use the publisher's release timestamp. `captured_at` never makes a later-published value available earlier. The source snapshot must preserve filing identity and amendment relationships, including `filing_version`, `is_amendment`, `amends_accession`, `supersedes_accession`, `publication_at`, and an amendment-scope classification.
 
-Point-in-time selection is fact-level, not period-level. For each requested concept, context, unit, and dimension set, select only candidates available at the valuation timestamp, then apply the versioned source-selection policy to the eligible candidates. A later amendment supersedes an earlier fact only when its scope covers that fact. An amendment that changes unrelated disclosure must not rewrite historical financial facts. All candidates and the selection decision remain in the immutable snapshot so a replay can explain why a fact was chosen.
+Point-in-time selection is fact-level, not period-level. Build the fact key from issuer, canonical concept, period type and dates, unit, currency, sorted dimensions, consolidation scope, and security class. Exclude candidates published after the valuation timestamp. Within one filing, select the candidate with the greatest XBRL `decimals` precision. If equally precise candidates with the same fact key disagree, return `FACT_CONFLICT`. Across filings, select the latest eligible fact by `available_at`; an amendment supersedes only fact keys it re-reports or explicitly changes. A later comparative fact is eligible only from the later filing's publication time. An amendment that changes unrelated disclosure must not rewrite historical financial facts. Preserve every candidate and the selection decision for replay.
 
 ### 8.2 Canonical fact contract
 
@@ -222,7 +234,7 @@ class CanonicalFact:
 
 The canonical layer must keep both the original XBRL concept and the normalized field. A normalized `revenue` value without the original concept, context, and unit is not auditable.
 
-The XBRL portion of the contract must also provide a structured `XbrlContextV1` containing the full concept QName, period type (`instant` or `duration`), start and end dates or instant, unit QName and measure, dimensions with explicit members, consolidation and entity scope, and the source context identifier. Duplicate candidates are retained with their validation outcome and selection reason; they are never silently collapsed by period end alone.
+The XBRL portion of the contract must also provide a structured `XbrlContextV1` containing the full concept QName, period type (`instant` or `duration`), start and end dates or instant, unit QName and measure, dimensions with explicit members, consolidation and entity scope, and the source context identifier. Retain duplicate candidates with their validation outcome and selection reason. Never collapse facts by period end alone.
 
 The canonical fact contract belongs to the new Fundamental service. It is not a reason to rewrite the existing Fundamental agent. The service owns the source and fact boundary:
 
@@ -235,7 +247,7 @@ The service must not read raw `FinancialReportModel` dictionaries from the exist
 
 ### 8.3 Normalization rules
 
-- Keep `Decimal` for monetary and per-share values. Convert to binary floating point only at a defined calculation boundary, and record that conversion.
+- Use `Decimal` for all monetary values, rates, share counts, discount factors, and intermediate results. Do not convert valuation inputs or outputs to binary floating point.
 - Store currency and scale explicitly. Never infer millions or billions from a label.
 - Store period type, duration, and instant separately. Do not combine quarterly and annual facts by matching dates alone.
 - Resolve dimensions such as segment, geography, class of stock, and continuing operations before aggregation.
@@ -385,7 +397,7 @@ The service uses one model-definition format for every family. A model family is
 | Model ID | Economic method and output | Minimum issuer-specific evidence | Reject or abstain when |
 | --- | --- | --- | --- |
 | `fcff_dcf` | Discount operating free cash flow at WACC, then bridge enterprise value to equity value. | Multi-year revenue, operating profit, taxes, D&A, capex, working capital, debt, cash, leases, share scope, and cost-of-capital inputs. | The business lacks a defensible operating forecast, terminal value dominates without a stable convergence case, or the capital bridge cannot reconcile. |
-| `transition_fcff_dcf` | Forecast explicit growth and margin transition before applying a mature-state terminal policy. SaaS is an issuer archetype under this model, not a separate formula. | Revenue cohorts or retention when disclosed, gross margin, acquisition or sales efficiency when available, SBC, dilution, cash runway, and a supported path to normalized margins. | Growth or margin convergence is guessed, material dilution is omitted, or the company has no supportable path to positive unit economics. |
+| `transition_fcff_dcf` | Forecast explicit growth and margin transition before applying a mature-state terminal policy. SaaS is an issuer archetype under this model, not a separate formula. | Filed revenue history and gross margin, SBC, dilution, cash runway, and a supported path to normalized margins. Require retention, cohort, or acquisition-efficiency evidence whenever the forecast uses that driver. | Growth or margin convergence is guessed, a peer or vendor substitutes for an undisclosed issuer fact, material dilution is omitted, or the company has no supportable path to positive unit economics. |
 | `residual_income` | Value equity as current book equity plus discounted residual income: net income less the required return on beginning book equity. | Reliable book value, earnings, cost of equity, distributions, and a clean-surplus or documented book-value bridge. | Book value is economically meaningless, earnings and book-value movements cannot reconcile, or continuing residual income has no justified convergence policy. |
 | `eva` | Value invested capital plus discounted economic profit: NOPAT less a capital charge on invested capital. Under consistent forecasts, this is a cross-formulation of DCF. | Invested capital, NOPAT, WACC, and documented operating adjustments such as research capitalization or lease treatment. | Adjustments are unsupported, invested capital is incomplete, or EVA and DCF disagree beyond declared tolerance without an explained policy difference. |
 | `dividend_discount` | Discount expected shareholder distributions at cost of equity. | Sustainable distributable earnings, capital requirements, payout policy, diluted shares, and a justified terminal payout or growth policy. | Dividends are temporarily funded by asset sales or unsustainable capital depletion, or the model confuses enterprise and equity cash flows. |
@@ -436,9 +448,9 @@ The new service owns its calculation engine and model registry. It may reuse rev
 - Record whether debt is gross or net, whether leases are included, and whether preferred stock and non-controlling interests are deducted.
 - Keep equity value and enterprise value distinct. The bridge must show cash, debt, preferred stock, lease liabilities, minority interest, and other adjustments separately.
 - Use diluted weighted-average shares for per-share earnings and an as-of diluted share count for equity value. Do not mix the two without a policy record.
-- Represent each capital-bridge input as `present`, `confirmed_absent`, `unknown`, or `unsupported`, with source and policy provenance. A material `unknown` in debt, cash, preferred stock, lease liabilities, non-controlling interests, SBC dilution, or the selected share scope blocks a `verified` intrinsic-value artifact. A model may return `provisional`, `degraded`, or `abstain` only under its declared policy; callers must not convert `unknown` to zero.
+- Represent each capital-bridge input as `present`, `confirmed_absent`, `unknown`, or `unsupported`, with source and policy provenance. Any `unknown` in debt, cash, preferred stock, lease liabilities, non-controlling interests, dilutive instruments, or share scope blocks an intrinsic-value calculation. V1 has no materiality threshold that turns an unknown claim into zero. A model may return `provisional` or `degraded` only for a declared non-blocking limitation; otherwise it abstains.
 - Make mid-year versus end-year discounting explicit.
-- Store monetary inputs and outputs as typed decimal amounts with an explicit currency and scale. If an intermediate function uses binary floating point, pin its runtime and precision, quantify the output error, and enforce the declared tolerance.
+- Store monetary inputs and outputs as typed decimal amounts with an explicit currency and scale. Binary floating point is forbidden in the V1 calculation path.
 - Record all rounding only at presentation boundaries. Never round intermediate values.
 
 The alternative intrinsic-value formulations must use consistent cash flows, capital charges, and discount rates:
@@ -457,14 +469,18 @@ These formulations provide independent calculation paths only when their input a
 
 ### 13.2 FCFF and WACC
 
-The FCFF policy must state:
+The V1 FCFF policy is:
 
 ```text
-FCFF = NOPAT + D&A - maintenance and growth capex - change in operating working capital
-Enterprise value = PV(explicit FCFF) + PV(terminal value)
-Equity value = enterprise value + cash - debt - preferred stock - non-controlling interest + or - declared adjustments
-Intrinsic value per share = equity value / selected diluted share scope
+NOPAT_t = EBIT_t - forecast cash taxes_t
+FCFF_t = NOPAT_t + D&A_t - total capex_t - change in operating working capital_t
+TV_5 = normalized FCFF_6 / (WACC - terminal_growth)
+Enterprise value = sum(FCFF_t / (1 + WACC)^t for t=1..5) + TV_5 / (1 + WACC)^5
+Equity value = enterprise value + cash + non-operating assets - gross debt - finance lease liabilities - preferred claims - non-controlling interests - other senior claims
+Intrinsic value per share = common equity value / as-of diluted common shares
 ```
+
+V1 uses end-of-year discounting. `change in operating working capital_t` is current-period operating net working capital minus the prior period. The terminal period is a normalized sixth year, not a copy of year five. The model records the terminal-year margin, reinvestment, and return-on-invested-capital assumptions that produce `FCFF_6`.
 
 The WACC policy must identify debt and equity weights, cost of debt, tax treatment, risk-free tenor, beta source and window, market risk premium source and vintage, country risk treatment, and any company-specific adjustment. A CAPM cost of equity is not a complete WACC by itself.
 
@@ -476,7 +492,7 @@ SBC policy must choose one internally consistent treatment:
 - add back SBC only when the model also includes the expected dilution or repurchase cost;
 - or abstain when the filing does not provide enough information to avoid double counting.
 
-The artifact must include SBC expense, SBC add-back, option and award dilution, share repurchase assumptions, basic shares, diluted shares, and the selected share scope. The engine must reject a result that adds back SBC and uses a share count that ignores material dilution without an explicit override.
+For `us-gaap-public-v1`, keep SBC as an operating expense in every forecast year and set `sbc_add_back = 0`. Use an as-of diluted share count that starts with point-in-time common shares outstanding and adds existing dilutive awards under the treasury-stock method at the selected valuation-date quote. Do not add forecast dilution for future SBC grants because the forecast already charges their compensation expense to FCFF. Model future share-count changes only for separately identified non-SBC issuance, conversion, or repurchase events. If award data, the valuation-date quote, or the resulting share scope is unknown, abstain. The artifact records SBC expense, the zero add-back, award dilution, any non-SBC share changes, basic shares, diluted shares, and the selected share scope.
 
 ### 13.4 Bank and insurance models
 
@@ -638,7 +654,7 @@ Analyst targets, current prices, scraped pages, and LLM explanations may support
 
 ## 18. Golden datasets and cohorts
 
-The verification corpus must contain fixed, versioned cohorts rather than one-off ticker tests.
+The enterprise verification corpus must contain fixed, versioned cohorts rather than one-off ticker tests. Its broad sector list is not a gate for `us-gaap-public-v1`; the first-release cohort is defined in section 24.2 and may use explicit abstention fixtures for unsupported sectors.
 
 Minimum cohorts:
 
@@ -688,7 +704,7 @@ An artifact or code release is blocked when any required gate fails.
 - the release includes the calibration artifact, split manifest, and cohort report;
 - a rejected calibration remains rejected and cannot silently become active.
 
-The fixed golden cohort is an engineering regression and replay corpus. It is not, by itself, evidence that a calibration mapping or prediction interval is reliable. Calibration and OOS cohorts are separate, chronological datasets with their own split manifest, label-availability rule, missingness report, and uncertainty estimates. The release profile must declare the minimum evidence required for each model and target, but there is no universal sample-size threshold: when a cohort is too small or too sparse for a defensible estimate, calibration remains inactive and the report states that limitation. A proposed threshold such as 30 OOS labels is a reviewable policy choice, not a domain fact, and requires justification for the target and cohort.
+The fixed golden cohort is an engineering regression and replay corpus. It is not, by itself, evidence that a calibration mapping or prediction interval is reliable. Calibration and OOS cohorts are separate, chronological datasets with their own split manifest, label-availability rule, missingness report, and uncertainty estimates. Enterprise model releases must declare the evidence required for each target and cohort. The V1 profile binds that policy to the minimums in section 24.4.3. Future profiles may use a different sample policy only after recording the target, cohort rationale, and release evidence. When a cohort is too small or too sparse for a defensible estimate, calibration remains inactive and the report states that limitation.
 
 ### 19.4 Governance gates
 
@@ -728,9 +744,9 @@ The service starts with its complete target contracts and adds supported coverag
 
 | Stage | Scope | Exit evidence |
 | --- | --- | --- |
-| Documentation foundation | This package, one canonical specification, complete `ModelSpecV1`, source register, and staged release gates. No runtime code. | Links resolve, domain definitions are internally consistent, and the design review records unresolved assumptions without weakening the required contract. |
+| Documentation foundation | This package, one canonical specification, complete `ModelSpecV1`, source register, and staged release gates. No runtime code. | Links resolve; every V1 scope, schema, calculation, source, storage, approval, and release-gate choice is fixed. The spec has no unresolved V1 decision that an implementer must make independently. |
 | Pragmatic service release | A deployable service with point-in-time SEC facts, replay, explicit quality states, deterministic calculations, and the limited coverage in section 24.1. | Every section 24.5 threshold passes for the declared profile. Unsupported archetypes abstain. |
-| Controlled family expansion | Add one complete family at a time, starting with insurer, REIT NAV, regulated utility, cyclical, biotech, and SOTP coverage when their public evidence is sufficient. | The family has a complete `ModelSpecV1`, lawful source coverage, positive and negative golden cases, independent node checks, and a predeclared out-of-sample cohort when its forecasts are calibratable. |
+| Controlled family expansion | Add one complete family at a time in this order: U.S. banks, insurers, REIT NAV, regulated utilities, cyclical issuers, biotech, SOTP, then IFRS accounting profiles. | The family has a complete `ModelSpecV1`, lawful source coverage, positive and negative golden cases, independent node checks, and a predeclared out-of-sample cohort when its forecasts are calibratable. |
 | Enterprise service | Governed model inventory, broader issuer and jurisdiction coverage, source health and retention controls, independent model validation, calibrated forecast intervals where data permits, operational SLOs, incident recovery, and controlled releases. | An independent reviewer can reproduce artifacts, inspect each model's validation record, confirm monitoring and rollback evidence, and verify the stated coverage limits. |
 
 All model families use the same versioned contract from the first service release. A new family adds a registry entry and its own evidence. It does not require a new `ModelSpec` schema or a rewrite of earlier families.
@@ -738,17 +754,17 @@ All model families use the same versioned contract from the first service releas
 "Fully tested before integration" means that every model and path advertised by the intended service release passes that release's gates. It does not mean that unsupported future families must exist before the first agent call. The first integration may expose only the pragmatic profile, with all other families returning explicit `unsupported` or `abstain` states.
 
 1. **Freeze the canonical specification.** Register this file as the only normative Fundamental document. Mark older design documents non-authoritative and remove conflicting index entries.
-2. **Create the service boundary.** Add a private internal-service contract with `internal.v1` context, `fundamental.v1` operation schemas, deadlines, idempotency, stable errors, readiness, and correlation IDs.
-3. **Build the service-owned source snapshot.** Persist raw SEC, XBRL, macro, and market observations with content hashes, timestamps, provider metadata, and service-owned cache keys.
-4. **Build the point-in-time fact layer.** Add canonical facts, filing versions, accession selection, dimensions, units, and restatement handling inside the new service.
-5. **Harden Arelle validation.** Make taxonomy, EFM, DQC, plugin, and validation-rule signatures first-class artifacts with block and warn gates.
-6. **Build the service calculation boundary.** Implement typed valuation inputs, pure deterministic graphs, capital-structure policy, and explicit quality states without importing the old agent internals.
-7. **Build eligibility and model selection.** Add required fields, forbidden conditions, minimum quality, and explicit abstention to every service-owned `ModelSpec`.
+2. **Create the service boundary.** Add a private internal-service contract with `internal.v1` context, `fundamental.v1` operation schemas, the prepare/approve/reject state machine, deadlines, idempotency, stable errors, readiness, and correlation IDs.
+3. **Build the service-owned source snapshot.** Persist raw SEC, filing-referenced DTS, selected Treasury/ALFRED/Damodaran observations, and optional market observations with content hashes, timestamps, provider metadata, legal-use references, and service-owned cache keys.
+4. **Build the point-in-time fact and taxonomy registry.** Add canonical facts, accession and amendment selection, complete DTS manifests, content-addressed taxonomy packages, reviewed canonical mapping decisions, dimensions, units, and replay without network access.
+5. **Harden Arelle validation.** Load pinned EFM/DQC plugins and rule packages; make taxonomy, plugin, validation-rule signatures and normalized findings first-class artifacts with block and warn gates. Do not add custom plugins in the first release.
+6. **Build the service calculation boundary.** Implement the frozen `ValuationInputV1`, pure deterministic graphs, approved WACC and capital-structure policies, and explicit quality states without importing the old agent internals.
+7. **Build eligibility and model selection.** Add required fields, forbidden conditions, minimum quality, and explicit abstention to the two V1 model specs: `fcff_dcf` and `transition_fcff_dcf`.
 8. **Build scenarios, uncertainty, provenance, and replay.** Produce versioned artifacts with deterministic seeds, source graphs, release manifests, and offline replay.
 9. **Build point-in-time calibration.** Use first subsequently published labels, chronological splits, purge, embargo, raw and naive baselines, and separate market-signal evaluation.
 10. **Create golden cohorts and independent checks.** Add public-source reconciliation, independent formulas, property tests, and sector coverage.
 11. **Run the service cutover gate.** Compare the new service against fixed fixtures and independently expected outputs. Only after the gate passes does the existing agent call the service in production.
-12. **Expand model families.** Add banks, insurance, REIT NAV, cyclical, biotech, and SOTP one family at a time under the same service contracts.
+12. **Expand model families.** Add banks, insurance, REIT NAV, regulated utilities, cyclical, biotech, SOTP, and IFRS profiles in the order defined in section 21.1. Keep every family behind the same service contracts.
 
 The phases are architectural dependencies, not a promise that every phase is a small task. A phase is complete only when its service contract, fixtures, replay evidence, and release gate exist. The existing Fundamental agent requires no internal changes before the cutover gate.
 
@@ -790,15 +806,16 @@ This profile is the first usable service release. It does not reduce the target 
 
 ### 24.1 Initial coverage boundary
 
-The first production profile covers:
+The first production profile (`us-gaap-public-v1`) covers only:
 
-- U.S. public issuers with usable SEC filings;
+- U.S.-domiciled SEC registrants reporting under U.S. GAAP, with a usable filing history and one common-equity class that the service can resolve;
 - mature non-financial companies through FCFF DCF;
 - high-growth companies through a guarded transition-to-margin DCF when the required operating facts exist;
-- banks through a separately validated equity or dividend model when regulatory capital and RWA facts are available;
 - market price and consensus observations as degraded comparison signals only.
 
-The first profile returns `unsupported` or `abstain` for insurers, full REIT NAV, regulated utilities, cyclical normalization, biotech pipeline valuation, and conglomerate SOTP until their complete input contracts and golden cohorts exist. The current REIT FFO multiple may remain available as a clearly labelled provisional proxy, but it must not be presented as a full REIT valuation.
+The first profile returns `unsupported` or `abstain` for IFRS filers, banks, insurers, REITs, regulated utilities, commodity-dependent cyclical issuers, pre-revenue biotech, conglomerates/SOTP, unresolved multiple share classes, and any issuer whose reporting basis or identity cannot be proven. It does not expose legacy REIT FFO multiples or any other legacy model as a proxy. These families can be added later under separate model and accounting profiles while retaining the V1 service envelope.
+
+The initial model registry contains exactly two eligible model IDs: `fcff_dcf` for mature non-financial issuers and `transition_fcff_dcf` for high-growth non-financial issuers. Both use one calculation engine and capital-bridge policy. `transition_fcff_dcf` is not a permission to invent a path to mature margins: its forecast must be supported by filed operating evidence and explicit, reviewer-approved assumptions. If retention or cohort data is not disclosed, the model may qualify only when it does not use that driver and another filed operating path supports the transition. If the transition cannot be defended, the result is `abstain`.
 
 ### 24.2 Priority order
 
@@ -810,10 +827,10 @@ Implement the following slices in order. Do not start calibration or user-interf
 4. **Calculation correctness.** Fix the FCFF SBC policy, WACC composition, share scope, debt and cash bridge, preferred stock, leases, and non-controlling interest. Add invariant tests before adding new models.
 5. **Model eligibility.** Add required fields, forbidden conditions, minimum quality, and abstention to `ModelSpec`. Remove the unconditional `dcf_standard` fallback when no candidate is eligible.
 6. **Replay and release gate.** Generate a manifest from immutable inputs. Re-run the deterministic engine without network access. Block release when replay, provenance, or quality contracts fail.
-7. **Small calibration loop.** Calibrate one or two forecast metrics, such as revenue growth and operating margin, against first subsequently published filing values. Keep consensus-relative adjustment in a separate diagnostic path.
-8. **Cohort monitoring.** Start with a fixed cohort of at least 20 cases across the initial coverage boundary. Track missingness, abstention, provider fallback, signed bias, median absolute error, and replay pass rate.
+7. **Calibration evaluation.** Build the point-in-time label and report path for one or two forecast metrics, such as revenue growth and operating margin. Keep calibration inactive until the target-specific OOS evidence passes its predeclared promotion policy. Keep consensus-relative adjustment in a separate diagnostic path.
+8. **Cohort monitoring.** Start with a fixed engineering cohort of at least 20 cases across at least five industry groups. It must include positive cases for both eligible models and explicit abstention cases for out-of-profile issuers, missing or conflicting facts, and ambiguous share identity. Track missingness, abstention, provider fallback, signed bias, median absolute error, and replay pass rate.
 
-The 20-case cohort is a pragmatic engineering and replay minimum, not a statistical claim that calibration is reliable. Keep it separate from the chronological calibration/OOS cohort. For every promoted calibration artifact, report the target, model and sector cohort, `N`, label availability, missingness, abstention, raw/calibrated/naive metrics, uncertainty intervals, and the policy version that defines promotion. If the evidence is insufficient for a stable estimate, leave calibration inactive. Do not use a universal sample-size number without documenting why it is suitable for that target and cohort.
+The 20-case cohort is a pragmatic engineering and replay minimum, not a statistical claim that calibration is reliable. It contains at least 10 positive, independently checked valuations (at least five per eligible model across five industry groups) and at least 10 explicit abstention/degraded cases. Keep it separate from the chronological calibration/OOS cohort. For every promoted calibration artifact, report the target, model and sector cohort, `N`, label availability, missingness, abstention, raw/calibrated/naive metrics, uncertainty intervals, and the policy version that defines promotion. If the evidence is insufficient for a stable estimate, leave calibration inactive. Do not use a universal sample-size number without documenting why it is suitable for that target and cohort.
 
 ### 24.3 First implementation slices
 
@@ -823,7 +840,7 @@ Implement the first service release in these ownership slices. Keep each slice i
 | --- | --- | --- |
 | Public API and domain contracts | Request, response, identity, quality, model, valuation, and error types | Contract fixtures reject missing versions, invalid statuses, and untraceable values. |
 | Source snapshots and point-in-time facts | SEC acquisition, filing versions, taxonomy metadata, canonical facts, and immutable raw evidence | Amended-filing fixture selects only facts available at the requested timestamp and replays offline. |
-| Accounting quality | Arelle integration, EFM or DQC normalization, concept mapping, and reconciliation | Golden filings produce the declared blocking and warning codes. |
+| Accounting quality | Arelle 2.47.4 integration, the SEC EFM profile loaded by that runtime with its exact release ID recorded, DQC plugin/rules v31.0.3 with Xule 30055, concept mapping, and reconciliation | The pinned combination passes a startup/version compatibility fixture. Golden filings produce the declared blocking and warning codes; only DQC rules effective for the filing date can block. |
 | Model registry and deterministic engine | `ModelSpecV1`, eligibility, calculation graphs, capital bridges, and abstention | Positive, negative, boundary, and independent node-level fixtures pass for each supported model. |
 | Provenance, cache, and replay | Immutable manifests, content-addressed cache, artifact references, and offline replay | Cache lifecycle tests pass and a clean replay matches the release hash. |
 | Forecast calibration and uncertainty | Point-in-time labels, chronological evaluation, intervals, baselines, and promotion policy | Reports show raw, calibrated, and naive metrics. Calibration remains inactive when evidence is insufficient. |
@@ -850,6 +867,60 @@ The realized label is the first subsequently published eligible filing fact afte
 
 Before implementing each service slice, freeze the machine-readable V1 contract for the artifacts that slice produces. At minimum, the first release must define schemas for `SourceSnapshotV1`, `CanonicalFactV1`, `ValuationInputV1`, `EligibilityReportV1`, `CalculationArtifactV1`, `ReleaseManifestV1`, and the stable error catalog. Each schema must define required fields, unknown-field policy, version compatibility, status transitions, provenance references, idempotency behavior where applicable, and deterministic serialization. Enterprise-only artifacts such as a full `ProvenanceGraphV1` or broad `CalibrationArtifactV1` may be implemented in later slices, but their first released contract must not contradict these V1 semantics.
 
+### 24.4.3 Binding initial implementation decisions
+
+The following decisions are binding for `us-gaap-public-v1`; implementation does not reopen them without a versioned change to this specification.
+
+| Decision | Initial policy |
+| --- | --- |
+| Reporting basis | U.S. GAAP only. IFRS and other reporting bases return `unsupported`; they require a later accounting profile and dedicated fixtures. |
+| Issuer and security scope | U.S.-domiciled SEC registrant; consolidated issuer facts; one resolved common-equity class for per-share output. Ambiguous issuer, ADR, partnership, preferred-only, or unresolved multi-class allocation returns `abstain` or `unsupported`. |
+| Eligible models | `fcff_dcf` and `transition_fcff_dcf` only. Banks and all other sector-specific models are deferred and abstain in this profile. |
+| Runtime and XBRL validation baseline | Arelle `arelle-release==2.47.4`; the SEC EFM profile loaded by that runtime, with its exact release ID and hash recorded in the validation profile; XBRL US DQC plugin/rules `v31.0.3` with Xule `30055`. Lock package hashes before implementation and pass a startup/version compatibility fixture before enabling accounting operations. Only rules effective for the filing date may block; approved but not-yet-effective DQC rules are recorded as advisory. A later Xule release requires a compatibility fixture before adoption. |
+| Taxonomy package coverage | Bootstrap the immutable package registry with the 2026 SEC-supported standard taxonomies and every taxonomy release referenced by the initial golden filings and their five-year histories. Requests referencing an unregistered/unresolvable taxonomy return `unsupported` or `abstain`; add a package only through reviewed registry release and replay fixtures. |
+| Historical operating baseline | Use the latest five fiscal years available as of the request, requiring at least three complete, comparable annual periods. Quarterly facts may support freshness checks but do not silently replace missing annual history. |
+| Forecast horizon | Five explicit annual forecast periods followed by a steady-state terminal period. Every year-level driver is an explicit traceable assumption; no LLM-generated numeric value or silent default is permitted. |
+| Terminal value | Gordon growth on normalized year-six FCFF. Require positive normalized FCFF, `WACC > terminal_growth`, terminal growth no greater than the trailing ten-year nominal U.S. GDP CAGR available in the same ALFRED vintage (a conservative ceiling, not a forecast), and explicit convergence of margin, reinvestment, and return on invested capital. At the base case, terminal value may contribute at most 85% of enterprise value for `verified`; a contribution above 85% and at most 90% is `provisional` with a warning; above 90% returns `abstain`. Failure returns `abstain`; no alternate terminal formula is selected implicitly. |
+| Cost of capital | Calculate WACC from explicit, traceable components: 10-year U.S. Treasury par yield at or before valuation time; a public U.S. equity-risk-premium and industry-beta reference release available by that time; issuer debt cost and tax treatment; and market-value capital weights. Industry selection uses a versioned SIC-to-reference-industry mapping; ambiguous industry classification requires reviewer selection. A source requiring payment is forbidden. If lawful free market capitalization or a defensible debt-cost input is unavailable, accept only a reviewer-supplied assumption package with source, date, method, and sensitivity; otherwise abstain. No default WACC or current-vintage value may leak into historical replay. |
+| Tax policy | Forecast cash taxes explicitly. A temporary or negative effective tax rate is not extrapolated as steady state; the normalized tax assumption must have a dated, reviewed source and be shown separately from reported tax facts. |
+| Share-based compensation | Keep SBC as an operating expense in FCFF and set the V1 SBC add-back to zero. Include dated award dilution under the treasury-stock method and separately identified non-SBC share changes. Do not add forecast dilution for the same SBC expense. If award data or share scope is unknown, abstain. |
+| Capital bridge | Report cash, gross debt, lease liabilities, preferred claims, non-controlling interests, and other declared adjustments separately. Every component is `present`, `confirmed_absent`, `unknown`, or `unsupported`; any `unknown` component capable of changing equity value blocks `verified` status. |
+| Reconciliation tolerance | After unit and currency normalization, a reported accounting residual must be no greater than the greater of one unit of the least precise contributing fact, USD 1, or 1e-9 times the largest absolute side. A larger residual needs a named presentation, FX, rounding, or mapping exception and cannot be `verified` without reviewer approval. |
+| Arithmetic | Use `Decimal` with precision 34 and `ROUND_HALF_EVEN`; preserve full precision through the calculation and round only for display. Same-runtime golden replay must match the canonical serialized result exactly. Independent challenger tolerance is at most the greater of USD 1 absolute or 1e-9 relative for equity value, and USD 0.000001 per share. |
+| Calibration | Forecast calibration is not required to activate the first release. For V1 revenue-growth and operating-margin targets, the primary metric is MAE in percentage points and the interval is an 80% central interval. Calibration remains inactive until its predeclared, time-separated OOS cohort contains at least 30 eligible labels for the target and model, at least 10 labels in each promoted industry cohort, improves the raw and naive baselines by at least 10% on the primary metric with a two-sided 95% bootstrap interval for the improvement above zero, and has an observed interval coverage whose two-sided 95% Wilson interval has a lower bound of at least 70%. The report still shows raw and naive metrics and uncertainty. The 20-case engineering corpus is never calibration evidence. |
+| Human approval | Data preparation and eligibility may run before approval. Deterministic valuation calculation may run only after an authenticated reviewer approves the exact prepared-input and assumption digest. A changed digest invalidates the approval. |
+| Free-data rule | No paid API, subscription, or data license is required. If a free source's terms do not permit the intended use, it is excluded; the service degrades or abstains instead of scraping around the restriction. |
+
+`ValuationInputV1` has six top-level required groups: `identity` (CIK, issuer name, domicile, reporting basis, security/share-class identity, currency); `valuation_context` (valuation timestamp, source-selection policy, coverage profile); `historical_facts` (canonical fact references for the required field set below); `assumptions` (five-year forecast drivers, WACC components, terminal growth, tax normalization, dilution and scenario); `quality` (fact statuses, issue codes, and eligibility state); and `provenance` (snapshot, mapping, parser, taxonomy, and policy versions). It does not contain approval state or approver identity. The service computes `prepared_input_digest` over a canonical `fundamental-json-v1` serialization of these groups and stores approval in a separate immutable `ApprovalRecordV1`. Missing groups are schema errors. Missing required economic inputs are eligibility failures, never zeroes.
+
+The initial required canonical field set is: revenue; cost of revenue; operating income; income before tax; income tax expense; net income; depreciation and amortization; capital expenditure; operating current assets and liabilities needed for working-capital change; cash and equivalents; current and long-term interest-bearing debt; operating and finance lease costs and liabilities by current/long-term scope; SBC expense; basic and diluted weighted-average shares; and point-in-time common shares outstanding. Preferred claims, non-controlling interests, convertibles, and other share classes must be represented as present/confirmed-absent/unknown even when the model ultimately rejects the issuer. Every fact includes period, unit, currency, scale, dimensions, source accession and context, availability timestamp, original QName, canonical mapping decision, and quality status.
+
+For lease consistency, operating lease expense remains in operating cash flow and operating lease liabilities are disclosed but not deducted again as debt. Finance lease obligations are included in debt, the equity bridge, and WACC weights. If the filing cannot distinguish the two classes or provide the required expense/obligation facts, lease treatment is `unknown` and a verified result is blocked.
+
+The WACC proposal follows one calculation path: `Re = Rf + levered_beta * ERP`; `levered_beta = unlevered_industry_beta * (1 + (1 - normalized_tax_rate) * D/E)`; and `WACC = E/(D+E)*Re + D/(D+E)*Rd*(1-normalized_tax_rate)`. `Rf` is the 10-year U.S. Treasury par yield. `ERP` and the unlevered industry beta come from the latest dated Damodaran public U.S. dataset released no later than the valuation timestamp. `D` is reported interest-bearing debt plus finance-lease obligations at carrying value; `E` is point-in-time common shares multiplied by an approved, lawful, free-source closing price. `Rd` is a reviewer-approved marginal cost-of-debt assumption with cited evidence; trailing interest expense divided by average debt may be shown as a diagnostic but is not silently treated as a marginal borrowing rate. The normalized marginal tax rate is the same reviewed rate used by the forecast. Operating lease costs remain in FCFF and operating-lease liabilities are excluded from `D`; finance-lease obligations are included in `D` and the equity bridge. If any component is unavailable or its source is not permitted for the intended use, require a reviewer-supplied component with provenance or abstain. WACC, beta, ERP, tax, and capital weights are assumptions, not verified accounting facts, and the report must show their sensitivity.
+
+The first schemas use strict unknown-field rejection and no implicit defaults. Their minimum field groups are:
+
+| Artifact | Required V1 content |
+| --- | --- |
+| `SourceSnapshotV1` | schema and snapshot IDs; issuer/security identity; valuation timestamp; captured-at time; source records with URI, role, availability/capture time, HTTP status, content hash, media type and terms reference; accession/form/filed-at records and amendment links; taxonomy manifest reference; parser and policy versions. |
+| `CanonicalFactV1` | fact ID; issuer/security; original concept QName; canonical field and mapping decision ID; typed value or explicit missing state; unit/scale/currency; structured context and dimensions; economic period; available/filed/captured times; accession; taxonomy package hash; source content hash; quality status and issue references. |
+| `ValuationInputV1` | the six top-level groups defined above, excluding approval; references to immutable facts; explicit assumption provenance; requested model/profile; canonical serialized form and prepared digest. |
+| `ApprovalRecordV1` | valuation ID; prepared-input digest; approver identity and authorization evidence; approved-at time; decision; rejection reason when applicable; service contract and policy versions. |
+| `EligibilityReportV1` | input digest; every candidate model/version; required and missing fields; forbidden conditions; quality issues; eligibility status; selected model or abstention code; policy version. |
+| `CalculationArtifactV1` | approved input digest; approval-record reference; model/schema/calculation/policy versions; named DAG nodes with formula ID, input references, Decimal result, unit and provenance; enterprise/equity bridge; per-share result; scenarios/sensitivity; output hash and quality state. |
+| `ReleaseManifestV1` | artifact and input hashes; source snapshot IDs; taxonomy/DTS package hash; Arelle, EFM/DQC plugin and rule signatures; mapping, model, calculation, assumption, quality and calibration versions; runtime/build identity; replay result. |
+
+Stable boundary error codes for V1 are `IDENTITY_AMBIGUOUS`, `SOURCE_UNAVAILABLE`, `SOURCE_RATE_LIMITED`, `FILING_NOT_AVAILABLE_AS_OF`, `TAXONOMY_PACKAGE_INVALID`, `XBRL_VALIDATION_BLOCKED`, `FACT_MAPPING_UNRESOLVED`, `FACT_CONFLICT`, `MODEL_UNSUPPORTED`, `MODEL_INELIGIBLE`, `APPROVAL_REQUIRED`, `APPROVAL_DIGEST_MISMATCH`, `IDEMPOTENCY_CONFLICT`, `REPLAY_MISMATCH`, `DEPENDENCY_INCOMPATIBLE`, and `INTERNAL_FAILURE`. Each error also carries a retryable flag, correlation ID, and safe diagnostic reference. Message text is not a programmatic contract.
+
+The initial taxonomy path uses Arelle with pinned `validate/EFM` and `validate/DQC` plugins and the filing's complete DTS. It does not introduce a custom Arelle plugin. For every filing, create `TaxonomyPackageManifestV1` with the entrypoint, all schema/linkbase/import resources, namespace URIs, taxonomy/package identifiers, source locations, byte hashes, Arelle version, plugin versions, validation profile and package hash. Resolve the DTS into a content-addressed local package; offline replay must not fetch taxonomy resources from the network. Never substitute the newest taxonomy release for the taxonomy referenced by a historical filing. The service maintains an allowlisted taxonomy-package registry from SEC/XBRL-published releases and filing-referenced issuer extensions; a new package or rule release is an additive version, never an in-place update to prior artifacts.
+
+Issuer extensions remain first-class source concepts. The service-owned `CanonicalMappingV1` registry maps a source QName to a canonical field and records the taxonomy package hash, evidence (XBRL anchor and applicable presentation/calculation/definition relationships, label/reference, context, unit and period compatibility), sign/scale transformation, confidence class, reviewer, approval time and mapping-policy version. Labels or embedding similarity alone cannot establish a verified mapping. New or changed mappings enter `unresolved` until reviewed and golden fixtures pass; valuation-critical unresolved or ambiguous mappings block eligibility. Mapping decisions live in the Fundamental service, not in custom Arelle plugins.
+
+The first release uses Arelle's existing EFM/DQC plugins for filing validation. Custom Arelle plugins are deferred. Add one only when a reproducible validation rule requires Arelle lifecycle hooks or model/DTS access that cannot be expressed in the service-owned post-parse quality rules; the plugin must emit normalized findings and may not own canonical accounting mappings, model selection, or valuation policy. Pin plugin code and rule resources by release identifier and content hash. A rule or plugin update creates a new validation profile and requires the affected release cohort to be rerun.
+
+The service operation state machine is `accepted -> preparing -> awaiting_approval -> approved -> calculating -> completed`, with terminal `rejected`, `abstained`, `failed`, and `unavailable` outcomes. `POST /v1/valuations` prepares source evidence, canonical facts, proposed assumptions, quality results, and an eligibility report, then returns `awaiting_approval` only when at least one requested model is eligible. If no model is eligible, preparation ends in `abstained` and no approval is requested. Preparation never runs the valuation graph. `POST /v1/valuations/{id}/approve` requires the approver identity and prepared digest and is the only transition that starts deterministic calculation. `POST /v1/valuations/{id}/reject` records the reason and ends the run without calculating. `GET` returns operation state and artifacts. Replay is permitted only for completed runs and uses the stored manifest offline; it never refetches or changes the approved input.
+
 Do not use current price, analyst target price, or consensus as the realized label for intrinsic value. Those observations may remain in a separate market-signal evaluation.
 
 ### 24.5 Practical release thresholds
@@ -861,8 +932,8 @@ The first profile must enforce these hard requirements:
 - 0 silent model fallbacks and 0 silent provider fallbacks;
 - 100% deterministic replay hash match for the release cohort;
 - 0 blocking XBRL, EFM, DQC, unit, period, or share-scope issues in `verified` artifacts;
-- at least 20 golden cases and at least 5 sector or company-archetype groups;
-- calibration reports show raw, calibrated, and naive metrics, even when calibration is rejected;
+- at least 20 golden cases: at least 10 positive independently checked valuations (at least five per eligible model across five industry groups) and at least 10 explicit abstention/degraded cases;
+- calibration reports show raw and naive metrics where labels exist, calibrated metrics only for an eligible promoted artifact, and an explicit inactive/rejected reason otherwise;
 - every unsupported or abstained case contains a machine-readable reason and missing-evidence list.
 
 The release profile must be declared before running the cohort. It pins numeric tolerances, blocking issue codes, missingness and fallback limits, calibration promotion rules, and interval metrics. Any change creates a new quality-policy version and requires the affected cohort and replay evidence to be rerun.
@@ -955,6 +1026,7 @@ No single external source can prove an intrinsic value is correct. Independent c
 Use these external references and verification channels:
 
 - **SEC and XBRL.** Reconcile canonical facts with the issuer's filing, XBRL contexts, units, dimensions, accession, and filing date. Use Arelle's validation output and the applicable EFM or DQC rules. SEC Company Facts is an index and aggregation of non-custom taxonomy facts for an entity; it cannot replace the complete filing or the issuer's extension taxonomy, so valuation-critical custom facts must be checked against the original Inline XBRL package.
+- **Taxonomy lifecycle.** Use the SEC's [EDGAR XBRL guide and technical specifications](https://www.sec.gov/submit-filings/technical-specifications) to identify filing rules; use the [XBRL US DQC rule catalog and effective dates](https://xbrl.us/home/priorities/data-quality/rules-guidance/) to decide which rules are active for a filing. Use Arelle's [taxonomy package](https://arelle.readthedocs.io/en/latest/) and [plugin development](https://arelle.readthedocs.io/en/latest/plugins/plugins.html) documentation for runtime behavior. Pin the actual release artifacts and hashes used by each service build.
 - **Official macro sources.** Use FRED or ALFRED vintages, Treasury yields, BEA, BLS, Federal Reserve, and FDIC data for their declared domains. Store the vintage or publication time.
 - **Accounting standards.** Use the public SEC reporting guidance, FASB or IFRS taxonomy references, and issuer filing presentation for concept meaning. Do not use a market-data page to resolve accounting semantics.
 - **Model-risk governance.** [SR 26-2](https://www.federalreserve.gov/supervisionreg/srletters/SR2602.htm) replaced SR 11-7 on April 17, 2026. It applies as supervisory guidance to its banking scope and is a reference, not a certification or direct requirement for this service. Use the [NIST AI RMF](https://www.nist.gov/itl/ai-risk-management-framework) when an ML component affects a decision or confidence label.
@@ -1029,17 +1101,9 @@ No phase may introduce a temporary field that is absent from the target contract
 
 ### 25.9 Assumptions and open decisions
 
-The plan assumes that the initial production universe is U.S. public issuers and that SEC filing access remains available under its published terms. The following decisions must be recorded before implementation of the affected phase:
+The binding decisions for the initial service release are recorded in section 24.4.3. There are no unresolved architecture or product-scope decisions that block implementation. Each model release still must publish its own numeric tolerances, quality profile, calibration threshold, and lawful source register before its cohort evaluation; these are versioned release artifacts, not discretionary implementation defaults.
 
-- whether `CanonicalFactV1` lives in `src/shared/artifacts` or remains under the Fundamental capability until a second agent needs it;
-- the exact `ValuationInputV1` field set and unit types;
-- the accepted numerical tolerance for each calculation model;
-- the minimum cohort size for each model family beyond the initial profile;
-- the retention and access policy for raw filing bytes and derived artifacts;
-- the human review rule for extension mappings with low confidence;
-- the independent challenger implementation owner.
-
-These are design decisions, not reasons to defer the foundation. Each decision has a default owner and must be resolved before the phase that consumes it.
+Ownership is fixed as follows: contracts and canonical facts remain under the Fundamental service until another service has a demonstrated need for a shared contract; mapping changes require a Fundamental data-domain reviewer who did not author the mapping; the independent challenger must be maintained separately from production calculation code and reviewed by someone other than the model implementer; raw snapshots remain immutable while any valuation or calibration artifact references them, and unreferenced failed/preparation snapshots may be removed after 90 days. Source-specific terms take precedence over this retention rule.
 
 ## 26. Isolated service architecture decision
 
@@ -1069,27 +1133,36 @@ Use the existing internal-service pattern from [`src/shared/internal_services`](
 
 The first operation set is intentionally small:
 
-- `POST /v1/valuations`: create a valuation request with issuer or security identity, valuation timestamp, requested coverage, scenario policy, and idempotency key;
-- `GET /v1/valuations/{valuation_id}`: return the typed status, value projection, quality status, evidence references, and artifact references;
-- `POST /v1/valuations/{valuation_id}/replay`: run the stored manifest without network access and return the first differing node when replay fails;
+- `POST /v1/valuations`: create and prepare a valuation request with issuer or security identity, valuation timestamp, requested coverage, scenario policy, and idempotency key. It returns `awaiting_approval` with the prepared-input digest, resolved identity, model eligibility, proposed assumptions, quality findings, and evidence references; it does not calculate value.
+- `POST /v1/valuations/{valuation_id}/approve`: require an authenticated approver and the exact prepared-input digest; an approved request starts the deterministic calculation once.
+- `POST /v1/valuations/{valuation_id}/reject`: record the approver and reason, then terminate without calculation.
+- `GET /v1/valuations/{valuation_id}`: return the typed operation state, quality status, evidence references, and artifact references. Include an intrinsic-value projection only after successful calculation.
+- `POST /v1/valuations/{valuation_id}/replay`: replay a completed artifact from the stored manifest without network access and return the first differing node when replay fails;
 - `GET /readyz`: report service readiness without exposing source, cache, or database details.
 
-The request schema must not accept a precomputed intrinsic value or an unverified raw financial report. The response must include:
+The request schema must not accept a precomputed intrinsic value or an unverified raw financial report. The calculation command must bind to the approved input digest. Any input, assumption, model, or source-selection change invalidates prior approval and returns the request to `awaiting_approval`. The response must include:
 
 ```text
 valuation_id
 contract_version and service_version
 issuer and security identity
 valuation_timestamp and source_snapshot_id
-status: verified, provisional, degraded, unsupported, abstain, or error
+operation_state: accepted, preparing, awaiting_approval, approved, calculating, completed, rejected, abstained, failed, or unavailable
+quality_status: verified, provisional, degraded, unsupported, abstain, or error
 selected_model and eligibility report reference
-intrinsic-value projection and uncertainty projection when available
+intrinsic-value projection and uncertainty projection only when calculation completed
 quality issue codes and missing-evidence list
 provenance graph reference and release manifest reference
-correlation_id, created_at, completed_at, and retryability
+prepared_input_digest, approval reference, correlation_id, created_at, completed_at, and retryability
 ```
 
 Large provenance graphs, filing packages, and calibration reports remain behind artifact references. The agent converts the response projection, not the entire service domain graph, into its own DTO.
+
+`operation_state` describes execution lifecycle. `quality_status` describes the evidence and result quality. They are independent fields. For example, an operation can be `completed` with `quality_status: abstain`, or `awaiting_approval` with `quality_status: provisional`; the service must not infer one from the other. `abstained`, `failed`, and `unavailable` are terminal operation states. `unsupported`, `abstain`, and `error` are quality statuses that explain why no verified result exists.
+
+Idempotency is part of the operation contract. A repeated `POST /v1/valuations` with the same authenticated caller, idempotency key, and canonical request returns the original `valuation_id`. Reusing the key with a different canonical request returns `IDEMPOTENCY_CONFLICT`. Repeating approval with the same digest and approver returns the existing operation state and artifact reference. A different digest, a conflicting decision, or an expired approval returns the relevant stable error and never starts a second calculation. The service propagates the caller's absolute `deadline_at`; retries may repeat only an operation that is safe under these idempotency rules.
+
+The HTTP adapter uses `202 Accepted` for create, approve, reject, or replay commands that are queued or still running. It uses `200 OK` for a completed `GET` or completed offline replay. It maps malformed contracts to `400`, failed internal authentication to `401`, missing operations to `404`, idempotency or state conflicts to `409`, and stable domain refusals to `422`. Every non-success response includes the operation error code, `correlation_id`, and retryability. The service never places a numeric value in an error or abstention response.
 
 ### 26.4 Cache and data lifecycle
 
@@ -1164,10 +1237,15 @@ Use primary sources to validate definitions, observations, and tool behavior. Th
 
 ### 27.1 Data and sector definitions
 
-- [SEC EDGAR API documentation](https://www.sec.gov/edgar/sec-api-documentation) and [SEC Company Facts](https://data.sec.gov/api/xbrl/companyfacts/)
+- [SEC EDGAR API documentation](https://www.sec.gov/edgar/sec-api-documentation) and the [SEC Company Facts example endpoint](https://data.sec.gov/api/xbrl/companyfacts/CIK0000320193.json)
+- [SEC EDGAR technical specifications and taxonomies](https://www.sec.gov/submit-filings/technical-specifications)
 - [XBRL specifications](https://specifications.xbrl.org/) and [Arelle documentation](https://arelle.readthedocs.io/)
-- [XBRL US Data Quality Committee](https://xbrl.us/data-quality/)
+- [Arelle plugin system and validation plugin development](https://arelle.readthedocs.io/en/latest/plugins/plugins.html)
+- [Arelle 2.47.4 release](https://github.com/Arelle/Arelle/releases/tag/2.47.4), [DQC v31.0.3 release](https://github.com/DataQualityCommittee/dqc_us_rules/releases/tag/v31.0.3), and [Xule 30055 release](https://github.com/xbrlus/xule/releases/tag/30055)
+- [XBRL US Data Quality Committee rules and effective dates](https://xbrl.us/home/priorities/data-quality/rules-guidance/)
 - [FRED API documentation](https://fred.stlouisfed.org/docs/api/fred/) and [ALFRED vintage API](https://fred.stlouisfed.org/docs/api/fred/alfred_api.html)
+- [Daily U.S. Treasury par yield curve rates](https://home.treasury.gov/policy-issues/financing-the-government/interest-rate-statistics)
+- [Damodaran public data and historical downloads](https://pages.stern.nyu.edu/~adamodar/New_Home_Page/data.html)
 - [Federal Reserve SR 26-2](https://www.federalreserve.gov/supervisionreg/srletters/SR2602.htm), [Basel Framework](https://www.bis.org/basel_framework/), and [NAIC Risk-Based Capital](https://content.naic.org/insurance-topics/risk-based-capital)
 - [Nareit FFO definition](https://www.reit.com/glossary/funds-operations-ffo) and [Nareit AFFO definition](https://www.reit.com/glossary/adjusted-funds-operations-affo)
 - [FERC industry forms](https://www.ferc.gov/industries-data/data-forms) and [18 CFR Part 35](https://www.ecfr.gov/current/title-18/chapter-I/subchapter-B/part-35)
