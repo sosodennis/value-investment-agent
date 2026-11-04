@@ -6,7 +6,6 @@ from pathlib import Path
 from zipfile import ZipFile
 
 import pytest
-
 from fundamental_service.arelle_parser import (
     ArelleParseReportV1,
     ArelleValidationProfileV1,
@@ -24,10 +23,9 @@ from fundamental_service.snapshots import (
     CapturedSource,
     FilesystemContentStore,
     FilesystemSnapshotRepository,
-    SnapshotError,
     SnapshotBuilder,
+    SnapshotError,
 )
-
 
 FIXTURE_ROOT = Path(__file__).parent / "fixtures" / "sec-edgar"
 UTC = timezone.utc
@@ -146,6 +144,108 @@ def test_selection_filters_unavailable_newer_period_before_selecting_latest():
     )
     assert selection.fact is not None
     assert selection.fact.value == Decimal("100")
+
+
+def test_selection_prefers_annual_period_over_quarterly_period_in_one_filing():
+    source = _rebuild_source("d" * 64).model_copy(
+        update={"available_at": datetime(2024, 1, 1, tzinfo=UTC)}
+    )
+    report = _rebuild_report(
+        "d" * 64,
+        facts=(
+            ParsedXbrlFactV1(
+                concept="us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
+                value="100",
+                context_id="ctx-annual",
+                unit="iso4217:USD",
+                entity_identifier="0000320193",
+                period_start=datetime(2023, 1, 1).date(),
+                period_end=datetime(2023, 12, 31).date(),
+                is_numeric=True,
+                consolidation_scope="consolidated",
+            ),
+            ParsedXbrlFactV1(
+                concept="us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
+                value="25",
+                context_id="ctx-quarter",
+                unit="iso4217:USD",
+                entity_identifier="0000320193",
+                period_start=datetime(2023, 10, 1).date(),
+                period_end=datetime(2023, 12, 31).date(),
+                is_numeric=True,
+                consolidation_scope="consolidated",
+            ),
+        ),
+    )
+    candidates = parsed_facts_to_candidates(
+        report,
+        source=source,
+        issuer_id="0000320193",
+        normalized_field="revenue",
+    )
+    selection = select_canonical_fact(candidates, datetime(2024, 2, 1, tzinfo=UTC))
+    assert selection.fact is not None
+    assert selection.fact.period_start == datetime(2023, 1, 1).date()
+    assert selection.fact.period_end == datetime(2023, 12, 31).date()
+
+
+def test_selection_uses_latest_available_filing_over_newer_economic_period():
+    source = _rebuild_source("e" * 64)
+    report = _rebuild_report(
+        "e" * 64,
+        facts=(
+            ParsedXbrlFactV1(
+                concept="us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
+                value="100",
+                context_id="ctx-base",
+                unit="iso4217:USD",
+                entity_identifier="0000320193",
+                period_start=datetime(2023, 1, 1).date(),
+                period_end=datetime(2023, 12, 31).date(),
+                is_numeric=True,
+                consolidation_scope="consolidated",
+            ),
+        ),
+    )
+    base = parsed_facts_to_candidates(
+        report,
+        source=source,
+        issuer_id="0000320193",
+        normalized_field="revenue",
+    )[0]
+    later_available = base.model_copy(
+        update={
+            "candidate_id": "sec-fact-later-available",
+            "value": Decimal("90"),
+            "period_start": datetime(2022, 1, 1).date(),
+            "period_end": datetime(2022, 12, 31).date(),
+            "as_of": datetime(2022, 12, 31, tzinfo=UTC),
+            "available_at": datetime(2024, 2, 1, tzinfo=UTC),
+        }
+    )
+    newer_period = base.model_copy(
+        update={
+            "candidate_id": "sec-fact-newer-period",
+            "value": Decimal("110"),
+            "period_start": datetime(2024, 1, 1).date(),
+            "period_end": datetime(2024, 12, 31).date(),
+            "as_of": datetime(2024, 12, 31, tzinfo=UTC),
+            "available_at": datetime(2024, 1, 1, tzinfo=UTC),
+            "source": base.source.model_copy(
+                update={
+                    "content_hash": "f" * 64,
+                    "accession_number": "0000320193-24-000124",
+                }
+            ),
+            "accession_number": "0000320193-24-000124",
+            "filing_version": "0000320193-24-000124",
+        }
+    )
+    selection = select_canonical_fact(
+        (later_available, newer_period), datetime(2025, 1, 1, tzinfo=UTC)
+    )
+    assert selection.fact is not None
+    assert selection.fact.fact_id == "sec-fact-later-available"
 
 
 def test_captured_sec_bytes_rebuild_to_point_in_time_canonical_fact(tmp_path: Path):
