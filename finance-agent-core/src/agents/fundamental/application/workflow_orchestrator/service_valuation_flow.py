@@ -314,6 +314,26 @@ def _payload_equal(left: object, right: object) -> bool:
         return left == right
 
 
+def _caller_values_preserved(supplied: object, returned: object) -> bool:
+    """Require caller values to survive typed contract normalization."""
+
+    if isinstance(supplied, Mapping):
+        return isinstance(returned, Mapping) and all(
+            key in returned and _caller_values_preserved(value, returned[key])
+            for key, value in supplied.items()
+        )
+    if isinstance(supplied, list | tuple):
+        return (
+            isinstance(returned, list | tuple)
+            and len(supplied) == len(returned)
+            and all(
+                _caller_values_preserved(left, right)
+                for left, right in zip(supplied, returned, strict=True)
+            )
+        )
+    return _payload_equal(supplied, returned)
+
+
 def _approval_request(
     *,
     input_payload: Mapping[str, object],
@@ -599,8 +619,8 @@ async def run_service_valuation_flow(
         validated_input, input_digest, quality_status = _validated_input(
             validation_result
         )
-        if not _payload_equal(
-            validated_input.get("assumptions"), input_payload.get("assumptions")
+        if not _caller_values_preserved(
+            input_payload.get("assumptions"), validated_input.get("assumptions")
         ):
             raise FundamentalServiceFailure(
                 "INPUT_ASSUMPTIONS_CHANGED",
@@ -608,8 +628,8 @@ async def run_service_valuation_flow(
                 retryable=False,
                 status_code=502,
             )
-        if not _payload_equal(
-            validated_input.get("uncertainty"), input_payload.get("uncertainty")
+        if not _caller_values_preserved(
+            input_payload.get("uncertainty"), validated_input.get("uncertainty")
         ):
             raise FundamentalServiceFailure(
                 "INPUT_UNCERTAINTY_CHANGED",
