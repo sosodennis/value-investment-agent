@@ -3,6 +3,9 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 
+from src.agents.fundamental.application.fundamental_service_port import (
+    FundamentalServiceClient,
+)
 from src.agents.fundamental.application.workflow_orchestrator.dto import (
     FundamentalAppContextDTO,
 )
@@ -12,6 +15,9 @@ from src.agents.fundamental.application.workflow_orchestrator.financial_health_f
 )
 from src.agents.fundamental.application.workflow_orchestrator.model_selection_flow import (
     run_model_selection_flow,
+)
+from src.agents.fundamental.application.workflow_orchestrator.service_valuation_flow import (
+    run_service_valuation_flow,
 )
 from src.agents.fundamental.application.workflow_orchestrator.services.model_selection_artifact_service import (
     build_and_store_model_selection_artifact,
@@ -217,4 +223,22 @@ class FundamentalOrchestrator:
             build_params_fn=build_params_fn,
             get_model_runtime_fn=get_model_runtime_fn,
             request_approval_fn=request_approval_fn,
+        )
+
+    async def run_service_valuation(
+        self,
+        state: Mapping[str, object],
+        *,
+        client: FundamentalServiceClient,
+        request_approval_fn: Callable[[JSONObject], object],
+        timeout_seconds: float = 10.0,
+    ) -> FundamentalNodeResult:
+        """Run caller-owned approval around the stateless Fundamental service."""
+
+        return await run_service_valuation_flow(
+            self,
+            state,
+            client=client,
+            request_approval_fn=request_approval_fn,
+            timeout_seconds=timeout_seconds,
         )

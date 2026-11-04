@@ -71,6 +71,7 @@ class RunRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     message: str = Field(min_length=1)
+    valuation_request: dict[str, object] | None = None
 
 
 class ResumeRequest(BaseModel):
@@ -151,7 +152,10 @@ async def start_run(
             organization_id=principal.organization_id,
             membership_id=principal.membership_id,
             thread_id=thread_id,
-            input_data={"message": body.message},
+            input_data={
+                "message": body.message,
+                "valuation_request": body.valuation_request,
+            },
         )
     except Exception as exc:
         raise _map_error(exc) from exc

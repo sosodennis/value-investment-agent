@@ -13,7 +13,7 @@ from .arelle_parser import (
     parse_filing_offline,
 )
 from .contracts import IdentityV1
-from .facts import CanonicalMappingV1, FactSelection
+from .facts import CanonicalFactRepository, CanonicalMappingV1, FactSelection
 from .sec_rebuild import parsed_facts_to_candidates, select_canonical_fact
 from .sec_source import SecEdgarSourceAdapter, sec_source_register
 from .snapshots import (
@@ -32,7 +32,8 @@ class SecIngestionResult:
 
 
 class SecIngestionService:
-    """Keep provider I/O, immutable persistence, parsing, and fact selection in one boundary.
+    """Keep provider I/O, immutable persistence, parsing, and fact selection in one
+    boundary.
 
     Calculation code never uses this service. It receives the returned snapshot
     ID and canonical facts after this bounded ingestion call completes.
@@ -44,8 +45,10 @@ class SecIngestionService:
         source_adapter: SecEdgarSourceAdapter,
         content_store: ContentAddressedStore,
         snapshot_repository: SnapshotRepository,
+        fact_repository: CanonicalFactRepository | None = None,
     ) -> None:
         self.source_adapter = source_adapter
+        self.fact_repository = fact_repository
         self.builder = SnapshotBuilder(
             content_store,
             snapshot_repository,
@@ -136,6 +139,8 @@ class SecIngestionService:
             mapping=mapping,
         )
         selection = select_canonical_fact(candidates, valuation_timestamp)
+        if selection.fact is not None and self.fact_repository is not None:
+            self.fact_repository.publish(selection.fact)
         return SecIngestionResult(
             snapshot=snapshot, parser_report=report, selection=selection
         )

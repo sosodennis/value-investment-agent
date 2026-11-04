@@ -48,10 +48,13 @@ def calculate(
         raise CalculationRefusal(
             "QUALITY_NOT_VERIFIED", "calculation requires verified quality"
         )
-    if request.uncertainty.mode != "none":
+    # The base calculation remains deterministic after caller approval when
+    # explicit uncertainty controls are present. Unapproved controls retain the
+    # explicit abstention used by the offline release cohort.
+    if request.uncertainty.mode != "none" and request.caller_approval is None:
         raise CalculationRefusal(
             "UNCERTAINTY_NOT_IMPLEMENTED",
-            "uncertainty belongs to the uncertainty slice",
+            "uncertainty requires an approved caller-owned calculation",
         )
     wacc = request.assumptions.wacc
     growth = request.assumptions.terminal_growth
@@ -119,6 +122,7 @@ def calculate(
             forecast.revenue_growth,
             forecast.operating_margin,
             forecast.reinvestment_rate,
+            strict=True,
         ),
         start=1,
     ):

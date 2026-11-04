@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import os
+import tempfile
 from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Iterable, Literal
+from pathlib import Path
+from typing import Iterable, Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -18,8 +21,109 @@ from .contracts import (
     QualityStatus,
     Severity,
     SourceProvenanceV1,
+    SourceSnapshotV1,
     XbrlContextV1,
 )
+from .serialization import canonical_bytes
+from .snapshots import SnapshotError
+
+
+class CanonicalFactRepository(Protocol):
+    """Small immutable fact store used by the public snapshot resolver."""
+
+    def publish(self, fact: CanonicalFactV1) -> None: ...
+
+    def get(self, fact_id: str) -> CanonicalFactV1: ...
+
+    def resolve(
+        self,
+        *,
+        snapshot: "SourceSnapshotV1",
+        valuation_timestamp: datetime,
+        required_fields: tuple[str, ...],
+    ) -> tuple[CanonicalFactV1, ...]: ...
+
+
+class FilesystemCanonicalFactRepository:
+    """Append-only JSON facts addressed by their canonical fact ID."""
+
+    def __init__(self, root: Path) -> None:
+        self.root = root
+        self.root.mkdir(parents=True, exist_ok=True)
+
+    def _path(self, fact_id: str) -> Path:
+        if not fact_id or fact_id in {".", ".."} or any(c in fact_id for c in "/\\"):
+            raise ValueError("fact identifier contains an unsafe path")
+        path = (self.root / f"{fact_id}.json").resolve()
+        if self.root.resolve() not in path.parents:
+            raise ValueError("fact path escapes repository root")
+        return path
+
+    def publish(self, fact: CanonicalFactV1) -> None:
+        path = self._path(fact.fact_id)
+        payload = canonical_bytes(fact)
+        if path.exists():
+            if path.read_bytes() != payload:
+                raise ValueError("canonical fact is immutable")
+            return
+        fd, temporary = tempfile.mkstemp(prefix="fact-", dir=self.root)
+        try:
+            with os.fdopen(fd, "wb") as handle:
+                handle.write(payload)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temporary, path)
+        finally:
+            if os.path.exists(temporary):
+                os.unlink(temporary)
+
+    def get(self, fact_id: str) -> CanonicalFactV1:
+        try:
+            return CanonicalFactV1.model_validate_json(self._path(fact_id).read_bytes())
+        except (FileNotFoundError, ValueError) as exc:
+            raise SnapshotError(
+                "FACT_NOT_FOUND", f"fact {fact_id} is unavailable"
+            ) from exc
+
+    def resolve(
+        self,
+        *,
+        snapshot: "SourceSnapshotV1",
+        valuation_timestamp: datetime,
+        required_fields: tuple[str, ...],
+    ) -> tuple[CanonicalFactV1, ...]:
+        source_hashes = {record.content_hash for record in snapshot.source_records}
+        requested = set(required_fields)
+        candidates: list[CanonicalFactV1] = []
+        for path in sorted(self.root.glob("*.json")):
+            try:
+                fact = CanonicalFactV1.model_validate_json(path.read_bytes())
+            except (OSError, ValueError):
+                continue
+            if (
+                fact.issuer_id != snapshot.identity.issuer_id
+                or fact.security_id not in {None, snapshot.identity.security_id}
+                or fact.normalized_field not in requested
+                or fact.quality is not QualityStatus.VERIFIED
+                or fact.available_at > valuation_timestamp
+                or fact.source.content_hash not in source_hashes
+            ):
+                continue
+            candidates.append(fact)
+        selected: list[CanonicalFactV1] = []
+        for field in required_fields:
+            field_candidates = [
+                fact for fact in candidates if fact.normalized_field == field
+            ]
+            if not field_candidates:
+                raise SnapshotError(
+                    "FACT_NOT_FOUND",
+                    f"no verified canonical fact is available for {field}",
+                )
+            selected.append(
+                max(field_candidates, key=lambda fact: (fact.as_of, fact.fact_id))
+            )
+        return tuple(selected)
 
 
 class PinnedValidationProfile(BaseModel):

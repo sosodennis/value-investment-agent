@@ -214,6 +214,39 @@ class SourceSnapshotV1(StrictModel):
         return self
 
 
+class SnapshotResolutionRequestV1(StrictModel):
+    """Caller-owned point-in-time selector for an immutable data snapshot."""
+
+    contract_version: Literal["fundamental.v1"]
+    identity: IdentityV1
+    valuation_timestamp: datetime
+    source_selection_policy: str = Field(min_length=1)
+    coverage_profile: str = Field(min_length=1)
+    required_fields: tuple[str, ...] = Field(min_length=1)
+
+    @field_validator("valuation_timestamp")
+    @classmethod
+    def timestamp_has_timezone(cls, value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("valuation_timestamp must include a timezone")
+        return value
+
+
+class SnapshotResolutionV1(StrictModel):
+    """Immutable references needed to construct a complete valuation input."""
+
+    contract_version: Literal["fundamental.v1"]
+    snapshot_id: str = Field(min_length=1)
+    historical_facts: tuple[str, ...] = Field(min_length=1)
+    identity: IdentityV1
+    valuation_timestamp: datetime
+    source_selection_policy: str = Field(min_length=1)
+    coverage_profile: str = Field(min_length=1)
+    quality: QualityStatus
+    issue_codes: tuple[str, ...] = ()
+    provenance: dict[str, str | None]
+
+
 class MissingValueV1(StrictModel):
     status: Literal["missing", "not_applicable", "unsupported", "unresolved"]
     reason: str = Field(min_length=1)
@@ -342,6 +375,16 @@ class DistributionParameterV1(StrictModel):
         return self
 
 
+class ScenarioInputV1(StrictModel):
+    name: Literal["base", "downside", "upside"]
+    assumptions: dict[str, object] = {}
+
+
+class SensitivityInputV1(StrictModel):
+    path: str = Field(min_length=1)
+    values: tuple[object, ...] = Field(min_length=2)
+
+
 class UncertaintyV1(StrictModel):
     mode: Literal["none", "scenarios", "monte_carlo"]
     parameters: tuple[DistributionParameterV1, ...] = ()
@@ -349,6 +392,8 @@ class UncertaintyV1(StrictModel):
     seed: int | None = None
     correlations: tuple[tuple[str, str, Decimal], ...] = ()
     invalid_draw_policy: Literal["reject", "skip", "abstain"] | None = None
+    scenarios: tuple[ScenarioInputV1, ...] = ()
+    sensitivity: tuple[SensitivityInputV1, ...] = ()
 
     @model_validator(mode="after")
     def sampling_requirements(self) -> "UncertaintyV1":
