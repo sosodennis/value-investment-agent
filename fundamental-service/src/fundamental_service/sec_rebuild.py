@@ -8,13 +8,19 @@ from decimal import Decimal, InvalidOperation
 
 from .arelle_parser import ArelleParseReportV1, ParsedXbrlFactV1
 from .contracts import (
+    CandidateRejectionV1,
     DimensionV1,
     IssueV1,
     Severity,
-    SourceRecordV1,
     SourceProvenanceV1,
+    SourceRecordV1,
 )
-from .facts import CanonicalMappingV1, FactCandidateV1, FactSelection, select_fact
+from .facts import (
+    CanonicalMappingV1,
+    FactCandidateV1,
+    FactSelection,
+    select_fact_groups,
+)
 from .snapshots import SnapshotError
 
 
@@ -163,6 +169,7 @@ def parsed_facts_to_candidates(
                 or "unknown",
                 is_amendment=source.is_amendment,
                 amends_accession=source.amends_accession,
+                supersedes_accession=source.supersedes_accession,
                 amendment_scope=source.amendment_scope,
                 decimals=(
                     int(fact.decimals)
@@ -183,7 +190,7 @@ def parsed_facts_to_candidates(
 def select_canonical_fact(
     candidates: tuple[FactCandidateV1, ...], valuation_timestamp: datetime
 ) -> FactSelection:
-    """Select the consolidated issuer fact while retaining segment evidence."""
+    """Select one fact-key result and refuse ambiguous normalized-field ties."""
     consolidated = tuple(
         candidate
         for candidate in candidates
@@ -202,36 +209,196 @@ def select_canonical_fact(
                 ),
             ),
         )
-    available = tuple(
-        candidate
-        for candidate in consolidated
-        if candidate.available_at <= valuation_timestamp
+    grouped_selections = select_fact_groups(consolidated, valuation_timestamp)
+    rejected = tuple(
+        sorted(
+            {
+                candidate_id
+                for selection in grouped_selections
+                for candidate_id in selection.rejected_candidate_ids
+            }
+            | {
+                candidate.candidate_id
+                for candidate in candidates
+                if candidate not in consolidated
+            }
+        )
     )
-    latest_period = max((candidate.as_of for candidate in available), default=None)
-    period_candidates = (
-        tuple(candidate for candidate in available if candidate.as_of == latest_period)
-        if latest_period is not None
-        else consolidated
+    rejected_reasons = {
+        record.candidate_id: record.reason
+        for selection in grouped_selections
+        for record in selection.rejected_candidate_reasons
+    }
+    rejected_reasons.update(
+        {
+            candidate.candidate_id: "non_consolidated_or_dimensional_candidate"
+            for candidate in candidates
+            if candidate not in consolidated
+        }
     )
-    selection = select_fact(
-        period_candidates,
-        valuation_timestamp,
+    failed_selections = tuple(
+        selection for selection in grouped_selections if selection.fact is None
     )
-    if selection.fact is not None:
-        selection = FactSelection(
-            selection.fact.model_copy(
-                update={"rejected_candidates": selection.rejected_candidate_ids}
+    fatal_issues = tuple(
+        issue
+        for selection in failed_selections
+        for issue in selection.issues
+        if issue.severity is Severity.FATAL
+    )
+    selected = tuple(
+        selection.fact for selection in grouped_selections if selection.fact is not None
+    )
+    if fatal_issues:
+        return FactSelection(
+            None,
+            rejected,
+            fatal_issues,
+            tuple(
+                CandidateRejectionV1(candidate_id=key, reason=value)
+                for key, value in sorted(rejected_reasons.items())
+            ),
+        )
+    if not selected:
+        return FactSelection(
+            None,
+            rejected,
+            tuple(
+                issue for selection in failed_selections for issue in selection.issues
             ),
             tuple(
-                dict.fromkeys(
-                    selection.rejected_candidate_ids
-                    + tuple(
-                        candidate.candidate_id
-                        for candidate in candidates
-                        if candidate not in consolidated
-                    )
-                )
+                CandidateRejectionV1(candidate_id=key, reason=value)
+                for key, value in sorted(rejected_reasons.items())
             ),
-            selection.issues,
         )
-    return selection
+    filing_groups: dict[tuple[str | None, str, str], list] = {}
+    for fact in selected:
+        filing_key = (
+            fact.accession_number,
+            fact.filing_version,
+            fact.source.content_hash,
+        )
+        filing_groups.setdefault(filing_key, []).append(fact)
+    filing_selections = []
+    for filing_candidates in filing_groups.values():
+        latest_end = max(fact.period_end or fact.instant for fact in filing_candidates)
+        latest_period = tuple(
+            fact
+            for fact in filing_candidates
+            if (fact.period_end or fact.instant) == latest_end
+        )
+        durations = {
+            fact.fact_id: (
+                (fact.period_end - fact.period_start).days
+                if fact.period_start is not None and fact.period_end is not None
+                else 0
+            )
+            for fact in latest_period
+        }
+        longest_duration = max(durations.values())
+        preferred = tuple(
+            fact
+            for fact in latest_period
+            if durations[fact.fact_id] == longest_duration
+        )
+        if len(preferred) > 1:
+            rejected_reasons.update(
+                {
+                    fact.fact_id: "ambiguous_period_key_within_filing"
+                    for fact in preferred
+                }
+            )
+            return FactSelection(
+                None,
+                tuple(sorted(set(rejected) | {fact.fact_id for fact in preferred})),
+                (
+                    IssueV1(
+                        code="FACT_CONFLICT",
+                        severity=Severity.FATAL,
+                        message="multiple fact keys remain for the selected period",
+                        field=preferred[0].normalized_field,
+                    ),
+                ),
+                tuple(
+                    CandidateRejectionV1(candidate_id=key, reason=value)
+                    for key, value in sorted(rejected_reasons.items())
+                ),
+            )
+        chosen = preferred[0]
+        rejected_reasons.update(
+            {
+                fact.fact_id: "superseded_by_later_period_within_filing"
+                for fact in filing_candidates
+                if fact.fact_id != chosen.fact_id
+            }
+        )
+        filing_selections.append(chosen)
+    latest_available = max(fact.available_at for fact in filing_selections)
+    latest = tuple(
+        fact for fact in filing_selections if fact.available_at == latest_available
+    )
+    latest_keys = {
+        (
+            fact.concept,
+            fact.context.period_type,
+            fact.period_start,
+            fact.period_end,
+            fact.instant,
+            fact.unit,
+            fact.currency,
+            tuple(sorted((item.name, item.member) for item in fact.context.dimensions)),
+            fact.context.entity_scope,
+            fact.context.consolidation_scope,
+            fact.security_scope,
+            fact.security_id,
+        )
+        for fact in latest
+    }
+    if len(latest_keys) != 1:
+        rejected_reasons.update(
+            {fact.fact_id: "ambiguous_latest_fact_key" for fact in latest}
+        )
+        return FactSelection(
+            None,
+            tuple(sorted(set(rejected) | {fact.fact_id for fact in latest})),
+            (
+                IssueV1(
+                    code="FACT_CONFLICT",
+                    severity=Severity.FATAL,
+                    message="multiple canonical fact keys map to the latest required field",
+                    field=latest[0].normalized_field,
+                ),
+            ),
+            tuple(
+                CandidateRejectionV1(candidate_id=key, reason=value)
+                for key, value in sorted(rejected_reasons.items())
+            ),
+        )
+    fact = min(latest, key=lambda item: item.fact_id)
+    selected_issues = next(
+        selection.issues
+        for selection in grouped_selections
+        if selection.fact is not None and selection.fact.fact_id == fact.fact_id
+    )
+    rejected = tuple(
+        sorted(set(rejected) | {item.fact_id for item in selected if item != fact})
+    )
+    rejected_reasons.update(
+        {
+            item.fact_id: "superseded_by_later_available_filing"
+            for item in selected
+            if item.fact_id != fact.fact_id
+        }
+    )
+    reason_records = tuple(
+        CandidateRejectionV1(candidate_id=key, reason=value)
+        for key, value in sorted(rejected_reasons.items())
+    )
+    fact = fact.model_copy(
+        update={
+            "rejected_candidates": rejected,
+            "rejected_candidate_reasons": reason_records,
+            "point_in_time_policy": "pit-v1",
+            "selection_reason": "latest_available_after_fact_key_point_in_time_selection",
+        }
+    )
+    return FactSelection(fact, rejected, selected_issues, reason_records)

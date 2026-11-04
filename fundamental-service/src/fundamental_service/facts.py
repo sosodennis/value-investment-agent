@@ -13,6 +13,7 @@ from typing import Iterable, Literal, Protocol
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .contracts import (
+    CandidateRejectionV1,
     CanonicalFactV1,
     DimensionV1,
     IssueV1,
@@ -92,38 +93,19 @@ class FilesystemCanonicalFactRepository:
         valuation_timestamp: datetime,
         required_fields: tuple[str, ...],
     ) -> tuple[CanonicalFactV1, ...]:
-        source_hashes = {record.content_hash for record in snapshot.source_records}
-        requested = set(required_fields)
         candidates: list[CanonicalFactV1] = []
         for path in sorted(self.root.glob("*.json")):
             try:
                 fact = CanonicalFactV1.model_validate_json(path.read_bytes())
             except (OSError, ValueError):
                 continue
-            if (
-                fact.issuer_id != snapshot.identity.issuer_id
-                or fact.security_id not in {None, snapshot.identity.security_id}
-                or fact.normalized_field not in requested
-                or fact.quality is not QualityStatus.VERIFIED
-                or fact.available_at > valuation_timestamp
-                or fact.source.content_hash not in source_hashes
-            ):
-                continue
             candidates.append(fact)
-        selected: list[CanonicalFactV1] = []
-        for field in required_fields:
-            field_candidates = [
-                fact for fact in candidates if fact.normalized_field == field
-            ]
-            if not field_candidates:
-                raise SnapshotError(
-                    "FACT_NOT_FOUND",
-                    f"no verified canonical fact is available for {field}",
-                )
-            selected.append(
-                max(field_candidates, key=lambda fact: (fact.as_of, fact.fact_id))
-            )
-        return tuple(selected)
+        return resolve_canonical_facts(
+            candidates,
+            snapshot=snapshot,
+            valuation_timestamp=valuation_timestamp,
+            required_fields=required_fields,
+        )
 
 
 class PinnedValidationProfile(BaseModel):
@@ -231,6 +213,7 @@ class FactCandidateV1(BaseModel):
     filing_version: str = Field(min_length=1)
     is_amendment: bool = False
     amends_accession: str | None = None
+    supersedes_accession: str | None = None
     amendment_scope: Literal["valuation_relevant", "unrelated", "unknown"] | None = None
     decimals: int | None = None
     context_id: str = Field(min_length=1)
@@ -310,6 +293,13 @@ class FactCandidateV1(BaseModel):
             issue_codes=issue_codes,
             mapping_decision_id=self.mapping.decision_id if self.mapping else None,
             mapping_confidence=self.mapping.confidence if self.mapping else None,
+            security_scope=self.security_scope,
+            filing_version=self.filing_version,
+            is_amendment=self.is_amendment,
+            amends_accession=self.amends_accession,
+            supersedes_accession=self.supersedes_accession,
+            amendment_scope=self.amendment_scope,
+            decimals=self.decimals,
         )
 
 
@@ -318,6 +308,7 @@ class FactSelection:
     fact: CanonicalFactV1 | None
     rejected_candidate_ids: tuple[str, ...]
     issues: tuple[IssueV1, ...]
+    rejected_candidate_reasons: tuple[CandidateRejectionV1, ...] = ()
 
 
 def _precision(candidate: FactCandidateV1) -> int:
@@ -341,18 +332,57 @@ def select_fact(
                 ),
             ),
         )
-    eligible = tuple(
-        item for item in candidates if item.available_at <= valuation_timestamp
+    unknown_amendments = tuple(
+        item
+        for item in candidates
+        if item.is_amendment
+        and item.available_at <= valuation_timestamp
+        and item.amendment_scope in {None, "unknown"}
     )
-    rejected = [
-        item.candidate_id
+    if unknown_amendments:
+        return FactSelection(
+            None,
+            tuple(sorted(item.candidate_id for item in candidates)),
+            (
+                IssueV1(
+                    code="FACT_AMENDMENT_SCOPE_UNKNOWN",
+                    severity=Severity.FATAL,
+                    message="eligible amendment facts lack a reviewed amendment scope",
+                    field=unknown_amendments[0].normalized_field,
+                ),
+            ),
+            tuple(
+                CandidateRejectionV1(
+                    candidate_id=item.candidate_id,
+                    reason="eligible_amendment_scope_unknown",
+                )
+                for item in sorted(
+                    candidates, key=lambda candidate: candidate.candidate_id
+                )
+            ),
+        )
+    eligible = tuple(
+        item
+        for item in candidates
+        if item.available_at <= valuation_timestamp
+        and not (item.is_amendment and item.amendment_scope == "unrelated")
+    )
+    rejected_reasons = {
+        item.candidate_id: "not_available_at_valuation_time"
         for item in candidates
         if item.available_at > valuation_timestamp
-    ]
+    }
+    rejected_reasons.update(
+        {
+            item.candidate_id: "unrelated_amendment_cannot_supersede_fact"
+            for item in candidates
+            if item.is_amendment and item.amendment_scope == "unrelated"
+        }
+    )
     if not eligible:
         return FactSelection(
             None,
-            tuple(rejected),
+            tuple(sorted(rejected_reasons)),
             (
                 IssueV1(
                     code="FACT_NOT_AVAILABLE",
@@ -360,26 +390,133 @@ def select_fact(
                     message="no fact was available at valuation time",
                 ),
             ),
+            tuple(
+                CandidateRejectionV1(candidate_id=key, reason=value)
+                for key, value in sorted(rejected_reasons.items())
+            ),
         )
-    latest_available = max(item.available_at for item in eligible)
-    latest = tuple(item for item in eligible if item.available_at == latest_available)
-    precision = max(_precision(item) for item in latest)
-    precise = tuple(item for item in latest if _precision(item) == precision)
-    values = {repr(item.value) for item in precise}
-    if len(values) > 1:
+    by_filing: dict[tuple[str | None, str, str], list[FactCandidateV1]] = {}
+    for item in eligible:
+        filing_key = (
+            item.accession_number,
+            item.filing_version,
+            item.source.content_hash,
+        )
+        by_filing.setdefault(filing_key, []).append(item)
+    filing_selections: list[FactCandidateV1] = []
+    for filing_candidates in by_filing.values():
+        available_in_filing = tuple(
+            item
+            for item in filing_candidates
+            if item.available_at
+            == max(candidate.available_at for candidate in filing_candidates)
+        )
+        precision = max(_precision(item) for item in available_in_filing)
+        precise_in_filing = tuple(
+            item for item in available_in_filing if _precision(item) == precision
+        )
+        if len({repr(item.value) for item in precise_in_filing}) > 1:
+            return FactSelection(
+                None,
+                tuple(
+                    sorted(
+                        set(rejected_reasons)
+                        | {item.candidate_id for item in precise_in_filing}
+                    )
+                ),
+                (
+                    IssueV1(
+                        code="FACT_CONFLICT",
+                        severity=Severity.FATAL,
+                        message="equally precise facts in one filing disagree",
+                        field=precise_in_filing[0].normalized_field,
+                    ),
+                ),
+                tuple(
+                    CandidateRejectionV1(candidate_id=key, reason=value)
+                    for key, value in sorted(
+                        {
+                            **rejected_reasons,
+                            **{
+                                item.candidate_id: "equal_precision_conflict_in_filing"
+                                for item in precise_in_filing
+                            },
+                        }.items()
+                    )
+                ),
+            )
+        selected_in_filing = min(precise_in_filing, key=lambda item: item.candidate_id)
+        filing_selections.append(selected_in_filing)
+        rejected_reasons.update(
+            {
+                item.candidate_id: "lower_precision_within_filing"
+                for item in filing_candidates
+                if item not in precise_in_filing
+                and item.available_at
+                == max(candidate.available_at for candidate in filing_candidates)
+            }
+        )
+        rejected_reasons.update(
+            {
+                item.candidate_id: "superseded_by_later_available_candidate_in_filing"
+                for item in filing_candidates
+                if item not in available_in_filing
+            }
+        )
+        rejected_reasons.update(
+            {
+                item.candidate_id: "equivalent_fact_candidate_in_filing"
+                for item in precise_in_filing
+                if item.candidate_id != selected_in_filing.candidate_id
+            }
+        )
+
+    latest_available = max(item.available_at for item in filing_selections)
+    latest = tuple(
+        item for item in filing_selections if item.available_at == latest_available
+    )
+    rejected_reasons.update(
+        {
+            item.candidate_id: "superseded_by_later_available_filing"
+            for item in filing_selections
+            if item.available_at < latest_available
+        }
+    )
+    if len({repr(item.value) for item in latest}) > 1:
         return FactSelection(
             None,
-            tuple(rejected + [item.candidate_id for item in precise]),
+            tuple(
+                sorted(set(rejected_reasons) | {item.candidate_id for item in latest})
+            ),
             (
                 IssueV1(
                     code="FACT_CONFLICT",
                     severity=Severity.FATAL,
-                    message="equally precise eligible facts disagree",
-                    field=precise[0].normalized_field,
+                    message="equally recent filing facts disagree for the same fact key",
+                    field=latest[0].normalized_field,
                 ),
             ),
+            tuple(
+                CandidateRejectionV1(candidate_id=key, reason=value)
+                for key, value in sorted(
+                    {
+                        **rejected_reasons,
+                        **{
+                            item.candidate_id: "equal_availability_conflict_across_filings"
+                            for item in latest
+                        },
+                    }.items()
+                )
+            ),
         )
-    selected = sorted(precise, key=lambda item: item.candidate_id)[0]
+    selected = min(latest, key=lambda item: item.candidate_id)
+    rejected_reasons.update(
+        {
+            item.candidate_id: "equivalent_fact_candidate_across_filings"
+            for item in latest
+            if item.candidate_id != selected.candidate_id
+        }
+    )
     quality = QualityStatus.VERIFIED
     issues: list[IssueV1] = []
     if selected.mapping is None or selected.mapping.status != "approved":
@@ -392,19 +529,29 @@ def select_fact(
                 field=selected.normalized_field,
             )
         )
+    fact = selected.canonical_fact(
+        quality=quality, issue_codes=tuple(issue.code for issue in issues)
+    ).model_copy(
+        update={
+            "rejected_candidates": tuple(sorted(rejected_reasons)),
+            "rejected_candidate_reasons": tuple(
+                CandidateRejectionV1(candidate_id=candidate_id, reason=reason)
+                for candidate_id, reason in sorted(rejected_reasons.items())
+            ),
+            "point_in_time_policy": "pit-v1",
+            "selection_reason": "latest_available_then_highest_xbrl_decimals",
+        }
+    )
+    reason_records = tuple(
+        CandidateRejectionV1(candidate_id=key, reason=value)
+        for key, value in sorted(rejected_reasons.items())
+    )
+    fact = fact.model_copy(update={"rejected_candidate_reasons": reason_records})
     return FactSelection(
-        selected.canonical_fact(
-            quality=quality, issue_codes=tuple(issue.code for issue in issues)
-        ),
-        tuple(
-            rejected
-            + [
-                item.candidate_id
-                for item in latest
-                if item.candidate_id != selected.candidate_id
-            ]
-        ),
+        fact,
+        tuple(sorted(rejected_reasons)),
         tuple(issues),
+        reason_records,
     )
 
 
@@ -415,6 +562,264 @@ def select_fact_groups(
     for candidate in candidates:
         grouped.setdefault(candidate.fact_key(), []).append(candidate)
     return tuple(select_fact(items, valuation_timestamp) for items in grouped.values())
+
+
+def resolve_canonical_facts(
+    candidates: Iterable[CanonicalFactV1],
+    *,
+    snapshot: SourceSnapshotV1,
+    valuation_timestamp: datetime,
+    required_fields: tuple[str, ...],
+) -> tuple[CanonicalFactV1, ...]:
+    """Resolve stored facts through one shared, deterministic PIT policy."""
+
+    source_records = {item.content_hash: item for item in snapshot.source_records}
+    requested = set(required_fields)
+    eligible: list[CanonicalFactV1] = []
+    rejected_reasons: dict[str, str] = {}
+    for fact in candidates:
+        if fact.normalized_field not in requested:
+            continue
+        source = source_records.get(fact.source.content_hash)
+        if fact.issuer_id != snapshot.identity.issuer_id:
+            rejected_reasons[fact.fact_id] = "issuer_mismatch"
+            continue
+        if fact.security_id not in {None, snapshot.identity.security_id}:
+            rejected_reasons[fact.fact_id] = "security_mismatch"
+            continue
+        if fact.quality is not QualityStatus.VERIFIED:
+            rejected_reasons[fact.fact_id] = "fact_quality_not_verified"
+            continue
+        if source is None:
+            rejected_reasons[fact.fact_id] = "source_not_in_snapshot"
+            continue
+        if (
+            fact.available_at > valuation_timestamp
+            or source.available_at > valuation_timestamp
+        ):
+            rejected_reasons[fact.fact_id] = "not_available_at_valuation_time"
+            continue
+        is_amendment = fact.is_amendment or source.is_amendment
+        amendment_scope = fact.amendment_scope or source.amendment_scope
+        if is_amendment and amendment_scope in {None, "unknown"}:
+            raise SnapshotError(
+                "FACT_AMENDMENT_SCOPE_UNKNOWN",
+                "eligible amendment facts lack a reviewed amendment scope",
+            )
+        if is_amendment and amendment_scope == "unrelated":
+            rejected_reasons[fact.fact_id] = "unrelated_amendment_cannot_supersede_fact"
+            continue
+        eligible.append(fact)
+
+    fact_groups: dict[tuple[object, ...], list[CanonicalFactV1]] = {}
+    for fact in eligible:
+        fact_groups.setdefault(_canonical_fact_key(fact, snapshot), []).append(fact)
+
+    selected_by_key: list[CanonicalFactV1] = []
+    for group in fact_groups.values():
+        chosen, key_rejections = _select_canonical_fact_key(group)
+        rejected_reasons.update(key_rejections)
+        selected_by_key.append(chosen)
+
+    filing_groups: dict[tuple[str | None, str | None, str], list[CanonicalFactV1]] = {}
+    for fact in selected_by_key:
+        filing_key = (
+            fact.accession_number,
+            fact.filing_version,
+            fact.source.content_hash,
+        )
+        filing_groups.setdefault(filing_key, []).append(fact)
+    selected_by_filing: list[CanonicalFactV1] = []
+    for group in filing_groups.values():
+        chosen, key_rejections = _select_latest_period_in_filing(group)
+        rejected_reasons.update(key_rejections)
+        selected_by_filing.append(chosen)
+
+    resolved: list[CanonicalFactV1] = []
+    for field in required_fields:
+        field_facts = [
+            fact for fact in selected_by_filing if fact.normalized_field == field
+        ]
+        if not field_facts:
+            raise SnapshotError(
+                "FACT_NOT_FOUND",
+                f"no verified canonical fact is available for {field}",
+            )
+        latest_available = max(fact.available_at for fact in field_facts)
+        latest_period = tuple(
+            fact for fact in field_facts if fact.available_at == latest_available
+        )
+        latest_keys = {_canonical_fact_key(fact, snapshot) for fact in latest_period}
+        if len(latest_keys) != 1:
+            raise SnapshotError(
+                "FACT_CONFLICT",
+                f"multiple canonical fact keys are eligible for {field}",
+            )
+        chosen = min(latest_period, key=lambda fact: fact.fact_id)
+        rejected_reasons.update(
+            {
+                fact.fact_id: "superseded_by_later_available_filing"
+                for fact in field_facts
+                if fact.available_at < latest_available
+            }
+        )
+        selected_rejections = {
+            fact_id: reason
+            for fact_id, reason in rejected_reasons.items()
+            if fact_id != chosen.fact_id
+        }
+        resolved.append(
+            chosen.model_copy(
+                update={
+                    "rejected_candidates": tuple(sorted(selected_rejections)),
+                    "rejected_candidate_reasons": tuple(
+                        CandidateRejectionV1(candidate_id=fact_id, reason=reason)
+                        for fact_id, reason in sorted(selected_rejections.items())
+                    ),
+                    "point_in_time_policy": "pit-v1",
+                    "selection_reason": "latest_available_after_fact_key_point_in_time_selection",
+                }
+            )
+        )
+    return tuple(resolved)
+
+
+def _select_latest_period_in_filing(
+    candidates: list[CanonicalFactV1],
+) -> tuple[CanonicalFactV1, dict[str, str]]:
+    latest_end = max(fact.period_end or fact.instant for fact in candidates)
+    latest_period = tuple(
+        fact for fact in candidates if (fact.period_end or fact.instant) == latest_end
+    )
+    durations = {
+        fact.fact_id: (
+            (fact.period_end - fact.period_start).days
+            if fact.period_start is not None and fact.period_end is not None
+            else 0
+        )
+        for fact in latest_period
+    }
+    longest_duration = max(durations.values())
+    preferred = tuple(
+        fact for fact in latest_period if durations[fact.fact_id] == longest_duration
+    )
+    if len(preferred) != 1:
+        raise SnapshotError(
+            "FACT_CONFLICT",
+            "multiple fact keys remain for the selected period",
+        )
+    chosen = preferred[0]
+    return chosen, {
+        fact.fact_id: "superseded_by_later_period_within_filing"
+        for fact in candidates
+        if fact.fact_id != chosen.fact_id
+    }
+
+
+def _canonical_precision(fact: CanonicalFactV1) -> int:
+    return fact.decimals if fact.decimals is not None else -(10**9)
+
+
+def _select_canonical_fact_key(
+    candidates: list[CanonicalFactV1],
+) -> tuple[CanonicalFactV1, dict[str, str]]:
+    rejected: dict[str, str] = {}
+    by_filing: dict[tuple[str | None, str | None, str], list[CanonicalFactV1]] = {}
+    for fact in candidates:
+        filing_key = (
+            fact.accession_number,
+            fact.filing_version,
+            fact.source.content_hash,
+        )
+        by_filing.setdefault(filing_key, []).append(fact)
+
+    filing_selections: list[CanonicalFactV1] = []
+    for filing_candidates in by_filing.values():
+        latest_available = max(fact.available_at for fact in filing_candidates)
+        latest = tuple(
+            fact for fact in filing_candidates if fact.available_at == latest_available
+        )
+        rejected.update(
+            {
+                fact.fact_id: "superseded_by_later_available_candidate_in_filing"
+                for fact in filing_candidates
+                if fact.available_at < latest_available
+            }
+        )
+        precision = max(_canonical_precision(fact) for fact in latest)
+        precise = tuple(
+            fact for fact in latest if _canonical_precision(fact) == precision
+        )
+        rejected.update(
+            {
+                fact.fact_id: "lower_precision_within_filing"
+                for fact in latest
+                if fact not in precise
+            }
+        )
+        if len({repr(fact.value) for fact in precise}) > 1:
+            raise SnapshotError(
+                "FACT_CONFLICT",
+                "equally precise facts in one filing disagree for the same fact key",
+            )
+        chosen = min(precise, key=lambda fact: fact.fact_id)
+        rejected.update(
+            {
+                fact.fact_id: "equivalent_fact_candidate_in_filing"
+                for fact in precise
+                if fact.fact_id != chosen.fact_id
+            }
+        )
+        filing_selections.append(chosen)
+
+    latest_available = max(fact.available_at for fact in filing_selections)
+    latest = tuple(
+        fact for fact in filing_selections if fact.available_at == latest_available
+    )
+    rejected.update(
+        {
+            fact.fact_id: "superseded_by_later_available_filing"
+            for fact in filing_selections
+            if fact.available_at < latest_available
+        }
+    )
+    if len({repr(fact.value) for fact in latest}) > 1:
+        raise SnapshotError(
+            "FACT_CONFLICT",
+            "equally recent filings disagree for the same fact key",
+        )
+    chosen = min(latest, key=lambda fact: fact.fact_id)
+    rejected.update(
+        {
+            fact.fact_id: "equivalent_fact_candidate_across_filings"
+            for fact in latest
+            if fact.fact_id != chosen.fact_id
+        }
+    )
+    return chosen, rejected
+
+
+def _canonical_fact_key(
+    fact: CanonicalFactV1, snapshot: SourceSnapshotV1
+) -> tuple[object, ...]:
+    dimensions = tuple(
+        sorted((item.name, item.member) for item in fact.context.dimensions)
+    )
+    return (
+        fact.issuer_id,
+        fact.security_id or snapshot.identity.security_id,
+        fact.concept,
+        fact.context.period_type,
+        fact.period_start,
+        fact.period_end,
+        fact.instant,
+        fact.unit,
+        fact.currency,
+        dimensions,
+        fact.context.entity_scope,
+        fact.context.consolidation_scope,
+        fact.security_scope or snapshot.identity.share_class,
+    )
 
 
 def quality_gate(
