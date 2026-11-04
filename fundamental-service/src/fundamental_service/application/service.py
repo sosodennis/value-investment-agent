@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+from typing import Any
 
 from pydantic import model_validator
 
@@ -25,7 +26,6 @@ from ..operations import (
 )
 from ..replay import (
     ArtifactRecordV1,
-    ArtifactStore,
     ReplayEnvelopeV1,
     ReplayReportV1,
     replay_manifest,
@@ -124,11 +124,13 @@ class FundamentalApplication:
     """Owns use cases while keeping transport and dependency assembly outside."""
 
     snapshot_repository: SnapshotRepository | None
-    artifact_store: ArtifactStore | None
+    artifact_store: Any
     content_store: ContentAddressedStore | None
     config: OperationsConfig
     metrics: OperationalMetrics
     fact_repository: CanonicalFactRepository | None = None
+    metadata_store: Any = None
+    require_metadata: bool = False
 
     @property
     def ready(self) -> bool:
@@ -138,6 +140,10 @@ class FundamentalApplication:
             and self.content_store is not None
             and self.fact_repository is not None
             and self.config.auth_ready
+            and (
+                not self.require_metadata
+                or (self.metadata_store is not None and bool(self.metadata_store.ready))
+            )
         )
 
     def _verify_fact_references(self, value: ValuationInputV1) -> None:
