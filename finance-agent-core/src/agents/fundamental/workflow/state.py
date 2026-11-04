@@ -35,6 +35,8 @@ class FundamentalAnalysisInput(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     company_profile: CompanyProfile | None = None
+    valuation_request: dict[str, object] | None = None
+    fundamental_analysis: FundamentalAnalysisContext = Field(default_factory=dict)
     artifact_references: dict[str, ArtifactReferencePayload] = Field(
         default_factory=dict
     )
@@ -47,6 +49,7 @@ class FundamentalAnalysisInput(BaseModel):
 
 class FundamentalAnalysisOutput(BaseModel):
     fundamental_analysis: FundamentalAnalysisContext
+    valuation_request: dict[str, object] | None = None
     messages: list[object] = Field(default_factory=list)
     company_profile: CompanyProfile | None = None
     artifact_references: dict[str, ArtifactReferencePayload] = Field(
@@ -57,6 +60,7 @@ class FundamentalAnalysisOutput(BaseModel):
 
 
 class FundamentalAnalysisState(TypedDict):
+    valuation_request: Annotated[dict[str, object] | None, last_value]
     company_profile: Annotated[CompanyProfile | None, last_value]
     artifact_references: Annotated[dict[str, ArtifactReferencePayload], merge_dict]
     fundamental_analysis: Annotated[FundamentalAnalysisContext, merge_dict]

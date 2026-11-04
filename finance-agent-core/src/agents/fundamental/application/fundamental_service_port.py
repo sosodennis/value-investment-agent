@@ -11,16 +11,28 @@ from src.agents.fundamental.interface.fundamental_service_contracts import (
 )
 from src.shared.internal_services import InternalPrincipal
 
-FundamentalOperation = Literal["validate", "calculate", "uncertainty", "replay"]
+FundamentalOperation = Literal[
+    "resolve_snapshot", "validate", "calculate", "uncertainty", "replay"
+]
 
 
 class FundamentalServiceFailure(RuntimeError):
     """A typed unavailable/degraded outcome from the service boundary."""
 
-    def __init__(self, code: str, message: str, *, retryable: bool) -> None:
+    def __init__(
+        self,
+        code: str,
+        message: str,
+        *,
+        retryable: bool,
+        status_code: int | None = None,
+        retry_after_ms: int | None = None,
+    ) -> None:
         super().__init__(message)
         self.code = code
         self.retryable = retryable
+        self.status_code = status_code
+        self.retry_after_ms = retry_after_ms
 
 
 class FundamentalServiceClient(Protocol):

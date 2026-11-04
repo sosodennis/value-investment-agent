@@ -2769,6 +2769,10 @@ export interface components {
         RunRequest: {
             /** Message */
             message: string;
+            /** Valuation Request */
+            valuation_request?: {
+                [key: string]: unknown;
+            } | null;
         };
         /** RunResponse */
         RunResponse: {

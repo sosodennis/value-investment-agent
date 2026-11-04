@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 from contextlib import asynccontextmanager
@@ -16,7 +17,9 @@ from pydantic import ValidationError
 from src.shared.internal_services import INTERNAL_CONTRACT_VERSION
 
 from .application import FundamentalApplication, UncertaintyRequestV1
-from .contracts import ValuationInputV1
+from .application.service import normalize_uncertainty_payload
+from .contracts import SnapshotResolutionRequestV1, ValuationInputV1
+from .facts import CanonicalFactRepository, FilesystemCanonicalFactRepository
 from .interface.transport import (
     authorize_operation,
     decode_input,
@@ -60,6 +63,7 @@ def create_app(
     snapshot_repository: SnapshotRepository | None = None,
     artifact_store: ArtifactStore | None = None,
     content_store: ContentAddressedStore | None = None,
+    fact_repository: CanonicalFactRepository | None = None,
     *,
     config: OperationsConfig | None = None,
 ) -> FastAPI:
@@ -72,6 +76,7 @@ def create_app(
         snapshot_repository=snapshot_repository,
         artifact_store=artifact_store,
         content_store=content_store,
+        fact_repository=fact_repository,
         config=runtime_config,
         metrics=metrics,
     )
@@ -198,6 +203,11 @@ def create_app(
     async def get_snapshot(request: Request, snapshot_id: str) -> JSONResponse:
         return success_response(request, application.snapshot(snapshot_id))
 
+    @app.post("/v1/data/snapshots/resolve", response_model=None)
+    async def resolve_snapshot(request: Request) -> JSONResponse:
+        value = decode_input(request, SnapshotResolutionRequestV1)
+        return success_response(request, application.resolve_snapshot(value))
+
     @app.get("/v1/artifacts/{artifact_id}", response_model=None)
     async def get_artifact(request: Request, artifact_id: str) -> JSONResponse:
         return success_response(request, application.artifact(artifact_id))
@@ -216,6 +226,12 @@ def create_app(
 
     @app.post("/v1/valuation/validate", response_model=None)
     async def validate_valuation(request: Request) -> JSONResponse:
+        raw_input = request.state.operation_input
+        if any(key in raw_input for key in ("scenarios", "sensitivity", "monte_carlo")):
+            value = UncertaintyRequestV1.model_validate_json(
+                json.dumps(normalize_uncertainty_payload(raw_input))
+            )
+            return success_response(request, application.validate_uncertainty(value))
         value = decode_input(request, ValuationInputV1)
         return success_response(request, application.validate_valuation(value))
 
@@ -234,7 +250,9 @@ def create_app(
 
     @app.post("/v1/valuation/uncertainty", response_model=None)
     async def uncertainty_valuation(request: Request) -> JSONResponse:
-        value = decode_input(request, UncertaintyRequestV1)
+        value = UncertaintyRequestV1.model_validate_json(
+            json.dumps(normalize_uncertainty_payload(request.state.operation_input))
+        )
         return success_response(request, application.uncertainty_valuation(value))
 
     return app
@@ -252,6 +270,7 @@ def create_runtime_app() -> FastAPI:
         snapshot_repository=FilesystemSnapshotRepository(root / "snapshots"),
         artifact_store=ArtifactStore(root / "artifacts"),
         content_store=FilesystemContentStore(root / "content"),
+        fact_repository=FilesystemCanonicalFactRepository(root / "facts"),
         config=config,
     )
 

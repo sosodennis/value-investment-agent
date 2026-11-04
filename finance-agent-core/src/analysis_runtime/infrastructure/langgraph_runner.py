@@ -309,6 +309,7 @@ class LangGraphRunner(GraphRunner):
             graph_input: Command[object] | dict[str, object] = {
                 "messages": [HumanMessage(content=message)],
                 "user_query": message,
+                "valuation_request": input_data.get("valuation_request"),
                 "company_profile": None,
                 "artifact_references": None,
                 "workflow_activity_statuses": None,

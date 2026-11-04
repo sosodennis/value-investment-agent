@@ -3,6 +3,9 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 
+from src.agents.fundamental.application.fundamental_service_port import (
+    FundamentalServiceClient,
+)
 from src.agents.fundamental.application.workflow_orchestrator.dto import (
     FundamentalAppContextDTO,
 )
@@ -14,29 +17,12 @@ from src.agents.fundamental.application.workflow_orchestrator.ports import (
     FundamentalFinancialStatementsPayload,
     IFundamentalFinancialStatementsProvider,
     IFundamentalForwardSignalsProvider,
-    IFundamentalMarketDataService,
-)
-from src.agents.fundamental.application.workflow_orchestrator.services.valuation_replay_contracts import (
-    INTERNAL_REPLAY_MARKET_SNAPSHOT_KEY,
-)
-from src.agents.fundamental.application.workflow_orchestrator.state_readers import (
-    read_intent_state,
 )
 from src.agents.fundamental.capabilities.artifacts_provenance.public import (
     IFundamentalReportRepo,
 )
-from src.agents.fundamental.capabilities.core_valuation.public import (
-    ParamBuildResult,
-    ValuationModelRegistry,
-    build_params,
-)
 from src.agents.fundamental.capabilities.financial_statements.public import (
-    parse_financial_reports_model,
     parse_financial_statements_payload,
-)
-from src.agents.fundamental.capabilities.forward_signals.public import (
-    ForwardSignalPayload,
-    serialize_forward_signals,
 )
 from src.agents.fundamental.capabilities.model_selection.public import (
     select_valuation_model,
@@ -116,7 +102,8 @@ class FundamentalWorkflowRunner:
     orchestrator: FundamentalOrchestrator
     fetch_financial_reports_fn: IFundamentalFinancialStatementsProvider
     extract_forward_signals_fn: IFundamentalForwardSignalsProvider
-    market_data_service: IFundamentalMarketDataService
+    fundamental_service_client: FundamentalServiceClient
+    service_timeout_seconds: float = 10.0
     financial_payload_years: int = 5
 
     async def run_financial_health(
@@ -160,62 +147,11 @@ class FundamentalWorkflowRunner:
         *,
         request_approval: Callable[[Mapping[str, object]], object],
     ) -> FundamentalNodeResult:
-        market_snapshot_override: dict[str, object] | None = None
-        intent_state = read_intent_state(state)
-        if intent_state.resolved_ticker:
-            snapshot = await self.market_data_service.get_market_snapshot_async(
-                intent_state.resolved_ticker
-            )
-            market_snapshot_override = snapshot.to_mapping()
-
-        def _build_params_with_market_data(
-            model_type: str,
-            ticker: str | None,
-            reports_raw: list[dict[str, object]],
-            forward_signals: list[ForwardSignalPayload] | None,
-        ) -> ParamBuildResult:
-            canonical_reports = parse_financial_reports_model(
-                reports_raw,
-                context="valuation.financial_reports",
-                inject_default_provenance=True,
-            )
-            market_snapshot: dict[str, object] | None = market_snapshot_override
-            if market_snapshot is None and ticker:
-                market_snapshot = self.market_data_service.get_market_snapshot(
-                    ticker
-                ).to_mapping()
-            if market_snapshot is None and forward_signals:
-                market_snapshot = {}
-            if isinstance(market_snapshot, dict) and forward_signals:
-                serialized_signals = serialize_forward_signals(forward_signals)
-                if serialized_signals is not None:
-                    market_snapshot["forward_signals"] = serialized_signals
-            build_result = build_params(
-                model_type,
-                ticker,
-                canonical_reports,
-                market_snapshot=market_snapshot,
-            )
-            if not isinstance(market_snapshot, dict):
-                return build_result
-
-            replay_metadata: dict[str, object] = {}
-            if isinstance(build_result.metadata, Mapping):
-                replay_metadata.update(dict(build_result.metadata))
-            replay_metadata[INTERNAL_REPLAY_MARKET_SNAPSHOT_KEY] = dict(market_snapshot)
-            return ParamBuildResult(
-                params=build_result.params,
-                trace_inputs=build_result.trace_inputs,
-                missing=build_result.missing,
-                assumptions=build_result.assumptions,
-                metadata=replay_metadata,
-            )
-
-        return await self.orchestrator.run_valuation(
+        return await self.orchestrator.run_service_valuation(
             state,
-            build_params_fn=_build_params_with_market_data,
-            get_model_runtime_fn=ValuationModelRegistry.get_model_runtime,
+            client=self.fundamental_service_client,
             request_approval_fn=lambda payload: request_approval(payload),
+            timeout_seconds=self.service_timeout_seconds,
         )
 
 
@@ -224,13 +160,15 @@ def build_fundamental_workflow_runner(
     orchestrator: FundamentalOrchestrator,
     fetch_financial_reports_fn: IFundamentalFinancialStatementsProvider,
     extract_forward_signals_fn: IFundamentalForwardSignalsProvider,
-    market_data_service: IFundamentalMarketDataService,
+    fundamental_service_client: FundamentalServiceClient,
+    service_timeout_seconds: float = 10.0,
     financial_payload_years: int = 5,
 ) -> FundamentalWorkflowRunner:
     return FundamentalWorkflowRunner(
         orchestrator=orchestrator,
         fetch_financial_reports_fn=fetch_financial_reports_fn,
         extract_forward_signals_fn=extract_forward_signals_fn,
-        market_data_service=market_data_service,
+        fundamental_service_client=fundamental_service_client,
+        service_timeout_seconds=service_timeout_seconds,
         financial_payload_years=financial_payload_years,
     )

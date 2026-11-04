@@ -70,6 +70,31 @@ async def _run(
 
 
 @pytest.mark.asyncio
+async def test_runner_passes_caller_valuation_request_into_root_graph() -> None:
+    graph = _EventGraph([])
+    valuation_request = {
+        "contract_version": "fundamental.v1",
+        "assumptions": {"terminal_growth": "0.02"},
+        "uncertainty": {"mode": "none"},
+    }
+
+    _ = [
+        item
+        async for item in LangGraphRunner(graph).run(
+            thread_id="thread-1",
+            run_id="runtime-run-1",
+            input_data={
+                "message": "Value ACME",
+                "valuation_request": valuation_request,
+            },
+            principal_id="principal-1",
+        )
+    ]
+
+    assert graph.calls[0][0]["valuation_request"] == valuation_request
+
+
+@pytest.mark.asyncio
 async def test_runner_uses_callback_ids_and_parent_ids_for_repeated_invocations() -> (
     None
 ):

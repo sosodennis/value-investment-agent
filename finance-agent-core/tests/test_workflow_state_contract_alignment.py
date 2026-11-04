@@ -11,4 +11,5 @@ def test_root_state_contains_only_shared_transport_and_workflow_fields() -> None
         "active_activity_id",
         "workflow_activity_updates",
         "error_logs",
+        "valuation_request",
     }

@@ -12,12 +12,12 @@ from typing import Protocol
 
 from .contracts import (
     IdentityV1,
+    IssueV1,
     QualityStatus,
+    Severity,
     SourceRecordV1,
     SourceRole,
     SourceSnapshotV1,
-    IssueV1,
-    Severity,
 )
 from .serialization import canonical_bytes, is_digest, sha256_digest
 
@@ -102,6 +102,10 @@ class SnapshotRepository(Protocol):
 
     def get(self, snapshot_id: str) -> SourceSnapshotV1: ...
 
+    def find(
+        self, *, identity: IdentityV1, valuation_timestamp: datetime
+    ) -> tuple[SourceSnapshotV1, ...]: ...
+
 
 class FilesystemSnapshotRepository:
     def __init__(self, root: Path) -> None:
@@ -137,6 +141,31 @@ class FilesystemSnapshotRepository:
                 "SNAPSHOT_NOT_FOUND", f"snapshot {snapshot_id} is unavailable"
             ) from exc
         return SourceSnapshotV1.model_validate_json(payload)
+
+    def find(
+        self, *, identity: IdentityV1, valuation_timestamp: datetime
+    ) -> tuple[SourceSnapshotV1, ...]:
+        matches: list[SourceSnapshotV1] = []
+        for path in sorted(self.root.glob("*.json")):
+            try:
+                snapshot = SourceSnapshotV1.model_validate_json(path.read_bytes())
+            except (OSError, ValueError):
+                continue
+            if (
+                snapshot.identity.issuer_id == identity.issuer_id
+                and snapshot.identity.security_id == identity.security_id
+                and snapshot.identity.share_class == identity.share_class
+                and snapshot.identity.currency == identity.currency
+                and snapshot.valuation_timestamp <= valuation_timestamp
+            ):
+                matches.append(snapshot)
+        return tuple(
+            sorted(
+                matches,
+                key=lambda item: (item.valuation_timestamp, item.snapshot_id),
+                reverse=True,
+            )
+        )
 
     def _path(self, snapshot_id: str) -> Path:
         if (
@@ -183,7 +212,8 @@ class SourceRegister:
         if role is not None and entry.role is not role:
             raise SnapshotError(
                 "SOURCE_ROLE_MISMATCH",
-                f"source {source_id} is registered as {entry.role.value}, not {role.value}",
+                f"source {source_id} is registered as {entry.role.value}, "
+                f"not {role.value}",
             )
         return entry
 
@@ -291,7 +321,9 @@ class SnapshotBuilder:
                     IssueV1(
                         code="SOURCE_CAPTURE_ORDER",
                         severity=Severity.ERROR,
-                        message=f"source {source.source_id} is not available before capture",
+                        message=(
+                            f"source {source.source_id} is not available before capture"
+                        ),
                     )
                 )
             if not 200 <= source.http_status < 300:
@@ -299,7 +331,10 @@ class SnapshotBuilder:
                     IssueV1(
                         code="SOURCE_PROVIDER_ERROR",
                         severity=Severity.ERROR,
-                        message=f"source {source.source_id} returned HTTP {source.http_status}",
+                        message=(
+                            f"source {source.source_id} returned HTTP "
+                            f"{source.http_status}"
+                        ),
                     )
                 )
             if source.role is SourceRole.FILING and (
@@ -309,7 +344,10 @@ class SnapshotBuilder:
                     IssueV1(
                         code="FILING_METADATA_MISSING",
                         severity=Severity.ERROR,
-                        message=f"filing source {source.source_id} lacks accession/form/filed_at",
+                        message=(
+                            f"filing source {source.source_id} lacks "
+                            "accession/form/filed_at"
+                        ),
                     )
                 )
             content_hash = self.content_store.put(
@@ -361,7 +399,10 @@ class SnapshotBuilder:
                 IssueV1(
                     code="SOURCE_AFTER_VALUATION",
                     severity=Severity.WARNING,
-                    message="snapshot contains sources published after valuation timestamp; they require point-in-time filtering",
+                    message=(
+                        "snapshot contains sources published after valuation "
+                        "timestamp; they require point-in-time filtering"
+                    ),
                 )
             )
         if any(issue.severity in {Severity.ERROR, Severity.FATAL} for issue in issues):

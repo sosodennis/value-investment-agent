@@ -4,33 +4,24 @@ from __future__ import annotations
 
 import math
 import random
-from statistics import NormalDist
 from decimal import Decimal
+from statistics import NormalDist
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, model_validator
 
 from .calculator import CalculationRefusal, calculate
 from .contracts import (
     CalculationArtifactV1,
     QualityStatus,
+    ScenarioInputV1,
+    SensitivityInputV1,
     UncertaintyV1,
     ValuationInputV1,
 )
 
-
-class ScenarioV1(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    name: Literal["base", "downside", "upside"]
-    assumptions: dict[str, object] = {}
-
-
-class SensitivityRequestV1(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    path: str = Field(min_length=1)
-    values: tuple[object, ...] = Field(min_length=2)
+ScenarioV1 = ScenarioInputV1
+SensitivityRequestV1 = SensitivityInputV1
 
 
 class MonteCarloRequestV1(BaseModel):
@@ -142,7 +133,8 @@ def _draws(spec: UncertaintyV1, rng: random.Random) -> tuple[object, ...]:
             + math.sqrt(1 - coefficient**2) * z_values[right_index]
         )
     return tuple(
-        _draw(parameter, rng, z) for parameter, z in zip(spec.parameters, z_values)
+        _draw(parameter, rng, z)
+        for parameter, z in zip(spec.parameters, z_values, strict=True)
     )
 
 
@@ -153,6 +145,15 @@ def run_uncertainty(
     scenarios: tuple[ScenarioV1, ...] = (),
     sensitivity: tuple[SensitivityRequestV1, ...] = (),
 ) -> UncertaintyReportV1:
+    scenarios = scenarios or tuple(
+        ScenarioV1.model_validate(item) for item in request.uncertainty.scenarios
+    )
+    sensitivity = sensitivity or tuple(
+        SensitivityRequestV1.model_validate(item)
+        for item in request.uncertainty.sensitivity
+    )
+    if monte_carlo is None and request.uncertainty.mode == "monte_carlo":
+        monte_carlo = MonteCarloRequestV1(uncertainty=request.uncertainty)
     deterministic_request = request.model_copy(
         update={"uncertainty": UncertaintyV1(mode="none")}
     ).with_digest()
@@ -198,13 +199,13 @@ def run_uncertainty(
         draw = _draws(spec, rng)
         if any(
             value < parameter.lower or value > parameter.upper
-            for value, parameter in zip(draw, spec.parameters)
+            for value, parameter in zip(draw, spec.parameters, strict=True)
         ):
             invalid["OUT_OF_BOUNDS"] = invalid.get("OUT_OF_BOUNDS", 0) + 1
             continue
         try:
             sampled = deterministic_request
-            for parameter, value in zip(spec.parameters, draw):
+            for parameter, value in zip(spec.parameters, draw, strict=True):
                 sampled = _with_path(sampled, parameter.path, value)
             values.append(calculate(sampled).per_share_value)
         except (CalculationRefusal, ValueError):
