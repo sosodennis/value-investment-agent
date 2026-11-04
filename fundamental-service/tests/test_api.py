@@ -391,6 +391,23 @@ def test_signed_context_claims_are_bound_to_audience_and_organization():
     assert response.json()["error"]["code"] == "internal_context_organization_mismatch"
 
 
+def test_signed_context_rejects_invalid_signature():
+    client = TestClient(
+        create_app(_SnapshotRepository(), fact_repository=_FactRepository())
+    )
+    envelope = make_internal_envelope(make_valuation().model_dump(mode="json"))
+    envelope["context"]["signature"] = "0" * 64
+
+    response = client.post(
+        "/v1/valuation/calculate",
+        headers=auth_headers(),
+        json=envelope,
+    )
+
+    assert response.status_code == 401
+    assert response.json()["error"]["code"] == "internal_context_signature_invalid"
+
+
 def test_artifact_survives_store_restart_and_cache_reset(tmp_path: Path):
     first = ArtifactStore(tmp_path / "artifacts")
     record = first.put("release-1", {"result": "immutable"})
