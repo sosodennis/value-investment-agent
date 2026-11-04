@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 
 import pytest
+
 from fundamental_service.contracts import SourceProvenanceV1, SourceRole
 from fundamental_service.facts import (
     CanonicalMappingV1,

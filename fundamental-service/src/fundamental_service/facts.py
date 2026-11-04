@@ -492,7 +492,9 @@ def select_fact(
                 IssueV1(
                     code="FACT_CONFLICT",
                     severity=Severity.FATAL,
-                    message="equally recent filing facts disagree for the same fact key",
+                    message=(
+                        "equally recent filing facts disagree for the same fact key"
+                    ),
                     field=latest[0].normalized_field,
                 ),
             ),
@@ -502,7 +504,9 @@ def select_fact(
                     {
                         **rejected_reasons,
                         **{
-                            item.candidate_id: "equal_availability_conflict_across_filings"
+                            item.candidate_id: (
+                                "equal_availability_conflict_across_filings"
+                            )
                             for item in latest
                         },
                     }.items()
@@ -677,7 +681,9 @@ def resolve_canonical_facts(
                         for fact_id, reason in sorted(selected_rejections.items())
                     ),
                     "point_in_time_policy": "pit-v1",
-                    "selection_reason": "latest_available_after_fact_key_point_in_time_selection",
+                    "selection_reason": (
+                        "latest_available_after_fact_key_point_in_time_selection"
+                    ),
                 }
             )
         )

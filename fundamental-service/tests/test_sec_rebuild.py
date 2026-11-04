@@ -6,6 +6,7 @@ from pathlib import Path
 from zipfile import ZipFile
 
 import pytest
+
 from fundamental_service.arelle_parser import (
     ArelleParseReportV1,
     ArelleValidationProfileV1,
