@@ -5684,6 +5684,18 @@
             "minLength": 1,
             "title": "Message",
             "type": "string"
+          },
+          "valuation_request": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Valuation Request"
           }
         },
         "required": [
