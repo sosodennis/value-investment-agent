@@ -10,7 +10,12 @@ remains subordinate to the target state.
 
 The service will own its source snapshots, point-in-time facts, model definitions, deterministic calculations, calibration artifacts, replay, and cache. The existing agent will call the service through a versioned API after the service passes the release gate for its declared coverage profile. The service must not import the existing agent's private implementation or share its valuation database.
 
-The first runtime slice freezes the `internal.v1` context and `fundamental.v1` data/calculation contracts in `src/fundamental_service`. It remains independent of `finance-agent-core`; later slices add source ingestion, facts, policies, deterministic calculations, replay, operations, and the typed agent client.
+The service consumes the shared `internal.v1` context from
+`finance-agent-core/src/shared/internal_services` through the supported Docker
+additional build context. Its operation payloads are `{context, input}` and its
+responses carry shared correlation/error metadata around a service-owned
+`fundamental.v1` result. It never imports agent implementation modules or reads
+the agent database/cache.
 
 The parent integration branch is `codex/issue-270-integration` and its dedicated worktree is `../value-investment-agent-issue-270-integration`. Child changes are delivered serially from that tip according to `docs/issue-worktree-lifecycle.md`.
 

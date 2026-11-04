@@ -1,7 +1,10 @@
 """Small fixture constructors shared by service contract tests."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timedelta, timezone
 from decimal import Decimal
+from typing import Mapping
+
+from src.shared.internal_services import InternalPrincipal, build_internal_context
 
 from .contracts import (
     AssumptionsV1,
@@ -73,3 +76,38 @@ def make_valuation() -> ValuationInputV1:
         model_id="fcff_dcf",
         model_version="fcff_dcf-v1",
     )
+
+
+TEST_SERVICE_TOKEN = "test-service-token"
+
+
+def make_internal_envelope(
+    input_payload: Mapping[str, object],
+    *,
+    correlation_id: str = "correlation-test",
+    deadline_at: datetime | None = None,
+    issued_at: datetime | None = None,
+    audience: str = "fundamental-service",
+    organization_id: str | None = "organization-test",
+    membership_id: str | None = "membership-test",
+) -> dict[str, object]:
+    context = build_internal_context(
+        principal=InternalPrincipal(
+            subject_id="subject-test",
+            organization_id=organization_id,
+            membership_id=membership_id,
+        ),
+        correlation_id=correlation_id,
+        deadline_at=deadline_at or datetime.now(UTC) + timedelta(seconds=30),
+        audience=audience,
+        signing_key=TEST_SERVICE_TOKEN,
+        issued_at=issued_at,
+    )
+    return {"context": context.model_dump(mode="json"), "input": dict(input_payload)}
+
+
+def auth_headers(*, organization_id: str = "organization-test") -> dict[str, str]:
+    return {
+        "Authorization": f"Bearer {TEST_SERVICE_TOKEN}",
+        "X-Organization-ID": organization_id,
+    }

@@ -2,12 +2,12 @@ FROM python:3.12-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    FUNDAMENTAL_SERVICE_DATA_ROOT=/var/lib/fundamental \
-    FUNDAMENTAL_SERVICE_REQUIRE_AUTH=true
+    FUNDAMENTAL_SERVICE_DATA_ROOT=/var/lib/fundamental
 
 WORKDIR /app
 
 COPY fundamental-service/pyproject.toml fundamental-service/uv.lock fundamental-service/README.md ./
+COPY --from=internal-contracts internal_services ./src/shared/internal_services
 COPY fundamental-service/src ./src
 
 RUN python -m pip install --no-cache-dir --upgrade pip \

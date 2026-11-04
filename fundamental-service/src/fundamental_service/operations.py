@@ -7,22 +7,18 @@ calculation evidence remain in the immutable stores owned by the service.
 
 from __future__ import annotations
 
-import hmac
 import os
 import threading
 import time
 from collections import defaultdict, deque
 from dataclasses import dataclass
-from datetime import UTC, datetime
-from email.utils import parsedate_to_datetime
+from datetime import UTC, datetime, timedelta
 from typing import Final
 
 from fastapi import Request
 
 AUTH_HEADER: Final[str] = "Authorization"
 CORRELATION_HEADER: Final[str] = "X-Correlation-ID"
-DEADLINE_HEADER: Final[str] = "X-Request-Deadline"
-TIMEOUT_HEADER: Final[str] = "X-Request-Timeout-Ms"
 
 
 class ServiceError(RuntimeError):
@@ -47,9 +43,7 @@ class ServiceError(RuntimeError):
 class OperationsConfig:
     """Environment-backed limits and credentials for one service process."""
 
-    auth_token: str | None = None
-    signing_key: str | None = None
-    require_auth: bool = True
+    service_token: str | None = None
     max_body_bytes: int = 2_000_000
     max_calculation_samples: int = 10_000
     max_forecast_periods: int = 30
@@ -58,8 +52,12 @@ class OperationsConfig:
 
     @classmethod
     def testing(cls) -> OperationsConfig:
-        """A deliberately unauthenticated config for direct unit-test seams."""
-        return cls(require_auth=False, rate_limit_per_minute=10_000)
+        """A deterministic token for direct unit-test seams.
+
+        Tests still exercise the production authentication path and must create a
+        signed ``InternalRequestContext``; there is no unauthenticated bypass.
+        """
+        return cls(service_token="test-service-token", rate_limit_per_minute=10_000)
 
     @classmethod
     def from_env(cls) -> OperationsConfig:
@@ -75,13 +73,8 @@ class OperationsConfig:
                 raise ValueError(f"{name} must be at least {minimum}")
             return value
 
-        require_auth = os.getenv("FUNDAMENTAL_SERVICE_REQUIRE_AUTH", "true").lower()
-        if require_auth not in {"true", "false"}:
-            raise ValueError("FUNDAMENTAL_SERVICE_REQUIRE_AUTH must be true or false")
         return cls(
-            auth_token=os.getenv("FUNDAMENTAL_SERVICE_AUTH_TOKEN"),
-            signing_key=os.getenv("FUNDAMENTAL_SERVICE_SIGNING_KEY"),
-            require_auth=require_auth == "true",
+            service_token=os.getenv("FUNDAMENTAL_SERVICE_TOKEN"),
             max_body_bytes=integer("FUNDAMENTAL_SERVICE_MAX_BODY_BYTES", 2_000_000),
             max_calculation_samples=integer(
                 "FUNDAMENTAL_SERVICE_MAX_CALCULATION_SAMPLES", 10_000
@@ -97,7 +90,7 @@ class OperationsConfig:
 
     @property
     def auth_ready(self) -> bool:
-        return not self.require_auth or bool(self.auth_token and self.signing_key)
+        return bool(self.service_token)
 
 
 class OperationalMetrics:
@@ -185,93 +178,19 @@ def correlation_id(request: Request) -> str:
     return str(uuid4())
 
 
-def _parse_deadline(value: str) -> datetime:
-    try:
-        normalized = value[:-1] + "+00:00" if value.endswith("Z") else value
-        parsed = datetime.fromisoformat(normalized)
-    except ValueError:
-        try:
-            parsed = parsedate_to_datetime(value)
-        except (TypeError, ValueError) as exc:
-            raise ServiceError(
-                "REQUEST_DEADLINE_INVALID",
-                "request deadline is invalid",
-                status_code=400,
-                retryable=False,
-            ) from exc
-    if parsed.tzinfo is None or parsed.utcoffset() is None:
-        raise ServiceError(
-            "REQUEST_DEADLINE_INVALID",
-            "request deadline must include a timezone",
-            status_code=400,
-            retryable=False,
-        )
-    return parsed.astimezone(UTC)
-
-
-def enforce_deadline(request: Request, config: OperationsConfig) -> datetime | None:
-    deadline_header = request.headers.get(DEADLINE_HEADER)
-    timeout_header = request.headers.get(TIMEOUT_HEADER)
-    deadline = _parse_deadline(deadline_header) if deadline_header else None
-    if timeout_header:
-        try:
-            timeout_ms = int(timeout_header)
-        except ValueError as exc:
-            raise ServiceError(
-                "REQUEST_DEADLINE_INVALID",
-                "request timeout is invalid",
-                status_code=400,
-                retryable=False,
-            ) from exc
-        if timeout_ms < 1:
-            raise ServiceError(
-                "REQUEST_DEADLINE_INVALID",
-                "request timeout must be positive",
-                status_code=400,
-                retryable=False,
-            )
-        requested = datetime.now(UTC).timestamp() + timeout_ms / 1000
-        candidate = datetime.fromtimestamp(requested, UTC)
-        deadline = candidate if deadline is None else min(deadline, candidate)
-    if deadline is not None and deadline <= datetime.now(UTC):
+def enforce_deadline(deadline_at: datetime, config: OperationsConfig) -> datetime:
+    """Validate the caller's absolute deadline without restarting its budget."""
+    now = datetime.now(UTC)
+    if deadline_at <= now:
         raise ServiceError(
             "REQUEST_DEADLINE_EXCEEDED",
             "request deadline has expired",
             status_code=408,
             retryable=True,
         )
-    if deadline is not None:
-        remaining_ms = int((deadline - datetime.now(UTC)).total_seconds() * 1000)
-        if remaining_ms > config.max_request_ms:
-            deadline = datetime.now(UTC).timestamp() + config.max_request_ms / 1000
-            deadline = datetime.fromtimestamp(deadline, UTC)
-    return deadline
-
-
-def authenticate(request: Request, config: OperationsConfig) -> str:
-    if not config.require_auth:
-        return "test"
-    if not config.auth_ready:
-        raise ServiceError(
-            "DEPENDENCY_INCOMPATIBLE",
-            "service authentication is not configured",
-            status_code=503,
-            retryable=False,
-        )
-    header = request.headers.get(AUTH_HEADER, "")
-    scheme, _, token = header.partition(" ")
-    if (
-        scheme.lower() != "bearer"
-        or not token
-        or not hmac.compare_digest(token, config.auth_token or "")
-    ):
-        raise ServiceError(
-            "AUTHENTICATION_FAILED",
-            "authentication failed",
-            status_code=401,
-            retryable=False,
-        )
-    return "internal"
+    # Keep a local process budget while preserving the original absolute context
+    # deadline for downstream propagation and response correlation.
+    return min(deadline_at, now + timedelta(milliseconds=config.max_request_ms))
 
 
 def guard_body_size(request: Request, config: OperationsConfig) -> None:

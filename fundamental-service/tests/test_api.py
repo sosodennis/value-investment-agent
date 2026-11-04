@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -5,7 +6,12 @@ from fundamental_service.app import create_app
 from fundamental_service.operations import OperationsConfig
 from fundamental_service.replay import ArtifactStore
 from fundamental_service.snapshots import FilesystemContentStore
-from fundamental_service.testsupport import make_valuation
+from fundamental_service.testsupport import (
+    TEST_SERVICE_TOKEN,
+    auth_headers,
+    make_internal_envelope,
+    make_valuation,
+)
 
 
 class _SnapshotRepository:
@@ -48,12 +54,16 @@ def test_uncertainty_endpoint_runs_the_shared_calculator():
         }
     }
     response = TestClient(create_app(_SnapshotRepository())).post(
-        "/v1/valuation/uncertainty", json=payload
+        "/v1/valuation/uncertainty",
+        headers=auth_headers(),
+        json=make_internal_envelope(payload),
     )
     assert response.status_code == 200
     body = response.json()
-    assert body["valid_samples"] == 10
-    assert body["scenario_results"]
+    assert body["contract_version"] == "internal.v1"
+    assert body["schema_version"] == "fundamental.v1"
+    assert body["result"]["valid_samples"] == 10
+    assert body["result"]["scenario_results"]
 
 
 def test_liveness_is_public_and_readiness_requires_all_runtime_dependencies(
@@ -64,31 +74,27 @@ def test_liveness_is_public_and_readiness_requires_all_runtime_dependencies(
             _SnapshotRepository(),
             ArtifactStore(tmp_path / "artifacts"),
             FilesystemContentStore(tmp_path / "content"),
-            config=OperationsConfig(
-                auth_token="integration-token",
-                signing_key="integration-signing-key",
-            ),
+            config=OperationsConfig(service_token=TEST_SERVICE_TOKEN),
         )
     )
     assert client.get("/livez").status_code == 200
     ready = client.get("/readyz")
     assert ready.status_code == 200
-    assert ready.json() == {"contract_version": "internal.v1", "status": "ok"}
+    assert ready.json() == {"contract_version": "internal.v1", "status": "ready"}
 
 
-def test_internal_endpoints_require_bearer_auth_and_redact_credentials():
+def test_internal_endpoints_require_signed_context_and_redact_credentials():
     client = TestClient(
-        create_app(
-            config=OperationsConfig(
-                auth_token="super-secret-token",
-                signing_key="signing-key",
-            )
-        )
+        create_app(config=OperationsConfig(service_token="super-secret-token"))
     )
-    response = client.get("/v1/data/snapshots/snapshot-1")
+    response = client.request(
+        "GET",
+        "/v1/data/snapshots/snapshot-1",
+        json={"context": {}, "input": {}},
+    )
     assert response.status_code == 401
     body = response.json()
-    assert body["code"] == "AUTHENTICATION_FAILED"
+    assert body["error"]["code"] == "internal_auth_missing"
     assert "super-secret-token" not in response.text
     assert body["correlation_id"] == response.headers["X-Correlation-ID"]
 
@@ -98,16 +104,22 @@ def test_expired_deadline_and_calculation_budget_are_stable_errors():
     client = TestClient(create_app(_SnapshotRepository()))
     expired = client.post(
         "/v1/valuation/uncertainty",
-        headers={"X-Request-Deadline": "2020-01-01T00:00:00Z"},
-        json={**value, "scenarios": [], "sensitivity": [], "monte_carlo": None},
+        headers=auth_headers(),
+        json=make_internal_envelope(
+            {**value, "scenarios": [], "sensitivity": [], "monte_carlo": None},
+            deadline_at=datetime(2020, 1, 1, tzinfo=UTC),
+            issued_at=datetime(2019, 1, 1, tzinfo=UTC),
+        ),
     )
     assert expired.status_code == 408
-    assert expired.json()["code"] == "REQUEST_DEADLINE_EXCEEDED"
+    assert expired.json()["error"]["code"] == "REQUEST_DEADLINE_EXCEEDED"
 
     limited = TestClient(
         create_app(
             _SnapshotRepository(),
-            config=OperationsConfig(max_calculation_samples=2, require_auth=False),
+            config=OperationsConfig(
+                service_token=TEST_SERVICE_TOKEN, max_calculation_samples=2
+            ),
         )
     )
     value["monte_carlo"] = {
@@ -126,18 +138,57 @@ def test_expired_deadline_and_calculation_budget_are_stable_errors():
             ],
         }
     }
-    budget = limited.post("/v1/valuation/uncertainty", json=value)
+    budget = limited.post(
+        "/v1/valuation/uncertainty",
+        headers=auth_headers(),
+        json=make_internal_envelope(value),
+    )
     assert budget.status_code == 422
-    assert budget.json()["code"] == "CALCULATION_BUDGET_EXCEEDED"
+    assert budget.json()["error"]["code"] == "CALCULATION_BUDGET_EXCEEDED"
 
 
 def test_calculation_dependency_outage_is_unavailable_without_local_fallback():
     client = TestClient(create_app())
     response = client.post(
-        "/v1/valuation/calculate", json=make_valuation().model_dump(mode="json")
+        "/v1/valuation/calculate",
+        headers=auth_headers(),
+        json=make_internal_envelope(make_valuation().model_dump(mode="json")),
     )
     assert response.status_code == 503
-    assert response.json()["code"] == "SOURCE_UNAVAILABLE"
+    assert response.json()["error"]["code"] == "source_unavailable"
+
+
+def test_valid_bearer_without_signed_context_is_rejected():
+    client = TestClient(create_app(_SnapshotRepository()))
+    response = client.post(
+        "/v1/valuation/calculate",
+        headers={"Authorization": f"Bearer {TEST_SERVICE_TOKEN}"},
+        json={"input": make_valuation().model_dump(mode="json")},
+    )
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "invalid_request"
+
+
+def test_signed_context_claims_are_bound_to_audience_and_organization():
+    client = TestClient(create_app(_SnapshotRepository()))
+    payload = make_valuation().model_dump(mode="json")
+    wrong_audience = make_internal_envelope(payload, audience="search-service")
+    response = client.post(
+        "/v1/valuation/calculate",
+        headers=auth_headers(),
+        json=wrong_audience,
+    )
+    assert response.status_code == 401
+    assert response.json()["error"]["code"] == "internal_context_claims_invalid"
+
+    mismatched_org = make_internal_envelope(payload)
+    response = client.post(
+        "/v1/valuation/calculate",
+        headers=auth_headers(organization_id="organization-attacker"),
+        json=mismatched_org,
+    )
+    assert response.status_code == 401
+    assert response.json()["error"]["code"] == "internal_context_organization_mismatch"
 
 
 def test_artifact_survives_store_restart_and_cache_reset(tmp_path: Path):
