@@ -303,6 +303,63 @@ async def test_cutover_preserves_input_and_binds_caller_approval() -> None:
 
 
 @pytest.mark.asyncio
+async def test_cutover_accepts_canonical_defaults_without_changing_caller_values() -> (
+    None
+):
+    payload = _input(monte_carlo=True)
+    assumptions = {
+        **payload["assumptions"],
+        "trace": {
+            **payload["assumptions"]["trace"],
+            "expression": None,
+            "inputs": [],
+            "source_refs": [],
+        },
+    }
+    uncertainty = {
+        **payload["uncertainty"],
+        "correlations": [],
+        "scenarios": [],
+        "sensitivity": [],
+    }
+    client = _Client(
+        validated_input={
+            **payload,
+            "assumptions": assumptions,
+            "uncertainty": uncertainty,
+        }
+    )
+    token = set_request_principal(
+        InternalPrincipal(
+            subject_id="caller-1",
+            organization_id="org-1",
+            membership_id="membership-1",
+        )
+    )
+    try:
+        result = await run_service_valuation_flow(
+            _Runtime(),
+            {"fundamental_analysis": {"valuation_request": payload}},
+            client=client,
+            request_approval_fn=lambda _request: {
+                "type": "valuation_approval",
+                "contract_version": "v1",
+                "decision": "approve",
+            },
+        )
+    finally:
+        reset_request_principal(token)
+
+    assert [operation for operation, _ in client.calls] == [
+        "validate",
+        "calculate",
+        "uncertainty",
+    ]
+    assert result.update["fundamental_analysis"]["quality_status"] == "verified"
+    assert result.update["fundamental_analysis"]["valuation_request"] == payload
+
+
+@pytest.mark.asyncio
 async def test_cutover_routes_explicit_monte_carlo_controls_to_uncertainty() -> None:
     client = _Client()
     token = set_request_principal(
@@ -374,6 +431,42 @@ async def test_cutover_rejects_service_assumption_rewrite() -> None:
     assert [operation for operation, _ in client.calls] == ["validate"]
     assert result.update["fundamental_analysis"]["service_failure"]["code"] == (
         "INPUT_ASSUMPTIONS_CHANGED"
+    )
+
+
+@pytest.mark.asyncio
+async def test_cutover_rejects_service_uncertainty_rewrite() -> None:
+    payload = _input(monte_carlo=True)
+    client = _Client(
+        validated_input={
+            **payload,
+            "uncertainty": {**payload["uncertainty"], "seed": 99},
+        }
+    )
+    token = set_request_principal(
+        InternalPrincipal(
+            subject_id="caller-1",
+            organization_id="org-1",
+            membership_id="membership-1",
+        )
+    )
+    try:
+        result = await run_service_valuation_flow(
+            _Runtime(),
+            {"fundamental_analysis": {"valuation_request": payload}},
+            client=client,
+            request_approval_fn=lambda _request: {
+                "type": "valuation_approval",
+                "contract_version": "v1",
+                "decision": "approve",
+            },
+        )
+    finally:
+        reset_request_principal(token)
+
+    assert [operation for operation, _ in client.calls] == ["validate"]
+    assert result.update["fundamental_analysis"]["service_failure"]["code"] == (
+        "INPUT_UNCERTAINTY_CHANGED"
     )
 
 
