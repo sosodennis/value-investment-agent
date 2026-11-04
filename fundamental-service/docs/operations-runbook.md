@@ -19,14 +19,15 @@ docker compose -p value-investment-agent-270-integration \
 The default host port is `18080`; set `FUNDAMENTAL_SERVICE_HOST_PORT` when the
 port is occupied. `/livez` is process liveness and stays free of dependency
 details. `/readyz` is dependency readiness and requires the filesystem snapshot,
-content, and artifact stores plus auth/signing configuration. Both endpoints
-return only the `internal.v1` status shape.
+content, and artifact stores plus the service token. Both endpoints return only
+the `internal.v1` status shape.
 
-All `/v1/` and `/metrics` requests require the configured bearer token in
-`FUNDAMENTAL_SERVICE_AUTH_TOKEN`. Use `X-Correlation-ID` and, when a caller has
-a budget, `X-Request-Deadline` for tracing and deadline propagation. Error
-responses use `FundamentalError`; they never include credentials, provider
-responses, filesystem paths, or raw filing content.
+Every `/v1/` operation requires `Authorization: Bearer <FUNDAMENTAL_SERVICE_TOKEN>`
+and a signed `internal.v1` context in the `{context, input}` body envelope. The
+context binds the `fundamental-service` audience, `finance-agent-core` issuer,
+principal organization and membership, correlation ID, and absolute deadline.
+Error responses use the shared `InternalErrorResponse`; they never include
+credentials, provider responses, filesystem paths, or raw filing content.
 
 ## Recovery checks
 

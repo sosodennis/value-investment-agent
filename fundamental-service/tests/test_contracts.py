@@ -2,15 +2,12 @@ from datetime import datetime, timezone
 from decimal import Decimal
 
 import pytest
-from pydantic import ValidationError
-
 from fundamental_service.contracts import (
     AssumptionsV1,
-    CapitalBridgeAssumptionsV1,
     CallerApprovalEnvelopeV1,
+    CapitalBridgeAssumptionsV1,
     ForecastAssumptionsV1,
     IdentityV1,
-    InternalContextV1,
     QualityStatus,
     TraceV1,
     UncertaintyV1,
@@ -18,6 +15,7 @@ from fundamental_service.contracts import (
     ValuationInputV1,
     WaccAssumptionsV1,
 )
+from pydantic import ValidationError
 
 
 def assumptions() -> AssumptionsV1:
@@ -103,15 +101,3 @@ def test_unknown_fields_and_invalid_digest_are_rejected():
         ValuationInputV1(**{**valuation().model_dump(), "unexpected": True})
     with pytest.raises(ValidationError):
         ValuationInputV1(**{**valuation().model_dump(), "input_digest": "0" * 64})
-
-
-def test_internal_context_requires_timezone_and_has_no_session_fields():
-    context = InternalContextV1(
-        contract_version="internal.v1",
-        correlation_id="corr",
-        caller_service="caller",
-        deadline_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
-        auth_subject="subject",
-        signature="sig",
-    )
-    assert context.deadline_at.tzinfo is not None

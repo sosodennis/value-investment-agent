@@ -1,6 +1,6 @@
 # Backend engineering guide
 
-Date: 2026-10-24 | Status: Canonical | Scope: `finance-agent-core/`, `llm-provider-service/`, `model-inference-service/`, and `search-service/`
+Date: 2026-10-24 | Status: Canonical | Scope: `finance-agent-core/`, `fundamental-service/`, `llm-provider-service/`, `model-inference-service/`, and `search-service/`
 
 This guide defines backend ownership, contracts, naming, resource lifecycle, errors, tests, and SSE behavior. Service-specific contracts and runbooks add operational detail. They do not replace these cross-project rules.
 
@@ -9,7 +9,7 @@ This guide defines backend ownership, contracts, naming, resource lifecycle, err
 - Organize backend code by vertical slice. A slice owns its public entrypoint, API schemas, use cases, domain rules, adapters, and tests where those responsibilities exist.
 - Keep layers inside a slice only when each layer has a real owner responsibility. A small feature does not need empty `domain`, `application`, or `infrastructure` packages.
 - Keep the root workflow and FastAPI application as composition roots. They assemble feature entrypoints and resources; they do not reach into private feature modules to implement behavior.
-- Keep finance-agent core logic in the backend. Keep LLM Provider, Model Inference, and Search as separate deployable services because they own different provider credentials, model runtime, external search integrations, scaling, and resource lifecycles. Do not make every feature a network service.
+- Keep finance-agent core logic in the backend. Keep Fundamental, LLM Provider, Model Inference, and Search as separate deployable services because they own different public data, valuation, provider credentials, model runtime, external search integrations, scaling, and resource lifecycles. Do not make every feature a network service.
 - Keep Auth as a backend feature for now. Share only the authenticated principal and the minimum internal-service context needed by downstream services. A separate identity service is a later architecture decision.
 - Put code in `shared/` only when more than one feature needs the same stable, domain-neutral contract. Service operation schemas, provider choices, and feature policy stay with their owners.
 - Do not split a module to meet a line-count target. Split it when the new boundary makes ownership, dependencies, testing, or change review clearer.
@@ -229,7 +229,7 @@ edges are in the [architecture dependency report](refactor-map/architecture-depe
 | LLM Provider facade and service | Align | Separate the agent-facing client, product settings facade, and provider runtime. Keep provider SDK types in its adapter and test service lifecycle and retry ownership. |
 | Model Inference client and service | Align | Bound model concurrency, deadlines, cancellation, and blocking work. Keep domain-specific fallback in the caller that owns the decision. |
 | Search client, settings, and service | Align | Keep provider response types inside provider adapters. Normalize search results before returning them to agents and preserve organization scoping for keys and preferences. |
-| `shared/internal_services` | Keep narrow | Share principal, correlation, deadline, authentication, error, and readiness primitives. Keep every operation schema with its service. |
+| `shared/internal_services` | Keep narrow | Share principal, correlation, deadline, authentication, error, and readiness primitives. Keep every operation schema with its service, including Fundamental's `fundamental.v1` schemas. |
 | LangGraph checkpoint and runtime projection | Align | Keep graph resume state separate from durable product events and read projections. Define retention for each store. |
 | HTTP and internal-service contracts | Align | Use explicit Pydantic schemas, generated OpenAPI types, stable error codes, UTC timestamps, and operation-specific schema versions. |
 | SSE replay and fan-out | Verified locally | Run one API worker per container by default. PostgreSQL stores the durable event source, and the notification mechanism stays behind an adapter. Local replay, snapshot recovery, reconnect, bounded queues, cancellation, and disconnect tests pass. |

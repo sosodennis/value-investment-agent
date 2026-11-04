@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
-
+from fundamental_service.app import create_app
 from fundamental_service.contracts import IdentityV1, SourceRole
 from fundamental_service.snapshots import (
     CapturedSource,
@@ -15,7 +15,7 @@ from fundamental_service.snapshots import (
     SourceRegister,
     select_available_sources,
 )
-from fundamental_service.app import create_app
+from fundamental_service.testsupport import auth_headers, make_internal_envelope
 
 
 def identity() -> IdentityV1:
@@ -165,9 +165,14 @@ def test_snapshot_manifest_is_readable_without_provider_access(tmp_path: Path):
     client = TestClient(
         create_app(FilesystemSnapshotRepository(tmp_path / "manifests"))
     )
-    response = client.get(f"/v1/data/snapshots/{snapshot.snapshot_id}")
+    response = client.request(
+        "GET",
+        f"/v1/data/snapshots/{snapshot.snapshot_id}",
+        headers=auth_headers(),
+        json=make_internal_envelope({}),
+    )
     assert response.status_code == 200
-    assert response.json()["snapshot_id"] == snapshot.snapshot_id
+    assert response.json()["result"]["snapshot_id"] == snapshot.snapshot_id
 
 
 def test_content_store_rejects_untrusted_hash_path(tmp_path: Path):

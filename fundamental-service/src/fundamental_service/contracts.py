@@ -359,7 +359,8 @@ class UncertaintyV1(StrictModel):
             or self.invalid_draw_policy is None
         ):
             raise ValueError(
-                "monte_carlo requires parameters, samples, seed, and invalid_draw_policy"
+                "monte_carlo requires parameters, samples, seed, "
+                "and invalid_draw_policy"
             )
         paths = {parameter.path for parameter in self.parameters}
         if len(paths) != len(self.parameters):
@@ -593,31 +594,3 @@ class ReleaseManifestV1(StrictModel):
         ):
             raise ValueError("manifest_digest does not match release manifest")
         return self
-
-
-class InternalContextV1(StrictModel):
-    contract_version: Literal["internal.v1"]
-    correlation_id: str = Field(min_length=1)
-    caller_service: str = Field(min_length=1)
-    deadline_at: datetime
-    auth_subject: str = Field(min_length=1)
-    signature: str = Field(min_length=1)
-
-    @field_validator("deadline_at")
-    @classmethod
-    def deadline_is_utc(cls, value: datetime) -> datetime:
-        if value.tzinfo is None:
-            raise ValueError("deadline_at must include timezone")
-        return value.astimezone(timezone.utc)
-
-
-class FundamentalError(StrictModel):
-    code: str = Field(min_length=1)
-    message: str = Field(min_length=1)
-    correlation_id: str = Field(min_length=1)
-    retryable: bool
-
-
-class StatusResponseV1(StrictModel):
-    contract_version: Literal["internal.v1"]
-    status: Literal["ok", "not_ready"]

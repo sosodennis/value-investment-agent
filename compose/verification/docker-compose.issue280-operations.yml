@@ -5,11 +5,11 @@ services:
     build:
       context: ../..
       dockerfile: fundamental-service/Dockerfile
+      additional_contexts:
+        internal-contracts: ../../finance-agent-core/src/shared
     environment:
       FUNDAMENTAL_SERVICE_DATA_ROOT: /var/lib/fundamental
-      FUNDAMENTAL_SERVICE_REQUIRE_AUTH: "true"
-      FUNDAMENTAL_SERVICE_AUTH_TOKEN: ${FUNDAMENTAL_SERVICE_AUTH_TOKEN:-integration-token}
-      FUNDAMENTAL_SERVICE_SIGNING_KEY: ${FUNDAMENTAL_SERVICE_SIGNING_KEY:-integration-signing-key}
+      FUNDAMENTAL_SERVICE_TOKEN: ${FUNDAMENTAL_SERVICE_TOKEN:-integration-token}
       FUNDAMENTAL_SERVICE_MAX_CALCULATION_SAMPLES: ${FUNDAMENTAL_SERVICE_MAX_CALCULATION_SAMPLES:-10000}
       FUNDAMENTAL_SERVICE_MAX_REQUEST_MS: ${FUNDAMENTAL_SERVICE_MAX_REQUEST_MS:-5000}
     ports:
