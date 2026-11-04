@@ -204,7 +204,9 @@ def select_canonical_fact(
                 IssueV1(
                     code="FACT_CONSOLIDATED_MISSING",
                     severity=Severity.ERROR,
-                    message="no consolidated candidate is available for canonical selection",
+                    message=(
+                        "no consolidated candidate is available for canonical selection"
+                    ),
                     field=candidates[0].normalized_field if candidates else None,
                 ),
             ),
@@ -364,7 +366,9 @@ def select_canonical_fact(
                 IssueV1(
                     code="FACT_CONFLICT",
                     severity=Severity.FATAL,
-                    message="multiple canonical fact keys map to the latest required field",
+                    message=(
+                        "multiple canonical fact keys map to the latest required field"
+                    ),
                     field=latest[0].normalized_field,
                 ),
             ),
@@ -398,7 +402,9 @@ def select_canonical_fact(
             "rejected_candidates": rejected,
             "rejected_candidate_reasons": reason_records,
             "point_in_time_policy": "pit-v1",
-            "selection_reason": "latest_available_after_fact_key_point_in_time_selection",
+            "selection_reason": (
+                "latest_available_after_fact_key_point_in_time_selection"
+            ),
         }
     )
     return FactSelection(fact, rejected, selected_issues, reason_records)
