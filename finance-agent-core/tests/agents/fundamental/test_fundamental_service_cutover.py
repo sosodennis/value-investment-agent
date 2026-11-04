@@ -32,12 +32,18 @@ class _Client:
         *,
         failure: Exception | None = None,
         result_digest: str = "a" * 64,
+        uncertainty_base_digest: str = "a" * 64,
+        uncertainty_base_overrides: Mapping[str, object] | None = None,
+        calculation_overrides: Mapping[str, object] | None = None,
         validated_input: Mapping[str, object] | None = None,
         resolved_snapshot: Mapping[str, object] | None = None,
     ):
         self.calls: list[tuple[str, dict[str, object]]] = []
         self.failure = failure
         self.result_digest = result_digest
+        self.uncertainty_base_digest = uncertainty_base_digest
+        self.uncertainty_base_overrides = dict(uncertainty_base_overrides or {})
+        self.calculation_overrides = dict(calculation_overrides or {})
         self.validated_input = validated_input
         self.resolved_snapshot = resolved_snapshot
 
@@ -89,6 +95,8 @@ class _Client:
                     "missing_evidence": [],
                 },
             )
+        valuation_context = input_payload["valuation_context"]
+        provenance = input_payload["provenance"]
         primary = {
             "contract_version": "fundamental.v1",
             "calculation_version": "calculator-v1",
@@ -101,18 +109,47 @@ class _Client:
             "assumptions": input_payload["assumptions"],
             "model_version": input_payload["model_version"],
             "policy_version": "policy-v1",
+            "policy_id": input_payload["policy_id"],
+            "artifact_references": [
+                {
+                    "artifact_id": "calculation-evidence-1",
+                    "artifact_type": "calculation_evidence",
+                    "content_hash": "d" * 64,
+                }
+            ],
+            "trace": {
+                "source_selection_policy": valuation_context["source_selection_policy"],
+                "source_selection_policy_version": "pit-v1",
+                "snapshot_id": valuation_context["data_snapshot_id"],
+                "snapshot_manifest_digest": "e" * 64,
+                "fact_ids": list(input_payload["historical_facts"]),
+                "source_content_hashes": ["f" * 64],
+                "policy_id": input_payload["policy_id"],
+                "policy_version": provenance["policy_version"],
+                "policy_digest": "1" * 64,
+                "model_id": input_payload["model_id"],
+                "model_version": input_payload["model_version"],
+                "assumptions_digest": "2" * 64,
+                "calculation_version": "calculator-v1",
+            },
             "issue_codes": [],
             "missing_evidence": [],
-            "snapshot_id": "snapshot-1",
+            "snapshot_id": valuation_context["data_snapshot_id"],
             "evaluated_at": "2026-11-04T00:00:00Z",
             "correlation_id": "trace-281",
         }
+        primary.update(self.calculation_overrides)
         result: dict[str, object] = primary
         if operation == "uncertainty":
             monte_carlo = input_payload["monte_carlo"]["uncertainty"]
+            base = {
+                **primary,
+                "input_digest": self.uncertainty_base_digest,
+                **self.uncertainty_base_overrides,
+            }
             result = {
                 "status": "verified",
-                "base": {**primary, "input_digest": "c" * 64},
+                "base": base,
                 "requested_samples": monte_carlo["samples"],
                 "valid_samples": monte_carlo["samples"],
                 "invalid_samples": 0,
@@ -185,9 +222,11 @@ def _input(*, monte_carlo: bool = False) -> dict[str, object]:
             "mapping_version": "mapping-v1",
             "parser_version": "parser-v1",
             "taxonomy_version": "taxonomy-v1",
+            "policy_version": "policy-v1",
         },
         "model_id": "fcff_dcf",
         "model_version": "fcff_dcf-v1",
+        "policy_id": "fcff-dcf-policy-v1",
         "input_digest": None,
     }
     if monte_carlo:
@@ -401,7 +440,42 @@ async def test_cutover_routes_explicit_monte_carlo_controls_to_uncertainty() -> 
     ]
     assert summary["seed"] == 7
     assert summary["requested_samples"] == 10
-    assert summary["base"]["input_digest"] == "c" * 64
+    assert summary["base"]["input_digest"] == "a" * 64
+
+
+@pytest.mark.asyncio
+async def test_cutover_rejects_unapproved_assumption_defaults() -> None:
+    payload = _input()
+    client = _Client(
+        validated_input={
+            **payload,
+            "assumptions": {
+                **payload["assumptions"],
+                "terminal_growth_source": "service-default",
+            },
+        }
+    )
+    token = set_request_principal(
+        InternalPrincipal(subject_id="caller-1", organization_id="org-1")
+    )
+    try:
+        result = await run_service_valuation_flow(
+            _Runtime(),
+            {"valuation_request": payload},
+            client=client,
+            request_approval_fn=lambda _request: {
+                "type": "valuation_approval",
+                "contract_version": "v1",
+                "decision": "approve",
+            },
+        )
+    finally:
+        reset_request_principal(token)
+
+    assert [operation for operation, _ in client.calls] == ["validate"]
+    assert result.update["fundamental_analysis"]["service_failure"]["code"] == (
+        "INPUT_ASSUMPTIONS_CHANGED"
+    )
 
 
 @pytest.mark.asyncio
@@ -496,6 +570,110 @@ async def test_cutover_rejects_calculation_digest_mismatch() -> None:
     assert result.update["fundamental_analysis"]["service_failure"]["code"] == (
         "INPUT_DIGEST_MISMATCH"
     )
+
+
+@pytest.mark.asyncio
+async def test_cutover_rejects_uncertainty_base_digest_mismatch() -> None:
+    client = _Client(uncertainty_base_digest="c" * 64)
+    token = set_request_principal(
+        InternalPrincipal(
+            subject_id="caller-1", organization_id="org-1", membership_id="membership-1"
+        )
+    )
+    try:
+        result = await run_service_valuation_flow(
+            _Runtime(),
+            {"valuation_request": _input(monte_carlo=True)},
+            client=client,
+            request_approval_fn=lambda _request: {
+                "type": "valuation_approval",
+                "contract_version": "v1",
+                "decision": "approve",
+            },
+        )
+    finally:
+        reset_request_principal(token)
+
+    assert [operation for operation, _ in client.calls] == [
+        "validate",
+        "calculate",
+        "uncertainty",
+    ]
+    assert result.update["fundamental_analysis"]["service_failure"]["code"] == (
+        "INPUT_DIGEST_MISMATCH"
+    )
+
+
+@pytest.mark.asyncio
+async def test_cutover_rejects_uncertainty_base_artifact_mismatch() -> None:
+    client = _Client(uncertainty_base_overrides={"result_hash": "c" * 64})
+    token = set_request_principal(
+        InternalPrincipal(
+            subject_id="caller-1", organization_id="org-1", membership_id="membership-1"
+        )
+    )
+    try:
+        result = await run_service_valuation_flow(
+            _Runtime(),
+            {"valuation_request": _input(monte_carlo=True)},
+            client=client,
+            request_approval_fn=lambda _request: {
+                "type": "valuation_approval",
+                "contract_version": "v1",
+                "decision": "approve",
+            },
+        )
+    finally:
+        reset_request_principal(token)
+
+    assert [operation for operation, _ in client.calls] == [
+        "validate",
+        "calculate",
+        "uncertainty",
+    ]
+    assert result.update["fundamental_analysis"]["service_failure"]["code"] == (
+        "UPSTREAM_MALFORMED"
+    )
+
+
+@pytest.mark.asyncio
+async def test_cutover_rejects_wrong_model_version_or_missing_artifact_reference() -> (
+    None
+):
+    for overrides in (
+        {"model_version": "fcff_dcf-unrequested-v99"},
+        {"artifact_references": []},
+        {"assumptions": {"terminal_growth": "0.99"}},
+    ):
+        client = _Client(calculation_overrides=overrides)
+        token = set_request_principal(
+            InternalPrincipal(
+                subject_id="caller-1",
+                organization_id="org-1",
+                membership_id="membership-1",
+            )
+        )
+        try:
+            result = await run_service_valuation_flow(
+                _Runtime(),
+                {"valuation_request": _input()},
+                client=client,
+                request_approval_fn=lambda _request: {
+                    "type": "valuation_approval",
+                    "contract_version": "v1",
+                    "decision": "approve",
+                },
+            )
+        finally:
+            reset_request_principal(token)
+
+        assert [operation for operation, _ in client.calls] == [
+            "validate",
+            "calculate",
+        ]
+        assert result.update["fundamental_analysis"]["service_failure"]["code"] == (
+            "UPSTREAM_MALFORMED"
+        )
 
 
 @pytest.mark.asyncio
