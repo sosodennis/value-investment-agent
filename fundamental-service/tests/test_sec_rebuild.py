@@ -9,6 +9,7 @@ import pytest
 
 from fundamental_service.arelle_parser import (
     ArelleParseReportV1,
+    ArelleFindingV1,
     ArelleValidationProfileV1,
     ParsedXbrlFactV1,
     parse_filing_offline,
@@ -53,11 +54,13 @@ def _rebuild_source(content_hash: str) -> SourceRecordV1:
 
 
 def _rebuild_report(content_hash: str, **kwargs: object) -> ArelleParseReportV1:
+    profile = ArelleValidationProfileV1(profile_id="sec-efm-us-gaap-v1")
     return ArelleParseReportV1(
         filing_path="/tmp/filing.htm",
         parser_version="2.47.4",
         taxonomy_version="us-gaap-2024",
-        validation_profile=ArelleValidationProfileV1(profile_id="sec-efm-us-gaap-v1"),
+        validation_profile=profile,
+        validation_profile_digest=profile.digest(),
         parsed_at=datetime(2026, 1, 1, tzinfo=UTC),
         source_content_hash=content_hash,
         **kwargs,
@@ -66,7 +69,16 @@ def _rebuild_report(content_hash: str, **kwargs: object) -> ArelleParseReportV1:
 
 def test_blocking_parser_finding_prevents_fact_rebuild():
     source = _rebuild_source("a" * 64)
-    report = _rebuild_report("a" * 64, finding_codes=("IOerror",))
+    report = _rebuild_report(
+        "a" * 64,
+        findings=(
+            ArelleFindingV1(
+                code="IOerror",
+                severity="error",
+                message="taxonomy resource is unavailable",
+            ),
+        ),
+    )
     with pytest.raises(SnapshotError) as error:
         parsed_facts_to_candidates(
             report,

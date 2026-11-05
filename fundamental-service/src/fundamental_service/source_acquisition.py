@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
@@ -69,12 +70,33 @@ class SecAcquisitionSettings:
     taxonomy_manifest_id: str
     taxonomy_version: str
     taxonomy_cache_sha256: str
+    edgar_plugin_dir: Path
+    xule_plugin_dir: Path
+    dqc_ruleset_path: Path
+    edgar_plugin_sha256: str
+    xule_plugin_sha256: str
+    dqc_ruleset_sha256: str
 
     def __post_init__(self) -> None:
         if not self.taxonomy_cache_dir.is_dir():
             raise ValueError("pinned SEC taxonomy cache is unavailable")
         if _directory_hash(self.taxonomy_cache_dir) != self.taxonomy_cache_sha256:
             raise ValueError("pinned SEC taxonomy cache hash does not match")
+        if not self.edgar_plugin_dir.is_dir():
+            raise ValueError("pinned EDGAR validation plugin is unavailable")
+        if not self.xule_plugin_dir.is_dir():
+            raise ValueError("pinned XULE validation plugin is unavailable")
+        if not self.dqc_ruleset_path.is_file():
+            raise ValueError("pinned DQC ruleset is unavailable")
+        if _directory_hash(self.edgar_plugin_dir) != self.edgar_plugin_sha256:
+            raise ValueError("pinned EDGAR validation plugin hash does not match")
+        if _directory_hash(self.xule_plugin_dir) != self.xule_plugin_sha256:
+            raise ValueError("pinned XULE validation plugin hash does not match")
+        if (
+            hashlib.sha256(self.dqc_ruleset_path.read_bytes()).hexdigest()
+            != self.dqc_ruleset_sha256
+        ):
+            raise ValueError("pinned DQC ruleset hash does not match")
 
 
 @dataclass(frozen=True)
@@ -333,7 +355,16 @@ class SecAcquisitionUseCase:
             mappings=mappings,
             reference_sources=(submissions_source, index_source),
             dts_filenames=dts_filenames,
-            profile=ArelleValidationProfileV1(profile_id="sec-efm-us-gaap-v1"),
+            profile=ArelleValidationProfileV1(
+                profile_id="sec-efm-us-gaap-v1",
+                validation_mode="sec-efm-dqc",
+                edgar_plugin_dir=self.settings.edgar_plugin_dir,
+                xule_plugin_dir=self.settings.xule_plugin_dir,
+                dqc_ruleset_path=self.settings.dqc_ruleset_path,
+                edgar_plugin_sha256=self.settings.edgar_plugin_sha256,
+                xule_plugin_sha256=self.settings.xule_plugin_sha256,
+                dqc_ruleset_sha256=self.settings.dqc_ruleset_sha256,
+            ),
             form=filing.form,
             is_amendment=filing.is_amendment,
             amendment_scope="unknown" if filing.is_amendment else None,
@@ -651,6 +682,12 @@ def build_runtime_sec_acquisition(
     taxonomy_manifest_id: str | None,
     taxonomy_version: str | None,
     taxonomy_cache_sha256: str | None,
+    edgar_plugin_dir: str | None,
+    xule_plugin_dir: str | None,
+    dqc_ruleset_path: str | None,
+    edgar_plugin_sha256: str | None,
+    xule_plugin_sha256: str | None,
+    dqc_ruleset_sha256: str | None,
     authorized_organizations: frozenset[str],
 ) -> SecAcquisitionUseCase | None:
     values = (
@@ -660,6 +697,12 @@ def build_runtime_sec_acquisition(
         taxonomy_manifest_id,
         taxonomy_version,
         taxonomy_cache_sha256,
+        edgar_plugin_dir,
+        xule_plugin_dir,
+        dqc_ruleset_path,
+        edgar_plugin_sha256,
+        xule_plugin_sha256,
+        dqc_ruleset_sha256,
     )
     if not all(values):
         return None
@@ -668,6 +711,12 @@ def build_runtime_sec_acquisition(
         taxonomy_manifest_id=taxonomy_manifest_id or "",
         taxonomy_version=taxonomy_version or "",
         taxonomy_cache_sha256=taxonomy_cache_sha256 or "",
+        edgar_plugin_dir=Path(edgar_plugin_dir or ""),
+        xule_plugin_dir=Path(xule_plugin_dir or ""),
+        dqc_ruleset_path=Path(dqc_ruleset_path or ""),
+        edgar_plugin_sha256=edgar_plugin_sha256 or "",
+        xule_plugin_sha256=xule_plugin_sha256 or "",
+        dqc_ruleset_sha256=dqc_ruleset_sha256 or "",
     )
     adapter = SecEdgarSourceAdapter(
         policy=SecRequestPolicy(user_agent=user_agent or ""),

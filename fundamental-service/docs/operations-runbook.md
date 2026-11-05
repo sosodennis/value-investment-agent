@@ -70,10 +70,14 @@ retryable `INGESTION_IN_PROGRESS` or deadline response.
 The deployment must mount a reviewed, immutable offline Arelle taxonomy cache
 and set `FUNDAMENTAL_SEC_TAXONOMY_CACHE_DIR`,
 `FUNDAMENTAL_SEC_TAXONOMY_MANIFEST_ID`, `FUNDAMENTAL_SEC_TAXONOMY_VERSION`,
-and `FUNDAMENTAL_SEC_TAXONOMY_CACHE_SHA256`. Startup composition disables the
-ingestion route when these pins or the SEC User-Agent are absent. The runtime
-recomputes the cache directory hash and rejects a request whose taxonomy pins
-do not match. Do not mount the test taxonomy fixture as production evidence.
+and `FUNDAMENTAL_SEC_TAXONOMY_CACHE_SHA256`. It must also mount the pinned
+EDGAR validation plugin, XULE plugin, and DQC ruleset and set their paths and
+SHA-256 values through `FUNDAMENTAL_SEC_EDGAR_PLUGIN_*`,
+`FUNDAMENTAL_SEC_XULE_PLUGIN_*`, and `FUNDAMENTAL_SEC_DQC_RULESET_*`. Startup
+composition disables the ingestion route when any of these pins or the SEC
+User-Agent are absent. The runtime recomputes every directory/file hash and
+rejects a request whose taxonomy or validation pins do not match. Do not mount
+the test taxonomy or validation fixtures as production evidence.
 
 The provider returns only a typed snapshot reference, manifest digest,
 canonical fact IDs, source hashes, filing metadata, quality, missing evidence,

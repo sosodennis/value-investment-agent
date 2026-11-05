@@ -104,7 +104,7 @@ def test_captured_sec_filing_rebuilds_with_pinned_taxonomy_cache_without_network
                 date.fromisoformat(record["end"])
             }
             assert all(fact.context_id for fact in parsed_facts)
-    assert report.finding_codes
+    assert report.validation_profile_digest == report.validation_profile.digest()
     assert attempted_network == []
 
 

@@ -552,6 +552,12 @@ def create_runtime_app() -> FastAPI:
     taxonomy_manifest_id = os.getenv("FUNDAMENTAL_SEC_TAXONOMY_MANIFEST_ID")
     taxonomy_version = os.getenv("FUNDAMENTAL_SEC_TAXONOMY_VERSION")
     taxonomy_cache_sha256 = os.getenv("FUNDAMENTAL_SEC_TAXONOMY_CACHE_SHA256")
+    edgar_plugin_dir = os.getenv("FUNDAMENTAL_SEC_EDGAR_PLUGIN_DIR")
+    xule_plugin_dir = os.getenv("FUNDAMENTAL_SEC_XULE_PLUGIN_DIR")
+    dqc_ruleset_path = os.getenv("FUNDAMENTAL_SEC_DQC_RULESET_PATH")
+    edgar_plugin_sha256 = os.getenv("FUNDAMENTAL_SEC_EDGAR_PLUGIN_SHA256")
+    xule_plugin_sha256 = os.getenv("FUNDAMENTAL_SEC_XULE_PLUGIN_SHA256")
+    dqc_ruleset_sha256 = os.getenv("FUNDAMENTAL_SEC_DQC_RULESET_SHA256")
     sec_acquisition = build_runtime_sec_acquisition(
         metadata=metadata_store,
         content_store=content_store,
@@ -563,6 +569,12 @@ def create_runtime_app() -> FastAPI:
         taxonomy_manifest_id=taxonomy_manifest_id,
         taxonomy_version=taxonomy_version,
         taxonomy_cache_sha256=taxonomy_cache_sha256,
+        edgar_plugin_dir=edgar_plugin_dir,
+        xule_plugin_dir=xule_plugin_dir,
+        dqc_ruleset_path=dqc_ruleset_path,
+        edgar_plugin_sha256=edgar_plugin_sha256,
+        xule_plugin_sha256=xule_plugin_sha256,
+        dqc_ruleset_sha256=dqc_ruleset_sha256,
         authorized_organizations=config.ingestion_authorized_organizations,
     )
     return create_app(

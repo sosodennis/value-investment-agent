@@ -8,7 +8,7 @@ import tempfile
 from datetime import date, datetime, timedelta, timezone
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -31,6 +31,7 @@ class ArelleValidationProfileV1(BaseModel):
     dqc_version: str = "v31.0.3"
     xule_version: str = "30055"
     offline: bool = True
+    validation_mode: Literal["parse-only", "sec-efm-dqc"] = "parse-only"
     profile_id: str = Field(min_length=1)
     edgar_plugin_dir: Path | None = None
     xule_plugin_dir: Path | None = None
@@ -62,6 +63,12 @@ class ArelleValidationProfileV1(BaseModel):
         ):
             raise ValueError(
                 "validation plugin paths and hashes must be pinned together"
+            )
+        if self.validation_mode == "sec-efm-dqc" and not all(
+            item is not None for item in configured
+        ):
+            raise ValueError(
+                "SEC EFM/DQC validation requires pinned plugin paths and hashes"
             )
         return self
 
@@ -213,12 +220,22 @@ def _parse_in_process(
         profile.xule_plugin_sha256,
         profile.dqc_ruleset_sha256,
     )
-    if any(item is not None for item in validation_paths):
-        if not all(item is not None for item in validation_paths):
-            raise ArelleParserError(
-                "VALIDATION_RESOURCES_UNAVAILABLE",
-                "validation resources are not fully pinned",
-            )
+    has_validation_resources = all(item is not None for item in validation_paths)
+    if (
+        any(item is not None for item in validation_paths)
+        and not has_validation_resources
+    ):
+        raise ArelleParserError(
+            "VALIDATION_RESOURCES_UNAVAILABLE",
+            "validation resources are not fully pinned",
+        )
+    if profile.validation_mode == "sec-efm-dqc" and not has_validation_resources:
+        raise ArelleParserError(
+            "VALIDATION_RESOURCES_UNAVAILABLE",
+            "SEC validation plugins and DQC rules are required",
+        )
+    validation_enabled = profile.validation_mode == "sec-efm-dqc"
+    if has_validation_resources:
         assert (
             profile.edgar_plugin_dir
             and profile.xule_plugin_dir
@@ -240,25 +257,22 @@ def _parse_in_process(
                 "VALIDATION_RESOURCE_HASH_MISMATCH",
                 "pinned EFM/DQC resource hash does not match",
             )
-    elif filing_path.suffix.lower() in {".htm", ".html"}:
-        raise ArelleParserError(
-            "VALIDATION_RESOURCES_UNAVAILABLE",
-            "SEC validation plugins and DQC rules are required",
-        )
 
     from arelle import Cntlr, ModelManager
-    from arelle.logging.handlers.LogToXmlHandler import LogToXmlHandler
 
     config_root = tempfile.TemporaryDirectory(prefix="fundamental-arelle-config-")
     manager = None
     findings: tuple[ArelleFindingV1, ...] = ()
     try:
         controller = Cntlr.Cntlr(logFileName=None, disable_persistent_config=True)
-        controller.startLogging(logHandler=LogToXmlHandler(controller))
-        controller._pluginManager.addPluginModule(
-            str(profile.edgar_plugin_dir / "__init__.py")
-        )
-        controller._pluginManager.addPluginModule(str(profile.xule_plugin_dir))
+        if validation_enabled:
+            from arelle.logging.handlers.LogToXmlHandler import LogToXmlHandler
+
+            controller.startLogging(logHandler=LogToXmlHandler(controller))
+            controller._pluginManager.addPluginModule(
+                str(profile.edgar_plugin_dir / "__init__.py")
+            )
+            controller._pluginManager.addPluginModule(str(profile.xule_plugin_dir))
         manager = ModelManager.initialize(controller)
         if profile.offline and hasattr(controller, "webCache"):
             controller.webCache.workOffline = True
@@ -275,50 +289,51 @@ def _parse_in_process(
             raise ArelleParserError(
                 "XBRL_PARSE_FAILED", "Arelle could not load the filing DTS"
             )
-        controller._pluginManager.addPluginModule(
-            str(profile.xule_plugin_dir / "validate" / "DQC.py")
-        )
-        dqc_module = next(
-            (
-                module
-                for module in controller._pluginManager.modulePluginInfos.values()
-                if "DQC Rules Validator" in str(module.get("name", ""))
-            ),
-            None,
-        )
-        if dqc_module is not None:
-            controller._pluginManager.removePluginModule(
-                str(dqc_module.get("moduleURL", ""))
+        if validation_enabled:
+            controller._pluginManager.addPluginModule(
+                str(profile.xule_plugin_dir / "validate" / "DQC.py")
             )
-        disclosure_system = controller.modelManager.disclosureSystem
-        disclosure_system.select(profile.efm_profile)
-        if disclosure_system.name not in {"efm-strict-all-years", "efm-all-years"}:
-            raise ArelleParserError(
-                "EFM_PROFILE_UNAVAILABLE", "strict SEC EFM profile is not available"
+            dqc_module = next(
+                (
+                    module
+                    for module in controller._pluginManager.modulePluginInfos.values()
+                    if "DQC Rules Validator" in str(module.get("name", ""))
+                ),
+                None,
             )
-        if taxonomy_cache_dir is not None:
-            disclosure_system.dir = str(profile.edgar_plugin_dir)
-        model.modelManager.validate(
-            model, parameters={"xule_rule_set": str(profile.dqc_ruleset_path)}
-        )
-        handler = controller.logHandler
-        records = getattr(handler, "logRecordBuffer", ())
-        findings = tuple(
-            item
-            for record in records
-            if (item := _finding_from_log(handler.recordToJson(record))) is not None
-        )
-        if (
-            not any(item.code.startswith("DQC") for item in findings)
-            and profile.dqc_ruleset_path
-        ):
-            if not any(
-                record.get("code") == "info:profileActivity"
-                for record in (handler.recordToJson(item) for item in records)
-            ):
-                raise ArelleParserError(
-                    "DQC_VALIDATION_UNAVAILABLE", "DQC rules did not run"
+            if dqc_module is not None:
+                controller._pluginManager.removePluginModule(
+                    str(dqc_module.get("moduleURL", ""))
                 )
+            disclosure_system = controller.modelManager.disclosureSystem
+            disclosure_system.select(profile.efm_profile)
+            if disclosure_system.name not in {"efm-strict-all-years", "efm-all-years"}:
+                raise ArelleParserError(
+                    "EFM_PROFILE_UNAVAILABLE", "strict SEC EFM profile is not available"
+                )
+            if taxonomy_cache_dir is not None:
+                disclosure_system.dir = str(profile.edgar_plugin_dir)
+            model.modelManager.validate(
+                model, parameters={"xule_rule_set": str(profile.dqc_ruleset_path)}
+            )
+            handler = controller.logHandler
+            records = getattr(handler, "logRecordBuffer", ())
+            findings = tuple(
+                item
+                for record in records
+                if (item := _finding_from_log(handler.recordToJson(record))) is not None
+            )
+            if (
+                not any(item.code.startswith("DQC") for item in findings)
+                and profile.dqc_ruleset_path
+            ):
+                if not any(
+                    record.get("code") == "info:profileActivity"
+                    for record in (handler.recordToJson(item) for item in records)
+                ):
+                    raise ArelleParserError(
+                        "DQC_VALIDATION_UNAVAILABLE", "DQC rules did not run"
+                    )
         facts: list[ParsedXbrlFactV1] = []
         for fact in getattr(model, "facts", ()):
             concept = getattr(getattr(fact, "concept", None), "qname", None)
