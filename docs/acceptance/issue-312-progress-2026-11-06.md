@@ -89,3 +89,33 @@ service's capture manifest, cache digest, or offline replay is complete.
 - Record any expected filing-level EFM findings according to the service's
   quality policy before deciding whether the result is `degraded`, `abstain`, or
   publishable.
+
+## Parser review checkpoint
+
+- Read-only review target: `7410889b61b3eacab264efd309d9acbb86032ad3`.
+- Review finding: validation mode downgraded every `model.errors` code absent
+  from the XML log to a warning. An unlogged blocking DTS/XBRL error could
+  therefore be omitted from `blocking_finding_codes()`.
+- Fix: only the explicitly allowlisted Inline XBRL transformation diagnostics
+  remain warnings; other unlogged Arelle model errors are recorded as errors.
+- Regression: an unknown unlogged model error remains blocking while the
+  allowlisted transformation diagnostic remains non-blocking.
+- Implementation checkpoint: `247f8e04b148e36e0df307323cebb5707043b5f9`
+  (`fix(fundamental): keep unlogged XBRL errors blocking (Refs #312)`).
+- `git diff --check`: exit 0 before commit.
+- Commit hooks: trailing whitespace, end-of-file, large-file, Ruff, and
+  Ruff-format checks passed during `git commit`.
+- Exact-SHA service command (run on the implementation checkpoint above,
+  exit 0):
+
+  ```sh
+  ISSUE312_EDGAR_PLUGIN_DIR=/private/tmp/issue312-validation-runtime-v2/EDGAR-4891c4c9889c77af247428ceff4fa7cc52d534ea ISSUE312_XULE_PLUGIN_DIR=/private/tmp/issue312-validation-runtime-v2/xule-7ca1d7637f333f5c3a02379dbe6f6d6c17c88acc/plugin ISSUE312_DQC_RULESET_PATH=/private/tmp/issue312-validation-runtime-v2/dqc_us_rules-31.0.3/dqc_us_rules/dqc-us-2024-V31-ruleset.zip ISSUE312_TAXONOMY_CACHE_DIR=/tmp/issue312-aapl-validation-v3/taxonomy-online uv run --project fundamental-service pytest fundamental-service/tests -q
+  ```
+
+- Result: `162 passed, 5 skipped, 2 warnings` in 16.12 seconds. The Apple
+  offline SEC EFM/DQC replay ran in this suite. Five environment-gated checks
+  remained skipped; the two warnings are the existing Starlette/httpx
+  deprecation and calculator Pydantic serialization warning.
+- This checkpoint does not cover PostgreSQL coalescing, crash recovery,
+  complete taxonomy-manifest validation, Docker health, or Agent client
+  acceptance. No PR was created and issue #312 remains open.
