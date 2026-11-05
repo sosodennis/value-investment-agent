@@ -176,6 +176,35 @@ service's capture manifest, cache digest, or offline replay is complete.
   atomic publication and authorization/audit checks; retained-evidence offline
   rebuild and clean-environment replay; and Agent client acceptance. The Apple
   parser fixture contains blocking EFM finding
-  `EFM.5.02.05.disallowedElement`; the ingestion response quality gate is being
-  checked to ensure a blocking parser finding cannot produce `created` or
-  `VERIFIED` quality.
+  `EFM.5.02.05.disallowedElement`; the subsequent publication-gate verification
+  below confirms that it is rejected before snapshot/fact publication.
+
+## Blocking EFM publication-gate verification
+
+- Follow-up inspection confirmed the suspected `created`/`VERIFIED` path is
+  guarded before publication. `parsed_facts_to_candidates()` raises
+  `PARSER_VALIDATION_BLOCKED` when `blocking_finding_codes()` is non-empty;
+  `SecAcquisitionUseCase.execute()` catches that `SnapshotError`, records the
+  failed audit outcome, and returns a non-retryable 422 before
+  `publish_sec_ingestion()` can persist the snapshot or facts.
+- The concern was not a production defect, so no status-only workaround or
+  quality mutation was added. Such a mutation would be too late because the
+  canonical rebuild boundary already rejects the filing.
+- Verification command (exit 0):
+
+  ```sh
+  ISSUE312_EDGAR_PLUGIN_DIR=/private/tmp/issue312-validation-runtime-v2/EDGAR-4891c4c9889c77af247428ceff4fa7cc52d534ea \
+  ISSUE312_XULE_PLUGIN_DIR=/private/tmp/issue312-validation-runtime-v2/xule-7ca1d7637f333f5c3a02379dbe6f6d6c17c88acc/plugin \
+  ISSUE312_DQC_RULESET_PATH=/private/tmp/issue312-validation-runtime-v2/dqc_us_rules-31.0.3/dqc_us_rules/dqc-us-2024-V31-ruleset.zip \
+  ISSUE312_TAXONOMY_CACHE_DIR=/tmp/issue312-aapl-validation-v3/taxonomy-online \
+  fundamental-service/.venv/bin/pytest -q \
+    fundamental-service/tests/test_arelle_parser.py::test_apple_sec_efm_dqc_replay_with_pinned_runtime \
+    fundamental-service/tests/test_sec_rebuild.py
+  ```
+
+- Result: `7 passed` in 4.54 seconds. The real Apple EFM/DQC replay reports
+  `EFM.5.02.05.disallowedElement` as blocking, and the rebuild tests verify that
+  a blocking parser finding raises `PARSER_VALIDATION_BLOCKED` rather than
+  yielding canonical facts. This does not replace the still-required live
+  authenticated Docker API acceptance test or the database concurrency and
+  fault-recovery suites.
