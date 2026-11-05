@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-import tempfile
 import hashlib
+import tempfile
 from datetime import date, datetime, timedelta, timezone
-from pathlib import Path
 from importlib.metadata import PackageNotFoundError, version
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pathlib import Path
 from unittest.mock import patch
+
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class ArelleParserError(RuntimeError):
@@ -140,7 +141,8 @@ def parse_filing_offline(
         if installed_version != profile.arelle_version:
             raise ArelleParserError(
                 "ARELLE_VERSION_MISMATCH",
-                f"installed Arelle {installed_version} does not match {profile.arelle_version}",
+                "installed Arelle "
+                f"{installed_version} does not match {profile.arelle_version}",
             )
         log_path = Path(cache_dir.name) / "arelle.log"
         with patch.dict("os.environ", {"XDG_CONFIG_HOME": cache_dir.name}):
@@ -219,7 +221,7 @@ def parse_filing_offline(
                     if start_datetime is not None
                     else None,
                     period_end=period_end,
-                    instant=instant_datetime.date()
+                    instant=(instant_datetime - timedelta(days=1)).date()
                     if instant_datetime is not None
                     else None,
                     dimensions=tuple(dimensions),

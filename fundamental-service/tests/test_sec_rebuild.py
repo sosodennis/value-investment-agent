@@ -377,3 +377,50 @@ def test_captured_sec_bytes_rebuild_to_point_in_time_canonical_fact(tmp_path: Pa
     assert selection.fact.source.content_hash == filing_record["sha256"]
     assert selection.fact.context.context_id
     assert selection.fact.available_at <= datetime(2025, 1, 1, tzinfo=UTC)
+
+    assets_mapping = CanonicalMappingV1(
+        contract_version="fundamental.v1",
+        decision_id="map-us-gaap-assets-v1",
+        source_concept="us-gaap:Assets",
+        normalized_field="assets",
+        mapping_version="sec-us-gaap-v1",
+        confidence="high",
+        evidence_refs=(filing_record["sha256"],),
+        reviewer="fundamental-service",
+        reviewed_at=datetime(2025, 1, 1, tzinfo=UTC),
+        status="approved",
+    )
+    asset_candidates = parsed_facts_to_candidates(
+        report,
+        source=source_record,
+        issuer_id="0000320193",
+        normalized_field="assets",
+        mapping=assets_mapping,
+    )
+    instant_assets = {
+        (candidate.value, candidate.instant)
+        for candidate in asset_candidates
+        if not candidate.dimensions and candidate.unit == "iso4217:USD"
+    }
+    assert {
+        (Decimal("364980000000"), datetime(2024, 9, 28).date()),
+        (Decimal("352583000000"), datetime(2023, 9, 30).date()),
+    } <= instant_assets
+
+    current_assets = tuple(
+        candidate
+        for candidate in asset_candidates
+        if candidate.instant == datetime(2024, 9, 28).date()
+        and not candidate.dimensions
+    )
+    assert current_assets
+    selected_assets = select_canonical_fact(
+        current_assets, datetime(2024, 11, 2, tzinfo=UTC)
+    )
+    assert selected_assets.fact is not None
+    assert selected_assets.fact.instant == datetime(2024, 9, 28).date()
+    assert selected_assets.fact.as_of == datetime(2024, 9, 28, tzinfo=UTC)
+    before_filing = select_canonical_fact(
+        current_assets, datetime(2024, 10, 31, 23, 59, 59, tzinfo=UTC)
+    )
+    assert before_filing.fact is None
