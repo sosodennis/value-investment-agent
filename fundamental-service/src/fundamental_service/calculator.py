@@ -36,6 +36,28 @@ def _node(
     )
 
 
+def calculation_result_hash(artifact: CalculationArtifactV1) -> str:
+    return sha256_digest(
+        artifact.model_dump(
+            mode="python",
+            exclude={
+                "result_hash",
+                "artifact_references",
+                "evaluated_at",
+                "correlation_id",
+            },
+        )
+    )
+
+
+def with_calculation_result_hash(
+    artifact: CalculationArtifactV1,
+) -> CalculationArtifactV1:
+    return artifact.model_copy(
+        update={"result_hash": calculation_result_hash(artifact)}
+    )
+
+
 def calculate(
     request: ValuationInputV1, *, correlation_id: str = "local"
 ) -> CalculationArtifactV1:
@@ -234,32 +256,25 @@ def calculate(
             "INPUT_DIGEST_MISMATCH", "input_digest does not match the complete request"
         )
     input_digest = expected_input_digest
-    result_hash = sha256_digest(
-        {
-            "input_digest": input_digest,
-            "intrinsic_value": equity,
-            "per_share_value": per_share,
-            "nodes": nodes,
-            "model_version": request.model_version,
-        }
-    )
-    return CalculationArtifactV1(
+    result = CalculationArtifactV1(
         contract_version="fundamental.v1",
         calculation_version="calculator-v1",
         calculation_status=CalculationStatus.COMPLETED,
         quality_status=QualityStatus.VERIFIED,
         input_digest=input_digest,
-        result_hash=result_hash,
         intrinsic_value=equity,
         per_share_value=per_share,
         nodes=tuple(nodes),
         assumptions=request.assumptions,
+        policy_id=request.policy_id,
         model_version=request.model_version,
-        policy_version=request.policy_id,
+        policy_version=request.provenance.policy_version,
         snapshot_id=request.valuation_context.data_snapshot_id,
         evaluated_at=request.valuation_context.valuation_timestamp,
         correlation_id=correlation_id,
+        result_hash="0" * 64,
     )
+    return with_calculation_result_hash(result)
 
 
 def validate(request: ValuationInputV1) -> ValuationInputV1:

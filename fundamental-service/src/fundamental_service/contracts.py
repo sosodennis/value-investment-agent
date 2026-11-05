@@ -500,6 +500,7 @@ class ValidationResponseV1(StrictModel):
     input: ValuationInputV1
     input_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
     quality_status: QualityStatus
+    policy_resolution: "PolicyResolutionV1"
     issue_codes: tuple[str, ...] = ()
     missing_evidence: tuple[str, ...] = ()
 
@@ -507,6 +508,8 @@ class ValidationResponseV1(StrictModel):
 class PolicyResolutionV1(StrictModel):
     contract_version: Literal["fundamental.v1"]
     policy_id: str = Field(min_length=1)
+    policy_version: str = Field(min_length=1)
+    policy_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
     resolved_fields: dict[str, Any]
     precedence: dict[str, Literal["caller", "policy"]]
     input_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
@@ -532,6 +535,29 @@ class CalculationNodeV1(StrictModel):
     trace: TraceV1
 
 
+class ArtifactReferenceV1(StrictModel):
+    artifact_id: str = Field(min_length=1)
+    artifact_type: Literal["calculation_evidence", "uncertainty_evidence"]
+    content_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    media_type: Literal["application/json"] = "application/json"
+
+
+class CalculationTraceV1(StrictModel):
+    source_selection_policy: str = Field(min_length=1)
+    source_selection_policy_version: str = Field(min_length=1)
+    snapshot_id: str = Field(min_length=1)
+    snapshot_manifest_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    fact_ids: tuple[str, ...] = Field(min_length=1)
+    source_content_hashes: tuple[str, ...] = Field(min_length=1)
+    policy_id: str = Field(min_length=1)
+    policy_version: str = Field(min_length=1)
+    policy_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    model_id: str = Field(min_length=1)
+    model_version: str = Field(min_length=1)
+    assumptions_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    calculation_version: str = Field(min_length=1)
+
+
 class CalculationArtifactV1(StrictModel):
     contract_version: Literal["fundamental.v1"]
     calculation_version: str = Field(min_length=1)
@@ -543,13 +569,54 @@ class CalculationArtifactV1(StrictModel):
     per_share_value: Decimal | None = None
     nodes: tuple[CalculationNodeV1, ...] = ()
     assumptions: AssumptionsV1
+    policy_id: str | None = None
     model_version: str = Field(min_length=1)
     policy_version: str | None = None
+    policy_resolution: PolicyResolutionV1 | None = None
+    trace: CalculationTraceV1 | None = None
+    artifact_references: tuple[ArtifactReferenceV1, ...] = ()
     issue_codes: tuple[str, ...] = ()
     missing_evidence: tuple[str, ...] = ()
     snapshot_id: str = Field(min_length=1)
     evaluated_at: datetime
     correlation_id: str = Field(min_length=1)
+
+
+class CalculationEvidenceV1(StrictModel):
+    contract_version: Literal["fundamental.v1"]
+    request: ValuationInputV1
+    calculation: CalculationArtifactV1
+
+    @model_validator(mode="after")
+    def evidence_is_digest_bound(self) -> "CalculationEvidenceV1":
+        calculation = self.calculation
+        trace = calculation.trace
+        if trace is None:
+            raise ValueError("calculation evidence requires a complete trace")
+        if self.request.caller_approval is not None:
+            raise ValueError("caller approval evidence must not be persisted")
+        if (
+            calculation.input_digest != self.request.input_digest
+            or calculation.snapshot_id != trace.snapshot_id
+            or calculation.policy_id != trace.policy_id
+            or calculation.policy_version != trace.policy_version
+            or calculation.model_version != trace.model_version
+            or self.request.policy_id != trace.policy_id
+            or self.request.provenance.policy_version != trace.policy_version
+            or self.request.model_id != trace.model_id
+            or self.request.model_version != trace.model_version
+            or self.request.valuation_context.data_snapshot_id != trace.snapshot_id
+            or tuple(sorted(self.request.historical_facts)) != trace.fact_ids
+        ):
+            raise ValueError(
+                "calculation evidence provenance does not match its request"
+            )
+        return self
+
+
+class ArtifactReplayRequestV1(StrictModel):
+    artifact_id: str = Field(min_length=1)
+    content_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
 
 
 class ReleaseManifestV1(StrictModel):
