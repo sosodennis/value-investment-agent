@@ -277,9 +277,7 @@ class PostgresMetadataStore:
         )
         return self._runner.run(self._try_acquire_ingestion_lock(advisory_key))
 
-    def reserve_sec_provider_request_slot(
-        self, *, min_interval_seconds: float
-    ) -> float:
+    def reserve_sec_provider_request_slot(self, min_interval_seconds: float) -> float:
         self._require_ready()
         if not 0 <= min_interval_seconds <= 5:
             raise ValueError("SEC request interval is outside the supported bound")

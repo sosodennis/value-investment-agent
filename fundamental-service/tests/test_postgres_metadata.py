@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
+from email.message import Message
 from pathlib import Path
 from uuid import uuid4
 
@@ -24,6 +25,7 @@ from fundamental_service.metadata import (
     PostgresSnapshotRepository,
 )
 from fundamental_service.policies import PolicyRecordV1, initial_model_specs
+from fundamental_service.sec_source import SecEdgarSourceAdapter, SecRequestPolicy
 from fundamental_service.serialization import sha256_digest
 from fundamental_service.snapshots import SnapshotError
 from fundamental_service.testsupport import make_valuation
@@ -118,6 +120,42 @@ def test_snapshot_metadata_is_immutable(metadata: PostgresMetadataStore):
     repository.publish(_snapshot(suffix))
     with pytest.raises(SnapshotError, match="immutable"):
         repository.publish(_snapshot(suffix, policy_version="policy-v2"))
+
+
+def test_postgres_sec_request_slot_matches_source_adapter_callback(
+    metadata: PostgresMetadataStore,
+):
+    class FakeResponse:
+        status = 200
+
+        def __init__(self):
+            self.headers = Message()
+            self.headers["Content-Type"] = "application/json"
+
+        def read(self) -> bytes:
+            return b'{"entityName":"Example Co"}'
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+    def open_response(_request, timeout):
+        assert timeout > 0
+        return FakeResponse()
+
+    adapter = SecEdgarSourceAdapter(
+        SecRequestPolicy(
+            user_agent="value-agent test@example.com", min_interval_seconds=0
+        ),
+        opener=open_response,
+        request_slot=metadata.reserve_sec_provider_request_slot,
+    )
+
+    source = adapter.capture_company_facts("0000320193")
+
+    assert source.source_id == "sec-companyfacts"
 
 
 def test_versioned_releases_and_mappings_are_durable_and_immutable(
