@@ -119,3 +119,63 @@ service's capture manifest, cache digest, or offline replay is complete.
 - This checkpoint does not cover PostgreSQL coalescing, crash recovery,
   complete taxonomy-manifest validation, Docker health, or Agent client
   acceptance. No PR was created and issue #312 remains open.
+
+## SEC validation dependency checkpoint
+
+- Implementation commit: `d50cfbda071d67b44fc6b242c792db6510ed27d9`
+  (`fix(fundamental): lock SEC validation runtime dependencies (Refs #312)`).
+- Added direct bounded dependencies for the pinned SEC EFM plugin imports:
+  `aniso8601` (10.0.1), `holidays` (0.108), and `pytz` (2026.6). This makes
+  the runtime reproducible from the service lock instead of relying on packages
+  that happened to be present in a developer virtual environment.
+- `uv lock --check --project fundamental-service`: exit 0 (`Resolved 54
+  packages`).
+- Exact implementation SHA test command (exit 0):
+
+  ```sh
+  FUNDAMENTAL_TEST_DATABASE_URL=postgresql+asyncpg://fundamental:fundamental@127.0.0.1:18481/fundamental \
+  ISSUE312_EDGAR_PLUGIN_DIR=/private/tmp/issue312-validation-runtime-v2/EDGAR-4891c4c9889c77af247428ceff4fa7cc52d534ea \
+  ISSUE312_XULE_PLUGIN_DIR=/private/tmp/issue312-validation-runtime-v2/xule-7ca1d7637f333f5c3a02379dbe6f6d6c17c88acc/plugin \
+  ISSUE312_DQC_RULESET_PATH=/private/tmp/issue312-validation-runtime-v2/dqc_us_rules-31.0.3/dqc_us_rules/dqc-us-2024-V31-ruleset.zip \
+  ISSUE312_TAXONOMY_CACHE_DIR=/tmp/issue312-aapl-validation-v3/taxonomy-online \
+  fundamental-service/.venv/bin/pytest -q fundamental-service/tests
+  ```
+
+- Result on `d50cfbda071d67b44fc6b242c792db6510ed27d9`: `167 passed, 2
+  warnings` in 15.80 seconds. The suite had no skips. It includes the offline
+  Apple 2024 10-K EFM/DQC parser replay; the two warnings are the existing
+  Starlette/httpx deprecation and calculator Pydantic serialization warning.
+- Compose project: `value-investment-agent-issue-312-sec-ingestion`; required
+  host ports: PostgreSQL `18481`, Fundamental service `18082`. To validate the
+  default Compose configuration without local developer secrets,
+  `FRED_API_KEY=not-used-for-config
+  LLM_PROVIDER_ENCRYPTION_KEY=not-used-for-config docker compose -p
+  value-investment-agent-issue-312-sec-ingestion config --quiet` exited 0.
+  Only `fundamental-postgres` and `fundamental-service` were running, both
+  healthy. `curl -fsS http://127.0.0.1:18082/readyz` exited 0 and returned
+  `{"status":"ready","contract_version":"internal.v1"}`. Container image
+  ID: `sha256:df4a3dbc6146c434d1663d7c30323fc17d16373f00900860a6d61ad02d1e3ea1`.
+- Container import check exited 0 and reported `aniso8601 10.0.1`,
+  `holidays 0.108`, and `pytz 2026.6`.
+- Runtime resource fingerprints were recomputed from the pinned runtime and
+  match the service configuration: taxonomy manifest
+  `sec-us-gaap-2024-test-release`, taxonomy cache
+  `23201023716b144aefca4864bc6e4ee055aad864f2e13f3ff1ef652354a1d42c` (464
+  files), EDGAR plugin
+  `63e4b5540a6754a1d6ad86a34ec1aa70f3f7da90e46c6fa3959686d8b2ac7330`, Xule
+  plugin `e32ff88b52df8bf1e6aca3e63edabbc0b2f3513b7d0627ca9163db00d2a5678b`,
+  and DQC ruleset
+  `0eb33d095ac0ae08f01c508526b35523534659d661bc62873ac1400deec87930`.
+- Current GitHub state: issue #312 is open, no #312 PR exists, and branch
+  `codex/issue-312-sec-ingestion` is nine commits ahead of `origin/main` at
+  `bee63cb37da9edb2deb444e14d2fc666aed73d06`. This progress record is not an
+  acceptance or `VERIFIED` record.
+- Remaining acceptance: live authenticated ingestion through the Docker API;
+  cross-process PostgreSQL coalescing for at least 50 identical requests;
+  distinct-key non-coalescing; provider/parser/storage/process fault recovery;
+  atomic publication and authorization/audit checks; retained-evidence offline
+  rebuild and clean-environment replay; and Agent client acceptance. The Apple
+  parser fixture contains blocking EFM finding
+  `EFM.5.02.05.disallowedElement`; the ingestion response quality gate is being
+  checked to ensure a blocking parser finding cannot produce `created` or
+  `VERIFIED` quality.
