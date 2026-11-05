@@ -119,6 +119,7 @@ class SecAcquisitionUseCase:
     _MAX_DTS_FILES = 5
     _MAX_DTS_FILE_BYTES = 12_000_000
     _MAX_DTS_TOTAL_BYTES = 48_000_000
+    _MAX_ARCHIVE_BYTES = 24_000_000
 
     def __init__(
         self,
@@ -336,6 +337,9 @@ class SecAcquisitionUseCase:
         dts_filenames = self._select_dts_filenames(
             index_source.content, filing.primary_document
         )
+        filing_archive_filename = self._select_filing_archive_filename(
+            index_source.content, filing.accession_number
+        )
         mappings = self._resolve_mappings(request)
         captured_at = datetime.now(UTC)
         preparation = self.ingestion.prepare_filing(
@@ -343,6 +347,7 @@ class SecAcquisitionUseCase:
             cik=request.cik,
             accession_number=filing.accession_number,
             primary_document=filing.primary_document,
+            filing_archive_filename=filing_archive_filename,
             filed_at=filing.accepted_at,
             accepted_at=filing.accepted_at,
             captured_at=captured_at,
@@ -658,6 +663,47 @@ class SecAcquisitionUseCase:
                 retryable=False,
             )
         return tuple(selected)
+
+    def _select_filing_archive_filename(
+        self, payload: bytes, accession_number: str
+    ) -> str:
+        try:
+            filing_index = _FilingIndex.model_validate_json(payload)
+        except ValidationError as error:
+            raise ServiceError(
+                "SOURCE_PAYLOAD_INVALID",
+                "SEC filing index response does not match the expected schema",
+                status_code=502,
+                retryable=False,
+            ) from error
+        expected_name = f"{accession_number}-xbrl.zip"
+        matches = [
+            item for item in filing_index.directory.item if item.name == expected_name
+        ]
+        if len(matches) != 1:
+            raise ServiceError(
+                "SOURCE_PAYLOAD_INVALID",
+                "SEC filing index does not contain one accession-matched XBRL archive",
+                status_code=502,
+                retryable=False,
+            )
+        try:
+            size = int(matches[0].size)
+        except (TypeError, ValueError) as error:
+            raise ServiceError(
+                "SOURCE_PAYLOAD_INVALID",
+                "SEC filing index contains an invalid XBRL archive size",
+                status_code=502,
+                retryable=False,
+            ) from error
+        if size < 1 or size > self._MAX_ARCHIVE_BYTES:
+            raise ServiceError(
+                "INGESTION_BUDGET_EXCEEDED",
+                "SEC XBRL archive exceeds the supported size",
+                status_code=413,
+                retryable=False,
+            )
+        return expected_name
 
     @staticmethod
     def _require_before_deadline(deadline_at: datetime) -> None:

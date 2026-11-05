@@ -7,11 +7,10 @@ from pathlib import Path
 from zipfile import ZipFile
 
 import pytest
-
 from fundamental_service.arelle_parser import (
     ArelleFindingV1,
-    ArelleParserError,
     ArelleParseReportV1,
+    ArelleParserError,
     ArelleValidationProfileV1,
     _directory_hash,
     _dqc_validation_completed,
@@ -101,6 +100,67 @@ def test_apple_sec_efm_dqc_replay_with_pinned_runtime(
         "dqc-dqcrt-checks-completed",
     )
     assert "EFM.5.02.05.disallowedElement" in report.blocking_finding_codes()
+
+
+def test_microsoft_sec_efm_dqc_replay_uses_canonical_sec_archive_bytes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    required_environment = (
+        "ISSUE312_EDGAR_PLUGIN_DIR",
+        "ISSUE312_XULE_PLUGIN_DIR",
+        "ISSUE312_DQC_RULESET_PATH",
+        "ISSUE312_TAXONOMY_CACHE_DIR",
+    )
+    if not all(os.environ.get(name) for name in required_environment):
+        pytest.skip("pinned SEC EFM/DQC runtime paths are not configured")
+
+    fixture_root = Path(__file__).parent / "fixtures" / "sec-edgar"
+    archive_path = fixture_root / "microsoft-2024-original-xbrl-test-package.zip"
+    filing_dir = tmp_path / "filing"
+    filing_dir.mkdir()
+    with ZipFile(archive_path) as archive:
+        filing_path = filing_dir / "msft-20240630.htm"
+        filing_path.write_bytes(archive.read("msft-20240630.htm"))
+        (filing_dir / "msft-20240630.xsd").write_bytes(
+            archive.read("msft-20240630.xsd")
+        )
+
+    attempted_network: list[object] = []
+
+    def blocked_network(*args: object, **kwargs: object) -> None:
+        attempted_network.append((args, kwargs))
+        raise AssertionError("offline SEC replay attempted network access")
+
+    monkeypatch.setattr(socket.socket, "connect", blocked_network)
+    edgar_plugin_dir = Path(os.environ["ISSUE312_EDGAR_PLUGIN_DIR"])
+    xule_plugin_dir = Path(os.environ["ISSUE312_XULE_PLUGIN_DIR"])
+    ruleset_path = Path(os.environ["ISSUE312_DQC_RULESET_PATH"])
+    report = parse_filing_offline(
+        filing_path,
+        profile=ArelleValidationProfileV1(
+            profile_id="sec-efm-dqc-us-gaap-2023-2024-v1",
+            validation_mode="sec-efm-dqc",
+            edgar_plugin_dir=edgar_plugin_dir,
+            xule_plugin_dir=xule_plugin_dir,
+            dqc_ruleset_path=ruleset_path,
+            edgar_plugin_sha256=_directory_hash(edgar_plugin_dir),
+            xule_plugin_sha256=_directory_hash(xule_plugin_dir),
+            dqc_ruleset_sha256=hashlib.sha256(ruleset_path.read_bytes()).hexdigest(),
+        ),
+        taxonomy_version="us-gaap-2023-2024",
+        taxonomy_cache_dir=Path(os.environ["ISSUE312_TAXONOMY_CACHE_DIR"]),
+        source_content_hash=hashlib.sha256(filing_path.read_bytes()).hexdigest(),
+    )
+
+    assert len(report.facts) >= 1800
+    assert report.validation_engines == ("sec-efm", "dqc-us")
+    assert report.validation_evidence == (
+        "strict-sec-efm-profile-selected",
+        "dqc-dqcrt-checks-completed",
+    )
+    assert report.blocking_finding_codes() == ()
+    assert report.taxonomy_version == "us-gaap-2023-2024"
+    assert attempted_network == []
 
 
 def test_parser_rejects_non_offline_profile():
@@ -283,6 +343,15 @@ def test_sec_capture_manifest_has_verified_hashes_and_amendment_metadata():
         assert record["http_status"] == 200
     amendment = next(record for record in records.values() if record["is_amendment"])
     assert amendment["form"] == "10-K/A"
+    for fixture in manifest["test_fixtures"]:
+        assert (
+            hashlib.sha256((fixture_root / fixture["path"]).read_bytes()).hexdigest()
+            == fixture["sha256"]
+        )
+    microsoft_capture = manifest["external_public_evidence"][0]
+    assert microsoft_capture["sha256"] == (
+        "5a7653632f53c2529c4da82d25043fc52f05bfbe536837345aa5904560d92a82"
+    )
     assert amendment["amends_accession"] == "0001628280-25-003063"
 
 

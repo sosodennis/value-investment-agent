@@ -5,17 +5,16 @@ from __future__ import annotations
 import json
 import re
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from email.utils import parsedate_to_datetime
-from typing import Callable
 from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
 from urllib.parse import urlsplit
+from urllib.request import Request, urlopen
 
 from .contracts import SourceRole
 from .snapshots import CapturedSource, LegalSource, SnapshotError, SourceRegister
-
 
 SEC_TERMS = "https://www.sec.gov/submit-filings/about-edgar-filer-access"
 
@@ -66,6 +65,9 @@ def sec_source_register() -> SourceRegister:
                 "sec-filing-index", SourceRole.REFERENCE, SEC_TERMS, "indefinite"
             ),
             LegalSource("sec-filing", SourceRole.FILING, SEC_TERMS, "indefinite"),
+            LegalSource(
+                "sec-filing-archive", SourceRole.FILING, SEC_TERMS, "indefinite"
+            ),
             LegalSource("sec-taxonomy", SourceRole.TAXONOMY, SEC_TERMS, "indefinite"),
         )
     )
@@ -157,7 +159,15 @@ class SecEdgarSourceAdapter:
                 uri,
                 headers={
                     "User-Agent": self.policy.user_agent,
-                    "Accept": "application/json, text/html, application/xml",
+                    "Accept": ", ".join(
+                        (
+                            "application/json",
+                            "text/html",
+                            "application/xml",
+                            "application/zip",
+                            "application/octet-stream",
+                        )
+                    ),
                 },
             )
             self._last_request_at = time.monotonic()
@@ -387,6 +397,58 @@ class SecEdgarSourceAdapter:
             captured_at=captured_at or captured,
             publication_at=filed_at,
             filing_date=filing_date,
+            filed_at=filed_at,
+            accession_number=accession_number,
+            form=form,
+            filing_version=accession_number,
+            is_amendment=is_amendment,
+            amends_accession=amends_accession,
+            amendment_scope=amendment_scope,
+        )
+
+    def capture_filing_archive(
+        self,
+        *,
+        cik: str,
+        accession_number: str,
+        filename: str,
+        filed_at: datetime,
+        captured_at: datetime | None = None,
+        form: str = "10-K",
+        is_amendment: bool = False,
+        amends_accession: str | None = None,
+        amendment_scope: str | None = None,
+        accepted_at: datetime | None = None,
+        deadline_at: datetime | None = None,
+    ) -> CapturedSource:
+        """Capture the SEC-published XBRL package as immutable filing evidence."""
+        normalized = cik.strip().lstrip("0") or "0"
+        accession_path = accession_number.replace("-", "")
+        expected_filename = f"{accession_number}-xbrl.zip"
+        if not normalized.isdigit() or len(normalized) > 10:
+            raise ValueError("CIK must be numeric and at most ten digits")
+        if not accession_path.isdigit() or len(accession_path) != 18:
+            raise ValueError("accession number must be in SEC accession format")
+        if filename != expected_filename:
+            raise ValueError("filing archive must match the SEC accession number")
+        uri = (
+            f"https://www.sec.gov/Archives/edgar/data/{int(normalized)}/"
+            f"{accession_path}/{filename}"
+        )
+        payload, status, media_type, captured = self._request(
+            uri, deadline_at=deadline_at
+        )
+        available_at = accepted_at or filed_at
+        return CapturedSource(
+            source_id="sec-filing-archive",
+            uri=uri,
+            role=SourceRole.FILING,
+            content=payload,
+            media_type=media_type or "application/zip",
+            http_status=status,
+            available_at=available_at,
+            captured_at=captured_at or captured,
+            publication_at=filed_at,
             filed_at=filed_at,
             accession_number=accession_number,
             form=form,

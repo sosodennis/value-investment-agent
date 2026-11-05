@@ -3,16 +3,25 @@
 from __future__ import annotations
 
 import tempfile
-from dataclasses import dataclass
+import zlib
+from dataclasses import dataclass, replace
 from datetime import datetime
+from io import BytesIO
 from pathlib import Path
+from zipfile import BadZipFile, ZipFile
 
 from .arelle_parser import (
     ArelleParseReportV1,
     ArelleValidationProfileV1,
     parse_filing_offline,
 )
-from .contracts import CanonicalFactV1, IdentityV1, IssueV1, QualityStatus
+from .contracts import (
+    CanonicalFactV1,
+    IdentityV1,
+    IssueV1,
+    QualityStatus,
+    SourceRole,
+)
 from .facts import (
     CanonicalFactRepository,
     CanonicalMappingV1,
@@ -25,9 +34,117 @@ from .snapshots import (
     CapturedSource,
     ContentAddressedStore,
     SnapshotBuilder,
+    SnapshotError,
     SnapshotRepository,
     SourceSnapshotV1,
 )
+
+_MAX_SEC_XBRL_ARCHIVE_BYTES = 24_000_000
+_MAX_SEC_XBRL_ARCHIVE_MEMBERS = 4096
+_MAX_SEC_XBRL_ARCHIVE_UNCOMPRESSED_BYTES = 256_000_000
+_MAX_SEC_XBRL_PRIMARY_BYTES = 24_000_000
+_MAX_SEC_XBRL_RESOURCE_BYTES = 12_000_000
+_MAX_SEC_XBRL_SELECTED_BYTES = 48_000_000
+
+
+def _read_sec_xbrl_archive(
+    content: bytes, *, primary_document: str, dts_filenames: tuple[str, ...]
+) -> dict[str, bytes]:
+    """Read only bounded, index-selected root members without extracting paths."""
+    if len(content) > _MAX_SEC_XBRL_ARCHIVE_BYTES:
+        raise SnapshotError(
+            "INGESTION_BUDGET_EXCEEDED", "SEC XBRL archive exceeds the byte limit"
+        )
+    required = (primary_document, *dts_filenames)
+    if len(set(required)) != len(required):
+        raise SnapshotError(
+            "SOURCE_PAYLOAD_INVALID", "SEC XBRL member selection contains duplicates"
+        )
+    if any(
+        not name or "/" in name or "\\" in name or name in {".", ".."}
+        for name in required
+    ):
+        raise SnapshotError(
+            "SOURCE_PAYLOAD_INVALID", "SEC XBRL member path is not a root filename"
+        )
+    try:
+        with ZipFile(BytesIO(content)) as archive:
+            infos = archive.infolist()
+            if len(infos) > _MAX_SEC_XBRL_ARCHIVE_MEMBERS:
+                raise SnapshotError(
+                    "INGESTION_BUDGET_EXCEEDED",
+                    "SEC XBRL archive contains too many members",
+                )
+            all_names: set[str] = set()
+            selected_infos = {}
+            uncompressed_size = 0
+            for info in infos:
+                if info.filename in all_names:
+                    raise SnapshotError(
+                        "SOURCE_PAYLOAD_INVALID",
+                        "SEC XBRL archive repeats a member name",
+                    )
+                all_names.add(info.filename)
+                uncompressed_size += info.file_size
+                if uncompressed_size > _MAX_SEC_XBRL_ARCHIVE_UNCOMPRESSED_BYTES:
+                    raise SnapshotError(
+                        "INGESTION_BUDGET_EXCEEDED",
+                        "SEC XBRL archive exceeds the uncompressed byte limit",
+                    )
+                if info.filename in required:
+                    if info.flag_bits & 0x1:
+                        raise SnapshotError(
+                            "SOURCE_PAYLOAD_INVALID",
+                            "SEC XBRL archive contains an encrypted member",
+                        )
+                    selected_infos[info.filename] = info
+            missing = sorted(set(required) - selected_infos.keys())
+            if missing:
+                raise SnapshotError(
+                    "SOURCE_PAYLOAD_INVALID",
+                    "SEC XBRL archive is missing an index-selected member",
+                )
+            selected_size = 0
+            members: dict[str, bytes] = {}
+            for filename in required:
+                info = selected_infos[filename]
+                file_limit = (
+                    _MAX_SEC_XBRL_PRIMARY_BYTES
+                    if filename == primary_document
+                    else _MAX_SEC_XBRL_RESOURCE_BYTES
+                )
+                if info.file_size > file_limit:
+                    raise SnapshotError(
+                        "INGESTION_BUDGET_EXCEEDED",
+                        "SEC XBRL member exceeds the supported size",
+                    )
+                selected_size += info.file_size
+                if selected_size > _MAX_SEC_XBRL_SELECTED_BYTES:
+                    raise SnapshotError(
+                        "INGESTION_BUDGET_EXCEEDED",
+                        "SEC XBRL selected members exceed the byte limit",
+                    )
+                member = archive.read(info)
+                if len(member) != info.file_size:
+                    raise SnapshotError(
+                        "SOURCE_PAYLOAD_INVALID",
+                        "SEC XBRL member size does not match its directory entry",
+                    )
+                members[filename] = member
+            return members
+    except SnapshotError:
+        raise
+    except (
+        BadZipFile,
+        EOFError,
+        NotImplementedError,
+        OSError,
+        RuntimeError,
+        zlib.error,
+    ) as error:
+        raise SnapshotError(
+            "SOURCE_PAYLOAD_INVALID", "SEC XBRL archive could not be verified"
+        ) from error
 
 
 @dataclass(frozen=True)
@@ -41,7 +158,7 @@ class SecIngestionResult:
 
 
 class SecIngestionService:
-    """Keep provider I/O, immutable persistence, parsing, and fact selection in one boundary."""
+    """Keep source I/O, immutable persistence, and fact selection in one boundary."""
 
     def __init__(
         self,
@@ -64,6 +181,7 @@ class SecIngestionService:
         cik: str,
         accession_number: str,
         primary_document: str,
+        filing_archive_filename: str,
         filed_at: datetime,
         captured_at: datetime,
         valuation_timestamp: datetime,
@@ -83,10 +201,10 @@ class SecIngestionService:
         amends_accession: str | None = None,
         amendment_scope: str | None = None,
     ) -> SecIngestionResult:
-        source = self.source_adapter.capture_filing(
+        archive_source = self.source_adapter.capture_filing_archive(
             cik=cik,
             accession_number=accession_number,
-            primary_document=primary_document,
+            filename=filing_archive_filename,
             filed_at=filed_at,
             accepted_at=accepted_at,
             form=form,
@@ -95,21 +213,31 @@ class SecIngestionService:
             amendment_scope=amendment_scope,
             deadline_at=deadline_at,
         )
+        members = _read_sec_xbrl_archive(
+            archive_source.content,
+            primary_document=primary_document,
+            dts_filenames=dts_filenames,
+        )
+        source = replace(
+            archive_source,
+            source_id="sec-filing",
+            uri=f"{archive_source.uri}#member={primary_document}",
+            content=members[primary_document],
+            media_type="text/html",
+        )
         dts_sources = tuple(
-            self.source_adapter.capture_filing_resource(
-                cik=cik,
-                accession_number=accession_number,
-                filename=filename,
-                filed_at=accepted_at or filed_at,
+            replace(
+                archive_source,
+                source_id="sec-taxonomy",
+                uri=f"{archive_source.uri}#member={filename}",
+                role=SourceRole.TAXONOMY,
+                content=members[filename],
+                media_type="application/xml",
                 taxonomy_manifest_id=taxonomy_manifest_id,
-                is_amendment=is_amendment,
-                amends_accession=amends_accession,
-                amendment_scope=amendment_scope,
-                deadline_at=deadline_at,
             )
             for filename in dts_filenames
         )
-        sources = (*reference_sources, source, *dts_sources)
+        sources = (*reference_sources, archive_source, source, *dts_sources)
         snapshot = self.builder.prepare(
             identity=identity,
             valuation_timestamp=valuation_timestamp,
@@ -122,16 +250,14 @@ class SecIngestionService:
         source_record = next(
             record
             for record in snapshot.source_records
-            if record.role.value == "filing"
+            if record.source_id == "sec-filing"
         )
         profile = profile or ArelleValidationProfileV1(profile_id="sec-efm-us-gaap-v1")
         with tempfile.TemporaryDirectory(prefix="fundamental-sec-filing-") as directory:
             filing_path = Path(directory) / primary_document
             filing_path.write_bytes(source.content)
-            for resource in dts_sources:
-                (Path(directory) / Path(resource.uri).name).write_bytes(
-                    resource.content
-                )
+            for filename in dts_filenames:
+                (Path(directory) / filename).write_bytes(members[filename])
             report = parse_filing_offline(
                 filing_path,
                 profile=profile,
@@ -214,6 +340,7 @@ class SecIngestionService:
         cik: str,
         accession_number: str,
         primary_document: str,
+        filing_archive_filename: str,
         filed_at: datetime,
         captured_at: datetime,
         valuation_timestamp: datetime,
@@ -238,6 +365,7 @@ class SecIngestionService:
             cik=cik,
             accession_number=accession_number,
             primary_document=primary_document,
+            filing_archive_filename=filing_archive_filename,
             filed_at=filed_at,
             captured_at=captured_at,
             valuation_timestamp=valuation_timestamp,

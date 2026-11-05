@@ -3,7 +3,6 @@ from datetime import datetime, timezone
 from email.message import Message
 
 import pytest
-
 from fundamental_service.contracts import SourceRole
 from fundamental_service.sec_source import (
     SecEdgarSourceAdapter,
@@ -124,6 +123,36 @@ def test_filing_resource_capture_preserves_dts_role_and_metadata():
     assert source.uri.endswith("/aapl-20240928.xsd")
     assert source.filed_at == filed_at
     assert source.taxonomy_manifest_id == "manifest-v1"
+
+
+def test_filing_archive_capture_is_accession_bound_and_preserves_provenance():
+    adapter = SecEdgarSourceAdapter(
+        SecRequestPolicy(
+            user_agent="value-agent test@example.com", min_interval_seconds=0
+        ),
+        opener=lambda request, timeout: FakeResponse(b"PK\\x03\\x04archive"),
+        sleep=lambda _seconds: None,
+    )
+    filed_at = datetime(2024, 11, 1, 10, 1, 36, tzinfo=timezone.utc)
+    source = adapter.capture_filing_archive(
+        cik="0000320193",
+        accession_number="0000320193-24-000123",
+        filename="0000320193-24-000123-xbrl.zip",
+        filed_at=filed_at,
+    )
+    assert source.source_id == "sec-filing-archive"
+    assert source.role is SourceRole.FILING
+    assert source.uri.endswith("/0000320193-24-000123-xbrl.zip")
+    assert source.content == b"PK\\x03\\x04archive"
+    assert source.filed_at == filed_at
+
+    with pytest.raises(ValueError, match="match the SEC accession"):
+        adapter.capture_filing_archive(
+            cik="0000320193",
+            accession_number="0000320193-24-000123",
+            filename="other-accession-xbrl.zip",
+            filed_at=filed_at,
+        )
 
 
 def test_sec_policy_rejects_non_sec_base_url_and_archive_host():

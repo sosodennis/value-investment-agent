@@ -13,6 +13,11 @@ def test_sec_filing_index_selects_only_primary_schema_and_linkbases():
                         "type": "text.gif",
                         "size": "1503780",
                     },
+                    {
+                        "name": "0000320193-24-000123-xbrl.zip",
+                        "type": "compressed.gif",
+                        "size": "458550",
+                    },
                     {"name": "aapl-20240928.xsd", "type": "text.gif", "size": "58200"},
                     {
                         "name": "aapl-20240928_cal.xml",
@@ -52,4 +57,8 @@ def test_sec_filing_index_selects_only_primary_schema_and_linkbases():
         "aapl-20240928_def.xml",
         "aapl-20240928_lab.xml",
         "aapl-20240928_pre.xml",
+    )
+    assert (
+        use_case._select_filing_archive_filename(payload, "0000320193-24-000123")
+        == "0000320193-24-000123-xbrl.zip"
     )
