@@ -7,7 +7,6 @@ from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
-
 from fundamental_service.app import create_app
 from fundamental_service.contracts import (
     CalculationEvidenceV1,

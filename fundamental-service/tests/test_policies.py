@@ -8,7 +8,6 @@ from pathlib import Path
 import pytest
 from cryptography.hazmat.primitives import serialization as crypto_serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-
 from fundamental_service.calibration import (
     CalibrationArtifactV1,
     ConfidenceIntervalV1,
