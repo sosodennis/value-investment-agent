@@ -1,13 +1,21 @@
 from datetime import UTC, datetime
 from decimal import Decimal
+import hashlib
+import json
 from pathlib import Path
 from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
 
 from fundamental_service.app import create_app
-from fundamental_service.contracts import QualityStatus, UncertaintyV1
+from fundamental_service.contracts import (
+    CallerApprovalEnvelopeV1,
+    CalculationEvidenceV1,
+    QualityStatus,
+    UncertaintyV1,
+)
 from fundamental_service.operations import OperationsConfig
+from fundamental_service.policies import initial_policy_records
 from fundamental_service.replay import ArtifactStore
 from fundamental_service.snapshots import FilesystemContentStore
 from fundamental_service.testsupport import (
@@ -18,6 +26,18 @@ from fundamental_service.testsupport import (
 )
 
 
+def _bind_initial_policy(valuation):
+    policy = initial_policy_records()[0]
+    return valuation.model_copy(
+        update={
+            "policy_id": policy.policy_id,
+            "provenance": valuation.provenance.model_copy(
+                update={"policy_version": policy.policy_version}
+            ),
+        }
+    ).with_digest()
+
+
 class _SnapshotRepository:
     def __init__(self):
         valuation = make_valuation()
@@ -25,7 +45,9 @@ class _SnapshotRepository:
             snapshot_id="snapshot-1",
             identity=valuation.identity,
             valuation_timestamp=valuation.valuation_context.valuation_timestamp,
-            source_records=(SimpleNamespace(content_hash="test-source"),),
+            source_records=(SimpleNamespace(content_hash="a" * 64),),
+            manifest_digest="b" * 64,
+            policy_version="source-policy-v1",
         )
 
     def get(self, snapshot_id: str):
@@ -54,7 +76,7 @@ class _FactRepository:
             security_id="COMMON",
             quality=QualityStatus.VERIFIED,
             available_at=datetime(2025, 1, 1, tzinfo=UTC),
-            source=SimpleNamespace(content_hash="test-source"),
+            source=SimpleNamespace(content_hash="a" * 64),
         )
 
     def resolve(self, *, snapshot, valuation_timestamp, required_fields):
@@ -182,6 +204,7 @@ def test_calculate_accepts_explicit_monte_carlo_controls_for_base_result():
         )
         .with_digest()
     )
+    valuation = _bind_initial_policy(valuation)
     payload = valuation.model_dump(mode="json")
     payload["caller_approval"] = {
         "input_digest": valuation.input_digest,
@@ -198,6 +221,49 @@ def test_calculate_accepts_explicit_monte_carlo_controls_for_base_result():
     )
     assert response.status_code == 200
     assert response.json()["result"]["input_digest"] == valuation.input_digest
+
+
+def test_calculate_returns_version_bound_replayable_evidence():
+    app = create_app(_SnapshotRepository(), fact_repository=_FactRepository())
+    client = TestClient(app)
+    validation = app.state.application.validate_valuation(make_valuation())
+    request = validation.input.model_copy(
+        update={
+            "caller_approval": CallerApprovalEnvelopeV1(
+                input_digest=validation.input_digest,
+                decision="approved",
+                caller_id="test-agent",
+                decided_at=datetime.now(UTC),
+            )
+        }
+    )
+    response = client.post(
+        "/v1/valuation/calculate",
+        headers=auth_headers(),
+        json=make_internal_envelope(request.model_dump(mode="json")),
+    )
+    assert response.status_code == 200
+    result = response.json()["result"]
+    assert result["policy_id"] == validation.policy_resolution.policy_id
+    assert result["policy_version"] == validation.policy_resolution.policy_version
+    assert result["trace"]["snapshot_manifest_digest"] == "b" * 64
+    assert (
+        result["trace"]["policy_digest"] == validation.policy_resolution.policy_digest
+    )
+    references = result["artifact_references"]
+    assert len(references) == 1
+    reference = references[0]
+    record, content = app.state.application.artifact_content(reference["artifact_id"])
+    assert record.content_hash == reference["content_hash"]
+    assert hashlib.sha256(content).hexdigest() == reference["content_hash"]
+    evidence = CalculationEvidenceV1.model_validate_json(content)
+    assert evidence.calculation.result_hash == result["result_hash"]
+    assert (
+        evidence.calculation.trace.policy_digest
+        == validation.policy_resolution.policy_digest
+    )
+    assert evidence.request.caller_approval is None
+    assert json.loads(content)["request"]["caller_approval"] is None
 
 
 def test_uncertainty_accepts_the_validated_request_and_same_caller_approval():
@@ -223,6 +289,7 @@ def test_uncertainty_accepts_the_validated_request_and_same_caller_approval():
         )
         .with_digest()
     )
+    valuation = _bind_initial_policy(valuation)
     payload = valuation.model_dump(mode="json")
     payload["caller_approval"] = {
         "input_digest": valuation.input_digest,

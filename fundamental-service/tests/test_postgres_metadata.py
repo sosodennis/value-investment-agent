@@ -132,6 +132,7 @@ def test_versioned_releases_and_mappings_are_durable_and_immutable(
         "policy_version": "policy-postgres-v1",
         "profile_id": "us-gaap-public-v1",
         "model_id": model.model_id,
+        "model_version": model.model_version,
         "assumptions": request.assumptions,
         "source_refs": ("public-policy",),
         "effective_at": datetime(2026, 1, 1, tzinfo=UTC),

@@ -13,6 +13,7 @@ from pydantic import BaseModel, ConfigDict, model_validator
 from .calculator import CalculationRefusal, calculate
 from .contracts import (
     CalculationArtifactV1,
+    ArtifactReferenceV1,
     QualityStatus,
     ScenarioInputV1,
     SensitivityInputV1,
@@ -54,6 +55,7 @@ class UncertaintyReportV1(BaseModel):
     quantiles: dict[str, object] = {}
     convergence_diagnostics: dict[str, object] = {}
     dominant_drivers: tuple[str, ...] = ()
+    artifact_references: tuple[ArtifactReferenceV1, ...] = ()
 
 
 def _path_value(request: ValuationInputV1, path: str) -> object:
@@ -144,6 +146,7 @@ def run_uncertainty(
     monte_carlo: MonteCarloRequestV1 | None = None,
     scenarios: tuple[ScenarioV1, ...] = (),
     sensitivity: tuple[SensitivityRequestV1, ...] = (),
+    base_result: CalculationArtifactV1 | None = None,
 ) -> UncertaintyReportV1:
     scenarios = scenarios or tuple(
         ScenarioV1.model_validate(item) for item in request.uncertainty.scenarios
@@ -154,10 +157,13 @@ def run_uncertainty(
     )
     if monte_carlo is None and request.uncertainty.mode == "monte_carlo":
         monte_carlo = MonteCarloRequestV1(uncertainty=request.uncertainty)
-    deterministic_request = request.model_copy(
+    deterministic_request = (
+        request.base_input() if hasattr(request, "base_input") else request
+    )
+    deterministic_request = deterministic_request.model_copy(
         update={"uncertainty": UncertaintyV1(mode="none")}
     ).with_digest()
-    base = calculate(deterministic_request)
+    base = base_result or calculate(deterministic_request)
     scenario_results: list[CalculationArtifactV1] = []
     if scenarios:
         if {scenario.name for scenario in scenarios} != {"base", "downside", "upside"}:
