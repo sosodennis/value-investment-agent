@@ -1,7 +1,8 @@
 import hashlib
 import json
+import os
 import socket
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from zipfile import ZipFile
 
@@ -12,6 +13,8 @@ from fundamental_service.arelle_parser import (
     ArelleParserError,
     ArelleParseReportV1,
     ArelleValidationProfileV1,
+    _directory_hash,
+    _dqc_validation_completed,
     parse_filing_offline,
 )
 
@@ -25,6 +28,78 @@ def test_pinned_arelle_parses_captured_xbrl_without_network():
     assert report.offline is True
     assert report.parser_version == "2.47.4"
     assert any(fact.concept.endswith("Revenue") for fact in report.facts)
+
+
+def test_parser_uses_deadline_worker_for_isolated_replay():
+    report = parse_filing_offline(
+        Path(__file__).parent / "fixtures" / "simple.xbrl",
+        profile=ArelleValidationProfileV1(profile_id="sec-efm-us-gaap-v1"),
+        taxonomy_version="fixture-taxonomy-v1",
+        deadline_at=datetime.now(timezone.utc) + timedelta(seconds=30),
+    )
+    assert report.offline is True
+    assert any(fact.concept.endswith("Revenue") for fact in report.facts)
+
+
+def test_apple_sec_efm_dqc_replay_with_pinned_runtime(
+    tmp_path: Path,
+):
+    required_environment = (
+        "ISSUE312_EDGAR_PLUGIN_DIR",
+        "ISSUE312_XULE_PLUGIN_DIR",
+        "ISSUE312_DQC_RULESET_PATH",
+        "ISSUE312_TAXONOMY_CACHE_DIR",
+    )
+    if not all(os.environ.get(name) for name in required_environment):
+        pytest.skip("pinned SEC EFM/DQC runtime paths are not configured")
+
+    fixture_root = Path(__file__).parent / "fixtures" / "sec-edgar"
+    filing_dir = tmp_path / "filing"
+    filing_dir.mkdir()
+    filing_path = filing_dir / "aapl-20240928.htm"
+    filing_path.write_bytes(
+        (fixture_root / "apple-2024-original-aapl-20240928.htm").read_bytes()
+    )
+    with ZipFile(
+        fixture_root / "apple-2024-original-0000320193-24-000123-xbrl.zip"
+    ) as archive:
+        for filename in (
+            "aapl-20240928.xsd",
+            "aapl-20240928_pre.xml",
+            "aapl-20240928_def.xml",
+            "aapl-20240928_lab.xml",
+            "aapl-20240928_cal.xml",
+        ):
+            (filing_dir / filename).write_bytes(archive.read(filename))
+
+    edgar_plugin_dir = Path(os.environ["ISSUE312_EDGAR_PLUGIN_DIR"])
+    xule_plugin_dir = Path(os.environ["ISSUE312_XULE_PLUGIN_DIR"])
+    ruleset_path = Path(os.environ["ISSUE312_DQC_RULESET_PATH"])
+    report = parse_filing_offline(
+        filing_path,
+        profile=ArelleValidationProfileV1(
+            profile_id="sec-efm-dqc-us-gaap-2024-v1",
+            validation_mode="sec-efm-dqc",
+            edgar_plugin_dir=edgar_plugin_dir,
+            xule_plugin_dir=xule_plugin_dir,
+            dqc_ruleset_path=ruleset_path,
+            edgar_plugin_sha256=_directory_hash(edgar_plugin_dir),
+            xule_plugin_sha256=_directory_hash(xule_plugin_dir),
+            dqc_ruleset_sha256=hashlib.sha256(ruleset_path.read_bytes()).hexdigest(),
+        ),
+        taxonomy_version="us-gaap-2024",
+        taxonomy_cache_dir=Path(os.environ["ISSUE312_TAXONOMY_CACHE_DIR"]),
+        source_content_hash=hashlib.sha256(filing_path.read_bytes()).hexdigest(),
+        deadline_at=datetime.now(timezone.utc) + timedelta(minutes=5),
+    )
+
+    assert len(report.facts) >= 1000
+    assert report.validation_engines == ("sec-efm", "dqc-us")
+    assert report.validation_evidence == (
+        "strict-sec-efm-profile-selected",
+        "dqc-dqcrt-checks-completed",
+    )
+    assert "EFM.5.02.05.disallowedElement" in report.blocking_finding_codes()
 
 
 def test_parser_rejects_non_offline_profile():
@@ -61,6 +136,32 @@ def test_known_inline_transform_diagnostics_do_not_hide_other_blocking_findings(
     )
 
     assert report.blocking_finding_codes() == ("EFM.5.02.05.disallowedElement",)
+
+
+def test_dqc_completion_requires_a_dqc_finding_or_dqcrt_activity():
+    class Handler:
+        @staticmethod
+        def recordToJson(record: dict[str, object]) -> dict[str, object]:
+            return record
+
+    assert not _dqc_validation_completed(
+        Handler(),
+        (
+            {
+                "code": "info:profileActivity",
+                "message": {"args": {"activity": "... validateDTS"}},
+            },
+        ),
+    )
+    assert _dqc_validation_completed(
+        Handler(),
+        (
+            {
+                "code": "info:profileActivity",
+                "message": {"args": {"activity": "... DQCRT checks"}},
+            },
+        ),
+    )
 
 
 def test_captured_sec_filing_rebuilds_with_pinned_taxonomy_cache_without_network(

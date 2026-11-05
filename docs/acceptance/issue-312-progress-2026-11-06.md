@@ -9,8 +9,7 @@ acceptance or VERIFIED record.
 - Worktree: `../value-investment-agent-issue-312-sec-ingestion`
 - Base: `origin/main` at `bee63cb37da9edb2deb444e14d2fc666aed73d06`
 - Prior implementation checkpoints: `48cbf3067cf1872b632e5020a8e6263e4d636929`,
-  `6422a7cd`, `4adb1b9f`
-- Current checkpoint: WIP parser plugin initialization; no acceptance commit yet
+  `6422a7cd`, `4adb1b9f`, `3bc35cd3`
 - GitHub PR: none created
 
 The implementation checkpoint contains the SEC acquisition boundary, typed
@@ -52,30 +51,38 @@ service's capture manifest, cache digest, or offline replay is complete.
 
 ## Parser validation checkpoint
 
-- Command: `uv run --project fundamental-service pytest fundamental-service/tests/test_arelle_parser.py -q`
-- Result: exit 0, 7 passed.
-- The service parser was run against the same Apple filing with the pinned SEC,
-  Xule, and DQC resources and with `socket.socket.connect` replaced by a
-  function that raises on any network connection. The parser rejected the run
-  with `DQC_VALIDATION_UNAVAILABLE`; this is a failed acceptance probe, not a
-  successful offline EFM/DQC validation.
+- Unit command: `uv run --project fundamental-service pytest fundamental-service/tests/test_arelle_parser.py -q`
+- Unit result: exit 0, 9 passed, 1 environment-gated integration test skipped.
+- Ingestion command: `uv run --project fundamental-service pytest fundamental-service/tests/test_ingestion.py -q`
+- Ingestion result: exit 0, 1 passed.
+- Full service command: `uv run --project fundamental-service pytest fundamental-service/tests -q`
+- Full service result: exit 0, 160 passed, 6 skipped, 2 warnings.
+- Offline Apple EFM/DQC command (exit 0, 1 passed):
+  `ISSUE312_EDGAR_PLUGIN_DIR=/private/tmp/issue312-validation-runtime-v2/EDGAR-4891c4c9889c77af247428ceff4fa7cc52d534ea ISSUE312_XULE_PLUGIN_DIR=/private/tmp/issue312-validation-runtime-v2/xule-7ca1d7637f333f5c3a02379dbe6f6d6c17c88acc/plugin ISSUE312_DQC_RULESET_PATH=/private/tmp/issue312-validation-runtime-v2/dqc_us_rules-31.0.3/dqc_us_rules/dqc-us-2024-V31-ruleset.zip ISSUE312_TAXONOMY_CACHE_DIR=/tmp/issue312-aapl-validation-v3/taxonomy-online uv run --project fundamental-service pytest fundamental-service/tests/test_arelle_parser.py::test_apple_sec_efm_dqc_replay_with_pinned_runtime -q`
+- Filing fixture: Apple 2024 10-K, SHA-256
+  `a14d584e9804a87e92ddbd2446ade975e926a494671292403c811c1f4fc4b846`.
+- Pinned runtime: Arelle 2.47.4, SEC EFM 1.26.3, DQC US v31.0.3, Xule 30055,
+  and the 2024 US-GAAP ruleset. The deadline worker forbids socket connections.
+- Result: 1,127 parsed facts; executed engines `sec-efm` and `dqc-us`; evidence
+  `strict-sec-efm-profile-selected` and `dqc-dqcrt-checks-completed`.
+- Filing findings include blocking `EFM.5.02.05.disallowedElement` for the
+  inline `script`, plus non-blocking SEC transform diagnostics. The parser
+  preserves the blocking result; it does not mark this filing verified.
+- Two sequential in-process replays with the same pinned runtime returned the
+  same fact count, finding codes, engines, and execution evidence.
 - Arelle initializes its `DisclosureSystem.Types` hook cache before the SEC
   plugin is dynamically registered. Clearing that cache after registering SEC
   and DQC plugins makes the strict SEC profile select successfully and sets
   `EFMplugin=true`.
-- The remaining integration failure is that direct library validation does not
-  initialize the SEC command-line filing context expected by the EDGAR filing
-  validator. Xule/DQC execution has not yet been proven through the service
-  parser. Do not treat the focused parser tests or profile selection as DQC
-  acceptance.
+- The service parser now uses Arelle's synchronous filing lifecycle for SEC
+  validation. The deadline worker drains its result queue while the parser
+  runs, avoiding a pipe deadlock when a complete fact report exceeds pipe
+  capacity. Production ingestion now passes its request deadline to the parser.
 
 ## Remaining verification
 
 - Capture and verify the complete taxonomy manifest and directory digest used
   by the service profile.
-- Initialize the required SEC filing lifecycle in the service-owned parser,
-  then rerun the same filing with network access denied and record the command
-  exit code and EFM/DQC findings.
 - Run the issue #312 contract, authentication, PostgreSQL concurrency,
   fault-injection, replay, Docker health, and Agent client checks against one
   exact commit.

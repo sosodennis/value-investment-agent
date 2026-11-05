@@ -5,11 +5,13 @@ from __future__ import annotations
 import hashlib
 import multiprocessing
 import os
+import queue
 import tempfile
+import threading
+import time
 from datetime import date, datetime, timedelta, timezone
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
-from types import SimpleNamespace
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -23,6 +25,8 @@ _NON_BLOCKING_ARELLE_CODES = frozenset(
         "ix11.11.1.2:invalidTransformation",
     }
 )
+_PLUGIN_ROOT_LOCK = threading.Lock()
+_PLUGIN_ROOTS: dict[str, tuple[tempfile.TemporaryDirectory[str], Path]] = {}
 
 
 class ArelleParserError(RuntimeError):
@@ -129,6 +133,8 @@ class ArelleParseReportV1(BaseModel):
     facts: tuple[ParsedXbrlFactV1, ...] = ()
     findings: tuple[ArelleFindingV1, ...] = ()
     finding_codes: tuple[str, ...] = ()
+    validation_engines: tuple[str, ...] = ()
+    validation_evidence: tuple[str, ...] = ()
     parsed_at: datetime
     offline: bool = True
     source_content_hash: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
@@ -156,6 +162,34 @@ def _directory_hash(root: Path) -> str:
     return digest.hexdigest()
 
 
+def _validation_plugin_root(profile: "ArelleValidationProfileV1") -> Path:
+    assert profile.edgar_plugin_dir and profile.xule_plugin_dir
+    cache_key = hashlib.sha256(
+        f"{profile.edgar_plugin_sha256}:{profile.xule_plugin_sha256}".encode()
+    ).hexdigest()
+    with _PLUGIN_ROOT_LOCK:
+        cached = _PLUGIN_ROOTS.get(cache_key)
+        if cached is not None:
+            return cached[1]
+        config_root = tempfile.TemporaryDirectory(
+            prefix=f"fundamental-arelle-{cache_key[:12]}-"
+        )
+        plugin_root = Path(config_root.name) / "plugins"
+        plugin_root.mkdir()
+        (plugin_root / "EDGAR").symlink_to(
+            profile.edgar_plugin_dir, target_is_directory=True
+        )
+        (plugin_root / "xule").symlink_to(
+            profile.xule_plugin_dir / "xule", target_is_directory=True
+        )
+        (plugin_root / "validate").mkdir()
+        (plugin_root / "validate" / "DQC.py").symlink_to(
+            profile.xule_plugin_dir / "validate" / "DQC.py"
+        )
+        _PLUGIN_ROOTS[cache_key] = (config_root, plugin_root)
+        return plugin_root
+
+
 def _finding_from_log(record: dict[str, Any]) -> ArelleFindingV1 | None:
     level = str(record.get("level", "")).lower()
     if level not in {"error", "critical", "warning", "fatal"}:
@@ -171,6 +205,23 @@ def _finding_from_log(record: dict[str, Any]) -> ArelleFindingV1 | None:
     return ArelleFindingV1(code=code, severity=level, message=message_text[:2048])
 
 
+def _dqc_validation_completed(handler: Any, records: tuple[Any, ...]) -> bool:
+    for record in records:
+        entry = handler.recordToJson(record)
+        code = str(entry.get("code") or "")
+        if code.startswith("DQC"):
+            return True
+        message = entry.get("message")
+        details = message.get("args") if isinstance(message, dict) else None
+        if (
+            code == "info:profileActivity"
+            and isinstance(details, dict)
+            and details.get("activity") == "... DQCRT checks"
+        ):
+            return True
+    return False
+
+
 def _parse_worker(
     result_queue: multiprocessing.Queue,
     filing_path: str,
@@ -180,6 +231,12 @@ def _parse_worker(
     expected_source_hash: str | None,
 ) -> None:
     try:
+        import socket
+
+        def block_network(*args: Any, **kwargs: Any) -> None:
+            raise OSError("offline Arelle worker attempted network access")
+
+        socket.socket.connect = block_network
         result_queue.put(
             _parse_in_process(
                 Path(filing_path),
@@ -275,101 +332,92 @@ def _parse_in_process(
                 "pinned EFM/DQC resource hash does not match",
             )
 
-    from arelle import Cntlr, ModelManager
-
-    config_root = tempfile.TemporaryDirectory(prefix="fundamental-arelle-config-")
     manager = None
     findings: tuple[ArelleFindingV1, ...] = ()
+    validation_engines: tuple[str, ...] = ()
+    validation_evidence: tuple[str, ...] = ()
     try:
-        controller = Cntlr.Cntlr(logFileName=None, disable_persistent_config=True)
         if validation_enabled:
+            from arelle.CntlrCmdLine import CntlrCmdLine, ParserForDynamicPlugins
+            from arelle.RuntimeOptions import RuntimeOptions
             from arelle.logging.handlers.LogToXmlHandler import LogToXmlHandler
 
-            controller.startLogging(logHandler=LogToXmlHandler(controller))
-            plugin_root = Path(config_root.name) / "plugins"
-            plugin_root.mkdir()
-            (plugin_root / "EDGAR").symlink_to(
-                profile.edgar_plugin_dir, target_is_directory=True
-            )
-            (plugin_root / "xule").symlink_to(
-                profile.xule_plugin_dir / "xule", target_is_directory=True
-            )
-            (plugin_root / "validate").mkdir()
-            (plugin_root / "validate" / "DQC.py").symlink_to(
-                profile.xule_plugin_dir / "validate" / "DQC.py"
-            )
+            controller = CntlrCmdLine(disable_persistent_config=True)
+            plugin_root = _validation_plugin_root(profile)
             controller._pluginManager._pluginBase = str(plugin_root) + os.sep
-            if controller._pluginManager.addPluginModule("EDGAR/validate") is None:
-                raise ArelleParserError(
-                    "EFM_PLUGIN_UNAVAILABLE", "pinned SEC EFM plugin did not load"
-                )
-            if controller._pluginManager.addPluginModule("validate/DQC") is None:
+            dqc_plugin = controller._pluginManager.addPluginModule("validate/DQC")
+            if dqc_plugin is None:
                 raise ArelleParserError(
                     "DQC_PLUGIN_UNAVAILABLE", "pinned DQC plugin did not load"
+                )
+            edgar_plugin = controller._pluginManager.addPluginModule("EDGAR/validate")
+            if edgar_plugin is None:
+                raise ArelleParserError(
+                    "EFM_PLUGIN_UNAVAILABLE", "pinned SEC EFM plugin did not load"
                 )
             # Cntlr initializes ModelManager before these modules are registered,
             # which caches an empty DisclosureSystem.Types hook list.
             controller._pluginManager.pluginMethodsForClasses.clear()
-        manager = ModelManager.initialize(controller)
-        controller.modelManager = manager
-        if validation_enabled:
-            manager.loadCustomTransforms()
-            dqc_runner = next(
-                (
-                    method
-                    for method in controller.plugins.hooks("CntlrCmdLine.Utility.Run")
-                    if getattr(method, "__module__", "") == "DQC"
-                    and getattr(method, "__name__", "") == "cntrlrCmdLineUtilityRun"
-                ),
-                None,
+            controller.preloadedPlugins = {
+                "validate/DQC": dqc_plugin,
+                "EDGAR/validate": edgar_plugin,
+            }
+            controller.startLogging(logHandler=LogToXmlHandler(controller))
+            options = RuntimeOptions(
+                pluginOptions={
+                    "xule_rule_set": str(profile.dqc_ruleset_path),
+                    "xule_multi": False,
+                    "xule_bypass_packages": False,
+                },
+                entrypointFile=str(filing_path),
+                plugins="EDGAR/validate|validate/DQC",
+                validate=True,
+                disclosureSystemName=profile.efm_profile,
+                workOffline=True,
+                cacheDirectory=str(taxonomy_cache_dir)
+                if taxonomy_cache_dir is not None
+                else None,
+                keepOpen=True,
+                disablePersistentConfig=True,
+                logLevel="DEBUG",
             )
-            if dqc_runner is None:
+            for extender in controller.plugins.hooks("CntlrCmdLine.Options"):
+                extender(ParserForDynamicPlugins(options))
+            controller.postLoggingInit()
+            if not controller.run(options):
                 raise ArelleParserError(
-                    "DQC_PLUGIN_UNAVAILABLE", "pinned DQC validator did not activate"
+                    "XBRL_PARSE_FAILED", "Arelle command-line validation failed"
                 )
-            dqc_runner(
-                controller,
-                SimpleNamespace(
-                    xule_rule_set=str(profile.dqc_ruleset_path), xule_multi=False
-                ),
-            )
-        if profile.offline and hasattr(controller, "webCache"):
-            controller.webCache.workOffline = True
-            if taxonomy_cache_dir is not None:
-                if not taxonomy_cache_dir.is_dir():
-                    raise ArelleParserError(
-                        "TAXONOMY_CACHE_UNAVAILABLE", str(taxonomy_cache_dir)
-                    )
-                controller.webCache.cacheDir = str(taxonomy_cache_dir)
-        model = manager.load(str(filing_path))
+            manager = controller.modelManager
+            model = manager.modelXbrl
+        else:
+            from arelle import Cntlr, ModelManager
+
+            controller = Cntlr.Cntlr(logFileName=None, disable_persistent_config=True)
+            manager = ModelManager.initialize(controller)
+            controller.modelManager = manager
+            if profile.offline and hasattr(controller, "webCache"):
+                controller.webCache.workOffline = True
+                if taxonomy_cache_dir is not None:
+                    if not taxonomy_cache_dir.is_dir():
+                        raise ArelleParserError(
+                            "TAXONOMY_CACHE_UNAVAILABLE", str(taxonomy_cache_dir)
+                        )
+                    controller.webCache.cacheDir = str(taxonomy_cache_dir)
+            model = manager.load(str(filing_path))
         if model is None:
             raise ArelleParserError("XBRL_PARSE_FAILED", "Arelle returned no model")
         model_errors = tuple(sorted({str(code) for code in model.errors}))
-        blocking_model_errors = tuple(
-            code for code in model_errors if code not in _NON_BLOCKING_ARELLE_CODES
-        )
-        if blocking_model_errors:
-            raise ArelleParserError(
-                "XBRL_PARSE_FAILED",
-                "Arelle could not load the filing DTS: "
-                + ", ".join(blocking_model_errors),
-            )
         if validation_enabled:
-            controller._pluginManager.addPluginModule(
-                str(profile.xule_plugin_dir / "validate" / "DQC.py")
-            )
             disclosure_system = controller.modelManager.disclosureSystem
-            selected = disclosure_system.select(profile.efm_profile)
             if (
-                not selected
-                or disclosure_system.name
+                disclosure_system.name
                 != "US SEC (Edgar Filing Manual, Strict, all years)"
+                or not getattr(disclosure_system, "EFMplugin", False)
             ):
                 raise ArelleParserError(
                     "EFM_PROFILE_UNAVAILABLE", "strict SEC EFM profile is not available"
                 )
-            model.modelManager.validateDisclosureSystem = True
-            model.modelManager.validate()
             handler = controller.logHandler
             records = getattr(handler, "logRecordBuffer", ())
             findings = tuple(
@@ -387,17 +435,25 @@ def _parse_in_process(
                 for code in model_errors
                 if code not in logged_codes
             )
-            if (
-                not any(item.code.startswith("DQC") for item in findings)
-                and profile.dqc_ruleset_path
-            ):
-                if not any(
-                    record.get("code") == "info:profileActivity"
-                    for record in (handler.recordToJson(item) for item in records)
-                ):
-                    raise ArelleParserError(
-                        "DQC_VALIDATION_UNAVAILABLE", "DQC rules did not run"
-                    )
+            if not _dqc_validation_completed(handler, records):
+                raise ArelleParserError(
+                    "DQC_VALIDATION_UNAVAILABLE", "DQC rules did not run"
+                )
+            validation_engines = ("sec-efm", "dqc-us")
+            validation_evidence = (
+                "strict-sec-efm-profile-selected",
+                "dqc-dqcrt-checks-completed",
+            )
+        else:
+            blocking_model_errors = tuple(
+                code for code in model_errors if code not in _NON_BLOCKING_ARELLE_CODES
+            )
+            if blocking_model_errors:
+                raise ArelleParserError(
+                    "XBRL_PARSE_FAILED",
+                    "Arelle could not load the filing DTS: "
+                    + ", ".join(blocking_model_errors),
+                )
         facts: list[ParsedXbrlFactV1] = []
         for fact in getattr(model, "facts", ()):
             concept = getattr(getattr(fact, "concept", None), "qname", None)
@@ -478,6 +534,8 @@ def _parse_in_process(
             facts=tuple(facts),
             findings=findings,
             finding_codes=tuple(sorted({item.code for item in findings})),
+            validation_engines=validation_engines,
+            validation_evidence=validation_evidence,
             parsed_at=datetime.now(timezone.utc),
             offline=profile.offline,
             source_content_hash=actual_source_hash,
@@ -495,7 +553,6 @@ def _parse_in_process(
         close = getattr(manager, "close", None)
         if callable(close):
             close()
-        config_root.cleanup()
 
 
 def parse_filing_offline(
@@ -545,24 +602,37 @@ def parse_filing_offline(
         daemon=True,
     )
     process.start()
-    process.join(timeout=remaining)
-    if process.is_alive():
-        process.terminate()
-        process.join(timeout=2)
-        if process.is_alive() and hasattr(process, "kill"):
-            process.kill()
-            process.join(timeout=2)
-        raise ArelleParserError(
-            "REQUEST_DEADLINE_EXCEEDED",
-            "offline SEC parser exceeded the acquisition deadline",
-        )
+    monotonic_deadline = time.monotonic() + remaining
     try:
-        result = result_queue.get_nowait()
-    except Exception as error:
-        raise ArelleParserError(
-            "XBRL_PARSE_FAILED", "offline SEC parser exited without a result"
-        ) from error
+        result = None
+        while result is None:
+            remaining = monotonic_deadline - time.monotonic()
+            if remaining <= 0:
+                raise ArelleParserError(
+                    "REQUEST_DEADLINE_EXCEEDED",
+                    "offline SEC parser exceeded the acquisition deadline",
+                )
+            try:
+                result = result_queue.get(timeout=min(0.1, remaining))
+            except queue.Empty:
+                if not process.is_alive():
+                    raise ArelleParserError(
+                        "XBRL_PARSE_FAILED",
+                        "offline SEC parser exited without a result",
+                    )
+        process.join(timeout=max(0, monotonic_deadline - time.monotonic()))
+        if process.is_alive():
+            raise ArelleParserError(
+                "REQUEST_DEADLINE_EXCEEDED",
+                "offline SEC parser exceeded the acquisition deadline",
+            )
     finally:
+        if process.is_alive():
+            process.terminate()
+            process.join(timeout=0.2)
+            if process.is_alive() and hasattr(process, "kill"):
+                process.kill()
+                process.join(timeout=0.2)
         result_queue.close()
     if "error" in result:
         raise ArelleParserError(

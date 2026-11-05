@@ -138,6 +138,7 @@ class SecIngestionService:
                 taxonomy_version=taxonomy_version,
                 taxonomy_cache_dir=taxonomy_cache_dir,
                 source_content_hash=source_record.content_hash,
+                deadline_at=deadline_at,
             )
         all_facts: list[CanonicalFactV1] = []
         missing_fields: list[str] = []
