@@ -3,7 +3,7 @@
 Status: canonical normative specification for the implemented service and future family releases
 Owner: Fundamental service maintainers
 Scope: independently deployable domain service in `fundamental-service/`
-Last reviewed: 2026-11-04
+Last reviewed: 2026-11-05
 
 This file is the single source of truth for the Fundamental domain service. It defines its contracts, model families, quality states, valuation boundaries, calibration protocol, verification evidence, and release gates. Runtime code implements only the explicitly released coverage; exploratory families remain unsupported until their complete evidence and promotion gates pass. A backlog item, runbook, research note, or implementation comment may add operational detail, but it must not define a conflicting rule. When another document conflicts with this file, this file wins.
 
@@ -1239,6 +1239,18 @@ Calculation artifacts may be persisted as immutable, content-addressed release e
 The service must be able to rebuild derived stores from retained raw snapshots. A cache reset must not destroy the evidence needed to reproduce a released valuation.
 
 Derived artifacts carry a dependency manifest listing the source snapshot IDs, parser and taxonomy versions, mapping package, quality profile, model and calculation versions, assumption policy, and calibration artifact used to create them. When one dependency changes or is invalidated, the service marks only dependent derived artifacts as stale and records the reason; unrelated artifacts remain valid. Rebuild is explicit and append-only. A stale artifact cannot retain `verified` status, and a cache miss or provider error cannot silently promote a rebuilt artifact.
+
+#### Publish data releases without interrupting requests
+
+API replicas serve only published immutable releases. A separately operated scheduler or ingestion runner monitors public sources and builds candidate releases outside the API request path. The runner does not add a valuation session, approval state, or background calculation job. A failed acquisition, parse, mapping review, or validation leaves the current release available.
+
+A candidate release binds the exact source snapshots and canonical facts to compatible taxonomy/DTS packages, parser and validation-rule versions, mapping package, and quality profile. Persist and hash-check every referenced artifact before publishing the release manifest. Activate a profile-scoped release pointer in one database transaction with a compare-and-swap on its expected revision. If another publisher changes the pointer first, reject the stale activation and revalidate the candidate against the new release. Never update a published manifest or mapping in place.
+
+Resolve the active release once at the start of a request and pin its manifest digest, snapshot IDs, mapping package, and compatible policy versions through calculation, response provenance, and replay. An in-flight request continues with its pinned release after activation. New requests may resolve the new release. Requests that supply an explicit immutable snapshot keep that snapshot and its compatible release regardless of the active pointer. A request must never combine facts or mappings from different releases.
+
+Run the candidate through compatibility checks, mapping-scope and review gates, golden fixtures, offline replay, and the applicable Arelle, SEC EFM, and XBRL US DQC rules before activation. Use read-only shadow validation for a canary. Keep valuation-critical new or changed issuer extensions unresolved until an independent data-domain reviewer approves the evidence and the affected fixtures pass. Monitor the activated release against declared freshness, error, latency, and quality limits. Roll back by atomically pointing to the previous compatible release; retain both manifests and all referenced evidence for replay. Record the activation or rollback, actor, release digests, reason, and verification evidence in an append-only audit trail.
+
+Use release-aware cache keys that include the full dependency set. Activation does not require a global cache flush. Use expand-and-contract database migrations so old and new API replicas can read compatible schemas during a rollout. Keep the previous release readable until no request or retained artifact depends on it. Zero-downtime activation does not remove the service availability requirements for PostgreSQL, content storage, or other dependencies.
 
 ### 26.5 Why the response mapping cost is acceptable
 
