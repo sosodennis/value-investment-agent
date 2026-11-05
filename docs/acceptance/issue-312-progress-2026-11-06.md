@@ -307,3 +307,47 @@ service's capture manifest, cache digest, or offline replay is complete.
   and recovery, atomic visibility, persisted audit/auth rejection cases,
   clean offline retained-evidence replay, and Agent client acceptance. No PR
   has been created and #312 remains open.
+
+## Microsoft DQCRT coverage diagnosis
+
+- Official SEC submissions metadata identifies Microsoft's 2024 10-K as CIK
+  `0000789019`, accession `0000950170-24-087843`, filed `2024-07-30`, with
+  primary document `msft-20240630.htm`:
+  <https://data.sec.gov/submissions/CIK0000789019.json>.
+- The live SEC document SHA-256 is
+  `577d30abb4f61409b3c5ad9c332a408970ed7e54fd284a7ed483605b974cb90f`.
+  Its extension schema imports the FASB `us-gaap/2023` namespace. The SEC
+  accession's public XBRL package is
+  <https://www.sec.gov/Archives/edgar/data/789019/000095017024087843/0000950170-24-087843-xbrl.zip>
+  with SHA-256
+  `5a7653632f53c2529c4da82d25043fc52f05bfbe536837345aa5904560d92a82`.
+- The pinned SEC EDGAR plugin README says 2023-2024 US-GAAP filings use its
+  Python DQCRT implementation, while 2025-and-newer use Xule:
+  <https://github.com/Arelle/EDGAR/blob/4891c4c9889c77af247428ceff4fa7cc52d534ea/readme.md>.
+  Arelle's 2.47.4 source confirms `profileActivity` only emits its completion
+  record when elapsed time exceeds `minTimeToShow`:
+  <https://github.com/Arelle/Arelle/blob/2.47.4/arelle/ModelXbrl.py#L1203-L1227>.
+  The SEC plugin documents that `loadDqcRules` may return an empty collection
+  at <https://github.com/Arelle/EDGAR/blob/4891c4c9889c77af247428ceff4fa7cc52d534ea/validate/Filing.py#L219-L220>
+  and calls `"... DQCRT checks"` after the rules loop at
+  <https://github.com/Arelle/EDGAR/blob/4891c4c9889c77af247428ceff4fa7cc52d534ea/validate/Filing.py#L5779>.
+  The completion message alone therefore does not prove that DQCRT rules ran.
+- Read-only inspection of the pinned offline cache found 464 files (57 MB)
+  and `us-gaap-2024.xsd`, but no `us-gaap-2023.xsd`. A direct offline parser
+  trace of the retained Microsoft filing plus its SEC-published extension
+  schema reported `dqcRules` length `0` after `loadDqcRules`, no `xuleValidate`
+  call, and `DQC_VALIDATION_UNAVAILABLE`. The DQCRT activity hook ran after
+  `0.00145` seconds with `minTimeToShow=0.1`. The SEC code shows that this
+  short duration followed an empty rule set, so lowering the telemetry
+  threshold would conceal the missing taxonomy.
+- A first host-side replay attempt supplied only the primary filing and not
+  its extension schema, producing missing-schema findings before the intended
+  check. That attempt is diagnostic only and is not acceptance evidence.
+- Keep the current 2024 cache. Prepare a separate, hashed offline taxonomy
+  release with the filing-referenced 2023 and 2024 public resources. Update
+  the release pin and manifest description to identify that bundle. Rerun the
+  Microsoft filing offline with its schema and the pinned EFM/DQC runtime.
+  The signed ingestion remains unaccepted until DQC rules execute and a filing
+  with no blocking EFM/DQC findings publishes a snapshot and facts.
+- No parser workaround, `VERIFIED` state, PR, or GitHub issue mutation was
+  made. Issue #312 remains open with no PR.
