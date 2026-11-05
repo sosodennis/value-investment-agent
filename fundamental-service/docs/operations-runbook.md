@@ -24,7 +24,18 @@ content-addressed bytes. Set `FUNDAMENTAL_SERVICE_DATABASE_URL` and run with
 `FUNDAMENTAL_SERVICE_AUTO_MIGRATE=1` for a clean local database. `/livez` is
 process liveness and stays free of dependency details. `/readyz` is dependency
 readiness and requires the compatible Fundamental schema, content volume, and
-service token. Both endpoints return only the `internal.v1` status shape.
+service token. It also requires a non-empty model-release trust-root inventory.
+Both endpoints return only the `internal.v1` status shape.
+
+Set `FUNDAMENTAL_MODEL_TRUST_ROOTS_FILE` to a read-only deployment-owned JSON
+file. Its `verifiers` map pins each verifier ID to a workflow identity, a
+base64-encoded raw Ed25519 public key, an exact 40-character source revision,
+and a SHA-256 verification-suite digest. The service never receives the
+private signing key. Missing roots leave readiness `not_ready`; malformed
+configuration fails startup. The verification Compose file mounts the
+development-only fixture at this path by default. Set
+`FUNDAMENTAL_MODEL_TRUST_ROOTS_HOST_FILE` to replace that host file for local
+verification. Never use the development fixture as a production trust root.
 
 Every `/v1/` operation requires `Authorization: Bearer <FUNDAMENTAL_SERVICE_TOKEN>`
 and a signed `internal.v1` context in the `{context, input}` body envelope. The

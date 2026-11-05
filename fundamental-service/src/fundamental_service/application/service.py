@@ -28,6 +28,7 @@ from ..contracts import (
     ValuationInputV1,
 )
 from ..facts import CanonicalFactRepository
+from ..governance import ModelInventory
 from ..operations import (
     OperationalMetrics,
     OperationsConfig,
@@ -143,6 +144,7 @@ class FundamentalApplication:
     metadata_store: Any = None
     require_metadata: bool = False
     policy_registry: PolicyRegistry | None = None
+    model_inventory: ModelInventory | None = None
 
     @property
     def ready(self) -> bool:
@@ -154,7 +156,12 @@ class FundamentalApplication:
             and self.config.auth_ready
             and (
                 not self.require_metadata
-                or (self.metadata_store is not None and bool(self.metadata_store.ready))
+                or (
+                    self.metadata_store is not None
+                    and bool(self.metadata_store.ready)
+                    and self.model_inventory is not None
+                    and self.model_inventory.trust_roots_configured
+                )
             )
         )
 

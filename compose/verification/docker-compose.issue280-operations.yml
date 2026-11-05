@@ -30,10 +30,12 @@ services:
       FUNDAMENTAL_SERVICE_TOKEN: ${FUNDAMENTAL_SERVICE_TOKEN:-integration-token}
       FUNDAMENTAL_SERVICE_MAX_CALCULATION_SAMPLES: ${FUNDAMENTAL_SERVICE_MAX_CALCULATION_SAMPLES:-10000}
       FUNDAMENTAL_SERVICE_MAX_REQUEST_MS: ${FUNDAMENTAL_SERVICE_MAX_REQUEST_MS:-5000}
+      FUNDAMENTAL_MODEL_TRUST_ROOTS_FILE: /run/fundamental/model-trust-roots.json
     ports:
       - "${FUNDAMENTAL_SERVICE_HOST_PORT:-18080}:8080"
     volumes:
       - fundamental-service-data:/var/lib/fundamental
+      - ${FUNDAMENTAL_MODEL_TRUST_ROOTS_HOST_FILE:-../../fundamental-service/tests/fixtures/development/model-trust-roots.json}:/run/fundamental/model-trust-roots.json:ro
     depends_on:
       fundamental-postgres:
         condition: service_healthy

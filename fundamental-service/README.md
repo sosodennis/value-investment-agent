@@ -8,6 +8,13 @@ Runtime startup, health, auth, deadline, budget, recovery, and Compose checks
 are documented in the [operations runbook](docs/operations-runbook.md), which
 remains subordinate to the target state.
 
+Production deployments must set `FUNDAMENTAL_MODEL_TRUST_ROOTS_FILE` to a
+read-only deployment-owned JSON file containing verifier IDs, workflow
+identities, raw Ed25519 public keys, exact source revisions, and verification
+suite digests. Missing roots keep `/readyz` at `not_ready`; malformed roots
+fail startup. The operations Compose file uses a development-only public key
+fixture and must not be used as a production trust root.
+
 The service will own its source snapshots, point-in-time facts, model definitions, deterministic calculations, calibration artifacts, replay, and cache. The existing agent will call the service through a versioned API after the service passes the release gate for its declared coverage profile. The service must not import the existing agent's private implementation or share its valuation database.
 
 The service consumes the shared `internal.v1` context from

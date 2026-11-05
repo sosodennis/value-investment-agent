@@ -7,6 +7,7 @@ from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
+
 from fundamental_service.app import create_app
 from fundamental_service.contracts import (
     CalculationEvidenceV1,
@@ -14,9 +15,11 @@ from fundamental_service.contracts import (
     QualityStatus,
     UncertaintyV1,
 )
+from fundamental_service.governance import ModelInventory
 from fundamental_service.operations import OperationsConfig
 from fundamental_service.policies import (
     PolicyRegistry,
+    expansion_model_specs,
     initial_model_specs,
     initial_policy_records,
 )
@@ -332,6 +335,29 @@ def test_liveness_is_public_and_readiness_requires_all_runtime_dependencies(
     ready = client.get("/readyz")
     assert ready.status_code == 200
     assert ready.json() == {"contract_version": "internal.v1", "status": "ready"}
+
+
+def test_production_readiness_requires_deployment_model_trust_roots(tmp_path: Path):
+    common = {
+        "snapshot_repository": _SnapshotRepository(),
+        "artifact_store": ArtifactStore(tmp_path / "artifacts"),
+        "content_store": FilesystemContentStore(tmp_path / "content"),
+        "fact_repository": _FactRepository(),
+        "config": OperationsConfig(service_token=TEST_SERVICE_TOKEN),
+        "metadata_store": SimpleNamespace(ready=True),
+        "require_metadata": True,
+    }
+    missing_roots = create_app(**common, model_inventory=ModelInventory())
+    assert missing_roots.state.application.ready is False
+
+    trust_roots_file = (
+        Path(__file__).parent / "fixtures" / "development" / "model-trust-roots.json"
+    )
+    inventory = ModelInventory.from_deployment_file(
+        expansion_model_specs(), trust_roots_file
+    )
+    configured_roots = create_app(**common, model_inventory=inventory)
+    assert configured_roots.state.application.ready is True
 
 
 def test_internal_endpoints_require_signed_context_and_redact_credentials():

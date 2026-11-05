@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import base64
+import binascii
 import re
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from hashlib import sha256
+from pathlib import Path
 from typing import Literal
 from urllib.parse import urlsplit
 
@@ -249,6 +252,54 @@ class TrustedReleaseVerifier:
         Ed25519PublicKey.from_public_bytes(self.public_key)
 
 
+class DeploymentReleaseVerifierV1(BaseModel):
+    """Public deployment pins for one trusted release workflow."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    workflow_identity: str = Field(min_length=1)
+    public_key_ed25519_base64: str = Field(min_length=1)
+    expected_source_revision: str = Field(pattern=r"^[0-9a-f]{40}$")
+    expected_verification_suite_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+    @field_validator("public_key_ed25519_base64")
+    @classmethod
+    def public_key_is_ed25519(cls, value: str) -> str:
+        try:
+            public_key = base64.b64decode(value, validate=True)
+            Ed25519PublicKey.from_public_bytes(public_key)
+        except (binascii.Error, ValueError) as exc:
+            raise ValueError(
+                "deployment trust root must be a raw Ed25519 public key"
+            ) from exc
+        return value
+
+    def trusted_verifier(self) -> TrustedReleaseVerifier:
+        return TrustedReleaseVerifier(
+            workflow_identity=self.workflow_identity,
+            public_key=base64.b64decode(self.public_key_ed25519_base64, validate=True),
+            expected_source_revision=self.expected_source_revision,
+            expected_verification_suite_sha256=self.expected_verification_suite_sha256,
+        )
+
+
+class ModelTrustRootsV1(BaseModel):
+    """Deployment-owned public trust roots and exact release pins."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    verifiers: dict[str, DeploymentReleaseVerifierV1] = Field(min_length=1)
+
+    @field_validator("verifiers")
+    @classmethod
+    def verifier_ids_are_valid(
+        cls, value: dict[str, DeploymentReleaseVerifierV1]
+    ) -> dict[str, DeploymentReleaseVerifierV1]:
+        if any(not verifier_id.strip() for verifier_id in value):
+            raise ValueError("deployment trust root verifier IDs cannot be empty")
+        return value
+
+
 def sign_release_verification(
     payload: Mapping[str, object], private_key: Ed25519PrivateKey
 ) -> ReleaseVerificationAttestationV1:
@@ -338,6 +389,31 @@ class ModelInventory:
             raise ValueError("trusted verifier configuration is invalid")
         for model in models:
             self.register(model)
+
+    @classmethod
+    def from_deployment_file(
+        cls,
+        models: Iterable[ModelSpecV1],
+        trust_roots_file: Path | None,
+    ) -> ModelInventory:
+        """Load verifier identities and public keys from deployment config."""
+
+        if trust_roots_file is None:
+            return cls(models)
+        trust_roots = ModelTrustRootsV1.model_validate_json(
+            trust_roots_file.read_bytes()
+        )
+        return cls(
+            models,
+            trusted_verifiers={
+                verifier_id: verifier.trusted_verifier()
+                for verifier_id, verifier in trust_roots.verifiers.items()
+            },
+        )
+
+    @property
+    def trust_roots_configured(self) -> bool:
+        return bool(self._trusted_verifiers)
 
     def register(self, model: ModelSpecV1) -> None:
         if model.lifecycle == "active":
@@ -821,9 +897,11 @@ class ModelInventory:
 
 
 __all__ = [
+    "DeploymentReleaseVerifierV1",
     "ModelEvidenceArtifactV1",
     "ModelInventory",
     "ModelReleaseEvidenceV1",
+    "ModelTrustRootsV1",
     "ReleaseVerificationAttestationV1",
     "TrustedReleaseVerifier",
     "release_subject_digest",
