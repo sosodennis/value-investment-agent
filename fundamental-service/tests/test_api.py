@@ -1,5 +1,8 @@
+import asyncio
 import hashlib
 import json
+import socket
+import urllib.request
 from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
@@ -8,21 +11,34 @@ from types import SimpleNamespace
 import pytest
 from fastapi.testclient import TestClient
 from fundamental_service.app import create_app
+from fundamental_service.application.service import (
+    UncertaintyRequestV1,
+    normalize_uncertainty_payload,
+)
 from fundamental_service.contracts import (
     CalculationEvidenceV1,
     CallerApprovalEnvelopeV1,
+    CanonicalFactV1,
+    PeriodType,
     QualityStatus,
+    SourceProvenanceV1,
+    SourceRole,
     UncertaintyV1,
+    XbrlContextV1,
 )
 from fundamental_service.governance import ModelInventory
 from fundamental_service.operations import OperationsConfig
 from fundamental_service.policies import (
+    PolicyError,
+    PolicyRecordV1,
     PolicyRegistry,
     expansion_model_specs,
+    expansion_policy_records,
     initial_model_specs,
     initial_policy_records,
 )
-from fundamental_service.replay import ArtifactStore
+from fundamental_service.replay import ArtifactStore, replay_calculation
+from fundamental_service.serialization import sha256_digest
 from fundamental_service.snapshots import FilesystemContentStore
 from fundamental_service.testsupport import (
     TEST_SERVICE_TOKEN,
@@ -30,6 +46,8 @@ from fundamental_service.testsupport import (
     make_internal_envelope,
     make_valuation,
 )
+from fundamental_service.uncertainty import UncertaintyEvidenceV1
+from pydantic import ValidationError
 
 
 def _bind_initial_policy(valuation):
@@ -44,6 +62,15 @@ def _bind_initial_policy(valuation):
     ).with_digest()
 
 
+def _with_uncertainty_digest(payload):
+    normalized = normalize_uncertainty_payload(payload)
+    normalized["input_digest"] = None
+    normalized["caller_approval"] = None
+    return UncertaintyRequestV1.model_validate_json(
+        json.dumps(normalized)
+    ).with_digest()
+
+
 class _SnapshotRepository:
     def __init__(self):
         valuation = make_valuation()
@@ -54,6 +81,8 @@ class _SnapshotRepository:
             source_records=(SimpleNamespace(content_hash="a" * 64),),
             manifest_digest="b" * 64,
             policy_version="source-policy-v1",
+            coverage_status=QualityStatus.VERIFIED,
+            issues=(),
         )
 
     def get(self, snapshot_id: str):
@@ -88,8 +117,76 @@ class _FactRepository:
     def resolve(self, *, snapshot, valuation_timestamp, required_fields):
         _ = snapshot, valuation_timestamp
         return tuple(
-            SimpleNamespace(fact_id=f"fact-{field}") for field in required_fields
+            _canonical_fact(f"fact-{field}", field) for field in required_fields
         )
+
+
+def _canonical_fact(fact_id: str, normalized_field: str) -> CanonicalFactV1:
+    available = datetime(2025, 12, 1, tzinfo=UTC)
+    period_start = datetime(2025, 1, 1).date()
+    period_end = datetime(2025, 12, 31).date()
+    return CanonicalFactV1(
+        contract_version="fundamental.v1",
+        fact_id=fact_id,
+        issuer_id="CIK1",
+        security_id="COMMON",
+        concept="us-gaap:Revenues",
+        normalized_field=normalized_field,
+        value=Decimal(100),
+        unit="USD",
+        scale=0,
+        currency="USD",
+        period_start=period_start,
+        period_end=period_end,
+        context=XbrlContextV1(
+            concept_qname="us-gaap:Revenues",
+            period_type=PeriodType.DURATION,
+            start_date=period_start,
+            end_date=period_end,
+            unit_qname="xbrli:shares",
+            measure="iso4217:USD",
+            entity_scope="consolidated",
+            consolidation_scope="consolidated",
+            context_id=fact_id,
+        ),
+        security_scope="COMMON",
+        as_of=datetime(2025, 12, 31, tzinfo=UTC),
+        available_at=available,
+        filed_at=available,
+        captured_at=datetime(2026, 1, 2, tzinfo=UTC),
+        accession_number="0000000001-25-000001",
+        filing_version="original",
+        taxonomy_version="us-gaap-2025",
+        source=SourceProvenanceV1(
+            source_url="https://www.sec.gov/Archives/edgar/data/1/fixture.htm",
+            content_hash="a" * 64,
+            source_role=SourceRole.FILING,
+            captured_at=datetime(2026, 1, 2, tzinfo=UTC),
+            available_at=available,
+            filed_at=available,
+            accession_number="0000000001-25-000001",
+            parser_version="arelle-2.47.4",
+            taxonomy_version="us-gaap-2025",
+            terms_reference="SEC fair access policy",
+        ),
+        quality=QualityStatus.VERIFIED,
+    )
+
+
+def _policy_with_assumptions(assumptions) -> PolicyRecordV1:
+    payload = {
+        "contract_version": "fundamental.v1",
+        "policy_id": "fcff-policy-v1",
+        "policy_version": "fcff-policy-version-1",
+        "profile_id": "us-gaap-public-v1",
+        "model_id": "fcff_dcf",
+        "model_version": "fcff_dcf-v1",
+        "assumptions": assumptions,
+        "source_refs": ("public-policy-fixture",),
+        "effective_at": datetime(1970, 1, 1, tzinfo=UTC),
+        "status": "active",
+    }
+    return PolicyRecordV1(**payload, policy_digest=sha256_digest(payload))
 
 
 class _ForeignFactRepository(_FactRepository):
@@ -146,8 +243,487 @@ def test_snapshot_resolution_returns_service_owned_snapshot_and_fact_refs():
     assert response.json()["result"]["historical_facts"] == ["fact-revenue"]
 
 
+def test_facts_read_is_snapshot_scoped_point_in_time_and_documented():
+    app = create_app(_SnapshotRepository(), fact_repository=_FactRepository())
+    client = TestClient(app)
+    request = {
+        "contract_version": "fundamental.v1",
+        "snapshot_id": "snapshot-1",
+        "required_fields": ["revenue"],
+    }
+    response = client.request(
+        "GET",
+        "/v1/data/facts",
+        headers=auth_headers(),
+        json=make_internal_envelope(request),
+    )
+    assert response.status_code == 200
+    result = response.json()["result"]
+    assert result["snapshot_id"] == "snapshot-1"
+    assert result["snapshot_manifest_digest"] == "b" * 64
+    assert result["facts"][0]["fact_id"] == "fact-revenue"
+    assert result["facts"][0]["source"]["content_hash"] == "a" * 64
+
+    openapi = app.openapi()
+    facts_operation = openapi["paths"]["/v1/data/facts"]["get"]
+    assert "requestBody" in facts_operation
+    facts_envelope = openapi["components"]["schemas"][
+        "FundamentalFactsRequestEnvelopeV1"
+    ]
+    assert facts_envelope["properties"]["input"]["$ref"].endswith("/FactsReadRequestV1")
+    assert "FactsReadResponseV1" in str(facts_operation["responses"]["200"])
+
+
+def test_policy_read_returns_exact_version_and_unknown_policy_is_not_found():
+    client = TestClient(create_app())
+    response = client.request(
+        "GET",
+        "/v1/policies/fcff_dcf-us-gaap-public-v1",
+        headers=auth_headers(),
+        json=make_internal_envelope({}),
+    )
+    assert response.status_code == 200
+    assert response.json()["result"]["policy_id"] == "fcff_dcf-us-gaap-public-v1"
+    assert response.json()["result"]["policy_version"] == "fcff_dcf-v1-quality-v1"
+    operation = client.app.openapi()["paths"]["/v1/policies/{policy_id}"]["get"]
+    assert "requestBody" in operation
+    assert "PolicyRecordV1" in str(operation["responses"]["200"])
+
+    missing = client.request(
+        "GET",
+        "/v1/policies/missing-policy",
+        headers=auth_headers(),
+        json=make_internal_envelope({}),
+    )
+    assert missing.status_code == 404
+    assert missing.json()["error"]["code"] == "POLICY_NOT_FOUND"
+
+
+def test_policy_calculation_merges_overrides_and_uses_the_explicit_calculator(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    def reject_provider_io(*args, **kwargs):
+        _ = args, kwargs
+        raise AssertionError("Fundamental calculation must not perform provider I/O")
+
+    monkeypatch.setattr(urllib.request, "urlopen", reject_provider_io)
+    monkeypatch.setattr(socket, "create_connection", reject_provider_io)
+    monkeypatch.setattr(asyncio.BaseEventLoop, "create_connection", reject_provider_io)
+    monkeypatch.setattr(asyncio.BaseEventLoop, "sock_connect", reject_provider_io)
+
+    base = make_valuation()
+    policy = _policy_with_assumptions(base.assumptions)
+    registry = PolicyRegistry(models=initial_model_specs(), policies=(policy,))
+    client = TestClient(
+        create_app(
+            _SnapshotRepository(),
+            fact_repository=_FactRepository(),
+            policy_registry=registry,
+        )
+    )
+    partial = base.model_dump(mode="json")
+    partial["assumptions"] = {"terminal_growth": "0"}
+    partial["policy_id"] = policy.policy_id
+
+    policy_result = client.post(
+        "/v1/valuation/calculate-with-policy",
+        headers=auth_headers(),
+        json=make_internal_envelope(partial),
+    )
+    assert policy_result.status_code == 200, policy_result.text
+    policy_body = policy_result.json()["result"]
+    assert policy_body["assumptions"]["terminal_growth"] == "0"
+    assert not {"operation_id", "session_id", "job_id"}.intersection(policy_body)
+    assert (
+        policy_body["policy_resolution"]["precedence"]["assumptions.terminal_growth"]
+        == "caller"
+    )
+    assert (
+        policy_body["policy_resolution"]["precedence"][
+            "assumptions.wacc.risk_free_rate"
+        ]
+        == "policy"
+    )
+    assert (
+        policy_body["input_digest"] == policy_body["policy_resolution"]["input_digest"]
+    )
+
+    repeated = client.post(
+        "/v1/valuation/calculate-with-policy",
+        headers=auth_headers(),
+        json=make_internal_envelope(partial),
+    )
+    assert repeated.status_code == 200
+    assert repeated.json()["result"]["result_hash"] == policy_body["result_hash"]
+    assert (
+        repeated.json()["result"]["artifact_references"]
+        == policy_body["artifact_references"]
+    )
+
+    resolved_assumptions = base.assumptions.model_copy(
+        update={"terminal_growth": Decimal(0)}
+    )
+    explicit = base.model_copy(
+        update={
+            "assumptions": resolved_assumptions,
+            "policy_id": policy.policy_id,
+            "provenance": base.provenance.model_copy(
+                update={"policy_version": policy.policy_version}
+            ),
+        }
+    ).with_digest()
+    explicit_result = client.post(
+        "/v1/valuation/calculate",
+        headers=auth_headers(),
+        json=make_internal_envelope(explicit.model_dump(mode="json")),
+    )
+    assert explicit_result.status_code == 200, explicit_result.text
+    explicit_body = explicit_result.json()["result"]
+    assert explicit_body["input_digest"] == policy_body["input_digest"]
+    assert explicit_body["result_hash"] == policy_body["result_hash"]
+    assert explicit_body["per_share_value"] == policy_body["per_share_value"]
+    assert [(node["node_id"], node["value"]) for node in explicit_body["nodes"]] == [
+        (node["node_id"], node["value"]) for node in policy_body["nodes"]
+    ]
+
+    paths = client.app.openapi()["paths"]
+    assert "requestBody" in paths["/v1/valuation/calculate"]["post"]
+    assert "requestBody" in paths["/v1/valuation/calculate-with-policy"]["post"]
+    calculate_envelope = client.app.openapi()["components"]["schemas"][
+        "FundamentalCalculationRequestEnvelopeV1"
+    ]
+    assert calculate_envelope["properties"]["input"]["$ref"].endswith(
+        "/ValuationInputV1"
+    )
+    assert "UncertaintyReportV1" in str(
+        paths["/v1/valuation/calculate"]["post"]["responses"]["200"]
+    )
+    assert "UncertaintyReportV1" in str(
+        paths["/v1/valuation/calculate-with-policy"]["post"]["responses"]["200"]
+    )
+    policy_envelope = client.app.openapi()["components"]["schemas"][
+        "FundamentalPolicyCalculationRequestEnvelopeV1"
+    ]
+    assert policy_envelope["properties"]["input"]["$ref"].endswith(
+        "/PolicyValuationInputV1"
+    )
+
+
+def test_policy_calculation_missing_release_and_unresolved_assumptions_are_stable():
+    base = make_valuation()
+    client = TestClient(
+        create_app(_SnapshotRepository(), fact_repository=_FactRepository())
+    )
+    request = base.model_dump(mode="json")
+    request["assumptions"] = {"terminal_growth": "0.02"}
+    request["policy_id"] = "missing-policy"
+
+    missing = client.post(
+        "/v1/valuation/calculate-with-policy",
+        headers=auth_headers(),
+        json=make_internal_envelope(request),
+    )
+    assert missing.status_code == 404
+    assert missing.json()["error"]["code"] == "POLICY_NOT_FOUND"
+
+    unsupported = base.model_dump(mode="json")
+    unsupported["assumptions"] = {"terminal_growth": "0.02"}
+    unsupported["policy_id"] = "fcff_dcf-us-gaap-public-v1"
+    incomplete = client.post(
+        "/v1/valuation/calculate-with-policy",
+        headers=auth_headers(),
+        json=make_internal_envelope(unsupported),
+    )
+    assert incomplete.status_code == 422
+    assert incomplete.json()["error"]["code"] == "POLICY_ASSUMPTIONS_INCOMPLETE"
+
+    malformed = base.model_dump(mode="json")
+    malformed.pop("policy_id")
+    invalid = client.post(
+        "/v1/valuation/calculate-with-policy",
+        headers=auth_headers(),
+        json=make_internal_envelope(malformed),
+    )
+    assert invalid.status_code == 400
+    assert invalid.json()["error"]["code"] == "invalid_request"
+
+
+def test_calculate_requires_a_pinned_policy_while_validation_marks_active_selection():
+    app = create_app(_SnapshotRepository(), fact_repository=_FactRepository())
+    client = TestClient(app)
+    request = make_valuation().model_dump(mode="json")
+
+    validation = client.post(
+        "/v1/valuation/validate",
+        headers=auth_headers(),
+        json=make_internal_envelope(request),
+    )
+    assert validation.status_code == 200
+    assert (
+        validation.json()["result"]["policy_resolution"]["selection_mode"]
+        == "exploratory_active"
+    )
+    assert validation.json()["result"]["quality_status"] == "provisional"
+    assert "POLICY_NOT_PINNED_EXPLORATORY" in validation.json()["result"]["issue_codes"]
+
+    calculation = client.post(
+        "/v1/valuation/calculate",
+        headers=auth_headers(),
+        json=make_internal_envelope(request),
+    )
+    assert calculation.status_code == 422
+    assert calculation.json()["error"]["code"] == "POLICY_ID_REQUIRED"
+
+
+def test_policy_calculation_executes_uncertainty_and_preserves_full_input_binding():
+    base = make_valuation()
+    policy = _policy_with_assumptions(base.assumptions)
+    registry = PolicyRegistry(models=initial_model_specs(), policies=(policy,))
+    client = TestClient(
+        create_app(
+            _SnapshotRepository(),
+            fact_repository=_FactRepository(),
+            policy_registry=registry,
+        )
+    )
+    request = base.model_dump(mode="json")
+    request.update(
+        {
+            "policy_id": policy.policy_id,
+            "assumptions": {"terminal_growth": "0.02"},
+            "uncertainty": {
+                "mode": "monte_carlo",
+                "samples": 5,
+                "seed": 7,
+                "invalid_draw_policy": "skip",
+                "parameters": [
+                    {
+                        "path": "assumptions.terminal_growth",
+                        "distribution": "uniform",
+                        "lower": "0.01",
+                        "upper": "0.03",
+                    }
+                ],
+            },
+        }
+    )
+    response = client.post(
+        "/v1/valuation/calculate-with-policy",
+        headers=auth_headers(),
+        json=make_internal_envelope(request),
+    )
+
+    assert response.status_code == 200, response.text
+    result = response.json()["result"]
+    assert result["requested_samples"] == 5
+    assert result["valid_samples"] == 5
+    assert result["input_digest"] != result["base"]["policy_resolution"]["input_digest"]
+    assert result["input_digest"] != result["base"]["input_digest"]
+    calculation_reference = next(
+        item
+        for item in result["base"]["artifact_references"]
+        if item["artifact_type"] == "calculation_evidence"
+    )
+    calculation_content = client.app.state.application.artifact_content(
+        calculation_reference["artifact_id"]
+    )[1]
+    calculation_evidence = CalculationEvidenceV1.model_validate_json(
+        calculation_content
+    )
+    assert calculation_evidence.request.uncertainty.mode == "none"
+    assert calculation_evidence.request.input_digest == result["base"]["input_digest"]
+    assert (
+        replay_calculation(
+            calculation_evidence.request,
+            calculation_evidence.calculation,
+        ).status
+        == "match"
+    )
+    uncertainty_reference = next(
+        item
+        for item in result["artifact_references"]
+        if item["artifact_type"] == "uncertainty_evidence"
+    )
+    uncertainty_content = client.app.state.application.artifact_content(
+        uncertainty_reference["artifact_id"]
+    )[1]
+    uncertainty_evidence = UncertaintyEvidenceV1.model_validate_json(
+        uncertainty_content
+    )
+    assert uncertainty_evidence.report.input_digest == result["input_digest"]
+    assert (
+        uncertainty_evidence.report.base.input_digest == result["base"]["input_digest"]
+    )
+    assert "caller_approval" not in uncertainty_evidence.request
+
+    explicit_uncertainty = UncertaintyV1.model_validate_json(
+        json.dumps(request["uncertainty"])
+    )
+    explicit = base.model_copy(
+        update={
+            "policy_id": policy.policy_id,
+            "provenance": base.provenance.model_copy(
+                update={"policy_version": policy.policy_version}
+            ),
+            "assumptions": policy.assumptions,
+            "uncertainty": explicit_uncertainty,
+        }
+    ).with_digest()
+    explicit_response = client.post(
+        "/v1/valuation/calculate",
+        headers=auth_headers(),
+        json=make_internal_envelope(explicit.model_dump(mode="json")),
+    )
+    assert explicit_response.status_code == 200, explicit_response.text
+    explicit_result = explicit_response.json()["result"]
+    assert explicit_result["input_digest"] == result["input_digest"]
+    assert explicit_result["base"]["input_digest"] == result["base"]["input_digest"]
+    assert explicit_result["base"]["result_hash"] == result["base"]["result_hash"]
+
+
+def test_rejected_caller_approval_never_executes_calculation():
+    valuation = _bind_initial_policy(make_valuation())
+    payload = valuation.model_dump(mode="json")
+    payload["caller_approval"] = {
+        "input_digest": valuation.input_digest,
+        "decision": "rejected",
+        "caller_id": "test-agent",
+        "decided_at": datetime.now(UTC).isoformat(),
+    }
+    response = TestClient(
+        create_app(_SnapshotRepository(), fact_repository=_FactRepository())
+    ).post(
+        "/v1/valuation/calculate",
+        headers=auth_headers(),
+        json=make_internal_envelope(payload),
+    )
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "CALLER_APPROVAL_REJECTED"
+
+
+def test_policy_calculation_rejects_unsupported_model_family():
+    bank_model = next(
+        model
+        for model in expansion_model_specs()
+        if model.model_id == "bank_excess_return"
+    )
+    bank_policy = next(
+        policy
+        for policy in expansion_policy_records()
+        if policy.model_id == bank_model.model_id
+    )
+    request = make_valuation().model_dump(mode="json")
+    request.update(
+        {
+            "model_id": bank_model.model_id,
+            "model_version": bank_model.model_version,
+            "policy_id": bank_policy.policy_id,
+            "assumptions": {},
+        }
+    )
+    client = TestClient(create_app())
+
+    response = client.post(
+        "/v1/valuation/calculate-with-policy",
+        headers=auth_headers(),
+        json=make_internal_envelope(request),
+    )
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "POLICY_MODEL_UNSUPPORTED"
+
+
+def test_policy_calculation_maps_repository_outage_to_retryable_unavailable():
+    class UnavailablePolicyRepository:
+        def get(self, policy_id: str):
+            _ = policy_id
+            raise RuntimeError("database unavailable")
+
+    registry = PolicyRegistry(
+        models=initial_model_specs(), repository=UnavailablePolicyRepository()
+    )
+    client = TestClient(
+        create_app(
+            _SnapshotRepository(),
+            fact_repository=_FactRepository(),
+            policy_registry=registry,
+        )
+    )
+    request = make_valuation().model_dump(mode="json")
+    request["policy_id"] = "fcff-policy-v1"
+
+    response = client.post(
+        "/v1/valuation/calculate-with-policy",
+        headers=auth_headers(),
+        json=make_internal_envelope(request),
+    )
+
+    assert response.status_code == 503
+    assert response.json()["error"]["code"] == "POLICY_UNAVAILABLE"
+    assert response.json()["error"]["retryable"] is True
+
+
+def test_policy_lookup_preserves_ambiguous_release_error():
+    class AmbiguousPolicyRepository:
+        def get(self, policy_id: str):
+            _ = policy_id
+            raise PolicyError("POLICY_AMBIGUOUS", "policy ID has multiple releases")
+
+    registry = PolicyRegistry(
+        models=initial_model_specs(), repository=AmbiguousPolicyRepository()
+    )
+    client = TestClient(create_app(policy_registry=registry))
+
+    response = client.request(
+        "GET",
+        "/v1/policies/fcff-policy-v1",
+        headers=auth_headers(),
+        json=make_internal_envelope({}),
+    )
+
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "POLICY_AMBIGUOUS"
+
+
+def test_policy_lookup_without_registry_is_retryable_unavailable():
+    client = TestClient(create_app(require_metadata=True))
+
+    response = client.request(
+        "GET",
+        "/v1/policies/fcff-policy-v1",
+        headers=auth_headers(),
+        json=make_internal_envelope({}),
+    )
+
+    assert response.status_code == 503
+    assert response.json()["error"]["code"] == "POLICY_UNAVAILABLE"
+    assert response.json()["error"]["retryable"] is True
+
+
+def test_new_internal_routes_reject_missing_or_invalid_signed_context():
+    client = TestClient(create_app())
+    missing_context = client.get(
+        "/v1/policies/fcff_dcf-us-gaap-public-v1",
+        headers=auth_headers(),
+    )
+    assert missing_context.status_code == 400
+    assert missing_context.json()["error"]["code"] == "invalid_request"
+
+    invalid_context = make_internal_envelope({})
+    invalid_context["context"]["signature"] = "0" * 64
+    response = client.request(
+        "GET",
+        "/v1/policies/fcff_dcf-us-gaap-public-v1",
+        headers=auth_headers(),
+        json=invalid_context,
+    )
+    assert response.status_code == 401
+    assert response.json()["error"]["code"] == "internal_context_signature_invalid"
+
+
 def test_uncertainty_endpoint_runs_the_shared_calculator():
-    payload = make_valuation().model_dump(mode="json")
+    payload = _bind_initial_policy(make_valuation()).model_dump(mode="json")
     payload["scenarios"] = [
         {"name": "base", "assumptions": {}},
         {"name": "downside", "assumptions": {"assumptions.terminal_growth": "0.01"}},
@@ -172,6 +748,7 @@ def test_uncertainty_endpoint_runs_the_shared_calculator():
             ],
         }
     }
+    payload = _with_uncertainty_digest(payload).model_dump(mode="json")
     response = TestClient(
         create_app(_SnapshotRepository(), fact_repository=_FactRepository())
     ).post(
@@ -187,7 +764,85 @@ def test_uncertainty_endpoint_runs_the_shared_calculator():
     assert body["result"]["scenario_results"]
 
 
-def test_calculate_accepts_explicit_monte_carlo_controls_for_base_result():
+def test_uncertainty_approval_digest_covers_sampling_and_scenario_controls():
+    valuation = _bind_initial_policy(make_valuation())
+    payload = valuation.model_dump(mode="json")
+    payload.update(
+        {
+            "scenarios": [
+                {"name": "base", "assumptions": {}},
+                {
+                    "name": "downside",
+                    "assumptions": {"assumptions.terminal_growth": "0.01"},
+                },
+                {
+                    "name": "upside",
+                    "assumptions": {"assumptions.terminal_growth": "0.03"},
+                },
+            ],
+            "sensitivity": [],
+            "monte_carlo": {
+                "uncertainty": {
+                    "mode": "monte_carlo",
+                    "samples": 10,
+                    "seed": 7,
+                    "invalid_draw_policy": "skip",
+                    "parameters": [
+                        {
+                            "path": "assumptions.terminal_growth",
+                            "distribution": "uniform",
+                            "lower": "0.01",
+                            "upper": "0.03",
+                        }
+                    ],
+                },
+                "sampler_version": "python-random-v1",
+            },
+        }
+    )
+    payload["uncertainty"] = {
+        "mode": "monte_carlo",
+        "samples": 10,
+        "seed": 7,
+        "invalid_draw_policy": "skip",
+        "parameters": [
+            {
+                "path": "assumptions.terminal_growth",
+                "distribution": "uniform",
+                "lower": "0.01",
+                "upper": "0.03",
+            }
+        ],
+    }
+    request = _with_uncertainty_digest(payload)
+    changed = request.model_dump(mode="json")
+    changed["monte_carlo"]["uncertainty"]["seed"] = 8
+    with pytest.raises(ValidationError):
+        UncertaintyRequestV1.model_validate_json(json.dumps(changed))
+
+    payload = request.model_dump(mode="json")
+    payload["caller_approval"] = {
+        "input_digest": request.input_digest,
+        "decision": "approved",
+        "caller_id": "test-agent",
+        "decided_at": datetime.now(UTC).isoformat(),
+    }
+    response = TestClient(
+        create_app(_SnapshotRepository(), fact_repository=_FactRepository())
+    ).post(
+        "/v1/valuation/uncertainty",
+        headers=auth_headers(),
+        json=make_internal_envelope(payload),
+    )
+
+    assert response.status_code == 200, response.text
+    result = response.json()["result"]
+    assert result["base"]["input_digest"] != request.input_digest
+    assert result["input_digest"] == request.input_digest
+    assert result["valid_samples"] == 10
+
+
+def test_calculate_executes_explicit_monte_carlo_controls_with_optional_approval():
     valuation = (
         make_valuation()
         .model_copy(
@@ -212,12 +867,6 @@ def test_calculate_accepts_explicit_monte_carlo_controls_for_base_result():
     )
     valuation = _bind_initial_policy(valuation)
     payload = valuation.model_dump(mode="json")
-    payload["caller_approval"] = {
-        "input_digest": valuation.input_digest,
-        "decision": "approved",
-        "caller_id": "test-agent",
-        "decided_at": datetime.now(UTC).isoformat(),
-    }
     response = TestClient(
         create_app(_SnapshotRepository(), fact_repository=_FactRepository())
     ).post(
@@ -225,8 +874,56 @@ def test_calculate_accepts_explicit_monte_carlo_controls_for_base_result():
         headers=auth_headers(),
         json=make_internal_envelope(payload),
     )
-    assert response.status_code == 200
-    assert response.json()["result"]["input_digest"] == valuation.input_digest
+    assert response.status_code == 200, response.text
+    result = response.json()["result"]
+    assert result["requested_samples"] == 5
+    assert result["valid_samples"] == 5
+    assert result["input_digest"] == valuation.input_digest
+    assert result["base"]["input_digest"] != valuation.input_digest
+    assert (
+        result["base"]["policy_resolution"]["input_digest"]
+        == result["base"]["input_digest"]
+    )
+
+    approved = valuation.model_copy(
+        update={
+            "caller_approval": CallerApprovalEnvelopeV1(
+                input_digest=valuation.input_digest,
+                decision="approved",
+                caller_id="test-agent",
+                decided_at=datetime.now(UTC),
+            )
+        }
+    )
+    approved_response = TestClient(
+        create_app(_SnapshotRepository(), fact_repository=_FactRepository())
+    ).post(
+        "/v1/valuation/calculate",
+        headers=auth_headers(),
+        json=make_internal_envelope(approved.model_dump(mode="json")),
+    )
+    assert approved_response.status_code == 200, approved_response.text
+    assert (
+        approved_response.json()["result"]["base"]["result_hash"]
+        == result["base"]["result_hash"]
+    )
+
+
+def test_calculate_rejects_scenario_mode_without_executable_controls():
+    request = _bind_initial_policy(
+        make_valuation()
+        .model_copy(update={"uncertainty": UncertaintyV1(mode="scenarios")})
+        .with_digest()
+    )
+    response = TestClient(
+        create_app(_SnapshotRepository(), fact_repository=_FactRepository())
+    ).post(
+        "/v1/valuation/calculate",
+        headers=auth_headers(),
+        json=make_internal_envelope(request.model_dump(mode="json")),
+    )
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "UNCERTAINTY_INVALID"
 
 
 def test_calculate_returns_version_bound_replayable_evidence():
@@ -297,15 +994,17 @@ def test_uncertainty_accepts_the_validated_request_and_same_caller_approval():
     )
     valuation = _bind_initial_policy(valuation)
     payload = valuation.model_dump(mode="json")
-    payload["caller_approval"] = {
-        "input_digest": valuation.input_digest,
-        "decision": "approved",
-        "caller_id": "test-agent",
-        "decided_at": datetime.now(UTC).isoformat(),
-    }
     payload["monte_carlo"] = {
         "uncertainty": payload["uncertainty"],
         "sampler_version": "python-random-v1",
+    }
+    request = _with_uncertainty_digest(payload)
+    payload = request.model_dump(mode="json")
+    payload["caller_approval"] = {
+        "input_digest": request.input_digest,
+        "decision": "approved",
+        "caller_id": "test-agent",
+        "decided_at": datetime.now(UTC).isoformat(),
     }
     response = TestClient(
         create_app(_SnapshotRepository(), fact_repository=_FactRepository())
@@ -384,7 +1083,14 @@ def test_expired_deadline_and_calculation_budget_are_stable_errors():
         "/v1/valuation/uncertainty",
         headers=auth_headers(),
         json=make_internal_envelope(
-            {**value, "scenarios": [], "sensitivity": [], "monte_carlo": None},
+            _with_uncertainty_digest(
+                {
+                    **_bind_initial_policy(make_valuation()).model_dump(mode="json"),
+                    "scenarios": [],
+                    "sensitivity": [],
+                    "monte_carlo": None,
+                }
+            ).model_dump(mode="json"),
             deadline_at=datetime(2020, 1, 1, tzinfo=UTC),
             issued_at=datetime(2019, 1, 1, tzinfo=UTC),
         ),
@@ -401,6 +1107,7 @@ def test_expired_deadline_and_calculation_budget_are_stable_errors():
             ),
         )
     )
+    value = _bind_initial_policy(make_valuation()).model_dump(mode="json")
     value["monte_carlo"] = {
         "uncertainty": {
             "mode": "monte_carlo",
@@ -417,6 +1124,7 @@ def test_expired_deadline_and_calculation_budget_are_stable_errors():
             ],
         }
     }
+    value = _with_uncertainty_digest(value).model_dump(mode="json")
     budget = limited.post(
         "/v1/valuation/uncertainty",
         headers=auth_headers(),
@@ -428,10 +1136,11 @@ def test_expired_deadline_and_calculation_budget_are_stable_errors():
 
 def test_calculation_dependency_outage_is_unavailable_without_local_fallback():
     client = TestClient(create_app())
+    valuation = _bind_initial_policy(make_valuation())
     response = client.post(
         "/v1/valuation/calculate",
         headers=auth_headers(),
-        json=make_internal_envelope(make_valuation().model_dump(mode="json")),
+        json=make_internal_envelope(valuation.model_dump(mode="json")),
     )
     assert response.status_code == 503
     assert response.json()["error"]["code"] == "source_unavailable"

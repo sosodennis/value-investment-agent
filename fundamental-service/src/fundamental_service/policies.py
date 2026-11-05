@@ -11,14 +11,16 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Literal, Protocol
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from .contracts import (
     AssumptionsV1,
+    CapitalBridgeAssumptionsV1,
     EligibilityReportV1,
     ForecastAssumptionsV1,
     ModelId,
     PolicyResolutionV1,
+    PolicyValuationInputV1,
     QualityInputV1,
     QualityStatus,
     ValuationInputV1,
@@ -179,8 +181,10 @@ class PolicyRegistry:
             return policy
         try:
             policy = self._repository.get(policy_id)
-        except PolicyError:
-            return None
+        except PolicyError as error:
+            if error.code == "POLICY_NOT_FOUND":
+                return None
+            raise
         self._policies[policy_id] = policy
         return policy
 
@@ -429,6 +433,9 @@ def resolve_policy(
     request: ValuationInputV1,
     policy: PolicyRecordV1,
 ) -> tuple[ValuationInputV1, PolicyResolutionV1]:
+    selection_mode: Literal["pinned", "exploratory_active"] = (
+        "pinned" if request.policy_id is not None else "exploratory_active"
+    )
     if (
         policy.model_id != request.model_id
         or policy.model_version != request.model_version
@@ -446,11 +453,20 @@ def resolve_policy(
                 ),
             }
         ).with_digest()
+        if (
+            request.caller_approval is not None
+            and request.caller_approval.input_digest != resolved_input.input_digest
+        ):
+            raise PolicyError(
+                "CALLER_APPROVAL_CONFLICT",
+                "caller approval is bound to a different resolved input_digest",
+            )
         return resolved_input, PolicyResolutionV1(
             contract_version="fundamental.v1",
             policy_id=policy.policy_id,
             policy_version=policy.policy_version,
             policy_digest=policy.policy_digest,
+            selection_mode=selection_mode,
             resolved_fields=resolved,
             precedence=precedence,
             input_digest=resolved_input.input_digest,
@@ -512,16 +528,176 @@ def resolve_policy(
         }
     )
     resolved_input = resolved_input.with_digest()
+    if (
+        request.caller_approval is not None
+        and request.caller_approval.input_digest != resolved_input.input_digest
+    ):
+        raise PolicyError(
+            "CALLER_APPROVAL_CONFLICT",
+            "caller approval is bound to a different resolved input_digest",
+        )
     resolution = PolicyResolutionV1(
         contract_version="fundamental.v1",
         policy_id=policy.policy_id,
         policy_version=policy.policy_version,
         policy_digest=policy.policy_digest,
+        selection_mode=selection_mode,
         resolved_fields=dict(resolved),
         precedence=precedence,
         input_digest=resolved_input.input_digest,
     )
     return resolved_input, resolution
+
+
+def resolve_policy_overrides(
+    *,
+    request: PolicyValuationInputV1,
+    policy: PolicyRecordV1,
+) -> tuple[ValuationInputV1, PolicyResolutionV1]:
+    """Resolve a typed policy request into the calculator's complete input."""
+
+    if (
+        policy.model_id != request.model_id
+        or policy.model_version != request.model_version
+    ):
+        raise PolicyError(
+            "POLICY_MODEL_MISMATCH",
+            "policy release does not cover the requested model version",
+        )
+    if request.model_id not in {"fcff_dcf", "transition_fcff_dcf"}:
+        raise PolicyError(
+            "POLICY_MODEL_UNSUPPORTED",
+            "policy calculation is not released for this model family",
+        )
+    if request.assumptions.bank is not None or (
+        policy.assumptions is not None and policy.assumptions.bank is not None
+    ):
+        raise PolicyError(
+            "POLICY_ASSUMPTIONS_INVALID",
+            "bank assumptions are not valid for an FCFF policy calculation",
+        )
+
+    defaults = policy.assumptions or AssumptionsV1()
+    overrides = request.assumptions
+    resolved_fields: dict[str, object] = {}
+    precedence: dict[str, Literal["caller", "policy"]] = {}
+
+    def resolve_group(name: str, model_type: type[BaseModel]) -> BaseModel:
+        default_group = getattr(defaults, name)
+        caller_group = getattr(overrides, name)
+        default_values = (
+            default_group.model_dump(exclude_none=True) if default_group else {}
+        )
+        caller_values = (
+            caller_group.model_dump(exclude_none=True) if caller_group else {}
+        )
+        values: dict[str, object] = {}
+        for field in model_type.model_fields:
+            path = f"assumptions.{name}.{field}"
+            if field in caller_values:
+                values[field] = caller_values[field]
+                precedence[path] = "caller"
+            elif field in default_values:
+                values[field] = default_values[field]
+                precedence[path] = "policy"
+            else:
+                continue
+            resolved_fields[path] = values[field]
+        try:
+            return model_type.model_validate(values)
+        except ValidationError as error:
+            raise PolicyError(
+                "POLICY_ASSUMPTIONS_INCOMPLETE",
+                f"caller values and policy do not resolve complete {name} assumptions",
+            ) from error
+
+    forecast = resolve_group("forecast", ForecastAssumptionsV1)
+    wacc = resolve_group("wacc", WaccAssumptionsV1)
+    capital_bridge = resolve_group("capital_bridge", CapitalBridgeAssumptionsV1)
+
+    terminal_growth = overrides.terminal_growth
+    if terminal_growth is not None:
+        precedence["assumptions.terminal_growth"] = "caller"
+    else:
+        terminal_growth = defaults.terminal_growth
+        if terminal_growth is not None:
+            precedence["assumptions.terminal_growth"] = "policy"
+    if terminal_growth is None:
+        raise PolicyError(
+            "POLICY_ASSUMPTIONS_INCOMPLETE",
+            "caller values and policy do not resolve terminal_growth",
+        )
+    resolved_fields["assumptions.terminal_growth"] = terminal_growth
+
+    trace = overrides.trace or defaults.trace
+    if trace is None:
+        raise PolicyError(
+            "POLICY_ASSUMPTIONS_INCOMPLETE",
+            "caller values and policy do not resolve assumption trace",
+        )
+    precedence["assumptions.trace"] = "caller" if overrides.trace else "policy"
+    resolved_fields["assumptions.trace"] = trace.model_dump(mode="json")
+
+    assumptions = AssumptionsV1(
+        forecast=forecast,
+        wacc=wacc,
+        terminal_growth=terminal_growth,
+        capital_bridge=capital_bridge,
+        trace=trace,
+    )
+    payload = {
+        "contract_version": request.contract_version,
+        "identity": request.identity,
+        "valuation_context": request.valuation_context,
+        "historical_facts": request.historical_facts,
+        "assumptions": assumptions,
+        "uncertainty": request.uncertainty,
+        "quality": request.quality,
+        "provenance": request.provenance.model_copy(
+            update={"policy_version": policy.policy_version}
+        ),
+        "model_id": request.model_id,
+        "model_version": request.model_version,
+        "policy_id": policy.policy_id,
+    }
+    try:
+        resolved = ValuationInputV1(**payload).with_digest()
+    except ValidationError as error:
+        raise PolicyError(
+            "POLICY_ASSUMPTIONS_INVALID",
+            "resolved policy calculation input is invalid",
+        ) from error
+    if (
+        request.input_digest is not None
+        and request.input_digest != resolved.input_digest
+    ):
+        raise PolicyError(
+            "INPUT_DIGEST_MISMATCH",
+            "input_digest does not match the resolved policy calculation input",
+        )
+    if (
+        request.caller_approval is not None
+        and request.caller_approval.input_digest != resolved.input_digest
+    ):
+        raise PolicyError(
+            "CALLER_APPROVAL_CONFLICT",
+            "caller approval is bound to a different resolved input_digest",
+        )
+    if request.caller_approval is not None:
+        resolved = resolved.model_copy(
+            update={"caller_approval": request.caller_approval}
+        )
+
+    return resolved, PolicyResolutionV1(
+        contract_version="fundamental.v1",
+        policy_id=policy.policy_id,
+        policy_version=policy.policy_version,
+        policy_digest=policy.policy_digest,
+        selection_mode="pinned",
+        resolved_fields=resolved_fields,
+        precedence=precedence,
+        input_digest=resolved.input_digest,
+    )
 
 
 def _flatten_assumptions(

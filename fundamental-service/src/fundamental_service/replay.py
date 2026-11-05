@@ -2,27 +2,31 @@
 
 from __future__ import annotations
 
+import fcntl
 import hashlib
 import os
 import sys
 import tempfile
+from collections.abc import Callable
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from threading import Condition, RLock
 from time import monotonic
-from typing import Any, Callable, Literal
-
-import fcntl
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from .calculator import CalculationRefusal, calculate, calculation_result_hash
+from .calculator import (
+    CalculationRefusal,
+    calculate,
+    calculation_result_hash,
+    with_calculation_result_hash,
+)
 from .contracts import CalculationArtifactV1, ReleaseManifestV1, ValuationInputV1
 from .serialization import canonical_bytes, sha256_digest
-from .snapshots import SnapshotError
-from .snapshots import SnapshotRepository
+from .snapshots import SnapshotError, SnapshotRepository
 
 SERVICE_VERSION = "0.1.0"
 
@@ -61,7 +65,7 @@ class ProvenanceGraphV1(BaseModel):
     graph_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
 
     @model_validator(mode="after")
-    def validate_graph(self) -> "ProvenanceGraphV1":
+    def validate_graph(self) -> ProvenanceGraphV1:
         node_ids = [node.node_id for node in self.nodes]
         if len(node_ids) != len(set(node_ids)):
             raise ValueError("provenance graph contains duplicate node IDs")
@@ -197,7 +201,7 @@ class ArtifactStore:
                     break
                 raise SnapshotError(
                     "ARTIFACT_RECORD_CORRUPT", "artifact record history is corrupt"
-                )
+                ) from None
             self._records[record.artifact_id] = record
         self._loaded = True
 
@@ -1065,7 +1069,7 @@ def replay_manifest(
         )
     released_artifacts: list[CalculationArtifactV1] = []
     for artifact_id, result_hash in zip(
-        manifest.artifact_ids, manifest.artifact_hashes
+        manifest.artifact_ids, manifest.artifact_hashes, strict=True
     ):
         try:
             record = artifact_store.get(artifact_id)
@@ -1174,6 +1178,49 @@ def replay_calculation(
             actual_input_digest=expected_input_digest,
             first_difference=error.code,
             changed_dependency="calculation",
+        )
+    if expected.trace is not None or expected.policy_resolution is not None:
+        trace = expected.trace
+        resolution = expected.policy_resolution
+        if trace is None or resolution is None:
+            return ReplayReportV1(
+                contract_version="fundamental.v1",
+                status="mismatch",
+                expected_result_hash=expected.result_hash,
+                actual_result_hash=actual.result_hash,
+                expected_input_digest=expected.input_digest,
+                actual_input_digest=actual.input_digest,
+                first_difference="calculation_provenance",
+                changed_dependency="provenance",
+            )
+        if (
+            trace.snapshot_id != request.valuation_context.data_snapshot_id
+            or trace.snapshot_id != request.provenance.snapshot_id
+            or trace.fact_ids != tuple(sorted(request.historical_facts))
+            or trace.model_id != request.model_id
+            or trace.model_version != request.model_version
+            or trace.calculation_version != actual.calculation_version
+            or trace.assumptions_digest
+            != sha256_digest(request.assumptions.model_dump(mode="json"))
+            or resolution.input_digest != expected_input_digest
+            or resolution.policy_id != request.policy_id
+            or resolution.policy_version != request.provenance.policy_version
+            or resolution.policy_id != trace.policy_id
+            or resolution.policy_version != trace.policy_version
+            or resolution.policy_digest != trace.policy_digest
+        ):
+            return ReplayReportV1(
+                contract_version="fundamental.v1",
+                status="mismatch",
+                expected_result_hash=expected.result_hash,
+                actual_result_hash=actual.result_hash,
+                expected_input_digest=expected.input_digest,
+                actual_input_digest=actual.input_digest,
+                first_difference="calculation_provenance",
+                changed_dependency="provenance",
+            )
+        actual = with_calculation_result_hash(
+            actual.model_copy(update={"policy_resolution": resolution, "trace": trace})
         )
     dependency_versions = {
         "calculator": actual.calculation_version,

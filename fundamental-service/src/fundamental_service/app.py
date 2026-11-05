@@ -20,10 +20,20 @@ from src.shared.internal_services import INTERNAL_CONTRACT_VERSION
 
 from .application import FundamentalApplication, UncertaintyRequestV1
 from .application.service import normalize_uncertainty_payload
-from .contracts import SnapshotResolutionRequestV1, ValuationInputV1
+from .contracts import (
+    CalculationArtifactV1,
+    FactsReadRequestV1,
+    FactsReadResponseV1,
+    PolicyValuationInputV1,
+    SnapshotResolutionRequestV1,
+    ValuationInputV1,
+)
 from .facts import CanonicalFactRepository
 from .governance import ModelInventory
 from .interface.transport import (
+    EmptyOperationInputV1,
+    TypedFundamentalRequestEnvelopeV1,
+    TypedFundamentalResponseEnvelopeV1,
     authorize_operation,
     decode_input,
     error_response,
@@ -49,6 +59,7 @@ from .operations import (
 from .policies import (
     MetadataModelRepository,
     MetadataPolicyRepository,
+    PolicyRecordV1,
     PolicyRegistry,
     expansion_model_specs,
     expansion_policy_records,
@@ -61,6 +72,7 @@ from .snapshots import (
     FilesystemContentStore,
     SnapshotRepository,
 )
+from .uncertainty import UncertaintyReportV1
 
 LOGGER = logging.getLogger("fundamental_service")
 
@@ -272,6 +284,51 @@ def create_app(
     async def get_snapshot(request: Request, snapshot_id: str) -> JSONResponse:
         return success_response(request, application.snapshot(snapshot_id))
 
+    @app.get(
+        "/v1/data/facts",
+        response_model=TypedFundamentalResponseEnvelopeV1[FactsReadResponseV1],
+        openapi_extra={
+            "requestBody": {
+                "required": True,
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "$ref": (
+                                "#/components/schemas/FundamentalFactsRequestEnvelopeV1"
+                            )
+                        }
+                    }
+                },
+            }
+        },
+    )
+    async def get_facts(request: Request) -> JSONResponse:
+        value = decode_input(request, FactsReadRequestV1)
+        return success_response(request, application.read_facts(value))
+
+    @app.get(
+        "/v1/policies/{policy_id}",
+        response_model=TypedFundamentalResponseEnvelopeV1[PolicyRecordV1],
+        openapi_extra={
+            "requestBody": {
+                "required": True,
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "$ref": (
+                                "#/components/schemas/"
+                                "FundamentalPolicyLookupRequestEnvelopeV1"
+                            )
+                        }
+                    }
+                },
+            }
+        },
+    )
+    async def get_policy(request: Request, policy_id: str) -> JSONResponse:
+        decode_input(request, EmptyOperationInputV1)
+        return success_response(request, application.policy(policy_id))
+
     @app.post("/v1/data/snapshots/resolve", response_model=None)
     async def resolve_snapshot(request: Request) -> JSONResponse:
         value = decode_input(request, SnapshotResolutionRequestV1)
@@ -304,10 +361,58 @@ def create_app(
         value = decode_input(request, ValuationInputV1)
         return success_response(request, application.validate_valuation(value))
 
-    @app.post("/v1/valuation/calculate", response_model=None)
+    @app.post(
+        "/v1/valuation/calculate",
+        response_model=TypedFundamentalResponseEnvelopeV1[
+            CalculationArtifactV1 | UncertaintyReportV1
+        ],
+        openapi_extra={
+            "requestBody": {
+                "required": True,
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "$ref": (
+                                "#/components/schemas/"
+                                "FundamentalCalculationRequestEnvelopeV1"
+                            )
+                        }
+                    }
+                },
+            }
+        },
+    )
     async def calculate_valuation(request: Request) -> JSONResponse:
         value = decode_input(request, ValuationInputV1)
         result = application.calculate_valuation(
+            value, correlation_id=request.state.correlation_id
+        )
+        return success_response(request, result)
+
+    @app.post(
+        "/v1/valuation/calculate-with-policy",
+        response_model=TypedFundamentalResponseEnvelopeV1[
+            CalculationArtifactV1 | UncertaintyReportV1
+        ],
+        openapi_extra={
+            "requestBody": {
+                "required": True,
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "$ref": (
+                                "#/components/schemas/"
+                                "FundamentalPolicyCalculationRequestEnvelopeV1"
+                            )
+                        }
+                    }
+                },
+            }
+        },
+    )
+    async def calculate_with_policy(request: Request) -> JSONResponse:
+        value = decode_input(request, PolicyValuationInputV1)
+        result = application.calculate_with_policy(
             value, correlation_id=request.state.correlation_id
         )
         return success_response(request, result)
@@ -324,6 +429,42 @@ def create_app(
         )
         return success_response(request, application.uncertainty_valuation(value))
 
+    base_openapi = app.openapi
+
+    def openapi_with_typed_internal_envelopes():
+        if app.openapi_schema is not None:
+            return app.openapi_schema
+        schema = base_openapi()
+        request_models = (
+            (
+                "FundamentalCalculationRequestEnvelopeV1",
+                TypedFundamentalRequestEnvelopeV1[ValuationInputV1],
+            ),
+            (
+                "FundamentalFactsRequestEnvelopeV1",
+                TypedFundamentalRequestEnvelopeV1[FactsReadRequestV1],
+            ),
+            (
+                "FundamentalPolicyLookupRequestEnvelopeV1",
+                TypedFundamentalRequestEnvelopeV1[EmptyOperationInputV1],
+            ),
+            (
+                "FundamentalPolicyCalculationRequestEnvelopeV1",
+                TypedFundamentalRequestEnvelopeV1[PolicyValuationInputV1],
+            ),
+        )
+        components = schema.setdefault("components", {}).setdefault("schemas", {})
+        for name, model in request_models:
+            model_schema = model.model_json_schema(
+                ref_template="#/components/schemas/{model}"
+            )
+            definitions = model_schema.pop("$defs", {})
+            components.update(definitions)
+            components[name] = model_schema
+        app.openapi_schema = schema
+        return schema
+
+    app.openapi = openapi_with_typed_internal_envelopes
     return app
 
 
