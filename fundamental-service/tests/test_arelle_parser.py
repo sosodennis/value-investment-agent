@@ -1,6 +1,7 @@
 import hashlib
 import json
 import socket
+from datetime import date
 from pathlib import Path
 from zipfile import ZipFile
 
@@ -78,6 +79,31 @@ def test_captured_sec_filing_rebuilds_with_pinned_taxonomy_cache_without_network
         and fact.period_end is not None
         for fact in report.facts
     )
+    company_facts = json.loads((fixture_root / "apple-companyfacts.json").read_text())
+    for concept in ("Assets", "Liabilities", "StockholdersEquity"):
+        expected_records = [
+            (unit, record)
+            for unit, records in company_facts["facts"]["us-gaap"][concept][
+                "units"
+            ].items()
+            for record in records
+            if record["accn"] == "0000320193-24-000123" and "start" not in record
+        ]
+        assert len({record["end"] for _, record in expected_records}) >= 2
+        for unit, record in expected_records:
+            parsed_facts = [
+                fact
+                for fact in report.facts
+                if fact.concept == f"us-gaap:{concept}"
+                and fact.value == str(record["val"])
+                and fact.unit == f"iso4217:{unit}"
+                and not fact.dimensions
+            ]
+            assert parsed_facts
+            assert {fact.instant for fact in parsed_facts} == {
+                date.fromisoformat(record["end"])
+            }
+            assert all(fact.context_id for fact in parsed_facts)
     assert report.finding_codes
     assert attempted_network == []
 
