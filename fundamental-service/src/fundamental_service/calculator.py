@@ -23,6 +23,35 @@ class CalculationRefusal(ValueError):
         self.code = code
 
 
+def _artifact_digests(
+    request: ValuationInputV1,
+    *,
+    equity: Decimal,
+    per_share: Decimal,
+    nodes: list[CalculationNodeV1],
+) -> tuple[str, str]:
+    expected_input_digest = sha256_digest(
+        request.model_dump(exclude={"input_digest", "caller_approval"})
+    )
+    if (
+        request.input_digest is not None
+        and request.input_digest != expected_input_digest
+    ):
+        raise CalculationRefusal(
+            "INPUT_DIGEST_MISMATCH", "input_digest does not match the complete request"
+        )
+    result_hash = sha256_digest(
+        {
+            "input_digest": expected_input_digest,
+            "intrinsic_value": equity,
+            "per_share_value": per_share,
+            "nodes": nodes,
+            "model_version": request.model_version,
+        }
+    )
+    return expected_input_digest, result_hash
+
+
 def _node(
     node_id: str, formula: str, value: Decimal, unit: str, inputs: tuple[str, ...]
 ) -> CalculationNodeV1:
@@ -61,6 +90,11 @@ def with_calculation_result_hash(
 def calculate(
     request: ValuationInputV1, *, correlation_id: str = "local"
 ) -> CalculationArtifactV1:
+    if request.model_id not in {"fcff_dcf", "transition_fcff_dcf"}:
+        raise CalculationRefusal(
+            "MODEL_UNSUPPORTED",
+            f"model {request.model_id} is not released for the current profile",
+        )
     quality_status = (
         request.quality.status
         if hasattr(request.quality, "status")

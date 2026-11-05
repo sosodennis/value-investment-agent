@@ -16,6 +16,7 @@ from fastapi import FastAPI, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, PlainTextResponse
 from pydantic import ValidationError
+
 from src.shared.internal_services import INTERNAL_CONTRACT_VERSION
 
 from .application import FundamentalApplication, UncertaintyRequestV1
@@ -36,13 +37,6 @@ from .metadata import (
     PostgresMetadataStore,
     PostgresSnapshotRepository,
 )
-from .policies import (
-    MetadataModelRepository,
-    MetadataPolicyRepository,
-    PolicyRegistry,
-    initial_model_specs,
-    initial_policy_records,
-)
 from .operations import (
     CORRELATION_HEADER,
     OperationalMetrics,
@@ -51,6 +45,15 @@ from .operations import (
     ServiceError,
     correlation_id,
     guard_body_size,
+)
+from .policies import (
+    MetadataModelRepository,
+    MetadataPolicyRepository,
+    PolicyRegistry,
+    expansion_model_specs,
+    expansion_policy_records,
+    initial_model_specs,
+    initial_policy_records,
 )
 from .replay import ArtifactStore, ReplayEnvelopeV1
 from .snapshots import (
@@ -101,7 +104,8 @@ def create_app(
             )
         if policy_registry is None:
             policy_registry = PolicyRegistry(
-                models=initial_model_specs(), policies=initial_policy_records()
+                models=(*initial_model_specs(), *expansion_model_specs()),
+                policies=(*initial_policy_records(), *expansion_policy_records()),
             )
     metrics = OperationalMetrics()
     limiter = RateLimiter(runtime_config.rate_limit_per_minute)
@@ -123,13 +127,16 @@ def create_app(
             try:
                 metadata_store.start()
                 if policy_registry is not None:
-                    for model in initial_model_specs():
+                    for model in (*initial_model_specs(), *expansion_model_specs()):
                         metadata_store.publish_model(
                             model,
                             model_id=model.model_id,
                             model_version=model.model_version,
                         )
-                    for policy in initial_policy_records():
+                    for policy in (
+                        *initial_policy_records(),
+                        *expansion_policy_records(),
+                    ):
                         metadata_store.publish_policy(
                             policy,
                             policy_id=policy.policy_id,

@@ -8,6 +8,7 @@ version = "0.1.0"
 description = "Versioned, stateless Fundamental valuation service contracts"
 requires-python = ">=3.11"
 dependencies = [
+  "cryptography>=44.0",
   "fastapi>=0.110",
   "pydantic>=2.6",
   "arelle-release==2.47.4",

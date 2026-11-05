@@ -11,6 +11,33 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from .serialization import is_digest, sha256_digest
 
+# The public contract names every model family that may appear in a governed
+# inventory.  Only released families are accepted by the calculator; the
+# remaining values exist so callers receive an explicit unsupported decision
+# instead of a schema-level or hidden fallback.
+ModelId = Literal[
+    "fcff_dcf",
+    "transition_fcff_dcf",
+    "bank_excess_return",
+    "insurance_statutory_excess_return",
+    "reit_nav",
+    "regulated_utility",
+    "normalized_cyclical",
+    "biotech_rnpv",
+    "sum_of_parts",
+    "ifrs_fcff_dcf",
+]
+InitialModelId = Literal["fcff_dcf", "transition_fcff_dcf"]
+BankFactField = Literal[
+    "current_book_value",
+    "tangible_book_value",
+    "reported_rwa",
+    "cet1_capital",
+    "diluted_shares",
+    "regulatory_entity",
+    "issuer_entity_relationship",
+]
+
 
 class StrictModel(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True, validate_assignment=True)
@@ -67,7 +94,7 @@ class SourceProvenanceV1(StrictModel):
     terms_reference: str | None = None
 
     @model_validator(mode="after")
-    def timestamps_have_timezone(self) -> "SourceProvenanceV1":
+    def timestamps_have_timezone(self) -> SourceProvenanceV1:
         for name, value in (
             ("captured_at", self.captured_at),
             ("available_at", self.available_at),
@@ -94,7 +121,7 @@ class TraceV1(StrictModel):
     description: str | None = None
 
     @model_validator(mode="after")
-    def require_trace(self) -> "TraceV1":
+    def require_trace(self) -> TraceV1:
         if not self.source_refs and not self.expression and not self.description:
             raise ValueError("a trace requires source_refs, expression, or description")
         return self
@@ -104,7 +131,7 @@ class IdentityV1(StrictModel):
     issuer_id: str = Field(min_length=1)
     issuer_name: str = Field(min_length=1)
     domicile: str = Field(min_length=2, max_length=2)
-    reporting_basis: Literal["us-gaap"]
+    reporting_basis: Literal["us-gaap", "ifrs"]
     security_id: str = Field(min_length=1)
     share_class: str = Field(min_length=1)
     currency: str = Field(min_length=3, max_length=3)
@@ -129,7 +156,7 @@ class XbrlContextV1(StrictModel):
     context_id: str = Field(min_length=1)
 
     @model_validator(mode="after")
-    def period_shape(self) -> "XbrlContextV1":
+    def period_shape(self) -> XbrlContextV1:
         if self.period_type is PeriodType.INSTANT and self.instant is None:
             raise ValueError("instant context requires instant")
         if self.period_type is PeriodType.DURATION and (
@@ -166,7 +193,7 @@ class SourceRecordV1(StrictModel):
     taxonomy_manifest_id: str | None = None
 
     @model_validator(mode="after")
-    def timestamps_have_timezone(self) -> "SourceRecordV1":
+    def timestamps_have_timezone(self) -> SourceRecordV1:
         for name, value in (
             ("available_at", self.available_at),
             ("captured_at", self.captured_at),
@@ -195,7 +222,7 @@ class SourceSnapshotV1(StrictModel):
     manifest_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
 
     @model_validator(mode="after")
-    def validate_digest(self) -> "SourceSnapshotV1":
+    def validate_digest(self) -> SourceSnapshotV1:
         payload = self.model_dump(exclude={"manifest_digest", "snapshot_id"})
         if self.manifest_digest != sha256_digest(payload):
             raise ValueError(
@@ -204,7 +231,7 @@ class SourceSnapshotV1(StrictModel):
         return self
 
     @model_validator(mode="after")
-    def timestamps_have_timezone(self) -> "SourceSnapshotV1":
+    def timestamps_have_timezone(self) -> SourceSnapshotV1:
         for name, value in (
             ("valuation_timestamp", self.valuation_timestamp),
             ("captured_at", self.captured_at),
@@ -296,7 +323,7 @@ class CanonicalFactV1(StrictModel):
     selection_reason: str | None = None
 
     @model_validator(mode="after")
-    def point_in_time_order(self) -> "CanonicalFactV1":
+    def point_in_time_order(self) -> CanonicalFactV1:
         for earlier, later, name in (
             (self.available_at, self.captured_at, "available_at/captured_at"),
         ):
@@ -309,7 +336,7 @@ class CanonicalFactV1(StrictModel):
         return self
 
     @model_validator(mode="after")
-    def timestamps_have_timezone(self) -> "CanonicalFactV1":
+    def timestamps_have_timezone(self) -> CanonicalFactV1:
         for name, value in (
             ("as_of", self.as_of),
             ("available_at", self.available_at),
@@ -340,7 +367,7 @@ class WaccAssumptionsV1(StrictModel):
     equity_weight: Decimal
 
     @model_validator(mode="after")
-    def weights_and_rates(self) -> "WaccAssumptionsV1":
+    def weights_and_rates(self) -> WaccAssumptionsV1:
         if self.equity_weight + self.debt_weight != Decimal("1"):
             raise ValueError("debt_weight and equity_weight must sum to 1")
         return self
@@ -355,12 +382,138 @@ class CapitalBridgeAssumptionsV1(StrictModel):
     diluted_shares: Decimal = Field(gt=0)
 
 
-class AssumptionsV1(StrictModel):
-    forecast: ForecastAssumptionsV1
-    wacc: WaccAssumptionsV1
-    terminal_growth: Decimal
-    capital_bridge: CapitalBridgeAssumptionsV1
+class BankAssumptionsV1(StrictModel):
+    """Caller-owned inputs for a regulatory-capital constrained bank model."""
+
+    current_book_value: Decimal = Field(gt=0)
+    tangible_book_value: Decimal = Field(gt=0)
+    forecast_net_income: tuple[Decimal, ...] = Field(min_length=3, max_length=10)
+    forecast_rwa_growth: tuple[Decimal, ...] = Field(min_length=3, max_length=10)
+    cost_of_equity: Decimal = Field(gt=0)
+    payout_ratio: Decimal = Field(ge=0, le=1)
+    terminal_growth: Decimal = Field(ge=0)
+    reported_rwa: Decimal = Field(gt=0)
+    cet1_capital: Decimal = Field(gt=0)
+    minimum_cet1_ratio: Decimal = Field(gt=0, le=1)
+    fdic_certificate: str = Field(min_length=1)
+    reporting_entity_relationship: Literal[
+        "same_legal_entity", "consolidated_subsidiary"
+    ]
+    fact_references: dict[BankFactField, str]
+    diluted_shares: Decimal = Field(gt=0)
     trace: TraceV1
+
+    @property
+    def cet1_ratio(self) -> Decimal:
+        return self.cet1_capital / self.reported_rwa
+
+    @model_validator(mode="after")
+    def regulatory_constraints(self) -> BankAssumptionsV1:
+        if self.cet1_capital / self.reported_rwa < self.minimum_cet1_ratio:
+            raise ValueError("reported CET1 ratio is below the model minimum")
+        if self.terminal_growth >= self.cost_of_equity:
+            raise ValueError("terminal growth must be below cost of equity")
+        if len(self.forecast_net_income) != len(self.forecast_rwa_growth):
+            raise ValueError("bank income and RWA forecasts must have equal length")
+        if any(value <= Decimal("-1") for value in self.forecast_rwa_growth):
+            raise ValueError("forecast RWA growth must exceed -100 percent")
+        if self.tangible_book_value > self.current_book_value:
+            raise ValueError("tangible book value cannot exceed reported book value")
+        required_references = {
+            "current_book_value",
+            "tangible_book_value",
+            "reported_rwa",
+            "cet1_capital",
+            "diluted_shares",
+            "regulatory_entity",
+            "issuer_entity_relationship",
+        }
+        if set(self.fact_references) != required_references:
+            raise ValueError("bank fact references must cover every reported input")
+        if any(not fact_id for fact_id in self.fact_references.values()):
+            raise ValueError("bank fact references cannot be empty")
+        return self
+
+
+class AssumptionsV1(StrictModel):
+    forecast: ForecastAssumptionsV1 | None = None
+    wacc: WaccAssumptionsV1 | None = None
+    terminal_growth: Decimal | None = None
+    capital_bridge: CapitalBridgeAssumptionsV1 | None = None
+    trace: TraceV1 | None = None
+    bank: BankAssumptionsV1 | None = None
+
+
+def _valuation_input_json_schema(schema: dict[str, Any]) -> None:
+    fcff_fields = ("forecast", "wacc", "terminal_growth", "capital_bridge", "trace")
+    schema.setdefault("allOf", []).extend(
+        [
+            {
+                "if": {
+                    "properties": {"model_id": {"const": "bank_excess_return"}},
+                    "required": ["model_id"],
+                },
+                "then": {
+                    "properties": {
+                        "assumptions": {
+                            "required": ["bank"],
+                            "properties": {
+                                "bank": {"not": {"type": "null"}},
+                                **{field: {"type": "null"} for field in fcff_fields},
+                            },
+                        }
+                    }
+                },
+            },
+            {
+                "if": {
+                    "properties": {
+                        "model_id": {"enum": ["fcff_dcf", "transition_fcff_dcf"]}
+                    },
+                    "required": ["model_id"],
+                },
+                "then": {
+                    "properties": {
+                        "assumptions": {
+                            "required": list(fcff_fields),
+                            "properties": {
+                                **{
+                                    field: {"not": {"type": "null"}}
+                                    for field in fcff_fields
+                                },
+                                "bank": {"type": "null"},
+                            },
+                        }
+                    }
+                },
+            },
+            {
+                "if": {
+                    "properties": {
+                        "model_id": {
+                            "enum": [
+                                "fcff_dcf",
+                                "transition_fcff_dcf",
+                                "insurance_statutory_excess_return",
+                                "reit_nav",
+                                "regulated_utility",
+                                "normalized_cyclical",
+                                "biotech_rnpv",
+                                "sum_of_parts",
+                                "ifrs_fcff_dcf",
+                            ]
+                        }
+                    },
+                    "required": ["model_id"],
+                },
+                "then": {
+                    "properties": {
+                        "assumptions": {"properties": {"bank": {"type": "null"}}}
+                    }
+                },
+            },
+        ]
+    )
 
 
 class DistributionParameterV1(StrictModel):
@@ -372,7 +525,7 @@ class DistributionParameterV1(StrictModel):
     mean: Decimal | None = None
 
     @model_validator(mode="after")
-    def bounds(self) -> "DistributionParameterV1":
+    def bounds(self) -> DistributionParameterV1:
         if self.lower > self.upper:
             raise ValueError("distribution lower bound exceeds upper bound")
         if self.mode is not None and not self.lower <= self.mode <= self.upper:
@@ -411,7 +564,7 @@ class UncertaintyV1(StrictModel):
     sensitivity: tuple[SensitivityInputV1, ...] = ()
 
     @model_validator(mode="after")
-    def sampling_requirements(self) -> "UncertaintyV1":
+    def sampling_requirements(self) -> UncertaintyV1:
         if self.mode == "monte_carlo" and (
             not self.parameters
             or self.samples is None
@@ -474,6 +627,8 @@ class CallerApprovalEnvelopeV1(StrictModel):
 
 
 class ValuationInputV1(StrictModel):
+    model_config = ConfigDict(json_schema_extra=_valuation_input_json_schema)
+
     contract_version: Literal["fundamental.v1"]
     identity: IdentityV1
     valuation_context: ValuationContextV1
@@ -482,14 +637,56 @@ class ValuationInputV1(StrictModel):
     uncertainty: UncertaintyV1
     quality: QualityInputV1
     provenance: ProvenanceInputV1
-    model_id: Literal["fcff_dcf", "transition_fcff_dcf"]
+    model_id: ModelId
     model_version: str = Field(min_length=1)
     policy_id: str | None = None
     input_digest: str | None = None
     caller_approval: CallerApprovalEnvelopeV1 | None = None
 
     @model_validator(mode="after")
-    def digest_and_approval(self) -> "ValuationInputV1":
+    def model_assumptions_present(self) -> ValuationInputV1:
+        if self.model_id == "bank_excess_return":
+            if self.assumptions.bank is None:
+                raise ValueError("bank_excess_return requires assumptions.bank")
+            if any(
+                value is not None
+                for value in (
+                    self.assumptions.forecast,
+                    self.assumptions.wacc,
+                    self.assumptions.terminal_growth,
+                    self.assumptions.capital_bridge,
+                    self.assumptions.trace,
+                )
+            ):
+                raise ValueError(
+                    "bank_excess_return must not include FCFF-specific assumptions"
+                )
+            if not set(self.assumptions.bank.fact_references.values()) <= set(
+                self.historical_facts
+            ):
+                raise ValueError("bank fact references must belong to historical_facts")
+        elif self.model_id in {"fcff_dcf", "transition_fcff_dcf"} and (
+            any(
+                value is None
+                for value in (
+                    self.assumptions.forecast,
+                    self.assumptions.wacc,
+                    self.assumptions.terminal_growth,
+                    self.assumptions.capital_bridge,
+                    self.assumptions.trace,
+                )
+            )
+            or self.assumptions.bank is not None
+        ):
+            raise ValueError("FCFF models require FCFF assumptions only")
+        elif self.model_id not in {"fcff_dcf", "transition_fcff_dcf"} and (
+            self.assumptions.bank is not None
+        ):
+            raise ValueError("bank assumptions require bank_excess_return")
+        return self
+
+    @model_validator(mode="after")
+    def digest_and_approval(self) -> ValuationInputV1:
         payload = self.model_dump(exclude={"input_digest", "caller_approval"})
         computed = sha256_digest(payload)
         if self.input_digest is not None and (
@@ -503,7 +700,7 @@ class ValuationInputV1(StrictModel):
             raise ValueError("caller approval is bound to a different input_digest")
         return self
 
-    def with_digest(self) -> "ValuationInputV1":
+    def with_digest(self) -> ValuationInputV1:
         digest = sha256_digest(
             self.model_dump(exclude={"input_digest", "caller_approval"})
         )
@@ -515,7 +712,7 @@ class ValidationResponseV1(StrictModel):
     input: ValuationInputV1
     input_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
     quality_status: QualityStatus
-    policy_resolution: "PolicyResolutionV1"
+    policy_resolution: PolicyResolutionV1
     issue_codes: tuple[str, ...] = ()
     missing_evidence: tuple[str, ...] = ()
 
@@ -603,7 +800,7 @@ class CalculationEvidenceV1(StrictModel):
     calculation: CalculationArtifactV1
 
     @model_validator(mode="after")
-    def evidence_is_digest_bound(self) -> "CalculationEvidenceV1":
+    def evidence_is_digest_bound(self) -> CalculationEvidenceV1:
         calculation = self.calculation
         trace = calculation.trace
         if trace is None:
@@ -720,7 +917,7 @@ class ReleaseManifestV1(StrictModel):
         return values
 
     @model_validator(mode="after")
-    def digest(self) -> "ReleaseManifestV1":
+    def digest(self) -> ReleaseManifestV1:
         if self.manifest_digest != sha256_digest(
             self.model_dump(exclude={"manifest_digest"})
         ):

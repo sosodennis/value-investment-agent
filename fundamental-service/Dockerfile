@@ -2,6 +2,7 @@ FROM python:3.12-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
+    PATH="/app/.venv/bin:$PATH" \
     FUNDAMENTAL_SERVICE_DATA_ROOT=/var/lib/fundamental
 
 WORKDIR /app
@@ -10,8 +11,10 @@ COPY fundamental-service/pyproject.toml fundamental-service/uv.lock fundamental-
 COPY --from=internal-contracts internal_services ./src/shared/internal_services
 COPY fundamental-service/src ./src
 
-RUN python -m pip install --no-cache-dir --upgrade pip \
-    && python -m pip install --no-cache-dir .
+RUN python -m pip install --no-cache-dir uv==0.13.6 \
+    && uv sync --frozen --no-dev --no-install-project
+
+RUN uv sync --frozen --no-dev
 
 RUN useradd --create-home --uid 10001 fundamental \
     && mkdir -p /var/lib/fundamental \
