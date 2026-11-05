@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from types import SimpleNamespace
 from threading import Barrier, Lock, Thread
 from time import sleep
+import sys
 
 from fundamental_service.replay import (
     ArtifactStore,
@@ -190,7 +191,7 @@ def test_manifest_driven_replay_is_offline(tmp_path: Path):
     store.put("artifact-1", expected)
     source_record = store.put("source", {"source": "source"})
     dependencies = DependencyManifestV1(
-        runtime_version="python-3.12",
+        runtime_version=f"python-{sys.version_info.major}.{sys.version_info.minor}",
         parser_version=request.provenance.parser_version,
         taxonomy_version=request.provenance.taxonomy_version,
         model_version=request.model_version,
