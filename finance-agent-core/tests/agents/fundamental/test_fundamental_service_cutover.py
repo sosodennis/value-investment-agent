@@ -616,6 +616,35 @@ async def test_cutover_rejects_unapproved_assumption_defaults() -> None:
 
 
 @pytest.mark.asyncio
+async def test_cutover_accepts_service_defined_optional_assumption_defaults() -> None:
+    payload = _input()
+    canonical_assumptions = {**payload["assumptions"], "bank": None}
+    client = _Client(validated_input={**payload, "assumptions": canonical_assumptions})
+    token = set_request_principal(
+        InternalPrincipal(
+            subject_id="caller-1", organization_id="org-1", membership_id="membership-1"
+        )
+    )
+    try:
+        result = await run_service_valuation_flow(
+            _Runtime(),
+            {"fundamental_analysis": {"valuation_request": payload}},
+            client=client,
+            request_approval_fn=lambda _request: {
+                "type": "valuation_approval",
+                "contract_version": "v1",
+                "decision": "approve",
+            },
+        )
+    finally:
+        reset_request_principal(token)
+
+    assert [operation for operation, _ in client.calls] == ["validate", "calculate"]
+    assert result.update["fundamental_analysis"]["quality_status"] == "verified"
+    assert client.calls[1][1]["assumptions"]["bank"] is None
+
+
+@pytest.mark.asyncio
 async def test_cutover_rejects_service_assumption_rewrite() -> None:
     client = _Client(
         validated_input={**_input(), "assumptions": {"terminal_growth": "0.99"}}
