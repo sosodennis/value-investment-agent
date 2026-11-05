@@ -93,6 +93,7 @@ _PROJECTION_FIELDS = (
 _DIGEST_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 _MONTE_CARLO_SAMPLER_VERSION = "python-random-v1"
 _SCHEMA_DEFAULTS: tuple[tuple[tuple[str | int | None, ...], object], ...] = (
+    (("assumptions", "bank"), None),
     (("assumptions", "forecast", "base_revenue"), None),
     (("assumptions", "trace", "description"), None),
     (("assumptions", "trace", "expression"), None),
