@@ -1,21 +1,25 @@
-from datetime import UTC, datetime
-from decimal import Decimal
 import hashlib
 import json
+from datetime import UTC, datetime
+from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
 from fastapi.testclient import TestClient
-
 from fundamental_service.app import create_app
 from fundamental_service.contracts import (
-    CallerApprovalEnvelopeV1,
     CalculationEvidenceV1,
+    CallerApprovalEnvelopeV1,
     QualityStatus,
     UncertaintyV1,
 )
 from fundamental_service.operations import OperationsConfig
-from fundamental_service.policies import initial_policy_records
+from fundamental_service.policies import (
+    PolicyRegistry,
+    initial_model_specs,
+    initial_policy_records,
+)
 from fundamental_service.replay import ArtifactStore
 from fundamental_service.snapshots import FilesystemContentStore
 from fundamental_service.testsupport import (
@@ -419,6 +423,85 @@ def test_validation_rejects_fact_outside_selected_snapshot():
     )
     assert response.status_code == 422
     assert response.json()["error"]["code"] == "FACT_PROVENANCE_MISMATCH"
+
+
+@pytest.mark.parametrize(
+    ("lifecycle", "release_manifest", "expected_issue"),
+    (
+        ("retired", None, "MODEL_NOT_ACTIVE"),
+        ("active", None, "MODEL_RELEASE_EVIDENCE_MISSING"),
+    ),
+)
+def test_unreleased_model_is_unsupported_before_snapshot_reads(
+    lifecycle: str, release_manifest: str | None, expected_issue: str
+):
+    # Exercise the request gate against registry state that bypassed model validation.
+    model = initial_model_specs()[0].model_copy(
+        update={"lifecycle": lifecycle, "release_manifest": release_manifest}
+    )
+    registry = PolicyRegistry(models=(model,), policies=(initial_policy_records()[0],))
+
+    class SnapshotRepository:
+        def get(self, snapshot_id: str):
+            raise AssertionError(f"unreleased model read snapshot {snapshot_id}")
+
+    class FactRepository:
+        def get(self, fact_id: str):
+            raise AssertionError(f"unreleased model read fact {fact_id}")
+
+    client = TestClient(
+        create_app(
+            SnapshotRepository(),
+            fact_repository=FactRepository(),
+            policy_registry=registry,
+        )
+    )
+    payload = make_valuation().model_dump(mode="json")
+    envelope = make_internal_envelope(payload)
+
+    validation = client.post(
+        "/v1/valuation/validate", headers=auth_headers(), json=envelope
+    )
+    assert validation.status_code == 200
+    validation_result = validation.json()["result"]
+    assert validation_result["quality_status"] == "unsupported"
+    assert expected_issue in validation_result["issue_codes"]
+
+    calculation = client.post(
+        "/v1/valuation/calculate", headers=auth_headers(), json=envelope
+    )
+    assert calculation.status_code == 422
+    assert calculation.json()["error"]["code"] == "MODEL_UNSUPPORTED"
+
+    uncertainty_payload = {
+        **payload,
+        "scenarios": [],
+        "sensitivity": [],
+        "monte_carlo": {
+            "uncertainty": {
+                "mode": "monte_carlo",
+                "samples": 10,
+                "seed": 17,
+                "invalid_draw_policy": "skip",
+                "parameters": [
+                    {
+                        "path": "assumptions.terminal_growth",
+                        "distribution": "uniform",
+                        "lower": "0.01",
+                        "upper": "0.03",
+                    }
+                ],
+            },
+            "sampler_version": "python-random-v1",
+        },
+    }
+    uncertainty = client.post(
+        "/v1/valuation/uncertainty",
+        headers=auth_headers(),
+        json=make_internal_envelope(uncertainty_payload),
+    )
+    assert uncertainty.status_code == 422
+    assert uncertainty.json()["error"]["code"] == "MODEL_UNSUPPORTED"
 
 
 def test_valid_bearer_without_signed_context_is_rejected():

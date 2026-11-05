@@ -234,6 +234,36 @@ class FundamentalApplication:
                 retryable=False,
             ) from error
 
+    def _model_release_issues(self, value: ValuationInputV1) -> tuple[str, ...]:
+        if value.model_id not in {"fcff_dcf", "transition_fcff_dcf"}:
+            return ("MODEL_FAMILY_NOT_RELEASED",)
+        if self.policy_registry is None:
+            raise ServiceError(
+                "POLICY_UNAVAILABLE",
+                "no service-owned model registry is available",
+                status_code=503,
+                retryable=True,
+            )
+        model = self.policy_registry.model(value.model_id, value.model_version)
+        if model is None:
+            return ("MODEL_RELEASE_EVIDENCE_MISSING",)
+        issues = []
+        if model.lifecycle != "active":
+            issues.append("MODEL_NOT_ACTIVE")
+        if model.release_manifest is None:
+            issues.append("MODEL_RELEASE_EVIDENCE_MISSING")
+        return tuple(issues)
+
+    def _require_released_calculator_model(self, value: ValuationInputV1) -> None:
+        issues = self._model_release_issues(value)
+        if issues:
+            raise ServiceError(
+                "MODEL_UNSUPPORTED",
+                f"model {value.model_id} is not released: {', '.join(issues)}",
+                status_code=422,
+                retryable=False,
+            )
+
     @staticmethod
     def _trace(
         request: ValuationInputV1,
@@ -514,9 +544,10 @@ class FundamentalApplication:
         issue_codes = resolved.quality.issue_codes
         missing_evidence = resolved.quality.missing_evidence
         quality_status = resolved.quality.status
-        if resolved.model_id not in {"fcff_dcf", "transition_fcff_dcf"}:
+        release_issues = self._model_release_issues(resolved)
+        if release_issues:
             quality_status = QualityStatus.UNSUPPORTED
-            issue_codes = (*issue_codes, "MODEL_FAMILY_NOT_RELEASED")
+            issue_codes = (*issue_codes, *release_issues)
             missing_evidence = (
                 *missing_evidence,
                 "complete_model_source_cohort_challenger_calibration_release",
@@ -540,13 +571,7 @@ class FundamentalApplication:
     def calculate_valuation(
         self, value: ValuationInputV1, *, correlation_id: str
     ) -> CalculationArtifactV1:
-        if value.model_id not in {"fcff_dcf", "transition_fcff_dcf"}:
-            raise ServiceError(
-                "MODEL_UNSUPPORTED",
-                f"model {value.model_id} is not released for the current profile",
-                status_code=422,
-                retryable=False,
-            )
+        self._require_released_calculator_model(value)
         guard_calculation_budget(value, self.config)
         snapshot = self.snapshot(value.valuation_context.data_snapshot_id)
         self._verify_fact_references(value)
@@ -604,13 +629,7 @@ class FundamentalApplication:
         return report
 
     def uncertainty_valuation(self, value: UncertaintyRequestV1) -> UncertaintyReportV1:
-        if value.model_id not in {"fcff_dcf", "transition_fcff_dcf"}:
-            raise ServiceError(
-                "MODEL_UNSUPPORTED",
-                f"model {value.model_id} is not released for the current profile",
-                status_code=422,
-                retryable=False,
-            )
+        self._require_released_calculator_model(value)
         guard_calculation_budget(value, self.config)
         self.snapshot(value.valuation_context.data_snapshot_id)
         base_value = value.base_input()

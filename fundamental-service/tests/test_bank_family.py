@@ -7,11 +7,6 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 from fundamental_service.app import create_app
-from fundamental_service.bank_model import (
-    bank_artifact_findings,
-    calculate_bank_excess_return,
-    independent_bank_reference,
-)
 from fundamental_service.bank_source import (
     bank_report_issuer_mapping_status,
     parse_fdic_bankfind_report,
@@ -27,6 +22,11 @@ from fundamental_service.testsupport import (
     auth_headers,
     make_internal_envelope,
     make_valuation,
+)
+from references.bank_model import (
+    bank_artifact_findings,
+    calculate_bank_excess_return,
+    independent_bank_reference,
 )
 
 FIXTURE_ROOT = Path(__file__).parent / "fixtures" / "public-sources"

@@ -9,8 +9,8 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-from .calculator import CalculationRefusal, _artifact_digests, _node
-from .contracts import (
+from fundamental_service.calculator import CalculationRefusal, _artifact_digests, _node
+from fundamental_service.contracts import (
     BankAssumptionsV1,
     CalculationArtifactV1,
     CalculationNodeV1,
