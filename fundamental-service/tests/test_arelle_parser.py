@@ -1,14 +1,16 @@
 import hashlib
 import json
 import socket
-from datetime import date
+from datetime import date, datetime, timezone
 from pathlib import Path
 from zipfile import ZipFile
 
 import pytest
 
 from fundamental_service.arelle_parser import (
+    ArelleFindingV1,
     ArelleParserError,
+    ArelleParseReportV1,
     ArelleValidationProfileV1,
     parse_filing_offline,
 )
@@ -28,6 +30,37 @@ def test_pinned_arelle_parses_captured_xbrl_without_network():
 def test_parser_rejects_non_offline_profile():
     with pytest.raises(ValueError, match="offline=true"):
         ArelleValidationProfileV1(profile_id="sec-efm-us-gaap-v1", offline=False)
+
+
+def test_known_inline_transform_diagnostics_do_not_hide_other_blocking_findings():
+    profile = ArelleValidationProfileV1(profile_id="sec-efm-us-gaap-v1")
+    report = ArelleParseReportV1(
+        filing_path="fixture.xbrl",
+        parser_version=profile.arelle_version,
+        taxonomy_version="fixture-taxonomy-v1",
+        validation_profile=profile,
+        validation_profile_digest=profile.digest(),
+        findings=(
+            ArelleFindingV1(
+                code="ix11.10.1.2:invalidTransformation",
+                severity="error",
+                message="invalid transformation",
+            ),
+            ArelleFindingV1(
+                code="ix11.11.1.2:invalidTransformation",
+                severity="error",
+                message="invalid transformation",
+            ),
+            ArelleFindingV1(
+                code="EFM.5.02.05.disallowedElement",
+                severity="error",
+                message="disallowed inline element",
+            ),
+        ),
+        parsed_at=datetime.now(timezone.utc),
+    )
+
+    assert report.blocking_finding_codes() == ("EFM.5.02.05.disallowedElement",)
 
 
 def test_captured_sec_filing_rebuilds_with_pinned_taxonomy_cache_without_network(

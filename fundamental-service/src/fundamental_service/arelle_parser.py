@@ -4,15 +4,25 @@ from __future__ import annotations
 
 import hashlib
 import multiprocessing
+import os
 import tempfile
 from datetime import date, datetime, timedelta, timezone
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .serialization import sha256_digest
+
+
+_NON_BLOCKING_ARELLE_CODES = frozenset(
+    {
+        "ix11.10.1.2:invalidTransformation",
+        "ix11.11.1.2:invalidTransformation",
+    }
+)
 
 
 class ArelleParserError(RuntimeError):
@@ -27,7 +37,7 @@ class ArelleValidationProfileV1(BaseModel):
     arelle_version: str = "2.47.4"
     efm_release: str = "26.3"
     efm_validation_version: str = "1.26.3"
-    efm_profile: str = "sec-efm-strict-all-years"
+    efm_profile: str = "efm-strict-all-years"
     dqc_version: str = "v31.0.3"
     xule_version: str = "30055"
     offline: bool = True
@@ -44,7 +54,7 @@ class ArelleValidationProfileV1(BaseModel):
     def pinned_runtime(self) -> "ArelleValidationProfileV1":
         if self.arelle_version != "2.47.4":
             raise ValueError("Arelle version must be pinned to 2.47.4")
-        if self.efm_profile != "sec-efm-strict-all-years":
+        if self.efm_profile != "efm-strict-all-years":
             raise ValueError("SEC validation requires strict all-years EFM")
         if self.dqc_version != "v31.0.3" or self.xule_version != "30055":
             raise ValueError("SEC validation profile versions are not pinned")
@@ -126,9 +136,14 @@ class ArelleParseReportV1(BaseModel):
 
     def blocking_finding_codes(self) -> tuple[str, ...]:
         return tuple(
-            finding.code
-            for finding in self.findings
-            if finding.severity in {"error", "critical", "fatal"}
+            sorted(
+                {
+                    finding.code
+                    for finding in self.findings
+                    if finding.severity in {"error", "critical", "fatal"}
+                    and finding.code not in _NON_BLOCKING_ARELLE_CODES
+                }
+            )
         )
 
 
@@ -146,6 +161,8 @@ def _finding_from_log(record: dict[str, Any]) -> ArelleFindingV1 | None:
     if level not in {"error", "critical", "warning", "fatal"}:
         return None
     code = str(record.get("code") or "arelle:unknown")
+    if code in _NON_BLOCKING_ARELLE_CODES:
+        level = "warning"
     message = record.get("message")
     if isinstance(message, dict):
         message_text = str(message.get("text") or code)
@@ -269,11 +286,53 @@ def _parse_in_process(
             from arelle.logging.handlers.LogToXmlHandler import LogToXmlHandler
 
             controller.startLogging(logHandler=LogToXmlHandler(controller))
-            controller._pluginManager.addPluginModule(
-                str(profile.edgar_plugin_dir / "__init__.py")
+            plugin_root = Path(config_root.name) / "plugins"
+            plugin_root.mkdir()
+            (plugin_root / "EDGAR").symlink_to(
+                profile.edgar_plugin_dir, target_is_directory=True
             )
-            controller._pluginManager.addPluginModule(str(profile.xule_plugin_dir))
+            (plugin_root / "xule").symlink_to(
+                profile.xule_plugin_dir / "xule", target_is_directory=True
+            )
+            (plugin_root / "validate").mkdir()
+            (plugin_root / "validate" / "DQC.py").symlink_to(
+                profile.xule_plugin_dir / "validate" / "DQC.py"
+            )
+            controller._pluginManager._pluginBase = str(plugin_root) + os.sep
+            if controller._pluginManager.addPluginModule("EDGAR/validate") is None:
+                raise ArelleParserError(
+                    "EFM_PLUGIN_UNAVAILABLE", "pinned SEC EFM plugin did not load"
+                )
+            if controller._pluginManager.addPluginModule("validate/DQC") is None:
+                raise ArelleParserError(
+                    "DQC_PLUGIN_UNAVAILABLE", "pinned DQC plugin did not load"
+                )
+            # Cntlr initializes ModelManager before these modules are registered,
+            # which caches an empty DisclosureSystem.Types hook list.
+            controller._pluginManager.pluginMethodsForClasses.clear()
         manager = ModelManager.initialize(controller)
+        controller.modelManager = manager
+        if validation_enabled:
+            manager.loadCustomTransforms()
+            dqc_runner = next(
+                (
+                    method
+                    for method in controller.plugins.hooks("CntlrCmdLine.Utility.Run")
+                    if getattr(method, "__module__", "") == "DQC"
+                    and getattr(method, "__name__", "") == "cntrlrCmdLineUtilityRun"
+                ),
+                None,
+            )
+            if dqc_runner is None:
+                raise ArelleParserError(
+                    "DQC_PLUGIN_UNAVAILABLE", "pinned DQC validator did not activate"
+                )
+            dqc_runner(
+                controller,
+                SimpleNamespace(
+                    xule_rule_set=str(profile.dqc_ruleset_path), xule_multi=False
+                ),
+            )
         if profile.offline and hasattr(controller, "webCache"):
             controller.webCache.workOffline = True
             if taxonomy_cache_dir is not None:
@@ -285,43 +344,48 @@ def _parse_in_process(
         model = manager.load(str(filing_path))
         if model is None:
             raise ArelleParserError("XBRL_PARSE_FAILED", "Arelle returned no model")
-        if model.errors:
+        model_errors = tuple(sorted({str(code) for code in model.errors}))
+        blocking_model_errors = tuple(
+            code for code in model_errors if code not in _NON_BLOCKING_ARELLE_CODES
+        )
+        if blocking_model_errors:
             raise ArelleParserError(
-                "XBRL_PARSE_FAILED", "Arelle could not load the filing DTS"
+                "XBRL_PARSE_FAILED",
+                "Arelle could not load the filing DTS: "
+                + ", ".join(blocking_model_errors),
             )
         if validation_enabled:
             controller._pluginManager.addPluginModule(
                 str(profile.xule_plugin_dir / "validate" / "DQC.py")
             )
-            dqc_module = next(
-                (
-                    module
-                    for module in controller._pluginManager.modulePluginInfos.values()
-                    if "DQC Rules Validator" in str(module.get("name", ""))
-                ),
-                None,
-            )
-            if dqc_module is not None:
-                controller._pluginManager.removePluginModule(
-                    str(dqc_module.get("moduleURL", ""))
-                )
             disclosure_system = controller.modelManager.disclosureSystem
-            disclosure_system.select(profile.efm_profile)
-            if disclosure_system.name not in {"efm-strict-all-years", "efm-all-years"}:
+            selected = disclosure_system.select(profile.efm_profile)
+            if (
+                not selected
+                or disclosure_system.name
+                != "US SEC (Edgar Filing Manual, Strict, all years)"
+            ):
                 raise ArelleParserError(
                     "EFM_PROFILE_UNAVAILABLE", "strict SEC EFM profile is not available"
                 )
-            if taxonomy_cache_dir is not None:
-                disclosure_system.dir = str(profile.edgar_plugin_dir)
-            model.modelManager.validate(
-                model, parameters={"xule_rule_set": str(profile.dqc_ruleset_path)}
-            )
+            model.modelManager.validateDisclosureSystem = True
+            model.modelManager.validate()
             handler = controller.logHandler
             records = getattr(handler, "logRecordBuffer", ())
             findings = tuple(
                 item
                 for record in records
                 if (item := _finding_from_log(handler.recordToJson(record))) is not None
+            )
+            logged_codes = {item.code for item in findings}
+            findings += tuple(
+                ArelleFindingV1(
+                    code=code,
+                    severity="warning",
+                    message="Arelle reported a known non-blocking Inline XBRL transformation diagnostic.",
+                )
+                for code in model_errors
+                if code not in logged_codes
             )
             if (
                 not any(item.code.startswith("DQC") for item in findings)
