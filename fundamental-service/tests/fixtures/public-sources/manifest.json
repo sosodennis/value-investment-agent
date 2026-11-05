@@ -1,6 +1,6 @@
 {
   "capture_version": "public-source-capture-v1",
-  "captured_at": "2026-11-03T16:42:20.769326+00:00",
+  "captured_at": "2026-11-04T12:00:00+00:00",
   "sources": [
     {
       "available_at": "2026-11-03T16:42:16.970335+00:00",
@@ -61,11 +61,24 @@
       "media_type": "application/json",
       "path": "public-sources/fdic-institution-sample.json",
       "publication_at": "2026-11-03T16:42:20.768064+00:00",
-      "role": "macro",
+      "role": "reference",
       "sha256": "b0819cf25f2dfecf3bf9d6600d7843765f781128b1c587b924f371a08cc16e25",
       "source_id": "fdic-bankfind",
       "terms_reference": "https://banks.data.fdic.gov/docs/",
       "uri": "https://banks.data.fdic.gov/api/institutions?limit=1"
+    },
+    {
+      "available_at": "2026-08-19T18:58:33+00:00",
+      "bytes": 694,
+      "http_status": 200,
+      "media_type": "application/json",
+      "path": "public-sources/fdic-jpmorgan-financials-20260630.json",
+      "publication_at": "2026-08-19T18:58:33+00:00",
+      "role": "reference",
+      "sha256": "060f7addb1f52157f409bb3de1dc44ed3f4b21b2e54fbbbbb0f98a3a7e68d4da",
+      "source_id": "fdic-bankfind",
+      "terms_reference": "https://banks.data.fdic.gov/docs/",
+      "uri": "https://banks.data.fdic.gov/api/financials?filters=CERT%3A628%20AND%20REPDTE%3A20260630&fields=CERT%2CNAME%2CREPDTE%2CASSET%2CEQ%2CNETINC%2CRWAJT%2CRWAJTR%2CIDT1CER%2CIDT1RWAJR%2CRBC1AAJ%2CROE%2CNIM%2CINTINC%2CINTEXPY%2CDEP%2CID&limit=1&format=json"
     }
   ]
 }

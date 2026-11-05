@@ -1,5 +1,4 @@
 import pytest
-
 from fundamental_service.calculator import CalculationRefusal, calculate
 from fundamental_service.testsupport import make_valuation
 
@@ -25,6 +24,13 @@ def test_unverified_quality_refuses_calculation():
     )
     with pytest.raises(CalculationRefusal, match="verified"):
         calculate(request)
+
+
+def test_unreleased_model_family_is_explicitly_unsupported():
+    request = make_valuation().model_copy(update={"model_id": "bank_excess_return"})
+    with pytest.raises(CalculationRefusal) as error:
+        calculate(request)
+    assert error.value.code == "MODEL_UNSUPPORTED"
 
 
 def test_missing_base_revenue_and_forged_digest_refuse():

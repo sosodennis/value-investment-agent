@@ -10,6 +10,7 @@ from pydantic import model_validator
 from ..calculator import CalculationRefusal, calculate, validate
 from ..contracts import (
     CalculationArtifactV1,
+    QualityStatus,
     SnapshotResolutionRequestV1,
     SnapshotResolutionV1,
     SourceSnapshotV1,
@@ -286,16 +287,27 @@ class FundamentalApplication:
             raise _snapshot_error(error) from error
 
     def validate_valuation(self, value: ValuationInputV1) -> ValidationResponseV1:
-        self.snapshot(value.valuation_context.data_snapshot_id)
-        self._verify_fact_references(value)
         resolved = validate(value)
+        issue_codes = resolved.quality.issue_codes
+        missing_evidence = resolved.quality.missing_evidence
+        quality_status = resolved.quality.status
+        if resolved.model_id not in {"fcff_dcf", "transition_fcff_dcf"}:
+            quality_status = QualityStatus.UNSUPPORTED
+            issue_codes = (*issue_codes, "MODEL_FAMILY_NOT_RELEASED")
+            missing_evidence = (
+                *missing_evidence,
+                "complete_model_source_cohort_challenger_calibration_release",
+            )
+        else:
+            self.snapshot(value.valuation_context.data_snapshot_id)
+            self._verify_fact_references(value)
         return ValidationResponseV1(
             contract_version="fundamental.v1",
             input=resolved,
             input_digest=resolved.input_digest,
-            quality_status=resolved.quality.status,
-            issue_codes=resolved.quality.issue_codes,
-            missing_evidence=resolved.quality.missing_evidence,
+            quality_status=quality_status,
+            issue_codes=issue_codes,
+            missing_evidence=missing_evidence,
         )
 
     def validate_uncertainty(self, value: UncertaintyRequestV1) -> ValidationResponseV1:
@@ -304,6 +316,13 @@ class FundamentalApplication:
     def calculate_valuation(
         self, value: ValuationInputV1, *, correlation_id: str
     ) -> CalculationArtifactV1:
+        if value.model_id not in {"fcff_dcf", "transition_fcff_dcf"}:
+            raise ServiceError(
+                "MODEL_UNSUPPORTED",
+                f"model {value.model_id} is not released for the current profile",
+                status_code=422,
+                retryable=False,
+            )
         guard_calculation_budget(value, self.config)
         self.snapshot(value.valuation_context.data_snapshot_id)
         try:

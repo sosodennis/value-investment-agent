@@ -1,11 +1,10 @@
 import hashlib
 import json
-from email.message import Message
 from datetime import datetime, timezone
+from email.message import Message
 from pathlib import Path
 
 import pytest
-
 from fundamental_service.public_source import (
     PUBLIC_SOURCE_SPECS,
     PublicSourceAdapter,
@@ -63,6 +62,25 @@ def test_all_declared_free_sources_have_allowlisted_capture_contract():
         fundamental_source_register().require("sec-companyfacts").source_id
         == "sec-companyfacts"
     )
+
+
+def test_expansion_source_register_covers_each_governed_family_boundary():
+    register = fundamental_source_register()
+    for source_id in (
+        "fdic-bankfind",
+        "ffiec-cdr",
+        "naic-statutory-filings",
+        "nareit-definitions",
+        "ferc-public-data",
+        "state-utility-orders",
+        "eia-open-data",
+        "usgs-commodity-statistics",
+        "usda-nass-quickstats",
+        "fda-drugs",
+        "clinicaltrials-api",
+        "ifrs-taxonomy",
+    ):
+        assert register.require(source_id).permitted
 
 
 def test_public_source_rejects_unregistered_uri_before_network():

@@ -9,8 +9,8 @@ from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 from typing import Callable
 from urllib.error import HTTPError, URLError
+from urllib.parse import parse_qs, urlsplit
 from urllib.request import Request, urlopen
-from urllib.parse import urlsplit, parse_qs
 
 from .contracts import SourceRole
 from .snapshots import CapturedSource, LegalSource, SnapshotError, SourceRegister
@@ -63,15 +63,83 @@ PUBLIC_SOURCE_SPECS: tuple[PublicSourceSpec, ...] = (
     ),
     PublicSourceSpec(
         "fdic-bankfind",
-        SourceRole.MACRO,
+        SourceRole.REFERENCE,
         "https://banks.data.fdic.gov/api/",
         "https://banks.data.fdic.gov/docs/",
+    ),
+    PublicSourceSpec(
+        "ffiec-cdr",
+        SourceRole.REFERENCE,
+        "https://cdr.ffiec.gov/public/",
+        "https://www.ffiec.gov/",
     ),
     PublicSourceSpec(
         "damodaran-reference",
         SourceRole.REFERENCE,
         "https://pages.stern.nyu.edu/~adamodar/pc/",
         "https://pages.stern.nyu.edu/~adamodar/New_Home_Page/datafile/",
+    ),
+    # Post-cutover family sources.  Registration records the lawful public
+    # boundary even while a family remains exploratory and cannot calculate.
+    PublicSourceSpec(
+        "naic-statutory-filings",
+        SourceRole.REFERENCE,
+        "https://content.naic.org/",
+        "https://content.naic.org/insurance-topics/financial-data-repository",
+    ),
+    PublicSourceSpec(
+        "nareit-definitions",
+        SourceRole.REFERENCE,
+        "https://www.reit.com/",
+        "https://www.reit.com/terms-of-use",
+    ),
+    PublicSourceSpec(
+        "ferc-public-data",
+        SourceRole.REFERENCE,
+        "https://www.ferc.gov/",
+        "https://www.ferc.gov/terms-use",
+    ),
+    PublicSourceSpec(
+        "state-utility-orders",
+        SourceRole.REFERENCE,
+        "https://www.naruc.org/",
+        "https://www.naruc.org/about-naruc/",
+    ),
+    PublicSourceSpec(
+        "eia-open-data",
+        SourceRole.REFERENCE,
+        "https://api.eia.gov/",
+        "https://www.eia.gov/about/copyrights_reuse.php",
+    ),
+    PublicSourceSpec(
+        "usgs-commodity-statistics",
+        SourceRole.REFERENCE,
+        "https://www.usgs.gov/centers/national-minerals-information-center/",
+        "https://www.usgs.gov/information-policies",
+    ),
+    PublicSourceSpec(
+        "usda-nass-quickstats",
+        SourceRole.REFERENCE,
+        "https://quickstats.nass.usda.gov/api/",
+        "https://www.nass.usda.gov/About_NASS/",
+    ),
+    PublicSourceSpec(
+        "fda-drugs",
+        SourceRole.REFERENCE,
+        "https://www.accessdata.fda.gov/",
+        "https://www.fda.gov/about-fda/website-policies",
+    ),
+    PublicSourceSpec(
+        "clinicaltrials-api",
+        SourceRole.REFERENCE,
+        "https://clinicaltrials.gov/data-api/api/",
+        "https://clinicaltrials.gov/about-site/terms-conditions",
+    ),
+    PublicSourceSpec(
+        "ifrs-taxonomy",
+        SourceRole.TAXONOMY,
+        "https://www.ifrs.org/issued-standards/ifrs-taxonomy/",
+        "https://www.ifrs.org/legal/terms-and-conditions/",
     ),
 )
 
@@ -253,7 +321,9 @@ class PublicSourceAdapter:
                 uri,
                 headers={
                     "User-Agent": self.user_agent,
-                    "Accept": "text/csv, application/json, application/xml, text/plain, */*",
+                    "Accept": (
+                        "text/csv, application/json, application/xml, text/plain, */*"
+                    ),
                 },
             )
             self._last_request_at = time.monotonic()
