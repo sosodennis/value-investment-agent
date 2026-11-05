@@ -18,7 +18,7 @@ import fcntl
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from .calculator import CalculationRefusal, calculate
+from .calculator import CalculationRefusal, calculate, calculation_result_hash
 from .contracts import CalculationArtifactV1, ReleaseManifestV1, ValuationInputV1
 from .serialization import canonical_bytes, sha256_digest
 from .snapshots import SnapshotError
@@ -851,15 +851,7 @@ def _first_difference(
 
 
 def _artifact_result_hash(artifact: CalculationArtifactV1) -> str:
-    return sha256_digest(
-        {
-            "input_digest": artifact.input_digest,
-            "intrinsic_value": artifact.intrinsic_value,
-            "per_share_value": artifact.per_share_value,
-            "nodes": artifact.nodes,
-            "model_version": artifact.model_version,
-        }
-    )
+    return calculation_result_hash(artifact)
 
 
 def replay_manifest(

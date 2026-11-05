@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import tempfile
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from pathlib import Path
@@ -35,6 +36,13 @@ from .metadata import (
     PostgresMetadataStore,
     PostgresSnapshotRepository,
 )
+from .policies import (
+    MetadataModelRepository,
+    MetadataPolicyRepository,
+    PolicyRegistry,
+    initial_model_specs,
+    initial_policy_records,
+)
 from .operations import (
     CORRELATION_HEADER,
     OperationalMetrics,
@@ -44,9 +52,10 @@ from .operations import (
     correlation_id,
     guard_body_size,
 )
-from .replay import ReplayEnvelopeV1
+from .replay import ArtifactStore, ReplayEnvelopeV1
 from .snapshots import (
     ContentAddressedStore,
+    FilesystemContentStore,
     SnapshotRepository,
 )
 
@@ -74,10 +83,26 @@ def create_app(
     config: OperationsConfig | None = None,
     metadata_store: PostgresMetadataStore | None = None,
     require_metadata: bool = False,
+    policy_registry: PolicyRegistry | None = None,
 ) -> FastAPI:
     """Assemble transport, application use cases, and runtime resources."""
 
     runtime_config = config or OperationsConfig.testing()
+    if not require_metadata:
+        # The explicit testing composition root owns disposable local evidence.
+        # Production uses create_runtime_app and cannot reach this branch.
+        if artifact_store is None:
+            artifact_store = ArtifactStore(
+                Path(tempfile.mkdtemp(prefix="fundamental-test-artifacts-"))
+            )
+        if content_store is None:
+            content_store = FilesystemContentStore(
+                Path(tempfile.mkdtemp(prefix="fundamental-test-content-"))
+            )
+        if policy_registry is None:
+            policy_registry = PolicyRegistry(
+                models=initial_model_specs(), policies=initial_policy_records()
+            )
     metrics = OperationalMetrics()
     limiter = RateLimiter(runtime_config.rate_limit_per_minute)
     application = FundamentalApplication(
@@ -89,6 +114,7 @@ def create_app(
         metrics=metrics,
         metadata_store=metadata_store,
         require_metadata=require_metadata,
+        policy_registry=policy_registry,
     )
 
     @asynccontextmanager
@@ -96,6 +122,19 @@ def create_app(
         if metadata_store is not None:
             try:
                 metadata_store.start()
+                if policy_registry is not None:
+                    for model in initial_model_specs():
+                        metadata_store.publish_model(
+                            model,
+                            model_id=model.model_id,
+                            model_version=model.model_version,
+                        )
+                    for policy in initial_policy_records():
+                        metadata_store.publish_policy(
+                            policy,
+                            policy_id=policy.policy_id,
+                            policy_version=policy.policy_version,
+                        )
             except Exception:
                 LOGGER.exception("fundamental metadata startup failed")
         app.state.accepting_requests = True
@@ -300,6 +339,10 @@ def create_runtime_app() -> FastAPI:
         config=config,
         metadata_store=metadata_store,
         require_metadata=True,
+        policy_registry=PolicyRegistry(
+            model_repository=MetadataModelRepository(metadata_store),
+            repository=MetadataPolicyRepository(metadata_store),
+        ),
     )
 
 

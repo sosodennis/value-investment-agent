@@ -622,6 +622,11 @@ class CalculationEvidenceV1(StrictModel):
             or self.request.model_version != trace.model_version
             or self.request.valuation_context.data_snapshot_id != trace.snapshot_id
             or tuple(sorted(self.request.historical_facts)) != trace.fact_ids
+            or self.request.provenance.snapshot_id != trace.snapshot_id
+            or calculation.policy_resolution is None
+            or calculation.policy_resolution.policy_id != trace.policy_id
+            or calculation.policy_resolution.policy_version != trace.policy_version
+            or calculation.policy_resolution.policy_digest != trace.policy_digest
         ):
             raise ValueError(
                 "calculation evidence provenance does not match its request"

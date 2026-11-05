@@ -8,7 +8,7 @@ import tempfile
 from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
-from typing import Iterable, Literal
+from typing import Iterable, Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -23,6 +23,7 @@ from .contracts import (
     WaccAssumptionsV1,
 )
 from .serialization import canonical_bytes, sha256_digest
+from .snapshots import SnapshotError
 
 
 class ModelSpecV1(BaseModel):
@@ -73,17 +74,41 @@ class PolicyRegistry:
         self,
         models: Iterable[ModelSpecV1] = (),
         policies: Iterable[PolicyRecordV1] = (),
+        model_repository: "ModelRepository | None" = None,
         repository: "PolicyRepository | None" = None,
     ) -> None:
         self._models = {(item.model_id, item.model_version): item for item in models}
         self._policies = {item.policy_id: item for item in policies}
+        self._model_repository = model_repository
         self._repository = repository
         if repository is not None:
             for policy in self._policies.values():
                 repository.publish(policy)
 
     def model(self, model_id: str, model_version: str) -> ModelSpecV1 | None:
-        return self._models.get((model_id, model_version))
+        model = self._models.get((model_id, model_version))
+        if model is not None or self._model_repository is None:
+            return model
+        try:
+            model = self._model_repository.get_model(model_id, model_version)
+        except PolicyError:
+            return None
+        self._models[(model_id, model_version)] = model
+        return model
+
+    def models(self) -> tuple[ModelSpecV1, ...]:
+        values = {
+            (model.model_id, model.model_version): model
+            for model in self._models.values()
+        }
+        if self._model_repository is not None:
+            values.update(
+                {
+                    (model.model_id, model.model_version): model
+                    for model in self._model_repository.list_models()
+                }
+            )
+        return tuple(values.values())
 
     def policy(self, policy_id: str) -> PolicyRecordV1 | None:
         policy = self._policies.get(policy_id)
@@ -162,12 +187,65 @@ class PolicyError(ValueError):
         self.code = code
 
 
+class ModelRepository(Protocol):
+    def list_models(self) -> tuple[ModelSpecV1, ...]: ...
+
+    def get_model(self, model_id: str, model_version: str) -> ModelSpecV1: ...
+
+    def publish_model(self, model: ModelSpecV1) -> None: ...
+
+
 class PolicyRepository:
     def list(self) -> tuple[PolicyRecordV1, ...]: ...
 
     def get(self, policy_id: str) -> PolicyRecordV1: ...
 
     def publish(self, policy: PolicyRecordV1) -> None: ...
+
+
+class MetadataModelRepository:
+    """Adapter for the service-owned metadata persistence port."""
+
+    def __init__(self, metadata: object) -> None:
+        self._metadata = metadata
+
+    def list_models(self) -> tuple[ModelSpecV1, ...]:
+        return tuple(self._metadata.list_models())
+
+    def get_model(self, model_id: str, model_version: str) -> ModelSpecV1:
+        try:
+            return self._metadata.get_model(model_id, model_version)
+        except SnapshotError as error:
+            raise PolicyError(
+                "MODEL_NOT_FOUND", "model release was not found"
+            ) from error
+
+    def publish_model(self, model: ModelSpecV1) -> None:
+        self._metadata.publish_model(
+            model, model_id=model.model_id, model_version=model.model_version
+        )
+
+
+class MetadataPolicyRepository:
+    """Adapter for immutable policy releases stored by the service."""
+
+    def __init__(self, metadata: object) -> None:
+        self._metadata = metadata
+
+    def list(self) -> tuple[PolicyRecordV1, ...]:
+        return tuple(self._metadata.list_policies())
+
+    def get(self, policy_id: str) -> PolicyRecordV1:
+        candidates = tuple(item for item in self.list() if item.policy_id == policy_id)
+        if len(candidates) != 1:
+            code = "POLICY_NOT_FOUND" if not candidates else "POLICY_AMBIGUOUS"
+            raise PolicyError(code, "policy release lookup is not unique")
+        return candidates[0]
+
+    def publish(self, policy: PolicyRecordV1) -> None:
+        self._metadata.publish_policy(
+            policy, policy_id=policy.policy_id, policy_version=policy.policy_version
+        )
 
 
 class FilesystemPolicyRepository:
@@ -248,7 +326,9 @@ def initial_policy_records() -> tuple[PolicyRecordV1, ...]:
                     "source_refs": (
                         "fundamental-service/docs/fundamental-enterprise-grade-target-state.md#24.4.3",
                     ),
-                    "effective_at": datetime(2026, 11, 5, tzinfo=UTC),
+                    # The first released policy is effective for every supported
+                    # historical snapshot; later releases supersede it by version.
+                    "effective_at": datetime(1970, 1, 1, tzinfo=UTC),
                     "status": "active",
                 }
             ),
