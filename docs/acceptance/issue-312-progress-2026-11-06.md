@@ -146,15 +146,11 @@ service's capture manifest, cache digest, or offline replay is complete.
   Apple 2024 10-K EFM/DQC parser replay; the two warnings are the existing
   Starlette/httpx deprecation and calculator Pydantic serialization warning.
 - Compose project: `value-investment-agent-issue-312-sec-ingestion`; required
-  host ports: PostgreSQL `18481`, Fundamental service `18082`. To validate the
-  default Compose configuration without local developer secrets,
-  `FRED_API_KEY=not-used-for-config
-  LLM_PROVIDER_ENCRYPTION_KEY=not-used-for-config docker compose -p
-  value-investment-agent-issue-312-sec-ingestion config --quiet` exited 0.
-  Only `fundamental-postgres` and `fundamental-service` were running, both
-  healthy. `curl -fsS http://127.0.0.1:18082/readyz` exited 0 and returned
-  `{"status":"ready","contract_version":"internal.v1"}`. Container image
-  ID: `sha256:df4a3dbc6146c434d1663d7c30323fc17d16373f00900860a6d61ad02d1e3ea1`.
+  host ports: PostgreSQL `18481`, Fundamental service `18082`. The earlier
+  root `docker-compose.yml` config check was not the Fundamental stack and is
+  superseded by the corrected check below. The actual stack is configured by
+  `compose/verification/docker-compose.issue280-operations.yml` plus
+  `compose/verification/docker-compose.issue312-sec-ingestion.yml`.
 - Container import check exited 0 and reported `aniso8601 10.0.1`,
   `holidays 0.108`, and `pytz 2026.6`.
 - Runtime resource fingerprints were recomputed from the pinned runtime and
@@ -166,8 +162,9 @@ service's capture manifest, cache digest, or offline replay is complete.
   plugin `e32ff88b52df8bf1e6aca3e63edabbc0b2f3513b7d0627ca9163db00d2a5678b`,
   and DQC ruleset
   `0eb33d095ac0ae08f01c508526b35523534659d661bc62873ac1400deec87930`.
-- Current GitHub state: issue #312 is open, no #312 PR exists, and branch
-  `codex/issue-312-sec-ingestion` is nine commits ahead of `origin/main` at
+- Current GitHub state at this checkpoint: issue #312 is open, no #312 PR
+  exists, and branch `codex/issue-312-sec-ingestion` is twelve commits ahead
+  of `origin/main` at
   `bee63cb37da9edb2deb444e14d2fc666aed73d06`. This progress record is not an
   acceptance or `VERIFIED` record.
 - Remaining acceptance: live authenticated ingestion through the Docker API;
@@ -208,3 +205,105 @@ service's capture manifest, cache digest, or offline replay is complete.
   yielding canonical facts. This does not replace the still-required live
   authenticated Docker API acceptance test or the database concurrency and
   fault-recovery suites.
+
+## PostgreSQL SEC pacing callback checkpoint
+
+- Failure reproduction: the first live signed AAPL ingestion call returned
+  HTTP 500 `internal_failure` before making a SEC request. A direct invocation
+  of the same configured use case exposed
+  `TypeError: PostgresMetadataStore.reserve_sec_provider_request_slot() takes 1
+  positional argument but 2 were given`.
+- Root cause: `SecEdgarSourceAdapter` defines and invokes the pacing callback as
+  `Callable[[float], float]`, while the PostgreSQL implementation made the
+  interval keyword-only. `db57b1feb9102597288628794eb02bcdef8603ab` removes that
+  signature mismatch. Existing keyword callers remain valid.
+- Regression test:
+  `FUNDAMENTAL_TEST_DATABASE_URL=postgresql+asyncpg://fundamental:fundamental@127.0.0.1:18481/fundamental fundamental-service/.venv/bin/pytest -q fundamental-service/tests/test_postgres_metadata.py::test_postgres_sec_request_slot_matches_source_adapter_callback`
+  failed before the fix with the callback TypeError and passed after it (`1
+  passed`, exit 0). The test uses a real PostgreSQL metadata store and a fake
+  SEC HTTP response, so it validates the cross-module contract without network
+  access.
+- Exact commit `db57b1feb9102597288628794eb02bcdef8603ab` full service suite
+  command (exit 0):
+
+  ```sh
+  FUNDAMENTAL_TEST_DATABASE_URL=postgresql+asyncpg://fundamental:fundamental@127.0.0.1:18481/fundamental \
+  ISSUE312_EDGAR_PLUGIN_DIR=/private/tmp/issue312-validation-runtime-v2/EDGAR-4891c4c9889c77af247428ceff4fa7cc52d534ea \
+  ISSUE312_XULE_PLUGIN_DIR=/private/tmp/issue312-validation-runtime-v2/xule-7ca1d7637f333f5c3a02379dbe6f6d6c17c88acc/plugin \
+  ISSUE312_DQC_RULESET_PATH=/private/tmp/issue312-validation-runtime-v2/dqc_us_rules-31.0.3/dqc_us_rules/dqc-us-2024-V31-ruleset.zip \
+  ISSUE312_TAXONOMY_CACHE_DIR=/tmp/issue312-aapl-validation-v3/taxonomy-online \
+  fundamental-service/.venv/bin/pytest -q fundamental-service/tests
+  ```
+
+- Result on the exact commit: `168 passed, 2 warnings` in 16.11 seconds, no
+  skips. `uv lock --check --project fundamental-service` and
+  `git diff --check` both exited 0. Commit hooks passed trailing whitespace,
+  end-of-file, large-file, Ruff, and Ruff-format checks.
+- Corrected Compose check (exit 0) used the actual two-file service stack,
+  project `value-investment-agent-issue-312-sec-ingestion`, PostgreSQL host
+  port `18481`, service host port `18082`, and the pinned SEC resource paths
+  and hashes:
+
+  ```sh
+  COMPOSE_PROJECT_NAME=value-investment-agent-issue-312-sec-ingestion \
+  FUNDAMENTAL_POSTGRES_HOST_PORT=18481 \
+  FUNDAMENTAL_SERVICE_HOST_PORT=18082 \
+  FUNDAMENTAL_SEC_TAXONOMY_CACHE_SHA256=23201023716b144aefca4864bc6e4ee055aad864f2e13f3ff1ef652354a1d42c \
+  FUNDAMENTAL_SEC_TAXONOMY_CACHE_HOST_DIR=/tmp/issue312-aapl-validation-v3/taxonomy-online \
+  FUNDAMENTAL_SEC_EDGAR_PLUGIN_SHA256=63e4b5540a6754a1d6ad86a34ec1aa70f3f7da90e46c6fa3959686d8b2ac7330 \
+  FUNDAMENTAL_SEC_EDGAR_PLUGIN_HOST_DIR=/private/tmp/issue312-validation-runtime-v2/EDGAR-4891c4c9889c77af247428ceff4fa7cc52d534ea \
+  FUNDAMENTAL_SEC_XULE_PLUGIN_SHA256=e32ff88b52df8bf1e6aca3e63edabbc0b2f3513b7d0627ca9163db00d2a5678b \
+  FUNDAMENTAL_SEC_XULE_PLUGIN_HOST_DIR=/private/tmp/issue312-validation-runtime-v2/xule-7ca1d7637f333f5c3a02379dbe6f6d6c17c88acc/plugin \
+  FUNDAMENTAL_SEC_DQC_RULESET_SHA256=0eb33d095ac0ae08f01c508526b35523534659d661bc62873ac1400deec87930 \
+  FUNDAMENTAL_SEC_DQC_RULESET_HOST_PATH=/private/tmp/issue312-validation-runtime-v2/dqc_us_rules-31.0.3/dqc_us_rules/dqc-us-2024-V31-ruleset.zip \
+  docker compose -p value-investment-agent-issue-312-sec-ingestion \
+    -f compose/verification/docker-compose.issue280-operations.yml \
+    -f compose/verification/docker-compose.issue312-sec-ingestion.yml config --quiet
+  ```
+
+- The same two-file Compose stack rebuilt only `fundamental-service` from the
+  exact commit; the database volume and container were retained. Build command
+  exited 0. New image ID:
+  `sha256:025a86b338b5edd76b90997c6a879682eb9b247e20be1c438178ba96e19902da`.
+  PostgreSQL and Fundamental service were both healthy. `curl -fsS
+  http://127.0.0.1:18082/readyz` exited 0 with `{"status":"ready",
+  "contract_version":"internal.v1"}`. A container import check exited 0 and
+  reported `aniso8601 10.0.1`, `holidays 0.108`, and `pytz 2026.6`.
+- Exact build command (exit 0; resource paths and digests are pinned values
+  recorded in the preceding checkpoint):
+
+  ```sh
+  COMPOSE_PROJECT_NAME=value-investment-agent-issue-312-sec-ingestion \
+  FUNDAMENTAL_POSTGRES_HOST_PORT=18481 \
+  FUNDAMENTAL_SERVICE_HOST_PORT=18082 \
+  FUNDAMENTAL_SEC_TAXONOMY_CACHE_SHA256=23201023716b144aefca4864bc6e4ee055aad864f2e13f3ff1ef652354a1d42c \
+  FUNDAMENTAL_SEC_TAXONOMY_CACHE_HOST_DIR=/tmp/issue312-aapl-validation-v3/taxonomy-online \
+  FUNDAMENTAL_SEC_EDGAR_PLUGIN_SHA256=63e4b5540a6754a1d6ad86a34ec1aa70f3f7da90e46c6fa3959686d8b2ac7330 \
+  FUNDAMENTAL_SEC_EDGAR_PLUGIN_HOST_DIR=/private/tmp/issue312-validation-runtime-v2/EDGAR-4891c4c9889c77af247428ceff4fa7cc52d534ea \
+  FUNDAMENTAL_SEC_XULE_PLUGIN_SHA256=e32ff88b52df8bf1e6aca3e63edabbc0b2f3513b7d0627ca9163db00d2a5678b \
+  FUNDAMENTAL_SEC_XULE_PLUGIN_HOST_DIR=/private/tmp/issue312-validation-runtime-v2/xule-7ca1d7637f333f5c3a02379dbe6f6d6c17c88acc/plugin \
+  FUNDAMENTAL_SEC_DQC_RULESET_SHA256=0eb33d095ac0ae08f01c508526b35523534659d661bc62873ac1400deec87930 \
+  FUNDAMENTAL_SEC_DQC_RULESET_HOST_PATH=/private/tmp/issue312-validation-runtime-v2/dqc_us_rules-31.0.3/dqc_us_rules/dqc-us-2024-V31-ruleset.zip \
+  docker compose -p value-investment-agent-issue-312-sec-ingestion \
+    -f compose/verification/docker-compose.issue280-operations.yml \
+    -f compose/verification/docker-compose.issue312-sec-ingestion.yml \
+    up -d --build fundamental-service
+  ```
+- Live API check used a correctly signed `internal.v1` context, Bearer
+  credential, authorized organization `org-sec-ingestion-test`, the persisted
+  approved `sec-revenue-v1` mapping, AAPL CIK `0000320193`, and filing
+  `0000320193-24-000123` at cutoff `2024-11-05T00:00:00Z`. The first attempt
+  before the fix returned HTTP 500 as described above. The retry through
+  `/v1/data/ingestions` on the rebuilt image returned HTTP 422 with stable code
+  `PARSER_VALIDATION_BLOCKED` and `retryable=false`. The SEC audit table records
+  this exact outcome and caller/organization/correlation. The filing's pinned
+  offline EFM/DQC replay reports blocking
+  `EFM.5.02.05.disallowedElement`; zero ingestion acquisitions and zero
+  canonical facts were published. This proves the error path is fail-closed,
+  not the successful snapshot publication criterion.
+- Remaining acceptance includes a successful live SEC snapshot/fact
+  publication, 50-way cross-process PostgreSQL request coalescing, distinct
+  acquisition-key isolation, injected provider/parser/storage/process failures
+  and recovery, atomic visibility, persisted audit/auth rejection cases,
+  clean offline retained-evidence replay, and Agent client acceptance. No PR
+  has been created and #312 remains open.
