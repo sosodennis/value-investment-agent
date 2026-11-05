@@ -57,6 +57,7 @@ class AgentState(TypedDict):
     """
 
     user_query: Annotated[str | None, last_value]
+    valuation_request: Annotated[dict[str, object] | None, replace_value]
     messages: Annotated[list[AnyMessage], add_messages]
     company_profile: Annotated[CompanyProfile | None, replace_value]
     artifact_references: Annotated[

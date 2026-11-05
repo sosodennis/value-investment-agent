@@ -21,9 +21,7 @@ from src.agents.fundamental.capabilities.forward_signals.public import (
     extract_forward_signals_from_sec_text,
     extract_forward_signals_from_xbrl_reports,
 )
-from src.agents.fundamental.capabilities.market_data.public import (
-    market_data_service,
-)
+from src.agents.fundamental.infrastructure import HttpFundamentalServiceClient
 from src.model_inference.entrypoint import get_model_inference
 
 
@@ -86,7 +84,7 @@ def build_default_fundamental_workflow_runner() -> FundamentalWorkflowRunner:
             )
         ),
         extract_forward_signals_fn=_extract_forward_signals,
-        market_data_service=market_data_service,
+        fundamental_service_client=HttpFundamentalServiceClient(),
     )
 
 

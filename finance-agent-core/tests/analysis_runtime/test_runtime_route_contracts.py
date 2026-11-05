@@ -38,6 +38,25 @@ def test_start_request_rejects_unbound_resume_payload() -> None:
         )
 
 
+def test_start_request_accepts_caller_owned_valuation_request() -> None:
+    request = RunRequest.model_validate(
+        {
+            "message": "Value ACME",
+            "valuation_request": {
+                "contract_version": "fundamental.v1",
+                "assumptions": {"terminal_growth": "0.02"},
+                "uncertainty": {"mode": "none"},
+            },
+        }
+    )
+
+    assert request.valuation_request == {
+        "contract_version": "fundamental.v1",
+        "assumptions": {"terminal_growth": "0.02"},
+        "uncertainty": {"mode": "none"},
+    }
+
+
 def test_resume_request_requires_full_interaction_identity() -> None:
     with pytest.raises(ValidationError):
         ResumeRequest.model_validate(
@@ -102,6 +121,16 @@ class Runner:
             label="Fundamental analysis",
             attempt=1,
         )
+
+
+class CapturingRunner(Runner):
+    def __init__(self) -> None:
+        self.input_data: dict[str, object] | None = None
+
+    async def run(self, **kwargs):
+        self.input_data = dict(kwargs["input_data"])
+        async for event in super().run(**kwargs):
+            yield event
 
 
 class RetryableRunner:
@@ -289,6 +318,43 @@ async def test_event_route_streams_replayed_workflow_events_without_transform_he
     assert payload["thread_id"] == "thread-1"
     assert payload["run_id"] == run_id
     assert payload["event_name"] == "workflow.activity"
+
+
+@pytest.mark.asyncio
+async def test_start_run_forwards_caller_valuation_request() -> None:
+    app = FastAPI()
+    app.include_router(router)
+    principal = Principal(
+        user_id="user-1",
+        subject="user-1",
+        email="user@example.test",
+        organization_id="organization-1",
+        membership_id="membership-1",
+    )
+    app.dependency_overrides[require_current_user_mutation] = lambda: principal
+    runner = CapturingRunner()
+    service = AnalysisRuntimeService(
+        repository=InMemoryActivityRepository(), owner=Owner(), runner=runner
+    )
+    app.state.analysis_runtime = service
+    valuation_request = {
+        "contract_version": "fundamental.v1",
+        "assumptions": {"terminal_growth": "0.02"},
+        "uncertainty": {"mode": "none"},
+    }
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://testserver"
+    ) as client:
+        response = await client.post(
+            "/api/v1/threads/thread-1/runs",
+            json={"message": "Value ACME", "valuation_request": valuation_request},
+        )
+        assert response.status_code == 202
+        await service._tasks["thread-1"]
+
+    assert runner.input_data is not None
+    assert runner.input_data["valuation_request"] == valuation_request
 
 
 @pytest.mark.asyncio

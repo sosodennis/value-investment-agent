@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fundamental-service"
+version = "0.1.0"
+description = "Versioned, stateless Fundamental valuation service contracts"
+requires-python = ">=3.11"
+dependencies = [
+  "cryptography>=44.0",
+  "fastapi>=0.110",
+  "pydantic>=2.6",
+  "arelle-release==2.47.4",
+  "uvicorn>=0.30",
+  "SQLAlchemy[asyncio]>=2.0.36",
+  "asyncpg>=0.30.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "httpx>=0.27"]
+parser = []
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+fundamental_service = ["migrations/*.sql"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src", "../finance-agent-core"]

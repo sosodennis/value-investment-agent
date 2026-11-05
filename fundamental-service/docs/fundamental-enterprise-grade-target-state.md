@@ -1,11 +1,11 @@
 # Fundamental valuation service target state
 
-Status: canonical normative specification; package is documentation-only
+Status: canonical normative specification for the implemented service and future family releases
 Owner: Fundamental service maintainers
 Scope: independently deployable domain service in `fundamental-service/`
-Last reviewed: 2026-11-03
+Last reviewed: 2026-11-04
 
-This file is the single source of truth for the new Fundamental domain service. The package has no runtime implementation yet. This file defines its contracts, model families, quality states, valuation boundaries, calibration protocol, verification evidence, and release gates. A backlog item, runbook, research note, or implementation comment may add operational detail, but it must not define a conflicting rule. When another document conflicts with this file, this file wins.
+This file is the single source of truth for the Fundamental domain service. It defines its contracts, model families, quality states, valuation boundaries, calibration protocol, verification evidence, and release gates. Runtime code implements only the explicitly released coverage; exploratory families remain unsupported until their complete evidence and promotion gates pass. A backlog item, runbook, research note, or implementation comment may add operational detail, but it must not define a conflicting rule. When another document conflicts with this file, this file wins.
 
 Existing Fundamental documents under `finance-agent-core/docs/` describe the current agent or provide historical and operational context. They do not define the new service. Do not create another design document for the same problem. Update this file first, then update code and any command-level runbook that is still needed to operate the service.
 
@@ -716,6 +716,21 @@ The fixed golden cohort is an engineering regression and replay corpus. It is no
 - the change has a rollback or explicit data-rebuild procedure;
 - the canonical specification and relevant operational runbook agree.
 
+Model promotion requires a signed verification attestation from a trusted release
+workflow. The attestation binds the model digest, release-subject digest, exact
+source commit, verification-suite digest, run identity, complete gate set,
+release-artifact hashes, approver, and approval and expiry timestamps. The
+deployment inventory pins the verifier identity, workflow identity, Ed25519
+public key, expected source commit, and expected suite digest. Missing pins,
+mismatches, or an invalid signature block promotion. Keep the signing key in the
+verification workflow.
+
+The signature records which trusted workflow checked the bound inputs. It does
+not replace independent reproduction of the reported evidence. Synthetic
+attestations and source bytes in unit tests exercise the governance contract;
+they are not model-release evidence. Keep a family unsupported until its
+release evidence is complete and independently reproducible.
+
 ## 20. Versioning and change control
 
 Version these independently:
@@ -738,17 +753,17 @@ Every release profile must pin its tolerances, blocking rule set, calibration pr
 
 ## 21. Ordered service-build phases
 
-The target is large, but the dependency order is fixed. The new service is built as an isolated product. Each phase produces a verifiable contract before the next phase consumes it. The existing Fundamental agent remains unchanged until the service contract passes its cutover gate.
+The target is large, but the dependency order is fixed. The service is built as an isolated product. Each phase produces a verifiable contract before the next phase consumes it. The existing Fundamental agent remains unchanged until the service contract passes its cutover gate; subsequent agent adaptation belongs to the agent integration layer.
 
 ### 21.1 Delivery stages
 
-The service starts with its complete target contracts and adds supported coverage in measured releases. The package being merged now contains documentation only. It makes no runtime or valuation-quality claim.
+The service starts with its complete target contracts and adds supported coverage in measured releases. Runtime availability and model support are separate claims: an implemented calculator or exploratory registry entry does not make a family eligible for service advertisement or valuation.
 
 | Stage | Scope | Exit evidence |
 | --- | --- | --- |
-| Documentation foundation | This package, one canonical specification, complete `ModelSpecV1`, source register, and staged release gates. No runtime code. | Links resolve; every V1 scope, schema, calculation, source, storage, approval, and release-gate choice is fixed. The spec has no unresolved V1 decision that an implementer must make independently. |
-| Pragmatic service release | A deployable service with point-in-time SEC facts, replay, explicit quality states, deterministic calculations, and the limited coverage in section 24.1. | Every section 24.5 threshold passes for the declared profile. Unsupported archetypes abstain. |
-| Controlled family expansion | Add one complete family at a time in this order: U.S. banks, insurers, REIT NAV, regulated utilities, cyclical issuers, biotech, SOTP, then IFRS accounting profiles. | The family has a complete `ModelSpecV1`, lawful source coverage, positive and negative golden cases, independent node checks, and a predeclared out-of-sample cohort when its forecasts are calibratable. |
+| Documentation foundation | Canonical specification, complete `ModelSpecV1`, source register, and staged release gates. | Contract and release decisions are fixed in this specification. |
+| Pragmatic service release | Deployable service with point-in-time SEC facts, replay, explicit quality states, deterministic calculations, and the limited coverage in section 24.1. | Every section 24.5 threshold passes for the declared profile. Unsupported archetypes abstain. |
+| Controlled family expansion | Add one complete family at a time in this order: U.S. banks, insurers, REIT NAV, regulated utilities, cyclical issuers, biotech, SOTP, then IFRS accounting profiles. | The family has a complete `ModelSpecV1`, lawful source coverage, positive and negative golden cases, independent node checks, and a predeclared out-of-sample cohort when its forecasts are calibratable. Until then it remains explicitly unsupported. |
 | Enterprise service | Governed model inventory, broader issuer and jurisdiction coverage, source health and retention controls, independent model validation, calibrated forecast intervals where data permits, operational SLOs, incident recovery, and controlled releases. | An independent reviewer can reproduce artifacts, inspect each model's validation record, confirm monitoring and rollback evidence, and verify the stated coverage limits. |
 
 All model families use the same versioned contract from the first service release. A new family adds a registry entry and its own evidence. It does not require a new `ModelSpec` schema or a rewrite of earlier families.
