@@ -16,13 +16,13 @@ from fastapi import FastAPI, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, PlainTextResponse
 from pydantic import ValidationError
-
 from src.shared.internal_services import INTERNAL_CONTRACT_VERSION
 
 from .application import FundamentalApplication, UncertaintyRequestV1
 from .application.service import normalize_uncertainty_payload
 from .contracts import SnapshotResolutionRequestV1, ValuationInputV1
 from .facts import CanonicalFactRepository
+from .governance import ModelInventory
 from .interface.transport import (
     authorize_operation,
     decode_input,
@@ -87,6 +87,7 @@ def create_app(
     metadata_store: PostgresMetadataStore | None = None,
     require_metadata: bool = False,
     policy_registry: PolicyRegistry | None = None,
+    model_inventory: ModelInventory | None = None,
 ) -> FastAPI:
     """Assemble transport, application use cases, and runtime resources."""
 
@@ -119,6 +120,7 @@ def create_app(
         metadata_store=metadata_store,
         require_metadata=require_metadata,
         policy_registry=policy_registry,
+        model_inventory=model_inventory,
     )
 
     @asynccontextmanager
@@ -161,6 +163,7 @@ def create_app(
     app.state.metrics = metrics
     app.state.application = application
     app.state.metadata_store = metadata_store
+    app.state.model_inventory = model_inventory
 
     @app.middleware("http")
     async def operations_boundary(request: Request, call_next):
@@ -337,6 +340,11 @@ def create_runtime_app() -> FastAPI:
         database_url,
         auto_migrate=os.getenv("FUNDAMENTAL_SERVICE_AUTO_MIGRATE", "0") == "1",
     )
+    trust_roots_value = os.getenv("FUNDAMENTAL_MODEL_TRUST_ROOTS_FILE")
+    model_inventory = ModelInventory.from_deployment_file(
+        expansion_model_specs(),
+        Path(trust_roots_value) if trust_roots_value else None,
+    )
     content_store = PostgresContentStore(root / "content", metadata_store)
     return create_app(
         snapshot_repository=PostgresSnapshotRepository(metadata_store),
@@ -346,6 +354,7 @@ def create_runtime_app() -> FastAPI:
         config=config,
         metadata_store=metadata_store,
         require_metadata=True,
+        model_inventory=model_inventory,
         policy_registry=PolicyRegistry(
             model_repository=MetadataModelRepository(metadata_store),
             repository=MetadataPolicyRepository(metadata_store),

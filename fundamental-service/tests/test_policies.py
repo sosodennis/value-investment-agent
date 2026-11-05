@@ -1,10 +1,14 @@
+import base64
+import json
 from datetime import datetime, timezone
 from decimal import Decimal
 from hashlib import sha256
+from pathlib import Path
 
 import pytest
 from cryptography.hazmat.primitives import serialization as crypto_serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
 from fundamental_service.calibration import (
     CalibrationArtifactV1,
     ConfidenceIntervalV1,
@@ -112,7 +116,9 @@ def test_active_model_requires_governance_evidence():
         type(initial_model_specs()[0]).model_validate(payload)
 
 
-def test_inventory_advertises_only_signed_test_fixture_until_family_release():
+def test_inventory_advertises_only_signed_test_fixture_until_family_release(
+    tmp_path: Path,
+):
     model = expansion_model_specs()[0].model_copy(
         update={"model_id": "test-only-release-governance"}
     )
@@ -121,20 +127,30 @@ def test_inventory_advertises_only_signed_test_fixture_until_family_release():
     workflow_identity = "github-actions/fundamental-release-gates"
     source_revision = "a" * 40
     suite_digest = "b" * 64
-    inventory = ModelInventory(
-        (model,),
-        trusted_verifiers={
-            verifier_id: TrustedReleaseVerifier(
-                workflow_identity=workflow_identity,
-                public_key=private_key.public_key().public_bytes(
-                    encoding=crypto_serialization.Encoding.Raw,
-                    format=crypto_serialization.PublicFormat.Raw,
-                ),
-                expected_source_revision=source_revision,
-                expected_verification_suite_sha256=suite_digest,
-            )
-        },
+    public_key = private_key.public_key().public_bytes(
+        encoding=crypto_serialization.Encoding.Raw,
+        format=crypto_serialization.PublicFormat.Raw,
     )
+    trust_roots_file = tmp_path / "model-trust-roots.json"
+    trust_roots_file.write_text(
+        json.dumps(
+            {
+                "verifiers": {
+                    verifier_id: {
+                        "workflow_identity": workflow_identity,
+                        "public_key_ed25519_base64": base64.b64encode(
+                            public_key
+                        ).decode("ascii"),
+                        "expected_source_revision": source_revision,
+                        "expected_verification_suite_sha256": suite_digest,
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    inventory = ModelInventory.from_deployment_file((model,), trust_roots_file)
+    assert inventory.trust_roots_configured
     assert inventory.advertised(at=datetime(2026, 1, 1, tzinfo=timezone.utc)) == ()
     source_count = len(model.source_register)
     role_names = (
@@ -519,6 +535,28 @@ def test_inventory_advertises_only_signed_test_fixture_until_family_release():
         for item in inventory.advertised(at=datetime(2026, 8, 1, tzinfo=timezone.utc))
     ] == ["test-only-release-governance"]
     assert inventory.advertised(at=datetime(2027, 2, 1, tzinfo=timezone.utc)) == ()
+
+
+def test_deployment_trust_roots_reject_malformed_public_keys(tmp_path: Path):
+    trust_roots_file = tmp_path / "model-trust-roots.json"
+    trust_roots_file.write_text(
+        json.dumps(
+            {
+                "verifiers": {
+                    "release-gate": {
+                        "workflow_identity": "github-actions/fundamental-release-gates",
+                        "public_key_ed25519_base64": "not-a-public-key",
+                        "expected_source_revision": "a" * 40,
+                        "expected_verification_suite_sha256": "b" * 64,
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="raw Ed25519 public key"):
+        ModelInventory.from_deployment_file(expansion_model_specs(), trust_roots_file)
 
 
 def passing_bank_calibration(model_id: str, target: str) -> CalibrationArtifactV1:

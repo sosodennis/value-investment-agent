@@ -1,0 +1,10 @@
+{
+  "verifiers": {
+    "fundamental-release-gate-v1": {
+      "workflow_identity": "github-actions/fundamental-release-gates",
+      "public_key_ed25519_base64": "hDtxTkq6TM8fIu5l6aSQ3A+j+n6apBtklvni7gMNYnE=",
+      "expected_source_revision": "00546b3a4112640fb0b9d5e2c1f7bab76c1e92ed",
+      "expected_verification_suite_sha256": "c50e4c013deb632a67c95b1d6403e857a25192c8e2e6e0b2c5f95739cb446731"
+    }
+  }
+}
