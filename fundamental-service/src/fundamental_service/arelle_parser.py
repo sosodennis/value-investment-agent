@@ -205,6 +205,24 @@ def _finding_from_log(record: dict[str, Any]) -> ArelleFindingV1 | None:
     return ArelleFindingV1(code=code, severity=level, message=message_text[:2048])
 
 
+def _unlogged_model_error_findings(
+    model_errors: tuple[str, ...], logged_codes: set[str]
+) -> tuple[ArelleFindingV1, ...]:
+    return tuple(
+        ArelleFindingV1(
+            code=code,
+            severity="warning" if code in _NON_BLOCKING_ARELLE_CODES else "error",
+            message=(
+                "Arelle reported a known non-blocking Inline XBRL transformation diagnostic."
+                if code in _NON_BLOCKING_ARELLE_CODES
+                else "Arelle reported a model error without a corresponding log record."
+            ),
+        )
+        for code in model_errors
+        if code not in logged_codes
+    )
+
+
 def _dqc_validation_completed(handler: Any, records: tuple[Any, ...]) -> bool:
     for record in records:
         entry = handler.recordToJson(record)
@@ -426,15 +444,7 @@ def _parse_in_process(
                 if (item := _finding_from_log(handler.recordToJson(record))) is not None
             )
             logged_codes = {item.code for item in findings}
-            findings += tuple(
-                ArelleFindingV1(
-                    code=code,
-                    severity="warning",
-                    message="Arelle reported a known non-blocking Inline XBRL transformation diagnostic.",
-                )
-                for code in model_errors
-                if code not in logged_codes
-            )
+            findings += _unlogged_model_error_findings(model_errors, logged_codes)
             if not _dqc_validation_completed(handler, records):
                 raise ArelleParserError(
                     "DQC_VALIDATION_UNAVAILABLE", "DQC rules did not run"

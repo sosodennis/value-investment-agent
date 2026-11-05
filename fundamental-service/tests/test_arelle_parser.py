@@ -15,6 +15,7 @@ from fundamental_service.arelle_parser import (
     ArelleValidationProfileV1,
     _directory_hash,
     _dqc_validation_completed,
+    _unlogged_model_error_findings,
     parse_filing_offline,
 )
 
@@ -136,6 +137,32 @@ def test_known_inline_transform_diagnostics_do_not_hide_other_blocking_findings(
     )
 
     assert report.blocking_finding_codes() == ("EFM.5.02.05.disallowedElement",)
+
+
+def test_unlogged_model_errors_remain_blocking_except_known_transform_diagnostics():
+    profile = ArelleValidationProfileV1(profile_id="sec-efm-us-gaap-v1")
+    findings = _unlogged_model_error_findings(
+        (
+            "ix11.10.1.2:invalidTransformation",
+            "xbrl:unknownBlockingModelError",
+        ),
+        logged_codes=set(),
+    )
+    report = ArelleParseReportV1(
+        filing_path="fixture.xbrl",
+        parser_version=profile.arelle_version,
+        taxonomy_version="fixture-taxonomy-v1",
+        validation_profile=profile,
+        validation_profile_digest=profile.digest(),
+        findings=findings,
+        parsed_at=datetime.now(timezone.utc),
+    )
+
+    assert report.blocking_finding_codes() == ("xbrl:unknownBlockingModelError",)
+    assert {finding.code: finding.severity for finding in findings} == {
+        "ix11.10.1.2:invalidTransformation": "warning",
+        "xbrl:unknownBlockingModelError": "error",
+    }
 
 
 def test_dqc_completion_requires_a_dqc_finding_or_dqcrt_activity():
