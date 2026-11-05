@@ -220,7 +220,7 @@ class SnapshotResolutionRequestV1(StrictModel):
     contract_version: Literal["fundamental.v1"]
     identity: IdentityV1
     valuation_timestamp: datetime
-    source_selection_policy: str = Field(min_length=1)
+    source_selection_policy: Literal["pit-v1"]
     coverage_profile: str = Field(min_length=1)
     required_fields: tuple[str, ...] = Field(min_length=1)
 
@@ -252,6 +252,11 @@ class MissingValueV1(StrictModel):
     reason: str = Field(min_length=1)
 
 
+class CandidateRejectionV1(StrictModel):
+    candidate_id: str = Field(min_length=1)
+    reason: str = Field(min_length=1)
+
+
 class CanonicalFactV1(StrictModel):
     contract_version: Literal["fundamental.v1"]
     fact_id: str = Field(min_length=1)
@@ -267,11 +272,18 @@ class CanonicalFactV1(StrictModel):
     period_end: date
     instant: date | None = None
     context: XbrlContextV1
+    security_scope: str | None = None
     as_of: datetime
     available_at: datetime
     filed_at: datetime | None = None
     captured_at: datetime
     accession_number: str | None = None
+    filing_version: str | None = None
+    is_amendment: bool = False
+    amends_accession: str | None = None
+    supersedes_accession: str | None = None
+    amendment_scope: Literal["valuation_relevant", "unrelated", "unknown"] | None = None
+    decimals: int | None = None
     taxonomy_version: str = Field(min_length=1)
     source: SourceProvenanceV1
     quality: QualityStatus
@@ -279,6 +291,9 @@ class CanonicalFactV1(StrictModel):
     mapping_decision_id: str | None = None
     mapping_confidence: Literal["high", "medium", "low", "unresolved"] | None = None
     rejected_candidates: tuple[str, ...] = ()
+    rejected_candidate_reasons: tuple[CandidateRejectionV1, ...] = ()
+    point_in_time_policy: str | None = None
+    selection_reason: str | None = None
 
     @model_validator(mode="after")
     def point_in_time_order(self) -> "CanonicalFactV1":

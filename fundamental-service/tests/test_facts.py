@@ -76,7 +76,11 @@ def test_point_in_time_selection_prefers_latest_available_and_precision():
     )
     assert result.fact is not None
     assert result.fact.value == Decimal("100")
-    assert result.rejected_candidate_ids == ("future",)
+    assert result.rejected_candidate_ids == ("future", "old")
+    assert {item.candidate_id for item in result.rejected_candidate_reasons} == {
+        "future",
+        "old",
+    }
 
 
 def test_equally_precise_conflict_blocks_fact():
@@ -87,6 +91,93 @@ def test_equally_precise_conflict_blocks_fact():
         ),
         datetime(2026, 1, 1, tzinfo=timezone.utc),
     )
+    assert result.fact is None
+    assert result.issues[0].code == "FACT_CONFLICT"
+
+
+def test_eligible_amendment_without_scope_abstains():
+    result = select_fact(
+        (
+            candidate("original", "100", "2025-12-01", 2),
+            candidate(
+                "amendment",
+                "101",
+                "2025-12-20",
+                2,
+                is_amendment=True,
+                amendment_scope="unknown",
+            ),
+        ),
+        datetime(2026, 1, 1, tzinfo=timezone.utc),
+    )
+    assert result.fact is None
+    assert result.issues[0].code == "FACT_AMENDMENT_SCOPE_UNKNOWN"
+    assert result.issues[0].severity == "fatal"
+
+
+def test_unrelated_amendment_cannot_replace_original_fact():
+    result = select_fact(
+        (
+            candidate("original", "100", "2025-12-01", 2),
+            candidate(
+                "amendment",
+                "101",
+                "2025-12-20",
+                2,
+                is_amendment=True,
+                amendment_scope="unrelated",
+            ),
+        ),
+        datetime(2026, 1, 1, tzinfo=timezone.utc),
+    )
+    assert result.fact is not None
+    assert result.fact.fact_id == "original"
+    assert result.rejected_candidate_reasons[0].reason == (
+        "unrelated_amendment_cannot_supersede_fact"
+    )
+
+
+def test_relevant_later_amendment_wins_and_records_original():
+    original = candidate("original", "100", "2025-12-01", 2)
+    amended_source = source().model_copy(
+        update={
+            "content_hash": "b" * 64,
+            "accession_number": "0001-25-2",
+        }
+    )
+    amendment = candidate("amendment", "101", "2025-12-20", 2).model_copy(
+        update={
+            "source": amended_source,
+            "accession_number": "0001-25-2",
+            "filing_version": "0001-25-2-amendment",
+            "is_amendment": True,
+            "amends_accession": "0001-25-1",
+            "amendment_scope": "valuation_relevant",
+        }
+    )
+    result = select_fact(
+        (original, amendment), datetime(2026, 1, 1, tzinfo=timezone.utc)
+    )
+    assert result.fact is not None
+    assert result.fact.fact_id == "amendment"
+    assert result.rejected_candidate_ids == ("original",)
+
+
+def test_equal_precision_conflict_across_filings_abstains():
+    first = candidate("first", "100", "2025-12-01", 2)
+    second = candidate("second", "101", "2025-12-01", 2).model_copy(
+        update={
+            "source": source().model_copy(
+                update={
+                    "content_hash": "b" * 64,
+                    "accession_number": "0001-25-2",
+                }
+            ),
+            "accession_number": "0001-25-2",
+            "filing_version": "0001-25-2",
+        }
+    )
+    result = select_fact((first, second), datetime(2026, 1, 1, tzinfo=timezone.utc))
     assert result.fact is None
     assert result.issues[0].code == "FACT_CONFLICT"
 
