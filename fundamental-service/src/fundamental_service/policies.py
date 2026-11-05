@@ -73,7 +73,7 @@ class ModelSpecV1(BaseModel):
     release_manifest: str | None = None
 
     @model_validator(mode="after")
-    def governed_release(self) -> "ModelSpecV1":
+    def governed_release(self) -> ModelSpecV1:
         if self.lifecycle == "active":
             required = {
                 "approval_date": self.approval_date,
@@ -123,7 +123,7 @@ class PolicyRecordV1(BaseModel):
     policy_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
 
     @model_validator(mode="after")
-    def digest_matches(self) -> "PolicyRecordV1":
+    def digest_matches(self) -> PolicyRecordV1:
         if self.effective_at.tzinfo is None or self.effective_at.utcoffset() is None:
             raise ValueError("effective_at must include a timezone")
         payload = self.model_dump(exclude={"policy_digest"})
@@ -137,8 +137,8 @@ class PolicyRegistry:
         self,
         models: Iterable[ModelSpecV1] = (),
         policies: Iterable[PolicyRecordV1] = (),
-        model_repository: "ModelRepository | None" = None,
-        repository: "PolicyRepository | None" = None,
+        model_repository: ModelRepository | None = None,
+        repository: PolicyRepository | None = None,
     ) -> None:
         self._models = {(item.model_id, item.model_version): item for item in models}
         self._policies = {item.policy_id: item for item in policies}

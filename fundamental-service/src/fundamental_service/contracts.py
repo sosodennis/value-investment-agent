@@ -94,7 +94,7 @@ class SourceProvenanceV1(StrictModel):
     terms_reference: str | None = None
 
     @model_validator(mode="after")
-    def timestamps_have_timezone(self) -> "SourceProvenanceV1":
+    def timestamps_have_timezone(self) -> SourceProvenanceV1:
         for name, value in (
             ("captured_at", self.captured_at),
             ("available_at", self.available_at),
@@ -121,7 +121,7 @@ class TraceV1(StrictModel):
     description: str | None = None
 
     @model_validator(mode="after")
-    def require_trace(self) -> "TraceV1":
+    def require_trace(self) -> TraceV1:
         if not self.source_refs and not self.expression and not self.description:
             raise ValueError("a trace requires source_refs, expression, or description")
         return self
@@ -156,7 +156,7 @@ class XbrlContextV1(StrictModel):
     context_id: str = Field(min_length=1)
 
     @model_validator(mode="after")
-    def period_shape(self) -> "XbrlContextV1":
+    def period_shape(self) -> XbrlContextV1:
         if self.period_type is PeriodType.INSTANT and self.instant is None:
             raise ValueError("instant context requires instant")
         if self.period_type is PeriodType.DURATION and (
@@ -193,7 +193,7 @@ class SourceRecordV1(StrictModel):
     taxonomy_manifest_id: str | None = None
 
     @model_validator(mode="after")
-    def timestamps_have_timezone(self) -> "SourceRecordV1":
+    def timestamps_have_timezone(self) -> SourceRecordV1:
         for name, value in (
             ("available_at", self.available_at),
             ("captured_at", self.captured_at),
@@ -222,7 +222,7 @@ class SourceSnapshotV1(StrictModel):
     manifest_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
 
     @model_validator(mode="after")
-    def validate_digest(self) -> "SourceSnapshotV1":
+    def validate_digest(self) -> SourceSnapshotV1:
         payload = self.model_dump(exclude={"manifest_digest", "snapshot_id"})
         if self.manifest_digest != sha256_digest(payload):
             raise ValueError(
@@ -231,7 +231,7 @@ class SourceSnapshotV1(StrictModel):
         return self
 
     @model_validator(mode="after")
-    def timestamps_have_timezone(self) -> "SourceSnapshotV1":
+    def timestamps_have_timezone(self) -> SourceSnapshotV1:
         for name, value in (
             ("valuation_timestamp", self.valuation_timestamp),
             ("captured_at", self.captured_at),
@@ -323,7 +323,7 @@ class CanonicalFactV1(StrictModel):
     selection_reason: str | None = None
 
     @model_validator(mode="after")
-    def point_in_time_order(self) -> "CanonicalFactV1":
+    def point_in_time_order(self) -> CanonicalFactV1:
         for earlier, later, name in (
             (self.available_at, self.captured_at, "available_at/captured_at"),
         ):
@@ -336,7 +336,7 @@ class CanonicalFactV1(StrictModel):
         return self
 
     @model_validator(mode="after")
-    def timestamps_have_timezone(self) -> "CanonicalFactV1":
+    def timestamps_have_timezone(self) -> CanonicalFactV1:
         for name, value in (
             ("as_of", self.as_of),
             ("available_at", self.available_at),
@@ -367,7 +367,7 @@ class WaccAssumptionsV1(StrictModel):
     equity_weight: Decimal
 
     @model_validator(mode="after")
-    def weights_and_rates(self) -> "WaccAssumptionsV1":
+    def weights_and_rates(self) -> WaccAssumptionsV1:
         if self.equity_weight + self.debt_weight != Decimal("1"):
             raise ValueError("debt_weight and equity_weight must sum to 1")
         return self
@@ -408,7 +408,7 @@ class BankAssumptionsV1(StrictModel):
         return self.cet1_capital / self.reported_rwa
 
     @model_validator(mode="after")
-    def regulatory_constraints(self) -> "BankAssumptionsV1":
+    def regulatory_constraints(self) -> BankAssumptionsV1:
         if self.cet1_capital / self.reported_rwa < self.minimum_cet1_ratio:
             raise ValueError("reported CET1 ratio is below the model minimum")
         if self.terminal_growth >= self.cost_of_equity:
@@ -525,7 +525,7 @@ class DistributionParameterV1(StrictModel):
     mean: Decimal | None = None
 
     @model_validator(mode="after")
-    def bounds(self) -> "DistributionParameterV1":
+    def bounds(self) -> DistributionParameterV1:
         if self.lower > self.upper:
             raise ValueError("distribution lower bound exceeds upper bound")
         if self.mode is not None and not self.lower <= self.mode <= self.upper:
@@ -564,7 +564,7 @@ class UncertaintyV1(StrictModel):
     sensitivity: tuple[SensitivityInputV1, ...] = ()
 
     @model_validator(mode="after")
-    def sampling_requirements(self) -> "UncertaintyV1":
+    def sampling_requirements(self) -> UncertaintyV1:
         if self.mode == "monte_carlo" and (
             not self.parameters
             or self.samples is None
@@ -644,7 +644,7 @@ class ValuationInputV1(StrictModel):
     caller_approval: CallerApprovalEnvelopeV1 | None = None
 
     @model_validator(mode="after")
-    def model_assumptions_present(self) -> "ValuationInputV1":
+    def model_assumptions_present(self) -> ValuationInputV1:
         if self.model_id == "bank_excess_return":
             if self.assumptions.bank is None:
                 raise ValueError("bank_excess_return requires assumptions.bank")
@@ -686,7 +686,7 @@ class ValuationInputV1(StrictModel):
         return self
 
     @model_validator(mode="after")
-    def digest_and_approval(self) -> "ValuationInputV1":
+    def digest_and_approval(self) -> ValuationInputV1:
         payload = self.model_dump(exclude={"input_digest", "caller_approval"})
         computed = sha256_digest(payload)
         if self.input_digest is not None and (
@@ -700,7 +700,7 @@ class ValuationInputV1(StrictModel):
             raise ValueError("caller approval is bound to a different input_digest")
         return self
 
-    def with_digest(self) -> "ValuationInputV1":
+    def with_digest(self) -> ValuationInputV1:
         digest = sha256_digest(
             self.model_dump(exclude={"input_digest", "caller_approval"})
         )
@@ -712,7 +712,7 @@ class ValidationResponseV1(StrictModel):
     input: ValuationInputV1
     input_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
     quality_status: QualityStatus
-    policy_resolution: "PolicyResolutionV1"
+    policy_resolution: PolicyResolutionV1
     issue_codes: tuple[str, ...] = ()
     missing_evidence: tuple[str, ...] = ()
 
@@ -800,7 +800,7 @@ class CalculationEvidenceV1(StrictModel):
     calculation: CalculationArtifactV1
 
     @model_validator(mode="after")
-    def evidence_is_digest_bound(self) -> "CalculationEvidenceV1":
+    def evidence_is_digest_bound(self) -> CalculationEvidenceV1:
         calculation = self.calculation
         trace = calculation.trace
         if trace is None:
@@ -917,7 +917,7 @@ class ReleaseManifestV1(StrictModel):
         return values
 
     @model_validator(mode="after")
-    def digest(self) -> "ReleaseManifestV1":
+    def digest(self) -> ReleaseManifestV1:
         if self.manifest_digest != sha256_digest(
             self.model_dump(exclude={"manifest_digest"})
         ):

@@ -33,7 +33,7 @@ class BankFindFinancialReportV1(BaseModel):
     available_at: datetime
 
     @model_validator(mode="after")
-    def source_is_regulatory_entity_evidence(self) -> "BankFindFinancialReportV1":
+    def source_is_regulatory_entity_evidence(self) -> BankFindFinancialReportV1:
         host = urlsplit(self.source_uri).hostname
         if host != "banks.data.fdic.gov":
             raise ValueError("FDIC record must retain the official BankFind URI")
