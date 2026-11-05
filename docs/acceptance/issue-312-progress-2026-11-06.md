@@ -343,7 +343,8 @@ service's capture manifest, cache digest, or offline replay is complete.
 - A first host-side replay attempt supplied only the primary filing and not
   its extension schema, producing missing-schema findings before the intended
   check. That attempt is diagnostic only and is not acceptance evidence.
-- Keep the current 2024 cache. Prepare a separate, hashed offline taxonomy
+- Recommended next step at this point (completed in the later checkpoint
+  below): preserve the 2024 cache and add a separately hashed offline taxonomy
   release with the filing-referenced 2023 and 2024 public resources. Update
   the release pin and manifest description to identify that bundle. Rerun the
   Microsoft filing offline with its schema and the pinned EFM/DQC runtime.
@@ -414,7 +415,7 @@ service's capture manifest, cache digest, or offline replay is complete.
   `dqc-dqcrt-checks-completed`, has no blocking findings, and records no
   network attempts. The test verifies the exact SEC archive member bytes and
   schema. The taxonomy bundle SHA-256 is
-  `0accc5ab0d4ce6674083bd82cf878a8619b3ac441da8600e3a023ac1d95af3e7`.
+  `0accc5ab0d4ce6674083bd82cf878a8619b3ac441da8600e0a03aefb8432a3a3`.
 - `uvx --from ruff ruff format --check` on all eight changed Python files:
   exit 0. `uvx --from ruff ruff check --select E,F,I --ignore E501` on the
   changed Python files: exit 0. `git diff --check`: exit 0. Commit hooks for
@@ -426,3 +427,84 @@ service's capture manifest, cache digest, or offline replay is complete.
   concurrency, distinct-key isolation, failure/recovery and atomicity,
   authorization/audit checks, retained-evidence offline rebuild, and Agent
   client acceptance. No PR has been created and #312 remains open.
+
+## Authenticated SEC publication and profile propagation checkpoint
+
+- Implementation commit: `28c1d42ad0cd1102eb8e61ffe4c2dd046c68e5c6`
+  (`fix(fundamental): bind SEC ingestion to validation profile (Refs #312)`).
+- The previous live request returned HTTP 400 `invalid_request` before an audit
+  row or acquisition was created. `SecIngestionResponseV1` requires a
+  validation profile ID and digest, but `SecAcquisitionUseCase` omitted both.
+  The persisted snapshot also lacked the profile fields because it was built
+  before parsing. The fix derives both response values from the actual Arelle
+  report and binds them into the final snapshot manifest after parsing. The
+  runtime profile ID is the request's contract-limited selector.
+- Regression assertions verify that snapshot profile ID and digest match the
+  parser report. Focused command:
+  `fundamental-service/.venv/bin/pytest -q fundamental-service/tests/test_ingestion.py fundamental-service/tests/test_source_acquisition.py`
+  Result: exit 0, `3 passed`.
+- Exact-commit service suite command (exit 0):
+
+  ```sh
+  FUNDAMENTAL_TEST_DATABASE_URL=postgresql+asyncpg://fundamental:fundamental@127.0.0.1:18481/fundamental \
+  ISSUE312_EDGAR_PLUGIN_DIR=/private/tmp/issue312-validation-runtime-v2/EDGAR-4891c4c9889c77af247428ceff4fa7cc52d534ea \
+  ISSUE312_XULE_PLUGIN_DIR=/private/tmp/issue312-validation-runtime-v2/xule-7ca1d7637f333f5c3a02379dbe6f6d6c17c88acc/plugin \
+  ISSUE312_DQC_RULESET_PATH=/private/tmp/issue312-validation-runtime-v2/dqc_us_rules-31.0.3/dqc_us_rules/dqc-us-2024-V31-ruleset.zip \
+  ISSUE312_TAXONOMY_CACHE_DIR=/tmp/issue312-sec-taxonomy-2023-2024 \
+  fundamental-service/.venv/bin/pytest -q fundamental-service/tests
+  ```
+
+- Result on `28c1d42ad0cd1102eb8e61ffe4c2dd046c68e5c6`: `171 passed, 2
+  warnings` in 20.91 seconds, no skips. `uv lock --check --project
+  fundamental-service`, `git diff --check`, Ruff format check, and Ruff
+  `E,F,I` check all exited 0. Commit hooks for whitespace, end-of-file,
+  large-file, Ruff, and Ruff-format checks passed.
+- Docker Compose used project `value-investment-agent-issue-312-sec-ingestion`,
+  PostgreSQL host port `18481`, and service host port `18082`. The validated
+  stack services were `fundamental-postgres` and `fundamental-service`;
+  `docker compose ... config --quiet` exited 0. The Fundamental service image
+  was rebuilt from this code and both containers reported `healthy`;
+  `GET http://127.0.0.1:18082/readyz` returned `{"status":"ready",
+  "contract_version":"internal.v1"}`.
+- Authenticated live request command was run with
+  `PYTHONPATH=finance-agent-core:. fundamental-service/.venv/bin/python -`
+  using `build_internal_context`, Bearer `integration-token`, organization
+  `org-sec-ingestion-test`, and POST `/v1/data/ingestions`. It selected
+  Microsoft CIK `0000789019`, accession `0000950170-24-087843`, cutoff
+  `2025-06-30T00:00:00Z`, approved `sec-revenue-v1` mapping, Arelle `2.47.4`,
+  and the pinned `sec-efm-us-dqc-v31.0.3` profile with the 2023/2024 taxonomy
+  package. Command exit 0; API result HTTP 200, `degraded` / `provisional`,
+  with 57 canonical fact IDs and no blocking parser findings. Reported finding
+  codes were `EFM.5.02.05.14.hidden-fact-eligible-for-transform`,
+  `EFM.6.05.42`, and `ixbrl:selfClosedTagWarning`; the result was not upgraded
+  to `verified`.
+- Published immutable reference: snapshot
+  `snapshot-416fe2f64c7aff737286ba04326397be`, manifest digest
+  `436bcb6b938cfd0ffa1ac9f6f5cd5fef88e49f0bfb028f3b806fd56aaef37f8f`,
+  validation profile digest
+  `a5a2f617ea7872d2e3ba3d79abb93cd19ba7cd6773352edc77fe33284534da5a`,
+  taxonomy package `sec-us-gaap-2023-2024-public-bundle`, and five source
+  content hashes. PostgreSQL confirms one acquisition row, one snapshot, 57
+  `snapshot_facts` links, and one `degraded` audit row for correlation ID
+  `issue-312-live-msft-profile-fix`.
+- A second signed request with the same acquisition input and a new correlation
+  ID returned HTTP 200 `reused=true` with the same snapshot ID and manifest
+  digest. PostgreSQL still contained one acquisition row; a second audit row
+  records `reused` with five source hashes.
+- Public-source research: the official
+  [DQC ruleset usage guide](https://github.com/DataQualityCommittee/dqc_us_rules/blob/master/usage_rulesets.md)
+  states that ruleset ZIPs include local taxonomy packages for offline
+  execution; `--xule-bypass-packages` resolves resources from the DQC
+  repository and therefore is unsuitable for deterministic offline replay.
+  Official issue searches found DQC rule issue
+  [#1012](https://github.com/DataQualityCommittee/dqc_us_rules/issues/1012),
+  a closed DQC.US.0159 nil-fact crash for V30, and Arelle EDGAR issue
+  [#41](https://github.com/Arelle/EDGAR/issues/41), concerning IFRS validation
+  messages. Neither matches this US-GAAP V31 failure. The direct cause was the
+  missing 2023 US-GAAP taxonomy resource, already fixed and verified by the
+  1,856-fact offline Microsoft EFM/DQC replay above.
+- Issue #312 remains open with no PR. This checkpoint is not an acceptance or
+  `VERIFIED` record. Remaining criteria include 50-way cross-process
+  coalescing, distinct-key isolation, provider/parser/storage/process fault
+  recovery, atomic publication, authorization failures and audit evidence,
+  retained-evidence clean offline rebuild, and Agent client acceptance.
