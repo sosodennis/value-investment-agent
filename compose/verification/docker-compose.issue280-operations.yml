@@ -1,6 +1,22 @@
 name: ${COMPOSE_PROJECT_NAME:-value-investment-agent-270-integration}
 
 services:
+  fundamental-postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: fundamental
+      POSTGRES_PASSWORD: fundamental
+      POSTGRES_DB: fundamental
+    ports:
+      - "${FUNDAMENTAL_POSTGRES_HOST_PORT:-15481}:5432"
+    volumes:
+      - fundamental-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fundamental -d fundamental"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   fundamental-service:
     build:
       context: ../..
@@ -9,6 +25,8 @@ services:
         internal-contracts: ../../finance-agent-core/src/shared
     environment:
       FUNDAMENTAL_SERVICE_DATA_ROOT: /var/lib/fundamental
+      FUNDAMENTAL_SERVICE_DATABASE_URL: postgresql+asyncpg://fundamental:fundamental@fundamental-postgres:5432/fundamental
+      FUNDAMENTAL_SERVICE_AUTO_MIGRATE: "1"
       FUNDAMENTAL_SERVICE_TOKEN: ${FUNDAMENTAL_SERVICE_TOKEN:-integration-token}
       FUNDAMENTAL_SERVICE_MAX_CALCULATION_SAMPLES: ${FUNDAMENTAL_SERVICE_MAX_CALCULATION_SAMPLES:-10000}
       FUNDAMENTAL_SERVICE_MAX_REQUEST_MS: ${FUNDAMENTAL_SERVICE_MAX_REQUEST_MS:-5000}
@@ -16,6 +34,9 @@ services:
       - "${FUNDAMENTAL_SERVICE_HOST_PORT:-18080}:8080"
     volumes:
       - fundamental-service-data:/var/lib/fundamental
+    depends_on:
+      fundamental-postgres:
+        condition: service_healthy
     deploy:
       resources:
         limits:
@@ -40,3 +61,4 @@ services:
 
 volumes:
   fundamental-service-data:
+  fundamental-postgres-data:
