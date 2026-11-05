@@ -32,9 +32,11 @@ class _Client:
         *,
         failure: Exception | None = None,
         result_digest: str = "a" * 64,
-        uncertainty_base_digest: str = "a" * 64,
+        uncertainty_report_digest: str | None = None,
+        uncertainty_base_digest: str = "b" * 64,
         uncertainty_base_overrides: Mapping[str, object] | None = None,
         uncertainty_trace_overrides: Mapping[str, object] | None = None,
+        uncertainty_report_references: list[Mapping[str, object]] | None = None,
         calculation_overrides: Mapping[str, object] | None = None,
         calculation_trace_overrides: Mapping[str, object] | None = None,
         validation_policy_overrides: Mapping[str, object] | None = None,
@@ -45,9 +47,11 @@ class _Client:
         self.calls: list[tuple[str, dict[str, object]]] = []
         self.failure = failure
         self.result_digest = result_digest
+        self.uncertainty_report_digest = uncertainty_report_digest or result_digest
         self.uncertainty_base_digest = uncertainty_base_digest
         self.uncertainty_base_overrides = dict(uncertainty_base_overrides or {})
         self.uncertainty_trace_overrides = dict(uncertainty_trace_overrides or {})
+        self.uncertainty_report_references = uncertainty_report_references
         self.calculation_overrides = dict(calculation_overrides or {})
         self.calculation_trace_overrides = dict(calculation_trace_overrides or {})
         self.validation_policy_overrides = dict(validation_policy_overrides or {})
@@ -120,12 +124,21 @@ class _Client:
             )
         valuation_context = input_payload["valuation_context"]
         provenance = input_payload["provenance"]
+        uncertainty = input_payload["uncertainty"]
+        has_monte_carlo = (
+            operation == "calculate"
+            and isinstance(uncertainty, Mapping)
+            and uncertainty.get("mode") == "monte_carlo"
+        )
+        calculation_digest = (
+            self.uncertainty_base_digest if has_monte_carlo else self.result_digest
+        )
         primary = {
             "contract_version": "fundamental.v1",
             "calculation_version": "calculator-v1",
             "calculation_status": "completed",
             "quality_status": "verified",
-            "input_digest": self.result_digest,
+            "input_digest": calculation_digest,
             "result_hash": "b" * 64,
             "intrinsic_value": "123.45",
             "per_share_value": "1.23",
@@ -140,7 +153,7 @@ class _Client:
                 "policy_digest": "1" * 64,
                 "resolved_fields": {},
                 "precedence": {},
-                "input_digest": self.result_digest,
+                "input_digest": calculation_digest,
             },
             "artifact_references": [
                 {
@@ -173,8 +186,14 @@ class _Client:
         primary["trace"].update(self.calculation_trace_overrides)
         primary.update(self.calculation_overrides)
         result: dict[str, object] = primary
-        if operation == "uncertainty":
-            monte_carlo = input_payload["monte_carlo"]["uncertainty"]
+        if has_monte_carlo:
+            assert isinstance(uncertainty, Mapping)
+            monte_carlo = uncertainty
+            uncertainty_reference = {
+                "artifact_id": "uncertainty-evidence-1",
+                "artifact_type": "uncertainty_evidence",
+                "content_hash": "c" * 64,
+            }
             base = {
                 **primary,
                 "input_digest": self.uncertainty_base_digest,
@@ -183,17 +202,13 @@ class _Client:
             base_trace = dict(base["trace"])
             base_trace.update(self.uncertainty_trace_overrides)
             base["trace"] = base_trace
-            uncertainty_reference = {
-                "artifact_id": "uncertainty-evidence-1",
-                "artifact_type": "uncertainty_evidence",
-                "content_hash": "c" * 64,
-            }
             base["artifact_references"] = [
                 *primary["artifact_references"],
                 uncertainty_reference,
             ]
             result = {
                 "status": "verified",
+                "input_digest": self.uncertainty_report_digest,
                 "base": base,
                 "requested_samples": monte_carlo["samples"],
                 "valid_samples": monte_carlo["samples"],
@@ -201,7 +216,11 @@ class _Client:
                 "invalid_draw_policy": monte_carlo["invalid_draw_policy"],
                 "seed": monte_carlo["seed"],
                 "sampler_version": "python-random-v1",
-                "artifact_references": [uncertainty_reference],
+                "artifact_references": (
+                    self.uncertainty_report_references
+                    if self.uncertainty_report_references is not None
+                    else [uncertainty_reference]
+                ),
                 "quantiles": {"p05": "1.0", "p50": "1.2", "p95": "1.4"},
                 "convergence_diagnostics": {"converged": True},
             }
@@ -526,17 +545,15 @@ async def test_cutover_accepts_canonical_defaults_without_changing_caller_values
     finally:
         reset_request_principal(token)
 
-    assert [operation for operation, _ in client.calls] == [
-        "validate",
-        "calculate",
-        "uncertainty",
-    ]
+    assert [operation for operation, _ in client.calls] == ["validate", "calculate"]
     assert result.update["fundamental_analysis"]["quality_status"] == "verified"
     assert result.update["fundamental_analysis"]["valuation_request"] == payload
 
 
 @pytest.mark.asyncio
-async def test_cutover_routes_explicit_monte_carlo_controls_to_uncertainty() -> None:
+async def test_cutover_routes_explicit_monte_carlo_controls_to_calculation_report() -> (
+    None
+):
     client = _Client()
     token = set_request_principal(
         InternalPrincipal(
@@ -559,25 +576,88 @@ async def test_cutover_routes_explicit_monte_carlo_controls_to_uncertainty() -> 
     finally:
         reset_request_principal(token)
 
-    assert [operation for operation, _ in client.calls] == [
-        "validate",
-        "calculate",
-        "uncertainty",
-    ]
+    assert [operation for operation, _ in client.calls] == ["validate", "calculate"]
     assert client.calls[1][1]["caller_approval"]["input_digest"] == "a" * 64
-    assert client.calls[2][1]["caller_approval"]["input_digest"] == "a" * 64
-    assert (
-        client.calls[2][1]["monte_carlo"]["uncertainty"]
-        == _input(monte_carlo=True)["uncertainty"]
-    )
-    assert client.calls[2][1]["monte_carlo"]["uncertainty"]["samples"] == 10
+    assert client.calls[1][1]["uncertainty"] == _input(monte_carlo=True)["uncertainty"]
+    assert client.calls[1][1]["uncertainty"]["samples"] == 10
     assert result.update["fundamental_analysis"]["quality_status"] == "verified"
+    projection = result.update["fundamental_analysis"]["fundamental_service"]
+    assert projection["input_digest"] == "a" * 64
+    assert projection["service_result"]["input_digest"] == "a" * 64
     summary = result.update["fundamental_analysis"]["fundamental_service"][
         "uncertainty_summary"
     ]
     assert summary["seed"] == 7
     assert summary["requested_samples"] == 10
-    assert summary["base"]["input_digest"] == "a" * 64
+    assert summary["base"]["input_digest"] == "b" * 64
+
+
+@pytest.mark.asyncio
+async def test_cutover_rejects_uncertainty_report_for_different_caller_input() -> None:
+    client = _Client(uncertainty_report_digest="c" * 64)
+    token = set_request_principal(
+        InternalPrincipal(
+            subject_id="caller-1",
+            organization_id="org-1",
+            membership_id="membership-1",
+        )
+    )
+    try:
+        result = await run_service_valuation_flow(
+            _Runtime(),
+            {"valuation_request": _input(monte_carlo=True)},
+            client=client,
+            request_approval_fn=lambda _request: {
+                "type": "valuation_approval",
+                "contract_version": "v1",
+                "decision": "approve",
+            },
+        )
+    finally:
+        reset_request_principal(token)
+
+    assert [operation for operation, _ in client.calls] == ["validate", "calculate"]
+    assert result.update["fundamental_analysis"]["service_failure"]["code"] == (
+        "INPUT_DIGEST_MISMATCH"
+    )
+
+
+@pytest.mark.asyncio
+async def test_cutover_rejects_uncertainty_evidence_reference_mismatch() -> None:
+    client = _Client(
+        uncertainty_report_references=[
+            {
+                "artifact_id": "different-uncertainty-evidence",
+                "artifact_type": "uncertainty_evidence",
+                "content_hash": "9" * 64,
+            }
+        ]
+    )
+    token = set_request_principal(
+        InternalPrincipal(
+            subject_id="caller-1",
+            organization_id="org-1",
+            membership_id="membership-1",
+        )
+    )
+    try:
+        result = await run_service_valuation_flow(
+            _Runtime(),
+            {"valuation_request": _input(monte_carlo=True)},
+            client=client,
+            request_approval_fn=lambda _request: {
+                "type": "valuation_approval",
+                "contract_version": "v1",
+                "decision": "approve",
+            },
+        )
+    finally:
+        reset_request_principal(token)
+
+    assert [operation for operation, _ in client.calls] == ["validate", "calculate"]
+    assert result.update["fundamental_analysis"]["service_failure"]["code"] == (
+        "UPSTREAM_MALFORMED"
+    )
 
 
 @pytest.mark.asyncio
@@ -740,7 +820,7 @@ async def test_cutover_rejects_calculation_digest_mismatch() -> None:
 
 @pytest.mark.asyncio
 async def test_cutover_rejects_uncertainty_base_digest_mismatch() -> None:
-    client = _Client(uncertainty_base_digest="c" * 64)
+    client = _Client(uncertainty_base_overrides={"input_digest": "c" * 64})
     token = set_request_principal(
         InternalPrincipal(
             subject_id="caller-1", organization_id="org-1", membership_id="membership-1"
@@ -760,19 +840,15 @@ async def test_cutover_rejects_uncertainty_base_digest_mismatch() -> None:
     finally:
         reset_request_principal(token)
 
-    assert [operation for operation, _ in client.calls] == [
-        "validate",
-        "calculate",
-        "uncertainty",
-    ]
+    assert [operation for operation, _ in client.calls] == ["validate", "calculate"]
     assert result.update["fundamental_analysis"]["service_failure"]["code"] == (
-        "INPUT_DIGEST_MISMATCH"
+        "UPSTREAM_MALFORMED"
     )
 
 
 @pytest.mark.asyncio
 async def test_cutover_rejects_uncertainty_base_artifact_mismatch() -> None:
-    client = _Client(uncertainty_base_overrides={"result_hash": "c" * 64})
+    client = _Client(uncertainty_base_overrides={"result_hash": "invalid"})
     token = set_request_principal(
         InternalPrincipal(
             subject_id="caller-1", organization_id="org-1", membership_id="membership-1"
@@ -792,11 +868,7 @@ async def test_cutover_rejects_uncertainty_base_artifact_mismatch() -> None:
     finally:
         reset_request_principal(token)
 
-    assert [operation for operation, _ in client.calls] == [
-        "validate",
-        "calculate",
-        "uncertainty",
-    ]
+    assert [operation for operation, _ in client.calls] == ["validate", "calculate"]
     assert result.update["fundamental_analysis"]["service_failure"]["code"] == (
         "UPSTREAM_MALFORMED"
     )
@@ -826,11 +898,7 @@ async def test_cutover_rejects_uncertainty_base_policy_trace_mismatch() -> None:
     finally:
         reset_request_principal(token)
 
-    assert [operation for operation, _ in client.calls] == [
-        "validate",
-        "calculate",
-        "uncertainty",
-    ]
+    assert [operation for operation, _ in client.calls] == ["validate", "calculate"]
     assert result.update["fundamental_analysis"]["service_failure"]["code"] == (
         "UPSTREAM_MALFORMED"
     )

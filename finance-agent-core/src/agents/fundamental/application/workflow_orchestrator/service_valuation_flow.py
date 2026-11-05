@@ -91,7 +91,9 @@ _PROJECTION_FIELDS = (
     "value_drivers",
 )
 _DIGEST_PATTERN = re.compile(r"^[0-9a-f]{64}$")
-_MONTE_CARLO_SAMPLER_VERSION = "python-random-v1"
+_QUALITY_STATUSES = frozenset(
+    {"verified", "provisional", "degraded", "unsupported", "abstain", "error"}
+)
 _SCHEMA_DEFAULTS: tuple[tuple[tuple[str | int | None, ...], object], ...] = (
     (("assumptions", "bank"), None),
     (("assumptions", "forecast", "base_revenue"), None),
@@ -491,27 +493,30 @@ def _approval_is_accepted(value: object) -> bool:
     )
 
 
-def _monte_carlo_payload(input_payload: Mapping[str, object]) -> JSONObject:
-    uncertainty = input_payload.get("uncertainty")
-    if not isinstance(uncertainty, Mapping) or uncertainty.get("mode") != "monte_carlo":
-        raise ValueError("Monte Carlo execution requires explicit caller controls")
-    request: JSONObject = dict(input_payload)
-    request["monte_carlo"] = {
-        "uncertainty": dict(uncertainty),
-        "sampler_version": _MONTE_CARLO_SAMPLER_VERSION,
-    }
-    return request
-
-
 def _uncertainty_projection(
     response: FundamentalServiceResponseV1,
     *,
-    expected_calculation: Mapping[str, object],
+    expected_input_digest: str,
     expected_seed: int,
     expected_samples: int,
     expected_invalid_draw_policy: str,
 ) -> JSONObject:
     result = _response_result(response)
+    input_digest = result.get("input_digest")
+    if not isinstance(input_digest, str) or not _DIGEST_PATTERN.fullmatch(input_digest):
+        raise FundamentalServiceFailure(
+            "UPSTREAM_MALFORMED",
+            "Fundamental uncertainty response did not include its input digest",
+            retryable=False,
+            status_code=502,
+        )
+    if input_digest != expected_input_digest:
+        raise FundamentalServiceFailure(
+            "INPUT_DIGEST_MISMATCH",
+            "Fundamental uncertainty response is bound to a different caller input",
+            retryable=False,
+            status_code=502,
+        )
     base = result.get("base")
     if not isinstance(base, Mapping):
         raise FundamentalServiceFailure(
@@ -520,51 +525,14 @@ def _uncertainty_projection(
             retryable=False,
             status_code=502,
         )
-    expected_base = expected_calculation.get("base")
-    if not isinstance(expected_base, Mapping):
-        expected_base = expected_calculation
-    base_digest = base.get("input_digest")
-    if not isinstance(base_digest, str) or not _DIGEST_PATTERN.fullmatch(base_digest):
-        raise FundamentalServiceFailure(
-            "UPSTREAM_MALFORMED",
-            "Fundamental uncertainty response did not include its base input digest",
-            retryable=False,
-            status_code=502,
-        )
-    if base_digest != expected_base.get("input_digest"):
-        raise FundamentalServiceFailure(
-            "INPUT_DIGEST_MISMATCH",
-            "Fundamental uncertainty response is bound to a different input",
-            retryable=False,
-            status_code=502,
-        )
-    if any(
-        not _payload_equal(base.get(field), expected_base.get(field))
-        for field in (
-            "result_hash",
-            "calculation_version",
-            "model_version",
-            "policy_id",
-            "policy_version",
-            "snapshot_id",
-            "assumptions",
-            "trace",
-        )
-    ):
-        raise FundamentalServiceFailure(
-            "UPSTREAM_MALFORMED",
-            "Fundamental uncertainty response changed its base calculation trace",
-            retryable=False,
-            status_code=502,
-        )
-    expected_references = expected_base.get("artifact_references")
     base_references = base.get("artifact_references")
     uncertainty_references = result.get("artifact_references")
     if (
-        not isinstance(expected_references, list | tuple)
-        or not expected_references
+        result.get("status") not in _QUALITY_STATUSES
         or not isinstance(base_references, list | tuple)
         or not isinstance(uncertainty_references, list | tuple)
+        or not base_references
+        or not uncertainty_references
         or any(
             not isinstance(reference, Mapping)
             or not isinstance(reference.get("artifact_id"), str)
@@ -575,9 +543,10 @@ def _uncertainty_projection(
             not in {"calculation_evidence", "uncertainty_evidence"}
             for reference in (*base_references, *uncertainty_references)
         )
-        or any(
-            not any(_payload_equal(expected, actual) for actual in base_references)
-            for expected in expected_references
+        or not any(
+            reference.get("artifact_type") == "calculation_evidence"
+            for reference in base_references
+            if isinstance(reference, Mapping)
         )
         or not any(
             reference.get("artifact_type") == "uncertainty_evidence"
@@ -589,11 +558,27 @@ def _uncertainty_projection(
             for reference in uncertainty_references
             if isinstance(reference, Mapping)
         )
+        or any(
+            not any(
+                _payload_equal(reference, base_reference)
+                for base_reference in base_references
+            )
+            for reference in uncertainty_references
+        )
+        or any(
+            not any(
+                _payload_equal(reference, uncertainty_reference)
+                for uncertainty_reference in uncertainty_references
+            )
+            for reference in base_references
+            if isinstance(reference, Mapping)
+            and reference.get("artifact_type") == "uncertainty_evidence"
+        )
     ):
         raise FundamentalServiceFailure(
             "UPSTREAM_MALFORMED",
-            "Fundamental uncertainty response did not preserve calculation and "
-            "uncertainty artifact references",
+            "Fundamental uncertainty response did not bind its calculation and "
+            "uncertainty evidence references",
             retryable=False,
             status_code=502,
         )
@@ -604,7 +589,7 @@ def _uncertainty_projection(
         result.get("seed") != expected_seed
         or requested_samples != expected_samples
         or result.get("invalid_draw_policy") != expected_invalid_draw_policy
-        or result.get("sampler_version") != _MONTE_CARLO_SAMPLER_VERSION
+        or result.get("sampler_version") != "python-random-v1"
         or not isinstance(valid_samples, int)
         or not isinstance(invalid_samples, int)
         or valid_samples < 0
@@ -645,9 +630,19 @@ def _calculation_projection(
     expected_snapshot_id: str,
     expected_fact_ids: tuple[str, ...],
     expected_assumptions: Mapping[str, object],
+    expect_uncertainty_report: bool,
 ) -> JSONObject:
     result = _response_result(response)
-    primary = result.get("base") if isinstance(result.get("base"), Mapping) else result
+    report_base = result.get("base")
+    is_uncertainty_report = isinstance(report_base, Mapping)
+    if is_uncertainty_report != expect_uncertainty_report:
+        raise FundamentalServiceFailure(
+            "UPSTREAM_MALFORMED",
+            "Fundamental calculation response did not match requested uncertainty mode",
+            retryable=False,
+            status_code=502,
+        )
+    primary = report_base if is_uncertainty_report else result
     if not isinstance(primary, Mapping):  # pragma: no cover - guarded above
         raise FundamentalServiceFailure(
             "UPSTREAM_MALFORMED",
@@ -655,16 +650,36 @@ def _calculation_projection(
             retryable=False,
             status_code=502,
         )
-    input_digest = primary.get("input_digest")
+    calculation_input_digest = primary.get("input_digest")
     result_hash = primary.get("result_hash")
-    if not isinstance(input_digest, str) or not _DIGEST_PATTERN.fullmatch(input_digest):
+    if not isinstance(calculation_input_digest, str) or not _DIGEST_PATTERN.fullmatch(
+        calculation_input_digest
+    ):
         raise FundamentalServiceFailure(
             "UPSTREAM_MALFORMED",
             "Fundamental calculation response did not include input_digest",
             retryable=False,
             status_code=502,
         )
-    if input_digest != expected_input_digest:
+    if is_uncertainty_report:
+        report_input_digest = result.get("input_digest")
+        if not isinstance(report_input_digest, str) or not _DIGEST_PATTERN.fullmatch(
+            report_input_digest
+        ):
+            raise FundamentalServiceFailure(
+                "UPSTREAM_MALFORMED",
+                "Fundamental uncertainty report did not include its caller input digest",
+                retryable=False,
+                status_code=502,
+            )
+        if report_input_digest != expected_input_digest:
+            raise FundamentalServiceFailure(
+                "INPUT_DIGEST_MISMATCH",
+                "Fundamental uncertainty report is bound to a different caller input",
+                retryable=False,
+                status_code=502,
+            )
+    elif calculation_input_digest != expected_input_digest:
         raise FundamentalServiceFailure(
             "INPUT_DIGEST_MISMATCH",
             "Fundamental calculation response is bound to a different input",
@@ -696,7 +711,7 @@ def _calculation_projection(
         or policy_resolution.get("policy_id") != expected_policy_id
         or policy_resolution.get("policy_version") != expected_policy_version
         or policy_resolution.get("policy_digest") != expected_policy_digest
-        or policy_resolution.get("input_digest") != expected_input_digest
+        or policy_resolution.get("input_digest") != calculation_input_digest
     ):
         raise FundamentalServiceFailure(
             "UPSTREAM_MALFORMED",
@@ -758,6 +773,9 @@ def _calculation_projection(
             status_code=502,
         )
     artifact_references = primary.get("artifact_references")
+    allowed_artifact_types = {"calculation_evidence"}
+    if is_uncertainty_report:
+        allowed_artifact_types.add("uncertainty_evidence")
     if (
         not isinstance(artifact_references, list | tuple)
         or not artifact_references
@@ -767,8 +785,13 @@ def _calculation_projection(
             or not reference.get("artifact_id")
             or not isinstance(reference.get("content_hash"), str)
             or not _DIGEST_PATTERN.fullmatch(reference["content_hash"])
-            or reference.get("artifact_type") != "calculation_evidence"
+            or reference.get("artifact_type") not in allowed_artifact_types
             for reference in artifact_references
+        )
+        or not any(
+            reference.get("artifact_type") == "calculation_evidence"
+            for reference in artifact_references
+            if isinstance(reference, Mapping)
         )
     ):
         raise FundamentalServiceFailure(
@@ -798,7 +821,7 @@ def _calculation_projection(
         "calculation_version": calculation_version,
         "calculation_status": calculation_status,
         "quality_status": quality_status,
-        "input_digest": input_digest,
+        "input_digest": expected_input_digest,
         "result_hash": result_hash,
         "service_result": _narrow_result(result),
         "correlation_id": response.correlation_id,
@@ -997,6 +1020,10 @@ async def run_service_valuation_flow(
                 retryable=False,
                 status_code=502,
             )
+        uncertainty = _as_mapping(
+            validated_input["uncertainty"], context="validated_input.uncertainty"
+        )
+        expect_uncertainty_report = uncertainty.get("mode") == "monte_carlo"
         projection = _calculation_projection(
             calculation_response,
             expected_input_digest=input_digest,
@@ -1013,23 +1040,9 @@ async def run_service_valuation_flow(
                 validated_input["assumptions"],
                 context="validated_input.assumptions",
             ),
+            expect_uncertainty_report=expect_uncertainty_report,
         )
-        uncertainty = _as_mapping(
-            validated_input["uncertainty"], context="validated_input.uncertainty"
-        )
-        if uncertainty.get("mode") == "monte_carlo":
-            uncertainty_response = await client.execute(
-                "uncertainty",
-                _monte_carlo_payload(approved_input),
-                principal=principal,
-                correlation_id=correlation_id,
-                deadline_at=deadline_at,
-            )
-            valuation_context = _as_mapping(
-                validated_input["valuation_context"],
-                context="validated_input.valuation_context",
-            )
-            snapshot_id = valuation_context.get("data_snapshot_id")
+        if expect_uncertainty_report:
             samples = uncertainty.get("samples")
             seed = uncertainty.get("seed")
             invalid_draw_policy = uncertainty.get("invalid_draw_policy")
@@ -1046,10 +1059,8 @@ async def run_service_valuation_flow(
                     status_code=502,
                 )
             projection["uncertainty_summary"] = _uncertainty_projection(
-                uncertainty_response,
-                expected_calculation=_as_mapping(
-                    projection["service_result"], context="service_result"
-                ),
+                calculation_response,
+                expected_input_digest=input_digest,
                 expected_seed=seed,
                 expected_samples=samples,
                 expected_invalid_draw_policy=invalid_draw_policy,
