@@ -361,7 +361,7 @@ class SecAcquisitionUseCase:
             reference_sources=(submissions_source, index_source),
             dts_filenames=dts_filenames,
             profile=ArelleValidationProfileV1(
-                profile_id="sec-efm-us-gaap-v1",
+                profile_id=request.validation_profile_id,
                 validation_mode="sec-efm-dqc",
                 edgar_plugin_dir=self.settings.edgar_plugin_dir,
                 xule_plugin_dir=self.settings.xule_plugin_dir,
@@ -452,6 +452,8 @@ class SecAcquisitionUseCase:
             issue_codes=tuple(sorted(issue_codes)),
             missing_evidence=required_missing,
             parser_version=request.parser_version,
+            validation_profile_id=preparation.parser_report.validation_profile.profile_id,
+            validation_profile_digest=preparation.parser_report.validation_profile_digest,
             taxonomy_manifest_id=request.taxonomy_manifest_id,
             taxonomy_version=request.taxonomy_version,
             correlation_id=correlation_id,

@@ -154,6 +154,14 @@ def test_sec_ingestion_connects_adapter_snapshot_parser_and_fact_selection(
         ),
     )
     assert result.snapshot.snapshot_id
+    assert (
+        result.snapshot.validation_profile_id
+        == result.parser_report.validation_profile.profile_id
+    )
+    assert (
+        result.snapshot.validation_profile_digest
+        == result.parser_report.validation_profile_digest
+    )
     filing_record = next(
         record
         for record in result.snapshot.source_records

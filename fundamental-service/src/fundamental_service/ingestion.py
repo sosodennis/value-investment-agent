@@ -238,6 +238,7 @@ class SecIngestionService:
             for filename in dts_filenames
         )
         sources = (*reference_sources, archive_source, source, *dts_sources)
+        profile = profile or ArelleValidationProfileV1(profile_id="sec-efm-us-gaap-v1")
         snapshot = self.builder.prepare(
             identity=identity,
             valuation_timestamp=valuation_timestamp,
@@ -252,7 +253,6 @@ class SecIngestionService:
             for record in snapshot.source_records
             if record.source_id == "sec-filing"
         )
-        profile = profile or ArelleValidationProfileV1(profile_id="sec-efm-us-gaap-v1")
         with tempfile.TemporaryDirectory(prefix="fundamental-sec-filing-") as directory:
             filing_path = Path(directory) / primary_document
             filing_path.write_bytes(source.content)
@@ -266,6 +266,17 @@ class SecIngestionService:
                 source_content_hash=source_record.content_hash,
                 deadline_at=deadline_at,
             )
+        snapshot = self.builder.prepare(
+            identity=identity,
+            valuation_timestamp=valuation_timestamp,
+            captured_at=captured_at,
+            parser_version=parser_version,
+            policy_version=policy_version,
+            sources=sources,
+            taxonomy_manifest_id=taxonomy_manifest_id,
+            validation_profile_id=report.validation_profile.profile_id,
+            validation_profile_digest=report.validation_profile_digest,
+        )
         all_facts: list[CanonicalFactV1] = []
         missing_fields: list[str] = []
         issues: list[IssueV1] = []
