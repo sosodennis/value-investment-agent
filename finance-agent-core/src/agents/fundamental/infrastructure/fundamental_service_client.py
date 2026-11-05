@@ -33,8 +33,10 @@ from src.shared.internal_services import (
 
 _DEFAULT_URL: Final[str] = "http://fundamental-service:8080"
 _DEFAULT_TIMEOUT_SECONDS: Final[float] = 10.0
+_DEFAULT_INGESTION_TIMEOUT_SECONDS: Final[float] = 120.0
 _DEFAULT_MAX_ATTEMPTS: Final[int] = 2
 _OPERATION_PATHS: dict[FundamentalOperation, str] = {
+    "ingest_sec_data": "/v1/data/ingestions",
     "resolve_snapshot": "/v1/data/snapshots/resolve",
     "validate": "/v1/valuation/validate",
     "calculate": "/v1/valuation/calculate",
@@ -50,6 +52,7 @@ class FundamentalServiceClientSettings:
     base_url: str
     service_token: str
     timeout_seconds: float = _DEFAULT_TIMEOUT_SECONDS
+    ingestion_timeout_seconds: float = _DEFAULT_INGESTION_TIMEOUT_SECONDS
     max_attempts: int = _DEFAULT_MAX_ATTEMPTS
 
     @classmethod
@@ -62,14 +65,27 @@ class FundamentalServiceClientSettings:
         max_attempts = (
             int(raw_attempts) if raw_attempts is not None else _DEFAULT_MAX_ATTEMPTS
         )
+        raw_ingestion_timeout = os.getenv(
+            "FUNDAMENTAL_SERVICE_INGESTION_TIMEOUT_SECONDS"
+        )
+        ingestion_timeout_seconds = (
+            float(raw_ingestion_timeout)
+            if raw_ingestion_timeout is not None
+            else _DEFAULT_INGESTION_TIMEOUT_SECONDS
+        )
         if timeout_seconds <= 0:
             raise ValueError("FUNDAMENTAL_SERVICE_TIMEOUT_SECONDS must be positive")
+        if ingestion_timeout_seconds <= 0:
+            raise ValueError(
+                "FUNDAMENTAL_SERVICE_INGESTION_TIMEOUT_SECONDS must be positive"
+            )
         if max_attempts < 1 or max_attempts > 3:
             raise ValueError("FUNDAMENTAL_SERVICE_MAX_ATTEMPTS must be between 1 and 3")
         return cls(
             base_url=os.getenv("FUNDAMENTAL_SERVICE_URL", _DEFAULT_URL).rstrip("/"),
             service_token=os.getenv("FUNDAMENTAL_SERVICE_TOKEN", "").strip(),
             timeout_seconds=timeout_seconds,
+            ingestion_timeout_seconds=ingestion_timeout_seconds,
             max_attempts=max_attempts,
         )
 
@@ -78,6 +94,10 @@ class FundamentalServiceClientSettings:
             raise ValueError("FUNDAMENTAL_SERVICE_URL is required")
         if not self.service_token:
             raise ValueError("FUNDAMENTAL_SERVICE_TOKEN is required")
+        if self.ingestion_timeout_seconds <= 0:
+            raise ValueError(
+                "FUNDAMENTAL_SERVICE_INGESTION_TIMEOUT_SECONDS must be positive"
+            )
 
 
 class HttpFundamentalServiceClient:
@@ -145,6 +165,11 @@ class HttpFundamentalServiceClient:
         }
         if principal.organization_id:
             headers["X-Organization-ID"] = principal.organization_id
+        operation_timeout = (
+            self._settings.ingestion_timeout_seconds
+            if operation == "ingest_sec_data"
+            else self._settings.timeout_seconds
+        )
 
         last_failure: FundamentalServiceFailure | None = None
         for attempt in range(1, self._settings.max_attempts + 1):
@@ -163,7 +188,7 @@ class HttpFundamentalServiceClient:
                     f"{self._settings.base_url}{path}",
                     json=payload,
                     headers=headers,
-                    timeout=min(remaining, self._settings.timeout_seconds),
+                    timeout=min(remaining, operation_timeout),
                 )
             except httpx.TimeoutException:
                 last_failure = FundamentalServiceFailure(
@@ -239,7 +264,12 @@ class HttpFundamentalServiceClient:
                     retryable=False,
                     status_code=408,
                 ) from last_failure
-            await asyncio.sleep(min(0.01, remaining / 10))
+            retry_delay = (
+                last_failure.retry_after_ms / 1000
+                if last_failure.retry_after_ms is not None
+                else min(0.01, remaining / 10)
+            )
+            await asyncio.sleep(min(retry_delay, remaining))
 
         raise last_failure or FundamentalServiceFailure(
             "UPSTREAM_UNAVAILABLE",

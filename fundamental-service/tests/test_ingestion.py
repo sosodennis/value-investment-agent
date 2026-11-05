@@ -137,6 +137,7 @@ def test_sec_ingestion_connects_adapter_snapshot_parser_and_fact_selection(
         policy_version="source-policy-v1",
         taxonomy_manifest_id="taxonomy-manifest-v1",
         taxonomy_version="us-gaap-2024",
+        acquisition_key="a" * 64,
         taxonomy_cache_dir=taxonomy_cache,
         normalized_field="revenue",
         dts_filenames=tuple(dts_bytes),
@@ -162,6 +163,7 @@ def test_sec_ingestion_connects_adapter_snapshot_parser_and_fact_selection(
         result.snapshot.validation_profile_digest
         == result.parser_report.validation_profile_digest
     )
+    assert result.snapshot.acquisition_key == "a" * 64
     filing_record = next(
         record
         for record in result.snapshot.source_records

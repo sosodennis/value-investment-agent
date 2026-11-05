@@ -189,6 +189,7 @@ class SecIngestionService:
         policy_version: str,
         taxonomy_manifest_id: str | None,
         taxonomy_version: str,
+        acquisition_key: str | None = None,
         taxonomy_cache_dir: Path,
         mappings: tuple[CanonicalMappingV1, ...],
         reference_sources: tuple[CapturedSource, ...] = (),
@@ -247,6 +248,7 @@ class SecIngestionService:
             policy_version=policy_version,
             sources=sources,
             taxonomy_manifest_id=taxonomy_manifest_id,
+            acquisition_key=acquisition_key,
         )
         source_record = next(
             record
@@ -274,6 +276,7 @@ class SecIngestionService:
             policy_version=policy_version,
             sources=sources,
             taxonomy_manifest_id=taxonomy_manifest_id,
+            acquisition_key=acquisition_key,
             validation_profile_id=report.validation_profile.profile_id,
             validation_profile_digest=report.validation_profile_digest,
         )
@@ -359,6 +362,7 @@ class SecIngestionService:
         policy_version: str,
         taxonomy_manifest_id: str | None,
         taxonomy_version: str,
+        acquisition_key: str | None = None,
         taxonomy_cache_dir: Path,
         normalized_field: str,
         mapping: CanonicalMappingV1,
@@ -383,6 +387,7 @@ class SecIngestionService:
             parser_version=parser_version,
             policy_version=policy_version,
             taxonomy_manifest_id=taxonomy_manifest_id,
+            acquisition_key=acquisition_key,
             taxonomy_version=taxonomy_version,
             taxonomy_cache_dir=taxonomy_cache_dir,
             mappings=(mapping,),

@@ -162,7 +162,17 @@ class SecAcquisitionUseCase:
         correlation_id: str,
         deadline_at: datetime,
     ) -> SecIngestionResponseV1:
+        key_payload = self._canonical_key_payload(request)
+        acquisition_key = sha256_digest(key_payload)
         if organization_id not in self.authorized_organizations:
+            self.metadata.publish_source_audit(
+                acquisition_key=acquisition_key,
+                caller_principal=caller_principal,
+                organization_id=organization_id,
+                correlation_id=correlation_id,
+                source_hashes=(),
+                outcome="INGESTION_NOT_AUTHORIZED",
+            )
             raise ServiceError(
                 "INGESTION_NOT_AUTHORIZED",
                 "organization is not authorized for SEC data acquisition",
@@ -173,16 +183,30 @@ class SecAcquisitionUseCase:
             request.taxonomy_manifest_id != self.settings.taxonomy_manifest_id
             or request.taxonomy_version != self.settings.taxonomy_version
         ):
+            self.metadata.publish_source_audit(
+                acquisition_key=acquisition_key,
+                caller_principal=caller_principal,
+                organization_id=organization_id,
+                correlation_id=correlation_id,
+                source_hashes=(),
+                outcome="TAXONOMY_PACKAGE_INVALID",
+            )
             raise ServiceError(
                 "TAXONOMY_PACKAGE_INVALID",
                 "requested taxonomy release is not installed",
                 status_code=422,
                 retryable=False,
             )
-        key_payload = self._canonical_key_payload(request)
-        acquisition_key = sha256_digest(key_payload)
         lease = self.metadata.try_acquire_ingestion_lock(acquisition_key)
         if lease is None:
+            self.metadata.publish_source_audit(
+                acquisition_key=acquisition_key,
+                caller_principal=caller_principal,
+                organization_id=organization_id,
+                correlation_id=correlation_id,
+                source_hashes=(),
+                outcome="INGESTION_IN_PROGRESS",
+            )
             raise ServiceError(
                 "INGESTION_IN_PROGRESS",
                 "an identical SEC acquisition is already in progress",
@@ -356,6 +380,7 @@ class SecAcquisitionUseCase:
             policy_version=request.policy_version,
             taxonomy_manifest_id=request.taxonomy_manifest_id,
             taxonomy_version=request.taxonomy_version,
+            acquisition_key=acquisition_key,
             taxonomy_cache_dir=self.settings.taxonomy_cache_dir,
             mappings=mappings,
             reference_sources=(submissions_source, index_source),
