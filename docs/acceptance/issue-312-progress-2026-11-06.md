@@ -351,3 +351,78 @@ service's capture manifest, cache digest, or offline replay is complete.
   with no blocking EFM/DQC findings publishes a snapshot and facts.
 - No parser workaround, `VERIFIED` state, PR, or GitHub issue mutation was
   made. Issue #312 remains open with no PR.
+
+## Canonical SEC archive and 2023/2024 DQCRT checkpoint
+
+- Implementation commit: `2ec337da` (`fix(fundamental): capture canonical SEC
+  filing archives (Refs #312)`). The `codex/issue-312-sec-ingestion`
+  worktree was clean before this checkpoint and remains ahead of
+  `origin/main` at `bee63cb37da9edb2deb444e14d2fc666aed73d06`.
+- SEC submissions and accession index identify Microsoft's 2024 10-K as
+  CIK `0000789019`, accession `0000950170-24-087843`, primary document
+  `msft-20240630.htm`, accepted `2024-07-30T20:06:22Z`. The SEC index lists
+  its XBRL archive as 551,435 bytes.
+- Repeated direct SEC downloads returned HTML of 6,861,017 bytes with SHA-256
+  `577d30abb4f61409b3c5ad9c332a408970ed7e54fd284a7ed483605b974cb90f` and
+  one CDN challenge script. The official accession ZIP SHA-256 is
+  `5a7653632f53c2529c4da82d25043fc52f05bfbe536837345aa5904560d92a82`.
+  Its canonical HTML member is 6,860,910 bytes with SHA-256
+  `01cc7750e904e14a2065ba0ddb639138f2e5b0591c8071a513ac1234a735602e`;
+  it has no challenge script. The ZIP's extension schema imports
+  `http://fasb.org/us-gaap/2023`.
+- `SecEdgarSourceAdapter` now captures only the accession-matched
+  `*-xbrl.zip` for filing bytes. Ingestion verifies the ZIP directory, limits
+  archive bytes, member count, total uncompressed bytes and selected member
+  sizes, rejects duplicate names/encrypted or missing members, and reads only
+  the indexed root-file set without extracting archive paths. The content
+  store retains the raw ZIP, canonical filing member and selected DTS
+  resources independently by hash. Fact provenance references the canonical
+  member; the SEC ZIP is the original package evidence. The archive source is
+  included in the release-security SEC host/path allowlist.
+- The small committed Microsoft test package contains only the canonical HTML
+  and its SEC extension schema, recompressed for regression testing. Its SHA
+  is `9315745e8b66735afd8be0f63a2d5876d350eb7ae7be80a7e0aff015df76acf0`.
+  The original 551,435-byte SEC archive remains independently identified by
+  its public URL and hash above; the full binary is not copied into Git.
+- The SEC taxonomy runtime defaults now identify the tested
+  `sec-us-gaap-2023-2024-public-bundle` / `us-gaap-2023-2024` release rather
+  than describing the cache as 2024-only.
+- Exact-SHA focused source command (exit 0):
+
+  ```sh
+  fundamental-service/.venv/bin/pytest -q \
+    fundamental-service/tests/test_ingestion.py \
+    fundamental-service/tests/test_source_acquisition.py \
+    fundamental-service/tests/test_sec_source.py
+  ```
+
+- Result on `2ec337da`: `11 passed` in 1.40 seconds.
+- Exact-SHA Microsoft EFM/DQC and fixture-manifest command (exit 0):
+
+  ```sh
+  ISSUE312_EDGAR_PLUGIN_DIR=/private/tmp/issue312-validation-runtime-v2/EDGAR-4891c4c9889c77af247428ceff4fa7cc52d534ea \
+  ISSUE312_XULE_PLUGIN_DIR=/private/tmp/issue312-validation-runtime-v2/xule-7ca1d7637f333f5c3a02379dbe6f6d6c17c88acc/plugin \
+  ISSUE312_DQC_RULESET_PATH=/private/tmp/issue312-validation-runtime-v2/dqc_us_rules-31.0.3/dqc_us_rules/dqc-us-2024-V31-ruleset.zip \
+  ISSUE312_TAXONOMY_CACHE_DIR=/tmp/issue312-sec-taxonomy-2023-2024 \
+  fundamental-service/.venv/bin/pytest -q \
+    fundamental-service/tests/test_arelle_parser.py::test_microsoft_sec_efm_dqc_replay_uses_canonical_sec_archive_bytes \
+    fundamental-service/tests/test_arelle_parser.py::test_sec_capture_manifest_has_verified_hashes_and_amendment_metadata
+  ```
+
+- Result: `2 passed` in 5.52 seconds. The Microsoft offline parser replay
+  reports 1,856 facts, selects strict SEC EFM and DQC US engines, reports
+  `dqc-dqcrt-checks-completed`, has no blocking findings, and records no
+  network attempts. The test verifies the exact SEC archive member bytes and
+  schema. The taxonomy bundle SHA-256 is
+  `0accc5ab0d4ce6674083bd82cf878a8619b3ac441da8600e3a023ac1d95af3e7`.
+- `uvx --from ruff ruff format --check` on all eight changed Python files:
+  exit 0. `uvx --from ruff ruff check --select E,F,I --ignore E501` on the
+  changed Python files: exit 0. `git diff --check`: exit 0. Commit hooks for
+  whitespace, YAML, large files, Ruff, and Ruff formatting all passed.
+- This is an implementation checkpoint, not acceptance or `VERIFIED`.
+  PostgreSQL-backed authenticated SEC ingestion has not yet been rerun against
+  the 2023/2024 cache on the rebuilt Docker image. Remaining acceptance still
+  includes a published snapshot/facts from a clean filing, cross-process
+  concurrency, distinct-key isolation, failure/recovery and atomicity,
+  authorization/audit checks, retained-evidence offline rebuild, and Agent
+  client acceptance. No PR has been created and #312 remains open.
