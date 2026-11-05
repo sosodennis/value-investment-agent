@@ -68,6 +68,9 @@ def _snapshot(suffix: str, *, policy_version: str = "policy-v1") -> SourceSnapsh
         "captured_at": now,
         "source_records": (source,),
         "taxonomy_manifest_id": None,
+        "acquisition_key": None,
+        "validation_profile_id": None,
+        "validation_profile_digest": None,
         "parser_version": "parser-v1",
         "policy_version": policy_version,
         "coverage_status": QualityStatus.VERIFIED,
@@ -96,6 +99,7 @@ def test_schema_and_snapshot_survive_restart(metadata: PostgresMetadataStore):
     repository.publish(snapshot)
     assert metadata.health == type(metadata.health)(True, SCHEMA_VERSION)
 
+    metadata.close()
     metadata.close()
     restarted = PostgresMetadataStore(DATABASE_URL or "", auto_migrate=False)
     restarted.start()

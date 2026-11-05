@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from importlib import resources
 from pathlib import Path
-from threading import Event, Thread
+from threading import Event, Lock, Thread
 from typing import Any, Literal
 from uuid import uuid4
 
@@ -115,6 +115,8 @@ class PostgresMetadataStore:
         self._ready = False
         self._health = MetadataHealth(False, None)
         self._ingestion_lock_connections: dict[str, tuple[int, AsyncConnection]] = {}
+        self._close_lock = Lock()
+        self._closed = False
 
     @property
     def ready(self) -> bool:
@@ -1115,9 +1117,15 @@ class PostgresMetadataStore:
         return [dict(row["payload"]) for row in rows]
 
     def close(self) -> None:
-        self._runner.run(self._release_all_ingestion_locks())
-        self._runner.close()
-        self._ready = False
+        with self._close_lock:
+            if self._closed:
+                return
+            try:
+                self._runner.run(self._release_all_ingestion_locks())
+            finally:
+                self._runner.close()
+                self._ready = False
+                self._closed = True
 
     async def _release_all_ingestion_locks(self) -> None:
         held = tuple(self._ingestion_lock_connections.items())
