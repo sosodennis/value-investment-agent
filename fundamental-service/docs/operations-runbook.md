@@ -44,6 +44,49 @@ principal organization and membership, correlation ID, and absolute deadline.
 Error responses use the shared `InternalErrorResponse`; they never include
 credentials, provider responses, filesystem paths, or raw filing content.
 
+## SEC ingestion contract
+
+`POST /v1/data/ingestions` is the authenticated, synchronous `fundamental.v1`
+SEC acquisition operation. Its strict `input` schema requires the canonical
+issuer/security identity, CIK and matching ticker, valuation timestamp,
+required field set, approved mapping decision/version references, bounded
+filing selector, coverage and legal-use profiles, parser release, taxonomy
+manifest/version, and policy version. It does not accept URLs, raw filing
+payloads, caller idempotency keys as identity, or local filesystem paths. The
+generated OpenAPI schema is the wire-level field contract.
+
+Set `FUNDAMENTAL_SERVICE_INGESTION_ORGANIZATIONS` to a comma-separated list of
+organization IDs allowed to acquire SEC evidence. This authority is separate
+from normal valuation reads. Set `FUNDAMENTAL_SERVICE_INGESTION_RATE_LIMIT_PER_MINUTE`
+for the per-organization request quota and `FUNDAMENTAL_SERVICE_MAX_INGESTION_MS`
+for the bounded synchronous budget. The service also paces every EDGAR HTTP
+request through a PostgreSQL-backed limiter shared by service processes. It
+uses the registered `data.sec.gov` submissions endpoint and `www.sec.gov`
+filing archive only, with an identifiable `FUNDAMENTAL_SEC_USER_AGENT`, SEC
+Retry-After handling, bounded retries and response sizes, and the original
+signed deadline. There is no background queue; callers own retry after a
+retryable `INGESTION_IN_PROGRESS` or deadline response.
+
+The deployment must mount a reviewed, immutable offline Arelle taxonomy cache
+and set `FUNDAMENTAL_SEC_TAXONOMY_CACHE_DIR`,
+`FUNDAMENTAL_SEC_TAXONOMY_MANIFEST_ID`, `FUNDAMENTAL_SEC_TAXONOMY_VERSION`,
+and `FUNDAMENTAL_SEC_TAXONOMY_CACHE_SHA256`. Startup composition disables the
+ingestion route when these pins or the SEC User-Agent are absent. The runtime
+recomputes the cache directory hash and rejects a request whose taxonomy pins
+do not match. Do not mount the test taxonomy fixture as production evidence.
+
+The provider returns only a typed snapshot reference, manifest digest,
+canonical fact IDs, source hashes, filing metadata, quality, missing evidence,
+and version pins. Filing bytes stay in the Fundamental content-addressed
+volume. PostgreSQL publishes the immutable snapshot, facts, snapshot/fact
+links, and canonical acquisition result in one transaction. A PostgreSQL
+advisory lock and acquisition-key uniqueness ensure identical work across
+processes has one fetch leader; successful retries reuse the same manifest.
+Failed parsing or fact selection can leave unreferenced content-addressed bytes,
+but it cannot publish a snapshot or verified fact set. Authorized attempts
+record principal, organization, correlation ID, hashes when known, and outcome
+in the service-owned audit table.
+
 ## Recovery checks
 
 - A missing snapshot or artifact returns `SOURCE_UNAVAILABLE` or a stable

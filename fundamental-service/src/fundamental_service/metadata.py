@@ -17,11 +17,18 @@ from importlib import resources
 from pathlib import Path
 from threading import Event, Thread
 from typing import Any, Literal
+from uuid import uuid4
 
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine, create_async_engine
 
-from .contracts import CanonicalFactV1, IdentityV1, ReleaseManifestV1, SourceSnapshotV1
+from .contracts import (
+    CanonicalFactV1,
+    IdentityV1,
+    ReleaseManifestV1,
+    SecIngestionResponseV1,
+    SourceSnapshotV1,
+)
 from .facts import (
     CanonicalFactRepository,
     CanonicalMappingV1,
@@ -33,7 +40,7 @@ from .serialization import canonical_bytes, sha256_digest
 from .snapshots import SnapshotError, SnapshotRepository
 
 SCHEMA = "fundamental"
-SCHEMA_VERSION = "fundamental-metadata-v1"
+SCHEMA_VERSION = "fundamental-metadata-v2"
 
 
 def _async_database_url(database_url: str) -> str:
@@ -84,6 +91,12 @@ class MetadataHealth:
     schema_version: str | None
 
 
+@dataclass(frozen=True)
+class IngestionLockLease:
+    lease_id: str
+    advisory_key: int
+
+
 class PostgresMetadataStore:
     """Append-only metadata registry owned by the Fundamental service."""
 
@@ -101,6 +114,7 @@ class PostgresMetadataStore:
         self._runner = _AsyncRunner(database_url)
         self._ready = False
         self._health = MetadataHealth(False, None)
+        self._ingestion_lock_connections: dict[str, tuple[int, AsyncConnection]] = {}
 
     @property
     def ready(self) -> bool:
@@ -132,22 +146,25 @@ class PostgresMetadataStore:
         self._health = MetadataHealth(True, version)
 
     async def _apply_migration(self) -> None:
-        migration = resources.files("fundamental_service").joinpath(
-            "migrations/001_initial.sql"
+        migration_dir = resources.files("fundamental_service").joinpath("migrations")
+        migrations = sorted(
+            (item for item in migration_dir.iterdir() if item.name.endswith(".sql")),
+            key=lambda item: item.name,
         )
-        sql = migration.read_text(encoding="utf-8")
-        async with self._runner._engine.begin() as connection:
-            for statement in sql.split(";"):
-                statement = statement.strip()
-                if statement:
-                    await connection.execute(text(statement))
+        for migration in migrations:
+            sql = migration.read_text(encoding="utf-8")
+            async with self._runner._engine.begin() as connection:
+                for statement in sql.split(";"):
+                    statement = statement.strip()
+                    if statement:
+                        await connection.execute(text(statement))
 
     async def _schema_version(self) -> str | None:
         async with self._runner._engine.connect() as connection:
             result = await connection.execute(
                 text(
                     "SELECT version FROM fundamental.schema_migrations "
-                    "ORDER BY applied_at DESC LIMIT 1"
+                    "ORDER BY applied_at DESC, version DESC LIMIT 1"
                 )
             )
             row = result.first()
@@ -242,6 +259,347 @@ class PostgresMetadataStore:
         return tuple(
             SourceSnapshotV1.model_validate_json(canonical_bytes(item)) for item in rows
         )
+
+    def try_acquire_ingestion_lock(
+        self, acquisition_key: str
+    ) -> IngestionLockLease | None:
+        self._require_ready()
+        if len(acquisition_key) != 64 or any(
+            char not in "0123456789abcdef" for char in acquisition_key
+        ):
+            raise SnapshotError(
+                "INGESTION_KEY_INVALID", "acquisition key must be SHA-256"
+            )
+        advisory_key = int.from_bytes(
+            bytes.fromhex(acquisition_key[:16]), "big", signed=True
+        )
+        return self._runner.run(self._try_acquire_ingestion_lock(advisory_key))
+
+    def reserve_sec_provider_request_slot(
+        self, *, min_interval_seconds: float
+    ) -> float:
+        self._require_ready()
+        if not 0 <= min_interval_seconds <= 5:
+            raise ValueError("SEC request interval is outside the supported bound")
+        return float(
+            self._runner.run(
+                self._reserve_sec_provider_request_slot(min_interval_seconds)
+            )
+        )
+
+    async def _reserve_sec_provider_request_slot(
+        self, min_interval_seconds: float
+    ) -> float:
+        async with self._runner._engine.begin() as connection:
+            await connection.execute(
+                text(
+                    "INSERT INTO fundamental.sec_provider_rate_limits "
+                    "(rate_key, next_request_at) "
+                    "VALUES ('sec-edgar', clock_timestamp()) "
+                    "ON CONFLICT (rate_key) DO NOTHING"
+                )
+            )
+            row = (
+                (
+                    await connection.execute(
+                        text(
+                            "SELECT GREATEST(0, EXTRACT(EPOCH FROM "
+                            "(next_request_at - clock_timestamp()))) AS wait_seconds "
+                            "FROM fundamental.sec_provider_rate_limits "
+                            "WHERE rate_key='sec-edgar' FOR UPDATE"
+                        )
+                    )
+                )
+                .mappings()
+                .one()
+            )
+            await connection.execute(
+                text(
+                    "UPDATE fundamental.sec_provider_rate_limits "
+                    "SET next_request_at=GREATEST(next_request_at, clock_timestamp()) "
+                    "+ (:interval_seconds * INTERVAL '1 second') "
+                    "WHERE rate_key='sec-edgar'"
+                ),
+                {"interval_seconds": min_interval_seconds},
+            )
+        return float(row["wait_seconds"])
+
+    async def _try_acquire_ingestion_lock(
+        self, advisory_key: int
+    ) -> IngestionLockLease | None:
+        connection = await self._runner._engine.connect()
+        try:
+            result = await connection.execute(
+                text("SELECT pg_try_advisory_lock(:advisory_key)"),
+                {"advisory_key": advisory_key},
+            )
+            acquired = bool(result.scalar_one())
+            await connection.commit()
+            if not acquired:
+                await connection.close()
+                return None
+            lease = IngestionLockLease(uuid4().hex, advisory_key)
+            self._ingestion_lock_connections[lease.lease_id] = (
+                advisory_key,
+                connection,
+            )
+            return lease
+        except Exception:
+            await connection.close()
+            raise
+
+    def release_ingestion_lock(self, lease: IngestionLockLease) -> None:
+        self._runner.run(self._release_ingestion_lock(lease.lease_id))
+
+    async def _release_ingestion_lock(self, lease_id: str) -> None:
+        held = self._ingestion_lock_connections.pop(lease_id, None)
+        if held is None:
+            return
+        advisory_key, connection = held
+        try:
+            if not connection.closed:
+                await connection.execute(
+                    text("SELECT pg_advisory_unlock(:advisory_key)"),
+                    {"advisory_key": advisory_key},
+                )
+                await connection.commit()
+        finally:
+            await connection.close()
+
+    def get_sec_ingestion(
+        self,
+        acquisition_key: str,
+        *,
+        expected_acquisition_payload: object | None = None,
+    ) -> SecIngestionResponseV1 | None:
+        self._require_ready()
+        payload = self._runner.run(
+            self._get_sec_ingestion(acquisition_key, expected_acquisition_payload)
+        )
+        if payload is None:
+            return None
+        return SecIngestionResponseV1.model_validate_json(canonical_bytes(payload))
+
+    async def _get_sec_ingestion(
+        self, acquisition_key: str, expected_acquisition_payload: object | None
+    ) -> dict[str, Any] | None:
+        async with self._runner._engine.connect() as connection:
+            row = (
+                (
+                    await connection.execute(
+                        text(
+                            "SELECT acquisition_payload, result_payload FROM "
+                            "fundamental.sec_ingestion_acquisitions "
+                            "WHERE acquisition_key=:acquisition_key"
+                        ),
+                        {"acquisition_key": acquisition_key},
+                    )
+                )
+                .mappings()
+                .first()
+            )
+        if row is None:
+            return None
+        if expected_acquisition_payload is not None and not self._payload_equal(
+            row["acquisition_payload"], expected_acquisition_payload
+        ):
+            raise SnapshotError(
+                "INGESTION_KEY_COLLISION",
+                "canonical acquisition key identifies another request",
+            )
+        return dict(row["result_payload"])
+
+    def publish_sec_ingestion(
+        self,
+        *,
+        acquisition_key: str,
+        acquisition_payload: object,
+        snapshot: SourceSnapshotV1,
+        facts: tuple[CanonicalFactV1, ...],
+        result: SecIngestionResponseV1,
+        caller_principal: str,
+        organization_id: str,
+    ) -> SecIngestionResponseV1:
+        self._require_ready()
+        if not acquisition_key or len(acquisition_key) != 64:
+            raise SnapshotError(
+                "INGESTION_KEY_INVALID", "acquisition key must be SHA-256"
+            )
+        if (
+            result.snapshot_id != snapshot.snapshot_id
+            or result.manifest_digest != snapshot.manifest_digest
+        ):
+            raise SnapshotError(
+                "INGESTION_RESULT_MISMATCH", "result does not match snapshot manifest"
+            )
+        source_hashes = {record.content_hash for record in snapshot.source_records}
+        if any(fact.source.content_hash not in source_hashes for fact in facts):
+            raise SnapshotError(
+                "INGESTION_FACT_SOURCE_MISMATCH",
+                "canonical facts must reference bytes in the snapshot",
+            )
+        if tuple(sorted(fact.fact_id for fact in facts)) != result.canonical_fact_ids:
+            raise SnapshotError(
+                "INGESTION_RESULT_MISMATCH",
+                "canonical facts do not match the response fact references",
+            )
+        return self._runner.run(
+            self._publish_sec_ingestion(
+                acquisition_key=acquisition_key,
+                acquisition_payload=acquisition_payload,
+                snapshot=snapshot,
+                facts=facts,
+                result=result,
+                caller_principal=caller_principal,
+                organization_id=organization_id,
+            )
+        )
+
+    async def _publish_sec_ingestion(
+        self,
+        *,
+        acquisition_key: str,
+        acquisition_payload: object,
+        snapshot: SourceSnapshotV1,
+        facts: tuple[CanonicalFactV1, ...],
+        result: SecIngestionResponseV1,
+        caller_principal: str,
+        organization_id: str,
+    ) -> SecIngestionResponseV1:
+        async with self._runner._engine.begin() as connection:
+            existing_acquisition = (
+                (
+                    await connection.execute(
+                        text(
+                            "SELECT acquisition_payload, result_payload "
+                            "FROM fundamental.sec_ingestion_acquisitions "
+                            "WHERE acquisition_key=:acquisition_key"
+                        ),
+                        {"acquisition_key": acquisition_key},
+                    )
+                )
+                .mappings()
+                .first()
+            )
+            if existing_acquisition is not None:
+                if not self._payload_equal(
+                    existing_acquisition["acquisition_payload"], acquisition_payload
+                ):
+                    raise SnapshotError(
+                        "INGESTION_KEY_COLLISION",
+                        "canonical acquisition key identifies another request",
+                    )
+                return SecIngestionResponseV1.model_validate_json(
+                    canonical_bytes(existing_acquisition["result_payload"])
+                )
+
+            await connection.execute(
+                text(
+                    "INSERT INTO fundamental.snapshot_manifests "
+                    "(snapshot_id, manifest_digest, payload) "
+                    "VALUES (:snapshot_id, :digest, CAST(:payload AS jsonb)) "
+                    "ON CONFLICT (snapshot_id) DO NOTHING"
+                ),
+                {
+                    "snapshot_id": snapshot.snapshot_id,
+                    "digest": snapshot.manifest_digest,
+                    "payload": self._payload_json(snapshot.model_dump(mode="json")),
+                },
+            )
+            stored_snapshot = (
+                (
+                    await connection.execute(
+                        text(
+                            "SELECT manifest_digest, payload FROM "
+                            "fundamental.snapshot_manifests "
+                            "WHERE snapshot_id=:snapshot_id"
+                        ),
+                        {"snapshot_id": snapshot.snapshot_id},
+                    )
+                )
+                .mappings()
+                .first()
+            )
+            if (
+                stored_snapshot is None
+                or stored_snapshot["manifest_digest"] != snapshot.manifest_digest
+                or not self._payload_equal(
+                    stored_snapshot["payload"], snapshot.model_dump(mode="json")
+                )
+            ):
+                raise SnapshotError(
+                    "METADATA_IMMUTABLE", "snapshot manifest is already different"
+                )
+
+            for fact in facts:
+                fact_payload = fact.model_dump(mode="json")
+                fact_digest = sha256_digest(fact_payload)
+                await connection.execute(
+                    text(
+                        "INSERT INTO fundamental.canonical_facts "
+                        "(fact_id, fact_digest, payload) "
+                        "VALUES (:fact_id, :digest, CAST(:payload AS jsonb)) "
+                        "ON CONFLICT (fact_id) DO NOTHING"
+                    ),
+                    {
+                        "fact_id": fact.fact_id,
+                        "digest": fact_digest,
+                        "payload": self._payload_json(fact_payload),
+                    },
+                )
+                stored_fact = (
+                    (
+                        await connection.execute(
+                            text(
+                                "SELECT fact_digest, payload FROM "
+                                "fundamental.canonical_facts WHERE fact_id=:fact_id"
+                            ),
+                            {"fact_id": fact.fact_id},
+                        )
+                    )
+                    .mappings()
+                    .first()
+                )
+                if (
+                    stored_fact is None
+                    or stored_fact["fact_digest"] != fact_digest
+                    or not self._payload_equal(stored_fact["payload"], fact_payload)
+                ):
+                    raise SnapshotError(
+                        "METADATA_IMMUTABLE", "canonical fact is already different"
+                    )
+                await connection.execute(
+                    text(
+                        "INSERT INTO fundamental.snapshot_facts (snapshot_id, fact_id) "
+                        "VALUES (:snapshot_id, :fact_id) ON CONFLICT DO NOTHING"
+                    ),
+                    {"snapshot_id": snapshot.snapshot_id, "fact_id": fact.fact_id},
+                )
+
+            await connection.execute(
+                text(
+                    "INSERT INTO fundamental.sec_ingestion_acquisitions "
+                    "(acquisition_key, acquisition_payload, snapshot_id, fact_ids, "
+                    "result_payload, caller_principal, organization_id, correlation_id) "
+                    "VALUES (:acquisition_key, CAST(:acquisition_payload AS jsonb), "
+                    ":snapshot_id, CAST(:fact_ids AS jsonb), "
+                    "CAST(:result_payload AS jsonb), :caller_principal, "
+                    ":organization_id, :correlation_id)"
+                ),
+                {
+                    "acquisition_key": acquisition_key,
+                    "acquisition_payload": self._payload_json(acquisition_payload),
+                    "snapshot_id": snapshot.snapshot_id,
+                    "fact_ids": self._payload_json(result.canonical_fact_ids),
+                    "result_payload": self._payload_json(
+                        result.model_dump(mode="json")
+                    ),
+                    "caller_principal": caller_principal,
+                    "organization_id": organization_id,
+                    "correlation_id": result.correlation_id,
+                },
+            )
+        return result
 
     def publish_fact(self, fact: CanonicalFactV1) -> None:
         self._require_ready()
@@ -517,6 +875,57 @@ class PostgresMetadataStore:
             )
         self._runner.run(self._register_content(content_hash, media_type, byte_length))
 
+    def publish_source_audit(
+        self,
+        *,
+        acquisition_key: str,
+        caller_principal: str,
+        organization_id: str,
+        correlation_id: str,
+        source_hashes: tuple[str, ...],
+        outcome: str,
+    ) -> None:
+        self._require_ready()
+        self._runner.run(
+            self._publish_source_audit(
+                acquisition_key=acquisition_key,
+                caller_principal=caller_principal,
+                organization_id=organization_id,
+                correlation_id=correlation_id,
+                source_hashes=source_hashes,
+                outcome=outcome,
+            )
+        )
+
+    async def _publish_source_audit(
+        self,
+        *,
+        acquisition_key: str,
+        caller_principal: str,
+        organization_id: str,
+        correlation_id: str,
+        source_hashes: tuple[str, ...],
+        outcome: str,
+    ) -> None:
+        async with self._runner._engine.begin() as connection:
+            await connection.execute(
+                text(
+                    "INSERT INTO fundamental.source_acquisition_audits "
+                    "(acquisition_key, caller_principal, organization_id, "
+                    "correlation_id, source_hashes, outcome) VALUES "
+                    "(:acquisition_key, :caller_principal, :organization_id, "
+                    ":correlation_id, CAST(:source_hashes AS jsonb), :outcome)"
+                ),
+                {
+                    "acquisition_key": acquisition_key,
+                    "caller_principal": caller_principal,
+                    "organization_id": organization_id,
+                    "correlation_id": correlation_id,
+                    "source_hashes": self._payload_json(source_hashes),
+                    "outcome": outcome,
+                },
+            )
+
     def has_content_hash(
         self, content_hash: str, *, media_type: str | None = None
     ) -> bool:
@@ -706,8 +1115,23 @@ class PostgresMetadataStore:
         return [dict(row["payload"]) for row in rows]
 
     def close(self) -> None:
+        self._runner.run(self._release_all_ingestion_locks())
         self._runner.close()
         self._ready = False
+
+    async def _release_all_ingestion_locks(self) -> None:
+        held = tuple(self._ingestion_lock_connections.items())
+        self._ingestion_lock_connections.clear()
+        for _, (advisory_key, connection) in held:
+            try:
+                if not connection.closed:
+                    await connection.execute(
+                        text("SELECT pg_advisory_unlock(:advisory_key)"),
+                        {"advisory_key": advisory_key},
+                    )
+                    await connection.commit()
+            finally:
+                await connection.close()
 
 
 class PostgresContentStore:

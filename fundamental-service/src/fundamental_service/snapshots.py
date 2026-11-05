@@ -6,7 +6,7 @@ import hashlib
 import os
 import tempfile
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from typing import Protocol
 
@@ -248,9 +248,11 @@ class CapturedSource:
     media_type: str
     http_status: int
     available_at: datetime
+    captured_at: datetime | None = None
     publication_at: datetime | None = None
     accession_number: str | None = None
     form: str | None = None
+    filing_date: date | None = None
     filed_at: datetime | None = None
     filing_version: str | None = None
     is_amendment: bool = False
@@ -281,7 +283,43 @@ class SnapshotBuilder:
         policy_version: str,
         sources: tuple[CapturedSource, ...],
         taxonomy_manifest_id: str | None = None,
+        acquisition_key: str | None = None,
+        validation_profile_id: str | None = None,
+        validation_profile_digest: str | None = None,
+        additional_issues: tuple[IssueV1, ...] = (),
     ) -> SourceSnapshotV1:
+        snapshot = self.prepare(
+            identity=identity,
+            valuation_timestamp=valuation_timestamp,
+            captured_at=captured_at,
+            parser_version=parser_version,
+            policy_version=policy_version,
+            sources=sources,
+            taxonomy_manifest_id=taxonomy_manifest_id,
+            acquisition_key=acquisition_key,
+            validation_profile_id=validation_profile_id,
+            validation_profile_digest=validation_profile_digest,
+            additional_issues=additional_issues,
+        )
+        self.repository.publish(snapshot)
+        return snapshot
+
+    def prepare(
+        self,
+        *,
+        identity: IdentityV1,
+        valuation_timestamp: datetime,
+        captured_at: datetime,
+        parser_version: str,
+        policy_version: str,
+        sources: tuple[CapturedSource, ...],
+        taxonomy_manifest_id: str | None = None,
+        acquisition_key: str | None = None,
+        validation_profile_id: str | None = None,
+        validation_profile_digest: str | None = None,
+        additional_issues: tuple[IssueV1, ...] = (),
+    ) -> SourceSnapshotV1:
+        """Build a manifest without publishing it to snapshot readers."""
         if not sources:
             raise SnapshotError(
                 "SNAPSHOT_EMPTY", "a snapshot requires at least one source"
@@ -296,7 +334,7 @@ class SnapshotBuilder:
                     f"{timestamp_name} must include a timezone",
                 )
         records: list[SourceRecordV1] = []
-        issues: list[IssueV1] = []
+        issues: list[IssueV1] = list(additional_issues)
         for source in sources:
             if self.source_register is None:
                 raise SnapshotError(
@@ -359,7 +397,7 @@ class SnapshotBuilder:
                     uri=source.uri,
                     role=source.role,
                     available_at=source.available_at,
-                    captured_at=captured_at,
+                    captured_at=source.captured_at or captured_at,
                     publication_at=source.publication_at,
                     http_status=source.http_status,
                     media_type=source.media_type,
@@ -368,6 +406,7 @@ class SnapshotBuilder:
                     parser_version=parser_version,
                     accession_number=source.accession_number,
                     form=source.form,
+                    filing_date=source.filing_date,
                     filed_at=source.filed_at,
                     filing_version=source.filing_version,
                     is_amendment=source.is_amendment,
@@ -387,6 +426,9 @@ class SnapshotBuilder:
             "policy_version": policy_version,
             "captured_at": captured_at,
             "taxonomy_manifest_id": taxonomy_manifest_id,
+            "acquisition_key": acquisition_key,
+            "validation_profile_id": validation_profile_id,
+            "validation_profile_digest": validation_profile_digest,
             "sources": [
                 record.model_dump(exclude={"captured_at"}) for record in records
             ],
@@ -405,6 +447,8 @@ class SnapshotBuilder:
                     ),
                 )
             )
+        if any(issue.severity is Severity.WARNING for issue in issues):
+            coverage_status = QualityStatus.PROVISIONAL
         if any(issue.severity in {Severity.ERROR, Severity.FATAL} for issue in issues):
             coverage_status = QualityStatus.ABSTAIN
         snapshot = SourceSnapshotV1(
@@ -415,6 +459,9 @@ class SnapshotBuilder:
             captured_at=captured_at,
             source_records=tuple(records),
             taxonomy_manifest_id=taxonomy_manifest_id,
+            acquisition_key=acquisition_key,
+            validation_profile_id=validation_profile_id,
+            validation_profile_digest=validation_profile_digest,
             parser_version=parser_version,
             policy_version=policy_version,
             coverage_status=coverage_status,
@@ -427,6 +474,9 @@ class SnapshotBuilder:
                     "captured_at": captured_at,
                     "source_records": records,
                     "taxonomy_manifest_id": taxonomy_manifest_id,
+                    "acquisition_key": acquisition_key,
+                    "validation_profile_id": validation_profile_id,
+                    "validation_profile_digest": validation_profile_digest,
                     "parser_version": parser_version,
                     "policy_version": policy_version,
                     "coverage_status": coverage_status,
@@ -434,7 +484,6 @@ class SnapshotBuilder:
                 }
             ),
         )
-        self.repository.publish(snapshot)
         return snapshot
 
 

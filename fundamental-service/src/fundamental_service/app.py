@@ -17,6 +17,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, PlainTextResponse
 from pydantic import ValidationError
 from src.shared.internal_services import INTERNAL_CONTRACT_VERSION
+from starlette.concurrency import run_in_threadpool
 
 from .application import FundamentalApplication, UncertaintyRequestV1
 from .application.service import normalize_uncertainty_payload
@@ -25,6 +26,8 @@ from .contracts import (
     FactsReadRequestV1,
     FactsReadResponseV1,
     PolicyValuationInputV1,
+    SecIngestionRequestV1,
+    SecIngestionResponseV1,
     SnapshotResolutionRequestV1,
     ValuationInputV1,
 )
@@ -72,6 +75,7 @@ from .snapshots import (
     FilesystemContentStore,
     SnapshotRepository,
 )
+from .source_acquisition import SecAcquisitionUseCase, build_runtime_sec_acquisition
 from .uncertainty import UncertaintyReportV1
 
 LOGGER = logging.getLogger("fundamental_service")
@@ -100,6 +104,7 @@ def create_app(
     require_metadata: bool = False,
     policy_registry: PolicyRegistry | None = None,
     model_inventory: ModelInventory | None = None,
+    sec_acquisition: SecAcquisitionUseCase | None = None,
 ) -> FastAPI:
     """Assemble transport, application use cases, and runtime resources."""
 
@@ -176,6 +181,8 @@ def create_app(
     app.state.application = application
     app.state.metadata_store = metadata_store
     app.state.model_inventory = model_inventory
+    app.state.sec_acquisition = sec_acquisition
+    ingestion_limiter = RateLimiter(runtime_config.ingestion_rate_limit_per_minute)
 
     @app.middleware("http")
     async def operations_boundary(request: Request, call_next):
@@ -193,6 +200,19 @@ def create_app(
                         "request rate exceeds the synchronous service budget",
                         status_code=429,
                         retryable=True,
+                    )
+                if (
+                    request.url.path == "/v1/data/ingestions"
+                    and not ingestion_limiter.allow(
+                        context.principal.organization_id or "unscoped"
+                    )
+                ):
+                    raise ServiceError(
+                        "INGESTION_RATE_LIMITED",
+                        "organization SEC ingestion quota is exhausted",
+                        status_code=429,
+                        retryable=True,
+                        retry_after_ms=60_000,
                     )
             response = await call_next(request)
             status_code = response.status_code
@@ -334,6 +354,43 @@ def create_app(
         value = decode_input(request, SnapshotResolutionRequestV1)
         return success_response(request, application.resolve_snapshot(value))
 
+    @app.post(
+        "/v1/data/ingestions",
+        response_model=TypedFundamentalResponseEnvelopeV1[SecIngestionResponseV1],
+        openapi_extra={
+            "requestBody": {
+                "required": True,
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "$ref": "#/components/schemas/FundamentalIngestionRequestEnvelopeV1"
+                        }
+                    }
+                },
+            }
+        },
+    )
+    async def ingest_sec_data(request: Request) -> JSONResponse:
+        use_case = app.state.sec_acquisition
+        if not isinstance(use_case, SecAcquisitionUseCase):
+            raise ServiceError(
+                "SOURCE_ACQUISITION_UNAVAILABLE",
+                "SEC ingestion is not configured for this service deployment",
+                status_code=503,
+                retryable=True,
+            )
+        value = decode_input(request, SecIngestionRequestV1)
+        context = request.state.context
+        result = await run_in_threadpool(
+            use_case.execute,
+            value,
+            caller_principal=context.principal.subject_id,
+            organization_id=context.principal.organization_id,
+            correlation_id=context.correlation_id,
+            deadline_at=request.state.deadline,
+        )
+        return success_response(request, result)
+
     @app.get("/v1/artifacts/{artifact_id}", response_model=None)
     async def get_artifact(request: Request, artifact_id: str) -> JSONResponse:
         return success_response(request, application.artifact(artifact_id))
@@ -452,6 +509,10 @@ def create_app(
                 "FundamentalPolicyCalculationRequestEnvelopeV1",
                 TypedFundamentalRequestEnvelopeV1[PolicyValuationInputV1],
             ),
+            (
+                "FundamentalIngestionRequestEnvelopeV1",
+                TypedFundamentalRequestEnvelopeV1[SecIngestionRequestV1],
+            ),
         )
         components = schema.setdefault("components", {}).setdefault("schemas", {})
         for name, model in request_models:
@@ -487,6 +548,23 @@ def create_runtime_app() -> FastAPI:
         Path(trust_roots_value) if trust_roots_value else None,
     )
     content_store = PostgresContentStore(root / "content", metadata_store)
+    taxonomy_cache_dir = os.getenv("FUNDAMENTAL_SEC_TAXONOMY_CACHE_DIR")
+    taxonomy_manifest_id = os.getenv("FUNDAMENTAL_SEC_TAXONOMY_MANIFEST_ID")
+    taxonomy_version = os.getenv("FUNDAMENTAL_SEC_TAXONOMY_VERSION")
+    taxonomy_cache_sha256 = os.getenv("FUNDAMENTAL_SEC_TAXONOMY_CACHE_SHA256")
+    sec_acquisition = build_runtime_sec_acquisition(
+        metadata=metadata_store,
+        content_store=content_store,
+        snapshot_repository=PostgresSnapshotRepository(metadata_store),
+        fact_repository=PostgresCanonicalFactRepository(metadata_store),
+        service_token=config.service_token,
+        user_agent=os.getenv("FUNDAMENTAL_SEC_USER_AGENT"),
+        taxonomy_cache_dir=taxonomy_cache_dir,
+        taxonomy_manifest_id=taxonomy_manifest_id,
+        taxonomy_version=taxonomy_version,
+        taxonomy_cache_sha256=taxonomy_cache_sha256,
+        authorized_organizations=config.ingestion_authorized_organizations,
+    )
     return create_app(
         snapshot_repository=PostgresSnapshotRepository(metadata_store),
         artifact_store=PostgresArtifactStore(metadata_store, content_store),
@@ -500,6 +578,7 @@ def create_runtime_app() -> FastAPI:
             model_repository=MetadataModelRepository(metadata_store),
             repository=MetadataPolicyRepository(metadata_store),
         ),
+        sec_acquisition=sec_acquisition,
     )
 
 

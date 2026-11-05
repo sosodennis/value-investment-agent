@@ -184,6 +184,7 @@ class SourceRecordV1(StrictModel):
     parser_version: str = Field(min_length=1)
     accession_number: str | None = None
     form: str | None = None
+    filing_date: date | None = None
     filed_at: datetime | None = None
     filing_version: str | None = None
     is_amendment: bool = False
@@ -215,6 +216,11 @@ class SourceSnapshotV1(StrictModel):
     captured_at: datetime
     source_records: tuple[SourceRecordV1, ...] = Field(min_length=1)
     taxonomy_manifest_id: str | None = None
+    acquisition_key: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    validation_profile_id: str | None = None
+    validation_profile_digest: str | None = Field(
+        default=None, pattern=r"^[0-9a-f]{64}$"
+    )
     parser_version: str = Field(min_length=1)
     policy_version: str = Field(min_length=1)
     coverage_status: QualityStatus
@@ -376,6 +382,121 @@ class FactsReadResponseV1(StrictModel):
     quality_status: QualityStatus
     issue_codes: tuple[str, ...] = ()
     facts: tuple[CanonicalFactV1, ...] = Field(min_length=1)
+
+
+class SecFilingSelectorV1(StrictModel):
+    """Bounded SEC filing selection; callers never supply provider URLs."""
+
+    accession_number: str | None = Field(default=None, pattern=r"^\d{10}-\d{2}-\d{6}$")
+    forms: tuple[Literal["10-K", "10-K/A", "10-Q", "10-Q/A"], ...] = (
+        "10-K",
+        "10-Q",
+    )
+    lookback_days: int = Field(default=3650, ge=1, le=3650)
+
+    @field_validator("forms")
+    @classmethod
+    def forms_are_unique(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        if not value or len(value) != len(set(value)):
+            raise ValueError("forms must be non-empty and unique")
+        return value
+
+
+class SecMappingReferenceV1(StrictModel):
+    decision_id: str = Field(min_length=1, max_length=128)
+    mapping_version: str = Field(min_length=1, max_length=128)
+    normalized_field: str = Field(min_length=1, max_length=128)
+
+
+class SecIngestionRequestV1(StrictModel):
+    """Versioned, service-owned request for bounded SEC filing acquisition."""
+
+    contract_version: Literal["fundamental.v1"]
+    identity: IdentityV1
+    cik: str = Field(pattern=r"^\d{10}$")
+    ticker: str = Field(pattern=r"^[A-Z0-9][A-Z0-9.-]{0,14}$")
+    valuation_timestamp: datetime
+    required_fields: tuple[str, ...] = Field(min_length=1, max_length=32)
+    mappings: tuple[SecMappingReferenceV1, ...] = Field(min_length=1, max_length=32)
+    source_selection_policy: Literal["sec-pit-v1"]
+    coverage_profile: str = Field(min_length=1, max_length=128)
+    legal_use_profile: Literal["sec-public-us-v1"]
+    filing: SecFilingSelectorV1
+    parser_version: Literal["2.47.4"]
+    validation_profile_id: Literal["sec-efm-us-dqc-v31.0.3"]
+    taxonomy_manifest_id: str = Field(min_length=1, max_length=128)
+    taxonomy_version: str = Field(min_length=1, max_length=128)
+    policy_version: str = Field(min_length=1, max_length=128)
+
+    @field_validator("valuation_timestamp")
+    @classmethod
+    def valuation_timestamp_has_timezone(cls, value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("valuation_timestamp must include a timezone")
+        return value
+
+    @model_validator(mode="after")
+    def request_is_canonical(self) -> "SecIngestionRequestV1":
+        if len(self.required_fields) != len(set(self.required_fields)):
+            raise ValueError("required_fields must be unique")
+        if set(self.required_fields) != {
+            item.normalized_field for item in self.mappings
+        }:
+            raise ValueError("each required field needs exactly one mapping")
+        if len({item.normalized_field for item in self.mappings}) != len(self.mappings):
+            raise ValueError("mappings must contain one reference per field")
+        normalized_cik = str(int(self.cik))
+        normalized_issuer = self.identity.issuer_id.lstrip("0") or "0"
+        if not self.identity.issuer_id.isdigit() or normalized_issuer != normalized_cik:
+            raise ValueError("CIK must match the canonical issuer identity")
+        if self.identity.domicile != "US":
+            raise ValueError("SEC ingestion requires a US issuer identity")
+        return self
+
+
+class SecIngestionSourceV1(StrictModel):
+    source_id: str = Field(min_length=1, max_length=64)
+    uri: str = Field(min_length=1, max_length=2048)
+    role: SourceRole
+    content_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    accession_number: str | None = None
+    available_at: datetime
+    captured_at: datetime
+    filed_at: datetime | None = None
+
+
+class SecIngestionResponseV1(StrictModel):
+    """Typed references for a created or reused immutable SEC snapshot."""
+
+    contract_version: Literal["fundamental.v1"]
+    status: Literal["created", "reused", "degraded", "abstain"]
+    identity: IdentityV1
+    valuation_timestamp: datetime
+    snapshot_id: str | None = None
+    manifest_digest: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    canonical_fact_ids: tuple[str, ...] = ()
+    source_evidence: tuple[SecIngestionSourceV1, ...] = ()
+    quality_status: QualityStatus
+    issue_codes: tuple[str, ...] = ()
+    missing_evidence: tuple[str, ...] = ()
+    parser_version: str = Field(min_length=1)
+    validation_profile_id: str = Field(min_length=1)
+    validation_profile_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    taxonomy_manifest_id: str = Field(min_length=1)
+    taxonomy_version: str = Field(min_length=1)
+    reused: bool = False
+    coalesced: bool = False
+    correlation_id: str = Field(min_length=1, max_length=128)
+
+    @model_validator(mode="after")
+    def snapshot_reference_is_complete(self) -> "SecIngestionResponseV1":
+        if (self.snapshot_id is None) != (self.manifest_digest is None):
+            raise ValueError("snapshot_id and manifest_digest must be paired")
+        if self.status != "abstain" and self.snapshot_id is None:
+            raise ValueError("successful ingestion requires an immutable snapshot")
+        if self.reused != (self.status == "reused"):
+            raise ValueError("reused flag must match ingestion status")
+        return self
 
 
 class ForecastAssumptionsV1(StrictModel):

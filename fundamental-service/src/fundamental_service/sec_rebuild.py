@@ -25,17 +25,26 @@ from .snapshots import SnapshotError
 
 
 def _candidate_id(
-    fact: ParsedXbrlFactV1, *, source: SourceRecordV1, normalized_field: str
+    fact: ParsedXbrlFactV1,
+    *,
+    source: SourceRecordV1,
+    normalized_field: str,
+    security_id: str | None,
+    mapping: CanonicalMappingV1 | None,
 ) -> str:
     payload = "|".join(
         (
             source.content_hash,
+            source.captured_at.isoformat(),
+            security_id or "",
             fact.concept,
             fact.context_id,
             fact.value,
             fact.unit or "",
             fact.decimals or "",
             normalized_field,
+            mapping.decision_id if mapping else "",
+            mapping.mapping_version if mapping else "",
         )
     ).encode("utf-8")
     return f"sec-fact-{hashlib.sha256(payload).hexdigest()[:24]}"
@@ -56,6 +65,7 @@ def parsed_facts_to_candidates(
     issuer_id: str,
     normalized_field: str,
     mapping: CanonicalMappingV1 | None = None,
+    security_id: str | None = None,
 ) -> tuple[FactCandidateV1, ...]:
     """Convert numeric facts in an offline parser report into candidates.
 
@@ -142,9 +152,14 @@ def parsed_facts_to_candidates(
         candidates.append(
             FactCandidateV1(
                 candidate_id=_candidate_id(
-                    fact, source=source, normalized_field=normalized_field
+                    fact,
+                    source=source,
+                    normalized_field=normalized_field,
+                    security_id=security_id,
+                    mapping=mapping,
                 ),
                 issuer_id=issuer_id,
+                security_id=security_id,
                 concept=fact.concept,
                 normalized_field=normalized_field,
                 value=value,
