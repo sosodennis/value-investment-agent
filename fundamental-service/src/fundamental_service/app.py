@@ -5,27 +5,37 @@ from __future__ import annotations
 import json
 import logging
 import os
+import tempfile
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 from time import monotonic
+from typing import Any
 
 from fastapi import FastAPI, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, PlainTextResponse
 from pydantic import ValidationError
+
 from src.shared.internal_services import INTERNAL_CONTRACT_VERSION
 
 from .application import FundamentalApplication, UncertaintyRequestV1
 from .application.service import normalize_uncertainty_payload
 from .contracts import SnapshotResolutionRequestV1, ValuationInputV1
-from .facts import CanonicalFactRepository, FilesystemCanonicalFactRepository
+from .facts import CanonicalFactRepository
 from .interface.transport import (
     authorize_operation,
     decode_input,
     error_response,
     readiness_response,
     success_response,
+)
+from .metadata import (
+    PostgresArtifactStore,
+    PostgresCanonicalFactRepository,
+    PostgresContentStore,
+    PostgresMetadataStore,
+    PostgresSnapshotRepository,
 )
 from .operations import (
     CORRELATION_HEADER,
@@ -36,11 +46,19 @@ from .operations import (
     correlation_id,
     guard_body_size,
 )
+from .policies import (
+    MetadataModelRepository,
+    MetadataPolicyRepository,
+    PolicyRegistry,
+    expansion_model_specs,
+    expansion_policy_records,
+    initial_model_specs,
+    initial_policy_records,
+)
 from .replay import ArtifactStore, ReplayEnvelopeV1
 from .snapshots import (
     ContentAddressedStore,
     FilesystemContentStore,
-    FilesystemSnapshotRepository,
     SnapshotRepository,
 )
 
@@ -61,15 +79,34 @@ def _validation_error(request: Request) -> JSONResponse:
 
 def create_app(
     snapshot_repository: SnapshotRepository | None = None,
-    artifact_store: ArtifactStore | None = None,
+    artifact_store: Any = None,
     content_store: ContentAddressedStore | None = None,
     fact_repository: CanonicalFactRepository | None = None,
     *,
     config: OperationsConfig | None = None,
+    metadata_store: PostgresMetadataStore | None = None,
+    require_metadata: bool = False,
+    policy_registry: PolicyRegistry | None = None,
 ) -> FastAPI:
     """Assemble transport, application use cases, and runtime resources."""
 
     runtime_config = config or OperationsConfig.testing()
+    if not require_metadata:
+        # The explicit testing composition root owns disposable local evidence.
+        # Production uses create_runtime_app and cannot reach this branch.
+        if artifact_store is None:
+            artifact_store = ArtifactStore(
+                Path(tempfile.mkdtemp(prefix="fundamental-test-artifacts-"))
+            )
+        if content_store is None:
+            content_store = FilesystemContentStore(
+                Path(tempfile.mkdtemp(prefix="fundamental-test-content-"))
+            )
+        if policy_registry is None:
+            policy_registry = PolicyRegistry(
+                models=(*initial_model_specs(), *expansion_model_specs()),
+                policies=(*initial_policy_records(), *expansion_policy_records()),
+            )
     metrics = OperationalMetrics()
     limiter = RateLimiter(runtime_config.rate_limit_per_minute)
     application = FundamentalApplication(
@@ -79,13 +116,41 @@ def create_app(
         fact_repository=fact_repository,
         config=runtime_config,
         metrics=metrics,
+        metadata_store=metadata_store,
+        require_metadata=require_metadata,
+        policy_registry=policy_registry,
     )
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
+        if metadata_store is not None:
+            try:
+                metadata_store.start()
+                if policy_registry is not None:
+                    for model in (*initial_model_specs(), *expansion_model_specs()):
+                        metadata_store.publish_model(
+                            model,
+                            model_id=model.model_id,
+                            model_version=model.model_version,
+                        )
+                    for policy in (
+                        *initial_policy_records(),
+                        *expansion_policy_records(),
+                    ):
+                        metadata_store.publish_policy(
+                            policy,
+                            policy_id=policy.policy_id,
+                            policy_version=policy.policy_version,
+                        )
+            except Exception:
+                LOGGER.exception("fundamental metadata startup failed")
         app.state.accepting_requests = True
-        yield
-        app.state.accepting_requests = False
+        try:
+            yield
+        finally:
+            app.state.accepting_requests = False
+            if metadata_store is not None:
+                metadata_store.close()
 
     app = FastAPI(
         title="Fundamental service",
@@ -95,6 +160,7 @@ def create_app(
     app.state.operations_config = runtime_config
     app.state.metrics = metrics
     app.state.application = application
+    app.state.metadata_store = metadata_store
 
     @app.middleware("http")
     async def operations_boundary(request: Request, call_next):
@@ -259,19 +325,31 @@ def create_app(
 
 
 def create_runtime_app() -> FastAPI:
-    """Build the production process with filesystem-owned immutable stores."""
+    """Build production with PostgreSQL metadata and a content-only volume."""
 
     config = OperationsConfig.from_env()
     root_value = os.getenv("FUNDAMENTAL_SERVICE_DATA_ROOT")
-    if not root_value:
-        return create_app(config=config)
+    database_url = os.getenv("FUNDAMENTAL_SERVICE_DATABASE_URL")
+    if not root_value or not database_url:
+        return create_app(config=config, require_metadata=True)
     root = Path(root_value)
+    metadata_store = PostgresMetadataStore(
+        database_url,
+        auto_migrate=os.getenv("FUNDAMENTAL_SERVICE_AUTO_MIGRATE", "0") == "1",
+    )
+    content_store = PostgresContentStore(root / "content", metadata_store)
     return create_app(
-        snapshot_repository=FilesystemSnapshotRepository(root / "snapshots"),
-        artifact_store=ArtifactStore(root / "artifacts"),
-        content_store=FilesystemContentStore(root / "content"),
-        fact_repository=FilesystemCanonicalFactRepository(root / "facts"),
+        snapshot_repository=PostgresSnapshotRepository(metadata_store),
+        artifact_store=PostgresArtifactStore(metadata_store, content_store),
+        content_store=content_store,
+        fact_repository=PostgresCanonicalFactRepository(metadata_store),
         config=config,
+        metadata_store=metadata_store,
+        require_metadata=True,
+        policy_registry=PolicyRegistry(
+            model_repository=MetadataModelRepository(metadata_store),
+            repository=MetadataPolicyRepository(metadata_store),
+        ),
     )
 
 

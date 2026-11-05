@@ -57,6 +57,7 @@ _LEGACY_INPUT_FIELDS = frozenset(
 )
 _PROJECTION_FIELDS = (
     "status",
+    "calculation_version",
     "calculation_status",
     "quality_status",
     "input_digest",
@@ -67,6 +68,8 @@ _PROJECTION_FIELDS = (
     "assumptions",
     "model_version",
     "policy_version",
+    "policy_id",
+    "trace",
     "issue_codes",
     "missing_evidence",
     "snapshot_id",
@@ -89,6 +92,22 @@ _PROJECTION_FIELDS = (
 )
 _DIGEST_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 _MONTE_CARLO_SAMPLER_VERSION = "python-random-v1"
+_SCHEMA_DEFAULTS: tuple[tuple[tuple[str | int | None, ...], object], ...] = (
+    (("assumptions", "forecast", "base_revenue"), None),
+    (("assumptions", "trace", "description"), None),
+    (("assumptions", "trace", "expression"), None),
+    (("assumptions", "trace", "inputs"), ()),
+    (("assumptions", "trace", "source_refs"), ()),
+    (("uncertainty", "parameters"), ()),
+    (("uncertainty", "parameters", None, "mean"), None),
+    (("uncertainty", "parameters", None, "mode"), None),
+    (("uncertainty", "samples"), None),
+    (("uncertainty", "seed"), None),
+    (("uncertainty", "correlations"), ()),
+    (("uncertainty", "invalid_draw_policy"), None),
+    (("uncertainty", "scenarios"), ()),
+    (("uncertainty", "sensitivity"), ()),
+)
 
 
 class ServiceValuationRuntime(Protocol):
@@ -202,7 +221,9 @@ def _response_result(response: FundamentalServiceResponseV1) -> Mapping[str, obj
     return result
 
 
-def _validated_input(result: Mapping[str, object]) -> tuple[JSONObject, str, str]:
+def _validated_input(
+    result: Mapping[str, object],
+) -> tuple[JSONObject, str, str, Mapping[str, object]]:
     raw_input = result.get("input")
     if not isinstance(raw_input, Mapping):
         raise FundamentalServiceFailure(
@@ -227,12 +248,46 @@ def _validated_input(result: Mapping[str, object]) -> tuple[JSONObject, str, str
             retryable=False,
             status_code=502,
         )
-    return dict(raw_input), input_digest, quality_status
+    policy_resolution = result.get("policy_resolution")
+    if not isinstance(policy_resolution, Mapping):
+        raise FundamentalServiceFailure(
+            "UPSTREAM_MALFORMED",
+            "Fundamental validation response did not include policy resolution",
+            retryable=False,
+            status_code=502,
+        )
+    input_policy_id = raw_input.get("policy_id")
+    input_provenance = raw_input.get("provenance")
+    input_policy_version = (
+        input_provenance.get("policy_version")
+        if isinstance(input_provenance, Mapping)
+        else None
+    )
+    policy_digest = policy_resolution.get("policy_digest")
+    if (
+        result.get("contract_version") != "fundamental.v1"
+        or raw_input.get("input_digest") != input_digest
+        or policy_resolution.get("contract_version") != "fundamental.v1"
+        or policy_resolution.get("input_digest") != input_digest
+        or not isinstance(input_policy_id, str)
+        or policy_resolution.get("policy_id") != input_policy_id
+        or not isinstance(input_policy_version, str)
+        or policy_resolution.get("policy_version") != input_policy_version
+        or not isinstance(policy_digest, str)
+        or not _DIGEST_PATTERN.fullmatch(policy_digest)
+    ):
+        raise FundamentalServiceFailure(
+            "UPSTREAM_MALFORMED",
+            "Fundamental validation policy resolution is not bound to its input",
+            retryable=False,
+            status_code=502,
+        )
+    return dict(raw_input), input_digest, quality_status, policy_resolution
 
 
 def _resolved_snapshot_input(
     input_payload: Mapping[str, object], result: Mapping[str, object]
-) -> JSONObject:
+) -> tuple[JSONObject, str]:
     """Bind service-owned snapshot and fact references into the caller request."""
 
     snapshot_id = result.get("snapshot_id")
@@ -242,6 +297,11 @@ def _resolved_snapshot_input(
     resolved_policy = result.get("source_selection_policy")
     resolved_profile = result.get("coverage_profile")
     provenance_raw = result.get("provenance")
+    source_selection_policy_version = (
+        provenance_raw.get("policy_version")
+        if isinstance(provenance_raw, Mapping)
+        else None
+    )
     if (
         not isinstance(snapshot_id, str)
         or not snapshot_id
@@ -253,6 +313,8 @@ def _resolved_snapshot_input(
         or not isinstance(resolved_policy, str)
         or not isinstance(resolved_profile, str)
         or not isinstance(provenance_raw, Mapping)
+        or not isinstance(source_selection_policy_version, str)
+        or not source_selection_policy_version
     ):
         raise FundamentalServiceFailure(
             "UPSTREAM_MALFORMED",
@@ -286,7 +348,11 @@ def _resolved_snapshot_input(
     }
     updated["provenance"] = {
         **provenance,
-        **{key: value for key, value in provenance_raw.items() if value is not None},
+        **{
+            key: value
+            for key, value in provenance_raw.items()
+            if value is not None and key != "policy_version"
+        },
         "snapshot_id": snapshot_id,
         "fact_ids": list(facts),
     }
@@ -300,7 +366,7 @@ def _resolved_snapshot_input(
             "status": quality,
             "issue_codes": list(result.get("issue_codes", ())),
         }
-    return updated
+    return updated, source_selection_policy_version
 
 
 def _payload_equal(left: object, right: object) -> bool:
@@ -312,6 +378,51 @@ def _payload_equal(left: object, right: object) -> bool:
         )
     except (TypeError, ValueError):
         return left == right
+
+
+def _is_schema_default(path: tuple[str | int, ...], value: object) -> bool:
+    for pattern, expected in _SCHEMA_DEFAULTS:
+        if len(pattern) == len(path) and all(
+            candidate is None and isinstance(actual, int) or candidate == actual
+            for candidate, actual in zip(pattern, path, strict=True)
+        ):
+            if _payload_equal(expected, value):
+                return True
+    return False
+
+
+def _caller_values_preserved(
+    supplied: object,
+    returned: object,
+    *,
+    path: tuple[str | int, ...] = (),
+) -> bool:
+    """Preserve caller values and permit only known inert schema defaults."""
+
+    if isinstance(supplied, Mapping):
+        if not isinstance(returned, Mapping):
+            return False
+        for key, value in supplied.items():
+            if key not in returned or not _caller_values_preserved(
+                value, returned[key], path=path + (str(key),)
+            ):
+                return False
+        return all(
+            key in supplied or _is_schema_default(path + (str(key),), value)
+            for key, value in returned.items()
+        )
+    if isinstance(supplied, list | tuple):
+        return (
+            isinstance(returned, list | tuple)
+            and len(supplied) == len(returned)
+            and all(
+                _caller_values_preserved(left, right, path=path + (index,))
+                for index, (left, right) in enumerate(
+                    zip(supplied, returned, strict=True)
+                )
+            )
+        )
+    return _payload_equal(supplied, returned)
 
 
 def _approval_request(
@@ -394,7 +505,7 @@ def _monte_carlo_payload(input_payload: Mapping[str, object]) -> JSONObject:
 def _uncertainty_projection(
     response: FundamentalServiceResponseV1,
     *,
-    snapshot_id: str,
+    expected_calculation: Mapping[str, object],
     expected_seed: int,
     expected_samples: int,
     expected_invalid_draw_policy: str,
@@ -408,19 +519,80 @@ def _uncertainty_projection(
             retryable=False,
             status_code=502,
         )
+    expected_base = expected_calculation.get("base")
+    if not isinstance(expected_base, Mapping):
+        expected_base = expected_calculation
     base_digest = base.get("input_digest")
-    base_hash = base.get("result_hash")
-    if (
-        not isinstance(base_digest, str)
-        or not _DIGEST_PATTERN.fullmatch(base_digest)
-        or not isinstance(base_hash, str)
-        or not _DIGEST_PATTERN.fullmatch(base_hash)
-        or base.get("snapshot_id") != snapshot_id
+    if not isinstance(base_digest, str) or not _DIGEST_PATTERN.fullmatch(base_digest):
+        raise FundamentalServiceFailure(
+            "UPSTREAM_MALFORMED",
+            "Fundamental uncertainty response did not include its base input digest",
+            retryable=False,
+            status_code=502,
+        )
+    if base_digest != expected_base.get("input_digest"):
+        raise FundamentalServiceFailure(
+            "INPUT_DIGEST_MISMATCH",
+            "Fundamental uncertainty response is bound to a different input",
+            retryable=False,
+            status_code=502,
+        )
+    if any(
+        not _payload_equal(base.get(field), expected_base.get(field))
+        for field in (
+            "result_hash",
+            "calculation_version",
+            "model_version",
+            "policy_id",
+            "policy_version",
+            "snapshot_id",
+            "assumptions",
+            "trace",
+        )
     ):
         raise FundamentalServiceFailure(
             "UPSTREAM_MALFORMED",
-            "Fundamental uncertainty base result is not traceable to the "
-            "selected snapshot",
+            "Fundamental uncertainty response changed its base calculation trace",
+            retryable=False,
+            status_code=502,
+        )
+    expected_references = expected_base.get("artifact_references")
+    base_references = base.get("artifact_references")
+    uncertainty_references = result.get("artifact_references")
+    if (
+        not isinstance(expected_references, list | tuple)
+        or not expected_references
+        or not isinstance(base_references, list | tuple)
+        or not isinstance(uncertainty_references, list | tuple)
+        or any(
+            not isinstance(reference, Mapping)
+            or not isinstance(reference.get("artifact_id"), str)
+            or not reference.get("artifact_id")
+            or not isinstance(reference.get("content_hash"), str)
+            or not _DIGEST_PATTERN.fullmatch(reference["content_hash"])
+            or reference.get("artifact_type")
+            not in {"calculation_evidence", "uncertainty_evidence"}
+            for reference in (*base_references, *uncertainty_references)
+        )
+        or any(
+            not any(_payload_equal(expected, actual) for actual in base_references)
+            for expected in expected_references
+        )
+        or not any(
+            reference.get("artifact_type") == "uncertainty_evidence"
+            for reference in base_references
+            if isinstance(reference, Mapping)
+        )
+        or not any(
+            reference.get("artifact_type") == "uncertainty_evidence"
+            for reference in uncertainty_references
+            if isinstance(reference, Mapping)
+        )
+    ):
+        raise FundamentalServiceFailure(
+            "UPSTREAM_MALFORMED",
+            "Fundamental uncertainty response did not preserve calculation and "
+            "uncertainty artifact references",
             retryable=False,
             status_code=502,
         )
@@ -462,6 +634,16 @@ def _calculation_projection(
     response: FundamentalServiceResponseV1,
     *,
     expected_input_digest: str,
+    expected_model_id: str,
+    expected_model_version: str,
+    expected_policy_id: str,
+    expected_policy_version: str,
+    expected_policy_digest: str,
+    expected_source_selection_policy: str,
+    expected_source_selection_policy_version: str | None,
+    expected_snapshot_id: str,
+    expected_fact_ids: tuple[str, ...],
+    expected_assumptions: Mapping[str, object],
 ) -> JSONObject:
     result = _response_result(response)
     primary = result.get("base") if isinstance(result.get("base"), Mapping) else result
@@ -495,6 +677,106 @@ def _calculation_projection(
             retryable=False,
             status_code=502,
         )
+    calculation_version = primary.get("calculation_version")
+    model_version = primary.get("model_version")
+    policy_id = primary.get("policy_id")
+    policy_version = primary.get("policy_version")
+    snapshot_id = primary.get("snapshot_id")
+    policy_resolution = primary.get("policy_resolution")
+    if (
+        not isinstance(calculation_version, str)
+        or not calculation_version
+        or model_version != expected_model_version
+        or policy_id != expected_policy_id
+        or policy_version != expected_policy_version
+        or snapshot_id != expected_snapshot_id
+        or not isinstance(policy_resolution, Mapping)
+        or policy_resolution.get("contract_version") != "fundamental.v1"
+        or policy_resolution.get("policy_id") != expected_policy_id
+        or policy_resolution.get("policy_version") != expected_policy_version
+        or policy_resolution.get("policy_digest") != expected_policy_digest
+        or policy_resolution.get("input_digest") != expected_input_digest
+    ):
+        raise FundamentalServiceFailure(
+            "UPSTREAM_MALFORMED",
+            "Fundamental calculation response is missing or changed its "
+            "version-bound provenance",
+            retryable=False,
+            status_code=502,
+        )
+    assumptions = primary.get("assumptions")
+    if not isinstance(assumptions, Mapping) or not _caller_values_preserved(
+        expected_assumptions, assumptions, path=("assumptions",)
+    ):
+        raise FundamentalServiceFailure(
+            "UPSTREAM_MALFORMED",
+            "Fundamental calculation response changed caller assumptions",
+            retryable=False,
+            status_code=502,
+        )
+    trace = primary.get("trace")
+    trace_fact_ids = trace.get("fact_ids") if isinstance(trace, Mapping) else None
+    trace_source_hashes = (
+        trace.get("source_content_hashes") if isinstance(trace, Mapping) else None
+    )
+    if (
+        not isinstance(trace, Mapping)
+        or trace.get("source_selection_policy") != expected_source_selection_policy
+        or not isinstance(trace.get("source_selection_policy_version"), str)
+        or not trace.get("source_selection_policy_version")
+        or (
+            expected_source_selection_policy_version is not None
+            and trace.get("source_selection_policy_version")
+            != expected_source_selection_policy_version
+        )
+        or trace.get("snapshot_id") != expected_snapshot_id
+        or not isinstance(trace.get("snapshot_manifest_digest"), str)
+        or not _DIGEST_PATTERN.fullmatch(trace["snapshot_manifest_digest"])
+        or not isinstance(trace_fact_ids, list | tuple)
+        or tuple(sorted(trace_fact_ids)) != tuple(sorted(expected_fact_ids))
+        or not isinstance(trace_source_hashes, list | tuple)
+        or not trace_source_hashes
+        or any(
+            not isinstance(value, str) or not _DIGEST_PATTERN.fullmatch(value)
+            for value in trace_source_hashes
+        )
+        or trace.get("policy_id") != expected_policy_id
+        or trace.get("policy_version") != expected_policy_version
+        or trace.get("policy_digest") != expected_policy_digest
+        or trace.get("model_id") != expected_model_id
+        or trace.get("model_version") != expected_model_version
+        or not isinstance(trace.get("assumptions_digest"), str)
+        or not _DIGEST_PATTERN.fullmatch(trace["assumptions_digest"])
+        or trace.get("calculation_version") != calculation_version
+    ):
+        raise FundamentalServiceFailure(
+            "UPSTREAM_MALFORMED",
+            "Fundamental calculation response did not include complete "
+            "version-bound evidence",
+            retryable=False,
+            status_code=502,
+        )
+    artifact_references = primary.get("artifact_references")
+    if (
+        not isinstance(artifact_references, list | tuple)
+        or not artifact_references
+        or any(
+            not isinstance(reference, Mapping)
+            or not isinstance(reference.get("artifact_id"), str)
+            or not reference.get("artifact_id")
+            or not isinstance(reference.get("content_hash"), str)
+            or not _DIGEST_PATTERN.fullmatch(reference["content_hash"])
+            or reference.get("artifact_type") != "calculation_evidence"
+            for reference in artifact_references
+        )
+    ):
+        raise FundamentalServiceFailure(
+            "UPSTREAM_MALFORMED",
+            "Fundamental calculation response did not include content-addressed "
+            "artifact references",
+            retryable=False,
+            status_code=502,
+        )
     calculation_status = primary.get("calculation_status")
     quality_status = primary.get("quality_status")
     if not isinstance(calculation_status, str) or not calculation_status:
@@ -512,6 +794,7 @@ def _calculation_projection(
             status_code=502,
         )
     return {
+        "calculation_version": calculation_version,
         "calculation_status": calculation_status,
         "quality_status": quality_status,
         "input_digest": input_digest,
@@ -573,6 +856,7 @@ async def run_service_valuation_flow(
         correlation_id = resolve_correlation_id()
         deadline_at = datetime.now(UTC) + timedelta(seconds=timeout_seconds)
         selector = input_payload.get("snapshot_selector")
+        source_selection_policy_version: str | None = None
         if selector is not None:
             if not isinstance(selector, Mapping):
                 raise ValueError(
@@ -585,7 +869,7 @@ async def run_service_valuation_flow(
                 correlation_id=correlation_id,
                 deadline_at=deadline_at,
             )
-            input_payload = _resolved_snapshot_input(
+            input_payload, source_selection_policy_version = _resolved_snapshot_input(
                 input_payload, _response_result(resolution_response)
             )
         validation_response = await client.execute(
@@ -596,11 +880,16 @@ async def run_service_valuation_flow(
             deadline_at=deadline_at,
         )
         validation_result = _response_result(validation_response)
-        validated_input, input_digest, quality_status = _validated_input(
-            validation_result
-        )
-        if not _payload_equal(
-            validated_input.get("assumptions"), input_payload.get("assumptions")
+        (
+            validated_input,
+            input_digest,
+            quality_status,
+            policy_resolution,
+        ) = _validated_input(validation_result)
+        if not _caller_values_preserved(
+            input_payload.get("assumptions"),
+            validated_input.get("assumptions"),
+            path=("assumptions",),
         ):
             raise FundamentalServiceFailure(
                 "INPUT_ASSUMPTIONS_CHANGED",
@@ -608,8 +897,10 @@ async def run_service_valuation_flow(
                 retryable=False,
                 status_code=502,
             )
-        if not _payload_equal(
-            validated_input.get("uncertainty"), input_payload.get("uncertainty")
+        if not _caller_values_preserved(
+            input_payload.get("uncertainty"),
+            validated_input.get("uncertainty"),
+            path=("uncertainty",),
         ):
             raise FundamentalServiceFailure(
                 "INPUT_UNCERTAINTY_CHANGED",
@@ -666,9 +957,61 @@ async def run_service_valuation_flow(
             correlation_id=correlation_id,
             deadline_at=deadline_at,
         )
+        valuation_context = _as_mapping(
+            validated_input["valuation_context"],
+            context="validated_input.valuation_context",
+        )
+        provenance = _as_mapping(
+            validated_input["provenance"], context="validated_input.provenance"
+        )
+        model_id = validated_input.get("model_id")
+        model_version = validated_input.get("model_version")
+        policy_id = validated_input.get("policy_id")
+        policy_version = provenance.get("policy_version")
+        policy_digest = policy_resolution.get("policy_digest")
+        snapshot_id = valuation_context.get("data_snapshot_id")
+        source_selection_policy = valuation_context.get("source_selection_policy")
+        fact_ids = validated_input.get("historical_facts")
+        if (
+            not all(
+                isinstance(value, str) and value
+                for value in (
+                    model_id,
+                    model_version,
+                    policy_id,
+                    policy_version,
+                    policy_digest,
+                    snapshot_id,
+                    source_selection_policy,
+                )
+            )
+            or not isinstance(fact_ids, list | tuple)
+            or not fact_ids
+            or any(not isinstance(value, str) or not value for value in fact_ids)
+        ):
+            raise FundamentalServiceFailure(
+                "UPSTREAM_MALFORMED",
+                "validated Fundamental input is missing model, policy, or snapshot "
+                "version metadata",
+                retryable=False,
+                status_code=502,
+            )
         projection = _calculation_projection(
             calculation_response,
             expected_input_digest=input_digest,
+            expected_model_id=model_id,
+            expected_model_version=model_version,
+            expected_policy_id=policy_id,
+            expected_policy_version=policy_version,
+            expected_policy_digest=policy_digest,
+            expected_source_selection_policy=source_selection_policy,
+            expected_source_selection_policy_version=source_selection_policy_version,
+            expected_snapshot_id=snapshot_id,
+            expected_fact_ids=tuple(fact_ids),
+            expected_assumptions=_as_mapping(
+                validated_input["assumptions"],
+                context="validated_input.assumptions",
+            ),
         )
         uncertainty = _as_mapping(
             validated_input["uncertainty"], context="validated_input.uncertainty"
@@ -703,7 +1046,9 @@ async def run_service_valuation_flow(
                 )
             projection["uncertainty_summary"] = _uncertainty_projection(
                 uncertainty_response,
-                snapshot_id=snapshot_id,
+                expected_calculation=_as_mapping(
+                    projection["service_result"], context="service_result"
+                ),
                 expected_seed=seed,
                 expected_samples=samples,
                 expected_invalid_draw_policy=invalid_draw_policy,

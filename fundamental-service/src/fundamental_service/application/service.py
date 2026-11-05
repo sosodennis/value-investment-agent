@@ -4,16 +4,26 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+from typing import Any
 
 from pydantic import model_validator
 
-from ..calculator import CalculationRefusal, calculate, validate
+from ..calculator import (
+    CalculationRefusal,
+    calculate,
+    validate,
+    with_calculation_result_hash,
+)
 from ..contracts import (
+    ArtifactReferenceV1,
     CalculationArtifactV1,
+    CalculationEvidenceV1,
+    CalculationTraceV1,
     QualityStatus,
     SnapshotResolutionRequestV1,
     SnapshotResolutionV1,
     SourceSnapshotV1,
+    UncertaintyV1,
     ValidationResponseV1,
     ValuationInputV1,
 )
@@ -24,9 +34,9 @@ from ..operations import (
     ServiceError,
     guard_calculation_budget,
 )
+from ..policies import PolicyError, PolicyRegistry, resolve_policy
 from ..replay import (
     ArtifactRecordV1,
-    ArtifactStore,
     ReplayEnvelopeV1,
     ReplayReportV1,
     replay_manifest,
@@ -125,11 +135,14 @@ class FundamentalApplication:
     """Owns use cases while keeping transport and dependency assembly outside."""
 
     snapshot_repository: SnapshotRepository | None
-    artifact_store: ArtifactStore | None
+    artifact_store: Any
     content_store: ContentAddressedStore | None
     config: OperationsConfig
     metrics: OperationalMetrics
     fact_repository: CanonicalFactRepository | None = None
+    metadata_store: Any = None
+    require_metadata: bool = False
+    policy_registry: PolicyRegistry | None = None
 
     @property
     def ready(self) -> bool:
@@ -139,6 +152,10 @@ class FundamentalApplication:
             and self.content_store is not None
             and self.fact_repository is not None
             and self.config.auth_ready
+            and (
+                not self.require_metadata
+                or (self.metadata_store is not None and bool(self.metadata_store.ready))
+            )
         )
 
     def _verify_fact_references(self, value: ValuationInputV1) -> None:
@@ -177,6 +194,211 @@ class FundamentalApplication:
                     status_code=422,
                     retryable=False,
                 )
+
+    def _resolve_policy(self, value: ValuationInputV1) -> tuple[ValuationInputV1, Any]:
+        if self.policy_registry is None:
+            raise ServiceError(
+                "POLICY_UNAVAILABLE",
+                "no service-owned policy registry is available",
+                status_code=503,
+                retryable=True,
+            )
+        try:
+            policy = self.policy_registry.select_policy(
+                model_id=value.model_id,
+                model_version=value.model_version,
+                valuation_timestamp=value.valuation_context.valuation_timestamp,
+                policy_id=value.policy_id,
+            )
+            if (
+                value.provenance.policy_version is not None
+                and value.provenance.policy_version != policy.policy_version
+            ):
+                raise PolicyError(
+                    "POLICY_VERSION_MISMATCH",
+                    "request policy version does not match the selected release",
+                )
+            return resolve_policy(request=value, policy=policy)
+        except PolicyError as error:
+            raise ServiceError(
+                error.code,
+                str(error),
+                status_code=422,
+                retryable=False,
+            ) from error
+        except ValueError as error:
+            raise ServiceError(
+                "POLICY_INVALID",
+                str(error),
+                status_code=422,
+                retryable=False,
+            ) from error
+
+    @staticmethod
+    def _trace(
+        request: ValuationInputV1,
+        result: CalculationArtifactV1,
+        snapshot: SourceSnapshotV1,
+        resolution: Any,
+    ) -> CalculationTraceV1:
+        source_hashes = tuple(record.content_hash for record in snapshot.source_records)
+        if not is_digest(snapshot.manifest_digest) or any(
+            not is_digest(content_hash) for content_hash in source_hashes
+        ):
+            raise ServiceError(
+                "SNAPSHOT_PROVENANCE_INVALID",
+                "selected snapshot does not contain verified content hashes",
+                status_code=422,
+                retryable=False,
+            )
+        if request.provenance.snapshot_id != snapshot.snapshot_id:
+            raise ServiceError(
+                "SNAPSHOT_PROVENANCE_MISMATCH",
+                "request provenance does not identify the selected snapshot",
+                status_code=422,
+                retryable=False,
+            )
+        if not request.historical_facts:
+            raise ServiceError(
+                "FACT_PROVENANCE_MISSING",
+                "calculation evidence requires canonical fact IDs",
+                status_code=422,
+                retryable=False,
+            )
+        return CalculationTraceV1(
+            source_selection_policy=request.valuation_context.source_selection_policy,
+            source_selection_policy_version=snapshot.policy_version,
+            snapshot_id=snapshot.snapshot_id,
+            snapshot_manifest_digest=snapshot.manifest_digest,
+            fact_ids=tuple(sorted(request.historical_facts)),
+            source_content_hashes=tuple(sorted(source_hashes)),
+            policy_id=resolution.policy_id,
+            policy_version=resolution.policy_version,
+            policy_digest=resolution.policy_digest,
+            model_id=request.model_id,
+            model_version=request.model_version,
+            assumptions_digest=sha256_digest(
+                request.assumptions.model_dump(mode="json")
+            ),
+            calculation_version=result.calculation_version,
+        )
+
+    def _persist_evidence(
+        self,
+        request: ValuationInputV1,
+        result: CalculationArtifactV1,
+    ) -> CalculationArtifactV1:
+        if self.artifact_store is None:
+            raise ServiceError(
+                "ARTIFACT_UNAVAILABLE",
+                "calculation evidence storage is unavailable",
+                status_code=503,
+                retryable=True,
+            )
+        trace = result.trace
+        if trace is None or result.policy_resolution is None:
+            raise ServiceError(
+                "CALCULATION_EVIDENCE_INCOMPLETE",
+                "calculation evidence trace is incomplete",
+                status_code=422,
+                retryable=False,
+            )
+        # Transport correlation IDs are per request; persisted evidence must be
+        # byte-stable so the same deterministic result can be safely retried.
+        stable_result = result.model_copy(update={"correlation_id": "persisted"})
+        evidence_request = request.model_copy(update={"caller_approval": None})
+        evidence = CalculationEvidenceV1(
+            contract_version="fundamental.v1",
+            request=evidence_request,
+            calculation=stable_result,
+        )
+        artifact_id = f"calculation-evidence-{result.result_hash}"
+        dependency_hashes = (
+            result.input_digest,
+            trace.snapshot_manifest_digest,
+            *trace.source_content_hashes,
+            trace.policy_digest,
+            trace.assumptions_digest,
+        )
+        try:
+            record = self.artifact_store.put(
+                artifact_id,
+                evidence,
+                dependency_hashes=dependency_hashes,
+                retention="evidence",
+            )
+        except SnapshotError as error:
+            raise _snapshot_error(error) from error
+        reference = ArtifactReferenceV1(
+            artifact_id=record.artifact_id,
+            artifact_type="calculation_evidence",
+            content_hash=record.content_hash,
+            media_type=record.media_type,
+        )
+        return with_calculation_result_hash(
+            result.model_copy(update={"artifact_references": (reference,)})
+        )
+
+    def _persist_uncertainty_evidence(
+        self, result: UncertaintyReportV1
+    ) -> UncertaintyReportV1:
+        if self.artifact_store is None:
+            raise ServiceError(
+                "ARTIFACT_UNAVAILABLE",
+                "uncertainty evidence storage is unavailable",
+                status_code=503,
+                retryable=True,
+            )
+        trace = result.base.trace
+        if trace is None:
+            raise ServiceError(
+                "UNCERTAINTY_EVIDENCE_INCOMPLETE",
+                "uncertainty evidence requires a complete base trace",
+                status_code=422,
+                retryable=False,
+            )
+        stable_base = result.base.model_copy(update={"correlation_id": "persisted"})
+        stable_result = result.model_copy(
+            update={"base": stable_base, "artifact_references": ()}
+        )
+        artifact_id = f"uncertainty-evidence-{result.base.result_hash}"
+        dependencies = (
+            result.base.input_digest,
+            result.base.result_hash,
+            trace.snapshot_manifest_digest,
+            *trace.source_content_hashes,
+            trace.policy_digest,
+            trace.assumptions_digest,
+        )
+        try:
+            record = self.artifact_store.put(
+                artifact_id,
+                stable_result,
+                dependency_hashes=dependencies,
+                retention="evidence",
+            )
+        except SnapshotError as error:
+            raise _snapshot_error(error) from error
+        reference = ArtifactReferenceV1(
+            artifact_id=record.artifact_id,
+            artifact_type="uncertainty_evidence",
+            content_hash=record.content_hash,
+            media_type=record.media_type,
+        )
+        returned_base = result.base.model_copy(
+            update={
+                "artifact_references": (
+                    *result.base.artifact_references,
+                    reference,
+                )
+            }
+        )
+        return result.model_copy(
+            update={
+                "base": returned_base,
+                "artifact_references": (reference,),
+            }
+        )
 
     def snapshot(self, snapshot_id: str) -> SourceSnapshotV1:
         if self.snapshot_repository is None:
@@ -288,6 +510,7 @@ class FundamentalApplication:
 
     def validate_valuation(self, value: ValuationInputV1) -> ValidationResponseV1:
         resolved = validate(value)
+        resolved, resolution = self._resolve_policy(resolved)
         issue_codes = resolved.quality.issue_codes
         missing_evidence = resolved.quality.missing_evidence
         quality_status = resolved.quality.status
@@ -306,6 +529,7 @@ class FundamentalApplication:
             input=resolved,
             input_digest=resolved.input_digest,
             quality_status=quality_status,
+            policy_resolution=resolution,
             issue_codes=issue_codes,
             missing_evidence=missing_evidence,
         )
@@ -324,9 +548,16 @@ class FundamentalApplication:
                 retryable=False,
             )
         guard_calculation_budget(value, self.config)
-        self.snapshot(value.valuation_context.data_snapshot_id)
+        snapshot = self.snapshot(value.valuation_context.data_snapshot_id)
+        self._verify_fact_references(value)
+        resolved, resolution = self._resolve_policy(value)
+        calculation_request = resolved
+        if resolved.uncertainty.mode != "none" and resolved.caller_approval is None:
+            calculation_request = resolved.model_copy(
+                update={"uncertainty": UncertaintyV1(mode="none")}
+            ).with_digest()
         try:
-            result = calculate(value, correlation_id=correlation_id)
+            result = calculate(calculation_request, correlation_id=correlation_id)
         except CalculationRefusal as error:
             raise ServiceError(
                 error.code,
@@ -334,6 +565,11 @@ class FundamentalApplication:
                 status_code=422,
                 retryable=False,
             ) from error
+        trace = self._trace(calculation_request, result, snapshot, resolution)
+        result = with_calculation_result_hash(
+            result.model_copy(update={"policy_resolution": resolution, "trace": trace})
+        )
+        result = self._persist_evidence(calculation_request, result)
         self.metrics.increment("quality_status_total")
         self.metrics.increment(f"quality_status_{result.quality_status.value}_total")
         return result
@@ -368,14 +604,36 @@ class FundamentalApplication:
         return report
 
     def uncertainty_valuation(self, value: UncertaintyRequestV1) -> UncertaintyReportV1:
+        if value.model_id not in {"fcff_dcf", "transition_fcff_dcf"}:
+            raise ServiceError(
+                "MODEL_UNSUPPORTED",
+                f"model {value.model_id} is not released for the current profile",
+                status_code=422,
+                retryable=False,
+            )
         guard_calculation_budget(value, self.config)
         self.snapshot(value.valuation_context.data_snapshot_id)
+        base_value = value.base_input()
+        self._verify_fact_references(base_value)
+        resolved, _ = self._resolve_policy(base_value)
+        resolved_value = value.model_copy(
+            update={
+                "policy_id": resolved.policy_id,
+                "provenance": resolved.provenance,
+                "input_digest": resolved.input_digest,
+            }
+        )
         try:
+            base = self.calculate_valuation(
+                resolved,
+                correlation_id="uncertainty-base",
+            )
             result = run_uncertainty(
-                value,
+                resolved_value,
                 monte_carlo=value.monte_carlo,
                 scenarios=value.scenarios,
                 sensitivity=value.sensitivity,
+                base_result=base,
             )
         except (CalculationRefusal, ValueError) as error:
             raise ServiceError(
@@ -384,6 +642,15 @@ class FundamentalApplication:
                 status_code=422,
                 retryable=False,
             ) from error
+        if result.base.result_hash != base.result_hash:
+            raise ServiceError(
+                "UNCERTAINTY_BASE_MISMATCH",
+                "uncertainty did not use the approved deterministic calculation",
+                status_code=422,
+                retryable=False,
+            )
+        result = result.model_copy(update={"base": base})
+        result = self._persist_uncertainty_evidence(result)
         self.metrics.increment("quality_status_total")
         self.metrics.increment(f"quality_status_{result.status.value}_total")
         if result.status.value in {"abstain", "degraded"}:

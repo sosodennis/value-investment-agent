@@ -75,7 +75,7 @@
       "path": "public-sources/fdic-jpmorgan-financials-20260630.json",
       "publication_at": "2026-08-19T18:58:33+00:00",
       "role": "reference",
-      "sha256": "060f7addb1f52157f409bb3de1dc44ed3f4b21b2e54fbbbbb0f98a3a7e68d4da",
+      "sha256": "1085b214cbe6843f52f367f4a1ef0acddf0b3bcee0e45bc80d0614f160fdc1ac",
       "source_id": "fdic-bankfind",
       "terms_reference": "https://banks.data.fdic.gov/docs/",
       "uri": "https://banks.data.fdic.gov/api/financials?filters=CERT%3A628%20AND%20REPDTE%3A20260630&fields=CERT%2CNAME%2CREPDTE%2CASSET%2CEQ%2CNETINC%2CRWAJT%2CRWAJTR%2CIDT1CER%2CIDT1RWAJR%2CRBC1AAJ%2CROE%2CNIM%2CINTINC%2CINTEXPY%2CDEP%2CID&limit=1&format=json"

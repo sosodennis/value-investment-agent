@@ -229,17 +229,27 @@ def test_bank_contract_rejects_fcff_assumptions():
     ),
 )
 def test_http_contract_reports_unreleased_families_as_unsupported(model_id: str):
+    family_profile = (
+        "ifrs-public-v1" if model_id == "ifrs_fcff_dcf" else "us-gaap-public-v1"
+    )
     base_request = (
         bank_valuation()
         if model_id == "bank_excess_return"
         else make_valuation().model_copy(
-            update={"model_id": model_id, "assumptions": AssumptionsV1()}
+            update={
+                "model_id": model_id,
+                "model_version": f"{model_id}-v1",
+                "assumptions": AssumptionsV1(),
+            }
         )
     )
     request = base_request.model_copy(
         update={
             "valuation_context": make_valuation().valuation_context.model_copy(
-                update={"data_snapshot_id": "snapshot-bank"}
+                update={
+                    "data_snapshot_id": "snapshot-bank",
+                    "coverage_profile": family_profile,
+                }
             )
         }
     ).with_digest()
@@ -261,12 +271,16 @@ def test_http_contract_reports_unreleased_families_as_unsupported(model_id: str)
         "/v1/valuation/validate", headers=auth_headers(), json=envelope
     )
     assert validation.status_code == 200
-    assert validation.json()["result"]["quality_status"] == "unsupported"
-    assert "MODEL_FAMILY_NOT_RELEASED" in validation.json()["result"]["issue_codes"]
+    result = validation.json()["result"]
+    assert result["quality_status"] == "unsupported"
+    assert "MODEL_FAMILY_NOT_RELEASED" in result["issue_codes"]
     assert (
         "complete_model_source_cohort_challenger_calibration_release"
-        in (validation.json()["result"]["missing_evidence"])
+        in result["missing_evidence"]
     )
+    assert result["policy_resolution"]["policy_id"] == f"{model_id}-{family_profile}"
+    assert result["policy_resolution"]["input_digest"] == result["input_digest"]
+    assert result["input"]["assumptions"] == payload["assumptions"]
 
     calculation = client.post(
         "/v1/valuation/calculate", headers=auth_headers(), json=envelope

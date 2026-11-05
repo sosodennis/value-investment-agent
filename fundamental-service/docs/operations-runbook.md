@@ -16,11 +16,15 @@ docker compose -p value-investment-agent-270-integration \
   -f compose/verification/docker-compose.issue280-operations.yml ps
 ```
 
-The default host port is `18080`; set `FUNDAMENTAL_SERVICE_HOST_PORT` when the
-port is occupied. `/livez` is process liveness and stays free of dependency
-details. `/readyz` is dependency readiness and requires the filesystem snapshot,
-content, and artifact stores plus the service token. Both endpoints return only
-the `internal.v1` status shape.
+The default host ports are `18080` for the service and `15481` for the
+Fundamental-owned PostgreSQL instance; set `FUNDAMENTAL_SERVICE_HOST_PORT` or
+`FUNDAMENTAL_POSTGRES_HOST_PORT` when either port is occupied. PostgreSQL stores
+the Fundamental metadata schema (`fundamental`) and the named volume stores only
+content-addressed bytes. Set `FUNDAMENTAL_SERVICE_DATABASE_URL` and run with
+`FUNDAMENTAL_SERVICE_AUTO_MIGRATE=1` for a clean local database. `/livez` is
+process liveness and stays free of dependency details. `/readyz` is dependency
+readiness and requires the compatible Fundamental schema, content volume, and
+service token. Both endpoints return only the `internal.v1` status shape.
 
 Every `/v1/` operation requires `Authorization: Bearer <FUNDAMENTAL_SERVICE_TOKEN>`
 and a signed `internal.v1` context in the `{context, input}` body envelope. The
@@ -34,10 +38,15 @@ credentials, provider responses, filesystem paths, or raw filing content.
 - A missing snapshot or artifact returns `SOURCE_UNAVAILABLE` or a stable
   not-found code. The caller receives an unavailable/degraded result and must
   not calculate locally.
-- Restarting the container reopens the append-only artifact record log. Reset
-  only the operational cache; retain evidence artifacts and their source
-  dependencies. Rebuild a damaged artifact as a new content-addressed
-  generation and preserve the old record for audit.
+- Restarting the container reconnects to PostgreSQL and reopens the
+  content-addressed volume. Metadata publication is immutable and concurrent
+  idempotent; retain evidence artifacts and their source dependencies. Rebuild
+  a damaged artifact as a new content-addressed generation and preserve the old
+  record for audit.
+- A missing, stale, or incompatible Fundamental schema keeps `/readyz` in the
+  `not_ready` state. Apply the checked-in migration through the service-owned
+  migration runner before retrying readiness; do not point the service at Agent
+  tables or select a filesystem metadata fallback.
 - Disk exhaustion is an operator alert. Stop ingestion, preserve evidence, and
   repair or expand the mounted data volume before publishing another snapshot.
   Do not delete referenced evidence.
