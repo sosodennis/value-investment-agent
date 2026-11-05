@@ -259,6 +259,21 @@ class SnapshotResolutionRequestV1(StrictModel):
         return value
 
 
+class FactsReadRequestV1(StrictModel):
+    """Select canonical facts from one immutable snapshot."""
+
+    contract_version: Literal["fundamental.v1"]
+    snapshot_id: str = Field(min_length=1)
+    required_fields: tuple[str, ...] = Field(min_length=1)
+
+    @field_validator("required_fields")
+    @classmethod
+    def fields_are_unique(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        if len(value) != len(set(value)):
+            raise ValueError("required_fields must be unique")
+        return value
+
+
 class SnapshotResolutionV1(StrictModel):
     """Immutable references needed to construct a complete valuation input."""
 
@@ -348,6 +363,19 @@ class CanonicalFactV1(StrictModel):
             ):
                 raise ValueError(f"{name} must include a timezone")
         return self
+
+
+class FactsReadResponseV1(StrictModel):
+    """Point-in-time fact selection and quality metadata for one snapshot."""
+
+    contract_version: Literal["fundamental.v1"]
+    snapshot_id: str = Field(min_length=1)
+    snapshot_manifest_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    identity: IdentityV1
+    valuation_timestamp: datetime
+    quality_status: QualityStatus
+    issue_codes: tuple[str, ...] = ()
+    facts: tuple[CanonicalFactV1, ...] = Field(min_length=1)
 
 
 class ForecastAssumptionsV1(StrictModel):
@@ -592,8 +620,18 @@ class UncertaintyV1(StrictModel):
             or self.seed is not None
             or self.correlations
             or self.invalid_draw_policy is not None
+            or self.scenarios
+            or self.sensitivity
         ):
-            raise ValueError("mode none cannot include sampling controls")
+            raise ValueError("mode none cannot include uncertainty controls")
+        if self.mode == "scenarios" and (
+            self.parameters
+            or self.samples is not None
+            or self.seed is not None
+            or self.correlations
+            or self.invalid_draw_policy is not None
+        ):
+            raise ValueError("scenarios mode cannot include Monte Carlo controls")
         return self
 
 
@@ -707,6 +745,61 @@ class ValuationInputV1(StrictModel):
         return self.model_copy(update={"input_digest": digest})
 
 
+class ForecastAssumptionOverridesV1(StrictModel):
+    base_revenue: Decimal | None = None
+    revenue_growth: tuple[Decimal, ...] | None = None
+    operating_margin: tuple[Decimal, ...] | None = None
+    reinvestment_rate: tuple[Decimal, ...] | None = None
+
+
+class WaccAssumptionOverridesV1(StrictModel):
+    risk_free_rate: Decimal | None = None
+    beta: Decimal | None = None
+    equity_risk_premium: Decimal | None = None
+    pre_tax_cost_of_debt: Decimal | None = None
+    tax_rate: Decimal | None = None
+    debt_weight: Decimal | None = None
+    equity_weight: Decimal | None = None
+
+
+class CapitalBridgeAssumptionOverridesV1(StrictModel):
+    cash: Decimal | None = None
+    debt: Decimal | None = None
+    preferred_stock: Decimal | None = None
+    lease_liabilities: Decimal | None = None
+    non_controlling_interest: Decimal | None = None
+    diluted_shares: Decimal | None = Field(default=None, gt=0)
+
+
+class PolicyAssumptionOverridesV1(StrictModel):
+    """Explicit caller values; absent fields may be resolved by a pinned policy."""
+
+    forecast: ForecastAssumptionOverridesV1 | None = None
+    wacc: WaccAssumptionOverridesV1 | None = None
+    terminal_growth: Decimal | None = None
+    capital_bridge: CapitalBridgeAssumptionOverridesV1 | None = None
+    trace: TraceV1 | None = None
+    bank: BankAssumptionsV1 | None = None
+
+
+class PolicyValuationInputV1(StrictModel):
+    """Stateless calculation input with a pinned policy and caller overrides."""
+
+    contract_version: Literal["fundamental.v1"]
+    identity: IdentityV1
+    valuation_context: ValuationContextV1
+    historical_facts: tuple[str, ...] = Field(min_length=1)
+    assumptions: PolicyAssumptionOverridesV1
+    uncertainty: UncertaintyV1
+    quality: QualityInputV1
+    provenance: ProvenanceInputV1
+    model_id: ModelId
+    model_version: str = Field(min_length=1)
+    policy_id: str = Field(min_length=1)
+    input_digest: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    caller_approval: CallerApprovalEnvelopeV1 | None = None
+
+
 class ValidationResponseV1(StrictModel):
     contract_version: Literal["fundamental.v1"]
     input: ValuationInputV1
@@ -722,6 +815,7 @@ class PolicyResolutionV1(StrictModel):
     policy_id: str = Field(min_length=1)
     policy_version: str = Field(min_length=1)
     policy_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    selection_mode: Literal["pinned", "exploratory_active"]
     resolved_fields: dict[str, Any]
     precedence: dict[str, Literal["caller", "policy"]]
     input_digest: str = Field(pattern=r"^[0-9a-f]{64}$")

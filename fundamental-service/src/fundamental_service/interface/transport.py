@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping
-from typing import Literal
+from typing import Generic, Literal, TypeVar
 
 from fastapi import Request
 from fastapi.responses import JSONResponse
@@ -39,6 +39,36 @@ class FundamentalRequestEnvelopeV1(BaseModel):
 
     context: InternalRequestContext
     input: dict[str, object]
+
+
+RequestInput = TypeVar("RequestInput", bound=BaseModel)
+ResponseResult = TypeVar("ResponseResult", bound=BaseModel)
+
+
+class TypedFundamentalRequestEnvelopeV1(BaseModel, Generic[RequestInput]):
+    """Operation-specific input schema with the shared signed context."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    context: InternalRequestContext
+    input: RequestInput
+
+
+class TypedFundamentalResponseEnvelopeV1(BaseModel, Generic[ResponseResult]):
+    """OpenAPI response schema for the shared and service-owned envelopes."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    correlation_id: str
+    contract_version: Literal[INTERNAL_CONTRACT_VERSION]
+    schema_version: Literal["fundamental.v1"]
+    result: ResponseResult
+
+
+class EmptyOperationInputV1(BaseModel):
+    """Empty typed input used by authenticated path-based read operations."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
 
 
 class FundamentalResponseEnvelopeV1(BaseModel):
@@ -199,8 +229,11 @@ def decode_input(request: Request, model: type[BaseModel]) -> BaseModel:
 
 
 __all__ = [
+    "EmptyOperationInputV1",
     "FundamentalRequestEnvelopeV1",
     "FundamentalResponseEnvelopeV1",
+    "TypedFundamentalRequestEnvelopeV1",
+    "TypedFundamentalResponseEnvelopeV1",
     "authorize_operation",
     "decode_input",
     "error_response",

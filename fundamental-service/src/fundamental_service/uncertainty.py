@@ -8,18 +8,19 @@ from decimal import Decimal
 from statistics import NormalDist
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .calculator import CalculationRefusal, calculate
 from .contracts import (
-    CalculationArtifactV1,
     ArtifactReferenceV1,
+    CalculationArtifactV1,
     QualityStatus,
     ScenarioInputV1,
     SensitivityInputV1,
     UncertaintyV1,
     ValuationInputV1,
 )
+from .serialization import sha256_digest
 
 ScenarioV1 = ScenarioInputV1
 SensitivityRequestV1 = SensitivityInputV1
@@ -32,7 +33,7 @@ class MonteCarloRequestV1(BaseModel):
     sampler_version: Literal["python-random-v1"] = "python-random-v1"
 
     @model_validator(mode="after")
-    def requires_monte_carlo(self) -> "MonteCarloRequestV1":
+    def requires_monte_carlo(self) -> MonteCarloRequestV1:
         if self.uncertainty.mode != "monte_carlo":
             raise ValueError("Monte Carlo request requires mode monte_carlo")
         return self
@@ -42,6 +43,7 @@ class UncertaintyReportV1(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     status: QualityStatus
+    input_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
     base: CalculationArtifactV1
     scenario_results: tuple[CalculationArtifactV1, ...] = ()
     sensitivity: dict[str, tuple[object, ...]] = {}
@@ -56,6 +58,27 @@ class UncertaintyReportV1(BaseModel):
     convergence_diagnostics: dict[str, object] = {}
     dominant_drivers: tuple[str, ...] = ()
     artifact_references: tuple[ArtifactReferenceV1, ...] = ()
+
+
+class UncertaintyEvidenceV1(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    contract_version: Literal["fundamental.v1"] = "fundamental.v1"
+    request: dict[str, object]
+    report: UncertaintyReportV1
+
+    @model_validator(mode="after")
+    def evidence_is_digest_bound(self) -> UncertaintyEvidenceV1:
+        if "caller_approval" in self.request:
+            raise ValueError("caller approval evidence must not be persisted")
+        if sha256_digest(self.request) != self.report.input_digest:
+            raise ValueError(
+                "uncertainty evidence request digest does not match report"
+            )
+        uncertainty = self.request.get("uncertainty")
+        if not isinstance(uncertainty, dict) or uncertainty.get("mode") == "none":
+            raise ValueError("uncertainty evidence must contain caller controls")
+        return self
 
 
 def _path_value(request: ValuationInputV1, path: str) -> object:
@@ -140,6 +163,25 @@ def _draws(spec: UncertaintyV1, rng: random.Random) -> tuple[object, ...]:
     )
 
 
+def validate_uncertainty_controls(
+    request: ValuationInputV1,
+    *,
+    scenarios: tuple[ScenarioV1, ...] = (),
+    sensitivity: tuple[SensitivityRequestV1, ...] = (),
+) -> None:
+    declared_scenarios = scenarios or tuple(
+        ScenarioV1.model_validate(item) for item in request.uncertainty.scenarios
+    )
+    declared_sensitivity = sensitivity or tuple(
+        SensitivityRequestV1.model_validate(item)
+        for item in request.uncertainty.sensitivity
+    )
+    if request.uncertainty.mode == "scenarios" and not (
+        declared_scenarios or declared_sensitivity
+    ):
+        raise ValueError("scenarios mode requires scenario or sensitivity inputs")
+
+
 def run_uncertainty(
     request: ValuationInputV1,
     *,
@@ -147,7 +189,13 @@ def run_uncertainty(
     scenarios: tuple[ScenarioV1, ...] = (),
     sensitivity: tuple[SensitivityRequestV1, ...] = (),
     base_result: CalculationArtifactV1 | None = None,
+    input_digest: str | None = None,
 ) -> UncertaintyReportV1:
+    validate_uncertainty_controls(
+        request,
+        scenarios=scenarios,
+        sensitivity=sensitivity,
+    )
     scenarios = scenarios or tuple(
         ScenarioV1.model_validate(item) for item in request.uncertainty.scenarios
     )
@@ -161,7 +209,11 @@ def run_uncertainty(
         request.base_input() if hasattr(request, "base_input") else request
     )
     deterministic_request = deterministic_request.model_copy(
-        update={"uncertainty": UncertaintyV1(mode="none")}
+        update={
+            "uncertainty": UncertaintyV1(mode="none"),
+            "caller_approval": None,
+            "input_digest": None,
+        }
     ).with_digest()
     base = base_result or calculate(deterministic_request)
     scenario_results: list[CalculationArtifactV1] = []
@@ -192,6 +244,9 @@ def run_uncertainty(
     if monte_carlo is None:
         return UncertaintyReportV1(
             status=QualityStatus.VERIFIED,
+            input_digest=input_digest
+            or request.input_digest
+            or request.with_digest().input_digest,
             base=base,
             scenario_results=tuple(scenario_results),
             sensitivity=sensitivity_results,
@@ -242,6 +297,9 @@ def run_uncertainty(
     }
     return UncertaintyReportV1(
         status=status,
+        input_digest=input_digest
+        or request.input_digest
+        or request.with_digest().input_digest,
         base=base,
         scenario_results=tuple(scenario_results),
         sensitivity=sensitivity_results,

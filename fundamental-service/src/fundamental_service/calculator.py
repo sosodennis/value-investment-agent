@@ -74,6 +74,9 @@ def calculation_result_hash(artifact: CalculationArtifactV1) -> str:
                 "artifact_references",
                 "evaluated_at",
                 "correlation_id",
+                # Caller-vs-policy precedence describes how the same resolved
+                # inputs were supplied; it is not part of calculation identity.
+                "policy_resolution",
             },
         )
     )
@@ -90,6 +93,14 @@ def with_calculation_result_hash(
 def calculate(
     request: ValuationInputV1, *, correlation_id: str = "local"
 ) -> CalculationArtifactV1:
+    if (
+        request.caller_approval is not None
+        and request.caller_approval.decision != "approved"
+    ):
+        raise CalculationRefusal(
+            "CALLER_APPROVAL_REJECTED",
+            "caller rejected this exact valuation input",
+        )
     if request.model_id not in {"fcff_dcf", "transition_fcff_dcf"}:
         raise CalculationRefusal(
             "MODEL_UNSUPPORTED",
@@ -104,13 +115,10 @@ def calculate(
         raise CalculationRefusal(
             "QUALITY_NOT_VERIFIED", "calculation requires verified quality"
         )
-    # The base calculation remains deterministic after caller approval when
-    # explicit uncertainty controls are present. Unapproved controls retain the
-    # explicit abstention used by the offline release cohort.
-    if request.uncertainty.mode != "none" and request.caller_approval is None:
+    if request.uncertainty.mode != "none":
         raise CalculationRefusal(
             "UNCERTAINTY_NOT_IMPLEMENTED",
-            "uncertainty requires an approved caller-owned calculation",
+            "explicit uncertainty controls must be executed by service orchestration",
         )
     wacc = request.assumptions.wacc
     growth = request.assumptions.terminal_growth

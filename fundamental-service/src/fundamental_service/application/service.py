@@ -19,6 +19,9 @@ from ..contracts import (
     CalculationArtifactV1,
     CalculationEvidenceV1,
     CalculationTraceV1,
+    FactsReadRequestV1,
+    FactsReadResponseV1,
+    PolicyValuationInputV1,
     QualityStatus,
     SnapshotResolutionRequestV1,
     SnapshotResolutionV1,
@@ -35,7 +38,13 @@ from ..operations import (
     ServiceError,
     guard_calculation_budget,
 )
-from ..policies import PolicyError, PolicyRegistry, resolve_policy
+from ..policies import (
+    PolicyError,
+    PolicyRecordV1,
+    PolicyRegistry,
+    resolve_policy,
+    resolve_policy_overrides,
+)
 from ..replay import (
     ArtifactRecordV1,
     ReplayEnvelopeV1,
@@ -52,8 +61,10 @@ from ..uncertainty import (
     MonteCarloRequestV1,
     ScenarioV1,
     SensitivityRequestV1,
+    UncertaintyEvidenceV1,
     UncertaintyReportV1,
     run_uncertainty,
+    validate_uncertainty_controls,
 )
 
 
@@ -70,9 +81,6 @@ class UncertaintyRequestV1(ValuationInputV1):
             exclude={
                 "input_digest",
                 "caller_approval",
-                "scenarios",
-                "sensitivity",
-                "monte_carlo",
             }
         )
         computed = sha256_digest(payload)
@@ -88,9 +96,14 @@ class UncertaintyRequestV1(ValuationInputV1):
         return self
 
     def base_input(self) -> ValuationInputV1:
-        return ValuationInputV1.model_validate(
-            self.model_dump(exclude={"scenarios", "sensitivity", "monte_carlo"})
-        )
+        payload = self.model_dump(exclude={"scenarios", "sensitivity", "monte_carlo"})
+        payload["input_digest"] = None
+        payload["caller_approval"] = None
+        return ValuationInputV1.model_validate(payload)
+
+    def with_digest(self) -> UncertaintyRequestV1:
+        payload = self.model_dump(exclude={"input_digest", "caller_approval"})
+        return self.model_copy(update={"input_digest": sha256_digest(payload)})
 
 
 def normalize_uncertainty_payload(raw: Mapping[str, object]) -> dict[str, object]:
@@ -116,11 +129,22 @@ def normalize_uncertainty_payload(raw: Mapping[str, object]) -> dict[str, object
 
 
 def _snapshot_error(error: SnapshotError) -> ServiceError:
-    if error.code in {"SNAPSHOT_NOT_FOUND", "ARTIFACT_NOT_FOUND"}:
+    if error.code in {
+        "SNAPSHOT_NOT_FOUND",
+        "ARTIFACT_NOT_FOUND",
+        "FACT_NOT_FOUND",
+    }:
         return ServiceError(
             error.code,
             "requested immutable evidence was not found",
             status_code=404,
+            retryable=False,
+        )
+    if error.code in {"FACT_CONFLICT", "FACT_AMENDMENT_SCOPE_UNKNOWN"}:
+        return ServiceError(
+            error.code,
+            "canonical fact selection is not verified for this snapshot",
+            status_code=422,
             retryable=False,
         )
     return ServiceError(
@@ -128,6 +152,31 @@ def _snapshot_error(error: SnapshotError) -> ServiceError:
         "immutable evidence is temporarily unavailable",
         status_code=503,
         retryable=error.retryable or error.code.endswith("UNAVAILABLE"),
+    )
+
+
+def _policy_error(error: PolicyError) -> ServiceError:
+    if error.code == "POLICY_NOT_FOUND":
+        status_code = 404
+        retryable = False
+    elif error.code in {
+        "POLICY_AMBIGUOUS",
+        "CALLER_APPROVAL_CONFLICT",
+        "INPUT_DIGEST_MISMATCH",
+    }:
+        status_code = 409
+        retryable = False
+    elif error.code == "POLICY_UNAVAILABLE" or error.code.startswith("METADATA_"):
+        status_code = 503
+        retryable = True
+    else:
+        status_code = 422
+        retryable = False
+    return ServiceError(
+        error.code,
+        str(error),
+        status_code=status_code,
+        retryable=retryable,
     )
 
 
@@ -227,12 +276,7 @@ class FundamentalApplication:
                 )
             return resolve_policy(request=value, policy=policy)
         except PolicyError as error:
-            raise ServiceError(
-                error.code,
-                str(error),
-                status_code=422,
-                retryable=False,
-            ) from error
+            raise _policy_error(error) from error
         except ValueError as error:
             raise ServiceError(
                 "POLICY_INVALID",
@@ -349,7 +393,8 @@ class FundamentalApplication:
             request=evidence_request,
             calculation=stable_result,
         )
-        artifact_id = f"calculation-evidence-{result.result_hash}"
+        evidence_digest = sha256_digest(evidence.model_dump(mode="json"))
+        artifact_id = f"calculation-evidence-{evidence_digest}"
         dependency_hashes = (
             result.input_digest,
             trace.snapshot_manifest_digest,
@@ -377,7 +422,9 @@ class FundamentalApplication:
         )
 
     def _persist_uncertainty_evidence(
-        self, result: UncertaintyReportV1
+        self,
+        result: UncertaintyReportV1,
+        request: dict[str, object],
     ) -> UncertaintyReportV1:
         if self.artifact_store is None:
             raise ServiceError(
@@ -398,8 +445,11 @@ class FundamentalApplication:
         stable_result = result.model_copy(
             update={"base": stable_base, "artifact_references": ()}
         )
-        artifact_id = f"uncertainty-evidence-{result.base.result_hash}"
+        evidence = UncertaintyEvidenceV1(request=request, report=stable_result)
+        evidence_digest = sha256_digest(evidence.model_dump(mode="json"))
+        artifact_id = f"uncertainty-evidence-{evidence_digest}"
         dependencies = (
+            result.input_digest,
             result.base.input_digest,
             result.base.result_hash,
             trace.snapshot_manifest_digest,
@@ -410,7 +460,7 @@ class FundamentalApplication:
         try:
             record = self.artifact_store.put(
                 artifact_id,
-                stable_result,
+                evidence,
                 dependency_hashes=dependencies,
                 retention="evidence",
             )
@@ -459,6 +509,62 @@ class FundamentalApplication:
                 status_code=503,
                 retryable=True,
             ) from error
+
+    def read_facts(self, request: FactsReadRequestV1) -> FactsReadResponseV1:
+        if self.fact_repository is None:
+            raise ServiceError(
+                "source_unavailable",
+                "canonical fact dependencies are unavailable",
+                status_code=503,
+                retryable=True,
+            )
+        snapshot = self.snapshot(request.snapshot_id)
+        try:
+            facts = self.fact_repository.resolve(
+                snapshot=snapshot,
+                valuation_timestamp=snapshot.valuation_timestamp,
+                required_fields=request.required_fields,
+            )
+        except SnapshotError as error:
+            raise _snapshot_error(error) from error
+        return FactsReadResponseV1(
+            contract_version="fundamental.v1",
+            snapshot_id=snapshot.snapshot_id,
+            snapshot_manifest_digest=snapshot.manifest_digest,
+            identity=snapshot.identity,
+            valuation_timestamp=snapshot.valuation_timestamp,
+            quality_status=snapshot.coverage_status,
+            issue_codes=tuple(issue.code for issue in snapshot.issues),
+            facts=facts,
+        )
+
+    def policy(self, policy_id: str) -> PolicyRecordV1:
+        if self.policy_registry is None:
+            raise ServiceError(
+                "POLICY_UNAVAILABLE",
+                "service-owned policy registry is unavailable",
+                status_code=503,
+                retryable=True,
+            )
+        try:
+            policy = self.policy_registry.policy(policy_id)
+        except PolicyError as error:
+            raise _policy_error(error) from error
+        except Exception as error:  # pragma: no cover - defensive persistence boundary
+            raise ServiceError(
+                "POLICY_UNAVAILABLE",
+                "service-owned policy release is unavailable",
+                status_code=503,
+                retryable=True,
+            ) from error
+        if policy is None:
+            raise ServiceError(
+                "POLICY_NOT_FOUND",
+                "requested policy release was not found",
+                status_code=404,
+                retryable=False,
+            )
+        return policy
 
     def resolve_snapshot(
         self, request: SnapshotResolutionRequestV1
@@ -562,6 +668,11 @@ class FundamentalApplication:
         else:
             self.snapshot(value.valuation_context.data_snapshot_id)
             self._verify_fact_references(value)
+        if resolution.selection_mode == "exploratory_active":
+            if quality_status is QualityStatus.VERIFIED:
+                quality_status = QualityStatus.PROVISIONAL
+            issue_codes = (*issue_codes, "POLICY_NOT_PINNED_EXPLORATORY")
+            missing_evidence = (*missing_evidence, "caller_pinned_policy_id")
         return ValidationResponseV1(
             contract_version="fundamental.v1",
             input=resolved,
@@ -577,19 +688,109 @@ class FundamentalApplication:
 
     def calculate_valuation(
         self, value: ValuationInputV1, *, correlation_id: str
-    ) -> CalculationArtifactV1:
+    ) -> CalculationArtifactV1 | UncertaintyReportV1:
         self._require_released_calculator_model(value)
-        guard_calculation_budget(value, self.config)
-        snapshot = self.snapshot(value.valuation_context.data_snapshot_id)
-        self._verify_fact_references(value)
+        if value.policy_id is None:
+            raise ServiceError(
+                "POLICY_ID_REQUIRED",
+                "verified calculations require an explicit immutable policy_id",
+                status_code=422,
+                retryable=False,
+            )
         resolved, resolution = self._resolve_policy(value)
-        calculation_request = resolved
-        if resolved.uncertainty.mode != "none" and resolved.caller_approval is None:
-            calculation_request = resolved.model_copy(
-                update={"uncertainty": UncertaintyV1(mode="none")}
-            ).with_digest()
+        return self._calculate_resolved(
+            resolved, resolution, correlation_id=correlation_id
+        )
+
+    def calculate_with_policy(
+        self, value: PolicyValuationInputV1, *, correlation_id: str
+    ) -> CalculationArtifactV1 | UncertaintyReportV1:
+        if self.policy_registry is None:
+            raise ServiceError(
+                "POLICY_UNAVAILABLE",
+                "no service-owned policy registry is available",
+                status_code=503,
+                retryable=True,
+            )
         try:
-            result = calculate(calculation_request, correlation_id=correlation_id)
+            policy = self.policy_registry.select_policy(
+                model_id=value.model_id,
+                model_version=value.model_version,
+                valuation_timestamp=value.valuation_context.valuation_timestamp,
+                policy_id=value.policy_id,
+            )
+        except PolicyError as error:
+            raise _policy_error(error) from error
+        except Exception as error:  # pragma: no cover - persistence boundary
+            raise ServiceError(
+                "POLICY_UNAVAILABLE",
+                "service-owned policy registry is temporarily unavailable",
+                status_code=503,
+                retryable=True,
+            ) from error
+        try:
+            resolved, resolution = resolve_policy_overrides(
+                request=value, policy=policy
+            )
+        except PolicyError as error:
+            raise _policy_error(error) from error
+        return self._calculate_resolved(
+            resolved, resolution, correlation_id=correlation_id
+        )
+
+    def _calculate_resolved(
+        self,
+        resolved: ValuationInputV1,
+        resolution: Any,
+        *,
+        correlation_id: str,
+    ) -> CalculationArtifactV1 | UncertaintyReportV1:
+        if resolution.input_digest != resolved.input_digest:
+            raise ServiceError(
+                "INPUT_DIGEST_MISMATCH",
+                "policy resolution is not bound to the calculation input",
+                status_code=409,
+                retryable=False,
+            )
+        self._require_released_calculator_model(resolved)
+        guard_calculation_budget(resolved, self.config)
+        snapshot = self.snapshot(resolved.valuation_context.data_snapshot_id)
+        self._verify_fact_references(resolved)
+        has_uncertainty = resolved.uncertainty.mode != "none"
+        calculation_input = resolved
+        calculation_resolution = resolution
+        if has_uncertainty:
+            if (
+                resolved.caller_approval is not None
+                and resolved.caller_approval.decision != "approved"
+            ):
+                raise ServiceError(
+                    "CALLER_APPROVAL_REJECTED",
+                    "caller rejected this exact valuation input",
+                    status_code=422,
+                    retryable=False,
+                )
+            try:
+                validate_uncertainty_controls(resolved)
+            except ValueError as error:
+                raise ServiceError(
+                    "UNCERTAINTY_INVALID",
+                    str(error),
+                    status_code=422,
+                    retryable=False,
+                ) from error
+            calculation_input = resolved.model_copy(
+                update={
+                    "uncertainty": UncertaintyV1(mode="none"),
+                    "input_digest": None,
+                    "caller_approval": None,
+                }
+            ).with_digest()
+            calculation_resolution = resolution.model_copy(
+                update={"input_digest": calculation_input.input_digest}
+            )
+        try:
+            result = calculate(calculation_input, correlation_id=correlation_id)
         except CalculationRefusal as error:
             raise ServiceError(
                 error.code,
@@ -597,14 +798,44 @@ class FundamentalApplication:
                 status_code=422,
                 retryable=False,
             ) from error
-        trace = self._trace(calculation_request, result, snapshot, resolution)
+        trace = self._trace(calculation_input, result, snapshot, calculation_resolution)
         result = with_calculation_result_hash(
-            result.model_copy(update={"policy_resolution": resolution, "trace": trace})
+            result.model_copy(
+                update={"policy_resolution": calculation_resolution, "trace": trace}
+            )
         )
-        result = self._persist_evidence(calculation_request, result)
+        result = self._persist_evidence(calculation_input, result)
         self.metrics.increment("quality_status_total")
         self.metrics.increment(f"quality_status_{result.quality_status.value}_total")
-        return result
+        if not has_uncertainty:
+            return result
+        try:
+            uncertainty = run_uncertainty(resolved, base_result=result)
+        except (CalculationRefusal, ValueError) as error:
+            raise ServiceError(
+                getattr(error, "code", "uncertainty_invalid"),
+                str(error),
+                status_code=422,
+                retryable=False,
+            ) from error
+        if uncertainty.base.result_hash != result.result_hash:
+            raise ServiceError(
+                "UNCERTAINTY_BASE_MISMATCH",
+                "uncertainty did not use the resolved deterministic calculation",
+                status_code=422,
+                retryable=False,
+            )
+        uncertainty_request = resolved.model_dump(
+            exclude={"input_digest", "caller_approval"}
+        )
+        uncertainty = self._persist_uncertainty_evidence(
+            uncertainty, uncertainty_request
+        )
+        self.metrics.increment("quality_status_total")
+        self.metrics.increment(f"quality_status_{uncertainty.status.value}_total")
+        if uncertainty.status.value in {"abstain", "degraded"}:
+            self.metrics.increment("abstention_total")
+        return uncertainty
 
     def replay_valuation(self, envelope: ReplayEnvelopeV1) -> ReplayReportV1:
         if self.artifact_store is None or self.snapshot_repository is None:
@@ -637,18 +868,76 @@ class FundamentalApplication:
 
     def uncertainty_valuation(self, value: UncertaintyRequestV1) -> UncertaintyReportV1:
         self._require_released_calculator_model(value)
+        if value.policy_id is None:
+            raise ServiceError(
+                "POLICY_ID_REQUIRED",
+                "verified uncertainty calculations require an explicit immutable "
+                "policy_id",
+                status_code=422,
+                retryable=False,
+            )
+        if (
+            value.caller_approval is not None
+            and value.caller_approval.decision != "approved"
+        ):
+            raise ServiceError(
+                "CALLER_APPROVAL_REJECTED",
+                "caller rejected this exact valuation input",
+                status_code=422,
+                retryable=False,
+            )
+        try:
+            validate_uncertainty_controls(
+                value.base_input(),
+                scenarios=value.scenarios,
+                sensitivity=value.sensitivity,
+            )
+        except ValueError as error:
+            raise ServiceError(
+                "UNCERTAINTY_INVALID",
+                str(error),
+                status_code=422,
+                retryable=False,
+            ) from error
         guard_calculation_budget(value, self.config)
         self.snapshot(value.valuation_context.data_snapshot_id)
         base_value = value.base_input()
         self._verify_fact_references(base_value)
-        resolved, _ = self._resolve_policy(base_value)
+        deterministic_base = base_value.model_copy(
+            update={
+                "uncertainty": UncertaintyV1(mode="none"),
+                "caller_approval": None,
+            }
+        ).with_digest()
+        resolved, _ = self._resolve_policy(deterministic_base)
         resolved_value = value.model_copy(
             update={
                 "policy_id": resolved.policy_id,
+                "assumptions": resolved.assumptions,
                 "provenance": resolved.provenance,
-                "input_digest": resolved.input_digest,
+                "input_digest": None,
+                "caller_approval": None,
             }
-        )
+        ).with_digest()
+        if (
+            value.caller_approval is not None
+            and value.caller_approval.input_digest != resolved_value.input_digest
+        ):
+            raise ServiceError(
+                "CALLER_APPROVAL_CONFLICT",
+                "caller approval is bound to a different resolved input_digest",
+                status_code=409,
+                retryable=False,
+            )
+        if value.caller_approval is not None:
+            resolved_value = resolved_value.model_copy(
+                update={"caller_approval": value.caller_approval}
+            )
+        monte_carlo = value.monte_carlo
+        if monte_carlo is not None:
+            monte_carlo = monte_carlo.model_copy(
+                update={"uncertainty": resolved_value.uncertainty}
+            )
         try:
             base = self.calculate_valuation(
                 resolved,
@@ -656,10 +945,11 @@ class FundamentalApplication:
             )
             result = run_uncertainty(
                 resolved_value,
-                monte_carlo=value.monte_carlo,
+                monte_carlo=monte_carlo,
                 scenarios=value.scenarios,
                 sensitivity=value.sensitivity,
                 base_result=base,
+                input_digest=resolved_value.input_digest,
             )
         except (CalculationRefusal, ValueError) as error:
             raise ServiceError(
@@ -676,7 +966,10 @@ class FundamentalApplication:
                 retryable=False,
             )
         result = result.model_copy(update={"base": base})
-        result = self._persist_uncertainty_evidence(result)
+        evidence_request = resolved_value.model_dump(
+            exclude={"input_digest", "caller_approval"}
+        )
+        result = self._persist_uncertainty_evidence(result, evidence_request)
         self.metrics.increment("quality_status_total")
         self.metrics.increment(f"quality_status_{result.status.value}_total")
         if result.status.value in {"abstain", "degraded"}:

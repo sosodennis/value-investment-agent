@@ -1,14 +1,13 @@
 from decimal import Decimal
 
 import pytest
-
 from fundamental_service.contracts import UncertaintyV1
+from fundamental_service.testsupport import make_valuation
 from fundamental_service.uncertainty import (
     MonteCarloRequestV1,
     SensitivityRequestV1,
     run_uncertainty,
 )
-from fundamental_service.testsupport import make_valuation
 
 
 def test_seeded_monte_carlo_reproduces_and_sensitivity_is_explicit():
@@ -49,6 +48,32 @@ def test_seeded_monte_carlo_reproduces_and_sensitivity_is_explicit():
 def test_monte_carlo_requires_complete_specification():
     with pytest.raises(ValueError):
         MonteCarloRequestV1(uncertainty={"mode": "scenarios"})
+
+
+def test_scenario_mode_rejects_missing_or_ignored_controls():
+    request = (
+        make_valuation()
+        .model_copy(update={"uncertainty": UncertaintyV1(mode="scenarios")})
+        .with_digest()
+    )
+    with pytest.raises(ValueError, match="requires scenario or sensitivity"):
+        run_uncertainty(request)
+    with pytest.raises(ValueError, match="cannot include Monte Carlo"):
+        UncertaintyV1(
+            mode="scenarios",
+            scenarios=({"name": "base", "assumptions": {}},),
+            samples=5,
+            seed=7,
+            invalid_draw_policy="skip",
+            parameters=(
+                {
+                    "path": "assumptions.terminal_growth",
+                    "distribution": "uniform",
+                    "lower": Decimal("0.01"),
+                    "upper": Decimal("0.03"),
+                },
+            ),
+        )
 
 
 def test_invalid_paths_and_correlations_are_rejected():
