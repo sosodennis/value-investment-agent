@@ -853,3 +853,58 @@ service's capture manifest, cache digest, or offline replay is complete.
   issue branch diff against every #312 criterion, obtain an independent
   read-only review, run any affected checks, then open the main-based PR and
   collect its exact-head CI.
+
+## Acquisition-role compatibility and exact-SHA verification
+
+- Implementation checkpoint: `9f74b67493d7272f1d9e1c8b829ab7d0079f5175`
+  (`fix(fundamental): classify SEC acquisition evidence Refs #312`). The
+  change gives SEC submissions an explicit `SourceRole.ACQUISITION`, keeps the
+  lookup response in immutable snapshot and audit evidence, and excludes that
+  role from point-in-time coverage and source selection. Historical manifests
+  retain read compatibility for the removed field and for old digest and
+  capture-time representations; a manifest with a verified capture-time
+  contradiction still fails closed. No stored record or PostgreSQL volume was
+  rewritten.
+- Focused checkpoint command (exit 0):
+  `uv run --project fundamental-service pytest fundamental-service/tests/test_snapshots.py fundamental-service/tests/test_source_acquisition.py fundamental-service/tests/test_sec_source.py -q`
+  Result: `24 passed, 1 warning`. Changed-file Ruff `E,F,I`, Ruff format, and
+  `git diff --check` all exited 0. Commit hooks passed.
+- Exact-SHA service command (exit 0):
+  `FUNDAMENTAL_TEST_DATABASE_URL=postgresql+asyncpg://fundamental:fundamental@127.0.0.1:18481/fundamental_test_9f74b674 ISSUE312_EDGAR_PLUGIN_DIR=/private/tmp/issue312-validation-runtime-v2/EDGAR-4891c4c9889c77af247428ceff4fa7cc52d534ea ISSUE312_XULE_PLUGIN_DIR=/private/tmp/issue312-validation-runtime-v2/xule-7ca1d7637f333f5c3a02379dbe6f6d6c17c88acc/plugin ISSUE312_DQC_RULESET_PATH=/private/tmp/issue312-validation-runtime-v2/dqc_us_rules-31.0.3/dqc_us_rules/dqc-us-2024-V31-ruleset.zip ISSUE312_TAXONOMY_CACHE_DIR=/private/tmp/issue312-sec-taxonomy-2023-2024 fundamental-service/.venv/bin/pytest -q fundamental-service/tests`
+  Result: `197 passed, 2 warnings`, no skips. The Agent client suite returned
+  `4 passed`; architecture guard reported no boundary violations; and
+  `uv lock --check --project fundamental-service` exited 0.
+- PostgreSQL focused exact-SHA checks returned `5 passed, 1 warning`, covering
+  50-process coalescing, distinct-key lock isolation, terminated-owner lock
+  recovery, atomic publication rollback/recovery, and authorization audit.
+- Retained-evidence replay exited 0 with 1,856 facts, semantic digest
+  `c1a098e547276a804299bd16e387f5d1967696b34a66786cc429e6815850361d`, pinned
+  validation profile digest
+  `639140b39584b3ee3276f09a011403dec911efe41ea1b98773f5f770bd5200d4`,
+  taxonomy cache hash
+  `0accc5ab0d4ce6674083bd82cf878a8619b3ac441da8600e0a03aefb8432a3a3`, and
+  zero network attempts. Both normalized and canonical filing replay paths
+  had no blocking findings.
+- Docker project `value-investment-agent-issue-312-sec-ingestion` used only
+  `fundamental-postgres` and `fundamental-service`, with PostgreSQL `18481`
+  and service `18082`. The rebuilt service image is
+  `sha256:7afd22674ebd6180106ad0a6e509f7896cdaf4ca2eae084834ff8baf3e92c934`;
+  both services are healthy and `/readyz` returns
+  `{"status":"ready","contract_version":"internal.v1"}`. Runtime plugin
+  hashes are EDGAR `054a21fa824797787acc2c6e98af4bb040c51bbee41b613cee1793db8fd144af`
+  and Xule `63123d67048019e3c49a0efde0e0aa8ec3eba0fc971da56ebd96dea8e40cd713`.
+- Authenticated live Microsoft ingestion on the rebuilt image returned HTTP
+  200 `created`, `quality_status=verified`, 57 fact IDs, snapshot
+  `snapshot-26fe4569b08f4c8b87c916ac6387ae43`, and manifest digest
+  `c96882aaefc5836b9d6d37e32dbe6ea6e126a6643e019a4d124cc2405e68fc65`.
+  The persisted `sec-submissions` source has role `acquisition`, while the
+  selected filing, index, archive, and taxonomy remain available with their
+  historical timestamps. A retry and the Agent typed client both returned
+  `reused=true` with the same snapshot, manifest, and 57 fact references.
+  PostgreSQL audit outcomes are `created` and `reused`, each with five source
+  hashes.
+- The independent read-only review's P2 finding about current submissions
+  metadata downgrading historical snapshots is resolved by this checkpoint.
+  Load/soak testing and deployment rollout remain intentionally unrun; no PR
+  has been created and issue #312 remains open with its `blocker` label until
+  final diff review and exact-head CI.
