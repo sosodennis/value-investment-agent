@@ -10,7 +10,7 @@ from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 from time import monotonic
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import FastAPI, Request, Response
 from fastapi.exceptions import RequestValidationError
@@ -32,6 +32,10 @@ from .contracts import (
     ValuationInputV1,
 )
 from .data_releases import (
+    ActiveDataReleaseWithManifestV1,
+    DataReleaseActivationRequestV1,
+    DataReleaseCandidatePublishRequestV1,
+    DataReleaseCandidateReceiptV1,
     DataReleaseTrustRootsV1,
 )
 from .facts import CanonicalFactRepository
@@ -186,6 +190,28 @@ def create_app(
     app.state.model_inventory = model_inventory
     app.state.sec_acquisition = sec_acquisition
     ingestion_limiter = RateLimiter(runtime_config.ingestion_rate_limit_per_minute)
+
+    def release_actor(
+        request: Request, allowed_organizations: frozenset[str]
+    ) -> tuple[str, str]:
+        context = request.state.context
+        actor_id = context.principal.subject_id
+        organization_id = context.principal.organization_id
+        if (
+            not isinstance(actor_id, str)
+            or not actor_id
+            or not isinstance(organization_id, str)
+            or not organization_id
+            or organization_id not in allowed_organizations
+        ):
+            metrics.increment("data_release_authorization_failures_total")
+            raise ServiceError(
+                "DATA_RELEASE_FORBIDDEN",
+                "the organization is not authorized for this release operation",
+                status_code=403,
+                retryable=False,
+            )
+        return actor_id, organization_id
 
     @app.middleware("http")
     async def operations_boundary(request: Request, call_next):
@@ -358,6 +384,143 @@ def create_app(
         return success_response(request, application.resolve_snapshot(value))
 
     @app.post(
+        "/v1/data/releases/candidates",
+        response_model=TypedFundamentalResponseEnvelopeV1[
+            DataReleaseCandidateReceiptV1
+        ],
+        openapi_extra={
+            "requestBody": {
+                "required": True,
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "$ref": (
+                                "#/components/schemas/"
+                                "FundamentalDataReleaseCandidateRequestEnvelopeV1"
+                            )
+                        }
+                    }
+                },
+            }
+        },
+    )
+    async def publish_data_release_candidate(request: Request) -> JSONResponse:
+        release_actor(request, runtime_config.release_publish_authorized_organizations)
+        value = decode_input(request, DataReleaseCandidatePublishRequestV1)
+        receipt = application.publish_data_release_candidate(
+            value.manifest, value.verification
+        )
+        metrics.increment("data_release_candidate_publish_total")
+        return success_response(request, receipt)
+
+    @app.get(
+        "/v1/data/releases/{profile_id}",
+        response_model=TypedFundamentalResponseEnvelopeV1[
+            ActiveDataReleaseWithManifestV1
+        ],
+        openapi_extra={
+            "requestBody": {
+                "required": True,
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "$ref": (
+                                "#/components/schemas/"
+                                "FundamentalDataReleaseLookupRequestEnvelopeV1"
+                            )
+                        }
+                    }
+                },
+            }
+        },
+    )
+    async def get_active_data_release(
+        request: Request, profile_id: str
+    ) -> JSONResponse:
+        decode_input(request, EmptyOperationInputV1)
+        result = application.active_data_release(profile_id)
+        return success_response(request, result)
+
+    def change_data_release(
+        request: Request,
+        profile_id: str,
+        operation: Literal["activate", "rollback"],
+    ) -> JSONResponse:
+        actor_id, organization_id = release_actor(
+            request, runtime_config.release_activation_authorized_organizations
+        )
+        value = decode_input(request, DataReleaseActivationRequestV1)
+        if value.operation != operation:
+            raise ServiceError(
+                "DATA_RELEASE_OPERATION_MISMATCH",
+                f"{operation} route requires a {operation} operation",
+                status_code=422,
+                retryable=False,
+            )
+        result = application.change_active_data_release(
+            profile_id,
+            value,
+            actor_id=actor_id,
+            organization_id=organization_id,
+            correlation_id=request.state.correlation_id,
+        )
+        metric_name = (
+            "data_release_activation_total"
+            if operation == "activate"
+            else "data_release_rollback_total"
+        )
+        metrics.increment(metric_name)
+        return success_response(request, result)
+
+    @app.post(
+        "/v1/data/releases/{profile_id}/activate",
+        response_model=TypedFundamentalResponseEnvelopeV1[
+            ActiveDataReleaseWithManifestV1
+        ],
+        openapi_extra={
+            "requestBody": {
+                "required": True,
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "$ref": (
+                                "#/components/schemas/"
+                                "FundamentalDataReleaseActivationRequestEnvelopeV1"
+                            )
+                        }
+                    }
+                },
+            }
+        },
+    )
+    async def activate_data_release(request: Request, profile_id: str) -> JSONResponse:
+        return change_data_release(request, profile_id, "activate")
+
+    @app.post(
+        "/v1/data/releases/{profile_id}/rollback",
+        response_model=TypedFundamentalResponseEnvelopeV1[
+            ActiveDataReleaseWithManifestV1
+        ],
+        openapi_extra={
+            "requestBody": {
+                "required": True,
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "$ref": (
+                                "#/components/schemas/"
+                                "FundamentalDataReleaseActivationRequestEnvelopeV1"
+                            )
+                        }
+                    }
+                },
+            }
+        },
+    )
+    async def rollback_data_release(request: Request, profile_id: str) -> JSONResponse:
+        return change_data_release(request, profile_id, "rollback")
+
+    @app.post(
         "/v1/data/ingestions",
         response_model=TypedFundamentalResponseEnvelopeV1[SecIngestionResponseV1],
         openapi_extra={
@@ -516,6 +679,18 @@ def create_app(
             (
                 "FundamentalIngestionRequestEnvelopeV1",
                 TypedFundamentalRequestEnvelopeV1[SecIngestionRequestV1],
+            ),
+            (
+                "FundamentalDataReleaseCandidateRequestEnvelopeV1",
+                TypedFundamentalRequestEnvelopeV1[DataReleaseCandidatePublishRequestV1],
+            ),
+            (
+                "FundamentalDataReleaseLookupRequestEnvelopeV1",
+                TypedFundamentalRequestEnvelopeV1[EmptyOperationInputV1],
+            ),
+            (
+                "FundamentalDataReleaseActivationRequestEnvelopeV1",
+                TypedFundamentalRequestEnvelopeV1[DataReleaseActivationRequestV1],
             ),
         )
         components = schema.setdefault("components", {}).setdefault("schemas", {})

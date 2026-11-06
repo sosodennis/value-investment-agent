@@ -9,6 +9,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
@@ -35,10 +36,15 @@ from fundamental_service.data_releases import (
     ActiveDataReleaseV1,
     ActiveDataReleaseWithManifestV1,
     ArtifactRefV1,
+    DataReleaseActivationCommandV1,
+    DataReleaseError,
     DataReleaseManifestV1,
+    DataReleaseVerificationV1,
     FactRefV1,
     MappingRefV1,
+    REQUIRED_DATA_RELEASE_GATES,
     SnapshotRefV1,
+    sign_data_release_verification,
 )
 from fundamental_service.governance import ModelInventory
 from fundamental_service.operations import OperationsConfig
@@ -251,6 +257,112 @@ def _release_manifest_for(snapshot, facts):
         **payload,
         manifest_digest=sha256_digest(payload),
     )
+
+
+def _release_verification_for(
+    manifest: DataReleaseManifestV1,
+) -> DataReleaseVerificationV1:
+    payload = {
+        "manifest_digest": manifest.manifest_digest,
+        "verification_suite_digest": "1" * 64,
+        "source_revision": "2" * 40,
+        "verification_run_id": "release-api-run",
+        "workflow_identity": "github://value-investment-agent/release-api-test",
+        "verifier_id": "release-api-test",
+        "passed_gate_ids": tuple(sorted(REQUIRED_DATA_RELEASE_GATES)),
+        "evidence_refs": (
+            ArtifactRefV1(
+                artifact_id="release-api-evidence",
+                content_hash="3" * 64,
+                media_type="application/json",
+                role="verification-evidence",
+            ),
+        ),
+        "mapping_reviews": (),
+    }
+    return sign_data_release_verification(
+        payload,
+        Ed25519PrivateKey.from_private_bytes(b"release-api-key".ljust(32, b"0")),
+    )
+
+
+class _DataReleaseMetadata:
+    def __init__(self) -> None:
+        self.candidates: dict[
+            str, tuple[DataReleaseManifestV1, DataReleaseVerificationV1]
+        ] = {}
+        self.active: dict[str, ActiveDataReleaseWithManifestV1] = {}
+        self.activation_history: set[tuple[str, str]] = set()
+        self.rejected_candidates: set[str] = set()
+        self.commands: list[DataReleaseActivationCommandV1] = []
+
+    def publish_data_release_candidate(
+        self,
+        manifest: DataReleaseManifestV1,
+        verification: DataReleaseVerificationV1,
+    ) -> None:
+        if manifest.manifest_digest in self.rejected_candidates:
+            raise DataReleaseError(
+                "DATA_RELEASE_CANDIDATE_UNVERIFIED", "candidate was rejected"
+            )
+        self.candidates[manifest.manifest_digest] = (manifest, verification)
+
+    def get_active_data_release_with_manifest(
+        self, profile_id: str
+    ) -> ActiveDataReleaseWithManifestV1 | None:
+        return self.active.get(profile_id)
+
+    def get_data_release_manifest(
+        self, manifest_digest: str
+    ) -> DataReleaseManifestV1 | None:
+        candidate = self.candidates.get(manifest_digest)
+        return None if candidate is None else candidate[0]
+
+    def compare_and_swap_data_release(
+        self, command: DataReleaseActivationCommandV1
+    ) -> ActiveDataReleaseV1:
+        self.commands.append(command)
+        candidate = self.candidates.get(command.manifest_digest)
+        if candidate is None or candidate[0].profile_id != command.profile_id:
+            raise DataReleaseError(
+                "DATA_RELEASE_CANDIDATE_UNVERIFIED", "candidate was not published"
+            )
+        current = self.active.get(command.profile_id)
+        current_revision = 0 if current is None else current.active.revision
+        current_digest = None if current is None else current.active.manifest_digest
+        if (
+            current_revision != command.expected_revision
+            or current_digest != command.expected_manifest_digest
+        ):
+            raise DataReleaseError(
+                "DATA_RELEASE_POINTER_CONFLICT",
+                "active release changed",
+                retryable=True,
+            )
+        if (
+            command.operation == "rollback"
+            and (
+                command.profile_id,
+                command.manifest_digest,
+            )
+            not in self.activation_history
+        ):
+            raise DataReleaseError(
+                "DATA_RELEASE_ROLLBACK_TARGET_INVALID", "rollback target was not active"
+            )
+        active = ActiveDataReleaseV1(
+            profile_id=command.profile_id,
+            manifest_digest=command.manifest_digest,
+            revision=current_revision + 1,
+            activated_at=datetime.now(UTC),
+        )
+        resolved = ActiveDataReleaseWithManifestV1(
+            active=active,
+            manifest=candidate[0],
+        )
+        self.active[command.profile_id] = resolved
+        self.activation_history.add((command.profile_id, command.manifest_digest))
+        return active
 
 
 def _policy_with_assumptions(assumptions) -> PolicyRecordV1:
@@ -1456,6 +1568,189 @@ def test_production_fact_reads_require_a_pinned_release_digest():
     )
     assert response.status_code == 422
     assert response.json()["error"]["code"] == "DATA_RELEASE_MANIFEST_REQUIRED"
+
+
+def test_data_release_operations_are_signed_authorized_and_compare_and_swap():
+    metadata = _DataReleaseMetadata()
+    client = TestClient(
+        create_app(
+            config=OperationsConfig(
+                service_token=TEST_SERVICE_TOKEN,
+                rate_limit_per_minute=10_000,
+                release_publish_authorized_organizations=frozenset({"publisher"}),
+                release_activation_authorized_organizations=frozenset({"operator"}),
+            ),
+            metadata_store=metadata,
+            require_metadata=True,
+        )
+    )
+    fact = _canonical_fact("fact-revenue", "revenue")
+    first_snapshot = _SnapshotRepository().snapshot
+    second_snapshot = _SnapshotRepository().snapshot
+    second_snapshot.snapshot_id = "snapshot-release-two"
+    second_snapshot.manifest_digest = "9" * 64
+    rejected_snapshot = _SnapshotRepository().snapshot
+    rejected_snapshot.snapshot_id = "snapshot-rejected"
+    rejected_snapshot.manifest_digest = "8" * 64
+    first = _release_manifest_for(first_snapshot, (fact,))
+    second = _release_manifest_for(second_snapshot, (fact,))
+    rejected = _release_manifest_for(rejected_snapshot, (fact,))
+
+    denied = client.post(
+        "/v1/data/releases/candidates",
+        headers=auth_headers(organization_id="operator"),
+        json=make_internal_envelope(
+            {
+                "manifest": first.model_dump(mode="json"),
+                "verification": _release_verification_for(first).model_dump(
+                    mode="json"
+                ),
+            },
+            organization_id="operator",
+        ),
+    )
+    assert denied.status_code == 403
+    assert denied.json()["error"]["code"] == "DATA_RELEASE_FORBIDDEN"
+    assert metadata.candidates == {}
+
+    published = client.post(
+        "/v1/data/releases/candidates",
+        headers=auth_headers(organization_id="publisher"),
+        json=make_internal_envelope(
+            {
+                "manifest": first.model_dump(mode="json"),
+                "verification": _release_verification_for(first).model_dump(
+                    mode="json"
+                ),
+            },
+            organization_id="publisher",
+        ),
+    )
+    assert published.status_code == 200, published.text
+    assert published.json()["result"]["manifest_digest"] == first.manifest_digest
+
+    activation = {
+        "manifest_digest": first.manifest_digest,
+        "expected_revision": 0,
+        "expected_manifest_digest": None,
+        "operation": "activate",
+        "command_id": "activation-one",
+        "reason": "Initial release acceptance",
+    }
+    activated = client.post(
+        f"/v1/data/releases/{first.profile_id}/activate",
+        headers=auth_headers(organization_id="operator"),
+        json=make_internal_envelope(activation, organization_id="operator"),
+    )
+    assert activated.status_code == 200, activated.text
+    assert activated.json()["result"]["active"]["revision"] == 1
+    assert metadata.commands[-1].actor_id == "subject-test"
+    assert metadata.commands[-1].organization_id == "operator"
+    assert metadata.commands[-1].correlation_id == "correlation-test"
+
+    active_read = client.request(
+        "GET",
+        f"/v1/data/releases/{first.profile_id}",
+        headers=auth_headers(organization_id="operator"),
+        json=make_internal_envelope({}, organization_id="operator"),
+    )
+    assert active_read.status_code == 200
+    assert active_read.json()["result"]["manifest"]["manifest_digest"] == (
+        first.manifest_digest
+    )
+
+    metadata.rejected_candidates.add(rejected.manifest_digest)
+    rejected_response = client.post(
+        "/v1/data/releases/candidates",
+        headers=auth_headers(organization_id="publisher"),
+        json=make_internal_envelope(
+            {
+                "manifest": rejected.model_dump(mode="json"),
+                "verification": _release_verification_for(rejected).model_dump(
+                    mode="json"
+                ),
+            },
+            organization_id="publisher",
+        ),
+    )
+    assert rejected_response.status_code == 422
+    unchanged = metadata.get_active_data_release_with_manifest(first.profile_id)
+    assert unchanged is not None
+    assert unchanged.active.revision == 1
+    assert unchanged.active.manifest_digest == first.manifest_digest
+
+    second_publish = client.post(
+        "/v1/data/releases/candidates",
+        headers=auth_headers(organization_id="publisher"),
+        json=make_internal_envelope(
+            {
+                "manifest": second.model_dump(mode="json"),
+                "verification": _release_verification_for(second).model_dump(
+                    mode="json"
+                ),
+            },
+            organization_id="publisher",
+        ),
+    )
+    assert second_publish.status_code == 200, second_publish.text
+
+    stale_activation = {
+        **activation,
+        "manifest_digest": second.manifest_digest,
+        "command_id": "activation-stale",
+    }
+    stale = client.post(
+        f"/v1/data/releases/{first.profile_id}/activate",
+        headers=auth_headers(organization_id="operator"),
+        json=make_internal_envelope(stale_activation, organization_id="operator"),
+    )
+    assert stale.status_code == 409
+    assert stale.json()["error"]["code"] == "DATA_RELEASE_POINTER_CONFLICT"
+
+    second_activation = {
+        **stale_activation,
+        "expected_revision": 1,
+        "expected_manifest_digest": first.manifest_digest,
+        "command_id": "activation-two",
+    }
+    activated_second = client.post(
+        f"/v1/data/releases/{first.profile_id}/activate",
+        headers=auth_headers(organization_id="operator"),
+        json=make_internal_envelope(second_activation, organization_id="operator"),
+    )
+    assert activated_second.status_code == 200, activated_second.text
+    assert activated_second.json()["result"]["active"]["manifest_digest"] == (
+        second.manifest_digest
+    )
+
+    rollback = {
+        **second_activation,
+        "manifest_digest": first.manifest_digest,
+        "expected_revision": 2,
+        "expected_manifest_digest": second.manifest_digest,
+        "operation": "rollback",
+        "command_id": "rollback-one",
+        "reason": "Restore prior verified release",
+    }
+    rolled_back = client.post(
+        f"/v1/data/releases/{first.profile_id}/rollback",
+        headers=auth_headers(organization_id="operator"),
+        json=make_internal_envelope(rollback, organization_id="operator"),
+    )
+    assert rolled_back.status_code == 200, rolled_back.text
+    assert rolled_back.json()["result"]["active"]["revision"] == 3
+    assert rolled_back.json()["result"]["active"]["manifest_digest"] == (
+        first.manifest_digest
+    )
+
+    schema = client.app.openapi()
+    assert "FundamentalDataReleaseCandidateRequestEnvelopeV1" in str(schema)
+    assert "FundamentalDataReleaseLookupRequestEnvelopeV1" in str(schema)
+    assert "FundamentalDataReleaseActivationRequestEnvelopeV1" in str(schema)
+    metrics = client.get("/metrics").text
+    assert "fundamental_service_data_release_candidate_publish_total 2" in metrics
+    assert "fundamental_service_data_release_activation_total 2" in metrics
+    assert "fundamental_service_data_release_rollback_total 1" in metrics
 
 
 def test_internal_endpoints_require_signed_context_and_redact_credentials():
