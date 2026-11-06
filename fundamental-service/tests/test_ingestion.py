@@ -429,6 +429,9 @@ def test_sec_ingestion_blocks_real_aapl_efm_finding_without_publishing_facts(
     assert rejection.integrity_evidence.accession_number == "0000320193-24-000123"
     assert rejection.integrity_evidence.quality_decision == "block"
     assert any(finding.blocks for finding in rejection.integrity_evidence.findings)
+    finding_codes = {finding.code for finding in rejection.integrity_evidence.findings}
+    assert "EFM.5.02.05.graphicFileError" not in finding_codes
+    assert "EFM.5.02.05.disallowedElement" in finding_codes
     assert len(rejection.parser_replay_digests) == 2
     assert all(len(digest) == 64 for digest in rejection.parser_replay_digests)
 

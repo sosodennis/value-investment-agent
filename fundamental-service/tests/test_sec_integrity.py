@@ -8,7 +8,10 @@ from zipfile import ZIP_DEFLATED, ZipFile
 import pytest
 
 from fundamental_service.contracts import SourceRole
-from fundamental_service.sec_integrity import assess_filing_response
+from fundamental_service.sec_integrity import (
+    assess_filing_response,
+    extract_referenced_graphics,
+)
 from fundamental_service.snapshots import CapturedSource, SnapshotError
 
 ACCESSION = "0000320193-24-000123"
@@ -164,3 +167,75 @@ def test_accession_mismatch_is_blocked_before_normalization():
         )
 
     assert error.value.code == "SOURCE_ARCHIVE_ACCESSION_MISMATCH"
+
+
+def test_referenced_graphics_are_read_from_the_accession_archive():
+    image = b"\xff\xd8\xffjpeg"
+    archive_payload = io.BytesIO()
+    with ZipFile(archive_payload, "w", compression=ZIP_DEFLATED) as package:
+        package.writestr(PRIMARY_NAME, b"<html><body></body></html>")
+        package.writestr("aapl-20240928_g1.jpg", image)
+    html = (
+        b'<html><img src="aapl-20240928_g1.jpg">'
+        b'<img src="https://example.test/tracker.png">'
+        b"</html>"
+    )
+
+    resources = extract_referenced_graphics(
+        html_content=html,
+        archive_content=archive_payload.getvalue(),
+        primary_document=PRIMARY_NAME,
+    )
+
+    assert resources == (("aapl-20240928_g1.jpg", image),)
+
+
+@pytest.mark.parametrize(
+    "source",
+    (
+        b"../outside.jpg",
+        b"%2e%2e/outside.jpg",
+        b"..\\outside.jpg",
+        b"%2Foutside.jpg",
+    ),
+)
+def test_referenced_graphics_never_extract_paths_outside_the_filing_root(
+    source: bytes,
+):
+    archive_payload = _archive(b"<html></html>")
+
+    resources = extract_referenced_graphics(
+        html_content=b'<html><img src="' + source + b'"></html>',
+        archive_content=archive_payload,
+        primary_document=PRIMARY_NAME,
+    )
+
+    assert resources == ()
+
+
+def test_percent_encoded_backslash_path_is_not_extracted():
+    archive_payload = io.BytesIO()
+    with ZipFile(archive_payload, "w", compression=ZIP_DEFLATED) as package:
+        package.writestr("..\\outside.jpg", b"unsafe")
+
+    resources = extract_referenced_graphics(
+        html_content=b'<html><img src="%2e%2e%5coutside.jpg"></html>',
+        archive_content=archive_payload.getvalue(),
+        primary_document=PRIMARY_NAME,
+    )
+
+    assert resources == ()
+
+
+def test_percent_encoded_absolute_path_is_not_extracted():
+    archive_payload = io.BytesIO()
+    with ZipFile(archive_payload, "w", compression=ZIP_DEFLATED) as package:
+        package.writestr("/outside.jpg", b"unsafe")
+
+    resources = extract_referenced_graphics(
+        html_content=b'<html><img src="%2Foutside.jpg"></html>',
+        archive_content=archive_payload.getvalue(),
+        primary_document=PRIMARY_NAME,
+    )
+
+    assert resources == ()

@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 import hashlib
+from html.parser import HTMLParser
 import io
 import json
+import posixpath
 import re
+import stat
 from dataclasses import dataclass
-from zipfile import BadZipFile, ZipFile
+from urllib.parse import unquote, urlsplit
+from zipfile import BadZipFile, ZipFile, ZipInfo
 
 from .contracts import RemovedByteRangeV1
 from .serialization import sha256_digest
@@ -24,6 +28,108 @@ _NORMALIZATION_RULE = (
     "document only when archive index size, Akamai response metadata, and "
     "the exact archive member independently prove the representation delta"
 )
+_MAX_STAGED_GRAPHICS_BYTES = 32 * 1024 * 1024
+
+
+class _ImageSourceParser(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.sources: list[str] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        self._capture(tag, attrs)
+
+    def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        self._capture(tag, attrs)
+
+    def _capture(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag.lower() != "img":
+            return
+        source = next((value for name, value in attrs if name.lower() == "src"), None)
+        if source:
+            self.sources.append(source)
+
+
+def extract_referenced_graphics(
+    *,
+    html_content: bytes,
+    archive_content: bytes,
+    primary_document: str,
+    max_total_bytes: int = _MAX_STAGED_GRAPHICS_BYTES,
+) -> tuple[tuple[str, bytes], ...]:
+    """Read local image references from the accession-matched SEC archive.
+
+    External and unresolved references are left for Arelle's EFM validation to
+    reject. Archive paths are never written directly from untrusted HTML.
+    """
+    parser = _ImageSourceParser()
+    parser.feed(html_content.decode("utf-8", errors="replace"))
+    parser.close()
+
+    requested_paths: set[str] = set()
+    for source in parser.sources:
+        parsed = urlsplit(source)
+        if (
+            parsed.scheme
+            or parsed.netloc
+            or parsed.path.startswith("/")
+            or "\\" in parsed.path
+        ):
+            continue
+        decoded_path = unquote(parsed.path)
+        if (
+            not decoded_path
+            or decoded_path.startswith("/")
+            or "\x00" in decoded_path
+            or "\\" in decoded_path
+        ):
+            continue
+        archive_path = posixpath.normpath(
+            posixpath.join(posixpath.dirname(primary_document), decoded_path)
+        )
+        if archive_path in {"", ".", ".."} or archive_path.startswith("../"):
+            continue
+        requested_paths.add(archive_path)
+
+    if not requested_paths:
+        return ()
+
+    try:
+        with ZipFile(io.BytesIO(archive_content)) as package:
+            info_by_name: dict[str, list[ZipInfo]] = {}
+            for info in package.infolist():
+                if info.filename in requested_paths:
+                    info_by_name.setdefault(info.filename, []).append(info)
+            resources: list[tuple[str, bytes]] = []
+            total_bytes = 0
+            for archive_path in sorted(requested_paths):
+                matches = info_by_name.get(archive_path, [])
+                if not matches:
+                    continue
+                if len(matches) != 1:
+                    raise SnapshotError(
+                        "SOURCE_ARCHIVE_RESOURCE_AMBIGUOUS",
+                        "SEC archive contains duplicate referenced image paths",
+                    )
+                info = matches[0]
+                file_type = stat.S_IFMT(info.external_attr >> 16)
+                if info.is_dir() or file_type not in {0, stat.S_IFREG}:
+                    raise SnapshotError(
+                        "SOURCE_ARCHIVE_RESOURCE_INVALID",
+                        "SEC archive referenced image is not a regular file",
+                    )
+                total_bytes += info.file_size
+                if total_bytes > max_total_bytes:
+                    raise SnapshotError(
+                        "SOURCE_ARCHIVE_RESOURCE_LIMIT",
+                        "referenced SEC images exceed the offline staging limit",
+                    )
+                resources.append((archive_path, package.read(info)))
+            return tuple(resources)
+    except (BadZipFile, OSError) as error:
+        raise SnapshotError(
+            "SOURCE_ARCHIVE_INVALID", "SEC XBRL archive is invalid"
+        ) from error
 
 
 @dataclass(frozen=True)

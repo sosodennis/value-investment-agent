@@ -176,7 +176,7 @@ def test_parser_rejects_source_hash_mismatch():
     assert error.value.code == "SOURCE_HASH_MISMATCH"
 
 
-def test_aapl_sec_efm_dqc_replay_records_blocking_finding_and_zero_network(
+def test_aapl_sec_efm_dqc_replay_resolves_archived_images_without_network(
     tmp_path: Path,
 ):
     profile, taxonomy_dir = _configured_sec_profile()
@@ -188,13 +188,16 @@ def test_aapl_sec_efm_dqc_replay_records_blocking_finding_and_zero_network(
     with ZipFile(
         fixture_root / "apple-2024-original-0000320193-24-000123-xbrl.zip"
     ) as archive:
-        for filename in (
+        archive_names = (
             "aapl-20240928.xsd",
             "aapl-20240928_pre.xml",
             "aapl-20240928_def.xml",
             "aapl-20240928_lab.xml",
             "aapl-20240928_cal.xml",
-        ):
+            "aapl-20240928_g1.jpg",
+            "aapl-20240928_g2.jpg",
+        )
+        for filename in archive_names:
             (tmp_path / filename).write_bytes(archive.read(filename))
 
     reports = tuple(
@@ -218,11 +221,141 @@ def test_aapl_sec_efm_dqc_replay_records_blocking_finding_and_zero_network(
     )
     assert report.network_attempt_count == 0
     assert report.replay_digest() == replay.replay_digest()
+    assert "EFM.5.02.05.graphicFileError" not in report.finding_codes
     assert "EFM.5.02.05.disallowedElement" in report.blocking_finding_codes()
     assert any(
         finding.code == "EFM.5.02.05.disallowedElement" and finding.severity == "error"
         for finding in report.findings
     )
+
+
+def test_aapl_efm_image_resolution_is_offline_and_preserves_other_errors(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    required = ("ISSUE328_EDGAR_PLUGIN_DIR", "ISSUE328_TAXONOMY_CACHE_DIR")
+    if not all(os.environ.get(name) for name in required):
+        pytest.skip("pinned SEC EFM runtime paths are not configured")
+
+    from arelle.CntlrCmdLine import CntlrCmdLine, ParserForDynamicPlugins
+    from arelle.RuntimeOptions import RuntimeOptions
+    from arelle.logging.handlers.LogToXmlHandler import LogToXmlHandler
+
+    fixture_root = Path(__file__).parent / "fixtures" / "sec-edgar"
+    raw_content = (fixture_root / "apple-2024-original-aapl-20240928.htm").read_bytes()
+    archive_path = fixture_root / "apple-2024-original-0000320193-24-000123-xbrl.zip"
+    archive_root = tmp_path / "accession-archive"
+    with ZipFile(archive_path) as archive:
+        archive_root.mkdir()
+        for name in (
+            "aapl-20240928.xsd",
+            "aapl-20240928_pre.xml",
+            "aapl-20240928_def.xml",
+            "aapl-20240928_lab.xml",
+            "aapl-20240928_cal.xml",
+        ):
+            (archive_root / name).write_bytes(archive.read(name))
+        graphics = {
+            name: archive.read(name)
+            for name in ("aapl-20240928_g1.jpg", "aapl-20240928_g2.jpg")
+        }
+
+    case_roots = {
+        "missing": tmp_path / "missing-graphics",
+        "present": tmp_path / "present-graphics",
+    }
+    for case_root in case_roots.values():
+        case_root.mkdir()
+        (case_root / "aapl-20240928.htm").write_bytes(raw_content)
+        for source in archive_root.iterdir():
+            (case_root / source.name).write_bytes(source.read_bytes())
+    for name, content in graphics.items():
+        (case_roots["present"] / name).write_bytes(content)
+
+    plugin_root = tmp_path / "plugins"
+    plugin_root.mkdir()
+    edgar_plugin_dir = Path(os.environ["ISSUE328_EDGAR_PLUGIN_DIR"])
+    (plugin_root / "EDGAR").symlink_to(edgar_plugin_dir, target_is_directory=True)
+    taxonomy_cache_dir = Path(os.environ["ISSUE328_TAXONOMY_CACHE_DIR"])
+    network_attempts: list[object] = []
+
+    def blocked_network(*args: object, **kwargs: object) -> None:
+        network_attempts.append((args, kwargs))
+        raise AssertionError("offline SEC replay attempted network access")
+
+    monkeypatch.setattr(socket.socket, "connect", blocked_network)
+
+    def replay(case_root: Path) -> dict[str, object]:
+        controller = CntlrCmdLine(disable_persistent_config=True)
+        controller._pluginManager._pluginBase = str(plugin_root) + os.sep
+        edgar_plugin = controller._pluginManager.addPluginModule("EDGAR/validate")
+        assert edgar_plugin is not None
+        controller._pluginManager.pluginMethodsForClasses.clear()
+        controller.preloadedPlugins = {"EDGAR/validate": edgar_plugin}
+        handler = LogToXmlHandler(controller)
+        controller.startLogging(logHandler=handler)
+        options = RuntimeOptions(
+            plugins="EDGAR/validate",
+            entrypointFile=str(case_root / "aapl-20240928.htm"),
+            validate=True,
+            disclosureSystemName="efm-strict-all-years",
+            workOffline=True,
+            cacheDirectory=str(taxonomy_cache_dir),
+            keepOpen=True,
+            disablePersistentConfig=True,
+            logLevel="DEBUG",
+        )
+        for extender in controller.plugins.hooks("CntlrCmdLine.Options"):
+            extender(ParserForDynamicPlugins(options))
+        controller.postLoggingInit()
+        assert controller.run(options)
+        model = controller.modelManager.modelXbrl
+        assert (
+            controller.modelManager.disclosureSystem.name
+            == "US SEC (Edgar Filing Manual, Strict, all years)"
+        )
+        facts = sorted(
+            (
+                str(getattr(getattr(fact, "concept", None), "qname", "")),
+                str(getattr(fact, "value", "")),
+                str(getattr(fact, "contextID", "")),
+                str(getattr(fact, "unitID", "")),
+            )
+            for fact in model.facts
+        )
+        findings = tuple(
+            handler.recordToJson(record) for record in handler.logRecordBuffer
+        )
+        result = {
+            "fact_count": len(facts),
+            "fact_digest": hashlib.sha256(
+                json.dumps(facts, separators=(",", ":")).encode()
+            ).hexdigest(),
+            "model_errors": tuple(sorted(str(code) for code in model.errors)),
+            "findings": findings,
+        }
+        controller.modelManager.close()
+        return result
+
+    missing = replay(case_roots["missing"])
+    present = replay(case_roots["present"])
+
+    graphic_error = "EFM.5.02.05.graphicFileError"
+    disallowed_element = "EFM.5.02.05.disallowedElement"
+    assert missing["fact_count"] == present["fact_count"] >= 1000
+    assert missing["fact_digest"] == present["fact_digest"]
+    assert missing["model_errors"].count(graphic_error) == 2
+    assert graphic_error not in present["model_errors"]
+    assert disallowed_element in missing["model_errors"]
+    assert disallowed_element in present["model_errors"]
+    for result, expected_code in (
+        (missing, graphic_error),
+        (present, disallowed_element),
+    ):
+        assert any(
+            finding.get("code") == expected_code and finding.get("level") == "error"
+            for finding in result["findings"]
+        )
+    assert network_attempts == []
 
 
 def test_aapl_normalization_preserves_real_xbrl_semantics(tmp_path: Path):
