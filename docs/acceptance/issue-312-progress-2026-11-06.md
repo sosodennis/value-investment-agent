@@ -908,3 +908,53 @@ service's capture manifest, cache digest, or offline replay is complete.
   Load/soak testing and deployment rollout remain intentionally unrun; no PR
   has been created and issue #312 remains open with its `blocker` label until
   final diff review and exact-head CI.
+
+## SEC redirect rejection and exact-head checkpoint
+
+- Issue: #312. PR: [#332](https://github.com/sosodennis/value-investment-agent/pull/332),
+  base `main`. Candidate head:
+  `4749fd7ff9f2ed02e7283d9c7896fb904e34d406`. Candidate base is
+  `origin/main` at `10a88e41f3f5d63ec9feebb472dbd4d5469c647f`.
+- Issue-scoped code checkpoints:
+  `658042a4cd01e392687cf0252d08a5d98d020fc1`
+  (`fix(fundamental): reject SEC source redirects Refs #312`) disables
+  urllib's automatic redirect handling and maps redirect responses to the
+  non-retryable `SOURCE_REDIRECT_NOT_ALLOWED` error;
+  `4749fd7ff9f2ed02e7283d9c7896fb904e34d406`
+  (`test(fundamental): verify SEC transport blocks redirects Refs #312`) adds
+  a real loopback HTTP 302 regression test proving the redirect destination
+  receives zero requests. The adapter test also confirms the stable error and
+  that only the allowlisted SEC URL is requested.
+- Read-only reviewer re-reviewed exact head `4749fd7f` and confirmed the
+  redirect/SSRF finding is resolved: production construction uses the
+  protected default transport, redirects become `SOURCE_REDIRECT_NOT_ALLOWED`,
+  and the loopback test observes zero destination requests. No other actionable
+  findings were reported. The reviewer made no changes and ran no tests.
+- Exact-head local verification reported for `4749fd7f`:
+  - Fundamental service suite: `199 passed, 2 warnings`, no skips.
+  - SEC source tests: `10 passed`.
+  - PostgreSQL coalescing, distinct-key, process-recovery, publication-recovery,
+    and authorization-audit checks: `5 passed`.
+  - Agent client suite: `4 passed`.
+  - Architecture Guard, dependency lock check, Ruff, format check, and
+    `git diff --check`: passed.
+  - Retained SEC replay: 1,856 facts; semantic digest
+    `c1a098e547276a804299bd16e387f5d1967696b34a66786cc429e6815850361d`;
+    zero network attempts.
+- Docker project `value-investment-agent-issue-312-sec-ingestion` remained
+  healthy with its existing PostgreSQL volume and database. The candidate
+  service image was
+  `sha256:1eadf3b8e88e8e0daa10c01353f1b72a909ba70782d0ac7301ebbe4140e70d0a`;
+  `/readyz` returned ready. Signed live ingestion returned `created`, verified,
+  with 57 facts and snapshot `snapshot-fe49c6730def13de896ac29fb99421f2`;
+  manifest digest was
+  `c6003e981afa14dc7cc0beff1c078952aeb22394254bcf380b09b4d53b4bc57d`.
+  A retry reused the same snapshot and digest. The submissions source had role
+  `acquisition`.
+- GitHub state at this checkpoint: PR #332 still points to the older head
+  `ce286b3c8d613fdf5e96f1903230c5c6952ad2bc`; its checks passed, with
+  `fundamental-release-gate` skipped. Those checks do not verify `4749fd7f`.
+  Issue #312 remains open with its `blocker` label. This checkpoint is not an
+  acceptance or `VERIFIED` record. Next: commit this evidence, push the code and
+  evidence commits, update PR #332 with the candidate head and evidence, then
+  require CI and final acceptance against the new exact PR head before merge.
