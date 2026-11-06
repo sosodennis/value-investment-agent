@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import multiprocessing
 import os
 import time
@@ -13,7 +14,11 @@ from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from fastapi.testclient import TestClient
+from sqlalchemy import text
+from sqlalchemy.exc import DBAPIError
+
 from fundamental_service.app import create_app
 from fundamental_service.contracts import (
     CanonicalFactV1,
@@ -29,6 +34,17 @@ from fundamental_service.contracts import (
     SourceRole,
     SourceSnapshotV1,
     XbrlContextV1,
+)
+from fundamental_service.data_releases import (
+    REQUIRED_DATA_RELEASE_GATES,
+    DataReleaseActivationCommandV1,
+    DataReleaseError,
+    DataReleaseManifestV1,
+    DataReleaseTrustRootsV1,
+    DataReleaseVerificationV1,
+    DataReleaseVerifierV1,
+    sign_data_release_verification,
+    sign_mapping_review_evidence,
 )
 from fundamental_service.facts import CanonicalMappingV1
 from fundamental_service.metadata import (
@@ -50,15 +66,35 @@ from fundamental_service.testsupport import (
     make_internal_envelope,
     make_valuation,
 )
-from sqlalchemy import text
 
 DATABASE_URL = os.getenv("FUNDAMENTAL_TEST_DATABASE_URL")
+RELEASE_TEST_RUNNER_KEY = Ed25519PrivateKey.from_private_bytes(b"r" * 32)
+RELEASE_TEST_REVIEWER_KEY = Ed25519PrivateKey.from_private_bytes(b"v" * 32)
 pytestmark = pytest.mark.skipif(
     not DATABASE_URL,
     reason=(
         "FUNDAMENTAL_TEST_DATABASE_URL is required for the PostgreSQL acceptance suite"
     ),
 )
+
+
+def _release_test_trust_roots() -> DataReleaseTrustRootsV1:
+    return DataReleaseTrustRootsV1(
+        verifiers={
+            "postgres-test-runner": DataReleaseVerifierV1(
+                workflow_identity="github://value-investment-agent/postgres-tests",
+                public_key_ed25519_base64=base64.b64encode(
+                    RELEASE_TEST_RUNNER_KEY.public_key().public_bytes_raw()
+                ).decode("ascii"),
+                verification_suite_digest="f" * 64,
+            )
+        },
+        mapping_reviewers={
+            "postgres-test-reviewer": base64.b64encode(
+                RELEASE_TEST_REVIEWER_KEY.public_key().public_bytes_raw()
+            ).decode("ascii")
+        },
+    )
 
 
 def _snapshot(
@@ -213,7 +249,7 @@ def _fact_for_snapshot(snapshot: SourceSnapshotV1, fact_id: str) -> CanonicalFac
         security_id=snapshot.identity.security_id,
         concept="us-gaap:Revenues",
         normalized_field="revenue",
-        value=Decimal("100"),
+        value=Decimal(100),
         unit="USD",
         scale=0,
         currency="USD",
@@ -477,7 +513,11 @@ def _hold_ingestion_lock_until_terminated(
 @pytest.fixture
 def metadata() -> PostgresMetadataStore:
     assert DATABASE_URL is not None
-    store = PostgresMetadataStore(DATABASE_URL, auto_migrate=True)
+    store = PostgresMetadataStore(
+        DATABASE_URL,
+        auto_migrate=True,
+        data_release_trust_roots=_release_test_trust_roots(),
+    )
     store.start()
     yield store
     store.close()
@@ -498,6 +538,426 @@ def test_schema_and_snapshot_survive_restart(metadata: PostgresMetadataStore):
             PostgresSnapshotRepository(restarted).get(snapshot.snapshot_id) == snapshot
         )
         assert restarted.health.schema_version == SCHEMA_VERSION
+    finally:
+        restarted.close()
+
+
+def _data_release_candidate(
+    suffix: str, *, profile_id: str | None = None
+) -> tuple[DataReleaseManifestV1, DataReleaseVerificationV1]:
+    fact_refs = ({"fact_id": f"fact-{suffix}", "fact_digest": "d" * 64},)
+    taxonomy_ref = {
+        "artifact_id": f"taxonomy-{suffix}",
+        "content_hash": "b" * 64,
+        "media_type": "application/zip",
+        "role": "taxonomy",
+    }
+    evidence_ref = {
+        "artifact_id": f"quality-evidence-{suffix}",
+        "content_hash": "c" * 64,
+        "media_type": "application/json",
+        "role": "quality-evidence",
+    }
+    manifest_payload = {
+        "profile_id": profile_id or f"sec-public-pit-{suffix}",
+        "release_id": f"data-release-{suffix}",
+        "created_at": datetime(2026, 1, 1, tzinfo=UTC),
+        "snapshot_refs": (
+            {
+                "snapshot_id": f"snapshot-{suffix}",
+                "manifest_digest": "a" * 64,
+                "facts": fact_refs,
+                "fact_set_digest": sha256_digest(fact_refs),
+            },
+        ),
+        "mapping_refs": (
+            {"mapping_id": f"mapping-{suffix}", "mapping_digest": "e" * 64},
+        ),
+        "taxonomy_refs": (taxonomy_ref,),
+        "parser_version": "arelle-release==2.47.4",
+        "quality_profile_digest": "c" * 64,
+        "required_fields": ("revenue",),
+        "artifact_refs": (evidence_ref,),
+    }
+    manifest = DataReleaseManifestV1(
+        **manifest_payload,
+        manifest_digest=sha256_digest(manifest_payload),
+    )
+    mapping_review = sign_mapping_review_evidence(
+        {
+            "mapping_id": f"mapping-{suffix}",
+            "mapping_digest": "e" * 64,
+            "author_id": "mapping-builder",
+            "reviewer_id": "postgres-test-reviewer",
+            "reviewed_at": datetime(2026, 1, 1, tzinfo=UTC),
+            "evidence_refs": (evidence_ref,),
+            "fixture_digest": sha256_digest({"mapping": suffix}),
+        },
+        RELEASE_TEST_REVIEWER_KEY,
+    )
+    verification = sign_data_release_verification(
+        {
+            "manifest_digest": manifest.manifest_digest,
+            "verification_suite_digest": "f" * 64,
+            "source_revision": "0" * 40,
+            "verification_run_id": f"postgres-release-{suffix}",
+            "workflow_identity": "github://value-investment-agent/postgres-tests",
+            "verifier_id": "postgres-test-runner",
+            "passed_gate_ids": tuple(sorted(REQUIRED_DATA_RELEASE_GATES)),
+            "evidence_refs": (evidence_ref,),
+            "mapping_reviews": (mapping_review,),
+        },
+        RELEASE_TEST_RUNNER_KEY,
+    )
+    return manifest, verification
+
+
+def _activation_command(
+    manifest: DataReleaseManifestV1,
+    *,
+    command_id: str | None = None,
+    expected_revision: int = 0,
+    expected_manifest_digest: str | None = None,
+    operation: str = "activate",
+) -> DataReleaseActivationCommandV1:
+    return DataReleaseActivationCommandV1(
+        profile_id=manifest.profile_id,
+        manifest_digest=manifest.manifest_digest,
+        expected_revision=expected_revision,
+        expected_manifest_digest=expected_manifest_digest,
+        operation=operation,
+        command_id=command_id or uuid4().hex,
+        actor_id="release-operator",
+        organization_id="org-fundamental-test",
+        correlation_id=f"release-{uuid4().hex}",
+        reason="PostgreSQL release activation test",
+    )
+
+
+def test_data_release_activation_is_fenced_and_v2_compatible(
+    metadata: PostgresMetadataStore,
+):
+    manifest, verification = _data_release_candidate(uuid4().hex)
+    metadata.publish_data_release_candidate(manifest, verification)
+    metadata.publish_data_release_candidate(manifest, verification)
+    assert metadata.get_data_release_manifest(manifest.manifest_digest) == manifest
+    command = _activation_command(manifest)
+
+    active = metadata.compare_and_swap_data_release(command)
+    assert active.profile_id == manifest.profile_id
+    assert active.manifest_digest == manifest.manifest_digest
+    assert active.revision == 1
+    resolved = metadata.get_active_data_release_with_manifest(manifest.profile_id)
+    assert resolved is not None
+    assert resolved.active == active
+    assert resolved.manifest == manifest
+    assert metadata.get_data_release_manifest(manifest.manifest_digest) == manifest
+    assert metadata.compare_and_swap_data_release(command) == active
+    altered_retry = command.model_copy(update={"reason": "different command"})
+    with pytest.raises(DataReleaseError) as idempotency_conflict:
+        metadata.compare_and_swap_data_release(altered_retry)
+    assert idempotency_conflict.value.code == "DATA_RELEASE_IDEMPOTENCY_CONFLICT"
+
+    stale = _activation_command(
+        manifest,
+        expected_revision=0,
+        expected_manifest_digest=None,
+    )
+    with pytest.raises(DataReleaseError) as conflict:
+        metadata.compare_and_swap_data_release(stale)
+    assert conflict.value.code == "DATA_RELEASE_POINTER_CONFLICT"
+    assert metadata.get_active_data_release(manifest.profile_id) == active
+
+    async def read_release_schema() -> tuple[int, int, int]:
+        async with metadata._runner._engine.connect() as connection:
+            version_count = await connection.scalar(
+                text(
+                    "SELECT count(*) FROM fundamental.schema_migrations "
+                    "WHERE version=:version"
+                ),
+                {"version": SCHEMA_VERSION},
+            )
+            capability_count = await connection.scalar(
+                text(
+                    "SELECT count(*) FROM fundamental.schema_capabilities "
+                    "WHERE capability_id='data-release-activation-v1'"
+                )
+            )
+            audit_count = await connection.scalar(
+                text(
+                    "SELECT count(*) FROM fundamental.data_release_activation_audit "
+                    "WHERE profile_id=:profile_id"
+                ),
+                {"profile_id": manifest.profile_id},
+            )
+        return (
+            int(version_count or 0),
+            int(capability_count or 0),
+            int(audit_count or 0),
+        )
+
+    assert metadata.health.schema_version == SCHEMA_VERSION
+    assert metadata._runner.run(read_release_schema()) == (1, 1, 1)
+
+    old_version_reader = PostgresMetadataStore(DATABASE_URL or "", auto_migrate=False)
+    old_version_reader.start()
+    try:
+        assert old_version_reader.health.schema_version == SCHEMA_VERSION
+        assert old_version_reader.get_active_data_release(manifest.profile_id) == active
+    finally:
+        old_version_reader.close()
+
+
+def test_data_release_candidate_is_not_persisted_without_trust_roots():
+    assert DATABASE_URL is not None
+    metadata = PostgresMetadataStore(DATABASE_URL, auto_migrate=True)
+    metadata.start()
+    manifest, verification = _data_release_candidate(uuid4().hex)
+
+    try:
+        with pytest.raises(DataReleaseError) as unconfigured:
+            metadata.publish_data_release_candidate(manifest, verification)
+        assert unconfigured.value.code == "DATA_RELEASE_TRUST_ROOTS_UNCONFIGURED"
+
+        async def candidate_count() -> int:
+            async with metadata._runner._engine.connect() as connection:
+                count = await connection.scalar(
+                    text(
+                        "SELECT count(*) FROM fundamental.data_release_manifests "
+                        "WHERE manifest_digest=:digest"
+                    ),
+                    {"digest": manifest.manifest_digest},
+                )
+            return int(count or 0)
+
+        assert metadata._runner.run(candidate_count()) == 0
+    finally:
+        metadata.close()
+
+
+def test_data_release_candidate_transaction_rolls_back_after_manifest_insert(
+    metadata: PostgresMetadataStore,
+):
+    manifest, verification = _data_release_candidate(uuid4().hex)
+    suffix = uuid4().hex
+    function_name = f"reject_release_verification_{suffix}"
+    trigger_name = f"reject_release_verification_trigger_{suffix}"
+
+    async def install_failure_trigger() -> None:
+        async with metadata._runner._engine.begin() as connection:
+            await connection.execute(
+                text(
+                    f"CREATE FUNCTION fundamental.{function_name}() "
+                    "RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN "
+                    "RAISE EXCEPTION 'injected release verification failure'; END $$"
+                )
+            )
+            await connection.execute(
+                text(
+                    f"CREATE TRIGGER {trigger_name} BEFORE INSERT ON "
+                    "fundamental.data_release_verifications "
+                    f"FOR EACH ROW EXECUTE FUNCTION fundamental.{function_name}()"
+                )
+            )
+
+    async def remove_failure_trigger() -> None:
+        async with metadata._runner._engine.begin() as connection:
+            await connection.execute(
+                text(
+                    "DROP TRIGGER IF EXISTS "
+                    f"{trigger_name} ON fundamental.data_release_verifications"
+                )
+            )
+            await connection.execute(
+                text(f"DROP FUNCTION IF EXISTS fundamental.{function_name}()")
+            )
+
+    async def persisted_counts() -> tuple[int, int]:
+        async with metadata._runner._engine.connect() as connection:
+            manifest_count = await connection.scalar(
+                text(
+                    "SELECT count(*) FROM fundamental.data_release_manifests "
+                    "WHERE manifest_digest=:digest"
+                ),
+                {"digest": manifest.manifest_digest},
+            )
+            verification_count = await connection.scalar(
+                text(
+                    "SELECT count(*) FROM fundamental.data_release_verifications "
+                    "WHERE manifest_digest=:digest"
+                ),
+                {"digest": manifest.manifest_digest},
+            )
+        return int(manifest_count or 0), int(verification_count or 0)
+
+    metadata._runner.run(install_failure_trigger())
+    try:
+        with pytest.raises(DBAPIError, match="injected release verification failure"):
+            metadata.publish_data_release_candidate(manifest, verification)
+    finally:
+        metadata._runner.run(remove_failure_trigger())
+
+    assert metadata._runner.run(persisted_counts()) == (0, 0)
+    metadata.publish_data_release_candidate(manifest, verification)
+    assert metadata.get_data_release_manifest(manifest.manifest_digest) == manifest
+
+
+def test_data_release_audit_failure_rolls_back_pointer_and_can_retry(
+    metadata: PostgresMetadataStore,
+):
+    manifest, verification = _data_release_candidate(uuid4().hex)
+    metadata.publish_data_release_candidate(manifest, verification)
+    command = _activation_command(manifest)
+    suffix = uuid4().hex
+    function_name = f"reject_release_audit_{suffix}"
+    trigger_name = f"reject_release_audit_trigger_{suffix}"
+
+    async def install_failure_trigger() -> None:
+        async with metadata._runner._engine.begin() as connection:
+            await connection.execute(
+                text(
+                    f"CREATE FUNCTION fundamental.{function_name}() "
+                    "RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN "
+                    "RAISE EXCEPTION 'injected release audit failure'; END $$"
+                )
+            )
+            await connection.execute(
+                text(
+                    f"CREATE TRIGGER {trigger_name} BEFORE INSERT ON "
+                    "fundamental.data_release_activation_audit "
+                    f"FOR EACH ROW EXECUTE FUNCTION fundamental.{function_name}()"
+                )
+            )
+
+    async def remove_failure_trigger() -> None:
+        async with metadata._runner._engine.begin() as connection:
+            await connection.execute(
+                text(
+                    "DROP TRIGGER IF EXISTS "
+                    f"{trigger_name} ON fundamental.data_release_activation_audit"
+                )
+            )
+            await connection.execute(
+                text(f"DROP FUNCTION IF EXISTS fundamental.{function_name}()")
+            )
+
+    metadata._runner.run(install_failure_trigger())
+    try:
+        with pytest.raises(DBAPIError, match="injected release audit failure"):
+            metadata.compare_and_swap_data_release(command)
+    finally:
+        metadata._runner.run(remove_failure_trigger())
+
+    assert metadata.get_active_data_release(manifest.profile_id) is None
+
+    async def audit_count() -> int:
+        async with metadata._runner._engine.connect() as connection:
+            count = await connection.scalar(
+                text(
+                    "SELECT count(*) FROM fundamental.data_release_activation_audit "
+                    "WHERE profile_id=:profile_id"
+                ),
+                {"profile_id": manifest.profile_id},
+            )
+        return int(count or 0)
+
+    assert metadata._runner.run(audit_count()) == 0
+    assert metadata.compare_and_swap_data_release(command).revision == 1
+
+
+def test_competing_data_release_publishers_share_one_revision(
+    metadata: PostgresMetadataStore,
+):
+    profile_id = f"sec-public-pit-race-{uuid4().hex}"
+    candidates = tuple(
+        _data_release_candidate(uuid4().hex, profile_id=profile_id) for _ in range(2)
+    )
+    for manifest, verification in candidates:
+        metadata.publish_data_release_candidate(manifest, verification)
+
+    barrier = Barrier(2)
+
+    def activate(manifest: DataReleaseManifestV1) -> tuple[str, str]:
+        barrier.wait(timeout=10)
+        try:
+            result = metadata.compare_and_swap_data_release(
+                _activation_command(manifest)
+            )
+            return "activated", result.manifest_digest
+        except DataReleaseError as exc:
+            return "conflict", exc.code
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        results = tuple(
+            executor.map(activate, (candidate[0] for candidate in candidates))
+        )
+
+    assert sorted(result[0] for result in results) == ["activated", "conflict"]
+    active = metadata.get_active_data_release(candidates[0][0].profile_id)
+    assert active is not None
+    assert active.revision == 1
+    assert active.manifest_digest in {
+        candidate[0].manifest_digest for candidate in candidates
+    }
+
+    async def audit_count() -> int:
+        async with metadata._runner._engine.connect() as connection:
+            count = await connection.scalar(
+                text(
+                    "SELECT count(*) FROM fundamental.data_release_activation_audit "
+                    "WHERE profile_id=:profile_id"
+                ),
+                {"profile_id": active.profile_id},
+            )
+        return int(count or 0)
+
+    assert metadata._runner.run(audit_count()) == 1
+
+
+def test_data_release_pointer_survives_restart_and_legacy_reader_overlap(
+    metadata: PostgresMetadataStore,
+):
+    profile_id = f"sec-public-pit-overlap-{uuid4().hex}"
+    first, first_verification = _data_release_candidate(
+        uuid4().hex, profile_id=profile_id
+    )
+    second, second_verification = _data_release_candidate(
+        uuid4().hex, profile_id=profile_id
+    )
+    metadata.publish_data_release_candidate(first, first_verification)
+    metadata.publish_data_release_candidate(second, second_verification)
+    first_active = metadata.compare_and_swap_data_release(_activation_command(first))
+
+    legacy_reader = PostgresMetadataStore(DATABASE_URL or "", auto_migrate=False)
+    legacy_reader.start()
+    try:
+        second_active = metadata.compare_and_swap_data_release(
+            _activation_command(
+                second,
+                expected_revision=first_active.revision,
+                expected_manifest_digest=first_active.manifest_digest,
+            )
+        )
+        assert legacy_reader.health.schema_version == SCHEMA_VERSION
+        assert legacy_reader.get_active_data_release(profile_id) == second_active
+    finally:
+        legacy_reader.close()
+
+    metadata.close()
+    restarted = PostgresMetadataStore(DATABASE_URL or "", auto_migrate=False)
+    restarted.start()
+    try:
+        assert restarted.get_active_data_release(profile_id) == second_active
+        rolled_back = restarted.compare_and_swap_data_release(
+            _activation_command(
+                first,
+                expected_revision=second_active.revision,
+                expected_manifest_digest=second_active.manifest_digest,
+                operation="rollback",
+            )
+        )
+        assert rolled_back.revision == second_active.revision + 1
+        assert rolled_back.manifest_digest == first.manifest_digest
     finally:
         restarted.close()
 

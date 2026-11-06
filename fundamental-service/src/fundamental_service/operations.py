@@ -54,6 +54,8 @@ class OperationsConfig:
     rate_limit_per_minute: int = 120
     ingestion_rate_limit_per_minute: int = 10
     ingestion_authorized_organizations: frozenset[str] = frozenset()
+    release_publish_authorized_organizations: frozenset[str] = frozenset()
+    release_activation_authorized_organizations: frozenset[str] = frozenset()
 
     @classmethod
     def testing(cls) -> OperationsConfig:
@@ -99,6 +101,20 @@ class OperationsConfig:
                 item.strip()
                 for item in os.getenv(
                     "FUNDAMENTAL_SERVICE_INGESTION_ORGANIZATIONS", ""
+                ).split(",")
+                if item.strip()
+            ),
+            release_publish_authorized_organizations=frozenset(
+                item.strip()
+                for item in os.getenv(
+                    "FUNDAMENTAL_SERVICE_RELEASE_PUBLISH_ORGANIZATIONS", ""
+                ).split(",")
+                if item.strip()
+            ),
+            release_activation_authorized_organizations=frozenset(
+                item.strip()
+                for item in os.getenv(
+                    "FUNDAMENTAL_SERVICE_RELEASE_ACTIVATION_ORGANIZATIONS", ""
                 ).split(",")
                 if item.strip()
             ),

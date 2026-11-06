@@ -9,23 +9,45 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from fastapi.testclient import TestClient
-from fundamental_service.app import create_app
+from pydantic import ValidationError
+
+from fundamental_service.app import create_app, create_runtime_app
 from fundamental_service.application.service import (
+    FundamentalApplication,
     UncertaintyRequestV1,
     normalize_uncertainty_payload,
 )
 from fundamental_service.contracts import (
+    CalculationArtifactV1,
     CalculationEvidenceV1,
     CallerApprovalEnvelopeV1,
     CanonicalFactV1,
+    FactsReadRequestV1,
     PeriodType,
     QualityStatus,
+    SnapshotResolutionRequestV1,
     SourceProvenanceV1,
     SourceRole,
     UncertaintyV1,
     XbrlContextV1,
 )
+from fundamental_service.data_releases import (
+    REQUIRED_DATA_RELEASE_GATES,
+    ActiveDataReleaseV1,
+    ActiveDataReleaseWithManifestV1,
+    ArtifactRefV1,
+    DataReleaseActivationCommandV1,
+    DataReleaseError,
+    DataReleaseManifestV1,
+    DataReleaseVerificationV1,
+    FactRefV1,
+    MappingRefV1,
+    SnapshotRefV1,
+    sign_data_release_verification,
+)
+from fundamental_service.facts import canonical_fact_digest
 from fundamental_service.governance import ModelInventory
 from fundamental_service.operations import OperationsConfig
 from fundamental_service.policies import (
@@ -47,7 +69,6 @@ from fundamental_service.testsupport import (
     make_valuation,
 )
 from fundamental_service.uncertainty import UncertaintyEvidenceV1
-from pydantic import ValidationError
 
 
 def _bind_initial_policy(valuation):
@@ -101,6 +122,20 @@ class _ResolvingSnapshotRepository(_SnapshotRepository):
         ):
             return (self.snapshot,)
         return ()
+
+
+class _ReleaseSnapshotRepository(_ResolvingSnapshotRepository):
+    def __init__(self, *snapshots):
+        self.snapshots = snapshots
+        self.snapshot = snapshots[0]
+
+    def find(self, *, identity, valuation_timestamp):
+        return tuple(
+            snapshot
+            for snapshot in self.snapshots
+            if identity.issuer_id == snapshot.identity.issuer_id
+            and valuation_timestamp >= snapshot.valuation_timestamp
+        )
 
 
 class _FactRepository:
@@ -171,6 +206,165 @@ def _canonical_fact(fact_id: str, normalized_field: str) -> CanonicalFactV1:
         ),
         quality=QualityStatus.VERIFIED,
     )
+
+
+class _CanonicalFactRepository(_FactRepository):
+    def get(self, fact_id: str):
+        return _canonical_fact(fact_id, "revenue")
+
+
+def _release_manifest_for(snapshot, facts):
+    fact_refs = tuple(
+        FactRefV1(
+            fact_id=fact.fact_id,
+            fact_digest=sha256_digest(fact.model_dump(mode="json")),
+        )
+        for fact in facts
+    )
+    snapshot_ref = SnapshotRefV1(
+        snapshot_id=snapshot.snapshot_id,
+        manifest_digest=snapshot.manifest_digest,
+        facts=fact_refs,
+        fact_set_digest=sha256_digest(fact_refs),
+    )
+    payload = {
+        "profile_id": "sec-public-pit-v1",
+        "release_id": "release-pinned-tests",
+        "created_at": datetime(2026, 1, 1, tzinfo=UTC),
+        "snapshot_refs": (snapshot_ref,),
+        "mapping_refs": (
+            MappingRefV1(mapping_id="mapping-v1", mapping_digest="c" * 64),
+        ),
+        "taxonomy_refs": (
+            ArtifactRefV1(
+                artifact_id="taxonomy-v1",
+                content_hash="d" * 64,
+                media_type="application/zip",
+                role="taxonomy",
+            ),
+        ),
+        "parser_version": "arelle-release==2.47.4",
+        "quality_profile_digest": "e" * 64,
+        "required_fields": ("revenue",),
+        "artifact_refs": (
+            ArtifactRefV1(
+                artifact_id="quality-v1",
+                content_hash="f" * 64,
+                media_type="application/json",
+                role="quality-evidence",
+            ),
+        ),
+    }
+    return DataReleaseManifestV1(
+        **payload,
+        manifest_digest=sha256_digest(payload),
+    )
+
+
+def _release_verification_for(
+    manifest: DataReleaseManifestV1,
+) -> DataReleaseVerificationV1:
+    payload = {
+        "manifest_digest": manifest.manifest_digest,
+        "verification_suite_digest": "1" * 64,
+        "source_revision": "2" * 40,
+        "verification_run_id": "release-api-run",
+        "workflow_identity": "github://value-investment-agent/release-api-test",
+        "verifier_id": "release-api-test",
+        "passed_gate_ids": tuple(sorted(REQUIRED_DATA_RELEASE_GATES)),
+        "evidence_refs": (
+            ArtifactRefV1(
+                artifact_id="release-api-evidence",
+                content_hash="3" * 64,
+                media_type="application/json",
+                role="verification-evidence",
+            ),
+        ),
+        "mapping_reviews": (),
+    }
+    return sign_data_release_verification(
+        payload,
+        Ed25519PrivateKey.from_private_bytes(b"release-api-key".ljust(32, b"0")),
+    )
+
+
+class _DataReleaseMetadata:
+    def __init__(self) -> None:
+        self.candidates: dict[
+            str, tuple[DataReleaseManifestV1, DataReleaseVerificationV1]
+        ] = {}
+        self.active: dict[str, ActiveDataReleaseWithManifestV1] = {}
+        self.activation_history: set[tuple[str, str]] = set()
+        self.rejected_candidates: set[str] = set()
+        self.commands: list[DataReleaseActivationCommandV1] = []
+
+    def publish_data_release_candidate(
+        self,
+        manifest: DataReleaseManifestV1,
+        verification: DataReleaseVerificationV1,
+    ) -> None:
+        if manifest.manifest_digest in self.rejected_candidates:
+            raise DataReleaseError(
+                "DATA_RELEASE_CANDIDATE_UNVERIFIED", "candidate was rejected"
+            )
+        self.candidates[manifest.manifest_digest] = (manifest, verification)
+
+    def get_active_data_release_with_manifest(
+        self, profile_id: str
+    ) -> ActiveDataReleaseWithManifestV1 | None:
+        return self.active.get(profile_id)
+
+    def get_data_release_manifest(
+        self, manifest_digest: str
+    ) -> DataReleaseManifestV1 | None:
+        candidate = self.candidates.get(manifest_digest)
+        return None if candidate is None else candidate[0]
+
+    def compare_and_swap_data_release(
+        self, command: DataReleaseActivationCommandV1
+    ) -> ActiveDataReleaseV1:
+        self.commands.append(command)
+        candidate = self.candidates.get(command.manifest_digest)
+        if candidate is None or candidate[0].profile_id != command.profile_id:
+            raise DataReleaseError(
+                "DATA_RELEASE_CANDIDATE_UNVERIFIED", "candidate was not published"
+            )
+        current = self.active.get(command.profile_id)
+        current_revision = 0 if current is None else current.active.revision
+        current_digest = None if current is None else current.active.manifest_digest
+        if (
+            current_revision != command.expected_revision
+            or current_digest != command.expected_manifest_digest
+        ):
+            raise DataReleaseError(
+                "DATA_RELEASE_POINTER_CONFLICT",
+                "active release changed",
+                retryable=True,
+            )
+        if (
+            command.operation == "rollback"
+            and (
+                command.profile_id,
+                command.manifest_digest,
+            )
+            not in self.activation_history
+        ):
+            raise DataReleaseError(
+                "DATA_RELEASE_ROLLBACK_TARGET_INVALID", "rollback target was not active"
+            )
+        active = ActiveDataReleaseV1(
+            profile_id=command.profile_id,
+            manifest_digest=command.manifest_digest,
+            revision=current_revision + 1,
+            activated_at=datetime.now(UTC),
+        )
+        resolved = ActiveDataReleaseWithManifestV1(
+            active=active,
+            manifest=candidate[0],
+        )
+        self.active[command.profile_id] = resolved
+        self.activation_history.add((command.profile_id, command.manifest_digest))
+        return active
 
 
 def _policy_with_assumptions(assumptions) -> PolicyRecordV1:
@@ -1077,6 +1271,593 @@ def test_production_readiness_requires_deployment_model_trust_roots(tmp_path: Pa
     )
     configured_roots = create_app(**common, model_inventory=inventory)
     assert configured_roots.state.application.ready is True
+
+
+def test_runtime_injects_deployment_data_release_trust_roots(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
+    from fundamental_service import app as fundamental_app
+    from fundamental_service.data_releases import DataReleaseTrustRootsV1
+
+    trust_roots_file = tmp_path / "data-release-trust-roots.json"
+    trust_roots_file.write_text(
+        json.dumps(
+            {
+                "verifiers": {
+                    "release-ci": {
+                        "workflow_identity": "github://example/release.yml",
+                        "public_key_ed25519_base64": "W2SJycf9Dc9QVF58FkiG70BJHsBsfxsSMEF5foEXU14=",
+                        "verification_suite_digest": "a" * 64,
+                    }
+                },
+                "mapping_reviewers": {
+                    "reviewer-1": "tfkAlTGPPwRM2OQLWEJT2Gd3vmK/ByITNOX9IZnPp/c="
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("FUNDAMENTAL_SERVICE_DATA_ROOT", str(tmp_path / "data"))
+    monkeypatch.setenv(
+        "FUNDAMENTAL_SERVICE_DATABASE_URL",
+        "postgresql+asyncpg://fundamental:fundamental@localhost/fundamental",
+    )
+    monkeypatch.setenv(
+        "FUNDAMENTAL_DATA_RELEASE_TRUST_ROOTS_FILE", str(trust_roots_file)
+    )
+
+    captured: dict[str, object] = {}
+    monkeypatch.setattr(
+        fundamental_app,
+        "PostgresMetadataStore",
+        lambda *_, **kwargs: captured.update(kwargs) or object(),
+    )
+    monkeypatch.setattr(
+        fundamental_app.ModelInventory,
+        "from_deployment_file",
+        lambda *_args: object(),
+    )
+    for name in (
+        "PostgresSnapshotRepository",
+        "PostgresCanonicalFactRepository",
+        "PostgresContentStore",
+        "PostgresArtifactStore",
+        "MetadataModelRepository",
+        "MetadataPolicyRepository",
+        "PolicyRegistry",
+    ):
+        monkeypatch.setattr(fundamental_app, name, lambda *_args, **_kwargs: object())
+    monkeypatch.setattr(
+        fundamental_app, "build_runtime_sec_acquisition", lambda **_kwargs: object()
+    )
+    monkeypatch.setattr(fundamental_app, "create_app", lambda **kwargs: kwargs)
+
+    composed = create_runtime_app()
+
+    roots = DataReleaseTrustRootsV1.from_file(trust_roots_file)
+    assert captured["data_release_trust_roots"] == roots
+    assert composed["metadata_store"] is not None
+
+
+def test_snapshot_resolution_pins_only_active_release_facts():
+    snapshot = _SnapshotRepository().snapshot
+    snapshot.parser_version = "arelle-release==2.47.4"
+    snapshot.taxonomy_manifest_id = "taxonomy-v1"
+    fact = _canonical_fact("fact-revenue", "revenue")
+    fact_ref = {
+        "fact_id": fact.fact_id,
+        "fact_digest": sha256_digest(fact.model_dump(mode="json")),
+    }
+    snapshot_ref = {
+        "snapshot_id": snapshot.snapshot_id,
+        "manifest_digest": snapshot.manifest_digest,
+        "facts": (fact_ref,),
+        "fact_set_digest": sha256_digest((fact_ref,)),
+    }
+    manifest_payload = {
+        "profile_id": "sec-public-pit-v1",
+        "release_id": "release-1",
+        "created_at": datetime(2026, 1, 1, tzinfo=UTC),
+        "snapshot_refs": (snapshot_ref,),
+        "mapping_refs": (
+            MappingRefV1(mapping_id="mapping-1", mapping_digest="c" * 64),
+        ),
+        "taxonomy_refs": (
+            ArtifactRefV1(
+                artifact_id="taxonomy-1",
+                content_hash="d" * 64,
+                media_type="application/zip",
+                role="taxonomy",
+            ),
+        ),
+        "parser_version": "arelle-release==2.47.4",
+        "quality_profile_digest": "e" * 64,
+        "required_fields": ("revenue",),
+        "artifact_refs": (
+            ArtifactRefV1(
+                artifact_id="quality-1",
+                content_hash="f" * 64,
+                media_type="application/json",
+                role="quality-evidence",
+            ),
+        ),
+    }
+    manifest = DataReleaseManifestV1(
+        **manifest_payload,
+        manifest_digest=sha256_digest(manifest_payload),
+    )
+    active_release = ActiveDataReleaseWithManifestV1(
+        active=ActiveDataReleaseV1(
+            profile_id=manifest.profile_id,
+            manifest_digest=manifest.manifest_digest,
+            revision=3,
+            activated_at=datetime(2026, 1, 2, tzinfo=UTC),
+        ),
+        manifest=manifest,
+    )
+    decoy = SimpleNamespace(
+        **{
+            **snapshot.__dict__,
+            "snapshot_id": "snapshot-outside-release",
+            "manifest_digest": "9" * 64,
+        }
+    )
+    active_release_state = {"value": active_release}
+    metadata = SimpleNamespace(
+        get_active_data_release_with_manifest=lambda profile_id: (
+            active_release_state["value"] if profile_id == manifest.profile_id else None
+        )
+    )
+    app = create_app(
+        _ReleaseSnapshotRepository(decoy, snapshot),
+        fact_repository=_FactRepository(),
+        metadata_store=metadata,
+        config=OperationsConfig(service_token=TEST_SERVICE_TOKEN),
+    )
+    request = SnapshotResolutionRequestV1(
+        contract_version="fundamental.v1",
+        release_profile_id=manifest.profile_id,
+        identity=snapshot.identity,
+        valuation_timestamp=snapshot.valuation_timestamp,
+        source_selection_policy="pit-v1",
+        coverage_profile="us-gaap-public-v1",
+        required_fields=("revenue",),
+    )
+
+    response = TestClient(app).post(
+        "/v1/data/snapshots/resolve",
+        headers=auth_headers(),
+        json=make_internal_envelope(request.model_dump(mode="json")),
+    )
+
+    assert response.status_code == 200
+    result = response.json()["result"]
+    assert result["snapshot_id"] == snapshot.snapshot_id
+    assert result["historical_facts"] == [fact.fact_id]
+    assert result["data_release_manifest_digest"] == manifest.manifest_digest
+
+    undeclared_fact = FactRefV1(fact_id="fact-outside-release", fact_digest="0" * 64)
+    bad_snapshot_ref = SnapshotRefV1(
+        snapshot_id=snapshot.snapshot_id,
+        manifest_digest=snapshot.manifest_digest,
+        facts=(undeclared_fact,),
+        fact_set_digest=sha256_digest((undeclared_fact,)),
+    )
+    bad_manifest_payload = manifest.model_dump(
+        mode="python", exclude={"manifest_digest"}
+    )
+    bad_manifest_payload["snapshot_refs"] = (bad_snapshot_ref,)
+    bad_manifest = DataReleaseManifestV1(
+        **bad_manifest_payload,
+        manifest_digest=sha256_digest(bad_manifest_payload),
+    )
+    active_release_state["value"] = ActiveDataReleaseWithManifestV1(
+        active=ActiveDataReleaseV1(
+            profile_id=bad_manifest.profile_id,
+            manifest_digest=bad_manifest.manifest_digest,
+            revision=4,
+            activated_at=datetime(2026, 1, 3, tzinfo=UTC),
+        ),
+        manifest=bad_manifest,
+    )
+    mismatch = TestClient(app).post(
+        "/v1/data/snapshots/resolve",
+        headers=auth_headers(),
+        json=make_internal_envelope(request.model_dump(mode="json")),
+    )
+    assert mismatch.status_code == 409
+    assert mismatch.json()["error"]["code"] == "DATA_RELEASE_FACT_MISMATCH"
+
+
+def test_release_fact_verification_ignores_point_in_time_selection_annotations():
+    snapshot = _SnapshotRepository().snapshot
+    fact = _canonical_fact("fact-revenue", "revenue")
+    manifest = _release_manifest_for(snapshot, (fact,))
+    selected = fact.model_copy(
+        update={
+            "rejected_candidates": ("fact-older",),
+            "point_in_time_policy": "pit-v1",
+            "selection_reason": "latest_available_after_fact_key_point_in_time_selection",
+        }
+    )
+
+    FundamentalApplication._verify_release_snapshot_and_facts(
+        manifest,
+        snapshot,
+        (selected,),
+        required_fields=("revenue",),
+    )
+
+    assert (
+        canonical_fact_digest(selected)
+        == manifest.snapshot_refs[0].facts[0].fact_digest
+    )
+
+
+def test_facts_calculation_evidence_and_replay_keep_the_pinned_release(
+    tmp_path: Path,
+):
+    snapshot = _SnapshotRepository().snapshot
+    fact = _canonical_fact("fact-revenue", "revenue")
+    manifest = _release_manifest_for(snapshot, (fact,))
+    metadata = SimpleNamespace(
+        get_data_release_manifest=lambda digest: (
+            manifest if digest == manifest.manifest_digest else None
+        )
+    )
+    app = create_app(
+        snapshot_repository=_SnapshotRepository(),
+        artifact_store=ArtifactStore(tmp_path / "artifacts"),
+        content_store=FilesystemContentStore(tmp_path / "content"),
+        fact_repository=_CanonicalFactRepository(),
+        metadata_store=metadata,
+        config=OperationsConfig(service_token=TEST_SERVICE_TOKEN),
+    )
+    read_facts = app.state.application.read_facts(
+        FactsReadRequestV1(
+            contract_version="fundamental.v1",
+            snapshot_id=snapshot.snapshot_id,
+            data_release_manifest_digest=manifest.manifest_digest,
+            required_fields=("revenue",),
+        )
+    )
+    assert read_facts.data_release_manifest_digest == manifest.manifest_digest
+    assert tuple(item.fact_id for item in read_facts.facts) == (fact.fact_id,)
+
+    valuation = make_valuation()
+    valuation = valuation.model_copy(
+        update={
+            "historical_facts": (fact.fact_id,),
+            "valuation_context": valuation.valuation_context.model_copy(
+                update={"data_release_manifest_digest": manifest.manifest_digest}
+            ),
+            "provenance": valuation.provenance.model_copy(
+                update={"fact_ids": (fact.fact_id,)}
+            ),
+            "input_digest": None,
+        }
+    ).with_digest()
+    request = _bind_initial_policy(valuation)
+    response = TestClient(app).post(
+        "/v1/valuation/calculate",
+        headers=auth_headers(),
+        json=make_internal_envelope(request.model_dump(mode="json")),
+    )
+
+    assert response.status_code == 200, response.text
+    result = response.json()["result"]
+    assert result["trace"]["data_release_manifest_digest"] == manifest.manifest_digest
+    reference = result["artifact_references"][0]
+    record, content = app.state.application.artifact_content(reference["artifact_id"])
+    assert manifest.manifest_digest in record.dependency_hashes
+    evidence = CalculationEvidenceV1.model_validate_json(content)
+    assert (
+        evidence.request.valuation_context.data_release_manifest_digest
+        == manifest.manifest_digest
+    )
+
+    replay = replay_calculation(
+        request,
+        CalculationArtifactV1.model_validate_json(json.dumps(result)),
+    )
+    assert replay.status == "match"
+    assert replay.dependency_versions["data_release"] == manifest.manifest_digest
+
+
+def test_snapshot_resolution_cache_isolated_by_active_release_dependencies():
+    first_snapshot = _SnapshotRepository().snapshot
+    first_snapshot.snapshot_id = "snapshot-cache-one"
+    first_snapshot.manifest_digest = "a" * 64
+    first_snapshot.parser_version = "arelle-release==2.47.4"
+    first_snapshot.taxonomy_manifest_id = "taxonomy-v1"
+    second_snapshot = _SnapshotRepository().snapshot
+    second_snapshot.snapshot_id = "snapshot-cache-two"
+    second_snapshot.manifest_digest = "b" * 64
+    second_snapshot.parser_version = "arelle-release==2.47.4"
+    second_snapshot.taxonomy_manifest_id = "taxonomy-v1"
+    first_fact = _canonical_fact("fact-cache-one", "revenue")
+    second_fact = _canonical_fact("fact-cache-two", "revenue")
+    facts_by_snapshot = {
+        first_snapshot.snapshot_id: (first_fact,),
+        second_snapshot.snapshot_id: (second_fact,),
+    }
+    manifest_one = _release_manifest_for(first_snapshot, (first_fact,))
+    manifest_two = _release_manifest_for(second_snapshot, (second_fact,))
+    active_state = {
+        "value": ActiveDataReleaseWithManifestV1(
+            active=ActiveDataReleaseV1(
+                profile_id=manifest_one.profile_id,
+                manifest_digest=manifest_one.manifest_digest,
+                revision=1,
+                activated_at=datetime(2026, 1, 1, tzinfo=UTC),
+            ),
+            manifest=manifest_one,
+        )
+    }
+    metadata = SimpleNamespace(
+        get_active_data_release_with_manifest=lambda profile_id: (
+            active_state["value"] if profile_id == manifest_one.profile_id else None
+        )
+    )
+    fact_repository = SimpleNamespace(
+        resolve=lambda *, snapshot, valuation_timestamp, required_fields: (
+            facts_by_snapshot[snapshot.snapshot_id]
+        )
+    )
+    app = create_app(
+        _ReleaseSnapshotRepository(first_snapshot, second_snapshot),
+        fact_repository=fact_repository,
+        metadata_store=metadata,
+    )
+    request = SnapshotResolutionRequestV1(
+        contract_version="fundamental.v1",
+        identity=first_snapshot.identity,
+        valuation_timestamp=first_snapshot.valuation_timestamp,
+        source_selection_policy="pit-v1",
+        coverage_profile="us-gaap-public-v1",
+        required_fields=("revenue",),
+        release_profile_id=manifest_one.profile_id,
+    )
+
+    first = app.state.application.resolve_snapshot(request)
+    repeated = app.state.application.resolve_snapshot(request)
+    assert first.snapshot_id == first_snapshot.snapshot_id
+    assert repeated == first
+    assert "fundamental_service_cache_hit_total 1" in (
+        app.state.metrics.render_prometheus()
+    )
+
+    active_state["value"] = ActiveDataReleaseWithManifestV1(
+        active=ActiveDataReleaseV1(
+            profile_id=manifest_two.profile_id,
+            manifest_digest=manifest_two.manifest_digest,
+            revision=2,
+            activated_at=datetime(2026, 1, 2, tzinfo=UTC),
+        ),
+        manifest=manifest_two,
+    )
+    after_activation = app.state.application.resolve_snapshot(request)
+    assert after_activation.snapshot_id == second_snapshot.snapshot_id
+    assert after_activation.data_release_manifest_digest == manifest_two.manifest_digest
+    assert "fundamental_service_cache_miss_total 2" in (
+        app.state.metrics.render_prometheus()
+    )
+
+
+def test_production_fact_reads_require_a_pinned_release_digest():
+    snapshot = _SnapshotRepository().snapshot
+    manifest = _release_manifest_for(
+        snapshot, (_canonical_fact("fact-revenue", "revenue"),)
+    )
+    metadata = SimpleNamespace(
+        get_data_release_manifest=lambda digest: (
+            manifest if digest == manifest.manifest_digest else None
+        )
+    )
+    app = create_app(
+        snapshot_repository=_SnapshotRepository(),
+        fact_repository=_CanonicalFactRepository(),
+        metadata_store=metadata,
+        require_metadata=True,
+    )
+
+    response = TestClient(app).request(
+        "GET",
+        "/v1/data/facts",
+        headers=auth_headers(),
+        json=make_internal_envelope(
+            {
+                "contract_version": "fundamental.v1",
+                "snapshot_id": snapshot.snapshot_id,
+                "required_fields": ["revenue"],
+            }
+        ),
+    )
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "DATA_RELEASE_MANIFEST_REQUIRED"
+
+
+def test_data_release_operations_are_signed_authorized_and_compare_and_swap():
+    metadata = _DataReleaseMetadata()
+    client = TestClient(
+        create_app(
+            config=OperationsConfig(
+                service_token=TEST_SERVICE_TOKEN,
+                rate_limit_per_minute=10_000,
+                release_publish_authorized_organizations=frozenset({"publisher"}),
+                release_activation_authorized_organizations=frozenset({"operator"}),
+            ),
+            metadata_store=metadata,
+            require_metadata=True,
+        )
+    )
+    fact = _canonical_fact("fact-revenue", "revenue")
+    first_snapshot = _SnapshotRepository().snapshot
+    second_snapshot = _SnapshotRepository().snapshot
+    second_snapshot.snapshot_id = "snapshot-release-two"
+    second_snapshot.manifest_digest = "9" * 64
+    rejected_snapshot = _SnapshotRepository().snapshot
+    rejected_snapshot.snapshot_id = "snapshot-rejected"
+    rejected_snapshot.manifest_digest = "8" * 64
+    first = _release_manifest_for(first_snapshot, (fact,))
+    second = _release_manifest_for(second_snapshot, (fact,))
+    rejected = _release_manifest_for(rejected_snapshot, (fact,))
+
+    denied = client.post(
+        "/v1/data/releases/candidates",
+        headers=auth_headers(organization_id="operator"),
+        json=make_internal_envelope(
+            {
+                "manifest": first.model_dump(mode="json"),
+                "verification": _release_verification_for(first).model_dump(
+                    mode="json"
+                ),
+            },
+            organization_id="operator",
+        ),
+    )
+    assert denied.status_code == 403
+    assert denied.json()["error"]["code"] == "DATA_RELEASE_FORBIDDEN"
+    assert metadata.candidates == {}
+
+    published = client.post(
+        "/v1/data/releases/candidates",
+        headers=auth_headers(organization_id="publisher"),
+        json=make_internal_envelope(
+            {
+                "manifest": first.model_dump(mode="json"),
+                "verification": _release_verification_for(first).model_dump(
+                    mode="json"
+                ),
+            },
+            organization_id="publisher",
+        ),
+    )
+    assert published.status_code == 200, published.text
+    assert published.json()["result"]["manifest_digest"] == first.manifest_digest
+
+    activation = {
+        "manifest_digest": first.manifest_digest,
+        "expected_revision": 0,
+        "expected_manifest_digest": None,
+        "operation": "activate",
+        "command_id": "activation-one",
+        "reason": "Initial release acceptance",
+    }
+    activated = client.post(
+        f"/v1/data/releases/{first.profile_id}/activate",
+        headers=auth_headers(organization_id="operator"),
+        json=make_internal_envelope(activation, organization_id="operator"),
+    )
+    assert activated.status_code == 200, activated.text
+    assert activated.json()["result"]["active"]["revision"] == 1
+    assert metadata.commands[-1].actor_id == "subject-test"
+    assert metadata.commands[-1].organization_id == "operator"
+    assert metadata.commands[-1].correlation_id == "correlation-test"
+
+    active_read = client.request(
+        "GET",
+        f"/v1/data/releases/{first.profile_id}",
+        headers=auth_headers(organization_id="operator"),
+        json=make_internal_envelope({}, organization_id="operator"),
+    )
+    assert active_read.status_code == 200
+    assert active_read.json()["result"]["manifest"]["manifest_digest"] == (
+        first.manifest_digest
+    )
+
+    metadata.rejected_candidates.add(rejected.manifest_digest)
+    rejected_response = client.post(
+        "/v1/data/releases/candidates",
+        headers=auth_headers(organization_id="publisher"),
+        json=make_internal_envelope(
+            {
+                "manifest": rejected.model_dump(mode="json"),
+                "verification": _release_verification_for(rejected).model_dump(
+                    mode="json"
+                ),
+            },
+            organization_id="publisher",
+        ),
+    )
+    assert rejected_response.status_code == 422
+    unchanged = metadata.get_active_data_release_with_manifest(first.profile_id)
+    assert unchanged is not None
+    assert unchanged.active.revision == 1
+    assert unchanged.active.manifest_digest == first.manifest_digest
+
+    second_publish = client.post(
+        "/v1/data/releases/candidates",
+        headers=auth_headers(organization_id="publisher"),
+        json=make_internal_envelope(
+            {
+                "manifest": second.model_dump(mode="json"),
+                "verification": _release_verification_for(second).model_dump(
+                    mode="json"
+                ),
+            },
+            organization_id="publisher",
+        ),
+    )
+    assert second_publish.status_code == 200, second_publish.text
+
+    stale_activation = {
+        **activation,
+        "manifest_digest": second.manifest_digest,
+        "command_id": "activation-stale",
+    }
+    stale = client.post(
+        f"/v1/data/releases/{first.profile_id}/activate",
+        headers=auth_headers(organization_id="operator"),
+        json=make_internal_envelope(stale_activation, organization_id="operator"),
+    )
+    assert stale.status_code == 409
+    assert stale.json()["error"]["code"] == "DATA_RELEASE_POINTER_CONFLICT"
+
+    second_activation = {
+        **stale_activation,
+        "expected_revision": 1,
+        "expected_manifest_digest": first.manifest_digest,
+        "command_id": "activation-two",
+    }
+    activated_second = client.post(
+        f"/v1/data/releases/{first.profile_id}/activate",
+        headers=auth_headers(organization_id="operator"),
+        json=make_internal_envelope(second_activation, organization_id="operator"),
+    )
+    assert activated_second.status_code == 200, activated_second.text
+    assert activated_second.json()["result"]["active"]["manifest_digest"] == (
+        second.manifest_digest
+    )
+
+    rollback = {
+        **second_activation,
+        "manifest_digest": first.manifest_digest,
+        "expected_revision": 2,
+        "expected_manifest_digest": second.manifest_digest,
+        "operation": "rollback",
+        "command_id": "rollback-one",
+        "reason": "Restore prior verified release",
+    }
+    rolled_back = client.post(
+        f"/v1/data/releases/{first.profile_id}/rollback",
+        headers=auth_headers(organization_id="operator"),
+        json=make_internal_envelope(rollback, organization_id="operator"),
+    )
+    assert rolled_back.status_code == 200, rolled_back.text
+    assert rolled_back.json()["result"]["active"]["revision"] == 3
+    assert rolled_back.json()["result"]["active"]["manifest_digest"] == (
+        first.manifest_digest
+    )
+
+    schema = client.app.openapi()
+    assert "FundamentalDataReleaseCandidateRequestEnvelopeV1" in str(schema)
+    assert "FundamentalDataReleaseLookupRequestEnvelopeV1" in str(schema)
+    assert "FundamentalDataReleaseActivationRequestEnvelopeV1" in str(schema)
+    metrics = client.get("/metrics").text
+    assert "fundamental_service_data_release_candidate_publish_total 2" in metrics
+    assert "fundamental_service_data_release_activation_total 2" in metrics
+    assert "fundamental_service_data_release_rollback_total 1" in metrics
 
 
 def test_internal_endpoints_require_signed_context_and_redact_credentials():

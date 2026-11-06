@@ -428,6 +428,7 @@ class SnapshotResolutionRequestV1(StrictModel):
     """Caller-owned point-in-time selector for an immutable data snapshot."""
 
     contract_version: Literal["fundamental.v1"]
+    release_profile_id: str | None = Field(default=None, min_length=1)
     identity: IdentityV1
     valuation_timestamp: datetime
     source_selection_policy: Literal["pit-v1"]
@@ -447,6 +448,9 @@ class FactsReadRequestV1(StrictModel):
 
     contract_version: Literal["fundamental.v1"]
     snapshot_id: str = Field(min_length=1)
+    data_release_manifest_digest: str | None = Field(
+        default=None, pattern=r"^[0-9a-f]{64}$"
+    )
     required_fields: tuple[str, ...] = Field(min_length=1)
 
     @field_validator("required_fields")
@@ -462,6 +466,9 @@ class SnapshotResolutionV1(StrictModel):
 
     contract_version: Literal["fundamental.v1"]
     snapshot_id: str = Field(min_length=1)
+    data_release_manifest_digest: str | None = Field(
+        default=None, pattern=r"^[0-9a-f]{64}$"
+    )
     historical_facts: tuple[str, ...] = Field(min_length=1)
     identity: IdentityV1
     valuation_timestamp: datetime
@@ -553,6 +560,9 @@ class FactsReadResponseV1(StrictModel):
 
     contract_version: Literal["fundamental.v1"]
     snapshot_id: str = Field(min_length=1)
+    data_release_manifest_digest: str | None = Field(
+        default=None, pattern=r"^[0-9a-f]{64}$"
+    )
     snapshot_manifest_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
     identity: IdentityV1
     valuation_timestamp: datetime
@@ -942,6 +952,9 @@ class QualityInputV1(StrictModel):
 class ValuationContextV1(StrictModel):
     valuation_timestamp: datetime
     data_snapshot_id: str = Field(min_length=1)
+    data_release_manifest_digest: str | None = Field(
+        default=None, pattern=r"^[0-9a-f]{64}$"
+    )
     source_selection_policy: str = Field(min_length=1)
     coverage_profile: str = Field(min_length=1)
 
@@ -1151,6 +1164,9 @@ class CalculationTraceV1(StrictModel):
     source_selection_policy_version: str = Field(min_length=1)
     snapshot_id: str = Field(min_length=1)
     snapshot_manifest_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    data_release_manifest_digest: str | None = Field(
+        default=None, pattern=r"^[0-9a-f]{64}$"
+    )
     fact_ids: tuple[str, ...] = Field(min_length=1)
     source_content_hashes: tuple[str, ...] = Field(min_length=1)
     policy_id: str = Field(min_length=1)
@@ -1202,6 +1218,8 @@ class CalculationEvidenceV1(StrictModel):
         if (
             calculation.input_digest != self.request.input_digest
             or calculation.snapshot_id != trace.snapshot_id
+            or self.request.valuation_context.data_release_manifest_digest
+            != trace.data_release_manifest_digest
             or calculation.policy_id != trace.policy_id
             or calculation.policy_version != trace.policy_version
             or calculation.model_version != trace.model_version

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+from dataclasses import field as dataclass_field
 from typing import Any
 
 from pydantic import model_validator
@@ -30,7 +31,17 @@ from ..contracts import (
     ValidationResponseV1,
     ValuationInputV1,
 )
-from ..facts import CanonicalFactRepository
+from ..data_releases import (
+    ActiveDataReleaseWithManifestV1,
+    DataReleaseActivationCommandV1,
+    DataReleaseActivationRequestV1,
+    DataReleaseCandidateReceiptV1,
+    DataReleaseError,
+    DataReleaseManifestV1,
+    DataReleaseVerificationV1,
+    ReleaseResolutionCacheKeyV1,
+)
+from ..facts import CanonicalFactRepository, canonical_fact_digest
 from ..governance import ModelInventory
 from ..operations import (
     OperationalMetrics,
@@ -47,6 +58,7 @@ from ..policies import (
 )
 from ..replay import (
     ArtifactRecordV1,
+    CacheLifecycle,
     ReplayEnvelopeV1,
     ReplayReportV1,
     replay_manifest,
@@ -180,6 +192,36 @@ def _policy_error(error: PolicyError) -> ServiceError:
     )
 
 
+def _data_release_error(error: DataReleaseError) -> ServiceError:
+    if error.code in {
+        "DATA_RELEASE_POINTER_CONFLICT",
+        "DATA_RELEASE_IDEMPOTENCY_CONFLICT",
+        "DATA_RELEASE_IMMUTABLE",
+        "DATA_RELEASE_SNAPSHOT_MISMATCH",
+        "DATA_RELEASE_FACT_MISMATCH",
+    }:
+        status_code = 409
+    elif error.code in {
+        "DATA_RELEASE_CANDIDATE_UNVERIFIED",
+        "DATA_RELEASE_VERIFICATION_MISMATCH",
+        "DATA_RELEASE_VERIFICATION_SIGNATURE_INVALID",
+        "DATA_RELEASE_MAPPING_REVIEW_MISMATCH",
+        "DATA_RELEASE_MAPPING_REVIEW_SIGNATURE_INVALID",
+        "DATA_RELEASE_MAPPING_REVIEW_DUPLICATE",
+    }:
+        status_code = 422
+    elif error.code == "DATA_RELEASE_ROLLBACK_TARGET_INVALID":
+        status_code = 422
+    else:
+        status_code = 503
+    return ServiceError(
+        error.code,
+        "data release operation could not be completed",
+        status_code=status_code,
+        retryable=error.retryable or status_code == 503,
+    )
+
+
 @dataclass(frozen=True)
 class FundamentalApplication:
     """Owns use cases while keeping transport and dependency assembly outside."""
@@ -194,6 +236,11 @@ class FundamentalApplication:
     require_metadata: bool = False
     policy_registry: PolicyRegistry | None = None
     model_inventory: ModelInventory | None = None
+    release_cache: CacheLifecycle = dataclass_field(
+        default_factory=lambda: CacheLifecycle(max_entries=256),
+        repr=False,
+        compare=False,
+    )
 
     @property
     def ready(self) -> bool:
@@ -226,6 +273,7 @@ class FundamentalApplication:
             value.valuation_context.data_snapshot_id
         )
         source_hashes = {record.content_hash for record in snapshot.source_records}
+        facts = []
         for fact_id in value.historical_facts:
             try:
                 fact = self.fact_repository.get(fact_id)
@@ -250,6 +298,243 @@ class FundamentalApplication:
                     status_code=422,
                     retryable=False,
                 )
+            facts.append(fact)
+        release_manifest = self._data_release_manifest(
+            value.valuation_context.data_release_manifest_digest
+        )
+        if release_manifest is not None:
+            self._verify_release_snapshot_and_facts(
+                release_manifest,
+                snapshot,
+                tuple(facts),
+                required_fields=(),
+            )
+
+    def _data_release_manifest(
+        self, manifest_digest: str | None
+    ) -> DataReleaseManifestV1 | None:
+        if manifest_digest is None:
+            if self.require_metadata:
+                raise ServiceError(
+                    "DATA_RELEASE_MANIFEST_REQUIRED",
+                    "production requests require a pinned data release manifest",
+                    status_code=422,
+                    retryable=False,
+                )
+            return None
+        if self.metadata_store is None:
+            raise ServiceError(
+                "DATA_RELEASE_UNAVAILABLE",
+                "release metadata is unavailable",
+                status_code=503,
+                retryable=True,
+            )
+        manifest_reader = getattr(
+            self.metadata_store, "get_data_release_manifest", None
+        )
+        if not callable(manifest_reader):
+            raise ServiceError(
+                "DATA_RELEASE_UNAVAILABLE",
+                "release metadata is unavailable",
+                status_code=503,
+                retryable=True,
+            )
+        try:
+            manifest = manifest_reader(manifest_digest)
+        except DataReleaseError as error:
+            raise ServiceError(
+                error.code,
+                "release metadata is temporarily unavailable",
+                status_code=503,
+                retryable=error.retryable,
+            ) from error
+        except Exception as error:  # pragma: no cover - persistence boundary
+            raise ServiceError(
+                "DATA_RELEASE_UNAVAILABLE",
+                "release metadata is temporarily unavailable",
+                status_code=503,
+                retryable=True,
+            ) from error
+        if manifest is None:
+            raise ServiceError(
+                "DATA_RELEASE_NOT_FOUND",
+                "the pinned data release manifest is unavailable",
+                status_code=404,
+                retryable=False,
+            )
+        if manifest.manifest_digest != manifest_digest:
+            raise ServiceError(
+                "DATA_RELEASE_MANIFEST_MISMATCH",
+                "the stored data release does not match the requested digest",
+                status_code=409,
+                retryable=False,
+            )
+        return manifest
+
+    def publish_data_release_candidate(
+        self, manifest: DataReleaseManifestV1, verification: DataReleaseVerificationV1
+    ) -> DataReleaseCandidateReceiptV1:
+        if self.metadata_store is None:
+            raise ServiceError(
+                "DATA_RELEASE_UNAVAILABLE",
+                "release metadata is unavailable",
+                status_code=503,
+                retryable=True,
+            )
+        try:
+            self.metadata_store.publish_data_release_candidate(manifest, verification)
+        except DataReleaseError as error:
+            raise _data_release_error(error) from error
+        except Exception as error:  # pragma: no cover - persistence boundary
+            raise ServiceError(
+                "DATA_RELEASE_UNAVAILABLE",
+                "candidate publication is temporarily unavailable",
+                status_code=503,
+                retryable=True,
+            ) from error
+        return DataReleaseCandidateReceiptV1(
+            profile_id=manifest.profile_id,
+            release_id=manifest.release_id,
+            manifest_digest=manifest.manifest_digest,
+            verification_digest=verification.verification_digest,
+        )
+
+    def active_data_release(self, profile_id: str) -> ActiveDataReleaseWithManifestV1:
+        if self.metadata_store is None:
+            raise ServiceError(
+                "DATA_RELEASE_UNAVAILABLE",
+                "release metadata is unavailable",
+                status_code=503,
+                retryable=True,
+            )
+        try:
+            active = self.metadata_store.get_active_data_release_with_manifest(
+                profile_id
+            )
+        except DataReleaseError as error:
+            raise _data_release_error(error) from error
+        except Exception as error:  # pragma: no cover - persistence boundary
+            raise ServiceError(
+                "DATA_RELEASE_UNAVAILABLE",
+                "active release is temporarily unavailable",
+                status_code=503,
+                retryable=True,
+            ) from error
+        if active is None:
+            raise ServiceError(
+                "DATA_RELEASE_NOT_ACTIVE",
+                "no data release is active for this profile",
+                status_code=404,
+                retryable=False,
+            )
+        return active
+
+    def change_active_data_release(
+        self,
+        profile_id: str,
+        request: DataReleaseActivationRequestV1,
+        *,
+        actor_id: str,
+        organization_id: str,
+        correlation_id: str,
+    ) -> ActiveDataReleaseWithManifestV1:
+        if self.metadata_store is None:
+            raise ServiceError(
+                "DATA_RELEASE_UNAVAILABLE",
+                "release metadata is unavailable",
+                status_code=503,
+                retryable=True,
+            )
+        command = DataReleaseActivationCommandV1(
+            profile_id=profile_id,
+            manifest_digest=request.manifest_digest,
+            expected_revision=request.expected_revision,
+            expected_manifest_digest=request.expected_manifest_digest,
+            operation=request.operation,
+            command_id=request.command_id,
+            actor_id=actor_id,
+            organization_id=organization_id,
+            correlation_id=correlation_id,
+            reason=request.reason,
+        )
+        try:
+            active = self.metadata_store.compare_and_swap_data_release(command)
+            manifest = self.metadata_store.get_data_release_manifest(
+                active.manifest_digest
+            )
+        except DataReleaseError as error:
+            raise _data_release_error(error) from error
+        except Exception as error:  # pragma: no cover - persistence boundary
+            raise ServiceError(
+                "DATA_RELEASE_UNAVAILABLE",
+                "release activation is temporarily unavailable",
+                status_code=503,
+                retryable=True,
+            ) from error
+        if manifest is None:
+            raise ServiceError(
+                "DATA_RELEASE_NOT_FOUND",
+                "activated release manifest is unavailable",
+                status_code=503,
+                retryable=True,
+            )
+        return ActiveDataReleaseWithManifestV1(active=active, manifest=manifest)
+
+    @staticmethod
+    def _verify_release_snapshot_and_facts(
+        manifest: DataReleaseManifestV1,
+        snapshot: SourceSnapshotV1,
+        facts: tuple[Any, ...],
+        *,
+        required_fields: tuple[str, ...],
+    ) -> None:
+        if not set(required_fields).issubset(manifest.required_fields):
+            raise ServiceError(
+                "DATA_RELEASE_FIELDS_UNAVAILABLE",
+                "the pinned release does not cover all requested fields",
+                status_code=422,
+                retryable=False,
+            )
+        declared_snapshot = next(
+            (
+                reference
+                for reference in manifest.snapshot_refs
+                if reference.snapshot_id == snapshot.snapshot_id
+            ),
+            None,
+        )
+        if (
+            declared_snapshot is None
+            or declared_snapshot.manifest_digest != snapshot.manifest_digest
+        ):
+            raise ServiceError(
+                "DATA_RELEASE_SNAPSHOT_MISMATCH",
+                "the snapshot does not match the pinned data release",
+                status_code=409,
+                retryable=False,
+            )
+        declared_facts = {
+            fact.fact_id: fact.fact_digest for fact in declared_snapshot.facts
+        }
+        if any(
+            fact.fact_id not in declared_facts
+            or canonical_fact_digest(fact) != declared_facts[fact.fact_id]
+            for fact in facts
+        ):
+            raise ServiceError(
+                "DATA_RELEASE_FACT_MISMATCH",
+                "selected canonical facts do not match the pinned data release",
+                status_code=409,
+                retryable=False,
+            )
+        selected_fields = {fact.normalized_field for fact in facts}
+        if not set(required_fields).issubset(selected_fields):
+            raise ServiceError(
+                "DATA_RELEASE_FIELDS_UNAVAILABLE",
+                "the pinned release does not contain all requested fields",
+                status_code=422,
+                retryable=False,
+            )
 
     def _resolve_policy(self, value: ValuationInputV1) -> tuple[ValuationInputV1, Any]:
         if self.policy_registry is None:
@@ -351,6 +636,9 @@ class FundamentalApplication:
             source_selection_policy_version=snapshot.policy_version,
             snapshot_id=snapshot.snapshot_id,
             snapshot_manifest_digest=snapshot.manifest_digest,
+            data_release_manifest_digest=(
+                request.valuation_context.data_release_manifest_digest
+            ),
             fact_ids=tuple(sorted(request.historical_facts)),
             source_content_hashes=tuple(sorted(source_hashes)),
             policy_id=resolution.policy_id,
@@ -398,6 +686,11 @@ class FundamentalApplication:
         dependency_hashes = (
             result.input_digest,
             trace.snapshot_manifest_digest,
+            *(
+                (trace.data_release_manifest_digest,)
+                if trace.data_release_manifest_digest is not None
+                else ()
+            ),
             *trace.source_content_hashes,
             trace.policy_digest,
             trace.assumptions_digest,
@@ -453,6 +746,11 @@ class FundamentalApplication:
             result.base.input_digest,
             result.base.result_hash,
             trace.snapshot_manifest_digest,
+            *(
+                (trace.data_release_manifest_digest,)
+                if trace.data_release_manifest_digest is not None
+                else ()
+            ),
             *trace.source_content_hashes,
             trace.policy_digest,
             trace.assumptions_digest,
@@ -527,9 +825,20 @@ class FundamentalApplication:
             )
         except SnapshotError as error:
             raise _snapshot_error(error) from error
+        release_manifest = self._data_release_manifest(
+            request.data_release_manifest_digest
+        )
+        if release_manifest is not None:
+            self._verify_release_snapshot_and_facts(
+                release_manifest,
+                snapshot,
+                facts,
+                required_fields=request.required_fields,
+            )
         return FactsReadResponseV1(
             contract_version="fundamental.v1",
             snapshot_id=snapshot.snapshot_id,
+            data_release_manifest_digest=request.data_release_manifest_digest,
             snapshot_manifest_digest=snapshot.manifest_digest,
             identity=snapshot.identity,
             valuation_timestamp=snapshot.valuation_timestamp,
@@ -576,10 +885,126 @@ class FundamentalApplication:
                 status_code=503,
                 retryable=True,
             )
+        active_release: ActiveDataReleaseWithManifestV1 | None = None
+        cache_key: str | None = None
+        cache_dependencies: tuple[str, ...] = ()
+        if request.release_profile_id is None:
+            if self.require_metadata:
+                raise ServiceError(
+                    "DATA_RELEASE_PROFILE_REQUIRED",
+                    "production snapshot resolution requires a release profile",
+                    status_code=422,
+                    retryable=False,
+                )
+        else:
+            if self.metadata_store is None:
+                raise ServiceError(
+                    "DATA_RELEASE_UNAVAILABLE",
+                    "release metadata is unavailable",
+                    status_code=503,
+                    retryable=True,
+                )
+            release_reader = getattr(
+                self.metadata_store, "get_active_data_release_with_manifest", None
+            )
+            if not callable(release_reader):
+                raise ServiceError(
+                    "DATA_RELEASE_UNAVAILABLE",
+                    "release metadata is unavailable",
+                    status_code=503,
+                    retryable=True,
+                )
+            try:
+                active_release = release_reader(request.release_profile_id)
+            except DataReleaseError as error:
+                raise ServiceError(
+                    error.code,
+                    "active data release is temporarily unavailable",
+                    status_code=503,
+                    retryable=error.retryable,
+                ) from error
+            if active_release is None:
+                raise ServiceError(
+                    "DATA_RELEASE_NOT_ACTIVE",
+                    "no active data release is available for this profile",
+                    status_code=503,
+                    retryable=True,
+                )
+            if not set(request.required_fields).issubset(
+                active_release.manifest.required_fields
+            ):
+                raise ServiceError(
+                    "DATA_RELEASE_FIELDS_UNAVAILABLE",
+                    "the active release does not cover all required fields",
+                    status_code=422,
+                    retryable=False,
+                )
+
+            manifest = active_release.manifest
+            identity_digest = sha256_digest(request.identity.model_dump(mode="json"))
+            cache_key_model = ReleaseResolutionCacheKeyV1(
+                profile_id=manifest.profile_id,
+                manifest_digest=manifest.manifest_digest,
+                snapshot_refs=manifest.snapshot_refs,
+                mapping_refs=manifest.mapping_refs,
+                taxonomy_refs=manifest.taxonomy_refs,
+                artifact_refs=manifest.artifact_refs,
+                parser_version=manifest.parser_version,
+                quality_profile_digest=manifest.quality_profile_digest,
+                identity_digest=identity_digest,
+                valuation_timestamp=request.valuation_timestamp,
+                source_selection_policy=request.source_selection_policy,
+                coverage_profile=request.coverage_profile,
+                required_fields=request.required_fields,
+            )
+            cache_key = f"data-release-resolution:v1:{cache_key_model.digest()}"
+            cache_dependencies = (
+                manifest.manifest_digest,
+                manifest.quality_profile_digest,
+                identity_digest,
+                sha256_digest(manifest.parser_version),
+                *(ref.manifest_digest for ref in manifest.snapshot_refs),
+                *(
+                    fact.fact_digest
+                    for snapshot_ref in manifest.snapshot_refs
+                    for fact in snapshot_ref.facts
+                ),
+                *(ref.mapping_digest for ref in manifest.mapping_refs),
+                *(ref.content_hash for ref in manifest.taxonomy_refs),
+                *(ref.content_hash for ref in manifest.artifact_refs),
+            )
+            cache_status, cached_resolution = self.release_cache.get(cache_key)
+            if cache_status == "hit" and isinstance(
+                cached_resolution, SnapshotResolutionV1
+            ):
+                self.metrics.increment("cache_hit_total")
+                return cached_resolution
+            if cache_status == "hit":
+                self.release_cache.invalidate(cache_key)
+                cache_status = "stale"
+            if cache_status == "stale":
+                self.metrics.increment("cache_stale_total")
+            else:
+                self.metrics.increment("cache_miss_total")
+
         candidates = self.snapshot_repository.find(
             identity=request.identity,
             valuation_timestamp=request.valuation_timestamp,
         )
+        declared_snapshots = (
+            {
+                snapshot.snapshot_id: snapshot
+                for snapshot in active_release.manifest.snapshot_refs
+            }
+            if active_release is not None
+            else None
+        )
+        if declared_snapshots is not None:
+            candidates = tuple(
+                snapshot
+                for snapshot in candidates
+                if snapshot.snapshot_id in declared_snapshots
+            )
         if not candidates:
             raise ServiceError(
                 "SNAPSHOT_NOT_FOUND",
@@ -589,6 +1014,21 @@ class FundamentalApplication:
                 retryable=False,
             )
         for snapshot in candidates:
+            declared_snapshot = (
+                None
+                if declared_snapshots is None
+                else declared_snapshots[snapshot.snapshot_id]
+            )
+            if (
+                declared_snapshot is not None
+                and snapshot.manifest_digest != declared_snapshot.manifest_digest
+            ):
+                raise ServiceError(
+                    "DATA_RELEASE_SNAPSHOT_MISMATCH",
+                    "a release snapshot does not match its declared manifest",
+                    status_code=409,
+                    retryable=False,
+                )
             try:
                 facts = self.fact_repository.resolve(
                     snapshot=snapshot,
@@ -599,9 +1039,21 @@ class FundamentalApplication:
                 if error.code == "FACT_NOT_FOUND":
                     continue
                 raise _snapshot_error(error) from error
-            return SnapshotResolutionV1(
+            if declared_snapshot is not None:
+                self._verify_release_snapshot_and_facts(
+                    active_release.manifest,
+                    snapshot,
+                    facts,
+                    required_fields=request.required_fields,
+                )
+            result = SnapshotResolutionV1(
                 contract_version="fundamental.v1",
                 snapshot_id=snapshot.snapshot_id,
+                data_release_manifest_digest=(
+                    None
+                    if active_release is None
+                    else active_release.manifest.manifest_digest
+                ),
                 historical_facts=tuple(fact.fact_id for fact in facts),
                 identity=snapshot.identity,
                 valuation_timestamp=request.valuation_timestamp,
@@ -615,8 +1067,21 @@ class FundamentalApplication:
                     "parser_version": snapshot.parser_version,
                     "taxonomy_version": snapshot.taxonomy_manifest_id,
                     "policy_version": snapshot.policy_version,
+                    "data_release_manifest_digest": (
+                        None
+                        if active_release is None
+                        else active_release.manifest.manifest_digest
+                    ),
                 },
             )
+            if cache_key is not None:
+                self.release_cache.put(
+                    cache_key,
+                    result,
+                    cache_dependencies,
+                    ttl_seconds=60,
+                )
+            return result
         raise ServiceError(
             "FACT_NOT_FOUND",
             "required canonical facts are not available for the requested snapshot",

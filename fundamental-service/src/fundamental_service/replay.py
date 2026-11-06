@@ -445,7 +445,10 @@ class _CacheEntry:
 class CacheLifecycle:
     """An expiring operational cache; it never owns release evidence."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, max_entries: int | None = None) -> None:
+        if max_entries is not None and max_entries < 1:
+            raise ValueError("max_entries must be positive")
+        self._max_entries = max_entries
         self._values: dict[str, _CacheEntry] = {}
         self._building: dict[str, Condition] = {}
         self._lock = RLock()
@@ -473,6 +476,13 @@ class CacheLifecycle:
         if ttl_seconds is not None and ttl_seconds <= 0:
             raise ValueError("ttl_seconds must be positive")
         with self._lock:
+            if key in self._values:
+                del self._values[key]
+            elif (
+                self._max_entries is not None and len(self._values) >= self._max_entries
+            ):
+                oldest_key = next(iter(self._values))
+                del self._values[oldest_key]
             self._values[key] = _CacheEntry(
                 value,
                 dependency_hashes,
@@ -1196,6 +1206,8 @@ def replay_calculation(
         if (
             trace.snapshot_id != request.valuation_context.data_snapshot_id
             or trace.snapshot_id != request.provenance.snapshot_id
+            or trace.data_release_manifest_digest
+            != request.valuation_context.data_release_manifest_digest
             or trace.fact_ids != tuple(sorted(request.historical_facts))
             or trace.model_id != request.model_id
             or trace.model_version != request.model_version
@@ -1227,6 +1239,8 @@ def replay_calculation(
         "model": actual.model_version,
         "policy": actual.policy_version or "none",
         "snapshot": actual.snapshot_id,
+        "data_release": request.valuation_context.data_release_manifest_digest
+        or "none",
         "parser": request.provenance.parser_version,
         "taxonomy": request.provenance.taxonomy_version,
         "runtime": f"python-{sys.version_info.major}.{sys.version_info.minor}",
