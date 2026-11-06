@@ -268,6 +268,121 @@ curl -fsS http://127.0.0.1:18083/readyz
 curl -fsS http://127.0.0.1:18083/metrics
 ```
 
-The intentionally unrun checks are GitHub PR CI, independent review, and the
-final merge/issue-closure verification. #328 remains open and is not yet
-`VERIFIED` because its required PR has not been opened or merged to `main`.
+At this checkpoint, GitHub PR CI, independent review, and final merge/issue
+closure verification had not run. PR #329 is now open against `main`; the
+newest code and evidence checkpoints below still need PR CI and merge
+verification. Issue #328 remains open and is not `VERIFIED`.
+
+## Durable Rejection Evidence Checkpoint
+
+Code checkpoint: `bfd792331be10b6b80e5db97e5b03383259968c7` on
+`codex/issue-328-sec-integrity`, based on `main` at
+`bee63cb37da9edb2deb444e14d2fc666aed73d06`. PR #329 targets `main` and uses
+`Closes #328` because it carries the complete issue outcome.
+
+The real Arelle ingestion test runs the committed AAPL fixture through the
+pinned offline parser. Its raw response hash is
+`a14d584e9804a87e92ddbd2446ade975e926a494671292403c811c1f4fc4b846`, its
+archive-index hash is
+`71df49ac42d62008ce51d050e92b53b774faf4ce64a2ed90e83ad29f4415a153`, and its
+SEC archive hash is
+`c19944b22ee101abbfd69b2e6fa4f30e0ec511ad276fdbb3cf3ef5dce3938fee`. The
+normalized input and canonical archive member both hash to
+`a051b50fcba8c752df3dd55a87f42e0fb1c8f31b7b8ed287f55c8c385849e159`.
+The live SEC response classification and hashes remain in the first section;
+these hashes identify the committed offline test fixture.
+
+The test persisted and reopened rejection artifact
+`sec-ingestion-rejection-000032019324000123-0de28090422c44358c477ed94c14e9a9c182dd0b75dc085f3c7ea82c68f86b15`.
+Its content SHA-256 is
+`0de28090422c44358c477ed94c14e9a9c182dd0b75dc085f3c7ea82c68f86b15`, with
+`evidence` retention. The append-only record depends on all captured source
+hashes, normalized and archive-member hashes, validation-profile hash
+`f2338cf67fc8ad046fbf7fc32e5aa84e03e5d23b90c08d7191d75245ed6d8847`, and
+taxonomy-manifest hash
+`0accc5ab0d4ce6674083bd82cf878a8619b3ac441da8600e0a03aefb8432a3a3`. The
+artifact records Arelle `2.47.4`, EFM profile `efm-strict-all-years`, DQC
+`v31.0.3`, Xule `30055`, two parser replay digests, and blocking
+`EFM.5.02.05.graphicFileError` findings. This fixture replay returned
+`PARSER_VALIDATION_BLOCKED`; it created no snapshot or canonical fact. A fresh
+content-store instance read every captured source by hash, including the raw
+filing bytes.
+
+| Check | Result |
+| --- | --- |
+| AAPL durable rejection test, pinned runtime, `--basetemp=/private/tmp/issue328-rejection-evidence-bfd79233` | exit 0, `1 passed`; artifact hash above |
+| Full `fundamental-service/tests` suite with PostgreSQL and pinned runtime | exit 0, `171 passed, 2 warnings`, no skips |
+| Ruff format and lint on the four changed Python files | exit 0 |
+| `git diff --check` | exit 0 |
+| Commit hooks on `bfd7923` | exit 0; whitespace, file endings, large-file, Ruff, and format hooks passed |
+
+The full-suite command was:
+
+```sh
+FUNDAMENTAL_TEST_DATABASE_URL=postgresql+asyncpg://fundamental:fundamental@127.0.0.1:18483/fundamental \
+ISSUE328_EDGAR_PLUGIN_DIR=/private/tmp/328-edgar-src \
+ISSUE328_XULE_PLUGIN_DIR=/private/tmp/328-xule-src/plugin \
+ISSUE328_DQC_RULESET_PATH=/private/tmp/328-dqc-src/dqc_us_rules/dqc-us-2024-V31-ruleset.zip \
+ISSUE328_TAXONOMY_CACHE_DIR=/tmp/issue312-sec-taxonomy-2023-2024 \
+fundamental-service/.venv/bin/pytest -q fundamental-service/tests
+```
+
+The focused ingestion command was:
+
+```sh
+ISSUE328_EDGAR_PLUGIN_DIR=/private/tmp/328-edgar-src \
+ISSUE328_XULE_PLUGIN_DIR=/private/tmp/328-xule-src/plugin \
+ISSUE328_DQC_RULESET_PATH=/private/tmp/328-dqc-src/dqc_us_rules/dqc-us-2024-V31-ruleset.zip \
+ISSUE328_TAXONOMY_CACHE_DIR=/tmp/issue312-sec-taxonomy-2023-2024 \
+fundamental-service/.venv/bin/pytest -q fundamental-service/tests/test_ingestion.py
+```
+
+The focused AAPL command that preserved the test artifacts for hash
+inspection was:
+
+```sh
+ISSUE328_EDGAR_PLUGIN_DIR=/private/tmp/328-edgar-src \
+ISSUE328_XULE_PLUGIN_DIR=/private/tmp/328-xule-src/plugin \
+ISSUE328_DQC_RULESET_PATH=/private/tmp/328-dqc-src/dqc_us_rules/dqc-us-2024-V31-ruleset.zip \
+ISSUE328_TAXONOMY_CACHE_DIR=/tmp/issue312-sec-taxonomy-2023-2024 \
+fundamental-service/.venv/bin/pytest -q \
+  fundamental-service/tests/test_ingestion.py::test_sec_ingestion_blocks_real_aapl_efm_finding_without_publishing_facts \
+  --basetemp=/private/tmp/issue328-rejection-evidence-bfd79233
+```
+
+The Ruff commands were:
+
+```sh
+uvx --from ruff ruff format --check fundamental-service/src/fundamental_service/contracts.py fundamental-service/src/fundamental_service/ingestion.py fundamental-service/src/fundamental_service/snapshots.py fundamental-service/tests/test_ingestion.py
+uvx --from ruff ruff check --select E,F,I --ignore E501 fundamental-service/src/fundamental_service/contracts.py fundamental-service/src/fundamental_service/ingestion.py fundamental-service/src/fundamental_service/snapshots.py fundamental-service/tests/test_ingestion.py
+git diff --check
+```
+
+The verification stack used project
+`value-investment-agent-issue-328-sec-integrity`, PostgreSQL port `18483`,
+and Fundamental service port `18083`. `docker compose config --quiet` exited
+0. Rebuilding `fundamental-service` exited 0 and produced image
+`sha256:df125b606af22546ffb7cc100208cd9ea5901cb04cb05fcc860468e34e72812d`.
+PostgreSQL and Fundamental service both reported `healthy`; `/livez` returned
+`{"contract_version":"internal.v1","status":"ok"}` and `/readyz` returned
+`{"status":"ready","contract_version":"internal.v1"}`.
+
+The stack commands were:
+
+```sh
+COMPOSE_PROJECT_NAME=value-investment-agent-issue-328-sec-integrity FUNDAMENTAL_POSTGRES_HOST_PORT=18483 FUNDAMENTAL_SERVICE_HOST_PORT=18083 docker compose -p value-investment-agent-issue-328-sec-integrity -f compose/verification/docker-compose.issue280-operations.yml config --quiet
+COMPOSE_PROJECT_NAME=value-investment-agent-issue-328-sec-integrity FUNDAMENTAL_POSTGRES_HOST_PORT=18483 FUNDAMENTAL_SERVICE_HOST_PORT=18083 docker compose -p value-investment-agent-issue-328-sec-integrity -f compose/verification/docker-compose.issue280-operations.yml up -d --build fundamental-service
+docker compose -p value-investment-agent-issue-328-sec-integrity -f compose/verification/docker-compose.issue280-operations.yml ps
+curl -fsS http://127.0.0.1:18083/livez
+curl -fsS http://127.0.0.1:18083/readyz
+docker image inspect value-investment-agent-issue-328-sec-integrity-fundamental-service --format '{{.Id}}'
+git rev-parse HEAD
+```
+
+The `docker image inspect` result was
+`sha256:df125b606af22546ffb7cc100208cd9ea5901cb04cb05fcc860468e34e72812d`.
+The `git rev-parse HEAD` result was
+`bfd792331be10b6b80e5db97e5b03383259968c7`. This checkpoint has not yet been
+pushed, so PR CI has not run on it. Issue #328 remains open and is not
+`VERIFIED` until the PR checks, merge, exact `main` commit, and issue state are
+confirmed.
