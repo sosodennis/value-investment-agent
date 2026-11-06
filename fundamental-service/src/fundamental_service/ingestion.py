@@ -333,7 +333,6 @@ class SecIngestionService:
                     if item.received_size is not None
                     else len(item.content)
                 ),
-                point_in_time_relevant=item.point_in_time_relevant,
                 content_hash=self.content_store.put(
                     item.content, media_type=item.media_type
                 ),

@@ -17,6 +17,7 @@ from .contracts import (
     SecIngestionRequestV1,
     SecIngestionResponseV1,
     SecIngestionSourceV1,
+    SourceRole,
 )
 from .facts import CanonicalMappingV1
 from .ingestion import SecIngestionService
@@ -372,7 +373,7 @@ class SecAcquisitionUseCase:
         )
         submissions_source = replace(
             submissions_source,
-            point_in_time_relevant=False,
+            role=SourceRole.ACQUISITION,
         )
         submissions_hash = self.content_store.put(
             submissions_source.content, media_type=submissions_source.media_type
@@ -450,7 +451,6 @@ class SecAcquisitionUseCase:
                 available_at=record.available_at,
                 captured_at=record.captured_at,
                 filed_at=record.filed_at,
-                point_in_time_relevant=record.point_in_time_relevant,
             )
             for record in preparation.snapshot.source_records
         )

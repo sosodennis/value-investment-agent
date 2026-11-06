@@ -81,7 +81,7 @@ def sec_source_register() -> SourceRegister:
         (
             LegalSource("sec-companyfacts", SourceRole.FACTS, SEC_TERMS, "indefinite"),
             LegalSource(
-                "sec-submissions", SourceRole.REFERENCE, SEC_TERMS, "indefinite"
+                "sec-submissions", SourceRole.ACQUISITION, SEC_TERMS, "indefinite"
             ),
             LegalSource(
                 "sec-filing-index", SourceRole.REFERENCE, SEC_TERMS, "indefinite"

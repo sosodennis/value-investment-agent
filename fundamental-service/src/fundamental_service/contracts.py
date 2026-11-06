@@ -64,6 +64,7 @@ class SourceRole(str, Enum):
     FILING = "filing"
     FACTS = "company_facts"
     TAXONOMY = "taxonomy"
+    ACQUISITION = "acquisition"
     MACRO = "macro"
     MARKET = "market"
     REFERENCE = "reference"
@@ -196,6 +197,8 @@ class SourceRecordV1(StrictModel):
     response_headers: tuple[tuple[str, str], ...] = ()
     declared_size: int | None = Field(default=None, ge=0)
     received_size: int | None = Field(default=None, ge=0)
+    # Retained so manifests written before SourceRole.ACQUISITION remain readable.
+    # New snapshots use the role as the authoritative source classification.
     point_in_time_relevant: bool = True
 
     @model_validator(mode="after")
@@ -391,7 +394,15 @@ class SourceSnapshotV1(StrictModel):
     @model_validator(mode="after")
     def validate_digest(self) -> SourceSnapshotV1:
         payload = self.model_dump(exclude={"manifest_digest", "snapshot_id"})
-        if self.manifest_digest != sha256_digest(payload):
+        if self.manifest_digest == sha256_digest(payload):
+            return self
+
+        # Older immutable manifests omit fields added to the strict contract.
+        # Validate their digest against only the fields present in stored JSON.
+        legacy_payload = self.model_dump(
+            exclude={"manifest_digest", "snapshot_id"}, exclude_unset=True
+        )
+        if self.manifest_digest != sha256_digest(legacy_payload):
             raise ValueError(
                 "manifest_digest does not match canonical snapshot manifest"
             )
@@ -405,10 +416,11 @@ class SourceSnapshotV1(StrictModel):
         ):
             if value.tzinfo is None or value.utcoffset() is None:
                 raise ValueError(f"{name} must include a timezone")
-        if any(record.captured_at > self.captured_at for record in self.source_records):
-            raise ValueError(
-                "captured_at must not precede a source record capture time"
-            )
+        if (
+            any(record.captured_at > self.captured_at for record in self.source_records)
+            and self.coverage_status is QualityStatus.VERIFIED
+        ):
+            raise ValueError("verified snapshots must cover every source capture time")
         return self
 
 
@@ -628,7 +640,6 @@ class SecIngestionSourceV1(StrictModel):
     available_at: datetime
     captured_at: datetime
     filed_at: datetime | None = None
-    point_in_time_relevant: bool = True
 
 
 class SecIngestionResponseV1(StrictModel):
