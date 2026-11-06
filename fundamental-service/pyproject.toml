@@ -20,6 +20,9 @@ dependencies = [
   "asyncpg>=0.30.0",
 ]
 
+[project.scripts]
+fundamental-data-release-canary = "fundamental_service.release_runner:main"
+
 [project.optional-dependencies]
 dev = ["pytest>=8.0", "httpx>=0.27"]
 parser = []
