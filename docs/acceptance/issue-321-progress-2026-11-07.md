@@ -162,6 +162,19 @@ profile after restart returned HTTP 200 with manifest digest
 revision 3. A direct PostgreSQL check found three append-only audit rows for
 the profile, with resulting revisions 1 through 3 and non-null targets.
 
+## Old/new application overlap probe
+
+To exercise the expand-and-contract migration boundary, an image built from
+`origin/main` was started beside the exact-head service against the same
+dedicated PostgreSQL container. The old image digest was
+`sha256:409381404c84522d5464504befd24834ec41825ef2b4ebf9fc75c5602b627e1a`;
+the exact-head image digest was
+`sha256:0b0501f09178e14ff816094517c0eb2c574be7357f7ec3e3d2b487fb8eda7167`.
+Both application binaries reached healthy state concurrently and both
+`/readyz` endpoints returned HTTP 200 with the internal contract version. The
+old container was stopped after the probe; the dedicated Compose service
+remained healthy.
+
 ## Live release lifecycle probe
 
 The probe inserted two uniquely named, signed candidates into the dedicated
@@ -229,9 +242,6 @@ not support an unconstrained availability claim.
 
 ## Remaining verification limits
 
-- A rolling deployment with two different application binaries was not run.
-  The additive migration and legacy-reader overlap tests pass, but a live
-  two-image rollout still needs deployment infrastructure.
 - The live lifecycle probe used metadata candidates without source snapshots
   and facts. Snapshot resolution and in-flight request pinning remain covered
   by the service and cache tests, not by this HTTP probe.
