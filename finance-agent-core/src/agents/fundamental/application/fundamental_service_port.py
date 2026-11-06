@@ -7,6 +7,7 @@ from datetime import datetime
 from typing import Literal, Protocol
 
 from src.agents.fundamental.interface.fundamental_service_contracts import (
+    FundamentalFactsReadResultV1,
     FundamentalServiceResponseV1,
 )
 from src.shared.internal_services import InternalPrincipal
@@ -14,6 +15,7 @@ from src.shared.internal_services import InternalPrincipal
 FundamentalOperation = Literal[
     "ingest_sec_data",
     "resolve_snapshot",
+    "read_facts",
     "validate",
     "calculate",
     "uncertainty",
@@ -52,6 +54,15 @@ class FundamentalServiceClient(Protocol):
         correlation_id: str,
         deadline_at: datetime,
     ) -> FundamentalServiceResponseV1: ...
+
+    async def read_facts(
+        self,
+        input_payload: Mapping[str, object],
+        *,
+        principal: InternalPrincipal,
+        correlation_id: str,
+        deadline_at: datetime,
+    ) -> FundamentalFactsReadResultV1: ...
 
 
 __all__ = [

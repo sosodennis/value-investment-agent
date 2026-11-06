@@ -23,6 +23,7 @@ from src.agents.fundamental.application.fundamental_service_port import (
     FundamentalServiceFailure,
 )
 from src.agents.fundamental.interface.fundamental_service_contracts import (
+    FundamentalFactsReadResultV1,
     FundamentalServiceErrorV1,
     FundamentalServiceResponseV1,
 )
@@ -38,6 +39,7 @@ _DEFAULT_MAX_ATTEMPTS: Final[int] = 2
 _OPERATION_PATHS: dict[FundamentalOperation, str] = {
     "ingest_sec_data": "/v1/data/ingestions",
     "resolve_snapshot": "/v1/data/snapshots/resolve",
+    "read_facts": "/v1/data/facts",
     "validate": "/v1/valuation/validate",
     "calculate": "/v1/valuation/calculate",
     "uncertainty": "/v1/valuation/uncertainty",
@@ -277,6 +279,33 @@ class HttpFundamentalServiceClient:
             retryable=False,
             status_code=503,
         )
+
+    async def read_facts(
+        self,
+        input_payload: Mapping[str, object],
+        *,
+        principal: InternalPrincipal,
+        correlation_id: str,
+        deadline_at: datetime,
+    ) -> FundamentalFactsReadResultV1:
+        """Read and validate the immutable fact projection for one snapshot."""
+
+        response = await self.execute(
+            "read_facts",
+            input_payload,
+            principal=principal,
+            correlation_id=correlation_id,
+            deadline_at=deadline_at,
+        )
+        try:
+            return FundamentalFactsReadResultV1.model_validate(response.result)
+        except ValidationError as exc:
+            raise FundamentalServiceFailure(
+                "UPSTREAM_MALFORMED",
+                "Fundamental service returned an invalid facts projection",
+                retryable=False,
+                status_code=502,
+            ) from exc
 
 
 __all__ = ["FundamentalServiceClientSettings", "HttpFundamentalServiceClient"]
