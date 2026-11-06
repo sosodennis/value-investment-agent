@@ -484,6 +484,10 @@ async def test_cutover_resolves_snapshot_and_facts_through_service_boundary() ->
     service_artifact = artifact["fundamental_service"]
     assert isinstance(service_artifact, dict)
     assert service_artifact["facts"]["snapshot_id"] == "snapshot-resolved"
+    fact_projection = service_artifact["facts"]["facts"][0]
+    assert fact_projection["period_end"] == "2025-09-27"
+    assert fact_projection["instant"] == "2025-09-27"
+    assert "period" not in fact_projection
     assert service_artifact["valuation_trace"]["fact_ids"] == ["fact-revenue"]
     assert service_artifact["provenance"]["snapshot_id"] == "snapshot-resolved"
     assert service_artifact["hashes"]["snapshot_manifest_digest"] == "e" * 64
