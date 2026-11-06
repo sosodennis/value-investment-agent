@@ -74,7 +74,10 @@ synthetic fixture that caused it. It is not an acceptance or `VERIFIED` record.
   before the service valuation stage.
 - The Fundamental service container log contained only startup and `/readyz`
   health checks during this run; no service ingestion, snapshot, or fact-read
-  request was observed. The run did not prove a service-backed report.
+  request was observed because the run was stopped before service valuation.
+  The open #327 issue tracks removal of the legacy Agent-owned SEC/report path
+  after #325; this observation does not establish whether the #325 report falls
+  back to it.
 - Clicked `Cancel run` after observing the Agent-owned SEC fetch. The UI then
   showed `Run cancelled` at cursor 51 and `Connection closed`; it also showed
   the client-side `signal is aborted without reason` request alert.
@@ -83,17 +86,15 @@ synthetic fixture that caused it. It is not an acceptance or `VERIFIED` record.
 - `docker compose -p value-investment-agent-issue-325-app -f docker-compose.yml -f docker-compose.override.yml -f compose/verification/docker-compose.issue325-app-fundamental.yml config --services`
   exited 1 because this shell lacks `LLM_PROVIDER_ENCRYPTION_KEY`; no Compose
   resources were changed by this check.
-- Result: **failed / incomplete**. The live workflow still reaches a legacy
-  Agent-owned SEC acquisition before it can exercise the typed service facts
-  path. No snapshot, fact IDs, or manifest digest from this run are acceptance
-  evidence. Desktop/mobile viewports, keyboard evidence selection, and the
-  evidence inspector remain unverified.
+- Result: **incomplete**. This run did not reach or verify the typed service
+  facts path. No snapshot, fact IDs, or manifest digest from this run are
+  acceptance evidence. Desktop/mobile viewports, keyboard evidence selection,
+  and the evidence inspector remain unverified.
 
 ## Next
 
-Resolve the workflow's Agent-owned SEC fetch and service-stage ordering against
-the #312 service ownership contract before another live run. Then verify the
-real workspace artifact's fact IDs, snapshot ID, and manifest digest against
-the valuation trace. Run desktop and mobile route checks, keyboard evidence
-selection, the evidence inspector, and the remaining issue acceptance criteria
-before updating this record for the exact delivery commit.
+Continue the real workspace run through service valuation and verify its fact
+IDs, snapshot ID, and manifest digest against the valuation trace. Run desktop
+and mobile route checks, keyboard evidence selection, the evidence inspector,
+and the remaining issue acceptance criteria before updating this record for the
+exact delivery commit.
