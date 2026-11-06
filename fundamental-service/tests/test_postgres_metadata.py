@@ -72,6 +72,7 @@ def _snapshot(suffix: str, *, policy_version: str = "policy-v1") -> SourceSnapsh
         "policy_version": policy_version,
         "coverage_status": QualityStatus.VERIFIED,
         "issues": (),
+        "sec_integrity_evidence": None,
     }
     return SourceSnapshotV1(
         **payload,
