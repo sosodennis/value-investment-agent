@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { parseFundamentalFacts, sortFundamentalFacts } from './fundamental-service-facts';
+import {
+    parseFundamentalFacts,
+    parseFundamentalServiceArtifact,
+    sortFundamentalFacts,
+} from './fundamental-service-facts';
 
 const digest = 'a'.repeat(64);
 
@@ -49,7 +53,10 @@ const fact = (overrides: Record<string, unknown> = {}): Record<string, unknown> 
     ...overrides,
 });
 
-const result = (facts: Record<string, unknown>[]) => ({
+const result = (
+    facts: Record<string, unknown>[],
+    family: 'bank' | 'industrial' | 'reit' = 'industrial'
+) => ({
     contract_version: 'fundamental.v1',
     snapshot_id: 'snapshot-1',
     data_release_manifest_digest: digest,
@@ -62,12 +69,65 @@ const result = (facts: Record<string, unknown>[]) => ({
         security_id: 'security-1',
         share_class: 'common',
         currency: 'USD',
-        family: 'industrial',
+        family,
     },
     valuation_timestamp: '2026-11-07T00:00:00Z',
     quality_status: 'verified',
     issue_codes: [],
     facts,
+});
+
+const serviceArtifact = (family: 'bank' | 'industrial' | 'reit' = 'industrial') => ({
+    contract_version: 'fundamental.v1',
+    snapshot_id: 'snapshot-1',
+    snapshot_manifest_digest: digest,
+    fact_ids: ['fact-revenue'],
+    facts: result([fact({ family })], family),
+    valuation_trace: {
+        source_selection_policy: 'pit-v1',
+        source_selection_policy_version: 'pit-v1',
+        snapshot_id: 'snapshot-1',
+        snapshot_manifest_digest: digest,
+        fact_ids: ['fact-revenue'],
+        source_content_hashes: [digest],
+        policy_id: 'fcff-dcf-policy-v1',
+        policy_version: 'policy-v1',
+        policy_digest: digest,
+        model_id: 'fcff_dcf',
+        model_version: 'fcff_dcf-v1',
+        assumptions_digest: digest,
+        calculation_version: 'calculator-v1',
+    },
+    provenance: {
+        snapshot_id: 'snapshot-1',
+        mapping_version: 'mapping-v1',
+        parser_version: 'parser-v1',
+        taxonomy_version: 'taxonomy-v1',
+        policy_version: 'policy-v1',
+    },
+    quality: {
+        input: { status: 'verified' },
+        validation_status: 'verified',
+        facts_status: 'verified',
+        calculation_status: 'verified',
+        issue_codes: [],
+    },
+    hashes: {
+        input_digest: digest,
+        result_hash: digest,
+        snapshot_manifest_digest: digest,
+        source_content_hashes: [digest],
+    },
+    model_id: 'fcff_dcf',
+    model_version: 'fcff_dcf-v1',
+    calculation_version: 'calculator-v1',
+    calculation_status: 'completed',
+    quality_status: 'verified',
+    input_digest: digest,
+    result_hash: digest,
+    evaluated_at: '2026-11-07T00:00:00Z',
+    issue_codes: [],
+    missing_evidence: [],
 });
 
 describe('parseFundamentalFacts', () => {
@@ -168,5 +228,42 @@ describe('parseFundamentalFacts', () => {
         expect(() =>
             parseFundamentalFacts(result([fact(), fact()]))
         ).toThrowError('fundamental_service.facts contains duplicate fact_id fact-revenue.');
+    });
+});
+
+describe('parseFundamentalServiceArtifact', () => {
+    it.each(['bank', 'industrial', 'reit'] as const)(
+        'keeps typed %s family metadata and service facts as the source of truth',
+        (family) => {
+            const parsed = parseFundamentalServiceArtifact(serviceArtifact(family));
+
+            expect(parsed.facts.identity.family).toBe(family);
+            expect(parsed.fact_ids).toEqual(['fact-revenue']);
+            expect(parsed.valuation_trace.fact_ids).toEqual(['fact-revenue']);
+            expect(parsed.hashes.snapshot_manifest_digest).toBe(digest);
+            expect(parsed.facts.facts[0]?.value).toEqual({
+                kind: 'numeric',
+                raw: '1000000',
+                numeric: 1000000,
+            });
+        }
+    );
+
+    it('rejects a projection whose snapshot binding changes between sections', () => {
+        const payload = serviceArtifact();
+        payload.valuation_trace.snapshot_id = 'other-snapshot';
+
+        expect(() => parseFundamentalServiceArtifact(payload)).toThrowError(
+            'fundamental_service snapshot_id is not bound to facts and valuation_trace.'
+        );
+    });
+
+    it('rejects a projection whose trace fact IDs do not match selected facts', () => {
+        const payload = serviceArtifact();
+        payload.valuation_trace.fact_ids = ['fact-other'];
+
+        expect(() => parseFundamentalServiceArtifact(payload)).toThrowError(
+            'fundamental_service.fact_ids are not bound to facts and valuation_trace.'
+        );
     });
 });

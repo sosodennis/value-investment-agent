@@ -155,6 +155,71 @@ export interface FundamentalFactsReadResult {
     facts: FundamentalCanonicalFact[];
 }
 
+export interface FundamentalValuationTrace {
+    source_selection_policy: string;
+    source_selection_policy_version: string;
+    snapshot_id: string;
+    snapshot_manifest_digest: string;
+    fact_ids: string[];
+    source_content_hashes: string[];
+    policy_id: string;
+    policy_version: string;
+    policy_digest: string;
+    model_id: string;
+    model_version: string;
+    assumptions_digest: string;
+    calculation_version: string;
+}
+
+export interface FundamentalArtifactProvenance {
+    snapshot_id?: string;
+    fact_ids?: string[];
+    mapping_version?: string;
+    parser_version?: string;
+    taxonomy_version?: string;
+    policy_version?: string;
+}
+
+export interface FundamentalArtifactQuality {
+    input_status?: FundamentalQualityStatus;
+    validation_status?: FundamentalQualityStatus;
+    facts_status?: FundamentalQualityStatus;
+    calculation_status?: FundamentalQualityStatus;
+    issue_codes: string[];
+}
+
+export interface FundamentalArtifactHashes {
+    input_digest: string;
+    result_hash: string;
+    snapshot_manifest_digest: string;
+    data_release_manifest_digest?: string;
+    source_content_hashes: string[];
+}
+
+export interface FundamentalServiceArtifact {
+    contract_version: 'fundamental.v1';
+    snapshot_id: string;
+    snapshot_manifest_digest: string;
+    fact_ids: string[];
+    facts: FundamentalFactsReadResult;
+    valuation_trace: FundamentalValuationTrace;
+    provenance: FundamentalArtifactProvenance;
+    quality: FundamentalArtifactQuality;
+    hashes: FundamentalArtifactHashes;
+    model_id?: string;
+    model_version?: string;
+    calculation_version?: string;
+    calculation_status?: string;
+    quality_status?: FundamentalQualityStatus;
+    input_digest?: string;
+    result_hash?: string;
+    intrinsic_value?: number;
+    per_share_value?: number;
+    evaluated_at?: string;
+    issue_codes: string[];
+    missing_evidence: string[];
+}
+
 const DIGEST_PATTERN = /^[0-9a-f]{64}$/;
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -237,6 +302,13 @@ const parseStringArray = (value: unknown, context: string): string[] => {
     if (value === undefined || value === null) return [];
     if (!Array.isArray(value)) throw new TypeError(`${context} must be an array.`);
     return value.map((item, index) => parseString(item, `${context}[${index}]`));
+};
+
+const parseRequiredDigestArray = (value: unknown, context: string): string[] => {
+    if (!Array.isArray(value) || value.length === 0) {
+        throw new TypeError(`${context} must be a non-empty digest array.`);
+    }
+    return value.map((item, index) => parseDigest(item, `${context}[${index}]`));
 };
 
 const parseOptionalNumber = (value: unknown, context: string): number | undefined => {
@@ -598,4 +670,174 @@ export const parseFundamentalFacts = (
         factIds.add(fact.fact_id);
     }
     return { ...parsed, facts: sortFundamentalFacts(parsed.facts) };
+};
+
+const parseProvenanceMetadata = (
+    value: unknown,
+    context: string
+): FundamentalArtifactProvenance => {
+    const record = parseRecord(value, context);
+    const parsed: FundamentalArtifactProvenance = {};
+    for (const field of [
+        'snapshot_id',
+        'mapping_version',
+        'parser_version',
+        'taxonomy_version',
+        'policy_version',
+    ] as const) {
+        const fieldValue = parseOptionalString(record[field], `${context}.${field}`);
+        if (fieldValue !== undefined) parsed[field] = fieldValue;
+    }
+    if (record.fact_ids !== undefined && record.fact_ids !== null) {
+        parsed.fact_ids = parseStringArray(record.fact_ids, `${context}.fact_ids`);
+    }
+    return parsed;
+};
+
+const parseQualityMetadata = (
+    value: unknown,
+    context: string
+): FundamentalArtifactQuality => {
+    const record = parseRecord(value, context);
+    const parsed: FundamentalArtifactQuality = {
+        issue_codes: parseStringArray(record.issue_codes, `${context}.issue_codes`),
+    };
+    const input = record.input;
+    if (input !== undefined && input !== null) {
+        const inputRecord = parseRecord(input, `${context}.input`);
+        const inputStatus = parseOptionalString(inputRecord.status, `${context}.input.status`);
+        if (inputStatus !== undefined) parsed.input_status = parseQuality(inputStatus, `${context}.input.status`);
+    }
+    for (const field of ['validation_status', 'facts_status', 'calculation_status'] as const) {
+        const status = parseOptionalString(record[field], `${context}.${field}`);
+        if (status !== undefined) parsed[field] = parseQuality(status, `${context}.${field}`);
+    }
+    return parsed;
+};
+
+const parseValuationTrace = (
+    value: unknown,
+    context: string
+): FundamentalValuationTrace => {
+    const record = parseRecord(value, context);
+    return {
+        source_selection_policy: parseString(record.source_selection_policy, `${context}.source_selection_policy`),
+        source_selection_policy_version: parseString(record.source_selection_policy_version, `${context}.source_selection_policy_version`),
+        snapshot_id: parseString(record.snapshot_id, `${context}.snapshot_id`),
+        snapshot_manifest_digest: parseDigest(record.snapshot_manifest_digest, `${context}.snapshot_manifest_digest`),
+        fact_ids: parseStringArray(record.fact_ids, `${context}.fact_ids`),
+        source_content_hashes: parseRequiredDigestArray(record.source_content_hashes, `${context}.source_content_hashes`),
+        policy_id: parseString(record.policy_id, `${context}.policy_id`),
+        policy_version: parseString(record.policy_version, `${context}.policy_version`),
+        policy_digest: parseDigest(record.policy_digest, `${context}.policy_digest`),
+        model_id: parseString(record.model_id, `${context}.model_id`),
+        model_version: parseString(record.model_version, `${context}.model_version`),
+        assumptions_digest: parseDigest(record.assumptions_digest, `${context}.assumptions_digest`),
+        calculation_version: parseString(record.calculation_version, `${context}.calculation_version`),
+    };
+};
+
+const parseArtifactHashes = (
+    value: unknown,
+    context: string
+): FundamentalArtifactHashes => {
+    const record = parseRecord(value, context);
+    const dataReleaseDigest = record.data_release_manifest_digest;
+    return {
+        input_digest: parseDigest(record.input_digest, `${context}.input_digest`),
+        result_hash: parseDigest(record.result_hash, `${context}.result_hash`),
+        snapshot_manifest_digest: parseDigest(record.snapshot_manifest_digest, `${context}.snapshot_manifest_digest`),
+        ...(dataReleaseDigest === undefined || dataReleaseDigest === null
+            ? {}
+            : { data_release_manifest_digest: parseDigest(dataReleaseDigest, `${context}.data_release_manifest_digest`) }),
+        source_content_hashes: parseRequiredDigestArray(record.source_content_hashes, `${context}.source_content_hashes`),
+    };
+};
+
+const parseOptionalArtifactNumber = (value: unknown, context: string): number | undefined => {
+    if (value === undefined || value === null) return undefined;
+    return parseOptionalNumber(value, context);
+};
+
+export const parseFundamentalServiceArtifact = (
+    value: unknown,
+    context = 'fundamental_service'
+): FundamentalServiceArtifact => {
+    const record = parseRecord(value, context);
+    if (record.contract_version !== 'fundamental.v1') {
+        throw new TypeError(`${context}.contract_version must be fundamental.v1.`);
+    }
+    const facts = parseFundamentalFacts(record.facts, `${context}.facts`);
+    const snapshotId = parseString(record.snapshot_id, `${context}.snapshot_id`);
+    const snapshotManifestDigest = parseDigest(
+        record.snapshot_manifest_digest,
+        `${context}.snapshot_manifest_digest`
+    );
+    const factIds = parseStringArray(record.fact_ids, `${context}.fact_ids`);
+    const valuationTrace = parseValuationTrace(record.valuation_trace, `${context}.valuation_trace`);
+    if (snapshotId !== facts.snapshot_id || snapshotId !== valuationTrace.snapshot_id) {
+        throw new TypeError(`${context} snapshot_id is not bound to facts and valuation_trace.`);
+    }
+    if (
+        snapshotManifestDigest !== facts.snapshot_manifest_digest ||
+        snapshotManifestDigest !== valuationTrace.snapshot_manifest_digest
+    ) {
+        throw new TypeError(`${context} snapshot_manifest_digest is not bound to facts and valuation_trace.`);
+    }
+    const expectedFactIds = [...facts.facts].map((fact) => fact.fact_id).sort();
+    const actualFactIds = [...factIds].sort();
+    const traceFactIds = [...valuationTrace.fact_ids].sort();
+    if (
+        actualFactIds.length === 0 ||
+        actualFactIds.join('\u0000') !== expectedFactIds.join('\u0000') ||
+        traceFactIds.join('\u0000') !== expectedFactIds.join('\u0000')
+    ) {
+        throw new TypeError(`${context}.fact_ids are not bound to facts and valuation_trace.`);
+    }
+    const provenance = parseProvenanceMetadata(record.provenance, `${context}.provenance`);
+    if (provenance.snapshot_id !== undefined && provenance.snapshot_id !== snapshotId) {
+        throw new TypeError(`${context}.provenance.snapshot_id does not match snapshot_id.`);
+    }
+    if (provenance.fact_ids !== undefined && [...provenance.fact_ids].sort().join('\u0000') !== expectedFactIds.join('\u0000')) {
+        throw new TypeError(`${context}.provenance.fact_ids do not match facts.`);
+    }
+    const quality = parseQualityMetadata(record.quality, `${context}.quality`);
+    const hashes = parseArtifactHashes(record.hashes, `${context}.hashes`);
+    if (hashes.snapshot_manifest_digest !== snapshotManifestDigest) {
+        throw new TypeError(`${context}.hashes.snapshot_manifest_digest does not match snapshot_manifest_digest.`);
+    }
+    const parseOptionalProjectionString = (field: keyof FundamentalServiceArtifact): string | undefined =>
+        parseOptionalString(record[field], `${context}.${field}`);
+    const qualityStatus = parseOptionalProjectionString('quality_status');
+    const parsed: FundamentalServiceArtifact = {
+        contract_version: 'fundamental.v1',
+        snapshot_id: snapshotId,
+        snapshot_manifest_digest: snapshotManifestDigest,
+        fact_ids: factIds,
+        facts,
+        valuation_trace: valuationTrace,
+        provenance,
+        quality,
+        hashes,
+        issue_codes: parseStringArray(record.issue_codes, `${context}.issue_codes`),
+        missing_evidence: parseStringArray(record.missing_evidence, `${context}.missing_evidence`),
+    };
+    for (const field of ['model_id', 'model_version', 'calculation_version', 'calculation_status', 'input_digest', 'result_hash', 'evaluated_at'] as const) {
+        const parsedValue = parseOptionalProjectionString(field);
+        if (parsedValue !== undefined) {
+            if (field === 'input_digest' || field === 'result_hash') {
+                parsed[field] = parseDigest(parsedValue, `${context}.${field}`);
+            } else if (field === 'evaluated_at') {
+                parsed[field] = parseTimestamp(parsedValue, `${context}.${field}`);
+            } else {
+                parsed[field] = parsedValue;
+            }
+        }
+    }
+    if (qualityStatus !== undefined) parsed.quality_status = parseQuality(qualityStatus, `${context}.quality_status`);
+    const intrinsicValue = parseOptionalArtifactNumber(record.intrinsic_value, `${context}.intrinsic_value`);
+    if (intrinsicValue !== undefined) parsed.intrinsic_value = intrinsicValue;
+    const perShareValue = parseOptionalArtifactNumber(record.per_share_value, `${context}.per_share_value`);
+    if (perShareValue !== undefined) parsed.per_share_value = perShareValue;
+    return parsed;
 };

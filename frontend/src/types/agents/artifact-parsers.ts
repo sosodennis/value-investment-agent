@@ -72,6 +72,7 @@ import {
     TechnicalMomentumExtremes,
 } from './technical';
 import { isRecord } from '../preview';
+import { parseFundamentalServiceArtifact } from './fundamental-service-facts';
 
 const toRecord = (value: unknown, context: string): Record<string, unknown> => {
     if (!isRecord(value) || Array.isArray(value)) {
@@ -3419,6 +3420,9 @@ export const parseFundamentalArtifact = (
     if (record.status !== 'done') {
         throw new TypeError(`${context}.status must be done.`);
     }
+    const serviceProjection = record.fundamental_service === undefined || record.fundamental_service === null
+        ? undefined
+        : parseFundamentalServiceArtifact(record.fundamental_service, `${context}.fundamental_service`);
     const parsed = parseFinancialPreview(
         {
             financial_reports: record.financial_reports,
@@ -3489,6 +3493,7 @@ export const parseFundamentalArtifact = (
         industry: industry ?? 'Unknown',
         reasoning: reasoning ?? '',
         financial_reports: parsed.financial_reports,
+        ...(serviceProjection ? { fundamental_service: serviceProjection } : {}),
         ...(forwardSignals ? { forward_signals: forwardSignals } : {}),
         ...(valuationDiagnostics
             ? { valuation_diagnostics: valuationDiagnostics }
