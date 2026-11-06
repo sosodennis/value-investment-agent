@@ -247,7 +247,7 @@ class _Client:
         self.facts_calls.append(dict(input_payload))
         if self.failure is not None:
             raise self.failure
-        fact_ids = self.facts_ids or list(input_payload.get("historical_facts", ()))
+        fact_ids = self.facts_ids or list(input_payload.get("required_fields", ()))
         snapshot_id = self.facts_snapshot_id or str(input_payload["snapshot_id"])
         facts = [
             {
@@ -390,7 +390,7 @@ def _input(*, monte_carlo: bool = False) -> dict[str, object]:
 
 @pytest.mark.asyncio
 async def test_cutover_resolves_snapshot_and_facts_through_service_boundary() -> None:
-    client = _Client()
+    client = _Client(facts_ids=["fact-revenue"])
     payload = _input()
     payload.pop("historical_facts")
     payload["snapshot_selector"] = {
@@ -430,6 +430,29 @@ async def test_cutover_resolves_snapshot_and_facts_through_service_boundary() ->
         "snapshot-resolved"
     )
     assert client.calls[1][1]["provenance"]["policy_version"] == "policy-v1"
+    assert client.facts_calls == [
+        {
+            "contract_version": "fundamental.v1",
+            "snapshot_id": "snapshot-resolved",
+            "data_release_manifest_digest": None,
+            "required_fields": ["revenue"],
+        }
+    ]
+    assert (
+        result.update["fundamental_analysis"]["fundamental_service"]["facts"][
+            "snapshot_id"
+        ]
+        == "snapshot-resolved"
+    )
+    assert (
+        result.update["fundamental_analysis"]["fundamental_service"]["facts"][
+            "snapshot_manifest_digest"
+        ]
+        == "e" * 64
+    )
+    assert result.update["fundamental_analysis"]["fundamental_service"]["facts"][
+        "fact_ids"
+    ] == ["fact-revenue"]
     assert result.update["fundamental_analysis"]["input_digest"] == "a" * 64
 
 
