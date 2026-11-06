@@ -1,0 +1,5 @@
+services:
+  backend:
+    environment:
+      FUNDAMENTAL_SERVICE_URL: ${FUNDAMENTAL_SERVICE_URL:-http://host.docker.internal:18690}
+      FUNDAMENTAL_SERVICE_TOKEN: ${FUNDAMENTAL_SERVICE_TOKEN:?set a runtime Fundamental service token}
