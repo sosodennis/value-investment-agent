@@ -245,8 +245,9 @@ Record the results against the exact delivery commit.
 - Conclusion: a service-owned issuer-identity resolution contract is a required
   prerequisite to #325's live workspace acceptance. This work is outside the
   current #325 report-display scope and must be tracked as a linked blocker
-  before any service-side implementation is added. #325 remains open and
-  incomplete; no live valuation request was sent during this audit.
+  before any service-side implementation is added. Blocker #336 now tracks
+  that contract and explicitly blocks #325. #325 remains open and incomplete;
+  no live valuation request was sent during this audit.
 - Evidence locations: `fundamental-service/src/fundamental_service/contracts.py`
   (`IdentityV1`, `SnapshotResolutionRequestV1`, and `SecIngestionRequestV1`),
   `fundamental-service/src/fundamental_service/source_acquisition.py` (SEC
