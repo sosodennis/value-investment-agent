@@ -58,13 +58,42 @@ synthetic fixture that caused it. It is not an acceptance or `VERIFIED` record.
 - Viewports, keyboard selection, evidence inspector behavior, and a genuine
   service-backed workspace run are not yet verified.
 
+## Follow-up live wiring attempt
+
+- Date: 2026-11-07.
+- Code under test: `fa98ad5e73abde612caf02f17c2253b8d11e45bc`.
+- Route: `http://127.0.0.1:18681/workspace`, Personal organization.
+- Action: entered `MSFT`, selected the exact `MSFT` / NASDAQ candidate shown at
+  100% match over `MSFT.TO` at 90%, then continued from the actual workspace.
+- Run: `21618609-ec4c-4994-adcc-2f5115c05945`; thread
+  `thread_1794004480022`.
+- The UI reached `fundamental_analysis / review-financial-health`. Backend logs
+  show the Agent calling SEC archive URLs directly, including the 2025 MSFT
+  10-K. Code inspection confirms `application/wiring.py` injects
+  `fetch_financial_reports_payload` and `financial_health_flow.py` executes it
+  before the service valuation stage.
+- The Fundamental service container log contained only startup and `/readyz`
+  health checks during this run; no service ingestion, snapshot, or fact-read
+  request was observed. The run did not prove a service-backed report.
+- Clicked `Cancel run` after observing the Agent-owned SEC fetch. The UI then
+  showed `Run cancelled` at cursor 51 and `Connection closed`; it also showed
+  the client-side `signal is aborted without reason` request alert.
+- Docker inspection: app backend and Fundamental service both `healthy`;
+  `curl -fsS http://127.0.0.1:18690/readyz` exited 0 and returned `ready`.
+- `docker compose -p value-investment-agent-issue-325-app -f docker-compose.yml -f docker-compose.override.yml -f compose/verification/docker-compose.issue325-app-fundamental.yml config --services`
+  exited 1 because this shell lacks `LLM_PROVIDER_ENCRYPTION_KEY`; no Compose
+  resources were changed by this check.
+- Result: **failed / incomplete**. The live workflow still reaches a legacy
+  Agent-owned SEC acquisition before it can exercise the typed service facts
+  path. No snapshot, fact IDs, or manifest digest from this run are acceptance
+  evidence. Desktop/mobile viewports, keyboard evidence selection, and the
+  evidence inspector remain unverified.
+
 ## Next
 
-Start the Fundamental service with the pinned SEC configuration and retained
-runtime assets documented by the merged #312 work. Configure the #325 local
-application backend to call that service without exposing credentials, create
-or reuse a real service-owned snapshot, and verify a workspace artifact whose
-fact IDs, snapshot ID, and manifest digest match the valuation trace. Then run
-the desktop and mobile route checks, keyboard evidence selection, and the
-remaining issue acceptance criteria before updating this record for the exact
-delivery commit.
+Resolve the workflow's Agent-owned SEC fetch and service-stage ordering against
+the #312 service ownership contract before another live run. Then verify the
+real workspace artifact's fact IDs, snapshot ID, and manifest digest against
+the valuation trace. Run desktop and mobile route checks, keyboard evidence
+selection, the evidence inspector, and the remaining issue acceptance criteria
+before updating this record for the exact delivery commit.
