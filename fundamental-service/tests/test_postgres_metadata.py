@@ -430,6 +430,26 @@ def _cross_process_ingestion_contenders(
         metadata.close()
 
 
+def _hold_ingestion_lock_until_terminated(
+    database_url: str,
+    acquisition_key: str,
+    acquired_event,
+    release_event,
+) -> None:
+    metadata = PostgresMetadataStore(database_url, auto_migrate=False)
+    metadata.start()
+    lease = metadata.try_acquire_ingestion_lock(acquisition_key)
+    if lease is None:
+        metadata.close()
+        raise AssertionError("child process could not acquire ingestion lock")
+    acquired_event.set()
+    try:
+        release_event.wait(timeout=60)
+    finally:
+        metadata.release_ingestion_lock(lease)
+        metadata.close()
+
+
 @pytest.fixture
 def metadata() -> PostgresMetadataStore:
     assert DATABASE_URL is not None
@@ -603,6 +623,37 @@ def test_distinct_sec_acquisition_keys_hold_independent_postgres_locks(
             metadata.release_ingestion_lock(second)
         if first is not None:
             metadata.release_ingestion_lock(first)
+
+
+def test_terminated_ingestion_owner_releases_postgres_single_flight_lock(
+    metadata: PostgresMetadataStore,
+):
+    assert DATABASE_URL is not None
+    acquisition_key = sha256_digest({"issue": 312, "process-crash": uuid4().hex})
+    context = multiprocessing.get_context("spawn")
+    acquired = context.Event()
+    release = context.Event()
+    process = context.Process(
+        target=_hold_ingestion_lock_until_terminated,
+        args=(DATABASE_URL, acquisition_key, acquired, release),
+    )
+    process.start()
+    try:
+        assert acquired.wait(timeout=20)
+        assert process.is_alive()
+        assert metadata.try_acquire_ingestion_lock(acquisition_key) is None
+        process.terminate()
+        process.join(timeout=10)
+        assert not process.is_alive()
+        assert process.exitcode is not None and process.exitcode != 0
+
+        recovered_lease = metadata.try_acquire_ingestion_lock(acquisition_key)
+        assert recovered_lease is not None
+        metadata.release_ingestion_lock(recovered_lease)
+    finally:
+        if process.is_alive():
+            process.terminate()
+            process.join(timeout=10)
 
 
 def test_sec_ingestion_publish_rolls_back_snapshot_and_facts_then_recovers(
