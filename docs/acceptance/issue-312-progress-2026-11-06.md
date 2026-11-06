@@ -727,3 +727,103 @@ service's capture manifest, cache digest, or offline replay is complete.
   contract and replay unit coverage; Docker live ingestion and reuse were
   rerun. Load/soak testing and deployment rollout remain intentionally out of
   scope for this issue.
+
+## SEC multiline normalization and retained-evidence checkpoint
+
+- Verified code commit: `72875fe2b4f30b60c93c59c09bb0e3f2bd256a15`
+  (`fix(fundamental): normalize SEC multiline edge responses Refs #312`),
+  based on `origin/main` `10a88e41f3f5d63ec9feebb472dbd4d5469c647f`. The
+  worktree was clean before recording this evidence. No PR exists and #312
+  remains open with its `blocker` label; this checkpoint does not mark the
+  issue verified.
+- Full Fundamental service suite command on the exact code commit (exit 0):
+
+  ```sh
+  FUNDAMENTAL_TEST_DATABASE_URL=postgresql+asyncpg://fundamental:fundamental@127.0.0.1:18481/fundamental_test_72875fe2 \
+  ISSUE312_EDGAR_PLUGIN_DIR=/private/tmp/issue312-validation-runtime-v2/EDGAR-4891c4c9889c77af247428ceff4fa7cc52d534ea \
+  ISSUE312_XULE_PLUGIN_DIR=/private/tmp/issue312-validation-runtime-v2/xule-7ca1d7637f333f5c3a02379dbe6f6d6c17c88acc/plugin \
+  ISSUE312_DQC_RULESET_PATH=/private/tmp/issue312-validation-runtime-v2/dqc_us_rules-31.0.3/dqc_us_rules/dqc-us-2024-V31-ruleset.zip \
+  ISSUE312_TAXONOMY_CACHE_DIR=/private/tmp/issue312-sec-taxonomy-2023-2024 \
+  ISSUE328_EDGAR_PLUGIN_DIR=/private/tmp/issue312-validation-runtime-v2/EDGAR-4891c4c9889c77af247428ceff4fa7cc52d534ea \
+  ISSUE328_XULE_PLUGIN_DIR=/private/tmp/issue312-validation-runtime-v2/xule-7ca1d7637f333f5c3a02379dbe6f6d6c17c88acc/plugin \
+  ISSUE328_DQC_RULESET_PATH=/private/tmp/issue312-validation-runtime-v2/dqc_us_rules-31.0.3/dqc_us_rules/dqc-us-2024-V31-ruleset.zip \
+  ISSUE328_TAXONOMY_CACHE_DIR=/private/tmp/issue312-sec-taxonomy-2023-2024 \
+  fundamental-service/.venv/bin/pytest -q fundamental-service/tests
+  ```
+
+- Result: `194 passed, 0 skipped` in 103.90 seconds. The two warnings are the
+  existing Starlette/httpx TestClient deprecation and calculator Pydantic
+  serialization warning. `python3 scripts/architecture_guard.py` exited 0
+  with no boundary violations. `uv lock --check --project fundamental-service`
+  exited 0. The Agent client command
+  `uv run --project finance-agent-core pytest -q finance-agent-core/tests/agents/fundamental/test_fundamental_service_client.py`
+  exited 0 with `4 passed`.
+- Docker Compose project
+  `value-investment-agent-issue-312-sec-ingestion` was inspected without
+  changing containers or volumes. The issue-specific Compose configuration
+  validated with `config --quiet` (exit 0) and lists only
+  `fundamental-postgres` and `fundamental-service`. The service container was
+  healthy on image `sha256:4b32db0b10a477f814802cc6f5072851ae9fdea50b038c948b41f301a9ff5e27`;
+  `GET http://127.0.0.1:18082/readyz` returned
+  `{"status":"ready","contract_version":"internal.v1"}`.
+- PostgreSQL schema was read directly from
+  `information_schema.columns`. The acquisition table stores
+  `acquisition_key`, `snapshot_id`, `fact_ids`, `result_payload`, and caller
+  metadata; the manifest table stores `snapshot_id`, `manifest_digest`, and
+  payload; audit rows store correlation, outcome, and source hashes. No
+  acquisition digest column was assumed. On live acquisition key
+  `a3a659859f6f2a08556d705f93175902051ea10fecdd638660010c5ee14704d8`,
+  PostgreSQL records correlation `issue312-live-msft-4fe205a3-normalized`,
+  snapshot `snapshot-960d616aab2cac8bd4a7c1cfe8f99492`, manifest digest
+  `0ef7b562f1ee89c0e7635d3876e05fb128669f1567d4535514af3ac20d09407b`, and
+  57 fact IDs. The manifest links to 57 distinct persisted facts. The matching
+  retry correlation `issue312-live-msft-4fe205a3-reuse` returns the same
+  snapshot and digest with `reused=true` and 57 references.
+- Both persisted audit records use the same acquisition key and list the five
+  acquired source hashes:
+  `0bb3e310d6aafc4c2aa9f215d79f7b819b7862cc119ed6fe26c3b604ce75d536`
+  (raw SEC filing),
+  `5a7653632f53c2529c4da82d25043fc52f05bfbe536837345aa5904560d92a82`
+  (SEC ZIP archive),
+  `5692bbfccc76991d2cba6f4ddf2a8db9487dfce51ac5dded0b2607660a65a966`
+  (archive index),
+  `1a4256a23be814a5193601a2c733d1da647c45da4d73dfe98eee58e32f8f9251`
+  (submissions response), and
+  `0b71b0995cba38320a588bdeed7a516be06e1f681832ccb7f6d274bdb965d554`
+  (filing extension schema). The first audit outcome is `degraded` and the
+  retry outcome is `reused`; the response remains `provisional` with no
+  promotion to verified. The parser-integrity evidence records 12 non-blocking
+  findings, zero blocking findings, SEC EFM and DQC-US engines, Arelle 2.47.4,
+  DQC v31.0.3, Xule 30055, and the pinned profile and taxonomy digests.
+- Retained source objects were read from the running service content volume and
+  each SHA-256 was recomputed before replay. `assess_filing_response` classified
+  the response as normalized under
+  `sec-edgar-akamai-trailing-script-v2`: raw bytes are 6,861,030 bytes, the SEC
+  index declares 6,860,911 bytes, and the ZIP member is 6,860,910 bytes. The
+  raw response hash remains
+  `0bb3e310d6aafc4c2aa9f215d79f7b819b7862cc119ed6fe26c3b604ce75d536`; the
+  normalized bytes and exact canonical ZIP member both hash to
+  `01cc7750e904e14a5193601a2c733d1da647c45da4d73dfe98eee58e32f8f9251`.
+  Recorded removed ranges are `[6860895, 6861014)` with digest
+  `cecc8aa8a16de673292c5bda6e96fab070080592ead3fb82fd1e40286c3172db` and
+  `[6861029, 6861030)` with digest
+  `01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b`.
+- A clean temporary replay directory was populated only from the retained ZIP,
+  normalized filing, and extension schema. The pinned offline parser replayed
+  both normalized and canonical filings. Both produced 1,856 facts and semantic
+  digest
+  `c1a098e547276a804299bd16e387f5d1967696b34a66786cc429e6815850361d`, with
+  engines `sec-efm` and `dqc-us`, no blocking findings, and zero network
+  attempts. Validation evidence was `strict-sec-efm-profile-selected` and
+  `dqc-dqcrt-checks-completed`; the profile digest was
+  `70e1b431fc81107c017decf5e124273335d6e212eed3a4e7428f25e153bee373` and
+  taxonomy digest was
+  `0accc5ab0d4ce6674083bd82cf878a8619b3ac441da8600e0a03aefb8432a3a3`.
+- `uv run --project fundamental-service ruff check fundamental-service/src fundamental-service/tests`
+  was attempted but exited 2 because the `ruff` executable is absent from that
+  project environment; the following format check did not run. Load/soak and
+  deployment rollout checks remain intentionally unrun. These results do not
+  complete all #312 acceptance criteria or resolve the blocker label. Next:
+  restore a usable Ruff executable, inspect the full 28-commit diff against
+  every #312 criterion, obtain an independent read-only review, run any
+  affected checks, then open the main-based PR and collect its exact-head CI.
