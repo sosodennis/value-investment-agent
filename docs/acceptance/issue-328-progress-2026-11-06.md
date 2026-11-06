@@ -220,11 +220,21 @@ and asserts zero network attempts.
 | `GET /livez` and `GET /readyz` | exit 0; `internal.v1` healthy/ready |
 | Service failure counters | request, auth, source-health, freshness, and replay failure counters all `0` |
 
-Exact runtime hashes used for the current checkpoint are EDGAR
-`11e88a8a45c26bbbcf8152f0d5ac7352e8e0623b459effeebaa4097acfcdfacf`, Xule
-`5ffe3f37308fd9f662c37311cb121889e97c2a6954a35ba4af1ead8cd3f0ee55`, DQC
+The full service suite passed at exact code-bearing head
+`e4acc63ed64c12e359dde6887ab17bb4b0f88870`. The commit changes only this
+acceptance document after the AAPL integration test checkpoint. A focused AAPL
+semantic replay also passed on that head. The EDGAR and Xule tree hashes were
+identical before and after that replay.
+
+The runtime tree hashes were EDGAR
+`054a21fa824797787acc2c6e98af4bb040c51bbee41b613cee1793db8fd144af`, Xule
+`63123d67048019e3c49a0efde0e0aa8ec3eba0fc971da56ebd96dea8e40cd713`, DQC
 ruleset `0eb33d095ac0ae08f01c508526b35523534659d661bc62873ac1400deec87930`,
 and taxonomy cache `0accc5ab0d4ce6674083bd82cf878a8619b3ac441da8600e0a03aefb8432a3a3`.
+The source archive hashes were EDGAR 26.3
+`6550ba0ddc7937bb39bdff62fc008c59f0b7899670b756ad81418982c14e25a8`, Xule
+30055 `c17687935ffa052846bb18362dddf4b6e7f86159e776021bd20c7247fc9d16c6`,
+and DQC US v31.0.3 `96b2c00946f6ab55f2012d3710d9c5c724ec64101ed1537a5693de1e0123d9c3`.
 The rebuilt service image digest is
 `sha256:6fc43fc224dbb7c19276763b878f2629682f48ed0caf87a428f7bddf44ed7cfb`.
 
@@ -238,6 +248,10 @@ ISSUE328_DQC_RULESET_PATH=/private/tmp/328-dqc-src/dqc_us_rules/dqc-us-2024-V31-
 ISSUE328_TAXONOMY_CACHE_DIR=/tmp/issue312-sec-taxonomy-2023-2024 \
 fundamental-service/.venv/bin/pytest -q fundamental-service/tests
 ```
+
+Result on `e4acc63ed64c12e359dde6887ab17bb4b0f88870`: exit 0,
+`171 passed, 2 warnings`, no skips. The warnings are the existing
+Starlette/httpx deprecation and calculator Pydantic serialization warning.
 
 The exact Docker checks were run with project
 `value-investment-agent-issue-328-sec-integrity`, PostgreSQL port `18483`, and
