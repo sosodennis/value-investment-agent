@@ -138,6 +138,66 @@ class IdentityV1(StrictModel):
     currency: str = Field(min_length=3, max_length=3)
 
 
+class IdentityResolutionRequestV1(StrictModel):
+    ticker: str = Field(min_length=1, max_length=32, pattern=r"^[A-Z0-9.-]+$")
+
+    @field_validator("ticker", mode="before")
+    @classmethod
+    def normalize_ticker(cls, value: object) -> object:
+        return value.strip().upper() if isinstance(value, str) else value
+
+
+class IdentitySourceEvidenceV1(StrictModel):
+    source_id: Literal["sec-company-tickers", "sec-submissions", "sec-companyfacts"]
+    source_uri: str = Field(min_length=1, max_length=2048)
+    content_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    captured_at: datetime
+    available_at: datetime
+    media_type: Literal["application/json"]
+    byte_count: int = Field(ge=0)
+
+    @model_validator(mode="after")
+    def timestamps_have_timezone(self) -> IdentitySourceEvidenceV1:
+        for name, value in (
+            ("captured_at", self.captured_at),
+            ("available_at", self.available_at),
+        ):
+            if value.tzinfo is None or value.utcoffset() is None:
+                raise ValueError(f"{name} must include a timezone")
+        return self
+
+
+class IdentityResolutionV1(StrictModel):
+    ticker: str = Field(min_length=1, max_length=32, pattern=r"^[A-Z0-9.-]+$")
+    identity: IdentityV1
+    mapping_version: Literal["sec-issuer-identity-v1"]
+    source_evidence: tuple[IdentitySourceEvidenceV1, ...] = Field(
+        min_length=3, max_length=3
+    )
+    resolution_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+    @model_validator(mode="after")
+    def resolution_is_bound_to_evidence(self) -> IdentityResolutionV1:
+        expected_sources = {
+            "sec-company-tickers",
+            "sec-submissions",
+            "sec-companyfacts",
+        }
+        source_ids = {source.source_id for source in self.source_evidence}
+        if source_ids != expected_sources:
+            raise ValueError("identity resolution requires all SEC source evidence")
+        if self.identity.security_id != self.ticker:
+            raise ValueError("identity security_id must retain the selected ticker")
+        if self.identity.share_class != self.ticker:
+            raise ValueError("identity share_class must use the opaque ticker key")
+        expected_digest = sha256_digest(
+            self.model_dump(mode="json", exclude={"resolution_digest"})
+        )
+        if self.resolution_digest != expected_digest:
+            raise ValueError("resolution_digest does not bind identity evidence")
+        return self
+
+
 class DimensionV1(StrictModel):
     name: str = Field(min_length=1)
     member: str = Field(min_length=1)
