@@ -259,7 +259,8 @@ def _unlogged_model_error_findings(
             code=code,
             severity="warning" if code in _NON_BLOCKING_ARELLE_CODES else "error",
             message=(
-                "Arelle reported a known non-blocking Inline XBRL transformation diagnostic."
+                "Arelle reported a known non-blocking Inline XBRL "
+                "transformation diagnostic."
                 if code in _NON_BLOCKING_ARELLE_CODES
                 else "Arelle reported a model error without a corresponding log record."
             ),
@@ -358,7 +359,8 @@ def _parse_in_process(
     if installed_version != profile.arelle_version:
         raise ArelleParserError(
             "ARELLE_VERSION_MISMATCH",
-            f"installed Arelle {installed_version} does not match {profile.arelle_version}",
+            f"installed Arelle {installed_version} does not match "
+            f"{profile.arelle_version}",
         )
     if filing_path.suffix.lower() in {".htm", ".html"} and taxonomy_cache_dir is None:
         raise ArelleParserError(

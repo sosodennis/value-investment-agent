@@ -363,7 +363,8 @@ def create_app(
                 "content": {
                     "application/json": {
                         "schema": {
-                            "$ref": "#/components/schemas/FundamentalIngestionRequestEnvelopeV1"
+                            "$ref": "#/components/schemas/"
+                            "FundamentalIngestionRequestEnvelopeV1"
                         }
                     }
                 },

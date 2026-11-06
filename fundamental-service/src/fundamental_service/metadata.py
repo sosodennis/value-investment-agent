@@ -580,7 +580,8 @@ class PostgresMetadataStore:
                 text(
                     "INSERT INTO fundamental.sec_ingestion_acquisitions "
                     "(acquisition_key, acquisition_payload, snapshot_id, fact_ids, "
-                    "result_payload, caller_principal, organization_id, correlation_id) "
+                    "result_payload, caller_principal, organization_id, "
+                    "correlation_id) "
                     "VALUES (:acquisition_key, CAST(:acquisition_payload AS jsonb), "
                     ":snapshot_id, CAST(:fact_ids AS jsonb), "
                     "CAST(:result_payload AS jsonb), :caller_principal, "
