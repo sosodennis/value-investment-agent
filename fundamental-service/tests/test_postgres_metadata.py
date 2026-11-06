@@ -639,6 +639,7 @@ def test_data_release_activation_is_fenced_and_v2_compatible(
     manifest, verification = _data_release_candidate(uuid4().hex)
     metadata.publish_data_release_candidate(manifest, verification)
     metadata.publish_data_release_candidate(manifest, verification)
+    assert metadata.get_data_release_manifest(manifest.manifest_digest) == manifest
     command = _activation_command(manifest)
 
     active = metadata.compare_and_swap_data_release(command)
@@ -649,6 +650,7 @@ def test_data_release_activation_is_fenced_and_v2_compatible(
     assert resolved is not None
     assert resolved.active == active
     assert resolved.manifest == manifest
+    assert metadata.get_data_release_manifest(manifest.manifest_digest) == manifest
     assert metadata.compare_and_swap_data_release(command) == active
     altered_retry = command.model_copy(update={"reason": "different command"})
     with pytest.raises(DataReleaseError) as idempotency_conflict:

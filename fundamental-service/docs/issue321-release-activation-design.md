@@ -246,7 +246,8 @@ transactional pointer CAS, append-only activation audit, and PostgreSQL
 idempotency/concurrency checks are implemented in the current issue branch.
 The metadata adapter now reads the active pointer and its manifest in one
 joined query, so a reader cannot observe a pointer without the immutable
-manifest it selects. Snapshot resolution accepts a release profile, restricts
+manifest it selects. It can also read a previously verified immutable manifest
+by digest after a later activation. Snapshot resolution accepts a release profile, restricts
 selection to that manifest's snapshot/fact references, checks their digests,
 and returns the pinned release digest. Metadata-backed production resolution
 requires a release profile; test compositions retain the legacy selector.

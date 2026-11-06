@@ -823,6 +823,30 @@ class PostgresMetadataStore:
         self._require_data_release_capability()
         return self._runner.run(self._get_active_data_release(profile_id))
 
+    def get_data_release_manifest(
+        self, manifest_digest: str
+    ) -> DataReleaseManifestV1 | None:
+        self._require_data_release_capability()
+        return self._runner.run(self._get_data_release_manifest(manifest_digest))
+
+    async def _get_data_release_manifest(
+        self, manifest_digest: str
+    ) -> DataReleaseManifestV1 | None:
+        async with self._runner._engine.connect() as connection:
+            payload = await connection.scalar(
+                text(
+                    "SELECT manifest.payload "
+                    "FROM fundamental.data_release_manifests AS manifest "
+                    "JOIN fundamental.data_release_verifications AS verification "
+                    "USING (manifest_digest) "
+                    "WHERE manifest.manifest_digest=:manifest_digest"
+                ),
+                {"manifest_digest": manifest_digest},
+            )
+        if payload is None:
+            return None
+        return DataReleaseManifestV1.model_validate_json(canonical_bytes(payload))
+
     async def _get_active_data_release(
         self, profile_id: str
     ) -> ActiveDataReleaseV1 | None:
