@@ -196,6 +196,7 @@ class SourceRecordV1(StrictModel):
     response_headers: tuple[tuple[str, str], ...] = ()
     declared_size: int | None = Field(default=None, ge=0)
     received_size: int | None = Field(default=None, ge=0)
+    point_in_time_relevant: bool = True
 
     @model_validator(mode="after")
     def timestamps_have_timezone(self) -> SourceRecordV1:
@@ -627,6 +628,7 @@ class SecIngestionSourceV1(StrictModel):
     available_at: datetime
     captured_at: datetime
     filed_at: datetime | None = None
+    point_in_time_relevant: bool = True
 
 
 class SecIngestionResponseV1(StrictModel):

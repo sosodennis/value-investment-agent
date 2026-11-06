@@ -272,6 +272,7 @@ class CapturedSource:
     response_headers: tuple[tuple[str, str], ...] = ()
     declared_size: int | None = None
     received_size: int | None = None
+    point_in_time_relevant: bool = True
 
 
 class SnapshotBuilder:
@@ -455,6 +456,7 @@ class SnapshotBuilder:
                         if source.received_size is not None
                         else len(source.content)
                     ),
+                    point_in_time_relevant=source.point_in_time_relevant,
                 )
             )
         records.sort(
@@ -477,7 +479,10 @@ class SnapshotBuilder:
         }
         snapshot_id = f"snapshot-{sha256_digest(identity_payload)[:32]}"
         coverage_status = QualityStatus.VERIFIED
-        if any(record.available_at > valuation_timestamp for record in records):
+        if any(
+            record.point_in_time_relevant and record.available_at > valuation_timestamp
+            for record in records
+        ):
             coverage_status = QualityStatus.PROVISIONAL
             issues.append(
                 IssueV1(
@@ -561,5 +566,6 @@ def select_available_sources(snapshot: SourceSnapshotV1) -> tuple[SourceRecordV1
     return tuple(
         record
         for record in snapshot.source_records
-        if record.available_at <= snapshot.valuation_timestamp
+        if record.point_in_time_relevant
+        and record.available_at <= snapshot.valuation_timestamp
     )

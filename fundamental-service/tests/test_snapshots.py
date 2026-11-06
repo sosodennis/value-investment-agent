@@ -197,6 +197,72 @@ def test_snapshot_capture_time_covers_every_source_record(tmp_path: Path):
     )
 
 
+def test_acquisition_metadata_does_not_change_point_in_time_coverage(
+    tmp_path: Path,
+):
+    register = SourceRegister(
+        (
+            LegalSource("sec", SourceRole.FILING, "sec-terms", "indefinite"),
+            LegalSource(
+                "sec-submissions", SourceRole.REFERENCE, "sec-terms", "indefinite"
+            ),
+        )
+    )
+    snapshot = SnapshotBuilder(
+        FilesystemContentStore(tmp_path / "objects"),
+        FilesystemSnapshotRepository(tmp_path / "manifests"),
+        register,
+    ).build(
+        identity=identity(),
+        valuation_timestamp=datetime(2025, 6, 30, tzinfo=timezone.utc),
+        captured_at=datetime(2026, 11, 6, tzinfo=timezone.utc),
+        parser_version="fixture-parser-v1",
+        policy_version="source-policy-v1",
+        sources=(
+            CapturedSource(
+                source_id="sec",
+                uri="https://example.test/10-k.html",
+                role=SourceRole.FILING,
+                content=b"filing available by cutoff",
+                media_type="text/html",
+                http_status=200,
+                available_at=datetime(2024, 7, 30, tzinfo=timezone.utc),
+                captured_at=datetime(2026, 11, 6, tzinfo=timezone.utc),
+                accession_number="0000000001-24-000001",
+                form="10-K",
+                filed_at=datetime(2024, 7, 30, tzinfo=timezone.utc),
+            ),
+            CapturedSource(
+                source_id="sec-submissions",
+                uri="https://data.sec.gov/submissions/CIK0000000001.json",
+                role=SourceRole.REFERENCE,
+                content=b"current submissions index",
+                media_type="application/json",
+                http_status=200,
+                available_at=datetime(2026, 11, 6, tzinfo=timezone.utc),
+                captured_at=datetime(2026, 11, 6, tzinfo=timezone.utc),
+                point_in_time_relevant=False,
+            ),
+        ),
+    )
+
+    assert snapshot.coverage_status.value == "verified"
+    assert {record.source_id for record in snapshot.source_records} == {
+        "sec",
+        "sec-submissions",
+    }
+    submissions = next(
+        record
+        for record in snapshot.source_records
+        if record.source_id == "sec-submissions"
+    )
+    assert submissions.available_at == datetime(2026, 11, 6, tzinfo=timezone.utc)
+    assert submissions.point_in_time_relevant is False
+    assert {record.source_id for record in select_available_sources(snapshot)} == {
+        "sec"
+    }
+
+
 def test_snapshot_manifest_is_readable_without_provider_access(tmp_path: Path):
     snapshot = build(tmp_path, datetime(2026, 1, 2, tzinfo=timezone.utc))
     client = TestClient(
