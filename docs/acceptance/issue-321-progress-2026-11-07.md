@@ -6,8 +6,12 @@ This record covers the immutable release activation work on branch
 ## Identity
 
 - Issue: #321
-- Pull request: not opened at this checkpoint
-- Base: `origin/main` at `4727b9194bd50825869b4737e47daeb109cbd41f`
+- Pull request: [#334](https://github.com/sosodennis/value-investment-agent/pull/334)
+- PR head: `codex/issue-321-zero-downtime-release` at
+  `8e4c27cee6943ec2f7cbfd19b67d52c2485418bd`
+- PR base: `main` at `4727b9194bd50825869b4737e47daeb109cbd41f`
+- Merge commit: `bfb5c22912c0e344f83814af154fcfadda29e45c`
+- Issue state after merge: `CLOSED`
 - Current synchronization checkpoint: `f900b973` (merge of the issue branch
   with the latest `origin/main`)
 - Current verification checkpoint: `b94cf9bb` (tests and static checks below
