@@ -382,7 +382,37 @@ git rev-parse HEAD
 The `docker image inspect` result was
 `sha256:df125b606af22546ffb7cc100208cd9ea5901cb04cb05fcc860468e34e72812d`.
 The `git rev-parse HEAD` result was
-`bfd792331be10b6b80e5db97e5b03383259968c7`. This checkpoint has not yet been
-pushed, so PR CI has not run on it. Issue #328 remains open and is not
+`bfd792331be10b6b80e5db97e5b03383259968c7`. At the time this checkpoint was
+recorded, it had not yet been pushed. Issue #328 remains open and is not
 `VERIFIED` until the PR checks, merge, exact `main` commit, and issue state are
 confirmed.
+
+## Rejection Retry Verification
+
+Test checkpoint: `5d738313ee17f2e211f43bc9325059d1e9640e84`, a test-only
+commit after the code checkpoint above. The SEC ingestion fixture retries the
+same parser-blocked response and requires both attempts to return
+`PARSER_VALIDATION_BLOCKED` with the same `evidence_ref`.
+
+| Check | Result |
+| --- | --- |
+| `test_sec_ingestion_connects_adapter_snapshot_parser_and_fact_selection` | exit 0, `1 passed` |
+| Full `fundamental-service/tests` suite with PostgreSQL and pinned runtime | exit 0, `171 passed, 2 warnings`, no skips |
+| Ruff format and lint on the changed test file | exit 0 |
+| Commit hooks on `5d7383` | exit 0; whitespace, file endings, large-file, Ruff, and format hooks passed |
+| Docker Compose rebuild from the same source tree | exit 0; image ID unchanged at `sha256:df125b606af22546ffb7cc100208cd9ea5901cb04cb05fcc860468e34e72812d` |
+| PostgreSQL and Fundamental service health | both `healthy` |
+| `/livez`, `/readyz`, and `/metrics` | exit 0; request, auth, source-health, freshness, and replay failure counters were `0` |
+
+The full-suite command and Docker commands are the same as in the preceding
+checkpoint. The full suite ran against exact commit
+`5d738313ee17f2e211f43bc9325059d1e9640e84`. The Docker image contains the
+same application source as `bfd792331be10b6b80e5db97e5b03383259968c7`; the
+intervening commit changed only the test.
+
+At this checkpoint, PR #329's remote head was
+`08a3020a7d8ff539f5776b6ab06e714d02791de6`. All 11 non-skipped checks passed
+on that head, including `backend-lint-test`, `fundamental-offline-fixture-contracts`,
+and `contract-codegen-check`; `fundamental-release-gate` was skipped. Commit
+`5d7383` had not yet been pushed, so its PR checks remained pending. Issue
+#328 remains open and is not `VERIFIED`.
