@@ -244,6 +244,10 @@ class SourceSnapshotV1(StrictModel):
         ):
             if value.tzinfo is None or value.utcoffset() is None:
                 raise ValueError(f"{name} must include a timezone")
+        if any(record.captured_at > self.captured_at for record in self.source_records):
+            raise ValueError(
+                "captured_at must not precede a source record capture time"
+            )
         return self
 
 

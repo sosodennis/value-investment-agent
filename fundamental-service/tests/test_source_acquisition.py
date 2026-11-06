@@ -1,8 +1,10 @@
 import json
 from datetime import UTC, datetime
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from fundamental_service.arelle_parser import ArelleValidationProfileV1
 from fundamental_service.contracts import (
     IdentityV1,
     SecFilingSelectorV1,
@@ -110,6 +112,33 @@ def _sec_request() -> SecIngestionRequestV1:
     )
 
 
+def _runtime_settings() -> SimpleNamespace:
+    return SimpleNamespace(
+        taxonomy_manifest_id="sec-us-gaap-2023-2024-public-bundle",
+        taxonomy_version="us-gaap-2023-2024",
+        taxonomy_cache_sha256="c" * 64,
+        edgar_plugin_dir=Path("/runtime/arelle/EDGAR"),
+        xule_plugin_dir=Path("/runtime/arelle/Xule"),
+        dqc_ruleset_path=Path("/runtime/arelle/dqc-ruleset.xml"),
+        edgar_plugin_sha256="a" * 64,
+        xule_plugin_sha256="b" * 64,
+        dqc_ruleset_sha256="d" * 64,
+    )
+
+
+def _validation_profile(dqc_ruleset_sha256: str = "d" * 64):
+    return ArelleValidationProfileV1(
+        profile_id="sec-efm-us-dqc-v31.0.3",
+        validation_mode="sec-efm-dqc",
+        edgar_plugin_dir=Path("/runtime/arelle/EDGAR"),
+        xule_plugin_dir=Path("/runtime/arelle/Xule"),
+        dqc_ruleset_path=Path("/runtime/arelle/dqc-ruleset.xml"),
+        edgar_plugin_sha256="a" * 64,
+        xule_plugin_sha256="b" * 64,
+        dqc_ruleset_sha256=dqc_ruleset_sha256,
+    )
+
+
 def test_canonical_acquisition_key_distinguishes_identity_cutoff_and_coverage():
     request = _sec_request()
     use_case = object.__new__(SecAcquisitionUseCase)
@@ -137,6 +166,28 @@ def test_canonical_acquisition_key_distinguishes_identity_cutoff_and_coverage():
         sha256_digest(use_case._canonical_key_payload(variant)) != key
         for variant in variants
     )
+
+
+def test_runtime_acquisition_key_binds_validation_and_taxonomy_digests():
+    request = _sec_request()
+    use_case = object.__new__(SecAcquisitionUseCase)
+    use_case.settings = _runtime_settings()
+
+    baseline = use_case._runtime_key_payload(request, _validation_profile())
+    changed_profile = use_case._runtime_key_payload(
+        request, _validation_profile(dqc_ruleset_sha256="e" * 64)
+    )
+    use_case.settings = SimpleNamespace(
+        **{**vars(_runtime_settings()), "taxonomy_cache_sha256": "f" * 64}
+    )
+    changed_taxonomy = use_case._runtime_key_payload(request, _validation_profile())
+
+    assert baseline["runtime_releases"] == {
+        "taxonomy_cache_sha256": "c" * 64,
+        "validation_profile_digest": _validation_profile().digest(),
+    }
+    assert sha256_digest(baseline) != sha256_digest(changed_profile)
+    assert sha256_digest(baseline) != sha256_digest(changed_taxonomy)
 
 
 class _AuditMetadata:
@@ -187,10 +238,7 @@ def test_authenticated_early_rejections_are_audited(
     metadata = _AuditMetadata()
     use_case.metadata = metadata
     use_case.authorized_organizations = frozenset({"org-approved"})
-    use_case.settings = SimpleNamespace(
-        taxonomy_manifest_id="sec-us-gaap-2023-2024-public-bundle",
-        taxonomy_version="us-gaap-2023-2024",
-    )
+    use_case.settings = _runtime_settings()
 
     with pytest.raises(ServiceError) as error:
         use_case.execute(

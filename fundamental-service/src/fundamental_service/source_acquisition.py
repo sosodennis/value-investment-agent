@@ -140,6 +140,12 @@ class SecAcquisitionUseCase:
 
     @staticmethod
     def _canonical_key_payload(request: SecIngestionRequestV1) -> dict[str, object]:
+        return SecAcquisitionUseCase._canonical_request_payload(request)
+
+    @staticmethod
+    def _canonical_request_payload(
+        request: SecIngestionRequestV1,
+    ) -> dict[str, object]:
         payload = request.model_dump(mode="json")
         payload["required_fields"] = sorted(request.required_fields)
         payload["mappings"] = [
@@ -153,6 +159,32 @@ class SecAcquisitionUseCase:
         payload["filing"] = filing
         return payload
 
+    def _validation_profile(
+        self, request: SecIngestionRequestV1
+    ) -> ArelleValidationProfileV1:
+        return ArelleValidationProfileV1(
+            profile_id=request.validation_profile_id,
+            validation_mode="sec-efm-dqc",
+            edgar_plugin_dir=self.settings.edgar_plugin_dir,
+            xule_plugin_dir=self.settings.xule_plugin_dir,
+            dqc_ruleset_path=self.settings.dqc_ruleset_path,
+            edgar_plugin_sha256=self.settings.edgar_plugin_sha256,
+            xule_plugin_sha256=self.settings.xule_plugin_sha256,
+            dqc_ruleset_sha256=self.settings.dqc_ruleset_sha256,
+        )
+
+    def _runtime_key_payload(
+        self,
+        request: SecIngestionRequestV1,
+        validation_profile: ArelleValidationProfileV1,
+    ) -> dict[str, object]:
+        payload = self._canonical_request_payload(request)
+        payload["runtime_releases"] = {
+            "taxonomy_cache_sha256": self.settings.taxonomy_cache_sha256,
+            "validation_profile_digest": validation_profile.digest(),
+        }
+        return payload
+
     def execute(
         self,
         request: SecIngestionRequestV1,
@@ -162,7 +194,8 @@ class SecAcquisitionUseCase:
         correlation_id: str,
         deadline_at: datetime,
     ) -> SecIngestionResponseV1:
-        key_payload = self._canonical_key_payload(request)
+        validation_profile = self._validation_profile(request)
+        key_payload = self._runtime_key_payload(request, validation_profile)
         acquisition_key = sha256_digest(key_payload)
         if organization_id not in self.authorized_organizations:
             self.metadata.publish_source_audit(
@@ -247,6 +280,7 @@ class SecAcquisitionUseCase:
                     organization_id=organization_id,
                     correlation_id=correlation_id,
                     deadline_at=deadline_at,
+                    validation_profile=validation_profile,
                 )
                 self.metadata.publish_source_audit(
                     acquisition_key=acquisition_key,
@@ -331,6 +365,7 @@ class SecAcquisitionUseCase:
         organization_id: str,
         correlation_id: str,
         deadline_at: datetime,
+        validation_profile: ArelleValidationProfileV1,
     ) -> SecIngestionResponseV1:
         submissions_source = self.adapter.capture_submissions(
             request.cik, deadline_at=deadline_at
@@ -385,16 +420,7 @@ class SecAcquisitionUseCase:
             mappings=mappings,
             reference_sources=(submissions_source, index_source),
             dts_filenames=dts_filenames,
-            profile=ArelleValidationProfileV1(
-                profile_id=request.validation_profile_id,
-                validation_mode="sec-efm-dqc",
-                edgar_plugin_dir=self.settings.edgar_plugin_dir,
-                xule_plugin_dir=self.settings.xule_plugin_dir,
-                dqc_ruleset_path=self.settings.dqc_ruleset_path,
-                edgar_plugin_sha256=self.settings.edgar_plugin_sha256,
-                xule_plugin_sha256=self.settings.xule_plugin_sha256,
-                dqc_ruleset_sha256=self.settings.dqc_ruleset_sha256,
-            ),
+            profile=validation_profile,
             form=filing.form,
             is_amendment=filing.is_amendment,
             amendment_scope="unknown" if filing.is_amendment else None,

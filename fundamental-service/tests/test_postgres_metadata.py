@@ -179,6 +179,28 @@ def _sec_ingestion_request() -> SecIngestionRequestV1:
     )
 
 
+def _test_sec_acquisition_settings(request: SecIngestionRequestV1) -> SimpleNamespace:
+    return SimpleNamespace(
+        taxonomy_manifest_id=request.taxonomy_manifest_id,
+        taxonomy_version=request.taxonomy_version,
+        taxonomy_cache_sha256="c" * 64,
+        edgar_plugin_dir=Path("/runtime/arelle/EDGAR"),
+        xule_plugin_dir=Path("/runtime/arelle/Xule"),
+        dqc_ruleset_path=Path("/runtime/arelle/dqc-ruleset.xml"),
+        edgar_plugin_sha256="a" * 64,
+        xule_plugin_sha256="b" * 64,
+        dqc_ruleset_sha256="d" * 64,
+    )
+
+
+def _runtime_acquisition_payload(
+    request: SecIngestionRequestV1, settings: SimpleNamespace | None = None
+) -> dict[str, object]:
+    use_case = object.__new__(SecAcquisitionUseCase)
+    use_case.settings = settings or _test_sec_acquisition_settings(request)
+    return use_case._runtime_key_payload(request, use_case._validation_profile(request))
+
+
 def _fact_for_snapshot(snapshot: SourceSnapshotV1, fact_id: str) -> CanonicalFactV1:
     available = datetime(2025, 12, 1, tzinfo=UTC)
     period_start = datetime(2025, 1, 1, tzinfo=UTC).date()
@@ -286,12 +308,10 @@ def _cross_process_ingestion_contenders(
     use_case = object.__new__(SecAcquisitionUseCase)
     use_case.metadata = metadata
     use_case.authorized_organizations = frozenset({"org-sec-ingestion-test"})
-    use_case.settings = SimpleNamespace(
-        taxonomy_manifest_id=request.taxonomy_manifest_id,
-        taxonomy_version=request.taxonomy_version,
-    )
+    use_case.settings = _test_sec_acquisition_settings(request)
     if (
-        SecAcquisitionUseCase._canonical_key_payload(request) != acquisition_payload
+        use_case._runtime_key_payload(request, use_case._validation_profile(request))
+        != acquisition_payload
         or sha256_digest(acquisition_payload) != acquisition_key
     ):
         raise AssertionError("concurrent requests did not use the expected key")
@@ -321,11 +341,14 @@ def _cross_process_ingestion_contenders(
         organization_id: str,
         correlation_id: str,
         deadline_at: datetime,
+        validation_profile,
     ) -> SecIngestionResponseV1:
         _ = deadline_at
         if (
-            SecAcquisitionUseCase._canonical_key_payload(acquisition_request)
+            _runtime_acquisition_payload(acquisition_request, use_case.settings)
             != key_payload
+            or validation_profile.digest()
+            != key_payload["runtime_releases"]["validation_profile_digest"]
         ):
             raise AssertionError("request payload changed during acquisition")
         metadata._runner.run(
@@ -731,10 +754,7 @@ def test_unauthorized_sec_ingestion_is_rejected_and_audited_in_postgres(
     use_case = object.__new__(SecAcquisitionUseCase)
     use_case.metadata = metadata
     use_case.authorized_organizations = frozenset({"org-approved"})
-    use_case.settings = SimpleNamespace(
-        taxonomy_manifest_id=request.taxonomy_manifest_id,
-        taxonomy_version=request.taxonomy_version,
-    )
+    use_case.settings = _test_sec_acquisition_settings(request)
     app = create_app(
         config=OperationsConfig(service_token=TEST_SERVICE_TOKEN),
         sec_acquisition=use_case,
@@ -777,7 +797,7 @@ def test_unauthorized_sec_ingestion_is_rejected_and_audited_in_postgres(
 
     audit = metadata._runner.run(read_audit())
     assert audit == (
-        sha256_digest(SecAcquisitionUseCase._canonical_key_payload(request)),
+        sha256_digest(_runtime_acquisition_payload(request, use_case.settings)),
         "subject-test",
         "org-unapproved",
         (),
@@ -794,7 +814,7 @@ def test_fifty_sec_ingestion_contenders_across_processes_publish_once(
     request = _sec_ingestion_request().model_copy(
         update={"policy_version": f"sec-public-pit-{run_id}"}
     )
-    acquisition_payload = SecAcquisitionUseCase._canonical_key_payload(request)
+    acquisition_payload = _runtime_acquisition_payload(request)
     acquisition_key = sha256_digest(acquisition_payload)
 
     async def create_probe() -> None:
@@ -892,10 +912,7 @@ def test_fifty_sec_ingestion_contenders_across_processes_publish_once(
         use_case = object.__new__(SecAcquisitionUseCase)
         use_case.metadata = metadata
         use_case.authorized_organizations = frozenset({"org-sec-ingestion-test"})
-        use_case.settings = SimpleNamespace(
-            taxonomy_manifest_id=request.taxonomy_manifest_id,
-            taxonomy_version=request.taxonomy_version,
-        )
+        use_case.settings = _test_sec_acquisition_settings(request)
         app = create_app(
             config=OperationsConfig(
                 service_token=TEST_SERVICE_TOKEN,

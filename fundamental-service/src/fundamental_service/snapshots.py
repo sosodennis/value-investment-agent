@@ -333,6 +333,19 @@ class SnapshotBuilder:
                     "SNAPSHOT_TIMESTAMP_TIMEZONE_REQUIRED",
                     f"{timestamp_name} must include a timezone",
                 )
+        source_capture_times = [captured_at]
+        for source in sources:
+            source_captured_at = source.captured_at or captured_at
+            if (
+                source_captured_at.tzinfo is None
+                or source_captured_at.utcoffset() is None
+            ):
+                raise SnapshotError(
+                    "SOURCE_TIMESTAMP_TIMEZONE_REQUIRED",
+                    "captured_at must include a timezone",
+                )
+            source_capture_times.append(source_captured_at)
+        snapshot_captured_at = max(source_capture_times)
         records: list[SourceRecordV1] = []
         issues: list[IssueV1] = list(additional_issues)
         for source in sources:
@@ -354,7 +367,7 @@ class SnapshotBuilder:
                         "SOURCE_TIMESTAMP_TIMEZONE_REQUIRED",
                         f"{timestamp_name} must include a timezone",
                     )
-            if source.available_at > captured_at:
+            if source.available_at > snapshot_captured_at:
                 issues.append(
                     IssueV1(
                         code="SOURCE_CAPTURE_ORDER",
@@ -397,7 +410,7 @@ class SnapshotBuilder:
                     uri=source.uri,
                     role=source.role,
                     available_at=source.available_at,
-                    captured_at=source.captured_at or captured_at,
+                    captured_at=source.captured_at or snapshot_captured_at,
                     publication_at=source.publication_at,
                     http_status=source.http_status,
                     media_type=source.media_type,
@@ -424,7 +437,7 @@ class SnapshotBuilder:
             "valuation_timestamp": valuation_timestamp,
             "parser_version": parser_version,
             "policy_version": policy_version,
-            "captured_at": captured_at,
+            "captured_at": snapshot_captured_at,
             "taxonomy_manifest_id": taxonomy_manifest_id,
             "acquisition_key": acquisition_key,
             "validation_profile_id": validation_profile_id,
@@ -456,7 +469,7 @@ class SnapshotBuilder:
             snapshot_id=snapshot_id,
             identity=identity,
             valuation_timestamp=valuation_timestamp,
-            captured_at=captured_at,
+            captured_at=snapshot_captured_at,
             source_records=tuple(records),
             taxonomy_manifest_id=taxonomy_manifest_id,
             acquisition_key=acquisition_key,
@@ -471,7 +484,7 @@ class SnapshotBuilder:
                     "contract_version": "fundamental.v1",
                     "identity": identity,
                     "valuation_timestamp": valuation_timestamp,
-                    "captured_at": captured_at,
+                    "captured_at": snapshot_captured_at,
                     "source_records": records,
                     "taxonomy_manifest_id": taxonomy_manifest_id,
                     "acquisition_key": acquisition_key,
