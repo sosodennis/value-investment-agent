@@ -678,16 +678,16 @@ const parseProvenanceMetadata = (
 ): FundamentalArtifactProvenance => {
     const record = parseRecord(value, context);
     const parsed: FundamentalArtifactProvenance = {};
-    for (const field of [
-        'snapshot_id',
-        'mapping_version',
-        'parser_version',
-        'taxonomy_version',
-        'policy_version',
-    ] as const) {
-        const fieldValue = parseOptionalString(record[field], `${context}.${field}`);
-        if (fieldValue !== undefined) parsed[field] = fieldValue;
-    }
+    const snapshotId = parseOptionalString(record.snapshot_id, `${context}.snapshot_id`);
+    if (snapshotId !== undefined) parsed.snapshot_id = snapshotId;
+    const mappingVersion = parseOptionalString(record.mapping_version, `${context}.mapping_version`);
+    if (mappingVersion !== undefined) parsed.mapping_version = mappingVersion;
+    const parserVersion = parseOptionalString(record.parser_version, `${context}.parser_version`);
+    if (parserVersion !== undefined) parsed.parser_version = parserVersion;
+    const taxonomyVersion = parseOptionalString(record.taxonomy_version, `${context}.taxonomy_version`);
+    if (taxonomyVersion !== undefined) parsed.taxonomy_version = taxonomyVersion;
+    const policyVersion = parseOptionalString(record.policy_version, `${context}.policy_version`);
+    if (policyVersion !== undefined) parsed.policy_version = policyVersion;
     if (record.fact_ids !== undefined && record.fact_ids !== null) {
         parsed.fact_ids = parseStringArray(record.fact_ids, `${context}.fact_ids`);
     }
@@ -708,10 +708,12 @@ const parseQualityMetadata = (
         const inputStatus = parseOptionalString(inputRecord.status, `${context}.input.status`);
         if (inputStatus !== undefined) parsed.input_status = parseQuality(inputStatus, `${context}.input.status`);
     }
-    for (const field of ['validation_status', 'facts_status', 'calculation_status'] as const) {
-        const status = parseOptionalString(record[field], `${context}.${field}`);
-        if (status !== undefined) parsed[field] = parseQuality(status, `${context}.${field}`);
-    }
+    const validationStatus = parseOptionalString(record.validation_status, `${context}.validation_status`);
+    if (validationStatus !== undefined) parsed.validation_status = parseQuality(validationStatus, `${context}.validation_status`);
+    const factsStatus = parseOptionalString(record.facts_status, `${context}.facts_status`);
+    if (factsStatus !== undefined) parsed.facts_status = parseQuality(factsStatus, `${context}.facts_status`);
+    const calculationStatus = parseOptionalString(record.calculation_status, `${context}.calculation_status`);
+    if (calculationStatus !== undefined) parsed.calculation_status = parseQuality(calculationStatus, `${context}.calculation_status`);
     return parsed;
 };
 
@@ -822,18 +824,20 @@ export const parseFundamentalServiceArtifact = (
         issue_codes: parseStringArray(record.issue_codes, `${context}.issue_codes`),
         missing_evidence: parseStringArray(record.missing_evidence, `${context}.missing_evidence`),
     };
-    for (const field of ['model_id', 'model_version', 'calculation_version', 'calculation_status', 'input_digest', 'result_hash', 'evaluated_at'] as const) {
-        const parsedValue = parseOptionalProjectionString(field);
-        if (parsedValue !== undefined) {
-            if (field === 'input_digest' || field === 'result_hash') {
-                parsed[field] = parseDigest(parsedValue, `${context}.${field}`);
-            } else if (field === 'evaluated_at') {
-                parsed[field] = parseTimestamp(parsedValue, `${context}.${field}`);
-            } else {
-                parsed[field] = parsedValue;
-            }
-        }
-    }
+    const modelId = parseOptionalProjectionString('model_id');
+    if (modelId !== undefined) parsed.model_id = modelId;
+    const modelVersion = parseOptionalProjectionString('model_version');
+    if (modelVersion !== undefined) parsed.model_version = modelVersion;
+    const calculationVersion = parseOptionalProjectionString('calculation_version');
+    if (calculationVersion !== undefined) parsed.calculation_version = calculationVersion;
+    const calculationStatus = parseOptionalProjectionString('calculation_status');
+    if (calculationStatus !== undefined) parsed.calculation_status = calculationStatus;
+    const inputDigest = parseOptionalProjectionString('input_digest');
+    if (inputDigest !== undefined) parsed.input_digest = parseDigest(inputDigest, `${context}.input_digest`);
+    const resultHash = parseOptionalProjectionString('result_hash');
+    if (resultHash !== undefined) parsed.result_hash = parseDigest(resultHash, `${context}.result_hash`);
+    const evaluatedAt = parseOptionalProjectionString('evaluated_at');
+    if (evaluatedAt !== undefined) parsed.evaluated_at = parseTimestamp(evaluatedAt, `${context}.evaluated_at`);
     if (qualityStatus !== undefined) parsed.quality_status = parseQuality(qualityStatus, `${context}.quality_status`);
     const intrinsicValue = parseOptionalArtifactNumber(record.intrinsic_value, `${context}.intrinsic_value`);
     if (intrinsicValue !== undefined) parsed.intrinsic_value = intrinsicValue;

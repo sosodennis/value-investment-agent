@@ -40,7 +40,6 @@ export interface FundamentalAnalysisOutputProps {
 const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProps> = ({
     reference,
     previewData,
-    resolvedTicker,
     status,
     onSelectEvidence,
 }) => {
