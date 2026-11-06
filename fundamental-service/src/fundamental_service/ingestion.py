@@ -599,7 +599,7 @@ class SecIngestionService:
         cik: str,
         accession_number: str,
         primary_document: str,
-        filing_archive_filename: str,
+        filing_archive_filename: str | None = None,
         filed_at: datetime,
         captured_at: datetime,
         valuation_timestamp: datetime,
