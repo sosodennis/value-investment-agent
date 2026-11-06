@@ -39,7 +39,8 @@ synthetic fixture that caused it. It is not an acceptance or `VERIFIED` record.
   `fundamental_output.artifact.data.fundamental_service.facts.facts[0].period_end must be a non-empty string.`
 - The artifact stores each fact's period under nested `period` (`kind`,
   `start`/`instant`, `end`). The canonical `fundamental.v1` Agent contract
-  requires the service wire fields `period_start`, `period_end`, and `instant`;
+  exposes `period_start` and `period_end`; an instant date is available at
+  `context.instant`, while the top-level `instant` field is optional.
   `service_valuation_flow.py` serializes the typed service model with
   `model_dump(mode="json")`.
 - The artifact's `snapshot-issue325-live-1`, 64-character `a` digest, and
