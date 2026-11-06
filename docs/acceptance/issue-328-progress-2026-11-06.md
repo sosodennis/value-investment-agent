@@ -112,3 +112,30 @@ fundamental-service/.venv/bin/pytest -q \
 Docker health, real service-backed snapshot publication from the clean filing,
 and exact-commit acceptance remain pending. Publication remains fail-closed
 until those gates are complete.
+
+## Verification Stack Checkpoint
+
+All checks below ran against exact commit `e7ac1d5d71421cc807a5f5893b60a01cafa5f3fa`.
+
+| Check | Result |
+| --- | --- |
+| Compose project | `value-investment-agent-issue-328-sec-integrity` |
+| Compose file | `compose/verification/docker-compose.issue280-operations.yml` |
+| Host ports | PostgreSQL `18483`, Fundamental service `18083` |
+| `docker compose ... up -d --build` | exit 0; image `value-investment-agent-issue-328-sec-integrity-fundamental-service`, image digest `sha256:d51d26bfdda70b1c874c7b79ba7274ab07e7c2ca57eea307520c0054effe8809` |
+| PostgreSQL container | healthy |
+| Fundamental service container | healthy |
+| `GET /livez` | exit 0; `{"status":"ok","contract_version":"internal.v1"}` |
+| `GET /readyz` | exit 0; `{"status":"ready","contract_version":"internal.v1"}` |
+| `GET /metrics` | exit 0; request failures, auth failures, source health failures, and replay failures were zero |
+| Full service suite with pinned Arelle/EFM/DQC runtime | `163 passed, 5 skipped, 2 warnings` |
+
+The five skips are the PostgreSQL metadata tests because the local pytest
+process was not given `FUNDAMENTAL_TEST_DATABASE_URL`; the Docker PostgreSQL
+health check and service readiness above are separate container checks. The
+remaining unrun acceptance is the service-backed SEC ingestion publication
+from a clean verified filing. The current ingestion regression uses a fake
+parser to cover normalization mismatch, raw retention, blocking findings, and
+publication ordering; the real parser-to-snapshot publication path still
+needs a clean filing fixture with the complete referenced taxonomy and a
+service/database-backed invocation.
