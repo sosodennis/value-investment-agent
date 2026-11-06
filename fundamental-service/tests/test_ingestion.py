@@ -272,6 +272,134 @@ def test_sec_ingestion_connects_adapter_snapshot_parser_and_fact_selection(
     assert content_store.get(raw_hash, media_type="text/html") == filing_bytes
 
 
+def test_sec_ingestion_blocks_real_aapl_efm_finding_without_publishing_facts(
+    tmp_path: Path,
+):
+    required_environment = (
+        "ISSUE328_EDGAR_PLUGIN_DIR",
+        "ISSUE328_XULE_PLUGIN_DIR",
+        "ISSUE328_DQC_RULESET_PATH",
+        "ISSUE328_TAXONOMY_CACHE_DIR",
+    )
+    if not all(os.environ.get(name) for name in required_environment):
+        pytest.skip("pinned SEC EFM/DQC runtime paths are not configured")
+
+    fixture_root = Path(__file__).parent / "fixtures" / "sec-edgar"
+    filing_bytes = (fixture_root / "apple-2024-original-aapl-20240928.htm").read_bytes()
+    archive_path = fixture_root / "apple-2024-original-0000320193-24-000123-xbrl.zip"
+    archive_bytes = archive_path.read_bytes()
+    with ZipFile(archive_path) as archive:
+        primary_bytes = archive.read("aapl-20240928.htm")
+        dts_bytes = {
+            filename: archive.read(filename)
+            for filename in (
+                "aapl-20240928.xsd",
+                "aapl-20240928_pre.xml",
+                "aapl-20240928_def.xml",
+                "aapl-20240928_lab.xml",
+                "aapl-20240928_cal.xml",
+            )
+        }
+    index_bytes = json.dumps(
+        {
+            "directory": {
+                "item": [
+                    {"name": "aapl-20240928.htm", "size": str(len(primary_bytes) + 1)},
+                    {
+                        "name": "0000320193-24-000123-xbrl.zip",
+                        "size": str(len(archive_bytes)),
+                    },
+                ]
+            }
+        }
+    ).encode()
+    edgar_dir = Path(os.environ["ISSUE328_EDGAR_PLUGIN_DIR"])
+    xule_dir = Path(os.environ["ISSUE328_XULE_PLUGIN_DIR"])
+    ruleset = Path(os.environ["ISSUE328_DQC_RULESET_PATH"])
+    profile = ArelleValidationProfileV1(
+        profile_id="sec-efm-dqc-us-gaap-2024-v1",
+        validation_mode="sec-efm-dqc",
+        edgar_plugin_dir=edgar_dir,
+        xule_plugin_dir=xule_dir,
+        dqc_ruleset_path=ruleset,
+        edgar_plugin_sha256=_directory_hash(edgar_dir),
+        xule_plugin_sha256=_directory_hash(xule_dir),
+        dqc_ruleset_sha256=hashlib.sha256(ruleset.read_bytes()).hexdigest(),
+    )
+    adapter = SecEdgarSourceAdapter(
+        SecRequestPolicy(
+            user_agent="value-agent test@example.com", min_interval_seconds=0
+        ),
+        opener=lambda request, timeout: _ingestion_response(
+            request.full_url,
+            index_bytes=index_bytes,
+            archive_bytes=archive_bytes,
+            filing_bytes=filing_bytes,
+            dts_bytes=dts_bytes,
+        ),
+        sleep=lambda _seconds: None,
+        clock=lambda: datetime(2026, 11, 6, tzinfo=timezone.utc),
+    )
+    content_store = FilesystemContentStore(tmp_path / "objects")
+    snapshot_repository = FilesystemSnapshotRepository(tmp_path / "snapshots")
+    service = SecIngestionService(
+        source_adapter=adapter,
+        content_store=content_store,
+        snapshot_repository=snapshot_repository,
+    )
+    ingestion_args = dict(
+        identity=IdentityV1(
+            issuer_id="0000320193",
+            issuer_name="Apple Inc.",
+            domicile="US",
+            reporting_basis="us-gaap",
+            security_id="AAPL",
+            share_class="common",
+            currency="USD",
+        ),
+        cik="0000320193",
+        accession_number="0000320193-24-000123",
+        primary_document="aapl-20240928.htm",
+        filed_at=datetime(2024, 11, 1, 10, 1, 36, tzinfo=timezone.utc),
+        captured_at=datetime(2026, 11, 6, tzinfo=timezone.utc),
+        valuation_timestamp=datetime(2025, 1, 1, tzinfo=timezone.utc),
+        parser_version="2.47.4",
+        policy_version="source-policy-v1",
+        taxonomy_manifest_id="taxonomy-manifest-v1",
+        taxonomy_version="us-gaap-2024",
+        taxonomy_cache_dir=Path(os.environ["ISSUE328_TAXONOMY_CACHE_DIR"]),
+        normalized_field="revenue",
+        dts_filenames=tuple(dts_bytes),
+        profile=profile,
+        mapping=CanonicalMappingV1(
+            contract_version="fundamental.v1",
+            decision_id="map-revenue-v1",
+            source_concept="us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
+            normalized_field="revenue",
+            mapping_version="sec-us-gaap-v1",
+            confidence="high",
+            evidence_refs=("public-sec-review",),
+            reviewer="fundamental-service",
+            reviewed_at=datetime(2025, 1, 1, tzinfo=timezone.utc),
+            status="approved",
+        ),
+    )
+
+    with pytest.raises(SnapshotError) as error:
+        service.ingest_filing(**ingestion_args)
+
+    assert error.value.code == "PARSER_VALIDATION_BLOCKED"
+    assert (
+        snapshot_repository.find(
+            identity=ingestion_args["identity"],
+            valuation_timestamp=ingestion_args["valuation_timestamp"],
+        )
+        == ()
+    )
+    raw_hash = hashlib.sha256(filing_bytes).hexdigest()
+    assert content_store.get(raw_hash, media_type="text/html") == filing_bytes
+
+
 def test_sec_ingestion_publishes_real_verified_microsoft_fixture(
     tmp_path: Path,
 ):
