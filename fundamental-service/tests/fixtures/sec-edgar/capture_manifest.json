@@ -224,5 +224,37 @@
       "terms_reference": "https://www.sec.gov/submit-filings/about-edgar-filer-access",
       "uri": "https://www.sec.gov/Archives/edgar/data/1318605/000110465925042659/tm252787d2_10ka.htm"
     }
+  ],
+  "external_public_evidence": [
+    {
+      "accession_number": "0000950170-24-087843",
+      "canonical_members": [
+        {
+          "bytes": 6860910,
+          "name": "msft-20240630.htm",
+          "sha256": "01cc7750e904e14a2065ba0ddb639138f2e5b0591c8071a513ac1234a735602e"
+        },
+        {
+          "bytes": 2099151,
+          "name": "msft-20240630.xsd",
+          "sha256": "0b71b0995cba38320a588bdeed7a516be06e1f681832ccb7f6d274bdb965d554"
+        }
+      ],
+      "direct_primary_document_response": {
+        "bytes": 6861017,
+        "challenge_script_count": 1,
+        "sha256": "577d30abb4f61409b3c5ad9c332a408970ed7e54fd284a7ed483605b974cb90f"
+      },
+      "media_type": "application/zip",
+      "sha256": "5a7653632f53c2529c4da82d25043fc52f05bfbe536837345aa5904560d92a82",
+      "source_url": "https://www.sec.gov/Archives/edgar/data/789019/000095017024087843/0000950170-24-087843-xbrl.zip"
+    }
+  ],
+  "test_fixtures": [
+    {
+      "description": "Canonical primary filing and extension schema from the SEC archive",
+      "path": "microsoft-2024-original-xbrl-test-package.zip",
+      "sha256": "9315745e8b66735afd8be0f63a2d5876d350eb7ae7be80a7e0aff015df76acf0"
+    }
   ]
 }

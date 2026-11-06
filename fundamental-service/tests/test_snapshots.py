@@ -4,7 +4,8 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 from fundamental_service.app import create_app
-from fundamental_service.contracts import IdentityV1, SourceRole
+from fundamental_service.contracts import IdentityV1, SourceRole, SourceSnapshotV1
+from fundamental_service.serialization import canonical_bytes, sha256_digest
 from fundamental_service.snapshots import (
     CapturedSource,
     FilesystemContentStore,
@@ -158,6 +159,158 @@ def test_snapshot_rejects_naive_top_level_timestamps(tmp_path: Path):
             ),
         )
     assert error.value.code == "SNAPSHOT_TIMESTAMP_TIMEZONE_REQUIRED"
+
+
+def test_snapshot_capture_time_covers_every_source_record(tmp_path: Path):
+    register = SourceRegister(
+        (LegalSource("sec", SourceRole.FILING, "sec-terms", "indefinite"),)
+    )
+    snapshot = SnapshotBuilder(
+        FilesystemContentStore(tmp_path / "objects"),
+        FilesystemSnapshotRepository(tmp_path / "manifests"),
+        register,
+    ).build(
+        identity=identity(),
+        valuation_timestamp=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        captured_at=datetime(2026, 1, 2, tzinfo=timezone.utc),
+        parser_version="fixture-parser-v1",
+        policy_version="source-policy-v1",
+        sources=(
+            CapturedSource(
+                source_id="sec",
+                uri="https://example.test/10-k.html",
+                role=SourceRole.FILING,
+                content=b"captured later than the requested snapshot time",
+                media_type="text/html",
+                http_status=200,
+                available_at=datetime(2025, 12, 1, tzinfo=timezone.utc),
+                captured_at=datetime(2026, 1, 3, tzinfo=timezone.utc),
+                filed_at=datetime(2025, 12, 1, tzinfo=timezone.utc),
+                accession_number="0000000001-25-000001",
+                form="10-K",
+            ),
+        ),
+    )
+
+    assert snapshot.captured_at == datetime(2026, 1, 3, tzinfo=timezone.utc)
+    assert all(
+        record.captured_at <= snapshot.captured_at for record in snapshot.source_records
+    )
+
+
+def test_acquisition_metadata_does_not_change_point_in_time_coverage(
+    tmp_path: Path,
+):
+    register = SourceRegister(
+        (
+            LegalSource("sec", SourceRole.FILING, "sec-terms", "indefinite"),
+            LegalSource(
+                "sec-submissions", SourceRole.ACQUISITION, "sec-terms", "indefinite"
+            ),
+        )
+    )
+    snapshot = SnapshotBuilder(
+        FilesystemContentStore(tmp_path / "objects"),
+        FilesystemSnapshotRepository(tmp_path / "manifests"),
+        register,
+    ).build(
+        identity=identity(),
+        valuation_timestamp=datetime(2025, 6, 30, tzinfo=timezone.utc),
+        captured_at=datetime(2026, 11, 6, tzinfo=timezone.utc),
+        parser_version="fixture-parser-v1",
+        policy_version="source-policy-v1",
+        sources=(
+            CapturedSource(
+                source_id="sec",
+                uri="https://example.test/10-k.html",
+                role=SourceRole.FILING,
+                content=b"filing available by cutoff",
+                media_type="text/html",
+                http_status=200,
+                available_at=datetime(2024, 7, 30, tzinfo=timezone.utc),
+                captured_at=datetime(2026, 11, 6, tzinfo=timezone.utc),
+                accession_number="0000000001-24-000001",
+                form="10-K",
+                filed_at=datetime(2024, 7, 30, tzinfo=timezone.utc),
+            ),
+            CapturedSource(
+                source_id="sec-submissions",
+                uri="https://data.sec.gov/submissions/CIK0000000001.json",
+                role=SourceRole.ACQUISITION,
+                content=b"current submissions index",
+                media_type="application/json",
+                http_status=200,
+                available_at=datetime(2026, 11, 6, tzinfo=timezone.utc),
+                captured_at=datetime(2026, 11, 6, tzinfo=timezone.utc),
+            ),
+        ),
+    )
+
+    assert snapshot.coverage_status.value == "verified"
+    assert {record.source_id for record in snapshot.source_records} == {
+        "sec",
+        "sec-submissions",
+    }
+    submissions = next(
+        record
+        for record in snapshot.source_records
+        if record.source_id == "sec-submissions"
+    )
+    assert submissions.available_at == datetime(2026, 11, 6, tzinfo=timezone.utc)
+    assert submissions.role is SourceRole.ACQUISITION
+    assert {record.source_id for record in select_available_sources(snapshot)} == {
+        "sec"
+    }
+
+
+def test_snapshot_reads_legacy_manifest_digest_without_point_in_time_field(
+    tmp_path: Path,
+):
+    snapshot = build(tmp_path, datetime(2026, 1, 2, tzinfo=timezone.utc))
+    payload = snapshot.model_dump(mode="json")
+    payload["source_records"][0].pop("point_in_time_relevant")
+    digest_payload = {
+        key: value
+        for key, value in payload.items()
+        if key not in {"snapshot_id", "manifest_digest"}
+    }
+    payload["manifest_digest"] = sha256_digest(digest_payload)
+
+    restored = SourceSnapshotV1.model_validate_json(canonical_bytes(payload))
+
+    assert restored.snapshot_id == snapshot.snapshot_id
+    assert restored.source_records[0].point_in_time_relevant is True
+    assert restored.manifest_digest == payload["manifest_digest"]
+
+
+def test_snapshot_reads_legacy_provisional_manifest_with_early_capture_time(
+    tmp_path: Path,
+):
+    snapshot = build(tmp_path, datetime(2026, 1, 2, tzinfo=timezone.utc))
+    payload = snapshot.model_dump(mode="json")
+    payload["captured_at"] = "2026-01-01T00:00:00Z"
+    payload["coverage_status"] = "provisional"
+    digest_payload = {
+        key: value
+        for key, value in payload.items()
+        if key not in {"snapshot_id", "manifest_digest"}
+    }
+    payload["manifest_digest"] = sha256_digest(digest_payload)
+
+    restored = SourceSnapshotV1.model_validate_json(canonical_bytes(payload))
+
+    assert restored.coverage_status.value == "provisional"
+
+    payload["coverage_status"] = "verified"
+    payload["manifest_digest"] = sha256_digest(
+        {
+            key: value
+            for key, value in payload.items()
+            if key not in {"snapshot_id", "manifest_digest"}
+        }
+    )
+    with pytest.raises(ValueError, match="verified snapshots must cover"):
+        SourceSnapshotV1.model_validate_json(canonical_bytes(payload))
 
 
 def test_snapshot_manifest_is_readable_without_provider_access(tmp_path: Path):

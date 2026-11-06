@@ -474,6 +474,7 @@ class ModelInventory:
                     "sec-companyfacts",
                     "sec-submissions",
                     "sec-filing",
+                    "sec-filing-archive",
                     "sec-taxonomy",
                 }
                 if (
@@ -488,6 +489,10 @@ class ModelInventory:
                     "sec-companyfacts": ("data.sec.gov", "/api/xbrl/companyfacts/"),
                     "sec-submissions": ("data.sec.gov", "/submissions/"),
                     "sec-filing": ("www.sec.gov", "/Archives/edgar/data/"),
+                    "sec-filing-archive": (
+                        "www.sec.gov",
+                        "/Archives/edgar/data/",
+                    ),
                     "sec-taxonomy": ("www.sec.gov", "/Archives/edgar/data/"),
                 }
                 if sec_source:

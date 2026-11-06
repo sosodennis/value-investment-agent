@@ -12,7 +12,12 @@ from src.agents.fundamental.interface.fundamental_service_contracts import (
 from src.shared.internal_services import InternalPrincipal
 
 FundamentalOperation = Literal[
-    "resolve_snapshot", "validate", "calculate", "uncertainty", "replay"
+    "ingest_sec_data",
+    "resolve_snapshot",
+    "validate",
+    "calculate",
+    "uncertainty",
+    "replay",
 ]
 
 

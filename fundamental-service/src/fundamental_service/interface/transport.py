@@ -165,7 +165,14 @@ async def authorize_operation(
 
     request.state.context = context
     request.state.correlation_id = context.correlation_id
-    request.state.deadline = enforce_deadline(context.deadline_at, config)
+    request_budget_ms = (
+        config.max_ingestion_ms
+        if request.url.path == "/v1/data/ingestions"
+        else config.max_request_ms
+    )
+    request.state.deadline = enforce_deadline(
+        context.deadline_at, config, max_request_ms=request_budget_ms
+    )
     request.state.operation_input = dict(raw["input"])
     return context, request.state.operation_input
 
@@ -179,6 +186,7 @@ def error_response(request: Request, error: ServiceError) -> JSONResponse:
             code=error.code,
             message=error.message,
             retryable=error.retryable,
+            retry_after_ms=error.retry_after_ms,
         ),
     )
     return JSONResponse(

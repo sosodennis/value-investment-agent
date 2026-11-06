@@ -1,24 +1,31 @@
 import json
 from datetime import datetime, timezone
 from email.message import Message
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from threading import Thread
+from urllib.error import HTTPError
+from urllib.request import Request
 
 import pytest
-
 from fundamental_service.contracts import SourceRole
 from fundamental_service.sec_source import (
     SecEdgarSourceAdapter,
     SecRequestPolicy,
     SecSourceError,
+    _open_sec,
 )
 
 
 class FakeResponse:
-    status = 200
-
-    def __init__(self, payload: bytes):
+    def __init__(
+        self, payload: bytes, *, status: int = 200, location: str | None = None
+    ):
         self._payload = payload
+        self.status = status
         self.headers = Message()
         self.headers["Content-Type"] = "application/json"
+        if location is not None:
+            self.headers["Location"] = location
 
     def read(self) -> bytes:
         return self._payload
@@ -101,6 +108,82 @@ def test_sec_source_rejects_uri_that_does_not_match_registered_endpoint():
     assert calls == []
 
 
+def test_sec_source_rejects_redirect_before_following_off_host_location():
+    calls = []
+
+    def opener(request, timeout):
+        calls.append(request.full_url)
+        return FakeResponse(
+            b"",
+            status=302,
+            location="https://evil.example/Archives/edgar/data/1/index.json",
+        )
+
+    adapter = SecEdgarSourceAdapter(
+        SecRequestPolicy(
+            user_agent="value-agent test@example.com", min_interval_seconds=0
+        ),
+        opener=opener,
+        sleep=lambda _seconds: None,
+    )
+    with pytest.raises(SecSourceError) as error:
+        adapter.capture_json(
+            source_id="sec-submissions",
+            uri="https://data.sec.gov/submissions/CIK0000000001.json",
+        )
+
+    assert error.value.code == "SOURCE_REDIRECT_NOT_ALLOWED"
+    assert calls == ["https://data.sec.gov/submissions/CIK0000000001.json"]
+
+
+def test_default_sec_transport_does_not_follow_redirect_to_another_origin():
+    destination_requests = []
+
+    class DestinationHandler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            destination_requests.append(self.path)
+            self.send_response(200)
+            self.end_headers()
+
+        def log_message(self, *_args):
+            return
+
+    destination_server = ThreadingHTTPServer(("127.0.0.1", 0), DestinationHandler)
+    destination = f"http://127.0.0.1:{destination_server.server_address[1]}/redirected"
+
+    class RedirectHandler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            self.send_response(302)
+            self.send_header("Location", destination)
+            self.end_headers()
+
+        def log_message(self, *_args):
+            return
+
+    redirect_server = ThreadingHTTPServer(("127.0.0.1", 0), RedirectHandler)
+    servers = (destination_server, redirect_server)
+    threads = tuple(
+        Thread(target=server.serve_forever, daemon=True) for server in servers
+    )
+    try:
+        for thread in threads:
+            thread.start()
+        request = Request(
+            f"http://127.0.0.1:{redirect_server.server_address[1]}/source"
+        )
+        with pytest.raises(HTTPError) as error:
+            _open_sec(request, timeout=2)
+
+        assert error.value.code == 302
+        assert destination_requests == []
+    finally:
+        for server in servers:
+            server.shutdown()
+            server.server_close()
+        for thread in threads:
+            thread.join(timeout=2)
+
+
 def test_filing_resource_capture_preserves_dts_role_and_metadata():
     adapter = SecEdgarSourceAdapter(
         SecRequestPolicy(
@@ -124,6 +207,36 @@ def test_filing_resource_capture_preserves_dts_role_and_metadata():
     assert source.uri.endswith("/aapl-20240928.xsd")
     assert source.filed_at == filed_at
     assert source.taxonomy_manifest_id == "manifest-v1"
+
+
+def test_filing_archive_capture_is_accession_bound_and_preserves_provenance():
+    adapter = SecEdgarSourceAdapter(
+        SecRequestPolicy(
+            user_agent="value-agent test@example.com", min_interval_seconds=0
+        ),
+        opener=lambda request, timeout: FakeResponse(b"PK\\x03\\x04archive"),
+        sleep=lambda _seconds: None,
+    )
+    filed_at = datetime(2024, 11, 1, 10, 1, 36, tzinfo=timezone.utc)
+    source = adapter.capture_filing_archive(
+        cik="0000320193",
+        accession_number="0000320193-24-000123",
+        filename="0000320193-24-000123-xbrl.zip",
+        filed_at=filed_at,
+    )
+    assert source.source_id == "sec-filing-archive"
+    assert source.role is SourceRole.FILING
+    assert source.uri.endswith("/0000320193-24-000123-xbrl.zip")
+    assert source.content == b"PK\\x03\\x04archive"
+    assert source.filed_at == filed_at
+
+    with pytest.raises(ValueError, match="match the SEC accession"):
+        adapter.capture_filing_archive(
+            cik="0000320193",
+            accession_number="0000320193-24-000123",
+            filename="other-accession-xbrl.zip",
+            filed_at=filed_at,
+        )
 
 
 def test_sec_policy_rejects_non_sec_base_url_and_archive_host():

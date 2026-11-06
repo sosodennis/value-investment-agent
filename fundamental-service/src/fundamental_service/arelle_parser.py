@@ -19,6 +19,12 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .serialization import sha256_digest
 
+_NON_BLOCKING_ARELLE_CODES = frozenset(
+    {
+        "ix11.10.1.2:invalidTransformation",
+        "ix11.11.1.2:invalidTransformation",
+    }
+)
 _PLUGIN_ROOT_LOCK = threading.Lock()
 _PLUGIN_ROOTS: dict[str, tuple[tempfile.TemporaryDirectory[str], Path]] = {}
 
@@ -147,6 +153,7 @@ class ArelleParseReportV1(BaseModel):
                     finding.code
                     for finding in self.findings
                     if finding.severity in {"error", "critical", "fatal"}
+                    and finding.code not in _NON_BLOCKING_ARELLE_CODES
                 }
             )
         )
@@ -234,6 +241,8 @@ def _finding_from_log(record: dict[str, Any]) -> ArelleFindingV1 | None:
     if level not in {"error", "critical", "warning", "fatal"}:
         return None
     code = str(record.get("code") or "arelle:unknown")
+    if code in _NON_BLOCKING_ARELLE_CODES:
+        level = "warning"
     message = record.get("message")
     if isinstance(message, dict):
         message_text = str(message.get("text") or code)
@@ -248,8 +257,13 @@ def _unlogged_model_error_findings(
     return tuple(
         ArelleFindingV1(
             code=code,
-            severity="error",
-            message="Arelle reported a model error without a corresponding log record.",
+            severity="warning" if code in _NON_BLOCKING_ARELLE_CODES else "error",
+            message=(
+                "Arelle reported a known non-blocking Inline XBRL "
+                "transformation diagnostic."
+                if code in _NON_BLOCKING_ARELLE_CODES
+                else "Arelle reported a model error without a corresponding log record."
+            ),
         )
         for code in model_errors
         if code not in logged_codes
@@ -345,7 +359,8 @@ def _parse_in_process(
     if installed_version != profile.arelle_version:
         raise ArelleParserError(
             "ARELLE_VERSION_MISMATCH",
-            f"installed Arelle {installed_version} does not match {profile.arelle_version}",
+            f"installed Arelle {installed_version} does not match "
+            f"{profile.arelle_version}",
         )
     if filing_path.suffix.lower() in {".htm", ".html"} and taxonomy_cache_dir is None:
         raise ArelleParserError(
@@ -504,10 +519,14 @@ def _parse_in_process(
                 "dqc-dqcrt-checks-completed",
             )
         else:
-            if model_errors:
+            blocking_model_errors = tuple(
+                code for code in model_errors if code not in _NON_BLOCKING_ARELLE_CODES
+            )
+            if blocking_model_errors:
                 raise ArelleParserError(
                     "XBRL_PARSE_FAILED",
-                    "Arelle could not load the filing DTS: " + ", ".join(model_errors),
+                    "Arelle could not load the filing DTS: "
+                    + ", ".join(blocking_model_errors),
                 )
         facts: list[ParsedXbrlFactV1] = []
         for fact in getattr(model, "facts", ()):
