@@ -636,3 +636,94 @@ service's capture manifest, cache digest, or offline replay is complete.
   #312 criterion; collect required GitHub CI on the exact pushed commit; and
   record any remaining intentionally unrun load/soak or deployment checks.
   No PR has been created, #312 is open, and no `VERIFIED` label has been added.
+
+## Runtime-bound acquisition and capture-time checkpoint
+
+- Implementation commit: `e31baf7c` (`fix(fundamental): bind SEC runtime
+  releases to acquisition`). The worktree was clean at the start of this
+  checkpoint and remains clean after the code commit. No PR was created and
+  issue #312 remains open.
+- The acquisition key payload now stores the deployed validation profile digest
+  and taxonomy cache SHA-256. The same pinned `ArelleValidationProfileV1` is
+  passed from request authentication/key derivation into the parser, so the
+  key cannot describe one runtime while parsing with another. Snapshot
+  publication now sets `captured_at` to at least every source record's capture
+  time, and the public snapshot contract rejects manifests that violate this
+  invariant.
+- Focused regression command (exit 0):
+
+  ```sh
+  uv --project fundamental-service run pytest \
+    fundamental-service/tests/test_source_acquisition.py \
+    fundamental-service/tests/test_snapshots.py -q
+  ```
+
+  Result: `13 passed, 1 warning`.
+- Fundamental service command on exact commit `e31baf7c` (exit 0):
+
+  ```sh
+  FUNDAMENTAL_TEST_DATABASE_URL=postgresql+asyncpg://fundamental:fundamental@127.0.0.1:18481/fundamental \
+  ISSUE312_EDGAR_PLUGIN_DIR=/private/tmp/issue312-validation-runtime-v2/EDGAR-4891c4c9889c77af247428ceff4fa7cc52d534ea \
+  ISSUE312_XULE_PLUGIN_DIR=/private/tmp/issue312-validation-runtime-v2/xule-7ca1d7637f333f5c3a02379dbe6f6d6c17c88acc/plugin \
+  ISSUE312_DQC_RULESET_PATH=/private/tmp/issue312-validation-runtime-v2/dqc_us_rules-31.0.3/dqc_us_rules/dqc-us-2024-V31-ruleset.zip \
+  ISSUE312_TAXONOMY_CACHE_DIR=/private/tmp/issue312-sec-taxonomy-2023-2024 \
+  uv --project fundamental-service run pytest fundamental-service/tests -q
+  ```
+
+  Result: `183 passed, 2 warnings` in 26.75 seconds. The prior run with the
+  2024-only `/tmp/issue312-aapl-validation-v3/taxonomy-online` intentionally
+  failed closed (`1 failed, 182 passed`) because the Microsoft filing's 2023
+  SEC taxonomy was absent; no parser change or fallback was used. Re-running
+  with the retained 2023/2024 bundle passed the offline EFM/DQC replay.
+- Docker Compose validation used project
+  `value-investment-agent-issue-312-sec-ingestion`, PostgreSQL host port
+  `18481`, Fundamental service host port `18082`, and only
+  `fundamental-postgres` plus `fundamental-service`:
+
+  ```sh
+  COMPOSE_PROJECT_NAME=value-investment-agent-issue-312-sec-ingestion \
+  FUNDAMENTAL_POSTGRES_HOST_PORT=18481 FUNDAMENTAL_SERVICE_HOST_PORT=18082 \
+  FUNDAMENTAL_SEC_TAXONOMY_CACHE_SHA256=0accc5ab0d4ce6674083bd82cf878a8619b3ac441da8600e0a03aefb8432a3a3 \
+  FUNDAMENTAL_SEC_TAXONOMY_CACHE_HOST_DIR=/private/tmp/issue312-sec-taxonomy-2023-2024 \
+  FUNDAMENTAL_SEC_EDGAR_PLUGIN_SHA256=63e4b5540a6754a1d6ad86a34ec1aa70f3f7da90e46c6fa3959686d8b2ac7330 \
+  FUNDAMENTAL_SEC_EDGAR_PLUGIN_HOST_DIR=/private/tmp/issue312-validation-runtime-v2/EDGAR-4891c4c9889c77af247428ceff4fa7cc52d534ea \
+  FUNDAMENTAL_SEC_XULE_PLUGIN_SHA256=e32ff88b52df8bf1e6aca3e63edabbc0b2f3513b7d0627ca9163db00d2a5678b \
+  FUNDAMENTAL_SEC_XULE_PLUGIN_HOST_DIR=/private/tmp/issue312-validation-runtime-v2/xule-7ca1d7637f333f5c3a02379dbe6f6d6c17c88acc/plugin \
+  FUNDAMENTAL_SEC_DQC_RULESET_SHA256=0eb33d095ac0ae08f01c508526b35523534659d661bc62873ac1400deec87930 \
+  FUNDAMENTAL_SEC_DQC_RULESET_HOST_PATH=/private/tmp/issue312-validation-runtime-v2/dqc_us_rules-31.0.3/dqc_us_rules/dqc-us-2024-V31-ruleset.zip \
+  docker compose -p value-investment-agent-issue-312-sec-ingestion \
+    -f compose/verification/docker-compose.issue280-operations.yml \
+    -f compose/verification/docker-compose.issue312-sec-ingestion.yml \
+    config --quiet
+  ```
+
+  Exit code was 0. Rebuilding `fundamental-service` from `e31baf7c` exited 0;
+  the image digest was
+  `sha256:168f53ec958afb10f5be73d6b11ebea82e82f84a6f4cce73617fe5daf34bc319`.
+  PostgreSQL and Fundamental service reported `healthy`, and
+  `GET http://127.0.0.1:18082/readyz` returned
+  `{"status":"ready","contract_version":"internal.v1"}`.
+- Signed live SEC ingestion against the rebuilt container exited 0 and
+  returned HTTP 200 with `status=degraded`, `quality_status=provisional`, 57
+  canonical facts, no blocking parser findings, and the pinned profile
+  digest `a5a2f617ea7872d2e3ba3d79abb93cd19ba7cd6773352edc77fe33284534da5a`.
+  The runtime-bound acquisition key was
+  `5c806775229226ea7ac75a45e883aa91f1b51e3d8277c26998b503b801440fcc`.
+  PostgreSQL records one immutable acquisition and five source hashes; the
+  published snapshot is `snapshot-bbb253e0aa9ddba14b91bee79b3fbb3a` with
+  manifest digest
+  `95a6c8d7cc9c6c14cd7c4d039672cd83b3f621ebd9cb372c1a15c7e26d94b0a4`.
+  Its persisted snapshot capture time is
+  `2026-11-06T00:44:20.831373Z`, covering all five source record capture
+  times. A second signed request with the same canonical input returned HTTP
+  200 `status=reused`, `reused=true`, the same snapshot and manifest, and 57
+  fact references. Audit rows for the two correlations are `degraded` and
+  `reused`, each with five source hashes.
+- Agent client acceptance, retained-evidence replay, and PostgreSQL
+  concurrency/fault-injection evidence from the immediately preceding
+  `18a1f7cc` checkpoint remain applicable to unchanged behavior. Checks not
+  rerun after `e31baf7c`: the Agent client live command and independent
+  retained-evidence replay. The full service suite includes the client
+  contract and replay unit coverage; Docker live ingestion and reuse were
+  rerun. Load/soak testing and deployment rollout remain intentionally out of
+  scope for this issue.
