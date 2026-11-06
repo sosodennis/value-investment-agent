@@ -224,3 +224,33 @@ typed Agent client and request producer. Then prepare an MSFT service snapshot
 and active release in the isolated acceptance project. Run the real workspace
 route and complete the desktop, mobile, keyboard, and evidence-inspector checks.
 Record the results against the exact delivery commit.
+
+## Identity contract ownership confirmation
+
+- Date: 2026-11-07.
+- Audit commit: `8147dd14f2259f9601aae344083c2cb939957ad8`.
+- The merged Fundamental contract requires a full `IdentityV1` for snapshot
+  resolution. SEC ingestion additionally requires a ten-digit `cik`, a ticker,
+  and an identity whose `issuer_id` normalizes to that CIK. The service checks
+  that the requested ticker is registered to the SEC issuer, but exposes no
+  ticker-to-issuer identity-resolution operation.
+- The Agent client operation map exposes ingestion, snapshot resolution, facts,
+  validation, calculation, uncertainty, and replay. Its existing profile source
+  supplies a ticker and descriptive fields only; it does not provide the CIK or
+  the complete security identity required by the service contract.
+- The #312 issue contract explicitly says a ticker alone is not a sufficient
+  identity key and requires the caller to provide canonical issuer/security
+  identity and CIK. Therefore, adding a caller-side field or treating a ticker
+  as a CIK would not resolve the missing ownership boundary.
+- Conclusion: a service-owned issuer-identity resolution contract is a required
+  prerequisite to #325's live workspace acceptance. This work is outside the
+  current #325 report-display scope and must be tracked as a linked blocker
+  before any service-side implementation is added. #325 remains open and
+  incomplete; no live valuation request was sent during this audit.
+- Evidence locations: `fundamental-service/src/fundamental_service/contracts.py`
+  (`IdentityV1`, `SnapshotResolutionRequestV1`, and `SecIngestionRequestV1`),
+  `fundamental-service/src/fundamental_service/source_acquisition.py` (SEC
+  ticker/issuer validation), `finance-agent-core/src/agents/fundamental/infrastructure/fundamental_service_client.py`
+  (supported operations), and
+  `finance-agent-core/src/shared/cross_agent/domain/market_identity.py`
+  (`CompanyProfile`).
