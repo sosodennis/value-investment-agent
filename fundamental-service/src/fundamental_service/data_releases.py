@@ -370,6 +370,20 @@ class ActiveDataReleaseV1(ReleaseModel):
     activated_at: datetime
 
 
+class ActiveDataReleaseWithManifestV1(ReleaseModel):
+    active: ActiveDataReleaseV1
+    manifest: DataReleaseManifestV1
+
+    @model_validator(mode="after")
+    def pointer_matches_manifest(self) -> ActiveDataReleaseWithManifestV1:
+        if (
+            self.active.profile_id != self.manifest.profile_id
+            or self.active.manifest_digest != self.manifest.manifest_digest
+        ):
+            raise ValueError("active release pointer does not match its manifest")
+        return self
+
+
 class DataReleaseRepository(Protocol):
     def publish_candidate(
         self,
@@ -388,6 +402,7 @@ __all__ = [
     "DATA_RELEASE_CAPABILITY",
     "REQUIRED_DATA_RELEASE_GATES",
     "ActiveDataReleaseV1",
+    "ActiveDataReleaseWithManifestV1",
     "ArtifactRefV1",
     "DataReleaseActivationCommandV1",
     "DataReleaseError",

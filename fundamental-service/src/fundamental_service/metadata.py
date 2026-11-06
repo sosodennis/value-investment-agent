@@ -32,6 +32,7 @@ from .contracts import (
 from .data_releases import (
     DATA_RELEASE_CAPABILITY,
     ActiveDataReleaseV1,
+    ActiveDataReleaseWithManifestV1,
     DataReleaseActivationCommandV1,
     DataReleaseError,
     DataReleaseManifestV1,
@@ -848,6 +849,47 @@ class PostgresMetadataStore:
             revision=int(row["revision"]),
             activated_at=row["activated_at"],
         )
+
+    def get_active_data_release_with_manifest(
+        self, profile_id: str
+    ) -> ActiveDataReleaseWithManifestV1 | None:
+        self._require_data_release_capability()
+        return self._runner.run(self._get_active_data_release_with_manifest(profile_id))
+
+    async def _get_active_data_release_with_manifest(
+        self, profile_id: str
+    ) -> ActiveDataReleaseWithManifestV1 | None:
+        async with self._runner._engine.connect() as connection:
+            row = (
+                (
+                    await connection.execute(
+                        text(
+                            "SELECT pointer.profile_id, pointer.manifest_digest, "
+                            "pointer.revision, pointer.activated_at, manifest.payload "
+                            "FROM fundamental.active_data_release_pointers AS pointer "
+                            "JOIN fundamental.data_release_manifests AS manifest "
+                            "USING (manifest_digest) "
+                            "WHERE pointer.profile_id=:profile_id "
+                            "AND pointer.revision > 0"
+                        ),
+                        {"profile_id": profile_id},
+                    )
+                )
+                .mappings()
+                .one_or_none()
+            )
+        if row is None:
+            return None
+        active = ActiveDataReleaseV1(
+            profile_id=str(row["profile_id"]),
+            manifest_digest=str(row["manifest_digest"]),
+            revision=int(row["revision"]),
+            activated_at=row["activated_at"],
+        )
+        manifest = DataReleaseManifestV1.model_validate_json(
+            canonical_bytes(row["payload"])
+        )
+        return ActiveDataReleaseWithManifestV1(active=active, manifest=manifest)
 
     def compare_and_swap_data_release(
         self, command: DataReleaseActivationCommandV1

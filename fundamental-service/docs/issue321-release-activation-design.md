@@ -244,6 +244,9 @@ panel for this issue.
 The additive migration, immutable manifest and verification persistence,
 transactional pointer CAS, append-only activation audit, and PostgreSQL
 idempotency/concurrency checks are implemented in the current issue branch.
+The metadata adapter now reads the active pointer and its manifest in one
+joined query, so a reader cannot observe a pointer without the immutable
+manifest it selects.
 Candidate persistence requires a trusted verification and independent mapping
 review signature. Runtime deployment can provide those public keys through
 `FUNDAMENTAL_DATA_RELEASE_TRUST_ROOTS_FILE`; an unset path keeps candidate
@@ -271,6 +274,6 @@ by issue #321 and are not considered verified by the persistence checkpoints.
 ## Next implementation step
 
 Implement the typed service boundary and request-level release pinning on top
-of the verified repository contract. Keep candidate validation and publication
+of the atomic pointer/manifest read. Keep candidate validation and publication
 outside API replica scheduling, and preserve the active pointer on every
 validation or persistence failure.

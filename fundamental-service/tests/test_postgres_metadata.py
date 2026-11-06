@@ -645,6 +645,10 @@ def test_data_release_activation_is_fenced_and_v2_compatible(
     assert active.profile_id == manifest.profile_id
     assert active.manifest_digest == manifest.manifest_digest
     assert active.revision == 1
+    resolved = metadata.get_active_data_release_with_manifest(manifest.profile_id)
+    assert resolved is not None
+    assert resolved.active == active
+    assert resolved.manifest == manifest
     assert metadata.compare_and_swap_data_release(command) == active
     altered_retry = command.model_copy(update={"reason": "different command"})
     with pytest.raises(DataReleaseError) as idempotency_conflict:
