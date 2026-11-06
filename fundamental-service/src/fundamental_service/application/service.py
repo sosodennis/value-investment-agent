@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass, field as dataclass_field
+from dataclasses import dataclass
+from dataclasses import field as dataclass_field
 from typing import Any
 
 from pydantic import model_validator
@@ -37,10 +38,10 @@ from ..data_releases import (
     DataReleaseCandidateReceiptV1,
     DataReleaseError,
     DataReleaseManifestV1,
-    ReleaseResolutionCacheKeyV1,
     DataReleaseVerificationV1,
+    ReleaseResolutionCacheKeyV1,
 )
-from ..facts import CanonicalFactRepository
+from ..facts import CanonicalFactRepository, canonical_fact_digest
 from ..governance import ModelInventory
 from ..operations import (
     OperationalMetrics,
@@ -517,8 +518,7 @@ class FundamentalApplication:
         }
         if any(
             fact.fact_id not in declared_facts
-            or sha256_digest(fact.model_dump(mode="json"))
-            != declared_facts[fact.fact_id]
+            or canonical_fact_digest(fact) != declared_facts[fact.fact_id]
             for fact in facts
         ):
             raise ServiceError(

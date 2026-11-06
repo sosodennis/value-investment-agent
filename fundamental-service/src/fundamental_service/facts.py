@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import os
 import tempfile
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
-from typing import Iterable, Literal, Protocol
+from typing import Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -25,8 +26,29 @@ from .contracts import (
     SourceSnapshotV1,
     XbrlContextV1,
 )
-from .serialization import canonical_bytes
+from .serialization import canonical_bytes, sha256_digest
 from .snapshots import SnapshotError
+
+
+CANONICAL_FACT_DERIVED_DEFAULTS = {
+    "rejected_candidates": (),
+    "rejected_candidate_reasons": (),
+    "point_in_time_policy": None,
+    "selection_reason": None,
+}
+
+
+def canonical_fact_digest(fact: CanonicalFactV1) -> str:
+    """Digest the immutable fact payload without PIT selection annotations.
+
+    Selection annotations are a derived view added by point-in-time resolution.
+    Normalize them to the schema defaults while retaining the existing payload
+    shape so manifests created before this helper remain valid.
+    """
+
+    payload = fact.model_dump(mode="json")
+    payload.update(CANONICAL_FACT_DERIVED_DEFAULTS)
+    return sha256_digest(payload)
 
 
 class CanonicalFactRepository(Protocol):

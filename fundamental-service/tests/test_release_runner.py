@@ -28,7 +28,7 @@ from fundamental_service.data_releases import (
     sign_data_release_verification,
     sign_mapping_review_evidence,
 )
-from fundamental_service.facts import CanonicalMappingV1
+from fundamental_service.facts import CanonicalMappingV1, canonical_fact_digest
 from fundamental_service.release_runner import DataReleaseCanaryRunner
 from fundamental_service.serialization import sha256_digest
 
@@ -293,6 +293,28 @@ def test_release_canary_replays_exact_digests_without_activation() -> None:
     assert first.candidate_manifest_digest == manifest.manifest_digest
     assert first.checked_snapshot_ids == ("snapshot-release",)
     assert len(first.checked_fact_digests) == 1
+
+
+def test_release_canary_ignores_point_in_time_selection_annotations() -> None:
+    manifest, verification, snapshots, facts, mappings, artifacts, roots = _candidate()
+    facts.fact = facts.fact.model_copy(
+        update={
+            "rejected_candidates": ("fact-older",),
+            "point_in_time_policy": "pit-v1",
+            "selection_reason": "latest_available_after_fact_key_point_in_time_selection",
+        }
+    )
+    runner = DataReleaseCanaryRunner(
+        snapshot_repository=snapshots,
+        fact_repository=facts,
+        mapping_reader=mappings,
+        artifact_reader=artifacts,
+        trust_roots=roots,
+    )
+
+    report = runner.validate(manifest, verification)
+
+    assert report.checked_fact_digests == (canonical_fact_digest(facts.fact),)
 
 
 def test_release_canary_blocks_artifact_hash_mismatch() -> None:

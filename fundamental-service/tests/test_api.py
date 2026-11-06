@@ -15,6 +15,7 @@ from pydantic import ValidationError
 
 from fundamental_service.app import create_app, create_runtime_app
 from fundamental_service.application.service import (
+    FundamentalApplication,
     UncertaintyRequestV1,
     normalize_uncertainty_payload,
 )
@@ -26,13 +27,14 @@ from fundamental_service.contracts import (
     FactsReadRequestV1,
     PeriodType,
     QualityStatus,
+    SnapshotResolutionRequestV1,
     SourceProvenanceV1,
     SourceRole,
-    SnapshotResolutionRequestV1,
     UncertaintyV1,
     XbrlContextV1,
 )
 from fundamental_service.data_releases import (
+    REQUIRED_DATA_RELEASE_GATES,
     ActiveDataReleaseV1,
     ActiveDataReleaseWithManifestV1,
     ArtifactRefV1,
@@ -42,10 +44,10 @@ from fundamental_service.data_releases import (
     DataReleaseVerificationV1,
     FactRefV1,
     MappingRefV1,
-    REQUIRED_DATA_RELEASE_GATES,
     SnapshotRefV1,
     sign_data_release_verification,
 )
+from fundamental_service.facts import canonical_fact_digest
 from fundamental_service.governance import ModelInventory
 from fundamental_service.operations import OperationsConfig
 from fundamental_service.policies import (
@@ -1465,6 +1467,31 @@ def test_snapshot_resolution_pins_only_active_release_facts():
     )
     assert mismatch.status_code == 409
     assert mismatch.json()["error"]["code"] == "DATA_RELEASE_FACT_MISMATCH"
+
+
+def test_release_fact_verification_ignores_point_in_time_selection_annotations():
+    snapshot = _SnapshotRepository().snapshot
+    fact = _canonical_fact("fact-revenue", "revenue")
+    manifest = _release_manifest_for(snapshot, (fact,))
+    selected = fact.model_copy(
+        update={
+            "rejected_candidates": ("fact-older",),
+            "point_in_time_policy": "pit-v1",
+            "selection_reason": "latest_available_after_fact_key_point_in_time_selection",
+        }
+    )
+
+    FundamentalApplication._verify_release_snapshot_and_facts(
+        manifest,
+        snapshot,
+        (selected,),
+        required_fields=("revenue",),
+    )
+
+    assert (
+        canonical_fact_digest(selected)
+        == manifest.snapshot_refs[0].facts[0].fact_digest
+    )
 
 
 def test_facts_calculation_evidence_and_replay_keep_the_pinned_release(

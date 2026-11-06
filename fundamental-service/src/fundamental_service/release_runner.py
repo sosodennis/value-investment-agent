@@ -29,6 +29,7 @@ from .facts import (
     CanonicalFactRepository,
     CanonicalMappingV1,
     FilesystemCanonicalFactRepository,
+    canonical_fact_digest,
 )
 from .replay import ArtifactStore
 from .serialization import canonical_bytes, sha256_digest
@@ -194,10 +195,7 @@ class DataReleaseCanaryRunner:
                 )
             resolved = self._resolve_facts(snapshot, manifest.required_fields)
             declared = {item.fact_id: item.fact_digest for item in reference.facts}
-            actual = {
-                item.fact_id: sha256_digest(item.model_dump(mode="json"))
-                for item in resolved
-            }
+            actual = {item.fact_id: canonical_fact_digest(item) for item in resolved}
             if actual != declared:
                 raise DataReleaseError(
                     "DATA_RELEASE_FACT_MISMATCH",

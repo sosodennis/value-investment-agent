@@ -43,6 +43,7 @@ from .data_releases import (
 from .facts import (
     CanonicalFactRepository,
     CanonicalMappingV1,
+    canonical_fact_digest,
     resolve_canonical_facts,
 )
 from .policies import ModelSpecV1, PolicyRecordV1
@@ -575,7 +576,7 @@ class PostgresMetadataStore:
 
             for fact in facts:
                 fact_payload = fact.model_dump(mode="json")
-                fact_digest = sha256_digest(fact_payload)
+                fact_digest = canonical_fact_digest(fact)
                 await connection.execute(
                     text(
                         "INSERT INTO fundamental.canonical_facts "
