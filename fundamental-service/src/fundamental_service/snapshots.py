@@ -258,6 +258,9 @@ class CapturedSource:
     supersedes_accession: str | None = None
     amendment_scope: str | None = None
     taxonomy_manifest_id: str | None = None
+    response_headers: tuple[tuple[str, str], ...] = ()
+    declared_size: int | None = None
+    received_size: int | None = None
 
 
 class SnapshotBuilder:
