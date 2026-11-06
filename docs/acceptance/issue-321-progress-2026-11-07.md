@@ -31,6 +31,19 @@ uv run pytest tests/test_release_runner.py tests/test_api.py tests/test_replay.p
 The Compose configuration also passed `docker compose ... config --quiet` for
 the dedicated project `value-investment-agent-321-release-verify`.
 
+At the same synchronized source tree, the PostgreSQL release persistence suite
+also exited 0:
+
+```text
+FUNDAMENTAL_TEST_DATABASE_URL=postgresql+asyncpg://fundamental:fundamental@127.0.0.1:18631/fundamental uv run pytest tests/test_postgres_metadata.py
+17 passed, 1 existing Starlette/httpx deprecation warning
+```
+
+The dedicated PostgreSQL and Fundamental service containers reported healthy
+status. The service image currently running in this project is not yet treated
+as final exact-head evidence; it will be rebuilt after the remaining source
+changes and its digest recorded below.
+
 The remaining checks must be rerun against the final issue commit before a PR
 is opened. The older results below are retained as historical checkpoints and
 are not being reused as exact-head acceptance evidence.
