@@ -189,20 +189,20 @@ function EvidenceDetail({ item }: { item: EvidenceSelection }) {
                     <EvidenceField label="Formula" value={item.formula} />
                     <EvidenceField label="Confidence" value={item.confidence} />
                     <EvidenceField label="Fact ID" value={item.factId} />
-                    <EvidenceField label="Concept" value={item.concept} />
-                    <EvidenceField label="Accession" value={item.accessionNumber} />
-                    <EvidenceField label="Filed at" value={item.filedAt} />
-                    <EvidenceField label="Available at" value={item.availableAt} />
-                    <EvidenceField label="Captured at" value={item.capturedAt} />
-                    <EvidenceField label="Parser" value={item.parserVersion} />
-                    <EvidenceField label="Taxonomy" value={item.taxonomyVersion} />
-                    <EvidenceField label="Taxonomy manifest" value={item.taxonomyManifestDigest} />
-                    <EvidenceField label="Mapping" value={item.mappingVersion} />
-                    <EvidenceField label="Source hash" value={item.sourceHash} />
-                    <EvidenceField label="Snapshot" value={item.snapshotId} />
-                    <EvidenceField label="Snapshot manifest" value={item.snapshotManifestDigest} />
-                    <EvidenceField label="Unit" value={formatUnit(item.unit, item.scale)} />
-                    <EvidenceField label="Issue codes" value={item.issueCodes?.join(', ')} />
+                    <EvidenceField label="Concept" value={factMetadataValue(item, item.concept)} />
+                    <EvidenceField label="Accession" value={factMetadataValue(item, item.accessionNumber)} />
+                    <EvidenceField label="Filed at" value={factMetadataValue(item, item.filedAt)} />
+                    <EvidenceField label="Available at" value={factMetadataValue(item, item.availableAt)} />
+                    <EvidenceField label="Captured at" value={factMetadataValue(item, item.capturedAt)} />
+                    <EvidenceField label="Parser" value={factMetadataValue(item, item.parserVersion)} />
+                    <EvidenceField label="Taxonomy" value={factMetadataValue(item, item.taxonomyVersion)} />
+                    <EvidenceField label="Taxonomy manifest" value={factMetadataValue(item, item.taxonomyManifestDigest)} />
+                    <EvidenceField label="Mapping" value={factMetadataValue(item, item.mappingVersion)} />
+                    <EvidenceField label="Source hash" value={factMetadataValue(item, item.sourceHash)} />
+                    <EvidenceField label="Snapshot" value={factMetadataValue(item, item.snapshotId)} />
+                    <EvidenceField label="Snapshot manifest" value={factMetadataValue(item, item.snapshotManifestDigest)} />
+                    <EvidenceField label="Unit" value={factMetadataValue(item, formatUnit(item.unit, item.scale))} />
+                    <EvidenceField label="Issue codes" value={formatIssueCodes(item)} />
                 </dl>
                 {item.artifactUrl ? (
                     <Button asChild variant="outline" size="sm" className="justify-start">
@@ -228,6 +228,17 @@ function EvidenceField({ label, value }: { label: string; value?: string }) {
 function formatUnit(unit: string | undefined, scale: number | undefined): string | undefined {
     if (unit === undefined) return undefined;
     return scale === undefined || scale === 0 ? unit : `${unit} · 10^${scale}`;
+}
+
+function factMetadataValue(item: EvidenceSelection, value: string | undefined): string | undefined {
+    if (!item.factId) return value;
+    return value ?? 'Unavailable';
+}
+
+function formatIssueCodes(item: EvidenceSelection): string | undefined {
+    if (!item.factId) return undefined;
+    if (item.issueCodes === undefined) return 'Unavailable';
+    return item.issueCodes.length === 0 ? 'None' : item.issueCodes.join(', ');
 }
 
 function isInspectableValue(value: unknown): value is string | number | boolean {

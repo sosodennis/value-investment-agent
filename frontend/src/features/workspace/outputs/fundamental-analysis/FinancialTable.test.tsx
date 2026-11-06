@@ -87,6 +87,15 @@ const facts: FundamentalFactsReadResult = {
     facts: [
         fact({ fact_id: 'fact-revenue', normalized_field: 'revenue' }),
         fact({
+            fact_id: 'fact-quarter',
+            normalized_field: 'quarterly_revenue',
+            value: { kind: 'numeric', raw: '8.25', numeric: 8.25 },
+            unit: 'EUR',
+            currency: 'EUR',
+            scale: 0,
+            period: { kind: 'duration', start: '2025-07-01', end: '2025-09-30' },
+        }),
+        fact({
             fact_id: 'fact-loss',
             normalized_field: 'loss',
             value: { kind: 'numeric', raw: '-42', numeric: -42 },
@@ -112,6 +121,22 @@ const facts: FundamentalFactsReadResult = {
             quality: 'degraded',
             issue_codes: ['FACT_UNRESOLVED'],
         }),
+        fact({
+            fact_id: 'fact-not-applicable',
+            normalized_field: 'dividend',
+            value: { kind: 'missing', status: 'not_applicable', reason: 'Not applicable to this model.' },
+            unit: 'USD',
+            scale: 0,
+            quality: 'provisional',
+        }),
+        fact({
+            fact_id: 'fact-abstain',
+            normalized_field: 'book_value',
+            value: { kind: 'missing', status: 'unresolved', reason: 'Candidate facts conflict.' },
+            unit: 'USD',
+            scale: 0,
+            quality: 'abstain',
+        }),
     ],
 };
 
@@ -120,14 +145,36 @@ describe('FinancialTable', () => {
         render(<FinancialTable facts={facts} />);
 
         screen.getByText('Example Bank');
-        screen.getByText(/Bank · us-gaap · USD · 4 selected facts/);
+        screen.getByText(/Bank · us-gaap · USD · 7 selected facts/);
         screen.getByText('12,500');
+        screen.getByText('8.25');
         screen.getByText('-42');
         screen.getByText('0');
         screen.getByText(/Unavailable · missing: No filed fact selected\./);
-        expect(screen.getAllByText('2025-01-01 → 2025-12-31')).toHaveLength(3);
+        screen.getByText(/Unavailable · not_applicable: Not applicable to this model\./);
+        screen.getByText(/Unavailable · unresolved: Candidate facts conflict\./);
+        expect(screen.getAllByText('2025-01-01 → 2025-12-31').length).toBeGreaterThan(0);
         screen.getByText('Instant · 2025-12-31');
+        screen.getByText('2025-07-01 → 2025-09-30');
         screen.getByText('FACT_UNRESOLVED');
+        const rowText = screen.getAllByRole('row').map((row) => row.textContent ?? '');
+        expect(rowText.findIndex((row) => row.includes('fact-revenue'))).toBeLessThan(
+            rowText.findIndex((row) => row.includes('fact-quarter'))
+        );
+    });
+
+    it.each([
+        ['bank', 'Bank'],
+        ['industrial', 'Industrial'],
+        ['reit', 'REIT'],
+    ] as const)('uses the typed %s family metadata', (family, label) => {
+        render(
+            <FinancialTable
+                facts={{ ...facts, identity: { ...facts.identity, family } }}
+            />
+        );
+
+        screen.getByText(new RegExp(`${label} · us-gaap`));
     });
 
     it('pins the selected fact to the evidence inspector contract', () => {

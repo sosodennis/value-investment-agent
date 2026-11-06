@@ -15,6 +15,7 @@ import type {
     FundamentalFactsReadResult,
     FundamentalFactValue,
 } from '@/types/agents/fundamental-service-facts';
+import { sortFundamentalFacts } from '@/types/agents/fundamental-service-facts';
 import type { EvidenceSelection } from '../../workspace-evidence-inspector';
 
 interface FinancialTableProps {
@@ -31,7 +32,7 @@ const FAMILY_LABELS = {
 
 const FinancialTableComponent = ({ facts, artifactReference, onSelectEvidence }: FinancialTableProps) => {
     const sortedFacts = useMemo(
-        () => [...facts.facts].sort((left, right) => left.normalized_field.localeCompare(right.normalized_field)),
+        () => sortFundamentalFacts(facts.facts),
         [facts.facts],
     );
     const familyLabel = facts.identity.family ? FAMILY_LABELS[facts.identity.family] : 'Family unspecified';
