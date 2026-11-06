@@ -139,6 +139,16 @@ were:
   6.93, second publish 4.19, activation 8.14, same retry 3.54, new-correlation
   retry 2.59, stale CAS 3.18, second activation 5.34, rollback 5.13.
 
+## Exact-head restart recovery probe
+
+The Fundamental service was restarted in the dedicated Compose project after
+the lifecycle probe. PostgreSQL remained healthy and the service returned
+`{"status":"ready","contract_version":"internal.v1"}`. Reading the same
+profile after restart returned HTTP 200 with manifest digest
+`9d87b96e3fbed017f9e6da7b0f5dc7ac1714842f8236a94c66c134b1a60f09b1` at
+revision 3. A direct PostgreSQL check found three append-only audit rows for
+the profile, with resulting revisions 1 through 3 and non-null targets.
+
 ## Live release lifecycle probe
 
 The probe inserted two uniquely named, signed candidates into the dedicated
