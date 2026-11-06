@@ -5,6 +5,7 @@ from decimal import Decimal
 
 import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
 from fundamental_service.contracts import (
     CanonicalFactV1,
     IdentityV1,
