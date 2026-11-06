@@ -508,3 +508,131 @@ service's capture manifest, cache digest, or offline replay is complete.
   coalescing, distinct-key isolation, provider/parser/storage/process fault
   recovery, atomic publication, authorization failures and audit evidence,
   retained-evidence clean offline rebuild, and Agent client acceptance.
+
+## SEC ingestion acceptance checkpoint
+
+- Code checkpoint: `18a1f7cc` (`test(fundamental): recover SEC lock after
+  process failure (Refs #312)`). It includes the service and Agent client
+  changes from `40b5c034`; the later commits only add PostgreSQL acceptance
+  tests. Branch `codex/issue-312-sec-ingestion` remains based on
+  `origin/main` `bee63cb37da9edb2deb444e14d2fc666aed73d06`. The worktree was
+  clean after the code checkpoint. Issue #312 remains open and has no PR.
+- PostgreSQL cross-process HTTP coalescing command (exit 0):
+
+  ```sh
+  FUNDAMENTAL_TEST_DATABASE_URL=postgresql+asyncpg://fundamental:fundamental@127.0.0.1:18481/fundamental \
+    fundamental-service/.venv/bin/pytest -q \
+    fundamental-service/tests/test_postgres_metadata.py::test_fifty_sec_ingestion_contenders_across_processes_publish_once
+  ```
+
+- The test starts ten OS processes with five signed `/v1/data/ingestions`
+  requests each against real PostgreSQL. The canonical request key is derived
+  from the actual `SecIngestionRequestV1`. Exactly one request publishes, 49
+  receive retryable `INGESTION_IN_PROGRESS`, the provider probe records one
+  call, and 50 subsequent route retries return `reused` with one identical
+  snapshot ID and manifest digest. PostgreSQL audit outcomes are 49
+  `INGESTION_IN_PROGRESS`, one `degraded`, and 50 `reused`.
+- Persisted authorization audit command (exit 0):
+
+  ```sh
+  FUNDAMENTAL_TEST_DATABASE_URL=postgresql+asyncpg://fundamental:fundamental@127.0.0.1:18481/fundamental \
+    fundamental-service/.venv/bin/pytest -q \
+    fundamental-service/tests/test_postgres_metadata.py::test_unauthorized_sec_ingestion_is_rejected_and_audited_in_postgres
+  ```
+
+- A signed request from `org-unapproved` receives HTTP 403
+  `INGESTION_NOT_AUTHORIZED`; a real PostgreSQL audit row records the derived
+  acquisition key, principal `subject-test`, organization, correlation ID,
+  empty source hashes, and outcome. Invalid/missing signed contexts are also
+  covered at the route boundary.
+- Process failure command (exit 0):
+
+  ```sh
+  FUNDAMENTAL_TEST_DATABASE_URL=postgresql+asyncpg://fundamental:fundamental@127.0.0.1:18481/fundamental \
+    fundamental-service/.venv/bin/pytest -q \
+    fundamental-service/tests/test_postgres_metadata.py::test_terminated_ingestion_owner_releases_postgres_single_flight_lock
+  ```
+
+- A child OS process acquired the PostgreSQL advisory lock and was terminated.
+  The parent could not acquire the same key before termination and acquired it
+  immediately after the database session closed. The publication transaction
+  failure/retry test also confirms that no manifest or fact remains visible
+  after an injected metadata write failure.
+- Final Fundamental service command on `18a1f7cc` (exit 0):
+
+  ```sh
+  FUNDAMENTAL_TEST_DATABASE_URL=postgresql+asyncpg://fundamental:fundamental@127.0.0.1:18481/fundamental \
+  ISSUE312_EDGAR_PLUGIN_DIR=/private/tmp/issue312-validation-runtime-v2/EDGAR-4891c4c9889c77af247428ceff4fa7cc52d534ea \
+  ISSUE312_XULE_PLUGIN_DIR=/private/tmp/issue312-validation-runtime-v2/xule-7ca1d7637f333f5c3a02379dbe6f6d6c17c88acc/plugin \
+  ISSUE312_DQC_RULESET_PATH=/private/tmp/issue312-validation-runtime-v2/dqc_us_rules-31.0.3/dqc_us_rules/dqc-us-2024-V31-ruleset.zip \
+  ISSUE312_TAXONOMY_CACHE_DIR=/private/tmp/issue312-sec-taxonomy-2023-2024 \
+  fundamental-service/.venv/bin/pytest -q fundamental-service/tests
+  ```
+
+- Result: `181 passed, 2 warnings`, no skips. Warnings are the existing
+  Starlette/httpx TestClient deprecation and calculator Pydantic serialization
+  warning. Agent client command `uv run --project finance-agent-core pytest
+  -q finance-agent-core/tests/agents/fundamental/test_fundamental_service_client.py`
+  exited 0 with `4 passed`. `uv lock --check --project fundamental-service`,
+  Ruff `E,F,I`, Ruff format check on all nine changed Python files, and
+  `git diff --check` exited 0. Commit hooks passed on both test checkpoints.
+- Docker project: `value-investment-agent-issue-312-sec-ingestion`; PostgreSQL
+  host port `18481`, Fundamental service host port `18082`. The service image
+  was built from the unchanged service source at `40b5c034`, image ID
+  `sha256:d7e0982c551bc761368bab31e96637112ec335524e6c3f5456fc6cfc41e6feeb`.
+  Both required containers were healthy; Compose `config --quiet` exited 0
+  with the pinned resources. A first start used the 2024 taxonomy cache hash
+  with the 2023/2024 mounted path and failed closed at startup. Recomputing the
+  mounted cache hash corrected the configuration to
+  `0accc5ab0d4ce6674083bd82cf878a8619b3ac441da8600e0a03aefb8432a3a3`; the
+  service then became healthy and `GET http://127.0.0.1:18082/readyz` returned
+  `{"status":"ready","contract_version":"internal.v1"}`. No data volume
+  was removed or reset.
+- Authenticated live request used the signed `internal.v1` context, Bearer
+  `integration-token`, authorized organization `org-sec-ingestion-test`,
+  Microsoft CIK `0000789019`, accession `0000950170-24-087843`, valuation
+  cutoff `2025-06-30T00:00:00Z`, and approved `sec-revenue-v1` mapping. Its
+  policy version was uniquely pinned to `sec-public-pit-v2-checkpoint-40b5c034`
+  so it could not reuse the earlier acquisition. POST
+  `http://127.0.0.1:18082/v1/data/ingestions` exited 0 with HTTP 200,
+  `status=degraded`, `quality_status=provisional`, 57 canonical fact IDs, no
+  blocking parser findings, and no promotion to `verified`.
+- New acquisition key:
+  `0ffa4527f81ef61fdf50e4af50a0fc39f7a8a48bd341d21a98d336fe8cec26d7`.
+  Published snapshot `snapshot-e48f2ab35591026b79fd289dcbd96ac2`, manifest
+  digest `ebdc9d766fb6edcf4dda634f80a72a03dad819f2b8f191bbe0c1573e62db6e49`,
+  and validation profile digest
+  `a5a2f617ea7872d2e3ba3d79abb93cd19ba7cd6773352edc77fe33284534da5a`.
+  PostgreSQL confirmed that the acquisition row and snapshot manifest both
+  store the same acquisition key and digest, with 57 `snapshot_facts` links
+  and one `degraded` audit row. The five referenced source hashes are
+  `01cc7750e904e14a2065ba0ddb639138f2e5b0591c8071a513ac1234a735602e`,
+  `5a7653632f53c2529c4da82d25043fc52f05bfbe536837345aa5904560d92a82`,
+  `5692bbfccc76991d2cba6f4ddf2a8db9487dfce51ac5dded0b2607660a65a966`,
+  `1a4256a23be814a5193601a2c733d1da647c45da4d73dfe98eee58e32f8f9251`, and
+  `0b71b0995cba38320a588bdeed7a516be06e1f681832ccb7f6d274bdb965d554`.
+- The Agent `HttpFundamentalServiceClient.execute("ingest_sec_data", ...)`
+  made a live signed request to the same endpoint with the same canonical
+  input. It returned `status=reused`, `reused=true`, the same snapshot ID and
+  digest, and all 57 fact references. The first caller's accidental
+  attribute-style assertion exposed that the client result payload is a dict;
+  the corrected assertion passed against the documented wire envelope.
+- Retained-evidence replay copied the service-owned content volume to
+  `/private/tmp/issue312-retained-evidence-40b5c034/content`. All five source
+  objects passed SHA-256 verification. The original SEC ZIP and selected
+  filing/taxonomy members were rebuilt into a clean temporary directory; a
+  socket-connect guard recorded zero network attempts. Pinned offline replay
+  reproduced 1,856 parser facts, `sec-efm` and `dqc-us` engines, no blocking
+  findings, the same three non-blocking finding codes, taxonomy cache digest
+  `0accc5ab0d4ce6674083bd82cf878a8619b3ac441da8600e0a03aefb8432a3a3`, and the
+  same validation profile digest. Re-running the approved mapping and
+  point-in-time selection reproduced exactly the 57 persisted canonical fact
+  IDs; every corresponding PostgreSQL fact record was present.
+- The public DQC ruleset usage guidance and related DQC/Arelle issue search are
+  recorded above. The successful live filing's three findings remain visible
+  as degraded evidence; no paid provider or hidden fallback was used.
+- Remaining before #312 PR: run the independent read-only review, resolve any
+  findings and rerun affected checks; inspect the final diff against every
+  #312 criterion; collect required GitHub CI on the exact pushed commit; and
+  record any remaining intentionally unrun load/soak or deployment checks.
+  No PR has been created, #312 is open, and no `VERIFIED` label has been added.
