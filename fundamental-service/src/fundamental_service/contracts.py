@@ -181,6 +181,7 @@ class SourceRecordV1(StrictModel):
     media_type: str = Field(min_length=1)
     terms_reference: str = Field(min_length=1)
     content_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    parser_input_hash: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
     parser_version: str = Field(min_length=1)
     accession_number: str | None = None
     form: str | None = None
@@ -191,6 +192,9 @@ class SourceRecordV1(StrictModel):
     supersedes_accession: str | None = None
     amendment_scope: Literal["valuation_relevant", "unrelated", "unknown"] | None = None
     taxonomy_manifest_id: str | None = None
+    response_headers: tuple[tuple[str, str], ...] = ()
+    declared_size: int | None = Field(default=None, ge=0)
+    received_size: int | None = Field(default=None, ge=0)
 
     @model_validator(mode="after")
     def timestamps_have_timezone(self) -> SourceRecordV1:
@@ -207,6 +211,88 @@ class SourceRecordV1(StrictModel):
         return self
 
 
+class RemovedByteRangeV1(StrictModel):
+    start: int = Field(ge=0)
+    end: int = Field(gt=0)
+    content_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+    @model_validator(mode="after")
+    def valid_range(self) -> RemovedByteRangeV1:
+        if self.end <= self.start:
+            raise ValueError("removed byte range must be non-empty")
+        return self
+
+
+class ArelleFindingEvidenceV1(StrictModel):
+    code: str = Field(min_length=1)
+    severity: Literal["warning", "error", "fatal"]
+    blocks: bool
+
+
+class SecIntegrityEvidenceV1(StrictModel):
+    """Reproducible link from SEC response bytes to parser and fact evidence."""
+
+    accession_number: str = Field(min_length=1)
+    primary_document_uri: str = Field(min_length=1)
+    captured_at: datetime
+    archive_index_uri: str = Field(min_length=1)
+    archive_index_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    declared_primary_size: int = Field(ge=0)
+    raw_response_headers: tuple[tuple[str, str], ...] = ()
+    raw_received_size: int = Field(ge=0)
+    raw_content_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    declared_response_size: int | None = Field(default=None, ge=0)
+    archive_uri: str = Field(min_length=1)
+    archive_size: int = Field(ge=0)
+    archive_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    archive_member_name: str = Field(min_length=1)
+    archive_member_size: int = Field(ge=0)
+    archive_member_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    integrity_relation: Literal["exact", "normalized"]
+    normalized_content_size: int = Field(ge=0)
+    normalized_content_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    normalization_policy_id: str | None = None
+    normalization_rule_signature: str | None = Field(
+        default=None, pattern=r"^[0-9a-f]{64}$"
+    )
+    normalization_reason: str | None = None
+    removed_ranges: tuple[RemovedByteRangeV1, ...] = ()
+    normalized_fact_count: int = Field(ge=0)
+    normalized_fact_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    archive_fact_count: int = Field(ge=0)
+    archive_fact_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    parser_input_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    taxonomy_manifest_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    arelle_version: str = Field(min_length=1)
+    efm_profile: str = Field(min_length=1)
+    dqc_version: str = Field(min_length=1)
+    xule_version: str = Field(min_length=1)
+    findings: tuple[ArelleFindingEvidenceV1, ...] = ()
+    quality_decision: Literal["pass", "block"]
+
+    @model_validator(mode="after")
+    def timestamps_have_timezone(self) -> SecIntegrityEvidenceV1:
+        if self.captured_at.tzinfo is None or self.captured_at.utcoffset() is None:
+            raise ValueError("captured_at must include a timezone")
+        if self.parser_input_hash != self.normalized_content_hash:
+            raise ValueError("parser input hash must match normalized source hash")
+        if self.normalized_fact_count != self.archive_fact_count:
+            raise ValueError("normalized and archive fact counts must match")
+        if self.normalized_fact_digest != self.archive_fact_digest:
+            raise ValueError("normalized and archive fact digests must match")
+        if self.quality_decision == "pass" and any(
+            finding.blocks for finding in self.findings
+        ):
+            raise ValueError("blocking findings cannot have a passing decision")
+        if self.integrity_relation == "exact" and self.removed_ranges:
+            raise ValueError("exact integrity cannot contain removed byte ranges")
+        if self.integrity_relation == "normalized" and (
+            not self.normalization_policy_id or not self.normalization_rule_signature
+        ):
+            raise ValueError("normalized integrity requires a signed policy")
+        return self
+
+
 class SourceSnapshotV1(StrictModel):
     contract_version: Literal["fundamental.v1"]
     snapshot_id: str = Field(min_length=1)
@@ -219,6 +305,7 @@ class SourceSnapshotV1(StrictModel):
     policy_version: str = Field(min_length=1)
     coverage_status: QualityStatus
     issues: tuple[IssueV1, ...] = ()
+    sec_integrity_evidence: SecIntegrityEvidenceV1 | None = None
     manifest_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
 
     @model_validator(mode="after")

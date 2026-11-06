@@ -11,6 +11,8 @@ from unittest.mock import patch
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from .serialization import sha256_digest
+
 
 class ArelleParserError(RuntimeError):
     def __init__(self, code: str, message: str) -> None:
@@ -63,6 +65,14 @@ class ParsedXbrlFactV1(BaseModel):
     security_scope: str = "unknown"
 
 
+class ArelleFindingDecisionV1(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    code: str = Field(min_length=1)
+    severity: str = Field(pattern=r"^(warning|error|fatal)$")
+    blocks: bool
+
+
 class ArelleParseReportV1(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -72,12 +82,15 @@ class ArelleParseReportV1(BaseModel):
     validation_profile: ArelleValidationProfileV1
     facts: tuple[ParsedXbrlFactV1, ...] = ()
     finding_codes: tuple[str, ...] = ()
+    finding_decisions: tuple[ArelleFindingDecisionV1, ...] = ()
     parsed_at: datetime
     offline: bool = True
     source_content_hash: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
     taxonomy_cache_hash: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
 
     def blocking_finding_codes(self) -> tuple[str, ...]:
+        if self.finding_decisions:
+            return tuple(item.code for item in self.finding_decisions if item.blocks)
         allowed_warnings = {
             "ix11.10.1.2:invalidTransformation",
             "ix11.11.1.2:invalidTransformation",
@@ -85,6 +98,32 @@ class ArelleParseReportV1(BaseModel):
         return tuple(
             code for code in self.finding_codes if code not in allowed_warnings
         )
+
+
+def fact_semantic_digest(report: ArelleParseReportV1) -> str:
+    """Digest XBRL fact meaning without parser path or run-time timestamps."""
+    facts = sorted(
+        (fact.model_dump(mode="json") for fact in report.facts),
+        key=lambda fact: sha256_digest(fact),
+    )
+    return sha256_digest({"fact_count": len(facts), "facts": facts})
+
+
+def finding_decisions(
+    codes: tuple[str, ...],
+) -> tuple[ArelleFindingDecisionV1, ...]:
+    allowed_warnings = {
+        "ix11.10.1.2:invalidTransformation",
+        "ix11.11.1.2:invalidTransformation",
+    }
+    return tuple(
+        ArelleFindingDecisionV1(
+            code=code,
+            severity="warning" if code in allowed_warnings else "error",
+            blocks=code not in allowed_warnings,
+        )
+        for code in sorted(set(codes))
+    )
 
 
 def _directory_hash(root: Path) -> str:
@@ -252,6 +291,7 @@ def parse_filing_offline(
         validation_profile=profile,
         facts=tuple(facts),
         finding_codes=finding_codes,
+        finding_decisions=finding_decisions(finding_codes),
         parsed_at=datetime.now(timezone.utc),
         offline=profile.offline,
         source_content_hash=actual_source_hash,

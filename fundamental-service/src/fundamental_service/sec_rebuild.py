@@ -67,7 +67,8 @@ def parsed_facts_to_candidates(
         raise SnapshotError(
             "PARSER_NOT_OFFLINE", "SEC rebuild requires an offline parser report"
         )
-    if report.source_content_hash != source.content_hash:
+    expected_parser_hash = source.parser_input_hash or source.content_hash
+    if report.source_content_hash != expected_parser_hash:
         raise SnapshotError(
             "SOURCE_HASH_MISMATCH", "parser report is not bound to source bytes"
         )

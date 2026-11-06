@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 from email.message import Message
+import json
 from pathlib import Path
 from zipfile import ZipFile
 
@@ -16,10 +17,12 @@ from fundamental_service.snapshots import (
 class Response:
     status = 200
 
-    def __init__(self, payload: bytes):
+    def __init__(self, payload: bytes, *, headers: dict[str, str] | None = None):
         self.payload = payload
         self.headers = Message()
         self.headers["Content-Type"] = "text/html"
+        for name, value in (headers or {}).items():
+            self.headers[name] = value
 
     def read(self):
         return self.payload
@@ -36,9 +39,10 @@ def test_sec_ingestion_connects_adapter_snapshot_parser_and_fact_selection(
 ):
     fixture_root = Path(__file__).parent / "fixtures" / "sec-edgar"
     filing_bytes = (fixture_root / "apple-2024-original-aapl-20240928.htm").read_bytes()
-    with ZipFile(
-        fixture_root / "apple-2024-original-0000320193-24-000123-xbrl.zip"
-    ) as archive:
+    archive_path = fixture_root / "apple-2024-original-0000320193-24-000123-xbrl.zip"
+    archive_bytes = archive_path.read_bytes()
+    with ZipFile(archive_path) as archive:
+        primary_bytes = archive.read("aapl-20240928.htm")
         dts_bytes = {
             filename: archive.read(filename)
             for filename in (
@@ -49,6 +53,19 @@ def test_sec_ingestion_connects_adapter_snapshot_parser_and_fact_selection(
                 "aapl-20240928_cal.xml",
             )
         }
+    index_bytes = json.dumps(
+        {
+            "directory": {
+                "item": [
+                    {"name": "aapl-20240928.htm", "size": str(len(primary_bytes) + 1)},
+                    {
+                        "name": "0000320193-24-000123-xbrl.zip",
+                        "size": str(len(archive_bytes)),
+                    },
+                ]
+            }
+        }
+    ).encode()
     taxonomy_cache = tmp_path / "taxonomy-cache"
     taxonomy_cache.mkdir()
     with ZipFile(fixture_root / "arelle-taxonomy-cache-2024.zip") as archive:
@@ -58,10 +75,15 @@ def test_sec_ingestion_connects_adapter_snapshot_parser_and_fact_selection(
         SecRequestPolicy(
             user_agent="value-agent test@example.com", min_interval_seconds=0
         ),
-        opener=lambda request, timeout: Response(
-            dts_bytes.get(Path(request.full_url).name, filing_bytes)
+        opener=lambda request, timeout: _ingestion_response(
+            request.full_url,
+            index_bytes=index_bytes,
+            archive_bytes=archive_bytes,
+            filing_bytes=filing_bytes,
+            dts_bytes=dts_bytes,
         ),
         sleep=lambda _seconds: None,
+        clock=lambda: datetime(2026, 11, 4, tzinfo=timezone.utc),
     )
     service = SecIngestionService(
         source_adapter=adapter,
@@ -105,9 +127,54 @@ def test_sec_ingestion_connects_adapter_snapshot_parser_and_fact_selection(
         ),
     )
     assert result.snapshot.snapshot_id
-    assert (
-        result.parser_report.source_content_hash
-        == result.snapshot.source_records[0].content_hash
+    filing_record = next(
+        record
+        for record in result.snapshot.source_records
+        if record.source_id == "sec-filing"
     )
+    assert result.parser_report.source_content_hash == filing_record.parser_input_hash
+    assert result.parser_report.source_content_hash != filing_record.content_hash
     assert result.selection.fact is not None
     assert result.selection.fact.quality.value == "verified"
+    assert result.integrity_evidence.integrity_relation == "normalized"
+    assert result.integrity_evidence.raw_content_hash
+    assert (
+        result.integrity_evidence.archive_member_hash
+        == result.integrity_evidence.normalized_content_hash
+    )
+    assert (
+        result.parser_report.source_content_hash
+        == result.integrity_evidence.parser_input_hash
+    )
+
+
+def _ingestion_response(
+    uri: str,
+    *,
+    index_bytes: bytes,
+    archive_bytes: bytes,
+    filing_bytes: bytes,
+    dts_bytes: dict[str, bytes],
+) -> Response:
+    filename = Path(uri).name
+    if filename == "index.json":
+        return Response(index_bytes, headers={"Content-Type": "application/json"})
+    if filename.endswith("-xbrl.zip"):
+        return Response(
+            archive_bytes,
+            headers={
+                "Content-Type": "application/zip",
+                "Content-Length": str(len(archive_bytes)),
+            },
+        )
+    if filename in dts_bytes:
+        return Response(
+            dts_bytes[filename], headers={"Content-Type": "application/xml"}
+        )
+    return Response(
+        filing_bytes,
+        headers={
+            "Content-Type": "text/html",
+            "X-Akamai-Transformed": "0 - 0 -",
+        },
+    )
