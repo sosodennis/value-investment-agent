@@ -1,12 +1,12 @@
 import hashlib
 import json
+import os
 from datetime import datetime, timezone
 from email.message import Message
 from pathlib import Path
 from zipfile import ZipFile
 
 import pytest
-
 from fundamental_service.arelle_parser import (
     ArelleFindingV1,
     ArelleParseReportV1,
@@ -272,6 +272,151 @@ def test_sec_ingestion_connects_adapter_snapshot_parser_and_fact_selection(
     assert content_store.get(raw_hash, media_type="text/html") == filing_bytes
 
 
+def test_sec_ingestion_publishes_real_verified_microsoft_fixture(
+    tmp_path: Path,
+):
+    required_environment = (
+        "ISSUE328_EDGAR_PLUGIN_DIR",
+        "ISSUE328_XULE_PLUGIN_DIR",
+        "ISSUE328_DQC_RULESET_PATH",
+        "ISSUE328_TAXONOMY_CACHE_DIR",
+    )
+    if not all(os.environ.get(name) for name in required_environment):
+        pytest.skip("pinned SEC EFM/DQC runtime paths are not configured")
+
+    fixture = (
+        Path(__file__).parent
+        / "fixtures"
+        / "sec-edgar"
+        / "microsoft-2024-original-xbrl-test-package.zip"
+    )
+    with ZipFile(fixture) as archive:
+        filing_bytes = archive.read("msft-20240630.htm")
+        xsd_bytes = archive.read("msft-20240630.xsd")
+    archive_bytes = fixture.read_bytes()
+    index_bytes = json.dumps(
+        {
+            "directory": {
+                "item": [
+                    {"name": "msft-20240630.htm", "size": str(len(filing_bytes))},
+                    {
+                        "name": "0000950170-24-087843-xbrl.zip",
+                        "size": str(len(archive_bytes)),
+                    },
+                ]
+            }
+        }
+    ).encode()
+
+    edgar_dir = Path(os.environ["ISSUE328_EDGAR_PLUGIN_DIR"])
+    xule_dir = Path(os.environ["ISSUE328_XULE_PLUGIN_DIR"])
+    ruleset = Path(os.environ["ISSUE328_DQC_RULESET_PATH"])
+    profile = ArelleValidationProfileV1(
+        profile_id="sec-efm-dqc-us-gaap-2023-2024-v1",
+        validation_mode="sec-efm-dqc",
+        edgar_plugin_dir=edgar_dir,
+        xule_plugin_dir=xule_dir,
+        dqc_ruleset_path=ruleset,
+        edgar_plugin_sha256=_directory_hash(edgar_dir),
+        xule_plugin_sha256=_directory_hash(xule_dir),
+        dqc_ruleset_sha256=hashlib.sha256(ruleset.read_bytes()).hexdigest(),
+    )
+    adapter = SecEdgarSourceAdapter(
+        SecRequestPolicy(
+            user_agent="value-agent test@example.com", min_interval_seconds=0
+        ),
+        opener=lambda request, timeout: _microsoft_ingestion_response(
+            request.full_url,
+            index_bytes=index_bytes,
+            archive_bytes=archive_bytes,
+            filing_bytes=filing_bytes,
+            xsd_bytes=xsd_bytes,
+        ),
+        sleep=lambda _seconds: None,
+        clock=lambda: datetime(2026, 11, 6, tzinfo=timezone.utc),
+    )
+    content_store = FilesystemContentStore(tmp_path / "objects")
+    snapshot_repository = FilesystemSnapshotRepository(tmp_path / "snapshots")
+    service = SecIngestionService(
+        source_adapter=adapter,
+        content_store=content_store,
+        snapshot_repository=snapshot_repository,
+    )
+    ingestion_args = dict(
+        identity=IdentityV1(
+            issuer_id="0000789019",
+            issuer_name="Microsoft Corporation",
+            domicile="US",
+            reporting_basis="us-gaap",
+            security_id="MSFT",
+            share_class="common",
+            currency="USD",
+        ),
+        cik="0000789019",
+        accession_number="0000950170-24-087843",
+        primary_document="msft-20240630.htm",
+        filed_at=datetime(2024, 7, 30, 20, 6, 22, tzinfo=timezone.utc),
+        captured_at=datetime(2026, 11, 6, tzinfo=timezone.utc),
+        valuation_timestamp=datetime(2025, 1, 1, tzinfo=timezone.utc),
+        parser_version="2.47.4",
+        policy_version="source-policy-v1",
+        taxonomy_manifest_id="sec-us-gaap-2023-2024-public-bundle",
+        taxonomy_version="us-gaap-2023-2024",
+        taxonomy_cache_dir=Path(os.environ["ISSUE328_TAXONOMY_CACHE_DIR"]),
+        normalized_field="revenue",
+        dts_filenames=("msft-20240630.xsd",),
+        profile=profile,
+        mapping=CanonicalMappingV1(
+            contract_version="fundamental.v1",
+            decision_id="map-msft-revenue-v1",
+            source_concept="us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
+            normalized_field="revenue",
+            mapping_version="sec-us-gaap-v1",
+            confidence="high",
+            evidence_refs=("sec-archive-msft-2024",),
+            reviewer="fundamental-service",
+            reviewed_at=datetime(2025, 1, 1, tzinfo=timezone.utc),
+            status="approved",
+        ),
+    )
+
+    result = service.ingest_filing(**ingestion_args)
+    assert len(result.parser_report.facts) >= 1800
+    assert result.parser_report.blocking_finding_codes() == ()
+    assert result.selection.fact is not None
+    assert result.selection.fact.quality.value == "verified"
+    assert result.snapshot.sec_integrity_evidence is not None
+    assert result.integrity_evidence.integrity_relation == "exact"
+    assert result.integrity_evidence.normalization_policy_id is None
+    assert result.integrity_evidence.network_attempt_count == 0
+    assert result.integrity_evidence.archive_hash
+
+    replay = service.ingest_filing(**ingestion_args)
+    assert replay.snapshot.manifest_digest == result.snapshot.manifest_digest
+    assert replay.integrity_evidence == result.integrity_evidence
+    assert (
+        content_store.get(
+            result.integrity_evidence.raw_content_hash, media_type="text/html"
+        )
+        == filing_bytes
+    )
+    assert (
+        content_store.get(
+            result.integrity_evidence.archive_hash, media_type="application/zip"
+        )
+        == archive_bytes
+    )
+    assert (
+        len(
+            snapshot_repository.find(
+                identity=ingestion_args["identity"],
+                valuation_timestamp=ingestion_args["valuation_timestamp"],
+            )
+        )
+        == 1
+    )
+
+
 def _ingestion_response(
     uri: str,
     *,
@@ -302,3 +447,27 @@ def _ingestion_response(
             "X-Akamai-Transformed": "0 - 0 -",
         },
     )
+
+
+def _microsoft_ingestion_response(
+    uri: str,
+    *,
+    index_bytes: bytes,
+    archive_bytes: bytes,
+    filing_bytes: bytes,
+    xsd_bytes: bytes,
+) -> Response:
+    filename = Path(uri).name
+    if filename == "index.json":
+        return Response(index_bytes, headers={"Content-Type": "application/json"})
+    if filename.endswith("-xbrl.zip"):
+        return Response(
+            archive_bytes,
+            headers={
+                "Content-Type": "application/zip",
+                "Content-Length": str(len(archive_bytes)),
+            },
+        )
+    if filename == "msft-20240630.xsd":
+        return Response(xsd_bytes, headers={"Content-Type": "application/xml"})
+    return Response(filing_bytes, headers={"Content-Type": "text/html"})
