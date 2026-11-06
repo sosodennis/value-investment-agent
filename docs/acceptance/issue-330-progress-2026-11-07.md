@@ -96,6 +96,9 @@ curl -fsS http://127.0.0.1:18633/livez
 curl -fsS http://127.0.0.1:18633/readyz
 ```
 
-PR #331 has not yet been updated to this commit or rerun through GitHub CI.
-This document records local exact-commit acceptance only; merge and issue
-closure remain pending.
+PR #331 targets `main` and currently points at exact head
+`2eb07e9fe65d7ae27a31d8813a7aa06bb4d774ff`. GitHub run
+`42262688272` completed on that SHA: all 11 applicable checks passed and
+`fundamental-release-gate` was skipped. The PR is `MERGEABLE` with a `CLEAN`
+merge state. Merge and issue closure remain pending until the current
+docs-only checkpoint's CI also completes.
