@@ -26,11 +26,19 @@ from .serialization import canonical_bytes, is_digest, sha256_digest
 class SnapshotError(RuntimeError):
     """Stable source-plane failures exposed to callers and operational logs."""
 
-    def __init__(self, code: str, message: str, *, retryable: bool = False) -> None:
+    def __init__(
+        self,
+        code: str,
+        message: str,
+        *,
+        retryable: bool = False,
+        evidence_ref: str | None = None,
+    ) -> None:
         super().__init__(message)
         self.code = code
         self.message = message
         self.retryable = retryable
+        self.evidence_ref = evidence_ref
 
 
 class ContentAddressedStore(Protocol):

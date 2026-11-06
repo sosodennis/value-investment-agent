@@ -306,6 +306,66 @@ class SecIntegrityEvidenceV1(StrictModel):
         return self
 
 
+class SecCapturedSourceEvidenceV1(StrictModel):
+    source_id: str = Field(min_length=1)
+    uri: str = Field(min_length=1)
+    role: SourceRole
+    media_type: str = Field(min_length=1)
+    http_status: int = Field(ge=100, le=599)
+    available_at: datetime
+    captured_at: datetime
+    publication_at: datetime | None = None
+    accession_number: str | None = None
+    form: str | None = None
+    filed_at: datetime | None = None
+    response_headers: tuple[tuple[str, str], ...] = ()
+    declared_size: int | None = Field(default=None, ge=0)
+    received_size: int = Field(ge=0)
+    content_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+    @model_validator(mode="after")
+    def timestamps_have_timezone(self) -> SecCapturedSourceEvidenceV1:
+        for name, value in (
+            ("available_at", self.available_at),
+            ("captured_at", self.captured_at),
+            ("publication_at", self.publication_at),
+            ("filed_at", self.filed_at),
+        ):
+            if value is not None and (
+                value.tzinfo is None or value.utcoffset() is None
+            ):
+                raise ValueError(f"{name} must include a timezone")
+        return self
+
+
+class SecIngestionRejectionEvidenceV1(StrictModel):
+    contract_version: Literal["fundamental.sec-ingestion-rejection.v1"]
+    error_code: Literal["PARSER_VALIDATION_BLOCKED"]
+    captured_sources: tuple[SecCapturedSourceEvidenceV1, ...] = Field(min_length=3)
+    integrity_evidence: SecIntegrityEvidenceV1
+    parser_replay_digests: tuple[str, ...] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def source_and_parser_evidence_are_bound(self) -> SecIngestionRejectionEvidenceV1:
+        evidence = self.integrity_evidence
+        if evidence.quality_decision != "block" or not any(
+            finding.blocks for finding in evidence.findings
+        ):
+            raise ValueError("rejection evidence requires a blocking parser finding")
+        source_hashes = {
+            (source.source_id, source.content_hash) for source in self.captured_sources
+        }
+        if ("sec-filing", evidence.raw_content_hash) not in source_hashes:
+            raise ValueError("rejection evidence must reference the raw filing")
+        if ("sec-filing-index", evidence.archive_index_hash) not in source_hashes:
+            raise ValueError("rejection evidence must reference the archive index")
+        if ("sec-filing-archive", evidence.archive_hash) not in source_hashes:
+            raise ValueError("rejection evidence must reference the SEC archive")
+        if any(not is_digest(digest) for digest in self.parser_replay_digests):
+            raise ValueError("parser replay digests must be SHA-256 values")
+        return self
+
+
 class SourceSnapshotV1(StrictModel):
     contract_version: Literal["fundamental.v1"]
     snapshot_id: str = Field(min_length=1)

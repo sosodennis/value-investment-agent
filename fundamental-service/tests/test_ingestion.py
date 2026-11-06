@@ -14,9 +14,16 @@ from fundamental_service.arelle_parser import (
     ParsedXbrlFactV1,
     _directory_hash,
 )
-from fundamental_service.contracts import IdentityV1
-from fundamental_service.facts import CanonicalMappingV1
+from fundamental_service.contracts import (
+    IdentityV1,
+    SecIngestionRejectionEvidenceV1,
+)
+from fundamental_service.facts import (
+    CanonicalMappingV1,
+    FilesystemCanonicalFactRepository,
+)
 from fundamental_service.ingestion import SecIngestionService
+from fundamental_service.replay import ArtifactStore
 from fundamental_service.sec_source import SecEdgarSourceAdapter, SecRequestPolicy
 from fundamental_service.snapshots import (
     FilesystemContentStore,
@@ -171,10 +178,12 @@ def test_sec_ingestion_connects_adapter_snapshot_parser_and_fact_selection(
     )
     content_store = FilesystemContentStore(tmp_path / "objects")
     snapshot_repository = FilesystemSnapshotRepository(tmp_path / "snapshots")
+    audit_store = ArtifactStore(tmp_path / "artifacts")
     service = SecIngestionService(
         source_adapter=adapter,
         content_store=content_store,
         snapshot_repository=snapshot_repository,
+        audit_store=audit_store,
     )
     ingestion_args = dict(
         identity=IdentityV1(
@@ -243,6 +252,7 @@ def test_sec_ingestion_connects_adapter_snapshot_parser_and_fact_selection(
         source_adapter=adapter,
         content_store=content_store,
         snapshot_repository=rejected_repository,
+        audit_store=audit_store,
     )
     parser_state["semantic_mismatch"] = True
     with pytest.raises(SnapshotError) as semantic_error:
@@ -342,10 +352,14 @@ def test_sec_ingestion_blocks_real_aapl_efm_finding_without_publishing_facts(
     )
     content_store = FilesystemContentStore(tmp_path / "objects")
     snapshot_repository = FilesystemSnapshotRepository(tmp_path / "snapshots")
+    audit_store = ArtifactStore(tmp_path / "audit-artifacts")
+    fact_repository = FilesystemCanonicalFactRepository(tmp_path / "facts")
     service = SecIngestionService(
         source_adapter=adapter,
         content_store=content_store,
         snapshot_repository=snapshot_repository,
+        audit_store=audit_store,
+        fact_repository=fact_repository,
     )
     ingestion_args = dict(
         identity=IdentityV1(
@@ -389,6 +403,7 @@ def test_sec_ingestion_blocks_real_aapl_efm_finding_without_publishing_facts(
         service.ingest_filing(**ingestion_args)
 
     assert error.value.code == "PARSER_VALIDATION_BLOCKED"
+    assert error.value.evidence_ref is not None
     assert (
         snapshot_repository.find(
             identity=ingestion_args["identity"],
@@ -398,6 +413,57 @@ def test_sec_ingestion_blocks_real_aapl_efm_finding_without_publishing_facts(
     )
     raw_hash = hashlib.sha256(filing_bytes).hexdigest()
     assert content_store.get(raw_hash, media_type="text/html") == filing_bytes
+    assert tuple(fact_repository.root.glob("*.json")) == ()
+
+    reopened_audit_store = ArtifactStore(tmp_path / "audit-artifacts")
+    rejection_record = reopened_audit_store.get(error.value.evidence_ref)
+    rejection = SecIngestionRejectionEvidenceV1.model_validate_json(
+        reopened_audit_store.read(error.value.evidence_ref)
+    )
+    assert rejection_record.retention == "evidence"
+    assert rejection.error_code == error.value.code
+    assert rejection.integrity_evidence.accession_number == "0000320193-24-000123"
+    assert rejection.integrity_evidence.quality_decision == "block"
+    assert any(finding.blocks for finding in rejection.integrity_evidence.findings)
+    assert len(rejection.parser_replay_digests) == 2
+    assert all(len(digest) == 64 for digest in rejection.parser_replay_digests)
+
+    sources_by_id = {source.source_id: source for source in rejection.captured_sources}
+    filing_source = sources_by_id["sec-filing"]
+    assert filing_source.uri.endswith("/aapl-20240928.htm")
+    assert filing_source.accession_number == "0000320193-24-000123"
+    assert filing_source.http_status == 200
+    assert filing_source.received_size == len(filing_bytes)
+    assert filing_source.content_hash == rejection.integrity_evidence.raw_content_hash
+    assert filing_source.declared_size is None
+    assert "x-akamai-transformed" in {
+        name.lower() for name, _value in filing_source.response_headers
+    }
+    assert sources_by_id["sec-filing-index"].content_hash == (
+        rejection.integrity_evidence.archive_index_hash
+    )
+    assert sources_by_id["sec-filing-archive"].content_hash == (
+        rejection.integrity_evidence.archive_hash
+    )
+
+    source_hashes = {source.content_hash for source in rejection.captured_sources}
+    assert set(rejection_record.dependency_hashes) == source_hashes | {
+        rejection.integrity_evidence.normalized_content_hash,
+        rejection.integrity_evidence.archive_member_hash,
+        rejection.integrity_evidence.validation_profile_digest,
+        rejection.integrity_evidence.taxonomy_manifest_hash,
+    }
+    reopened_content_store = FilesystemContentStore(tmp_path / "objects")
+    for source in rejection.captured_sources:
+        assert (
+            len(
+                reopened_content_store.get(
+                    source.content_hash, media_type=source.media_type
+                )
+            )
+            == source.received_size
+        )
+    assert reopened_content_store.get(raw_hash, media_type="text/html") == filing_bytes
 
 
 def test_sec_ingestion_publishes_real_verified_microsoft_fixture(
@@ -469,6 +535,7 @@ def test_sec_ingestion_publishes_real_verified_microsoft_fixture(
         source_adapter=adapter,
         content_store=content_store,
         snapshot_repository=snapshot_repository,
+        audit_store=ArtifactStore(tmp_path / "artifacts"),
     )
     ingestion_args = dict(
         identity=IdentityV1(

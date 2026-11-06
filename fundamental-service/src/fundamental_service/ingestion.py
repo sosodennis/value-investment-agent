@@ -6,6 +6,7 @@ import tempfile
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from typing import Literal, Protocol
 
 from .arelle_parser import (
     ArelleParseReportV1,
@@ -16,12 +17,16 @@ from .arelle_parser import (
 from .contracts import (
     ArelleFindingEvidenceV1,
     IdentityV1,
+    SecCapturedSourceEvidenceV1,
+    SecIngestionRejectionEvidenceV1,
     SecIntegrityEvidenceV1,
 )
 from .facts import CanonicalFactRepository, CanonicalMappingV1, FactSelection
+from .replay import ArtifactRecordV1
 from .sec_integrity import assess_filing_response
 from .sec_rebuild import parsed_facts_to_candidates, select_canonical_fact
 from .sec_source import SecEdgarSourceAdapter, sec_source_register
+from .serialization import sha256_digest
 from .snapshots import (
     ContentAddressedStore,
     SnapshotBuilder,
@@ -29,6 +34,18 @@ from .snapshots import (
     SnapshotRepository,
     SourceSnapshotV1,
 )
+
+
+class IngestionAuditStore(Protocol):
+    def put(
+        self,
+        artifact_id: str,
+        value: object,
+        dependency_hashes: tuple[str, ...] = (),
+        *,
+        media_type: str = "application/json",
+        retention: Literal["evidence", "operational_cache"] = "evidence",
+    ) -> ArtifactRecordV1: ...
 
 
 @dataclass(frozen=True)
@@ -48,10 +65,12 @@ class SecIngestionService:
         source_adapter: SecEdgarSourceAdapter,
         content_store: ContentAddressedStore,
         snapshot_repository: SnapshotRepository,
+        audit_store: IngestionAuditStore,
         fact_repository: CanonicalFactRepository | None = None,
     ) -> None:
         self.source_adapter = source_adapter
         self.content_store = content_store
+        self.audit_store = audit_store
         self.fact_repository = fact_repository
         self.builder = SnapshotBuilder(
             content_store,
@@ -139,8 +158,32 @@ class SecIngestionService:
 
         # Keep rejected responses as content-addressed audit evidence before any
         # integrity or parser gate can fail. None are selectable until publish.
-        for item in (index_source, source, archive_source, *dts_sources):
-            self.content_store.put(item.content, media_type=item.media_type)
+        captured_sources = tuple(
+            SecCapturedSourceEvidenceV1(
+                source_id=item.source_id,
+                uri=item.uri,
+                role=item.role,
+                media_type=item.media_type,
+                http_status=item.http_status,
+                available_at=item.available_at,
+                captured_at=item.captured_at or item.available_at,
+                publication_at=item.publication_at,
+                accession_number=item.accession_number,
+                form=item.form,
+                filed_at=item.filed_at,
+                response_headers=item.response_headers,
+                declared_size=item.declared_size,
+                received_size=(
+                    item.received_size
+                    if item.received_size is not None
+                    else len(item.content)
+                ),
+                content_hash=self.content_store.put(
+                    item.content, media_type=item.media_type
+                ),
+            )
+            for item in (index_source, source, archive_source, *dts_sources)
+        )
         assessment = assess_filing_response(
             raw_response=source,
             archive_index=index_source,
@@ -210,13 +253,6 @@ class SecIngestionService:
             )
             for item in parser_report.findings
         )
-        if blocking_codes:
-            raise SnapshotError(
-                "PARSER_VALIDATION_BLOCKED",
-                "blocking SEC EFM/DQC findings prevent canonical fact publication",
-            )
-        if not parser_report.facts:
-            raise SnapshotError("PARSER_FACTS_MISSING", "Arelle produced no XBRL facts")
         taxonomy_hash = parser_report.taxonomy_cache_hash
         if taxonomy_hash is None:
             raise SnapshotError(
@@ -263,8 +299,52 @@ class SecIngestionService:
             dqc_version=profile.dqc_version,
             xule_version=profile.xule_version,
             findings=finding_evidence,
-            quality_decision="pass",
+            quality_decision="block" if blocking_codes else "pass",
         )
+
+        if blocking_codes:
+            rejection_evidence = SecIngestionRejectionEvidenceV1(
+                contract_version="fundamental.sec-ingestion-rejection.v1",
+                error_code="PARSER_VALIDATION_BLOCKED",
+                captured_sources=captured_sources,
+                integrity_evidence=integrity_evidence,
+                parser_replay_digests=tuple(
+                    sorted(
+                        {parser_report.replay_digest(), archive_report.replay_digest()}
+                    )
+                ),
+            )
+            evidence_digest = sha256_digest(rejection_evidence)
+            accession_id = "".join(
+                character
+                for character in accession_number
+                if character.isascii() and character.isalnum()
+            )
+            artifact_id = f"sec-ingestion-rejection-{accession_id}-{evidence_digest}"
+            dependency_hashes = tuple(
+                sorted(
+                    {
+                        *(item.content_hash for item in captured_sources),
+                        assessment.normalized_content_hash,
+                        assessment.archive_member_hash,
+                        parser_report.validation_profile_digest,
+                        taxonomy_hash,
+                    }
+                )
+            )
+            record = self.audit_store.put(
+                artifact_id,
+                rejection_evidence,
+                dependency_hashes,
+                retention="evidence",
+            )
+            raise SnapshotError(
+                "PARSER_VALIDATION_BLOCKED",
+                "blocking SEC EFM/DQC findings prevent canonical fact publication",
+                evidence_ref=record.artifact_id,
+            )
+        if not parser_report.facts:
+            raise SnapshotError("PARSER_FACTS_MISSING", "Arelle produced no XBRL facts")
 
         all_sources = (index_source, source, archive_source, *dts_sources)
         prepared = self.builder.prepare(
