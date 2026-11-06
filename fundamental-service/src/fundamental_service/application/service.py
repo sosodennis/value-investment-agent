@@ -30,6 +30,7 @@ from ..contracts import (
     ValidationResponseV1,
     ValuationInputV1,
 )
+from ..data_releases import ActiveDataReleaseWithManifestV1, DataReleaseError
 from ..facts import CanonicalFactRepository
 from ..governance import ModelInventory
 from ..operations import (
@@ -576,10 +577,77 @@ class FundamentalApplication:
                 status_code=503,
                 retryable=True,
             )
+        active_release: ActiveDataReleaseWithManifestV1 | None = None
+        if request.release_profile_id is None:
+            if self.require_metadata:
+                raise ServiceError(
+                    "DATA_RELEASE_PROFILE_REQUIRED",
+                    "production snapshot resolution requires a release profile",
+                    status_code=422,
+                    retryable=False,
+                )
+        else:
+            if self.metadata_store is None:
+                raise ServiceError(
+                    "DATA_RELEASE_UNAVAILABLE",
+                    "release metadata is unavailable",
+                    status_code=503,
+                    retryable=True,
+                )
+            release_reader = getattr(
+                self.metadata_store, "get_active_data_release_with_manifest", None
+            )
+            if not callable(release_reader):
+                raise ServiceError(
+                    "DATA_RELEASE_UNAVAILABLE",
+                    "release metadata is unavailable",
+                    status_code=503,
+                    retryable=True,
+                )
+            try:
+                active_release = release_reader(request.release_profile_id)
+            except DataReleaseError as error:
+                raise ServiceError(
+                    error.code,
+                    "active data release is temporarily unavailable",
+                    status_code=503,
+                    retryable=error.retryable,
+                ) from error
+            if active_release is None:
+                raise ServiceError(
+                    "DATA_RELEASE_NOT_ACTIVE",
+                    "no active data release is available for this profile",
+                    status_code=503,
+                    retryable=True,
+                )
+            if not set(request.required_fields).issubset(
+                active_release.manifest.required_fields
+            ):
+                raise ServiceError(
+                    "DATA_RELEASE_FIELDS_UNAVAILABLE",
+                    "the active release does not cover all required fields",
+                    status_code=422,
+                    retryable=False,
+                )
+
         candidates = self.snapshot_repository.find(
             identity=request.identity,
             valuation_timestamp=request.valuation_timestamp,
         )
+        declared_snapshots = (
+            {
+                snapshot.snapshot_id: snapshot
+                for snapshot in active_release.manifest.snapshot_refs
+            }
+            if active_release is not None
+            else None
+        )
+        if declared_snapshots is not None:
+            candidates = tuple(
+                snapshot
+                for snapshot in candidates
+                if snapshot.snapshot_id in declared_snapshots
+            )
         if not candidates:
             raise ServiceError(
                 "SNAPSHOT_NOT_FOUND",
@@ -589,6 +657,21 @@ class FundamentalApplication:
                 retryable=False,
             )
         for snapshot in candidates:
+            declared_snapshot = (
+                None
+                if declared_snapshots is None
+                else declared_snapshots[snapshot.snapshot_id]
+            )
+            if (
+                declared_snapshot is not None
+                and snapshot.manifest_digest != declared_snapshot.manifest_digest
+            ):
+                raise ServiceError(
+                    "DATA_RELEASE_SNAPSHOT_MISMATCH",
+                    "a release snapshot does not match its declared manifest",
+                    status_code=409,
+                    retryable=False,
+                )
             try:
                 facts = self.fact_repository.resolve(
                     snapshot=snapshot,
@@ -599,9 +682,30 @@ class FundamentalApplication:
                 if error.code == "FACT_NOT_FOUND":
                     continue
                 raise _snapshot_error(error) from error
+            if declared_snapshot is not None:
+                declared_facts = {
+                    fact.fact_id: fact.fact_digest for fact in declared_snapshot.facts
+                }
+                if any(
+                    fact.fact_id not in declared_facts
+                    or sha256_digest(fact.model_dump(mode="json"))
+                    != declared_facts[fact.fact_id]
+                    for fact in facts
+                ):
+                    raise ServiceError(
+                        "DATA_RELEASE_FACT_MISMATCH",
+                        "selected canonical facts do not match the active release",
+                        status_code=409,
+                        retryable=False,
+                    )
             return SnapshotResolutionV1(
                 contract_version="fundamental.v1",
                 snapshot_id=snapshot.snapshot_id,
+                data_release_manifest_digest=(
+                    None
+                    if active_release is None
+                    else active_release.manifest.manifest_digest
+                ),
                 historical_facts=tuple(fact.fact_id for fact in facts),
                 identity=snapshot.identity,
                 valuation_timestamp=request.valuation_timestamp,
@@ -615,6 +719,11 @@ class FundamentalApplication:
                     "parser_version": snapshot.parser_version,
                     "taxonomy_version": snapshot.taxonomy_manifest_id,
                     "policy_version": snapshot.policy_version,
+                    "data_release_manifest_digest": (
+                        None
+                        if active_release is None
+                        else active_release.manifest.manifest_digest
+                    ),
                 },
             )
         raise ServiceError(

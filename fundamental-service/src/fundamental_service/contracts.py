@@ -428,6 +428,7 @@ class SnapshotResolutionRequestV1(StrictModel):
     """Caller-owned point-in-time selector for an immutable data snapshot."""
 
     contract_version: Literal["fundamental.v1"]
+    release_profile_id: str | None = Field(default=None, min_length=1)
     identity: IdentityV1
     valuation_timestamp: datetime
     source_selection_policy: Literal["pit-v1"]
@@ -462,6 +463,9 @@ class SnapshotResolutionV1(StrictModel):
 
     contract_version: Literal["fundamental.v1"]
     snapshot_id: str = Field(min_length=1)
+    data_release_manifest_digest: str | None = Field(
+        default=None, pattern=r"^[0-9a-f]{64}$"
+    )
     historical_facts: tuple[str, ...] = Field(min_length=1)
     identity: IdentityV1
     valuation_timestamp: datetime

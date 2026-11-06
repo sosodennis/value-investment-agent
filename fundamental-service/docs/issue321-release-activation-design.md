@@ -246,17 +246,21 @@ transactional pointer CAS, append-only activation audit, and PostgreSQL
 idempotency/concurrency checks are implemented in the current issue branch.
 The metadata adapter now reads the active pointer and its manifest in one
 joined query, so a reader cannot observe a pointer without the immutable
-manifest it selects.
+manifest it selects. Snapshot resolution accepts a release profile, restricts
+selection to that manifest's snapshot/fact references, checks their digests,
+and returns the pinned release digest. Metadata-backed production resolution
+requires a release profile; test compositions retain the legacy selector.
 Candidate persistence requires a trusted verification and independent mapping
 review signature. Runtime deployment can provide those public keys through
 `FUNDAMENTAL_DATA_RELEASE_TRUST_ROOTS_FILE`; an unset path keeps candidate
 publication fail-closed. The operations Compose file mounts a local-only
 development trust-root fixture and is not a production trust configuration.
 
-Serving behavior remains unimplemented: there is no typed release publish or
-activation route, request-level pinned release contract, release-aware cache,
-or end-to-end fault/recovery/overlap/load evidence yet. These remain required
-by issue #321 and are not considered verified by the persistence checkpoints.
+Serving behavior remains incomplete: there is no typed release publish or
+activation route, valuation/replay inputs do not yet carry the resolved digest,
+release-aware cache, or end-to-end fault/recovery/overlap/load evidence. These
+remain required by issue #321 and are not considered verified by these
+checkpoints.
 
 ## Open questions and risks
 
@@ -273,7 +277,7 @@ by issue #321 and are not considered verified by the persistence checkpoints.
 
 ## Next implementation step
 
-Implement the typed service boundary and request-level release pinning on top
-of the atomic pointer/manifest read. Keep candidate validation and publication
-outside API replica scheduling, and preserve the active pointer on every
-validation or persistence failure.
+Implement typed release publication/activation boundaries and propagate the
+resolved digest into valuation and replay inputs. Keep candidate validation
+and publication outside API replica scheduling, and preserve the active
+pointer on every validation or persistence failure.

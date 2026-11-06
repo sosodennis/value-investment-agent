@@ -25,8 +25,18 @@ from fundamental_service.contracts import (
     QualityStatus,
     SourceProvenanceV1,
     SourceRole,
+    SnapshotResolutionRequestV1,
     UncertaintyV1,
     XbrlContextV1,
+)
+from fundamental_service.data_releases import (
+    ActiveDataReleaseV1,
+    ActiveDataReleaseWithManifestV1,
+    ArtifactRefV1,
+    DataReleaseManifestV1,
+    FactRefV1,
+    MappingRefV1,
+    SnapshotRefV1,
 )
 from fundamental_service.governance import ModelInventory
 from fundamental_service.operations import OperationsConfig
@@ -102,6 +112,20 @@ class _ResolvingSnapshotRepository(_SnapshotRepository):
         ):
             return (self.snapshot,)
         return ()
+
+
+class _ReleaseSnapshotRepository(_ResolvingSnapshotRepository):
+    def __init__(self, *snapshots):
+        self.snapshots = snapshots
+        self.snapshot = snapshots[0]
+
+    def find(self, *, identity, valuation_timestamp):
+        return tuple(
+            snapshot
+            for snapshot in self.snapshots
+            if identity.issuer_id == snapshot.identity.issuer_id
+            and valuation_timestamp >= snapshot.valuation_timestamp
+        )
 
 
 class _FactRepository:
@@ -1144,6 +1168,136 @@ def test_runtime_injects_deployment_data_release_trust_roots(
     roots = DataReleaseTrustRootsV1.from_file(trust_roots_file)
     assert captured["data_release_trust_roots"] == roots
     assert composed["metadata_store"] is not None
+
+
+def test_snapshot_resolution_pins_only_active_release_facts():
+    snapshot = _SnapshotRepository().snapshot
+    snapshot.parser_version = "arelle-release==2.47.4"
+    snapshot.taxonomy_manifest_id = "taxonomy-v1"
+    fact = _canonical_fact("fact-revenue", "revenue")
+    fact_ref = {
+        "fact_id": fact.fact_id,
+        "fact_digest": sha256_digest(fact.model_dump(mode="json")),
+    }
+    snapshot_ref = {
+        "snapshot_id": snapshot.snapshot_id,
+        "manifest_digest": snapshot.manifest_digest,
+        "facts": (fact_ref,),
+        "fact_set_digest": sha256_digest((fact_ref,)),
+    }
+    manifest_payload = {
+        "profile_id": "sec-public-pit-v1",
+        "release_id": "release-1",
+        "created_at": datetime(2026, 1, 1, tzinfo=UTC),
+        "snapshot_refs": (snapshot_ref,),
+        "mapping_refs": (
+            MappingRefV1(mapping_id="mapping-1", mapping_digest="c" * 64),
+        ),
+        "taxonomy_refs": (
+            ArtifactRefV1(
+                artifact_id="taxonomy-1",
+                content_hash="d" * 64,
+                media_type="application/zip",
+                role="taxonomy",
+            ),
+        ),
+        "parser_version": "arelle-release==2.47.4",
+        "quality_profile_digest": "e" * 64,
+        "required_fields": ("revenue",),
+        "artifact_refs": (
+            ArtifactRefV1(
+                artifact_id="quality-1",
+                content_hash="f" * 64,
+                media_type="application/json",
+                role="quality-evidence",
+            ),
+        ),
+    }
+    manifest = DataReleaseManifestV1(
+        **manifest_payload,
+        manifest_digest=sha256_digest(manifest_payload),
+    )
+    active_release = ActiveDataReleaseWithManifestV1(
+        active=ActiveDataReleaseV1(
+            profile_id=manifest.profile_id,
+            manifest_digest=manifest.manifest_digest,
+            revision=3,
+            activated_at=datetime(2026, 1, 2, tzinfo=UTC),
+        ),
+        manifest=manifest,
+    )
+    decoy = SimpleNamespace(
+        **{
+            **snapshot.__dict__,
+            "snapshot_id": "snapshot-outside-release",
+            "manifest_digest": "9" * 64,
+        }
+    )
+    active_release_state = {"value": active_release}
+    metadata = SimpleNamespace(
+        get_active_data_release_with_manifest=lambda profile_id: (
+            active_release_state["value"] if profile_id == manifest.profile_id else None
+        )
+    )
+    app = create_app(
+        _ReleaseSnapshotRepository(decoy, snapshot),
+        fact_repository=_FactRepository(),
+        metadata_store=metadata,
+        config=OperationsConfig(service_token=TEST_SERVICE_TOKEN),
+    )
+    request = SnapshotResolutionRequestV1(
+        contract_version="fundamental.v1",
+        release_profile_id=manifest.profile_id,
+        identity=snapshot.identity,
+        valuation_timestamp=snapshot.valuation_timestamp,
+        source_selection_policy="pit-v1",
+        coverage_profile="us-gaap-public-v1",
+        required_fields=("revenue",),
+    )
+
+    response = TestClient(app).post(
+        "/v1/data/snapshots/resolve",
+        headers=auth_headers(),
+        json=make_internal_envelope(request.model_dump(mode="json")),
+    )
+
+    assert response.status_code == 200
+    result = response.json()["result"]
+    assert result["snapshot_id"] == snapshot.snapshot_id
+    assert result["historical_facts"] == [fact.fact_id]
+    assert result["data_release_manifest_digest"] == manifest.manifest_digest
+
+    undeclared_fact = FactRefV1(fact_id="fact-outside-release", fact_digest="0" * 64)
+    bad_snapshot_ref = SnapshotRefV1(
+        snapshot_id=snapshot.snapshot_id,
+        manifest_digest=snapshot.manifest_digest,
+        facts=(undeclared_fact,),
+        fact_set_digest=sha256_digest((undeclared_fact,)),
+    )
+    bad_manifest_payload = manifest.model_dump(
+        mode="python", exclude={"manifest_digest"}
+    )
+    bad_manifest_payload["snapshot_refs"] = (bad_snapshot_ref,)
+    bad_manifest = DataReleaseManifestV1(
+        **bad_manifest_payload,
+        manifest_digest=sha256_digest(bad_manifest_payload),
+    )
+    active_release_state["value"] = ActiveDataReleaseWithManifestV1(
+        active=ActiveDataReleaseV1(
+            profile_id=bad_manifest.profile_id,
+            manifest_digest=bad_manifest.manifest_digest,
+            revision=4,
+            activated_at=datetime(2026, 1, 3, tzinfo=UTC),
+        ),
+        manifest=bad_manifest,
+    )
+    mismatch = TestClient(app).post(
+        "/v1/data/snapshots/resolve",
+        headers=auth_headers(),
+        json=make_internal_envelope(request.model_dump(mode="json")),
+    )
+    assert mismatch.status_code == 409
+    assert mismatch.json()["error"]["code"] == "DATA_RELEASE_FACT_MISMATCH"
 
 
 def test_internal_endpoints_require_signed_context_and_redact_credentials():
