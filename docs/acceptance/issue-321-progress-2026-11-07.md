@@ -10,7 +10,7 @@ This record covers the immutable release activation work on branch
 - Base: `origin/main` at `4727b9194bd50825869b4737e47daeb109cbd41f`
 - Current synchronization checkpoint: `f900b973` (merge of the issue branch
   with the latest `origin/main`)
-- Current verification checkpoint: `c4769479` (tests and static checks below
+- Current verification checkpoint: `e29f7ac7` (tests and static checks below
   were rerun at this exact commit)
 - Release trust-root fixture SHA-256:
   `98d739b587416a41f2dd9efab04f83e244c7fc303cff64d8152041e44dbfeb34`
@@ -21,7 +21,7 @@ This record covers the immutable release activation work on branch
 
 ### Current synchronization checkpoint
 
-At `c4769479`, the following command exited 0:
+At `e29f7ac7`, the following command exited 0:
 
 ```text
 uv run pytest tests/test_release_runner.py tests/test_api.py tests/test_replay.py tests/test_data_release_attestations.py
@@ -31,7 +31,7 @@ uv run pytest tests/test_release_runner.py tests/test_api.py tests/test_replay.p
 The Compose configuration also passed `docker compose ... config --quiet` for
 the dedicated project `value-investment-agent-321-release-verify`.
 
-At the same synchronized source tree, the PostgreSQL release persistence suite
+At the same exact source tree, the PostgreSQL release persistence suite
 also exited 0:
 
 ```text
@@ -40,17 +40,23 @@ FUNDAMENTAL_TEST_DATABASE_URL=postgresql+asyncpg://fundamental:fundamental@127.0
 ```
 
 The dedicated PostgreSQL and Fundamental service containers reported healthy
-status. The service image currently running in this project is not yet treated
-as final exact-head evidence; it will be rebuilt after the remaining source
-changes and its digest recorded below.
+status.
 
-At `c4769479`, the repository's pinned pre-commit configuration also passed on
+The repository's pinned pre-commit configuration had already passed on
 all changed Python files (including Ruff `v0.3.0`), and these checks exited 0:
 
 ```text
 python -m compileall -q fundamental-service/src fundamental-service/tests
 git diff --check
 ```
+
+The exact-head rerun produced `58 passed` and `17 passed`, with only the
+existing Starlette/httpx deprecation warning. The Compose service was rebuilt
+from `e29f7ac7`; the image digest is
+`sha256:0b0501f09178e14ff816094517c0eb2c574be7357f7ec3e3d2b487fb8eda7167`.
+Both containers were healthy, `/readyz` returned HTTP 200 with
+`{"status":"ready","contract_version":"internal.v1"}`, and OpenAPI
+listed the four release routes under `/v1/data/releases`.
 
 The remaining checks must be rerun against the final issue commit before a PR
 is opened. The older results below are retained as historical checkpoints and
@@ -96,7 +102,7 @@ The project was rebuilt from the code checkpoint with:
 COMPOSE_PROJECT_NAME=value-investment-agent-321-release-verify FUNDAMENTAL_POSTGRES_HOST_PORT=18631 FUNDAMENTAL_SERVICE_HOST_PORT=18091 docker compose -f compose/verification/docker-compose.issue280-operations.yml up -d --build fundamental-service
 ```
 
-The service image digest is
+The historical service image digest was
 `sha256:aa2196b11ae2f5299b124b0205944d1115bf8de7f1d9b6e914e11f658155431f`.
 The PostgreSQL image digest is
 `sha256:c54a696c68013b2f8f42f479e00a2b6ad24c5ef10ee31cdfb8972cec3dad7eb7`.
@@ -107,6 +113,31 @@ An earlier probe against the pre-rebuild service image returned 404 for every
 release route. The stale image was not counted as acceptance evidence. The
 image was rebuilt and the OpenAPI route set was checked before the successful
 probe.
+
+The current exact-head rebuild is recorded in the automated checks above; its
+route set was checked before the exact-head HTTP probe below.
+
+## Exact-head HTTP lifecycle probe
+
+The probe ran against the rebuilt `e29f7ac7` image and a new PostgreSQL profile
+`live-321-exact-2e8bceda081743ac9b5914417e8a4b37`. It used the deployment trust
+root to sign two candidates and exercised the real HTTP routes. The results
+were:
+
+- Manifest digests: `9d87b96e3fbed017f9e6da7b0f5dc7ac1714842f8236a94c66c134b1a60f09b1`,
+  `4a0059d84f7435ea7cb8706ca1a1f4165881f1d196ff5e6b21667d483947df85`.
+- Initial read: HTTP 404. Invalid candidate: HTTP 422
+  `DATA_RELEASE_VERIFICATION_SIGNATURE_INVALID`; the active pointer remained
+  absent.
+- First and second publish: HTTP 200. Activation, same-correlation retry,
+  second activation, and rollback: HTTP 200 at revisions 1, 1, 2, and 3.
+- New-correlation retry: HTTP 409 `DATA_RELEASE_IDEMPOTENCY_CONFLICT`.
+  Stale compare-and-swap: HTTP 409 `DATA_RELEASE_POINTER_CONFLICT`.
+- Eight concurrent active-pointer reads: all HTTP 200, one complete digest,
+  maximum latency 17.73 ms.
+- Measured operation latency in milliseconds: bad publish 6.24, first publish
+  6.93, second publish 4.19, activation 8.14, same retry 3.54, new-correlation
+  retry 2.59, stale CAS 3.18, second activation 5.34, rollback 5.13.
 
 ## Live release lifecycle probe
 
