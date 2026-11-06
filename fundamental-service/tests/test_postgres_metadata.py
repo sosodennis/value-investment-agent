@@ -110,6 +110,7 @@ def _snapshot(
         "policy_version": policy_version,
         "coverage_status": QualityStatus.VERIFIED,
         "issues": (),
+        "sec_integrity_evidence": None,
     }
     return SourceSnapshotV1(
         **payload,

@@ -6,7 +6,7 @@ import json
 import re
 import time
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, datetime, timezone
 from email.utils import parsedate_to_datetime
 from urllib.error import HTTPError, URLError
@@ -17,6 +17,18 @@ from .contracts import SourceRole
 from .snapshots import CapturedSource, LegalSource, SnapshotError, SourceRegister
 
 SEC_TERMS = "https://www.sec.gov/submit-filings/about-edgar-filer-access"
+_RETAINED_RESPONSE_HEADERS = frozenset(
+    {
+        "cache-control",
+        "content-encoding",
+        "content-length",
+        "content-type",
+        "date",
+        "etag",
+        "last-modified",
+        "x-akamai-transformed",
+    }
+)
 
 
 class SecSourceError(SnapshotError):
@@ -51,6 +63,16 @@ class SecRequestPolicy:
             or parsed.path.rstrip("/")
         ):
             raise ValueError("SEC base_url must be https://data.sec.gov")
+
+
+@dataclass(frozen=True)
+class _SecResponse:
+    content: bytes
+    http_status: int
+    media_type: str
+    available_at: datetime
+    response_headers: tuple[tuple[str, str], ...]
+    declared_size: int | None
 
 
 def sec_source_register() -> SourceRegister:
@@ -102,16 +124,18 @@ class SecEdgarSourceAdapter:
         opener: Callable[..., object] = urlopen,
         sleep: Callable[[float], None] = time.sleep,
         request_slot: Callable[[float], float] | None = None,
+        clock: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
     ) -> None:
         self.policy = policy
         self._opener = opener
         self._sleep = sleep
         self._request_slot = request_slot
+        self._clock = clock
         self._last_request_at: float | None = None
 
     def _request(
         self, uri: str, *, deadline_at: datetime | None = None
-    ) -> tuple[bytes, int, str, datetime]:
+    ) -> _SecResponse:
         last_error: Exception | None = None
         for attempt in range(self.policy.max_attempts):
             remaining = (
@@ -125,36 +149,31 @@ class SecEdgarSourceAdapter:
                     "SEC acquisition deadline expired",
                     retryable=True,
                 )
-            if self._last_request_at is not None:
-                elapsed = time.monotonic() - self._last_request_at
-                if elapsed < self.policy.min_interval_seconds:
-                    delay = self.policy.min_interval_seconds - elapsed
-                    if remaining is not None and delay >= remaining:
-                        raise SecSourceError(
-                            "REQUEST_DEADLINE_EXCEEDED",
-                            "SEC rate limit exceeds the remaining request deadline",
-                            retryable=True,
-                        )
             if self._request_slot is not None:
                 delay = self._request_slot(self.policy.min_interval_seconds)
-                if remaining is not None and delay >= remaining:
-                    raise SecSourceError(
-                        "REQUEST_DEADLINE_EXCEEDED",
-                        "SEC request pacing exceeds the remaining deadline",
-                        retryable=True,
-                    )
-                if delay > 0:
-                    self._sleep(delay)
-                    if deadline_at is not None:
-                        remaining = (
-                            deadline_at - datetime.now(timezone.utc)
-                        ).total_seconds()
-                        if remaining <= 0:
-                            raise SecSourceError(
-                                "REQUEST_DEADLINE_EXCEEDED",
-                                "SEC acquisition deadline expired",
-                                retryable=True,
-                            )
+            elif self._last_request_at is not None:
+                elapsed = time.monotonic() - self._last_request_at
+                delay = max(0.0, self.policy.min_interval_seconds - elapsed)
+            else:
+                delay = 0.0
+            if remaining is not None and delay >= remaining:
+                raise SecSourceError(
+                    "REQUEST_DEADLINE_EXCEEDED",
+                    "SEC request pacing exceeds the remaining deadline",
+                    retryable=True,
+                )
+            if delay > 0:
+                self._sleep(delay)
+                if deadline_at is not None:
+                    remaining = (
+                        deadline_at - datetime.now(timezone.utc)
+                    ).total_seconds()
+                    if remaining <= 0:
+                        raise SecSourceError(
+                            "REQUEST_DEADLINE_EXCEEDED",
+                            "SEC acquisition deadline expired",
+                            retryable=True,
+                        )
             request = Request(
                 uri,
                 headers={
@@ -184,8 +203,33 @@ class SecEdgarSourceAdapter:
                     payload = self._read_bounded(response, deadline_at)
                     status = int(getattr(response, "status", 200))
                     media_type = response.headers.get_content_type()
-                    available_at = datetime.now(timezone.utc)
-                    return payload, status, media_type, available_at
+                    available_at = self._clock()
+                    response_headers = tuple(
+                        sorted(
+                            (str(name).lower(), str(value).strip())
+                            for name, value in response.headers.items()
+                            if str(name).lower() in _RETAINED_RESPONSE_HEADERS
+                        )
+                    )
+                    declared_header = response.headers.get("Content-Length")
+                    declared_size = (
+                        int(declared_header)
+                        if declared_header is not None and declared_header.isdecimal()
+                        else None
+                    )
+                    if declared_size is not None and declared_size != len(payload):
+                        raise SecSourceError(
+                            "SOURCE_RESPONSE_SIZE_MISMATCH",
+                            "SEC response length does not match Content-Length",
+                        )
+                    return _SecResponse(
+                        content=payload,
+                        http_status=status,
+                        media_type=media_type,
+                        available_at=available_at,
+                        response_headers=response_headers,
+                        declared_size=declared_size,
+                    )
             except HTTPError as error:
                 last_error = error
                 retryable = error.code == 429 or 500 <= error.code < 600
@@ -291,7 +335,7 @@ class SecEdgarSourceAdapter:
         allowed_hosts = (
             {"data.sec.gov"}
             if source_id in {"sec-companyfacts", "sec-submissions"}
-            else {"data.sec.gov", "www.sec.gov"}
+            else {"www.sec.gov"}
         )
         if (
             parsed.scheme != "https"
@@ -305,9 +349,8 @@ class SecEdgarSourceAdapter:
                 "SOURCE_URI_NOT_ALLOWED",
                 f"URI is outside the registered {source_id} endpoint",
             )
-        payload, status, media_type, available_at = self._request(
-            uri, deadline_at=deadline_at
-        )
+        response = self._request(uri, deadline_at=deadline_at)
+        payload = response.content
         try:
             json.loads(payload)
         except json.JSONDecodeError as error:
@@ -317,15 +360,20 @@ class SecEdgarSourceAdapter:
         return CapturedSource(
             source_id=source_id,
             uri=uri,
-            role=SourceRole.FACTS
-            if source_id == "sec-companyfacts"
-            else SourceRole.REFERENCE,
+            role=(
+                SourceRole.FACTS
+                if source_id == "sec-companyfacts"
+                else SourceRole.REFERENCE
+            ),
             content=payload,
-            media_type=media_type or "application/json",
-            http_status=status,
-            available_at=available_at,
-            captured_at=captured_at or available_at,
-            publication_at=available_at,
+            media_type=response.media_type or "application/json",
+            http_status=response.http_status,
+            available_at=response.available_at,
+            captured_at=captured_at or response.available_at,
+            publication_at=response.available_at,
+            response_headers=response.response_headers,
+            declared_size=response.declared_size,
+            received_size=len(payload),
         )
 
     def capture_company_facts(
@@ -382,28 +430,29 @@ class SecEdgarSourceAdapter:
         if not re.fullmatch(r"[A-Za-z0-9_.-]{1,200}", primary_document):
             raise ValueError("primary document must be a simple SEC archive filename")
         uri = f"https://www.sec.gov/Archives/edgar/data/{int(normalized)}/{accession_path}/{primary_document}"
-        payload, status, media_type, captured = self._request(
-            uri, deadline_at=deadline_at
-        )
-        available_at = accepted_at or filed_at
+        response = self._request(uri, deadline_at=deadline_at)
+        payload = response.content
         return CapturedSource(
             source_id="sec-filing",
             uri=uri,
             role=SourceRole.FILING,
             content=payload,
-            media_type=media_type or "text/html",
-            http_status=status,
-            available_at=available_at,
-            captured_at=captured_at or captured,
+            media_type=response.media_type or "text/html",
+            http_status=response.http_status,
+            available_at=accepted_at or filed_at,
+            captured_at=captured_at or response.available_at,
             publication_at=filed_at,
-            filing_date=filing_date,
             filed_at=filed_at,
+            filing_date=filing_date,
             accession_number=accession_number,
             form=form,
             filing_version=accession_number,
             is_amendment=is_amendment,
             amends_accession=amends_accession,
             amendment_scope=amendment_scope,
+            response_headers=response.response_headers,
+            declared_size=response.declared_size,
+            received_size=len(response.content),
         )
 
     def capture_filing_archive(
@@ -411,8 +460,8 @@ class SecEdgarSourceAdapter:
         *,
         cik: str,
         accession_number: str,
-        filename: str,
         filed_at: datetime,
+        filename: str | None = None,
         captured_at: datetime | None = None,
         form: str = "10-K",
         is_amendment: bool = False,
@@ -421,33 +470,32 @@ class SecEdgarSourceAdapter:
         accepted_at: datetime | None = None,
         deadline_at: datetime | None = None,
     ) -> CapturedSource:
-        """Capture the SEC-published XBRL package as immutable filing evidence."""
+        """Capture the accession-matched SEC XBRL archive as immutable evidence."""
         normalized = cik.strip().lstrip("0") or "0"
         accession_path = accession_number.replace("-", "")
-        expected_filename = f"{accession_number}-xbrl.zip"
         if not normalized.isdigit() or len(normalized) > 10:
             raise ValueError("CIK must be numeric and at most ten digits")
         if not accession_path.isdigit() or len(accession_path) != 18:
             raise ValueError("accession number must be in SEC accession format")
+        expected_filename = f"{accession_number}-xbrl.zip"
+        if filename is None:
+            filename = expected_filename
         if filename != expected_filename:
             raise ValueError("filing archive must match the SEC accession number")
         uri = (
             f"https://www.sec.gov/Archives/edgar/data/{int(normalized)}/"
             f"{accession_path}/{filename}"
         )
-        payload, status, media_type, captured = self._request(
-            uri, deadline_at=deadline_at
-        )
-        available_at = accepted_at or filed_at
+        response = self._request(uri, deadline_at=deadline_at)
         return CapturedSource(
             source_id="sec-filing-archive",
             uri=uri,
             role=SourceRole.FILING,
-            content=payload,
-            media_type=media_type or "application/zip",
-            http_status=status,
-            available_at=available_at,
-            captured_at=captured_at or captured,
+            content=response.content,
+            media_type=response.media_type or "application/zip",
+            http_status=response.http_status,
+            available_at=accepted_at or filed_at,
+            captured_at=captured_at or response.available_at,
             publication_at=filed_at,
             filed_at=filed_at,
             accession_number=accession_number,
@@ -456,6 +504,9 @@ class SecEdgarSourceAdapter:
             is_amendment=is_amendment,
             amends_accession=amends_accession,
             amendment_scope=amendment_scope,
+            response_headers=response.response_headers,
+            declared_size=response.declared_size,
+            received_size=len(response.content),
         )
 
     def capture_filing_resource(
@@ -490,19 +541,18 @@ class SecEdgarSourceAdapter:
         )
         if role not in {SourceRole.FILING, SourceRole.TAXONOMY}:
             raise ValueError("SEC filing resources must be filing or taxonomy records")
-        payload, status, media_type, captured = self._request(
-            uri, deadline_at=deadline_at
-        )
-        available_at = filed_at or captured
+        response = self._request(uri, deadline_at=deadline_at)
+        payload = response.content
+        available_at = filed_at or response.available_at
         return CapturedSource(
             source_id="sec-taxonomy" if role is SourceRole.TAXONOMY else "sec-filing",
             uri=uri,
             role=role,
             content=payload,
-            media_type=media_type or "application/octet-stream",
-            http_status=status,
+            media_type=response.media_type or "application/octet-stream",
+            http_status=response.http_status,
             available_at=available_at,
-            captured_at=captured_at or captured,
+            captured_at=captured_at or response.available_at,
             publication_at=available_at,
             filing_date=filing_date,
             accession_number=accession_number,
@@ -513,6 +563,9 @@ class SecEdgarSourceAdapter:
             amends_accession=amends_accession,
             amendment_scope=amendment_scope,
             taxonomy_manifest_id=taxonomy_manifest_id,
+            response_headers=response.response_headers,
+            declared_size=response.declared_size,
+            received_size=len(payload),
         )
 
     def capture_filing_index(
@@ -521,6 +574,8 @@ class SecEdgarSourceAdapter:
         cik: str,
         accession_number: str,
         deadline_at: datetime | None = None,
+        filed_at: datetime | None = None,
+        captured_at: datetime | None = None,
     ) -> CapturedSource:
         """Capture the accession's filing index, including DTS resource paths."""
         normalized = cik.strip().lstrip("0") or "0"
@@ -529,8 +584,20 @@ class SecEdgarSourceAdapter:
             raise ValueError("CIK must be numeric and at most ten digits")
         if not accession_path.isdigit() or len(accession_path) != 18:
             raise ValueError("accession number must be in SEC accession format")
-        return self.capture_json(
+        source = self.capture_json(
             source_id="sec-filing-index",
             uri=f"https://www.sec.gov/Archives/edgar/data/{int(normalized)}/{accession_path}/index.json",
+            captured_at=captured_at,
             deadline_at=deadline_at,
+        )
+        if filed_at is None:
+            return source
+        return replace(
+            source,
+            available_at=filed_at,
+            publication_at=filed_at,
+            accession_number=accession_number,
+            form="SEC-FILING-INDEX",
+            filed_at=filed_at,
+            filing_version=accession_number,
         )

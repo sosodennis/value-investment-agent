@@ -301,7 +301,7 @@ def test_captured_sec_bytes_rebuild_to_point_in_time_canonical_fact(tmp_path: Pa
         FilesystemContentStore(tmp_path / "objects"),
         repository,
         sec_source_register(),
-    ).build(
+    ).prepare(
         identity=IdentityV1(
             issuer_id="0000320193",
             issuer_name="Apple Inc.",
@@ -323,7 +323,8 @@ def test_captured_sec_bytes_rebuild_to_point_in_time_canonical_fact(tmp_path: Pa
         ).hexdigest(),
     )
     assert snapshot.coverage_status.value == "verified"
-    assert repository.get(snapshot.snapshot_id).snapshot_id == snapshot.snapshot_id
+    with pytest.raises(SnapshotError, match="unavailable"):
+        repository.get(snapshot.snapshot_id)
 
     filing_dir = tmp_path / "filing"
     filing_dir.mkdir()

@@ -20,7 +20,7 @@ from .contracts import (
 )
 from .facts import CanonicalMappingV1
 from .ingestion import SecIngestionService
-from .metadata import PostgresMetadataStore
+from .metadata import PostgresArtifactStore, PostgresMetadataStore
 from .operations import ServiceError
 from .sec_source import SecEdgarSourceAdapter, SecRequestPolicy, SecSourceError
 from .serialization import sha256_digest
@@ -825,6 +825,7 @@ def build_runtime_sec_acquisition(
         source_adapter=adapter,
         content_store=content_store,
         snapshot_repository=snapshot_repository,
+        audit_store=PostgresArtifactStore(metadata, content_store),
         fact_repository=fact_repository,
     )
     return SecAcquisitionUseCase(

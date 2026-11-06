@@ -181,6 +181,7 @@ class SourceRecordV1(StrictModel):
     media_type: str = Field(min_length=1)
     terms_reference: str = Field(min_length=1)
     content_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    parser_input_hash: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
     parser_version: str = Field(min_length=1)
     accession_number: str | None = None
     form: str | None = None
@@ -192,6 +193,9 @@ class SourceRecordV1(StrictModel):
     supersedes_accession: str | None = None
     amendment_scope: Literal["valuation_relevant", "unrelated", "unknown"] | None = None
     taxonomy_manifest_id: str | None = None
+    response_headers: tuple[tuple[str, str], ...] = ()
+    declared_size: int | None = Field(default=None, ge=0)
+    received_size: int | None = Field(default=None, ge=0)
 
     @model_validator(mode="after")
     def timestamps_have_timezone(self) -> SourceRecordV1:
@@ -205,6 +209,161 @@ class SourceRecordV1(StrictModel):
                 value.tzinfo is None or value.utcoffset() is None
             ):
                 raise ValueError(f"{name} must include a timezone")
+        return self
+
+
+class RemovedByteRangeV1(StrictModel):
+    start: int = Field(ge=0)
+    end: int = Field(gt=0)
+    content_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+    @model_validator(mode="after")
+    def valid_range(self) -> RemovedByteRangeV1:
+        if self.end <= self.start:
+            raise ValueError("removed byte range must be non-empty")
+        return self
+
+
+class ArelleFindingEvidenceV1(StrictModel):
+    code: str = Field(min_length=1)
+    severity: Literal["warning", "error", "critical", "fatal"]
+    blocks: bool
+
+
+class SecIntegrityEvidenceV1(StrictModel):
+    """Reproducible link from SEC response bytes to parser and fact evidence."""
+
+    accession_number: str = Field(min_length=1)
+    primary_document_uri: str = Field(min_length=1)
+    captured_at: datetime
+    archive_index_uri: str = Field(min_length=1)
+    archive_index_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    declared_primary_size: int = Field(ge=0)
+    raw_response_headers: tuple[tuple[str, str], ...] = ()
+    raw_received_size: int = Field(ge=0)
+    raw_content_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    declared_response_size: int | None = Field(default=None, ge=0)
+    archive_uri: str = Field(min_length=1)
+    archive_size: int = Field(ge=0)
+    archive_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    archive_member_name: str = Field(min_length=1)
+    archive_member_size: int = Field(ge=0)
+    archive_member_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    integrity_relation: Literal["exact", "normalized"]
+    normalized_content_size: int = Field(ge=0)
+    normalized_content_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    normalization_policy_id: str | None = None
+    normalization_rule_signature: str | None = Field(
+        default=None, pattern=r"^[0-9a-f]{64}$"
+    )
+    normalization_reason: str | None = None
+    removed_ranges: tuple[RemovedByteRangeV1, ...] = ()
+    normalized_fact_count: int = Field(ge=0)
+    normalized_fact_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    archive_fact_count: int = Field(ge=0)
+    archive_fact_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    parser_input_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    validation_profile_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    validation_engines: tuple[str, ...] = ()
+    validation_evidence: tuple[str, ...] = ()
+    network_attempt_count: int = Field(ge=0)
+    taxonomy_manifest_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    arelle_version: str = Field(min_length=1)
+    efm_profile: str = Field(min_length=1)
+    dqc_version: str = Field(min_length=1)
+    xule_version: str = Field(min_length=1)
+    findings: tuple[ArelleFindingEvidenceV1, ...] = ()
+    quality_decision: Literal["pass", "block"]
+
+    @model_validator(mode="after")
+    def timestamps_have_timezone(self) -> SecIntegrityEvidenceV1:
+        if self.captured_at.tzinfo is None or self.captured_at.utcoffset() is None:
+            raise ValueError("captured_at must include a timezone")
+        if self.parser_input_hash != self.normalized_content_hash:
+            raise ValueError("parser input hash must match normalized source hash")
+        if self.network_attempt_count != 0:
+            raise ValueError("offline SEC validation cannot contain network attempts")
+        if not {"sec-efm", "dqc-us"}.issubset(self.validation_engines):
+            raise ValueError("SEC integrity evidence requires EFM and DQC engines")
+        if not {
+            "strict-sec-efm-profile-selected",
+            "dqc-dqcrt-checks-completed",
+        }.issubset(self.validation_evidence):
+            raise ValueError("SEC integrity evidence requires EFM and DQC evidence")
+        if self.normalized_fact_count != self.archive_fact_count:
+            raise ValueError("normalized and archive fact counts must match")
+        if self.normalized_fact_digest != self.archive_fact_digest:
+            raise ValueError("normalized and archive fact digests must match")
+        if self.quality_decision == "pass" and any(
+            finding.blocks for finding in self.findings
+        ):
+            raise ValueError("blocking findings cannot have a passing decision")
+        if self.integrity_relation == "exact" and self.removed_ranges:
+            raise ValueError("exact integrity cannot contain removed byte ranges")
+        if self.integrity_relation == "normalized" and (
+            not self.normalization_policy_id or not self.normalization_rule_signature
+        ):
+            raise ValueError("normalized integrity requires a signed policy")
+        return self
+
+
+class SecCapturedSourceEvidenceV1(StrictModel):
+    source_id: str = Field(min_length=1)
+    uri: str = Field(min_length=1)
+    role: SourceRole
+    media_type: str = Field(min_length=1)
+    http_status: int = Field(ge=100, le=599)
+    available_at: datetime
+    captured_at: datetime
+    publication_at: datetime | None = None
+    accession_number: str | None = None
+    form: str | None = None
+    filed_at: datetime | None = None
+    response_headers: tuple[tuple[str, str], ...] = ()
+    declared_size: int | None = Field(default=None, ge=0)
+    received_size: int = Field(ge=0)
+    content_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+    @model_validator(mode="after")
+    def timestamps_have_timezone(self) -> SecCapturedSourceEvidenceV1:
+        for name, value in (
+            ("available_at", self.available_at),
+            ("captured_at", self.captured_at),
+            ("publication_at", self.publication_at),
+            ("filed_at", self.filed_at),
+        ):
+            if value is not None and (
+                value.tzinfo is None or value.utcoffset() is None
+            ):
+                raise ValueError(f"{name} must include a timezone")
+        return self
+
+
+class SecIngestionRejectionEvidenceV1(StrictModel):
+    contract_version: Literal["fundamental.sec-ingestion-rejection.v1"]
+    error_code: Literal["PARSER_VALIDATION_BLOCKED"]
+    captured_sources: tuple[SecCapturedSourceEvidenceV1, ...] = Field(min_length=3)
+    integrity_evidence: SecIntegrityEvidenceV1
+    parser_replay_digests: tuple[str, ...] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def source_and_parser_evidence_are_bound(self) -> SecIngestionRejectionEvidenceV1:
+        evidence = self.integrity_evidence
+        if evidence.quality_decision != "block" or not any(
+            finding.blocks for finding in evidence.findings
+        ):
+            raise ValueError("rejection evidence requires a blocking parser finding")
+        source_hashes = {
+            (source.source_id, source.content_hash) for source in self.captured_sources
+        }
+        if ("sec-filing", evidence.raw_content_hash) not in source_hashes:
+            raise ValueError("rejection evidence must reference the raw filing")
+        if ("sec-filing-index", evidence.archive_index_hash) not in source_hashes:
+            raise ValueError("rejection evidence must reference the archive index")
+        if ("sec-filing-archive", evidence.archive_hash) not in source_hashes:
+            raise ValueError("rejection evidence must reference the SEC archive")
+        if any(not is_digest(digest) for digest in self.parser_replay_digests):
+            raise ValueError("parser replay digests must be SHA-256 values")
         return self
 
 
@@ -225,6 +384,7 @@ class SourceSnapshotV1(StrictModel):
     policy_version: str = Field(min_length=1)
     coverage_status: QualityStatus
     issues: tuple[IssueV1, ...] = ()
+    sec_integrity_evidence: SecIntegrityEvidenceV1 | None = None
     manifest_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
 
     @model_validator(mode="after")

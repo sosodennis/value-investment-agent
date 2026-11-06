@@ -14,6 +14,7 @@ from .contracts import (
     IdentityV1,
     IssueV1,
     QualityStatus,
+    SecIntegrityEvidenceV1,
     Severity,
     SourceRecordV1,
     SourceRole,
@@ -25,11 +26,19 @@ from .serialization import canonical_bytes, is_digest, sha256_digest
 class SnapshotError(RuntimeError):
     """Stable source-plane failures exposed to callers and operational logs."""
 
-    def __init__(self, code: str, message: str, *, retryable: bool = False) -> None:
+    def __init__(
+        self,
+        code: str,
+        message: str,
+        *,
+        retryable: bool = False,
+        evidence_ref: str | None = None,
+    ) -> None:
         super().__init__(message)
         self.code = code
         self.message = message
         self.retryable = retryable
+        self.evidence_ref = evidence_ref
 
 
 class ContentAddressedStore(Protocol):
@@ -260,6 +269,9 @@ class CapturedSource:
     supersedes_accession: str | None = None
     amendment_scope: str | None = None
     taxonomy_manifest_id: str | None = None
+    response_headers: tuple[tuple[str, str], ...] = ()
+    declared_size: int | None = None
+    received_size: int | None = None
 
 
 class SnapshotBuilder:
@@ -287,6 +299,7 @@ class SnapshotBuilder:
         validation_profile_id: str | None = None,
         validation_profile_digest: str | None = None,
         additional_issues: tuple[IssueV1, ...] = (),
+        sec_integrity_evidence: SecIntegrityEvidenceV1 | None = None,
     ) -> SourceSnapshotV1:
         snapshot = self.prepare(
             identity=identity,
@@ -300,8 +313,9 @@ class SnapshotBuilder:
             validation_profile_id=validation_profile_id,
             validation_profile_digest=validation_profile_digest,
             additional_issues=additional_issues,
+            sec_integrity_evidence=sec_integrity_evidence,
         )
-        self.repository.publish(snapshot)
+        self.publish(snapshot)
         return snapshot
 
     def prepare(
@@ -318,8 +332,9 @@ class SnapshotBuilder:
         validation_profile_id: str | None = None,
         validation_profile_digest: str | None = None,
         additional_issues: tuple[IssueV1, ...] = (),
+        sec_integrity_evidence: SecIntegrityEvidenceV1 | None = None,
     ) -> SourceSnapshotV1:
-        """Build a manifest without publishing it to snapshot readers."""
+        """Persist source bytes and prepare a manifest without publishing it."""
         if not sources:
             raise SnapshotError(
                 "SNAPSHOT_EMPTY", "a snapshot requires at least one source"
@@ -416,6 +431,12 @@ class SnapshotBuilder:
                     media_type=source.media_type,
                     terms_reference=legal_source.terms_reference,
                     content_hash=content_hash,
+                    parser_input_hash=(
+                        sec_integrity_evidence.parser_input_hash
+                        if sec_integrity_evidence is not None
+                        and source.source_id == "sec-filing"
+                        else None
+                    ),
                     parser_version=parser_version,
                     accession_number=source.accession_number,
                     form=source.form,
@@ -427,6 +448,13 @@ class SnapshotBuilder:
                     supersedes_accession=source.supersedes_accession,
                     amendment_scope=source.amendment_scope,
                     taxonomy_manifest_id=source.taxonomy_manifest_id,
+                    response_headers=source.response_headers,
+                    declared_size=source.declared_size,
+                    received_size=(
+                        source.received_size
+                        if source.received_size is not None
+                        else len(source.content)
+                    ),
                 )
             )
         records.sort(
@@ -442,6 +470,7 @@ class SnapshotBuilder:
             "acquisition_key": acquisition_key,
             "validation_profile_id": validation_profile_id,
             "validation_profile_digest": validation_profile_digest,
+            "sec_integrity_evidence": sec_integrity_evidence,
             "sources": [
                 record.model_dump(exclude={"captured_at"}) for record in records
             ],
@@ -479,6 +508,7 @@ class SnapshotBuilder:
             policy_version=policy_version,
             coverage_status=coverage_status,
             issues=tuple(issues),
+            sec_integrity_evidence=sec_integrity_evidence,
             manifest_digest=sha256_digest(
                 {
                     "contract_version": "fundamental.v1",
@@ -494,10 +524,36 @@ class SnapshotBuilder:
                     "policy_version": policy_version,
                     "coverage_status": coverage_status,
                     "issues": issues,
+                    "sec_integrity_evidence": sec_integrity_evidence,
                 }
             ),
         )
         return snapshot
+
+    def publish(self, snapshot: SourceSnapshotV1) -> None:
+        """Make a prepared manifest selectable after its gates have passed."""
+        is_sec_filing = any(
+            record.source_id == "sec-filing" for record in snapshot.source_records
+        )
+        if is_sec_filing and snapshot.coverage_status is QualityStatus.ABSTAIN:
+            raise SnapshotError(
+                "SNAPSHOT_NOT_PUBLISHABLE", "abstained snapshots cannot be published"
+            )
+        if (
+            snapshot.sec_integrity_evidence is not None
+            and snapshot.sec_integrity_evidence.quality_decision != "pass"
+        ):
+            raise SnapshotError(
+                "SNAPSHOT_NOT_PUBLISHABLE",
+                "SEC integrity evidence does not permit snapshot publication",
+            )
+        if is_sec_filing:
+            if snapshot.sec_integrity_evidence is None:
+                raise SnapshotError(
+                    "SEC_INTEGRITY_EVIDENCE_REQUIRED",
+                    "SEC filing snapshots require parser-bound integrity evidence",
+                )
+        self.repository.publish(snapshot)
 
 
 def select_available_sources(snapshot: SourceSnapshotV1) -> tuple[SourceRecordV1, ...]:

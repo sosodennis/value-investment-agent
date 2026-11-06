@@ -15,8 +15,37 @@ from fundamental_service.arelle_parser import (
     _directory_hash,
     _dqc_validation_completed,
     _unlogged_model_error_findings,
+    fact_semantic_digest,
     parse_filing_offline,
 )
+from fundamental_service.contracts import SourceRole
+from fundamental_service.sec_integrity import assess_filing_response
+from fundamental_service.snapshots import CapturedSource
+
+
+def _configured_sec_profile() -> tuple[ArelleValidationProfileV1, Path]:
+    required = (
+        "ISSUE328_EDGAR_PLUGIN_DIR",
+        "ISSUE328_XULE_PLUGIN_DIR",
+        "ISSUE328_DQC_RULESET_PATH",
+        "ISSUE328_TAXONOMY_CACHE_DIR",
+    )
+    if not all(os.environ.get(name) for name in required):
+        pytest.skip("pinned SEC EFM/DQC runtime paths are not configured")
+    edgar = Path(os.environ["ISSUE328_EDGAR_PLUGIN_DIR"])
+    xule = Path(os.environ["ISSUE328_XULE_PLUGIN_DIR"])
+    dqc = Path(os.environ["ISSUE328_DQC_RULESET_PATH"])
+    profile = ArelleValidationProfileV1(
+        profile_id="sec-efm-dqc-us-gaap-2024-v1",
+        validation_mode="sec-efm-dqc",
+        edgar_plugin_dir=edgar,
+        xule_plugin_dir=xule,
+        dqc_ruleset_path=dqc,
+        edgar_plugin_sha256=_directory_hash(edgar),
+        xule_plugin_sha256=_directory_hash(xule),
+        dqc_ruleset_sha256=hashlib.sha256(dqc.read_bytes()).hexdigest(),
+    )
+    return profile, Path(os.environ["ISSUE328_TAXONOMY_CACHE_DIR"])
 
 
 def test_pinned_arelle_parses_captured_xbrl_without_network():
@@ -327,6 +356,7 @@ def test_captured_sec_filing_rebuilds_with_pinned_taxonomy_cache_without_network
             assert all(fact.context_id for fact in parsed_facts)
     assert report.validation_profile_digest == report.validation_profile.digest()
     assert attempted_network == []
+    assert report.network_attempt_count == 0
 
 
 def test_sec_capture_manifest_has_verified_hashes_and_amendment_metadata():
@@ -374,3 +404,220 @@ def test_parser_rejects_source_hash_mismatch():
             source_content_hash="0" * 64,
         )
     assert error.value.code == "SOURCE_HASH_MISMATCH"
+
+
+def test_aapl_sec_efm_dqc_replay_records_blocking_finding_and_zero_network(
+    tmp_path: Path,
+):
+    profile, taxonomy_dir = _configured_sec_profile()
+    fixture_root = Path(__file__).parent / "fixtures" / "sec-edgar"
+    filing_path = tmp_path / "aapl-20240928.htm"
+    filing_path.write_bytes(
+        (fixture_root / "apple-2024-original-aapl-20240928.htm").read_bytes()
+    )
+    with ZipFile(
+        fixture_root / "apple-2024-original-0000320193-24-000123-xbrl.zip"
+    ) as archive:
+        for filename in (
+            "aapl-20240928.xsd",
+            "aapl-20240928_pre.xml",
+            "aapl-20240928_def.xml",
+            "aapl-20240928_lab.xml",
+            "aapl-20240928_cal.xml",
+        ):
+            (tmp_path / filename).write_bytes(archive.read(filename))
+
+    reports = tuple(
+        parse_filing_offline(
+            filing_path,
+            profile=profile,
+            taxonomy_version="us-gaap-2024",
+            taxonomy_cache_dir=taxonomy_dir,
+            source_content_hash=hashlib.sha256(filing_path.read_bytes()).hexdigest(),
+            deadline_at=datetime.now(timezone.utc) + timedelta(minutes=5),
+        )
+        for _ in range(2)
+    )
+    report, replay = reports
+
+    assert len(report.facts) >= 1000
+    assert report.validation_engines == ("sec-efm", "dqc-us")
+    assert report.validation_evidence == (
+        "strict-sec-efm-profile-selected",
+        "dqc-dqcrt-checks-completed",
+    )
+    assert report.network_attempt_count == 0
+    assert report.replay_digest() == replay.replay_digest()
+    assert "EFM.5.02.05.disallowedElement" in report.blocking_finding_codes()
+    assert any(
+        finding.code == "EFM.5.02.05.disallowedElement" and finding.severity == "error"
+        for finding in report.findings
+    )
+
+
+def test_aapl_normalization_preserves_real_xbrl_semantics(tmp_path: Path):
+    profile, taxonomy_dir = _configured_sec_profile()
+    fixture_root = Path(__file__).parent / "fixtures" / "sec-edgar"
+    raw_content = (fixture_root / "apple-2024-original-aapl-20240928.htm").read_bytes()
+    archive_path = fixture_root / "apple-2024-original-0000320193-24-000123-xbrl.zip"
+    archive_content = archive_path.read_bytes()
+    with ZipFile(archive_path) as package:
+        archive_member = package.read("aapl-20240928.htm")
+        dts = {
+            filename: package.read(filename)
+            for filename in (
+                "aapl-20240928.xsd",
+                "aapl-20240928_pre.xml",
+                "aapl-20240928_def.xml",
+                "aapl-20240928_lab.xml",
+                "aapl-20240928_cal.xml",
+            )
+        }
+    captured_at = datetime(2026, 11, 6, tzinfo=timezone.utc)
+    base_uri = "https://www.sec.gov/Archives/edgar/data/320193/000032019324000123"
+    raw = CapturedSource(
+        source_id="sec-filing",
+        uri=f"{base_uri}/aapl-20240928.htm",
+        role=SourceRole.FILING,
+        content=raw_content,
+        media_type="text/html",
+        http_status=200,
+        available_at=captured_at,
+        captured_at=captured_at,
+        accession_number="0000320193-24-000123",
+        form="10-K",
+        filed_at=datetime(2024, 11, 1, tzinfo=timezone.utc),
+        response_headers=(("x-akamai-transformed", "0 - 0 -"),),
+    )
+    index = CapturedSource(
+        source_id="sec-filing-index",
+        uri=f"{base_uri}/index.json",
+        role=SourceRole.REFERENCE,
+        content=json.dumps(
+            {
+                "directory": {
+                    "item": [
+                        {
+                            "name": "aapl-20240928.htm",
+                            "size": str(len(archive_member) + 1),
+                        },
+                        {
+                            "name": "0000320193-24-000123-xbrl.zip",
+                            "size": str(len(archive_content)),
+                        },
+                    ]
+                }
+            }
+        ).encode(),
+        media_type="application/json",
+        http_status=200,
+        available_at=captured_at,
+        captured_at=captured_at,
+        accession_number="0000320193-24-000123",
+    )
+    archive = CapturedSource(
+        source_id="sec-filing-archive",
+        uri=f"{base_uri}/0000320193-24-000123-xbrl.zip",
+        role=SourceRole.FILING,
+        content=archive_content,
+        media_type="application/zip",
+        http_status=200,
+        available_at=captured_at,
+        captured_at=captured_at,
+        accession_number="0000320193-24-000123",
+        form="10-K",
+        filed_at=datetime(2024, 11, 1, tzinfo=timezone.utc),
+    )
+    assessment = assess_filing_response(
+        raw_response=raw, archive_index=index, archive=archive
+    )
+    assert assessment.relation == "normalized"
+    assert assessment.normalized_content == archive_member
+
+    normalized_path = tmp_path / "normalized" / "aapl-20240928.htm"
+    archive_path = tmp_path / "archive" / "aapl-20240928.htm"
+    normalized_path.parent.mkdir()
+    archive_path.parent.mkdir()
+    normalized_path.write_bytes(assessment.normalized_content)
+    archive_path.write_bytes(assessment.archive_member)
+    for root in (normalized_path.parent, archive_path.parent):
+        for filename, content in dts.items():
+            (root / filename).write_bytes(content)
+
+    kwargs = dict(
+        profile=profile,
+        taxonomy_version="us-gaap-2024",
+        taxonomy_cache_dir=taxonomy_dir,
+    )
+    normalized_report = parse_filing_offline(
+        normalized_path,
+        **kwargs,
+        source_content_hash=hashlib.sha256(normalized_path.read_bytes()).hexdigest(),
+    )
+    archive_report = parse_filing_offline(
+        archive_path,
+        **kwargs,
+        source_content_hash=hashlib.sha256(archive_path.read_bytes()).hexdigest(),
+    )
+    archive_replay = parse_filing_offline(
+        archive_path,
+        **kwargs,
+        source_content_hash=hashlib.sha256(archive_path.read_bytes()).hexdigest(),
+    )
+    normalized_replay = parse_filing_offline(
+        normalized_path,
+        **kwargs,
+        source_content_hash=hashlib.sha256(normalized_path.read_bytes()).hexdigest(),
+    )
+    assert len(normalized_report.facts) == len(archive_report.facts)
+    assert fact_semantic_digest(normalized_report) == fact_semantic_digest(
+        archive_report
+    )
+    assert tuple(
+        sorted((item.code, item.severity) for item in normalized_report.findings)
+    ) == tuple(sorted((item.code, item.severity) for item in archive_report.findings))
+    assert normalized_report.replay_digest() == normalized_replay.replay_digest()
+    assert archive_report.replay_digest() == archive_replay.replay_digest()
+    assert (
+        normalized_report.validation_profile_digest
+        == archive_report.validation_profile_digest
+    )
+    assert normalized_report.validation_engines == archive_report.validation_engines
+    assert normalized_report.validation_evidence == archive_report.validation_evidence
+    assert normalized_report.network_attempt_count == 0
+    assert archive_report.network_attempt_count == 0
+
+
+def test_microsoft_sec_efm_dqc_replay_allows_verified_fixture(tmp_path: Path):
+    profile, taxonomy_dir = _configured_sec_profile()
+    fixture = (
+        Path(__file__).parent
+        / "fixtures"
+        / "sec-edgar"
+        / "microsoft-2024-original-xbrl-test-package.zip"
+    )
+    with ZipFile(fixture) as archive:
+        filing_path = tmp_path / "msft-20240630.htm"
+        filing_path.write_bytes(archive.read("msft-20240630.htm"))
+        (tmp_path / "msft-20240630.xsd").write_bytes(archive.read("msft-20240630.xsd"))
+
+    report = parse_filing_offline(
+        filing_path,
+        profile=profile,
+        taxonomy_version="us-gaap-2023-2024",
+        taxonomy_cache_dir=taxonomy_dir,
+        source_content_hash=hashlib.sha256(filing_path.read_bytes()).hexdigest(),
+    )
+
+    assert len(report.facts) >= 1800
+    assert report.blocking_finding_codes() == ()
+    assert report.validation_engines == ("sec-efm", "dqc-us")
+    assert report.network_attempt_count == 0
+    replay = parse_filing_offline(
+        filing_path,
+        profile=profile,
+        taxonomy_version="us-gaap-2023-2024",
+        taxonomy_cache_dir=taxonomy_dir,
+        source_content_hash=hashlib.sha256(filing_path.read_bytes()).hexdigest(),
+    )
+    assert report.replay_digest() == replay.replay_digest()

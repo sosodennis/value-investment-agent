@@ -6,6 +6,7 @@ import hashlib
 import multiprocessing
 import os
 import queue
+import sys
 import tempfile
 import threading
 import time
@@ -17,7 +18,6 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .serialization import sha256_digest
-
 
 _NON_BLOCKING_ARELLE_CODES = frozenset(
     {
@@ -137,10 +137,16 @@ class ArelleParseReportV1(BaseModel):
     validation_evidence: tuple[str, ...] = ()
     parsed_at: datetime
     offline: bool = True
+    network_attempt_count: int = Field(default=0, ge=0)
     source_content_hash: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
     taxonomy_cache_hash: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
 
     def blocking_finding_codes(self) -> tuple[str, ...]:
+        if not self.findings:
+            # Older persisted reports contain only codes. Treat every such
+            # code as blocking; only current reports may carry explicit
+            # severity evidence.
+            return tuple(sorted(set(self.finding_codes)))
         return tuple(
             sorted(
                 {
@@ -152,10 +158,50 @@ class ArelleParseReportV1(BaseModel):
             )
         )
 
+    def replay_digest(self) -> str:
+        facts = sorted(
+            (fact.model_dump(mode="json") for fact in self.facts),
+            key=lambda fact: sha256_digest(fact),
+        )
+        findings = sorted(
+            (finding.model_dump(mode="json") for finding in self.findings),
+            key=lambda finding: sha256_digest(finding),
+        )
+        return sha256_digest(
+            {
+                "parser_version": self.parser_version,
+                "taxonomy_version": self.taxonomy_version,
+                "validation_profile_digest": self.validation_profile_digest,
+                "source_content_hash": self.source_content_hash,
+                "taxonomy_cache_hash": self.taxonomy_cache_hash,
+                "facts": facts,
+                "findings": findings,
+                "validation_engines": self.validation_engines,
+                "validation_evidence": self.validation_evidence,
+                "offline": self.offline,
+                "network_attempt_count": self.network_attempt_count,
+            }
+        )
+
+
+def fact_semantic_digest(report: ArelleParseReportV1) -> str:
+    """Digest XBRL fact meaning without parser paths or run-time timestamps."""
+    facts = sorted(
+        (fact.model_dump(mode="json") for fact in report.facts),
+        key=lambda fact: sha256_digest(fact),
+    )
+    return sha256_digest({"fact_count": len(facts), "facts": facts})
+
 
 def _directory_hash(root: Path) -> str:
     digest = hashlib.sha256()
-    for path in sorted(path for path in root.rglob("*") if path.is_file()):
+    for path in sorted(
+        path
+        for path in root.rglob("*")
+        if path.is_file()
+        and "__pycache__" not in path.relative_to(root).parts
+        and path.suffix not in {".pyc", ".pyo"}
+    ):
         digest.update(str(path.relative_to(root)).encode("utf-8"))
         digest.update(b"\0")
         digest.update(path.read_bytes())
@@ -248,20 +294,32 @@ def _parse_worker(
     taxonomy_cache_dir: str | None,
     expected_source_hash: str | None,
 ) -> None:
+    attempted_network = 0
+    bytecode_cache: tempfile.TemporaryDirectory[str] | None = None
     try:
+        bytecode_cache = tempfile.TemporaryDirectory(
+            prefix="fundamental-arelle-pycache-"
+        )
+        sys.pycache_prefix = bytecode_cache.name
         import socket
 
         def block_network(*args: Any, **kwargs: Any) -> None:
+            nonlocal attempted_network
+            attempted_network += 1
             raise OSError("offline Arelle worker attempted network access")
 
         socket.socket.connect = block_network
+        socket.socket.connect_ex = block_network
+        report = _parse_in_process(
+            Path(filing_path),
+            ArelleValidationProfileV1.model_validate(profile_data),
+            taxonomy_version,
+            Path(taxonomy_cache_dir) if taxonomy_cache_dir else None,
+            expected_source_hash,
+        )
         result_queue.put(
-            _parse_in_process(
-                Path(filing_path),
-                ArelleValidationProfileV1.model_validate(profile_data),
-                taxonomy_version,
-                Path(taxonomy_cache_dir) if taxonomy_cache_dir else None,
-                expected_source_hash,
+            report.model_copy(
+                update={"network_attempt_count": attempted_network}
             ).model_dump(mode="json")
         )
     except Exception as error:
@@ -269,8 +327,12 @@ def _parse_worker(
             {
                 "error": getattr(error, "code", "XBRL_PARSE_FAILED"),
                 "message": str(error),
+                "network_attempt_count": attempted_network,
             }
         )
+    finally:
+        if bytecode_cache is not None:
+            bytecode_cache.cleanup()
 
 
 def _parse_in_process(
@@ -357,8 +419,8 @@ def _parse_in_process(
     try:
         if validation_enabled:
             from arelle.CntlrCmdLine import CntlrCmdLine, ParserForDynamicPlugins
-            from arelle.RuntimeOptions import RuntimeOptions
             from arelle.logging.handlers.LogToXmlHandler import LogToXmlHandler
+            from arelle.RuntimeOptions import RuntimeOptions
 
             controller = CntlrCmdLine(disable_persistent_config=True)
             plugin_root = _validation_plugin_root(profile)
@@ -584,13 +646,7 @@ def parse_filing_offline(
                 "SOURCE_HASH_MISMATCH", "parser bytes do not match source manifest"
             )
     if deadline_at is None:
-        return _parse_in_process(
-            filing_path,
-            profile,
-            taxonomy_version,
-            taxonomy_cache_dir,
-            source_content_hash,
-        )
+        deadline_at = datetime.now(timezone.utc) + timedelta(minutes=5)
     remaining = (deadline_at - datetime.now(timezone.utc)).total_seconds()
     if remaining <= 0:
         raise ArelleParserError(
@@ -644,6 +700,11 @@ def parse_filing_offline(
                 process.kill()
                 process.join(timeout=0.2)
         result_queue.close()
+    if result.get("network_attempt_count", 0) != 0:
+        raise ArelleParserError(
+            "OFFLINE_NETWORK_ATTEMPT",
+            "offline Arelle worker attempted network access",
+        )
     if "error" in result:
         raise ArelleParserError(
             str(result["error"]), str(result.get("message", "Arelle parse failed"))
