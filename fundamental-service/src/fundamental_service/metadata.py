@@ -29,6 +29,14 @@ from .contracts import (
     SecIngestionResponseV1,
     SourceSnapshotV1,
 )
+from .data_releases import (
+    DATA_RELEASE_CAPABILITY,
+    ActiveDataReleaseV1,
+    DataReleaseActivationCommandV1,
+    DataReleaseError,
+    DataReleaseManifestV1,
+    DataReleaseVerificationV1,
+)
 from .facts import (
     CanonicalFactRepository,
     CanonicalMappingV1,
@@ -114,6 +122,7 @@ class PostgresMetadataStore:
         self._runner = _AsyncRunner(database_url)
         self._ready = False
         self._health = MetadataHealth(False, None)
+        self._schema_capabilities: frozenset[str] = frozenset()
         self._ingestion_lock_connections: dict[str, tuple[int, AsyncConnection]] = {}
         self._close_lock = Lock()
         self._closed = False
@@ -144,8 +153,23 @@ class PostgresMetadataStore:
         version = await self._schema_version()
         if version != SCHEMA_VERSION:
             raise RuntimeError("Fundamental metadata schema version is incompatible")
+        self._schema_capabilities = await self._schema_capability_ids()
         self._ready = True
         self._health = MetadataHealth(True, version)
+
+    async def _schema_capability_ids(self) -> frozenset[str]:
+        async with self._runner._engine.connect() as connection:
+            table_exists = await connection.scalar(
+                text(
+                    "SELECT to_regclass('fundamental.schema_capabilities') IS NOT NULL"
+                )
+            )
+            if not table_exists:
+                return frozenset()
+            result = await connection.execute(
+                text("SELECT capability_id FROM fundamental.schema_capabilities")
+            )
+            return frozenset(str(row[0]) for row in result.all())
 
     async def _apply_migration(self) -> None:
         migration_dir = resources.files("fundamental_service").joinpath("migrations")
@@ -177,6 +201,15 @@ class PostgresMetadataStore:
             raise SnapshotError(
                 "METADATA_NOT_READY",
                 "Fundamental metadata store is not ready",
+                retryable=True,
+            )
+
+    def _require_data_release_capability(self) -> None:
+        self._require_ready()
+        if DATA_RELEASE_CAPABILITY not in self._schema_capabilities:
+            raise DataReleaseError(
+                "DATA_RELEASE_SCHEMA_UNAVAILABLE",
+                "data release schema capability is unavailable",
                 retryable=True,
             )
 
@@ -671,6 +704,332 @@ class PostgresMetadataStore:
         return tuple(
             CanonicalMappingV1.model_validate_json(canonical_bytes(item))
             for item in self._list_payloads("mapping_decisions")
+        )
+
+    def publish_data_release_candidate(
+        self,
+        manifest: DataReleaseManifestV1,
+        verification: DataReleaseVerificationV1,
+    ) -> None:
+        self._require_data_release_capability()
+        if verification.manifest_digest != manifest.manifest_digest:
+            raise DataReleaseError(
+                "DATA_RELEASE_VERIFICATION_MISMATCH",
+                "verification evidence does not match the candidate manifest",
+            )
+        self._runner.run(self._publish_data_release_candidate(manifest, verification))
+
+    async def _publish_data_release_candidate(
+        self,
+        manifest: DataReleaseManifestV1,
+        verification: DataReleaseVerificationV1,
+    ) -> None:
+        async with self._runner._engine.begin() as connection:
+            await connection.execute(
+                text(
+                    "INSERT INTO fundamental.data_release_manifests "
+                    "(manifest_digest, profile_id, release_id, payload) VALUES "
+                    "(:digest, :profile_id, :release_id, CAST(:payload AS jsonb)) "
+                    "ON CONFLICT (manifest_digest) DO NOTHING"
+                ),
+                {
+                    "digest": manifest.manifest_digest,
+                    "profile_id": manifest.profile_id,
+                    "release_id": manifest.release_id,
+                    "payload": self._payload_json(manifest.model_dump(mode="json")),
+                },
+            )
+            stored_manifest = (
+                (
+                    await connection.execute(
+                        text(
+                            "SELECT profile_id, release_id, payload "
+                            "FROM fundamental.data_release_manifests "
+                            "WHERE manifest_digest=:digest"
+                        ),
+                        {"digest": manifest.manifest_digest},
+                    )
+                )
+                .mappings()
+                .one_or_none()
+            )
+            if (
+                stored_manifest is None
+                or stored_manifest["profile_id"] != manifest.profile_id
+                or stored_manifest["release_id"] != manifest.release_id
+                or not self._payload_equal(
+                    stored_manifest["payload"], manifest.model_dump(mode="json")
+                )
+            ):
+                raise DataReleaseError(
+                    "DATA_RELEASE_IMMUTABLE",
+                    "a stored data release manifest cannot be replaced",
+                )
+
+            await connection.execute(
+                text(
+                    "INSERT INTO fundamental.data_release_verifications "
+                    "(manifest_digest, verification_digest, payload) VALUES "
+                    "(:manifest_digest, :verification_digest, CAST(:payload AS jsonb)) "
+                    "ON CONFLICT (manifest_digest) DO NOTHING"
+                ),
+                {
+                    "manifest_digest": manifest.manifest_digest,
+                    "verification_digest": verification.verification_digest,
+                    "payload": self._payload_json(verification.model_dump(mode="json")),
+                },
+            )
+            stored_verification = (
+                (
+                    await connection.execute(
+                        text(
+                            "SELECT verification_digest, payload "
+                            "FROM fundamental.data_release_verifications "
+                            "WHERE manifest_digest=:manifest_digest"
+                        ),
+                        {"manifest_digest": manifest.manifest_digest},
+                    )
+                )
+                .mappings()
+                .one_or_none()
+            )
+            if (
+                stored_verification is None
+                or stored_verification["verification_digest"]
+                != verification.verification_digest
+                or not self._payload_equal(
+                    stored_verification["payload"],
+                    verification.model_dump(mode="json"),
+                )
+            ):
+                raise DataReleaseError(
+                    "DATA_RELEASE_IMMUTABLE",
+                    "stored data release verification cannot be replaced",
+                )
+
+    def get_active_data_release(self, profile_id: str) -> ActiveDataReleaseV1 | None:
+        self._require_data_release_capability()
+        return self._runner.run(self._get_active_data_release(profile_id))
+
+    async def _get_active_data_release(
+        self, profile_id: str
+    ) -> ActiveDataReleaseV1 | None:
+        async with self._runner._engine.connect() as connection:
+            row = (
+                (
+                    await connection.execute(
+                        text(
+                            "SELECT manifest_digest, revision, activated_at "
+                            "FROM fundamental.active_data_release_pointers "
+                            "WHERE profile_id=:profile_id"
+                        ),
+                        {"profile_id": profile_id},
+                    )
+                )
+                .mappings()
+                .one_or_none()
+            )
+        if row is None or int(row["revision"]) == 0:
+            return None
+        return ActiveDataReleaseV1(
+            profile_id=profile_id,
+            manifest_digest=str(row["manifest_digest"]),
+            revision=int(row["revision"]),
+            activated_at=row["activated_at"],
+        )
+
+    def compare_and_swap_data_release(
+        self, command: DataReleaseActivationCommandV1
+    ) -> ActiveDataReleaseV1:
+        self._require_data_release_capability()
+        return self._runner.run(self._compare_and_swap_data_release(command))
+
+    async def _compare_and_swap_data_release(
+        self, command: DataReleaseActivationCommandV1
+    ) -> ActiveDataReleaseV1:
+        async with self._runner._engine.begin() as connection:
+            await connection.execute(
+                text("SELECT pg_advisory_xact_lock(hashtextextended(:command_id, 0))"),
+                {"command_id": command.command_id},
+            )
+            previous_command = await self._release_activation_audit(
+                connection, command.command_id
+            )
+            if previous_command is not None:
+                return self._replay_activation_command(previous_command, command)
+
+            candidate = (
+                (
+                    await connection.execute(
+                        text(
+                            "SELECT manifest.profile_id "
+                            "FROM fundamental.data_release_manifests AS manifest "
+                            "JOIN fundamental.data_release_verifications AS verification "
+                            "USING (manifest_digest) "
+                            "WHERE manifest.manifest_digest=:manifest_digest"
+                        ),
+                        {"manifest_digest": command.manifest_digest},
+                    )
+                )
+                .mappings()
+                .one_or_none()
+            )
+            if candidate is None or candidate["profile_id"] != command.profile_id:
+                raise DataReleaseError(
+                    "DATA_RELEASE_CANDIDATE_UNVERIFIED",
+                    "verified data release candidate was not found for this profile",
+                )
+            if command.operation == "rollback":
+                previously_active = await connection.scalar(
+                    text(
+                        "SELECT EXISTS (SELECT 1 "
+                        "FROM fundamental.data_release_activation_audit "
+                        "WHERE profile_id=:profile_id "
+                        "AND to_manifest_digest=:manifest_digest)"
+                    ),
+                    {
+                        "profile_id": command.profile_id,
+                        "manifest_digest": command.manifest_digest,
+                    },
+                )
+                if not previously_active:
+                    raise DataReleaseError(
+                        "DATA_RELEASE_ROLLBACK_TARGET_INVALID",
+                        "rollback target was never active for this profile",
+                    )
+
+            await connection.execute(
+                text(
+                    "INSERT INTO fundamental.active_data_release_pointers "
+                    "(profile_id, manifest_digest, revision, activated_at) "
+                    "VALUES (:profile_id, NULL, 0, NULL) "
+                    "ON CONFLICT (profile_id) DO NOTHING"
+                ),
+                {"profile_id": command.profile_id},
+            )
+            pointer = (
+                (
+                    await connection.execute(
+                        text(
+                            "SELECT manifest_digest, revision "
+                            "FROM fundamental.active_data_release_pointers "
+                            "WHERE profile_id=:profile_id FOR UPDATE"
+                        ),
+                        {"profile_id": command.profile_id},
+                    )
+                )
+                .mappings()
+                .one()
+            )
+            current_digest = pointer["manifest_digest"]
+            current_revision = int(pointer["revision"])
+            if (
+                current_revision != command.expected_revision
+                or current_digest != command.expected_manifest_digest
+            ):
+                raise DataReleaseError(
+                    "DATA_RELEASE_POINTER_CONFLICT",
+                    "active data release changed; reread and revalidate the candidate",
+                    retryable=True,
+                )
+
+            activated = (
+                (
+                    await connection.execute(
+                        text(
+                            "UPDATE fundamental.active_data_release_pointers "
+                            "SET manifest_digest=:manifest_digest, "
+                            "revision=revision + 1, activated_at=clock_timestamp() "
+                            "WHERE profile_id=:profile_id "
+                            "RETURNING revision, activated_at"
+                        ),
+                        {
+                            "profile_id": command.profile_id,
+                            "manifest_digest": command.manifest_digest,
+                        },
+                    )
+                )
+                .mappings()
+                .one()
+            )
+            await connection.execute(
+                text(
+                    "INSERT INTO fundamental.data_release_activation_audit "
+                    "(command_id, profile_id, operation, expected_revision, "
+                    "expected_manifest_digest, from_manifest_digest, "
+                    "to_manifest_digest, actor_id, organization_id, correlation_id, "
+                    "reason, resulting_revision, activated_at) VALUES "
+                    "(:command_id, :profile_id, :operation, :expected_revision, "
+                    ":expected_manifest_digest, :from_manifest_digest, "
+                    ":to_manifest_digest, :actor_id, :organization_id, "
+                    ":correlation_id, :reason, :resulting_revision, :activated_at)"
+                ),
+                {
+                    "command_id": command.command_id,
+                    "profile_id": command.profile_id,
+                    "operation": command.operation,
+                    "expected_revision": command.expected_revision,
+                    "expected_manifest_digest": command.expected_manifest_digest,
+                    "from_manifest_digest": current_digest,
+                    "to_manifest_digest": command.manifest_digest,
+                    "actor_id": command.actor_id,
+                    "organization_id": command.organization_id,
+                    "correlation_id": command.correlation_id,
+                    "reason": command.reason,
+                    "resulting_revision": int(activated["revision"]),
+                    "activated_at": activated["activated_at"],
+                },
+            )
+        return ActiveDataReleaseV1(
+            profile_id=command.profile_id,
+            manifest_digest=command.manifest_digest,
+            revision=int(activated["revision"]),
+            activated_at=activated["activated_at"],
+        )
+
+    async def _release_activation_audit(
+        self, connection: AsyncConnection, command_id: str
+    ) -> dict[str, Any] | None:
+        result = await connection.execute(
+            text(
+                "SELECT command_id, profile_id, operation, expected_revision, "
+                "expected_manifest_digest, from_manifest_digest, to_manifest_digest, "
+                "actor_id, organization_id, correlation_id, reason, "
+                "resulting_revision, activated_at "
+                "FROM fundamental.data_release_activation_audit "
+                "WHERE command_id=:command_id"
+            ),
+            {"command_id": command_id},
+        )
+        row = result.mappings().one_or_none()
+        return None if row is None else dict(row)
+
+    @staticmethod
+    def _replay_activation_command(
+        row: dict[str, Any], command: DataReleaseActivationCommandV1
+    ) -> ActiveDataReleaseV1:
+        matches = (
+            row["profile_id"] == command.profile_id
+            and row["operation"] == command.operation
+            and int(row["expected_revision"]) == command.expected_revision
+            and row["expected_manifest_digest"] == command.expected_manifest_digest
+            and row["from_manifest_digest"] == command.expected_manifest_digest
+            and row["to_manifest_digest"] == command.manifest_digest
+            and row["actor_id"] == command.actor_id
+            and row["organization_id"] == command.organization_id
+            and row["correlation_id"] == command.correlation_id
+            and row["reason"] == command.reason
+        )
+        if not matches:
+            raise DataReleaseError(
+                "DATA_RELEASE_IDEMPOTENCY_CONFLICT",
+                "command ID was already used for a different activation",
+            )
+        return ActiveDataReleaseV1(
+            profile_id=command.profile_id,
+            manifest_digest=command.manifest_digest,
+            revision=int(row["resulting_revision"]),
+            activated_at=row["activated_at"],
         )
 
     def publish_release_manifest(self, manifest: ReleaseManifestV1) -> None:

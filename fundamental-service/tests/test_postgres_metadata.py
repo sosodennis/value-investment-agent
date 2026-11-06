@@ -509,10 +509,24 @@ def test_schema_and_snapshot_survive_restart(metadata: PostgresMetadataStore):
         restarted.close()
 
 
-def _data_release_candidate(suffix: str):
+def _data_release_candidate(
+    suffix: str, *, profile_id: str | None = None
+) -> tuple[DataReleaseManifestV1, DataReleaseVerificationV1]:
     fact_refs = ({"fact_id": f"fact-{suffix}", "fact_digest": "d" * 64},)
+    taxonomy_ref = {
+        "artifact_id": f"taxonomy-{suffix}",
+        "content_hash": "b" * 64,
+        "media_type": "application/zip",
+        "role": "taxonomy",
+    }
+    evidence_ref = {
+        "artifact_id": f"quality-evidence-{suffix}",
+        "content_hash": "c" * 64,
+        "media_type": "application/json",
+        "role": "quality-evidence",
+    }
     manifest_payload = {
-        "profile_id": "sec-public-pit-v1",
+        "profile_id": profile_id or f"sec-public-pit-{suffix}",
         "release_id": f"data-release-{suffix}",
         "created_at": datetime(2026, 1, 1, tzinfo=UTC),
         "snapshot_refs": (
@@ -526,11 +540,11 @@ def _data_release_candidate(suffix: str):
         "mapping_refs": (
             {"mapping_id": f"mapping-{suffix}", "mapping_digest": "e" * 64},
         ),
-        "taxonomy_refs": (),
+        "taxonomy_refs": (taxonomy_ref,),
         "parser_version": "arelle-release==2.47.4",
         "quality_profile_digest": "c" * 64,
         "required_fields": ("revenue",),
-        "artifact_refs": (),
+        "artifact_refs": (evidence_ref,),
     }
     manifest = DataReleaseManifestV1(
         **manifest_payload,
@@ -540,7 +554,7 @@ def _data_release_candidate(suffix: str):
         "manifest_digest": manifest.manifest_digest,
         "verification_suite_digest": "f" * 64,
         "passed_gate_ids": ("candidate-integrity",),
-        "evidence_refs": (),
+        "evidence_refs": (evidence_ref,),
         "mapping_reviews": (),
     }
     verification = DataReleaseVerificationV1(
@@ -577,6 +591,7 @@ def test_data_release_activation_is_fenced_and_v2_compatible(
 ):
     manifest, verification = _data_release_candidate(uuid4().hex)
     metadata.publish_data_release_candidate(manifest, verification)
+    metadata.publish_data_release_candidate(manifest, verification)
     command = _activation_command(manifest)
 
     active = metadata.compare_and_swap_data_release(command)
@@ -584,6 +599,10 @@ def test_data_release_activation_is_fenced_and_v2_compatible(
     assert active.manifest_digest == manifest.manifest_digest
     assert active.revision == 1
     assert metadata.compare_and_swap_data_release(command) == active
+    altered_retry = command.model_copy(update={"reason": "different command"})
+    with pytest.raises(DataReleaseError) as idempotency_conflict:
+        metadata.compare_and_swap_data_release(altered_retry)
+    assert idempotency_conflict.value.code == "DATA_RELEASE_IDEMPOTENCY_CONFLICT"
 
     stale = _activation_command(
         manifest,
@@ -630,6 +649,7 @@ def test_data_release_activation_is_fenced_and_v2_compatible(
     old_version_reader.start()
     try:
         assert old_version_reader.health.schema_version == SCHEMA_VERSION
+        assert old_version_reader.get_active_data_release(manifest.profile_id) == active
     finally:
         old_version_reader.close()
 
@@ -681,13 +701,29 @@ def test_data_release_audit_failure_rolls_back_pointer_and_can_retry(
         metadata._runner.run(remove_failure_trigger())
 
     assert metadata.get_active_data_release(manifest.profile_id) is None
+
+    async def audit_count() -> int:
+        async with metadata._runner._engine.connect() as connection:
+            count = await connection.scalar(
+                text(
+                    "SELECT count(*) FROM fundamental.data_release_activation_audit "
+                    "WHERE profile_id=:profile_id"
+                ),
+                {"profile_id": manifest.profile_id},
+            )
+        return int(count or 0)
+
+    assert metadata._runner.run(audit_count()) == 0
     assert metadata.compare_and_swap_data_release(command).revision == 1
 
 
 def test_competing_data_release_publishers_share_one_revision(
     metadata: PostgresMetadataStore,
 ):
-    candidates = tuple(_data_release_candidate(uuid4().hex) for _ in range(2))
+    profile_id = f"sec-public-pit-race-{uuid4().hex}"
+    candidates = tuple(
+        _data_release_candidate(uuid4().hex, profile_id=profile_id) for _ in range(2)
+    )
     for manifest, verification in candidates:
         metadata.publish_data_release_candidate(manifest, verification)
 
