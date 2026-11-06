@@ -363,6 +363,37 @@ class DataReleaseActivationCommandV1(ReleaseModel):
         return self
 
 
+class DataReleaseCandidatePublishRequestV1(ReleaseModel):
+    manifest: DataReleaseManifestV1
+    verification: DataReleaseVerificationV1
+
+
+class DataReleaseActivationRequestV1(ReleaseModel):
+    manifest_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    expected_revision: int = Field(ge=0)
+    expected_manifest_digest: str | None = Field(
+        default=None, pattern=r"^[0-9a-f]{64}$"
+    )
+    operation: Literal["activate", "rollback"]
+    command_id: str = Field(min_length=1)
+    reason: str = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def expected_pointer_is_coherent(self) -> DataReleaseActivationRequestV1:
+        if (self.expected_revision == 0) != (self.expected_manifest_digest is None):
+            raise ValueError(
+                "revision zero requires a missing digest; later revisions require one"
+            )
+        return self
+
+
+class DataReleaseCandidateReceiptV1(ReleaseModel):
+    profile_id: str = Field(min_length=1)
+    release_id: str = Field(min_length=1)
+    manifest_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    verification_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
 class ActiveDataReleaseV1(ReleaseModel):
     profile_id: str = Field(min_length=1)
     manifest_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
@@ -405,6 +436,9 @@ __all__ = [
     "ActiveDataReleaseWithManifestV1",
     "ArtifactRefV1",
     "DataReleaseActivationCommandV1",
+    "DataReleaseActivationRequestV1",
+    "DataReleaseCandidatePublishRequestV1",
+    "DataReleaseCandidateReceiptV1",
     "DataReleaseError",
     "DataReleaseManifestV1",
     "DataReleaseRepository",

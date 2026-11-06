@@ -30,8 +30,15 @@ from ..contracts import (
     ValidationResponseV1,
     ValuationInputV1,
 )
-from ..data_releases import ActiveDataReleaseWithManifestV1, DataReleaseError
-from ..data_releases import DataReleaseManifestV1
+from ..data_releases import (
+    ActiveDataReleaseWithManifestV1,
+    DataReleaseActivationCommandV1,
+    DataReleaseActivationRequestV1,
+    DataReleaseCandidateReceiptV1,
+    DataReleaseError,
+    DataReleaseManifestV1,
+    DataReleaseVerificationV1,
+)
 from ..facts import CanonicalFactRepository
 from ..governance import ModelInventory
 from ..operations import (
@@ -182,6 +189,36 @@ def _policy_error(error: PolicyError) -> ServiceError:
     )
 
 
+def _data_release_error(error: DataReleaseError) -> ServiceError:
+    if error.code in {
+        "DATA_RELEASE_POINTER_CONFLICT",
+        "DATA_RELEASE_IDEMPOTENCY_CONFLICT",
+        "DATA_RELEASE_IMMUTABLE",
+        "DATA_RELEASE_SNAPSHOT_MISMATCH",
+        "DATA_RELEASE_FACT_MISMATCH",
+    }:
+        status_code = 409
+    elif error.code in {
+        "DATA_RELEASE_CANDIDATE_UNVERIFIED",
+        "DATA_RELEASE_VERIFICATION_MISMATCH",
+        "DATA_RELEASE_VERIFICATION_SIGNATURE_INVALID",
+        "DATA_RELEASE_MAPPING_REVIEW_MISMATCH",
+        "DATA_RELEASE_MAPPING_REVIEW_SIGNATURE_INVALID",
+        "DATA_RELEASE_MAPPING_REVIEW_DUPLICATE",
+    }:
+        status_code = 422
+    elif error.code == "DATA_RELEASE_ROLLBACK_TARGET_INVALID":
+        status_code = 422
+    else:
+        status_code = 503
+    return ServiceError(
+        error.code,
+        "data release operation could not be completed",
+        status_code=status_code,
+        retryable=error.retryable or status_code == 503,
+    )
+
+
 @dataclass(frozen=True)
 class FundamentalApplication:
     """Owns use cases while keeping transport and dependency assembly outside."""
@@ -325,6 +362,115 @@ class FundamentalApplication:
                 retryable=False,
             )
         return manifest
+
+    def publish_data_release_candidate(
+        self, manifest: DataReleaseManifestV1, verification: DataReleaseVerificationV1
+    ) -> DataReleaseCandidateReceiptV1:
+        if self.metadata_store is None:
+            raise ServiceError(
+                "DATA_RELEASE_UNAVAILABLE",
+                "release metadata is unavailable",
+                status_code=503,
+                retryable=True,
+            )
+        try:
+            self.metadata_store.publish_data_release_candidate(manifest, verification)
+        except DataReleaseError as error:
+            raise _data_release_error(error) from error
+        except Exception as error:  # pragma: no cover - persistence boundary
+            raise ServiceError(
+                "DATA_RELEASE_UNAVAILABLE",
+                "candidate publication is temporarily unavailable",
+                status_code=503,
+                retryable=True,
+            ) from error
+        return DataReleaseCandidateReceiptV1(
+            profile_id=manifest.profile_id,
+            release_id=manifest.release_id,
+            manifest_digest=manifest.manifest_digest,
+            verification_digest=verification.verification_digest,
+        )
+
+    def active_data_release(self, profile_id: str) -> ActiveDataReleaseWithManifestV1:
+        if self.metadata_store is None:
+            raise ServiceError(
+                "DATA_RELEASE_UNAVAILABLE",
+                "release metadata is unavailable",
+                status_code=503,
+                retryable=True,
+            )
+        try:
+            active = self.metadata_store.get_active_data_release_with_manifest(
+                profile_id
+            )
+        except DataReleaseError as error:
+            raise _data_release_error(error) from error
+        except Exception as error:  # pragma: no cover - persistence boundary
+            raise ServiceError(
+                "DATA_RELEASE_UNAVAILABLE",
+                "active release is temporarily unavailable",
+                status_code=503,
+                retryable=True,
+            ) from error
+        if active is None:
+            raise ServiceError(
+                "DATA_RELEASE_NOT_ACTIVE",
+                "no data release is active for this profile",
+                status_code=404,
+                retryable=False,
+            )
+        return active
+
+    def change_active_data_release(
+        self,
+        profile_id: str,
+        request: DataReleaseActivationRequestV1,
+        *,
+        actor_id: str,
+        organization_id: str,
+        correlation_id: str,
+    ) -> ActiveDataReleaseWithManifestV1:
+        if self.metadata_store is None:
+            raise ServiceError(
+                "DATA_RELEASE_UNAVAILABLE",
+                "release metadata is unavailable",
+                status_code=503,
+                retryable=True,
+            )
+        command = DataReleaseActivationCommandV1(
+            profile_id=profile_id,
+            manifest_digest=request.manifest_digest,
+            expected_revision=request.expected_revision,
+            expected_manifest_digest=request.expected_manifest_digest,
+            operation=request.operation,
+            command_id=request.command_id,
+            actor_id=actor_id,
+            organization_id=organization_id,
+            correlation_id=correlation_id,
+            reason=request.reason,
+        )
+        try:
+            active = self.metadata_store.compare_and_swap_data_release(command)
+            manifest = self.metadata_store.get_data_release_manifest(
+                active.manifest_digest
+            )
+        except DataReleaseError as error:
+            raise _data_release_error(error) from error
+        except Exception as error:  # pragma: no cover - persistence boundary
+            raise ServiceError(
+                "DATA_RELEASE_UNAVAILABLE",
+                "release activation is temporarily unavailable",
+                status_code=503,
+                retryable=True,
+            ) from error
+        if manifest is None:
+            raise ServiceError(
+                "DATA_RELEASE_NOT_FOUND",
+                "activated release manifest is unavailable",
+                status_code=503,
+                retryable=True,
+            )
+        return ActiveDataReleaseWithManifestV1(active=active, manifest=manifest)
 
     @staticmethod
     def _verify_release_snapshot_and_facts(

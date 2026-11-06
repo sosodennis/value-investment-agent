@@ -31,7 +31,9 @@ from .contracts import (
     SnapshotResolutionRequestV1,
     ValuationInputV1,
 )
-from .data_releases import DataReleaseTrustRootsV1
+from .data_releases import (
+    DataReleaseTrustRootsV1,
+)
 from .facts import CanonicalFactRepository
 from .governance import ModelInventory
 from .interface.transport import (
