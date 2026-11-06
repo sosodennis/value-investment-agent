@@ -18,7 +18,6 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .serialization import sha256_digest
 
-
 _PLUGIN_ROOT_LOCK = threading.Lock()
 _PLUGIN_ROOTS: dict[str, tuple[tempfile.TemporaryDirectory[str], Path]] = {}
 
@@ -149,6 +148,31 @@ class ArelleParseReportV1(BaseModel):
                     if finding.severity in {"error", "critical", "fatal"}
                 }
             )
+        )
+
+    def replay_digest(self) -> str:
+        facts = sorted(
+            (fact.model_dump(mode="json") for fact in self.facts),
+            key=lambda fact: sha256_digest(fact),
+        )
+        findings = sorted(
+            (finding.model_dump(mode="json") for finding in self.findings),
+            key=lambda finding: sha256_digest(finding),
+        )
+        return sha256_digest(
+            {
+                "parser_version": self.parser_version,
+                "taxonomy_version": self.taxonomy_version,
+                "validation_profile_digest": self.validation_profile_digest,
+                "source_content_hash": self.source_content_hash,
+                "taxonomy_cache_hash": self.taxonomy_cache_hash,
+                "facts": facts,
+                "findings": findings,
+                "validation_engines": self.validation_engines,
+                "validation_evidence": self.validation_evidence,
+                "offline": self.offline,
+                "network_attempt_count": self.network_attempt_count,
+            }
         )
 
 
@@ -367,8 +391,8 @@ def _parse_in_process(
     try:
         if validation_enabled:
             from arelle.CntlrCmdLine import CntlrCmdLine, ParserForDynamicPlugins
-            from arelle.RuntimeOptions import RuntimeOptions
             from arelle.logging.handlers.LogToXmlHandler import LogToXmlHandler
+            from arelle.RuntimeOptions import RuntimeOptions
 
             controller = CntlrCmdLine(disable_persistent_config=True)
             plugin_root = _validation_plugin_root(profile)
