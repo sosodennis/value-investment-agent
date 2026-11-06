@@ -15,6 +15,7 @@ from src.agents.fundamental.interface.fundamental_service_contracts import (
     FundamentalFactsReadResultV1,
     FundamentalServiceResponseV1,
 )
+from src.shared.artifacts.artifact_data_models import FinancialReportsArtifactData
 from src.shared.internal_services import (
     InternalPrincipal,
     reset_request_principal,
@@ -23,8 +24,23 @@ from src.shared.internal_services import (
 
 
 class _Runtime:
+    def __init__(self) -> None:
+        self.saved_calls: list[dict[str, object]] = []
+
     def build_valuation_error_update(self, error: str) -> dict[str, object]:
         return {"error": error}
+
+    async def save_financial_reports(
+        self,
+        *,
+        data: dict[str, object],
+        produced_by: str,
+        key_prefix: str | None = None,
+    ) -> str:
+        self.saved_calls.append(
+            {"data": data, "produced_by": produced_by, "key_prefix": key_prefix}
+        )
+        return "service-valuation-artifact"
 
 
 class _Client:
@@ -391,6 +407,7 @@ def _input(*, monte_carlo: bool = False) -> dict[str, object]:
 @pytest.mark.asyncio
 async def test_cutover_resolves_snapshot_and_facts_through_service_boundary() -> None:
     client = _Client(facts_ids=["fact-revenue"])
+    runtime = _Runtime()
     payload = _input()
     payload.pop("historical_facts")
     payload["snapshot_selector"] = {
@@ -408,7 +425,7 @@ async def test_cutover_resolves_snapshot_and_facts_through_service_boundary() ->
     )
     try:
         result = await run_service_valuation_flow(
-            _Runtime(),
+            runtime,
             {"fundamental_analysis": {"valuation_request": payload}},
             client=client,
             request_approval_fn=lambda _request: {
@@ -454,6 +471,22 @@ async def test_cutover_resolves_snapshot_and_facts_through_service_boundary() ->
         "fact_ids"
     ] == ["fact-revenue"]
     assert result.update["fundamental_analysis"]["input_digest"] == "a" * 64
+    assert result.update["fundamental_analysis"]["financial_reports_artifact_id"] == (
+        "service-valuation-artifact"
+    )
+    assert result.update["artifact_references"]["financial_reports"]["artifact_id"] == (
+        "service-valuation-artifact"
+    )
+    artifact = runtime.saved_calls[0]["data"]
+    assert isinstance(artifact, dict)
+    stored_artifact = FinancialReportsArtifactData.model_validate(artifact)
+    assert stored_artifact.financial_reports == []
+    service_artifact = artifact["fundamental_service"]
+    assert isinstance(service_artifact, dict)
+    assert service_artifact["facts"]["snapshot_id"] == "snapshot-resolved"
+    assert service_artifact["valuation_trace"]["fact_ids"] == ["fact-revenue"]
+    assert service_artifact["provenance"]["snapshot_id"] == "snapshot-resolved"
+    assert service_artifact["hashes"]["snapshot_manifest_digest"] == "e" * 64
 
 
 @pytest.mark.parametrize(

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from src.shared.artifacts.debate_contracts import EvidenceFactModel
 from src.shared.artifacts.financial_statement_contracts import (
@@ -17,7 +17,8 @@ from src.shared.artifacts.news_contracts import (
 class FinancialReportsArtifactData(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    financial_reports: list[FinancialReportModel]
+    financial_reports: list[FinancialReportModel] = Field(default_factory=list)
+    fundamental_service: dict[str, object] | None = None
     forward_signals: list[dict[str, object]] | None = None
     diagnostics: dict[str, object] | None = None
     quality_gates: dict[str, object] | None = None

@@ -16,6 +16,11 @@ from src.agents.fundamental.interface.fundamental_service_contracts import (
     FundamentalFactsReadResultV1,
     FundamentalServiceResponseV1,
 )
+from src.artifacts.public import (
+    ARTIFACT_KIND_FINANCIAL_REPORTS,
+    ArtifactReference,
+    to_artifact_reference_payload,
+)
 from src.shared.internal_services import get_request_principal
 from src.shared.kernel.correlation import resolve_correlation_id
 from src.shared.kernel.types import JSONObject
@@ -116,6 +121,14 @@ _SCHEMA_DEFAULTS: tuple[tuple[tuple[str | int | None, ...], object], ...] = (
 
 class ServiceValuationRuntime(Protocol):
     def build_valuation_error_update(self, error: str) -> JSONObject: ...
+
+    async def save_financial_reports(
+        self,
+        *,
+        data: JSONObject,
+        produced_by: str,
+        key_prefix: str | None = None,
+    ) -> str: ...
 
 
 def _as_mapping(value: object, *, context: str) -> Mapping[str, object]:
@@ -674,6 +687,72 @@ def _facts_projection(
     return projection
 
 
+def _service_valuation_artifact_payload(
+    *,
+    projection: Mapping[str, object],
+    input_payload: Mapping[str, object],
+    input_digest: str,
+    validation_quality_status: str,
+    calculation_trace: Mapping[str, object],
+) -> JSONObject:
+    facts = _as_mapping(projection.get("facts"), context="fundamental facts projection")
+    provenance = _as_mapping(
+        input_payload["provenance"], context="validated_input.provenance"
+    )
+    quality = _as_mapping(input_payload["quality"], context="validated_input.quality")
+    snapshot_id = facts.get("snapshot_id")
+    snapshot_manifest_digest = facts.get("snapshot_manifest_digest")
+    fact_ids = facts.get("fact_ids")
+    if (
+        not isinstance(snapshot_id, str)
+        or not isinstance(snapshot_manifest_digest, str)
+        or not isinstance(fact_ids, list | tuple)
+    ):
+        raise FundamentalServiceFailure(
+            "UPSTREAM_MALFORMED",
+            "Fundamental artifact projection is missing snapshot metadata",
+            retryable=False,
+            status_code=502,
+        )
+    artifact_projection = dict(projection)
+    artifact_projection.update(
+        {
+            "contract_version": "fundamental.v1",
+            "snapshot_id": snapshot_id,
+            "snapshot_manifest_digest": snapshot_manifest_digest,
+            "fact_ids": list(fact_ids),
+            "valuation_trace": dict(calculation_trace),
+            "provenance": dict(provenance),
+            "quality": {
+                "input": dict(quality),
+                "validation_status": validation_quality_status,
+                "facts_status": facts.get("quality_status"),
+                "calculation_status": projection.get("quality_status"),
+                "issue_codes": facts.get("issue_codes", ()),
+            },
+            "hashes": {
+                "input_digest": input_digest,
+                "result_hash": projection.get("result_hash"),
+                "snapshot_manifest_digest": snapshot_manifest_digest,
+                "data_release_manifest_digest": facts.get(
+                    "data_release_manifest_digest"
+                ),
+                "source_content_hashes": calculation_trace.get(
+                    "source_content_hashes", ()
+                ),
+            },
+            "valuation_input": dict(input_payload),
+        }
+    )
+    return {
+        "financial_reports": [],
+        "fundamental_service": artifact_projection,
+        "status": "done",
+        "model_type": input_payload.get("model_id"),
+        "ticker": _ticker_from_input(input_payload),
+    }
+
+
 def _calculation_projection(
     response: FundamentalServiceResponseV1,
     *,
@@ -1168,6 +1247,26 @@ async def run_service_valuation_flow(
                 expected_samples=samples,
                 expected_invalid_draw_policy=invalid_draw_policy,
             )
+        artifact_payload = _service_valuation_artifact_payload(
+            projection=projection,
+            input_payload=approved_input,
+            input_digest=input_digest,
+            validation_quality_status=quality_status,
+            calculation_trace=calculation_trace,
+        )
+        try:
+            artifact_id = await runtime.save_financial_reports(
+                data=artifact_payload,
+                produced_by="fundamental_analysis.service_valuation",
+                key_prefix="fundamental_service_valuation",
+            )
+        except Exception as exc:
+            raise FundamentalServiceFailure(
+                "ARTIFACT_SAVE_FAILED",
+                "Fundamental service valuation artifact could not be saved",
+                retryable=True,
+                status_code=503,
+            ) from exc
     except (FundamentalServiceFailure, ValueError, TypeError) as error:
         return _service_error_update(fundamental=fundamental, error=error)
 
@@ -1178,6 +1277,7 @@ async def run_service_valuation_flow(
             "quality_status": projection["quality_status"],
             "input_digest": projection["input_digest"],
             "result_hash": projection["result_hash"],
+            "financial_reports_artifact_id": artifact_id,
             "fundamental_service": projection,
             "assumption_breakdown": {
                 "source": "fundamental-service",
@@ -1189,6 +1289,15 @@ async def run_service_valuation_flow(
     return FundamentalNodeResult(
         update={
             "fundamental_analysis": updated,
+            "artifact_references": {
+                "financial_reports": to_artifact_reference_payload(
+                    ArtifactReference(
+                        artifact_id=artifact_id,
+                        download_url=f"/api/v1/artifacts/{artifact_id}",
+                        type=ARTIFACT_KIND_FINANCIAL_REPORTS,
+                    )
+                )
+            },
             "active_activity_id": "calculation",
             "workflow_activity_updates": {"calculation": "done"},
         },
