@@ -1,0 +1,172 @@
+import { describe, expect, it } from 'vitest';
+import { parseFundamentalFacts, sortFundamentalFacts } from './fundamental-service-facts';
+
+const digest = 'a'.repeat(64);
+
+const fact = (overrides: Record<string, unknown> = {}): Record<string, unknown> => ({
+    contract_version: 'fundamental.v1',
+    fact_id: 'fact-revenue',
+    issuer_id: 'issuer-1',
+    concept: 'us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax',
+    normalized_field: 'revenue',
+    value: '1000000',
+    unit: 'USD',
+    scale: 0,
+    currency: 'USD',
+    period_start: '2025-01-01',
+    period_end: '2025-09-30',
+    context: {
+        concept_qname: 'us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax',
+        period_type: 'duration',
+        start_date: '2025-01-01',
+        end_date: '2025-09-30',
+        unit_qname: 'iso4217:USD',
+        measure: 'iso4217:USD',
+        dimensions: [],
+        entity_scope: 'issuer-1',
+        consolidation_scope: 'consolidated',
+        context_id: 'ctx-revenue',
+    },
+    as_of: '2025-09-30T00:00:00Z',
+    available_at: '2025-11-01T00:00:00Z',
+    captured_at: '2025-11-02T00:00:00Z',
+    taxonomy_version: 'us-gaap-2025',
+    source: {
+        source_url: 'https://www.sec.gov/Archives/filing.xml',
+        content_hash: digest,
+        source_role: 'filing',
+        captured_at: '2025-11-02T00:00:00Z',
+        available_at: '2025-11-01T00:00:00Z',
+        filed_at: '2025-11-01T00:00:00Z',
+        accession_number: '0000000000-25-000001',
+        parser_version: 'arelle-1',
+        taxonomy_version: 'us-gaap-2025',
+        taxonomy_manifest_digest: digest,
+        mapping_version: 'mapping-1',
+    },
+    quality: 'verified',
+    issue_codes: [],
+    ...overrides,
+});
+
+const result = (facts: Record<string, unknown>[]) => ({
+    contract_version: 'fundamental.v1',
+    snapshot_id: 'snapshot-1',
+    data_release_manifest_digest: digest,
+    snapshot_manifest_digest: digest,
+    identity: {
+        issuer_id: 'issuer-1',
+        issuer_name: 'Example Corp',
+        domicile: 'US',
+        reporting_basis: 'us-gaap',
+        security_id: 'security-1',
+        share_class: 'common',
+        currency: 'USD',
+        family: 'industrial',
+    },
+    valuation_timestamp: '2026-11-07T00:00:00Z',
+    quality_status: 'verified',
+    issue_codes: [],
+    facts,
+});
+
+describe('parseFundamentalFacts', () => {
+    it('parses service facts and preserves numeric zero, negative values, and provenance', () => {
+        const parsed = parseFundamentalFacts(
+            result([
+                fact({ fact_id: 'fact-zero', normalized_field: 'cash', value: 0 }),
+                fact({ fact_id: 'fact-negative', normalized_field: 'liabilities', value: '-12.5' }),
+            ])
+        );
+
+        expect(parsed.identity.family).toBe('industrial');
+        expect(parsed.facts.map((item) => item.fact_id)).toEqual([
+            'fact-negative',
+            'fact-zero',
+        ]);
+        expect(parsed.facts[0]?.value).toEqual({
+            kind: 'numeric',
+            raw: '-12.5',
+            numeric: -12.5,
+        });
+        expect(parsed.facts[1]?.value).toEqual({
+            kind: 'numeric',
+            raw: '0',
+            numeric: 0,
+        });
+        expect(parsed.facts[0]?.source.source_hash).toBe(digest);
+        expect(parsed.facts[0]?.source.mapping_version).toBe('mapping-1');
+    });
+
+    it('distinguishes instant and duration periods and missing values', () => {
+        const parsed = parseFundamentalFacts(
+            result([
+                fact({
+                    fact_id: 'fact-instant',
+                    normalized_field: 'assets',
+                    value: {
+                        status: 'unresolved',
+                        reason: 'The service could not select a point-in-time fact.',
+                    },
+                    period_start: undefined,
+                    period_end: '2025-09-30',
+                    context: {
+                        concept_qname: 'us-gaap:Assets',
+                        period_type: 'instant',
+                        instant: '2025-09-30',
+                        unit_qname: 'iso4217:USD',
+                        measure: 'iso4217:USD',
+                        dimensions: [],
+                        entity_scope: 'issuer-1',
+                        consolidation_scope: 'consolidated',
+                        context_id: 'ctx-assets',
+                    },
+                }),
+            ])
+        );
+
+        expect(parsed.facts[0]?.period).toEqual({
+            kind: 'instant',
+            end: '2025-09-30',
+            instant: '2025-09-30',
+        });
+        expect(parsed.facts[0]?.value).toEqual({
+            kind: 'missing',
+            status: 'unresolved',
+            reason: 'The service could not select a point-in-time fact.',
+        });
+    });
+
+    it('sorts by period end, start, kind, and fact id without mutating input', () => {
+        const first = parseFundamentalFacts(result([
+            fact({ fact_id: 'b', period_start: '2024-01-01', period_end: '2024-12-31' }),
+            fact({ fact_id: 'a', period_start: '2025-01-01', period_end: '2025-09-30' }),
+        ])).facts;
+        const sorted = sortFundamentalFacts(first);
+        expect(sorted.map((item) => item.fact_id)).toEqual(['a', 'b']);
+        expect(first.map((item) => item.fact_id)).toEqual(['a', 'b']);
+    });
+
+    it('rejects a malformed digest and duplicate fact identity', () => {
+        expect(() =>
+            parseFundamentalFacts(
+                result([
+                    fact({
+                        source: {
+                            source_url: 'https://www.sec.gov/Archives/filing.xml',
+                            content_hash: 'bad',
+                            source_role: 'filing',
+                            captured_at: '2025-11-02T00:00:00Z',
+                            available_at: '2025-11-01T00:00:00Z',
+                            parser_version: 'arelle-1',
+                        },
+                    }),
+                ])
+            )
+        ).toThrowError('fundamental_service.facts[0].source.content_hash must be a lowercase SHA-256 digest.');
+
+        expect(() =>
+            parseFundamentalFacts(result([fact(), fact()]))
+        ).toThrowError('fundamental_service.facts contains duplicate fact_id fact-revenue.');
+    });
+});
