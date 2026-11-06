@@ -188,9 +188,9 @@ class SecIngestionService:
             ArelleFindingEvidenceV1(
                 code=item.code,
                 severity=item.severity,
-                blocks=item.blocks,
+                blocks=item.code in blocking_codes,
             )
-            for item in parser_report.finding_decisions
+            for item in parser_report.findings
         )
         if blocking_codes:
             raise SnapshotError(
