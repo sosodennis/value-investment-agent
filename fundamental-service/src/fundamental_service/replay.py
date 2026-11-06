@@ -1196,6 +1196,8 @@ def replay_calculation(
         if (
             trace.snapshot_id != request.valuation_context.data_snapshot_id
             or trace.snapshot_id != request.provenance.snapshot_id
+            or trace.data_release_manifest_digest
+            != request.valuation_context.data_release_manifest_digest
             or trace.fact_ids != tuple(sorted(request.historical_facts))
             or trace.model_id != request.model_id
             or trace.model_version != request.model_version
@@ -1227,6 +1229,8 @@ def replay_calculation(
         "model": actual.model_version,
         "policy": actual.policy_version or "none",
         "snapshot": actual.snapshot_id,
+        "data_release": request.valuation_context.data_release_manifest_digest
+        or "none",
         "parser": request.provenance.parser_version,
         "taxonomy": request.provenance.taxonomy_version,
         "runtime": f"python-{sys.version_info.major}.{sys.version_info.minor}",

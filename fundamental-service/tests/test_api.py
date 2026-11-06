@@ -18,9 +18,11 @@ from fundamental_service.application.service import (
     normalize_uncertainty_payload,
 )
 from fundamental_service.contracts import (
+    CalculationArtifactV1,
     CalculationEvidenceV1,
     CallerApprovalEnvelopeV1,
     CanonicalFactV1,
+    FactsReadRequestV1,
     PeriodType,
     QualityStatus,
     SourceProvenanceV1,
@@ -195,6 +197,59 @@ def _canonical_fact(fact_id: str, normalized_field: str) -> CanonicalFactV1:
             terms_reference="SEC fair access policy",
         ),
         quality=QualityStatus.VERIFIED,
+    )
+
+
+class _CanonicalFactRepository(_FactRepository):
+    def get(self, fact_id: str):
+        return _canonical_fact(fact_id, "revenue")
+
+
+def _release_manifest_for(snapshot, facts):
+    fact_refs = tuple(
+        FactRefV1(
+            fact_id=fact.fact_id,
+            fact_digest=sha256_digest(fact.model_dump(mode="json")),
+        )
+        for fact in facts
+    )
+    snapshot_ref = SnapshotRefV1(
+        snapshot_id=snapshot.snapshot_id,
+        manifest_digest=snapshot.manifest_digest,
+        facts=fact_refs,
+        fact_set_digest=sha256_digest(fact_refs),
+    )
+    payload = {
+        "profile_id": "sec-public-pit-v1",
+        "release_id": "release-pinned-tests",
+        "created_at": datetime(2026, 1, 1, tzinfo=UTC),
+        "snapshot_refs": (snapshot_ref,),
+        "mapping_refs": (
+            MappingRefV1(mapping_id="mapping-v1", mapping_digest="c" * 64),
+        ),
+        "taxonomy_refs": (
+            ArtifactRefV1(
+                artifact_id="taxonomy-v1",
+                content_hash="d" * 64,
+                media_type="application/zip",
+                role="taxonomy",
+            ),
+        ),
+        "parser_version": "arelle-release==2.47.4",
+        "quality_profile_digest": "e" * 64,
+        "required_fields": ("revenue",),
+        "artifact_refs": (
+            ArtifactRefV1(
+                artifact_id="quality-v1",
+                content_hash="f" * 64,
+                media_type="application/json",
+                role="quality-evidence",
+            ),
+        ),
+    }
+    return DataReleaseManifestV1(
+        **payload,
+        manifest_digest=sha256_digest(payload),
     )
 
 
@@ -1298,6 +1353,109 @@ def test_snapshot_resolution_pins_only_active_release_facts():
     )
     assert mismatch.status_code == 409
     assert mismatch.json()["error"]["code"] == "DATA_RELEASE_FACT_MISMATCH"
+
+
+def test_facts_calculation_evidence_and_replay_keep_the_pinned_release(
+    tmp_path: Path,
+):
+    snapshot = _SnapshotRepository().snapshot
+    fact = _canonical_fact("fact-revenue", "revenue")
+    manifest = _release_manifest_for(snapshot, (fact,))
+    metadata = SimpleNamespace(
+        get_data_release_manifest=lambda digest: (
+            manifest if digest == manifest.manifest_digest else None
+        )
+    )
+    app = create_app(
+        snapshot_repository=_SnapshotRepository(),
+        artifact_store=ArtifactStore(tmp_path / "artifacts"),
+        content_store=FilesystemContentStore(tmp_path / "content"),
+        fact_repository=_CanonicalFactRepository(),
+        metadata_store=metadata,
+        config=OperationsConfig(service_token=TEST_SERVICE_TOKEN),
+    )
+    read_facts = app.state.application.read_facts(
+        FactsReadRequestV1(
+            contract_version="fundamental.v1",
+            snapshot_id=snapshot.snapshot_id,
+            data_release_manifest_digest=manifest.manifest_digest,
+            required_fields=("revenue",),
+        )
+    )
+    assert read_facts.data_release_manifest_digest == manifest.manifest_digest
+    assert tuple(item.fact_id for item in read_facts.facts) == (fact.fact_id,)
+
+    valuation = make_valuation()
+    valuation = valuation.model_copy(
+        update={
+            "historical_facts": (fact.fact_id,),
+            "valuation_context": valuation.valuation_context.model_copy(
+                update={"data_release_manifest_digest": manifest.manifest_digest}
+            ),
+            "provenance": valuation.provenance.model_copy(
+                update={"fact_ids": (fact.fact_id,)}
+            ),
+            "input_digest": None,
+        }
+    ).with_digest()
+    request = _bind_initial_policy(valuation)
+    response = TestClient(app).post(
+        "/v1/valuation/calculate",
+        headers=auth_headers(),
+        json=make_internal_envelope(request.model_dump(mode="json")),
+    )
+
+    assert response.status_code == 200, response.text
+    result = response.json()["result"]
+    assert result["trace"]["data_release_manifest_digest"] == manifest.manifest_digest
+    reference = result["artifact_references"][0]
+    record, content = app.state.application.artifact_content(reference["artifact_id"])
+    assert manifest.manifest_digest in record.dependency_hashes
+    evidence = CalculationEvidenceV1.model_validate_json(content)
+    assert (
+        evidence.request.valuation_context.data_release_manifest_digest
+        == manifest.manifest_digest
+    )
+
+    replay = replay_calculation(
+        request,
+        CalculationArtifactV1.model_validate_json(json.dumps(result)),
+    )
+    assert replay.status == "match"
+    assert replay.dependency_versions["data_release"] == manifest.manifest_digest
+
+
+def test_production_fact_reads_require_a_pinned_release_digest():
+    snapshot = _SnapshotRepository().snapshot
+    manifest = _release_manifest_for(
+        snapshot, (_canonical_fact("fact-revenue", "revenue"),)
+    )
+    metadata = SimpleNamespace(
+        get_data_release_manifest=lambda digest: (
+            manifest if digest == manifest.manifest_digest else None
+        )
+    )
+    app = create_app(
+        snapshot_repository=_SnapshotRepository(),
+        fact_repository=_CanonicalFactRepository(),
+        metadata_store=metadata,
+        require_metadata=True,
+    )
+
+    response = TestClient(app).request(
+        "GET",
+        "/v1/data/facts",
+        headers=auth_headers(),
+        json=make_internal_envelope(
+            {
+                "contract_version": "fundamental.v1",
+                "snapshot_id": snapshot.snapshot_id,
+                "required_fields": ["revenue"],
+            }
+        ),
+    )
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "DATA_RELEASE_MANIFEST_REQUIRED"
 
 
 def test_internal_endpoints_require_signed_context_and_redact_credentials():

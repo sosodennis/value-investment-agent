@@ -258,10 +258,10 @@ publication fail-closed. The operations Compose file mounts a local-only
 development trust-root fixture and is not a production trust configuration.
 
 Serving behavior remains incomplete: there is no typed release publish or
-activation route, valuation/replay inputs do not yet carry the resolved digest,
-release-aware cache, or end-to-end fault/recovery/overlap/load evidence. These
-remain required by issue #321 and are not considered verified by these
-checkpoints.
+activation route, release-aware cache, or end-to-end fault/recovery/overlap/load
+evidence. Resolution, fact reads, calculation evidence, and offline replay now
+carry the immutable release digest and verify exact snapshot/fact membership.
+These checkpoints do not establish the remaining acceptance criteria.
 
 ## Open questions and risks
 
@@ -278,7 +278,7 @@ checkpoints.
 
 ## Next implementation step
 
-Implement typed release publication/activation boundaries and propagate the
-resolved digest into valuation and replay inputs. Keep candidate validation
-and publication outside API replica scheduling, and preserve the active
-pointer on every validation or persistence failure.
+Implement typed release publication/activation boundaries and release-aware
+cache isolation. Keep candidate validation and publication outside API replica
+scheduling, and preserve the active pointer on every validation or persistence
+failure.
