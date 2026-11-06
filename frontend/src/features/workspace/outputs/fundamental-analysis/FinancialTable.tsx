@@ -138,7 +138,7 @@ function FactRow({
             </TableCell>
             <TableCell className="whitespace-nowrap text-xs text-muted-foreground">{period}</TableCell>
             <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
-                {fact.currency ? `${fact.currency} · ` : ''}{fact.unit}{fact.scale === 0 ? '' : ` · 10^${fact.scale}`}
+                {formatFactUnit(fact)}
             </TableCell>
             <TableCell>
                 <span className={qualityClass(fact.quality)}>{fact.quality}</span>
@@ -219,6 +219,13 @@ function formatFactValue(value: FundamentalFactValue, scale: number): string {
 
 function formatLabel(value: string): string {
     return value.replaceAll('_', ' ').replace(/\b\w/g, (character) => character.toUpperCase());
+}
+
+function formatFactUnit(fact: FundamentalCanonicalFact): string {
+    const unit = fact.currency && fact.currency !== fact.unit
+        ? `${fact.currency} · ${fact.unit}`
+        : fact.unit;
+    return fact.scale === 0 ? unit : `${unit} · 10^${fact.scale}`;
 }
 
 function qualityClass(value: FundamentalCanonicalFact['quality']): string {

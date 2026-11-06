@@ -17,6 +17,22 @@ export interface EvidenceSelection {
     confidence?: string;
     artifactId?: string;
     artifactUrl?: string;
+    factId?: string;
+    concept?: string;
+    accessionNumber?: string;
+    capturedAt?: string;
+    availableAt?: string;
+    filedAt?: string;
+    parserVersion?: string;
+    taxonomyVersion?: string;
+    taxonomyManifestDigest?: string;
+    mappingVersion?: string;
+    sourceHash?: string;
+    snapshotId?: string;
+    snapshotManifestDigest?: string;
+    unit?: string;
+    scale?: number;
+    issueCodes?: string[];
 }
 
 export function buildEvidenceItems(agent: AgentInfo, viewModel: AgentOutputViewModel): EvidenceSelection[] {
@@ -172,6 +188,21 @@ function EvidenceDetail({ item }: { item: EvidenceSelection }) {
                     <EvidenceField label="Period" value={item.period} />
                     <EvidenceField label="Formula" value={item.formula} />
                     <EvidenceField label="Confidence" value={item.confidence} />
+                    <EvidenceField label="Fact ID" value={item.factId} />
+                    <EvidenceField label="Concept" value={item.concept} />
+                    <EvidenceField label="Accession" value={item.accessionNumber} />
+                    <EvidenceField label="Filed at" value={item.filedAt} />
+                    <EvidenceField label="Available at" value={item.availableAt} />
+                    <EvidenceField label="Captured at" value={item.capturedAt} />
+                    <EvidenceField label="Parser" value={item.parserVersion} />
+                    <EvidenceField label="Taxonomy" value={item.taxonomyVersion} />
+                    <EvidenceField label="Taxonomy manifest" value={item.taxonomyManifestDigest} />
+                    <EvidenceField label="Mapping" value={item.mappingVersion} />
+                    <EvidenceField label="Source hash" value={item.sourceHash} />
+                    <EvidenceField label="Snapshot" value={item.snapshotId} />
+                    <EvidenceField label="Snapshot manifest" value={item.snapshotManifestDigest} />
+                    <EvidenceField label="Unit" value={formatUnit(item.unit, item.scale)} />
+                    <EvidenceField label="Issue codes" value={item.issueCodes?.join(', ')} />
                 </dl>
                 {item.artifactUrl ? (
                     <Button asChild variant="outline" size="sm" className="justify-start">
@@ -192,6 +223,11 @@ function EvidenceField({ label, value }: { label: string; value?: string }) {
             <dd className="break-words">{value}</dd>
         </div>
     ) : null;
+}
+
+function formatUnit(unit: string | undefined, scale: number | undefined): string | undefined {
+    if (unit === undefined) return undefined;
+    return scale === undefined || scale === 0 ? unit : `${unit} · 10^${scale}`;
 }
 
 function isInspectableValue(value: unknown): value is string | number | boolean {

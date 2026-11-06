@@ -12,7 +12,6 @@ import { ValuationDistributionSection } from './ValuationDistributionSection';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
-import { EmptyState } from '@/components/ui/empty-state';
 import type { EvidenceSelection } from '../../workspace-evidence-inspector';
 
 const MODEL_LABEL_BY_TYPE: Record<string, string> = {
@@ -64,6 +63,7 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
         {}
     );
     const reports = artifactData?.financial_reports ?? previewData?.financial_reports ?? [];
+    const serviceFacts = artifactData?.fundamental_service?.facts;
     const forwardSignals: ForwardSignal[] = artifactData?.forward_signals ?? [];
     const modelTypeRaw = artifactData?.model_type;
     const modelTypeDisplay = useMemo(() => {
@@ -1354,22 +1354,22 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
                 </div>
             )}
 
-            {reports.length > 0 ? (
+            {serviceFacts ? (
                 <FinancialTable
-                    reports={reports}
-                    ticker={resolvedTicker || 'N/A'}
+                    facts={serviceFacts}
                     artifactReference={reference}
                     onSelectEvidence={onSelectEvidence}
                 />
             ) : isReferenceLoading ? (
                 <AgentLoadingState type="block" title="Loading financial reports…" />
             ) : (
-                <EmptyState
-                    className="rounded-lg bg-muted/30 px-4 py-8"
-                    icon={<BarChart3 aria-hidden="true" />}
-                    title="No financial reports available"
-                    description="The completed run did not include financial statements."
-                />
+                <Alert role="status">
+                    <BarChart3 aria-hidden="true" className="size-4 text-warning" />
+                    <AlertTitle>Fundamental facts unavailable</AlertTitle>
+                    <AlertDescription>
+                        The service did not provide a snapshot-bound fact set for this run. The report is degraded and no legacy financial table is shown.
+                    </AlertDescription>
+                </Alert>
             )}
         </div>
     );
