@@ -35,7 +35,7 @@ from .facts import (
     select_fact_groups,
 )
 from .replay import ArtifactRecordV1
-from .sec_integrity import assess_filing_response
+from .sec_integrity import assess_filing_response, extract_referenced_graphics
 from .sec_rebuild import parsed_facts_to_candidates, select_canonical_fact
 from .sec_source import SecEdgarSourceAdapter, sec_source_register
 from .serialization import sha256_digest
@@ -742,6 +742,18 @@ class SecIngestionService:
             archive_member_path = archive_root / primary_document
             normalized_path.write_bytes(assessment.normalized_content)
             archive_member_path.write_bytes(assessment.archive_member)
+            graphics = extract_referenced_graphics(
+                html_content=assessment.normalized_content,
+                archive_content=archive_source.content,
+                primary_document=primary_document,
+            )
+            for relative_path, content in graphics:
+                normalized_resource = normalized_root / relative_path
+                archive_resource = archive_root / relative_path
+                normalized_resource.parent.mkdir(parents=True, exist_ok=True)
+                archive_resource.parent.mkdir(parents=True, exist_ok=True)
+                normalized_resource.write_bytes(content)
+                archive_resource.write_bytes(content)
             for resource in dts_sources:
                 filename = Path(resource.uri).name
                 (normalized_root / filename).write_bytes(resource.content)
