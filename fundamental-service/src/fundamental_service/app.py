@@ -31,6 +31,7 @@ from .contracts import (
     SnapshotResolutionRequestV1,
     ValuationInputV1,
 )
+from .data_releases import DataReleaseTrustRootsV1
 from .facts import CanonicalFactRepository
 from .governance import ModelInventory
 from .interface.transport import (
@@ -539,9 +540,17 @@ def create_runtime_app() -> FastAPI:
     if not root_value or not database_url:
         return create_app(config=config, require_metadata=True)
     root = Path(root_value)
+    data_release_trust_roots_file = os.getenv(
+        "FUNDAMENTAL_DATA_RELEASE_TRUST_ROOTS_FILE"
+    )
     metadata_store = PostgresMetadataStore(
         database_url,
         auto_migrate=os.getenv("FUNDAMENTAL_SERVICE_AUTO_MIGRATE", "0") == "1",
+        data_release_trust_roots=(
+            DataReleaseTrustRootsV1.from_file(Path(data_release_trust_roots_file))
+            if data_release_trust_roots_file
+            else None
+        ),
     )
     trust_roots_value = os.getenv("FUNDAMENTAL_MODEL_TRUST_ROOTS_FILE")
     model_inventory = ModelInventory.from_deployment_file(

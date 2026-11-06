@@ -1,0 +1,12 @@
+{
+  "verifiers": {
+    "local-development-release-ci": {
+      "workflow_identity": "local-development-only",
+      "public_key_ed25519_base64": "W2SJycf9Dc9QVF58FkiG70BJHsBsfxsSMEF5foEXU14=",
+      "verification_suite_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    }
+  },
+  "mapping_reviewers": {
+    "local-development-reviewer": "tfkAlTGPPwRM2OQLWEJT2Gd3vmK/ByITNOX9IZnPp/c="
+  }
+}

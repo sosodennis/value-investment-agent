@@ -10,7 +10,9 @@ from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
-from fundamental_service.app import create_app
+from pydantic import ValidationError
+
+from fundamental_service.app import create_app, create_runtime_app
 from fundamental_service.application.service import (
     UncertaintyRequestV1,
     normalize_uncertainty_payload,
@@ -47,7 +49,6 @@ from fundamental_service.testsupport import (
     make_valuation,
 )
 from fundamental_service.uncertainty import UncertaintyEvidenceV1
-from pydantic import ValidationError
 
 
 def _bind_initial_policy(valuation):
@@ -1077,6 +1078,72 @@ def test_production_readiness_requires_deployment_model_trust_roots(tmp_path: Pa
     )
     configured_roots = create_app(**common, model_inventory=inventory)
     assert configured_roots.state.application.ready is True
+
+
+def test_runtime_injects_deployment_data_release_trust_roots(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
+    from fundamental_service import app as fundamental_app
+    from fundamental_service.data_releases import DataReleaseTrustRootsV1
+
+    trust_roots_file = tmp_path / "data-release-trust-roots.json"
+    trust_roots_file.write_text(
+        json.dumps(
+            {
+                "verifiers": {
+                    "release-ci": {
+                        "workflow_identity": "github://example/release.yml",
+                        "public_key_ed25519_base64": "W2SJycf9Dc9QVF58FkiG70BJHsBsfxsSMEF5foEXU14=",
+                        "verification_suite_digest": "a" * 64,
+                    }
+                },
+                "mapping_reviewers": {
+                    "reviewer-1": "tfkAlTGPPwRM2OQLWEJT2Gd3vmK/ByITNOX9IZnPp/c="
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("FUNDAMENTAL_SERVICE_DATA_ROOT", str(tmp_path / "data"))
+    monkeypatch.setenv(
+        "FUNDAMENTAL_SERVICE_DATABASE_URL",
+        "postgresql+asyncpg://fundamental:fundamental@localhost/fundamental",
+    )
+    monkeypatch.setenv(
+        "FUNDAMENTAL_DATA_RELEASE_TRUST_ROOTS_FILE", str(trust_roots_file)
+    )
+
+    captured: dict[str, object] = {}
+    monkeypatch.setattr(
+        fundamental_app,
+        "PostgresMetadataStore",
+        lambda *_, **kwargs: captured.update(kwargs) or object(),
+    )
+    monkeypatch.setattr(
+        fundamental_app.ModelInventory,
+        "from_deployment_file",
+        lambda *_args: object(),
+    )
+    for name in (
+        "PostgresSnapshotRepository",
+        "PostgresCanonicalFactRepository",
+        "PostgresContentStore",
+        "PostgresArtifactStore",
+        "MetadataModelRepository",
+        "MetadataPolicyRepository",
+        "PolicyRegistry",
+    ):
+        monkeypatch.setattr(fundamental_app, name, lambda *_args, **_kwargs: object())
+    monkeypatch.setattr(
+        fundamental_app, "build_runtime_sec_acquisition", lambda **_kwargs: object()
+    )
+    monkeypatch.setattr(fundamental_app, "create_app", lambda **kwargs: kwargs)
+
+    composed = create_runtime_app()
+
+    roots = DataReleaseTrustRootsV1.from_file(trust_roots_file)
+    assert captured["data_release_trust_roots"] == roots
+    assert composed["metadata_store"] is not None
 
 
 def test_internal_endpoints_require_signed_context_and_redact_credentials():

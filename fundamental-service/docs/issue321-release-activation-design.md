@@ -241,8 +241,19 @@ panel for this issue.
 
 ## Implementation reconciliation
 
-No implementation deviations accepted yet. Update this section when a verified
-unit changes a contract or ownership decision, including the acceptance source.
+The additive migration, immutable manifest and verification persistence,
+transactional pointer CAS, append-only activation audit, and PostgreSQL
+idempotency/concurrency checks are implemented in the current issue branch.
+Candidate persistence requires a trusted verification and independent mapping
+review signature. Runtime deployment can provide those public keys through
+`FUNDAMENTAL_DATA_RELEASE_TRUST_ROOTS_FILE`; an unset path keeps candidate
+publication fail-closed. The operations Compose file mounts a local-only
+development trust-root fixture and is not a production trust configuration.
+
+Serving behavior remains unimplemented: there is no typed release publish or
+activation route, request-level pinned release contract, release-aware cache,
+or end-to-end fault/recovery/overlap/load evidence yet. These remain required
+by issue #321 and are not considered verified by the persistence checkpoints.
 
 ## Open questions and risks
 
@@ -259,5 +270,7 @@ unit changes a contract or ownership decision, including the acceptance source.
 
 ## Next implementation step
 
-Add the additive migration and typed repository operations first, then test
-revision fencing and audit atomicity with real PostgreSQL before wiring routes.
+Implement the typed service boundary and request-level release pinning on top
+of the verified repository contract. Keep candidate validation and publication
+outside API replica scheduling, and preserve the active pointer on every
+validation or persistence failure.
