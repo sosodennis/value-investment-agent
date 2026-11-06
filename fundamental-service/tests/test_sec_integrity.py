@@ -6,7 +6,6 @@ from datetime import datetime, timezone
 from zipfile import ZIP_DEFLATED, ZipFile
 
 import pytest
-
 from fundamental_service.contracts import SourceRole
 from fundamental_service.sec_integrity import (
     assess_filing_response,
@@ -113,7 +112,34 @@ def test_terminal_edge_script_normalizes_only_with_archive_proof():
     assert result.raw_content_hash == hashlib.sha256(direct).hexdigest()
     assert result.normalized_content_hash == hashlib.sha256(member).hexdigest()
     assert len(result.removed_ranges) == 2
-    assert result.normalization_policy_id == "sec-edgar-akamai-trailing-script-v1"
+    assert result.normalization_policy_id == "sec-edgar-akamai-trailing-script-v2"
+
+
+def test_terminal_edge_script_preserves_canonical_body_closing_newline():
+    member = b"<html><body>canonical</body>\n</html>"
+    script = b'<script type="text/javascript" src="/edge/path/token"></script>'
+    direct = member[: -len(b"</body>\n</html>")] + script + b"</body>\n</html>\n"
+    raw, index, archive = _fixtures(
+        direct=direct,
+        member=member,
+        headers=(("x-akamai-transformed", "0 - 0 -"),),
+    )
+
+    result = assess_filing_response(
+        raw_response=raw, archive_index=index, archive=archive
+    )
+
+    assert result.relation == "normalized"
+    assert result.normalized_content == member
+    assert len(result.removed_ranges) == 2
+    assert tuple(
+        raw.content[item.start : item.end] for item in result.removed_ranges
+    ) == (script, b"\n")
+    assert all(
+        hashlib.sha256(raw.content[item.start : item.end]).hexdigest()
+        == item.content_hash
+        for item in result.removed_ranges
+    )
 
 
 def test_exact_archive_member_requires_exact_declared_size():

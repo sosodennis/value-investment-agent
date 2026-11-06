@@ -722,6 +722,27 @@ def test_new_internal_routes_reject_missing_or_invalid_signed_context():
     assert response.json()["error"]["code"] == "internal_context_signature_invalid"
 
 
+def test_sec_ingestion_route_requires_a_valid_signed_context():
+    client = TestClient(create_app())
+    missing_context = client.post(
+        "/v1/data/ingestions",
+        headers=auth_headers(),
+        json={"input": {}},
+    )
+    assert missing_context.status_code == 400
+    assert missing_context.json()["error"]["code"] == "invalid_request"
+
+    invalid_context = make_internal_envelope({})
+    invalid_context["context"]["signature"] = "0" * 64
+    rejected = client.post(
+        "/v1/data/ingestions",
+        headers=auth_headers(),
+        json=invalid_context,
+    )
+    assert rejected.status_code == 401
+    assert rejected.json()["error"]["code"] == "internal_context_signature_invalid"
+
+
 def test_uncertainty_endpoint_runs_the_shared_calculator():
     payload = _bind_initial_policy(make_valuation()).model_dump(mode="json")
     payload["scenarios"] = [

@@ -1,0 +1,22 @@
+services:
+  fundamental-service:
+    environment:
+      FUNDAMENTAL_SEC_USER_AGENT: ${FUNDAMENTAL_SEC_USER_AGENT:-Value Investment Agent contact@example.com}
+      FUNDAMENTAL_SERVICE_INGESTION_ORGANIZATIONS: ${FUNDAMENTAL_SERVICE_INGESTION_ORGANIZATIONS:-org-sec-ingestion-test}
+      FUNDAMENTAL_SERVICE_INGESTION_RATE_LIMIT_PER_MINUTE: ${FUNDAMENTAL_SERVICE_INGESTION_RATE_LIMIT_PER_MINUTE:-10}
+      FUNDAMENTAL_SERVICE_MAX_INGESTION_MS: ${FUNDAMENTAL_SERVICE_MAX_INGESTION_MS:-120000}
+      FUNDAMENTAL_SEC_TAXONOMY_CACHE_DIR: /run/fundamental/taxonomy-cache
+      FUNDAMENTAL_SEC_TAXONOMY_MANIFEST_ID: ${FUNDAMENTAL_SEC_TAXONOMY_MANIFEST_ID:-sec-us-gaap-2023-2024-public-bundle}
+      FUNDAMENTAL_SEC_TAXONOMY_VERSION: ${FUNDAMENTAL_SEC_TAXONOMY_VERSION:-us-gaap-2023-2024}
+      FUNDAMENTAL_SEC_TAXONOMY_CACHE_SHA256: ${FUNDAMENTAL_SEC_TAXONOMY_CACHE_SHA256:?set the verified taxonomy cache SHA-256}
+      FUNDAMENTAL_SEC_EDGAR_PLUGIN_DIR: /run/fundamental/EDGAR
+      FUNDAMENTAL_SEC_XULE_PLUGIN_DIR: /run/fundamental/xule
+      FUNDAMENTAL_SEC_DQC_RULESET_PATH: /run/fundamental/dqc-us-ruleset.zip
+      FUNDAMENTAL_SEC_EDGAR_PLUGIN_SHA256: ${FUNDAMENTAL_SEC_EDGAR_PLUGIN_SHA256:?set the verified EDGAR plugin SHA-256}
+      FUNDAMENTAL_SEC_XULE_PLUGIN_SHA256: ${FUNDAMENTAL_SEC_XULE_PLUGIN_SHA256:?set the verified XULE plugin SHA-256}
+      FUNDAMENTAL_SEC_DQC_RULESET_SHA256: ${FUNDAMENTAL_SEC_DQC_RULESET_SHA256:?set the verified DQC ruleset SHA-256}
+    volumes:
+      - ${FUNDAMENTAL_SEC_TAXONOMY_CACHE_HOST_DIR:?set a pinned offline taxonomy cache directory}:/run/fundamental/taxonomy-cache:ro
+      - ${FUNDAMENTAL_SEC_EDGAR_PLUGIN_HOST_DIR:?set a pinned EDGAR plugin directory}:/run/fundamental/EDGAR:ro
+      - ${FUNDAMENTAL_SEC_XULE_PLUGIN_HOST_DIR:?set a pinned XULE plugin directory}:/run/fundamental/xule:ro
+      - ${FUNDAMENTAL_SEC_DQC_RULESET_HOST_PATH:?set a pinned DQC ruleset file}:/run/fundamental/dqc-us-ruleset.zip:ro

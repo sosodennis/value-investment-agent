@@ -6,8 +6,8 @@ from pathlib import Path
 from zipfile import ZipFile
 
 import pytest
-
 from fundamental_service.arelle_parser import (
+    ArelleFindingV1,
     ArelleParseReportV1,
     ArelleValidationProfileV1,
     ParsedXbrlFactV1,
@@ -68,7 +68,16 @@ def _rebuild_report(content_hash: str, **kwargs: object) -> ArelleParseReportV1:
 
 def test_blocking_parser_finding_prevents_fact_rebuild():
     source = _rebuild_source("a" * 64)
-    report = _rebuild_report("a" * 64, finding_codes=("IOerror",))
+    report = _rebuild_report(
+        "a" * 64,
+        findings=(
+            ArelleFindingV1(
+                code="IOerror",
+                severity="error",
+                message="taxonomy resource is unavailable",
+            ),
+        ),
+    )
     with pytest.raises(SnapshotError) as error:
         parsed_facts_to_candidates(
             report,

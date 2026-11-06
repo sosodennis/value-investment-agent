@@ -3,6 +3,7 @@ import json
 import os
 from datetime import datetime, timezone
 from email.message import Message
+from io import BytesIO
 from pathlib import Path
 from zipfile import ZipFile
 
@@ -22,7 +23,7 @@ from fundamental_service.facts import (
     CanonicalMappingV1,
     FilesystemCanonicalFactRepository,
 )
-from fundamental_service.ingestion import SecIngestionService
+from fundamental_service.ingestion import SecIngestionService, _read_sec_xbrl_archive
 from fundamental_service.replay import ArtifactStore
 from fundamental_service.sec_source import SecEdgarSourceAdapter, SecRequestPolicy
 from fundamental_service.snapshots import (
@@ -52,12 +53,41 @@ class Response:
         return False
 
 
+def test_sec_xbrl_archive_rejects_missing_or_duplicate_required_members():
+    archive_buffer = BytesIO()
+    with ZipFile(archive_buffer, "w") as archive:
+        archive.writestr("../aapl-20240928.htm", b"unsafe path")
+        archive.writestr("aapl-20240928.xsd", b"<schema/>")
+
+    with pytest.raises(SnapshotError, match="missing an index-selected member"):
+        _read_sec_xbrl_archive(
+            archive_buffer.getvalue(),
+            primary_document="aapl-20240928.htm",
+            dts_filenames=("aapl-20240928.xsd",),
+        )
+
+    duplicate_buffer = BytesIO()
+    with pytest.warns(UserWarning, match="Duplicate name"):
+        with ZipFile(duplicate_buffer, "w") as archive:
+            archive.writestr("aapl-20240928.htm", b"canonical")
+            archive.writestr("aapl-20240928.htm", b"challenge-polluted")
+            archive.writestr("aapl-20240928.xsd", b"<schema/>")
+    with pytest.raises(SnapshotError, match="repeats a member name"):
+        _read_sec_xbrl_archive(
+            duplicate_buffer.getvalue(),
+            primary_document="aapl-20240928.htm",
+            dts_filenames=("aapl-20240928.xsd",),
+        )
+
+
 def test_sec_ingestion_connects_adapter_snapshot_parser_and_fact_selection(
     tmp_path: Path,
     monkeypatch,
 ):
     fixture_root = Path(__file__).parent / "fixtures" / "sec-edgar"
-    filing_bytes = (fixture_root / "apple-2024-original-aapl-20240928.htm").read_bytes()
+    direct_filing_bytes = (
+        fixture_root / "apple-2024-original-aapl-20240928.htm"
+    ).read_bytes()
     archive_path = fixture_root / "apple-2024-original-0000320193-24-000123-xbrl.zip"
     archive_bytes = archive_path.read_bytes()
     with ZipFile(archive_path) as archive:
@@ -72,6 +102,7 @@ def test_sec_ingestion_connects_adapter_snapshot_parser_and_fact_selection(
                 "aapl-20240928_cal.xml",
             )
         }
+    filing_bytes = direct_filing_bytes
     index_bytes = json.dumps(
         {
             "directory": {
@@ -198,6 +229,7 @@ def test_sec_ingestion_connects_adapter_snapshot_parser_and_fact_selection(
         cik="0000320193",
         accession_number="0000320193-24-000123",
         primary_document="aapl-20240928.htm",
+        filing_archive_filename="0000320193-24-000123-xbrl.zip",
         filed_at=datetime(2024, 11, 1, 10, 1, 36, tzinfo=timezone.utc),
         captured_at=datetime(2026, 11, 4, tzinfo=timezone.utc),
         valuation_timestamp=datetime(2025, 1, 1, tzinfo=timezone.utc),
@@ -205,6 +237,7 @@ def test_sec_ingestion_connects_adapter_snapshot_parser_and_fact_selection(
         policy_version="source-policy-v1",
         taxonomy_manifest_id="taxonomy-manifest-v1",
         taxonomy_version="us-gaap-2024",
+        acquisition_key="a" * 64,
         taxonomy_cache_dir=taxonomy_cache,
         normalized_field="revenue",
         dts_filenames=tuple(dts_bytes),
@@ -224,13 +257,30 @@ def test_sec_ingestion_connects_adapter_snapshot_parser_and_fact_selection(
     )
     result = service.ingest_filing(**ingestion_args)
     assert result.snapshot.snapshot_id
+    assert (
+        result.snapshot.validation_profile_id
+        == result.parser_report.validation_profile.profile_id
+    )
+    assert (
+        result.snapshot.validation_profile_digest
+        == result.parser_report.validation_profile_digest
+    )
+    assert result.snapshot.acquisition_key == "a" * 64
     filing_record = next(
         record
         for record in result.snapshot.source_records
         if record.source_id == "sec-filing"
     )
+    archive_record = next(
+        record
+        for record in result.snapshot.source_records
+        if record.source_id == "sec-filing-archive"
+    )
     assert result.parser_report.source_content_hash == filing_record.parser_input_hash
     assert result.parser_report.source_content_hash != filing_record.content_hash
+    assert filing_record.content_hash == hashlib.sha256(filing_bytes).hexdigest()
+    assert archive_record.content_hash == hashlib.sha256(archive_bytes).hexdigest()
+    assert filing_record.uri.endswith("/aapl-20240928.htm")
     assert result.selection.fact is not None
     assert result.selection.fact.quality.value == "verified"
     assert result.integrity_evidence.integrity_relation == "normalized"
@@ -492,14 +542,23 @@ def test_sec_ingestion_publishes_real_verified_microsoft_fixture(
         / "microsoft-2024-original-xbrl-test-package.zip"
     )
     with ZipFile(fixture) as archive:
-        filing_bytes = archive.read("msft-20240630.htm")
+        archive_member = archive.read("msft-20240630.htm")
         xsd_bytes = archive.read("msft-20240630.xsd")
+    edge_script = b'<script type="text/javascript"  src="/edge/path/token"></script>'
+    filing_bytes = (
+        archive_member[: -len(b"</body>\n</html>")]
+        + edge_script
+        + b"</body>\n</html>\n"
+    )
     archive_bytes = fixture.read_bytes()
     index_bytes = json.dumps(
         {
             "directory": {
                 "item": [
-                    {"name": "msft-20240630.htm", "size": str(len(filing_bytes))},
+                    {
+                        "name": "msft-20240630.htm",
+                        "size": str(len(archive_member) + 1),
+                    },
                     {
                         "name": "0000950170-24-087843-xbrl.zip",
                         "size": str(len(archive_bytes)),
@@ -588,8 +647,12 @@ def test_sec_ingestion_publishes_real_verified_microsoft_fixture(
     assert result.selection.fact is not None
     assert result.selection.fact.quality.value == "verified"
     assert result.snapshot.sec_integrity_evidence is not None
-    assert result.integrity_evidence.integrity_relation == "exact"
-    assert result.integrity_evidence.normalization_policy_id is None
+    assert result.integrity_evidence.integrity_relation == "normalized"
+    assert (
+        result.integrity_evidence.normalization_policy_id
+        == "sec-edgar-akamai-trailing-script-v2"
+    )
+    assert len(result.integrity_evidence.removed_ranges) == 2
     assert result.integrity_evidence.network_attempt_count == 0
     assert result.integrity_evidence.archive_hash
 
@@ -601,6 +664,12 @@ def test_sec_ingestion_publishes_real_verified_microsoft_fixture(
             result.integrity_evidence.raw_content_hash, media_type="text/html"
         )
         == filing_bytes
+    )
+    assert (
+        content_store.get(
+            result.integrity_evidence.normalized_content_hash, media_type="text/html"
+        )
+        == archive_member
     )
     assert (
         content_store.get(
@@ -672,4 +741,10 @@ def _microsoft_ingestion_response(
         )
     if filename == "msft-20240630.xsd":
         return Response(xsd_bytes, headers={"Content-Type": "application/xml"})
-    return Response(filing_bytes, headers={"Content-Type": "text/html"})
+    return Response(
+        filing_bytes,
+        headers={
+            "Content-Type": "text/html",
+            "X-Akamai-Transformed": "0 - 0 -",
+        },
+    )

@@ -5,17 +5,16 @@ from __future__ import annotations
 import json
 import re
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, replace
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from email.utils import parsedate_to_datetime
-from typing import Callable
 from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
 from urllib.parse import urlsplit
+from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 from .contracts import SourceRole
 from .snapshots import CapturedSource, LegalSource, SnapshotError, SourceRegister
-
 
 SEC_TERMS = "https://www.sec.gov/submit-filings/about-edgar-filer-access"
 _RETAINED_RESPONSE_HEADERS = frozenset(
@@ -42,7 +41,7 @@ class SecRequestPolicy:
     min_interval_seconds: float = 0.11
     max_attempts: int = 3
     timeout_seconds: float = 30.0
-    max_response_bytes: int = 32 * 1024 * 1024
+    max_response_bytes: int = 24_000_000
     base_url: str = "https://data.sec.gov"
 
     def __post_init__(self) -> None:
@@ -76,18 +75,32 @@ class _SecResponse:
     declared_size: int | None
 
 
+class _NoRedirectHandler(HTTPRedirectHandler):
+    """Keep provider redirects visible to the SEC allowlist boundary."""
+
+    def redirect_request(self, *_args: object, **_kwargs: object) -> None:
+        return None
+
+
+_SEC_OPENER = build_opener(_NoRedirectHandler())
+
+
+def _open_sec(request: Request, *, timeout: float) -> object:
+    return _SEC_OPENER.open(request, timeout=timeout)
+
+
 def sec_source_register() -> SourceRegister:
     """Return the allowlist for the public SEC JSON and filing resources."""
     return SourceRegister(
         (
             LegalSource("sec-companyfacts", SourceRole.FACTS, SEC_TERMS, "indefinite"),
             LegalSource(
-                "sec-submissions", SourceRole.REFERENCE, SEC_TERMS, "indefinite"
+                "sec-submissions", SourceRole.ACQUISITION, SEC_TERMS, "indefinite"
             ),
-            LegalSource("sec-filing", SourceRole.FILING, SEC_TERMS, "indefinite"),
             LegalSource(
                 "sec-filing-index", SourceRole.REFERENCE, SEC_TERMS, "indefinite"
             ),
+            LegalSource("sec-filing", SourceRole.FILING, SEC_TERMS, "indefinite"),
             LegalSource(
                 "sec-filing-archive", SourceRole.FILING, SEC_TERMS, "indefinite"
             ),
@@ -122,37 +135,93 @@ class SecEdgarSourceAdapter:
         self,
         policy: SecRequestPolicy,
         *,
-        opener: Callable[..., object] = urlopen,
+        opener: Callable[..., object] | None = None,
         sleep: Callable[[float], None] = time.sleep,
+        request_slot: Callable[[float], float] | None = None,
         clock: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
     ) -> None:
         self.policy = policy
-        self._opener = opener
+        self._opener = opener or _open_sec
         self._sleep = sleep
+        self._request_slot = request_slot
         self._clock = clock
         self._last_request_at: float | None = None
 
-    def _request(self, uri: str) -> _SecResponse:
+    def _request(
+        self, uri: str, *, deadline_at: datetime | None = None
+    ) -> _SecResponse:
         last_error: Exception | None = None
         for attempt in range(self.policy.max_attempts):
-            if self._last_request_at is not None:
+            remaining = (
+                None
+                if deadline_at is None
+                else (deadline_at - datetime.now(timezone.utc)).total_seconds()
+            )
+            if remaining is not None and remaining <= 0:
+                raise SecSourceError(
+                    "REQUEST_DEADLINE_EXCEEDED",
+                    "SEC acquisition deadline expired",
+                    retryable=True,
+                )
+            if self._request_slot is not None:
+                delay = self._request_slot(self.policy.min_interval_seconds)
+            elif self._last_request_at is not None:
                 elapsed = time.monotonic() - self._last_request_at
-                if elapsed < self.policy.min_interval_seconds:
-                    self._sleep(self.policy.min_interval_seconds - elapsed)
+                delay = max(0.0, self.policy.min_interval_seconds - elapsed)
+            else:
+                delay = 0.0
+            if remaining is not None and delay >= remaining:
+                raise SecSourceError(
+                    "REQUEST_DEADLINE_EXCEEDED",
+                    "SEC request pacing exceeds the remaining deadline",
+                    retryable=True,
+                )
+            if delay > 0:
+                self._sleep(delay)
+                if deadline_at is not None:
+                    remaining = (
+                        deadline_at - datetime.now(timezone.utc)
+                    ).total_seconds()
+                    if remaining <= 0:
+                        raise SecSourceError(
+                            "REQUEST_DEADLINE_EXCEEDED",
+                            "SEC acquisition deadline expired",
+                            retryable=True,
+                        )
             request = Request(
                 uri,
                 headers={
                     "User-Agent": self.policy.user_agent,
-                    "Accept": "application/json, text/html, application/xml",
+                    "Accept": ", ".join(
+                        (
+                            "application/json",
+                            "text/html",
+                            "application/xml",
+                            "application/zip",
+                            "application/octet-stream",
+                        )
+                    ),
                 },
             )
             self._last_request_at = time.monotonic()
             try:
                 with self._opener(
-                    request, timeout=self.policy.timeout_seconds
+                    request,
+                    timeout=min(
+                        self.policy.timeout_seconds,
+                        remaining
+                        if remaining is not None
+                        else self.policy.timeout_seconds,
+                    ),
                 ) as response:
-                    payload = self._read_bounded(response)
                     status = int(getattr(response, "status", 200))
+                    if status in {301, 302, 303, 307, 308}:
+                        raise SecSourceError(
+                            "SOURCE_REDIRECT_NOT_ALLOWED",
+                            "SEC source redirects are not permitted",
+                            retryable=False,
+                        )
+                    payload = self._read_bounded(response, deadline_at)
                     media_type = response.headers.get_content_type()
                     available_at = self._clock()
                     response_headers = tuple(
@@ -182,6 +251,12 @@ class SecEdgarSourceAdapter:
                         declared_size=declared_size,
                     )
             except HTTPError as error:
+                if error.code in {301, 302, 303, 307, 308}:
+                    raise SecSourceError(
+                        "SOURCE_REDIRECT_NOT_ALLOWED",
+                        "SEC source redirects are not permitted",
+                        retryable=False,
+                    ) from error
                 last_error = error
                 retryable = error.code == 429 or 500 <= error.code < 600
                 if not retryable or attempt + 1 >= self.policy.max_attempts:
@@ -196,7 +271,9 @@ class SecEdgarSourceAdapter:
                         retryable=retryable,
                     ) from error
                 delay = _parse_retry_after(error.headers.get("Retry-After"))
-                self._sleep(delay if delay is not None else 2**attempt)
+                self._sleep_with_deadline(
+                    delay if delay is not None else 2**attempt, deadline_at
+                )
             except (URLError, TimeoutError, OSError) as error:
                 last_error = error
                 if attempt + 1 >= self.policy.max_attempts:
@@ -205,16 +282,22 @@ class SecEdgarSourceAdapter:
                         "SEC request failed after retries",
                         retryable=True,
                     ) from error
-                self._sleep(2**attempt)
+                self._sleep_with_deadline(2**attempt, deadline_at)
         raise SecSourceError(
             "SOURCE_UNAVAILABLE", "SEC request failed", retryable=True
         ) from last_error
 
-    def _read_bounded(self, response: object) -> bytes:
+    def _read_bounded(self, response: object, deadline_at: datetime | None) -> bytes:
         read = getattr(response, "read")
         chunks: list[bytes] = []
         total = 0
         while True:
+            if deadline_at is not None and datetime.now(timezone.utc) >= deadline_at:
+                raise SecSourceError(
+                    "REQUEST_DEADLINE_EXCEEDED",
+                    "SEC response exceeded the request deadline",
+                    retryable=True,
+                )
             try:
                 chunk = read(
                     min(1024 * 1024, self.policy.max_response_bytes + 1 - total)
@@ -225,6 +308,7 @@ class SecEdgarSourceAdapter:
                     raise SecSourceError(
                         "SOURCE_RESPONSE_TOO_LARGE",
                         "SEC response exceeds the configured evidence limit",
+                        retryable=False,
                     )
                 return chunk
             if not chunk:
@@ -235,7 +319,21 @@ class SecEdgarSourceAdapter:
                 raise SecSourceError(
                     "SOURCE_RESPONSE_TOO_LARGE",
                     "SEC response exceeds the configured evidence limit",
+                    retryable=False,
                 )
+
+    def _sleep_with_deadline(
+        self, delay_seconds: float, deadline_at: datetime | None
+    ) -> None:
+        if deadline_at is not None:
+            remaining = (deadline_at - datetime.now(timezone.utc)).total_seconds()
+            if remaining <= delay_seconds:
+                raise SecSourceError(
+                    "REQUEST_DEADLINE_EXCEEDED",
+                    "SEC retry delay exceeds the request deadline",
+                    retryable=True,
+                )
+        self._sleep(delay_seconds)
 
     def capture_json(
         self,
@@ -243,6 +341,7 @@ class SecEdgarSourceAdapter:
         source_id: str,
         uri: str,
         captured_at: datetime | None = None,
+        deadline_at: datetime | None = None,
     ) -> CapturedSource:
         if source_id not in {
             "sec-companyfacts",
@@ -276,7 +375,7 @@ class SecEdgarSourceAdapter:
                 "SOURCE_URI_NOT_ALLOWED",
                 f"URI is outside the registered {source_id} endpoint",
             )
-        response = self._request(uri)
+        response = self._request(uri, deadline_at=deadline_at)
         payload = response.content
         try:
             json.loads(payload)
@@ -316,7 +415,11 @@ class SecEdgarSourceAdapter:
         )
 
     def capture_submissions(
-        self, cik: str, *, captured_at: datetime | None = None
+        self,
+        cik: str,
+        *,
+        captured_at: datetime | None = None,
+        deadline_at: datetime | None = None,
     ) -> CapturedSource:
         normalized = cik.strip().lstrip("0") or "0"
         if not normalized.isdigit() or len(normalized) > 10:
@@ -325,6 +428,7 @@ class SecEdgarSourceAdapter:
             source_id="sec-submissions",
             uri=f"{self.policy.base_url}/submissions/CIK{int(normalized):010d}.json",
             captured_at=captured_at,
+            deadline_at=deadline_at,
         )
 
     def capture_filing(
@@ -339,6 +443,9 @@ class SecEdgarSourceAdapter:
         is_amendment: bool = False,
         amends_accession: str | None = None,
         amendment_scope: str | None = None,
+        accepted_at: datetime | None = None,
+        filing_date: date | None = None,
+        deadline_at: datetime | None = None,
     ) -> CapturedSource:
         normalized = cik.strip().lstrip("0") or "0"
         accession_path = accession_number.replace("-", "")
@@ -349,7 +456,7 @@ class SecEdgarSourceAdapter:
         if not re.fullmatch(r"[A-Za-z0-9_.-]{1,200}", primary_document):
             raise ValueError("primary document must be a simple SEC archive filename")
         uri = f"https://www.sec.gov/Archives/edgar/data/{int(normalized)}/{accession_path}/{primary_document}"
-        response = self._request(uri)
+        response = self._request(uri, deadline_at=deadline_at)
         payload = response.content
         return CapturedSource(
             source_id="sec-filing",
@@ -358,7 +465,62 @@ class SecEdgarSourceAdapter:
             content=payload,
             media_type=response.media_type or "text/html",
             http_status=response.http_status,
-            available_at=filed_at,
+            available_at=accepted_at or filed_at,
+            captured_at=captured_at or response.available_at,
+            publication_at=filed_at,
+            filed_at=filed_at,
+            filing_date=filing_date,
+            accession_number=accession_number,
+            form=form,
+            filing_version=accession_number,
+            is_amendment=is_amendment,
+            amends_accession=amends_accession,
+            amendment_scope=amendment_scope,
+            response_headers=response.response_headers,
+            declared_size=response.declared_size,
+            received_size=len(response.content),
+        )
+
+    def capture_filing_archive(
+        self,
+        *,
+        cik: str,
+        accession_number: str,
+        filed_at: datetime,
+        filename: str | None = None,
+        captured_at: datetime | None = None,
+        form: str = "10-K",
+        is_amendment: bool = False,
+        amends_accession: str | None = None,
+        amendment_scope: str | None = None,
+        accepted_at: datetime | None = None,
+        deadline_at: datetime | None = None,
+    ) -> CapturedSource:
+        """Capture the accession-matched SEC XBRL archive as immutable evidence."""
+        normalized = cik.strip().lstrip("0") or "0"
+        accession_path = accession_number.replace("-", "")
+        if not normalized.isdigit() or len(normalized) > 10:
+            raise ValueError("CIK must be numeric and at most ten digits")
+        if not accession_path.isdigit() or len(accession_path) != 18:
+            raise ValueError("accession number must be in SEC accession format")
+        expected_filename = f"{accession_number}-xbrl.zip"
+        if filename is None:
+            filename = expected_filename
+        if filename != expected_filename:
+            raise ValueError("filing archive must match the SEC accession number")
+        uri = (
+            f"https://www.sec.gov/Archives/edgar/data/{int(normalized)}/"
+            f"{accession_path}/{filename}"
+        )
+        response = self._request(uri, deadline_at=deadline_at)
+        return CapturedSource(
+            source_id="sec-filing-archive",
+            uri=uri,
+            role=SourceRole.FILING,
+            content=response.content,
+            media_type=response.media_type or "application/zip",
+            http_status=response.http_status,
+            available_at=accepted_at or filed_at,
             captured_at=captured_at or response.available_at,
             publication_at=filed_at,
             filed_at=filed_at,
@@ -368,47 +530,6 @@ class SecEdgarSourceAdapter:
             is_amendment=is_amendment,
             amends_accession=amends_accession,
             amendment_scope=amendment_scope,
-            response_headers=response.response_headers,
-            declared_size=response.declared_size,
-            received_size=len(payload),
-        )
-
-    def capture_filing_archive(
-        self,
-        *,
-        cik: str,
-        accession_number: str,
-        filed_at: datetime,
-        captured_at: datetime | None = None,
-        form: str = "10-K",
-    ) -> CapturedSource:
-        """Capture the accession-matched SEC XBRL archive as immutable evidence."""
-        normalized = cik.strip().lstrip("0") or "0"
-        accession_path = accession_number.replace("-", "")
-        if not normalized.isdigit() or len(normalized) > 10:
-            raise ValueError("CIK must be numeric and at most ten digits")
-        if not accession_path.isdigit() or len(accession_path) != 18:
-            raise ValueError("accession number must be in SEC accession format")
-        filename = f"{accession_number}-xbrl.zip"
-        uri = (
-            f"https://www.sec.gov/Archives/edgar/data/{int(normalized)}/"
-            f"{accession_path}/{filename}"
-        )
-        response = self._request(uri)
-        return CapturedSource(
-            source_id="sec-filing-archive",
-            uri=uri,
-            role=SourceRole.FILING,
-            content=response.content,
-            media_type=response.media_type or "application/zip",
-            http_status=response.http_status,
-            available_at=filed_at,
-            captured_at=captured_at or response.available_at,
-            publication_at=filed_at,
-            filed_at=filed_at,
-            accession_number=accession_number,
-            form=form,
-            filing_version=accession_number,
             response_headers=response.response_headers,
             declared_size=response.declared_size,
             received_size=len(response.content),
@@ -422,12 +543,14 @@ class SecEdgarSourceAdapter:
         filename: str,
         role: SourceRole = SourceRole.TAXONOMY,
         filed_at: datetime | None = None,
+        filing_date: date | None = None,
         taxonomy_manifest_id: str | None = None,
         form: str = "XBRL-DTS",
         is_amendment: bool = False,
         amends_accession: str | None = None,
         amendment_scope: str | None = None,
         captured_at: datetime | None = None,
+        deadline_at: datetime | None = None,
     ) -> CapturedSource:
         """Capture a DTS/XBRL resource declared in the SEC filing index."""
         normalized = cik.strip().lstrip("0") or "0"
@@ -444,7 +567,7 @@ class SecEdgarSourceAdapter:
         )
         if role not in {SourceRole.FILING, SourceRole.TAXONOMY}:
             raise ValueError("SEC filing resources must be filing or taxonomy records")
-        response = self._request(uri)
+        response = self._request(uri, deadline_at=deadline_at)
         payload = response.content
         available_at = filed_at or response.available_at
         return CapturedSource(
@@ -457,6 +580,7 @@ class SecEdgarSourceAdapter:
             available_at=available_at,
             captured_at=captured_at or response.available_at,
             publication_at=available_at,
+            filing_date=filing_date,
             accession_number=accession_number,
             form=form,
             filed_at=filed_at,
@@ -475,6 +599,7 @@ class SecEdgarSourceAdapter:
         *,
         cik: str,
         accession_number: str,
+        deadline_at: datetime | None = None,
         filed_at: datetime | None = None,
         captured_at: datetime | None = None,
     ) -> CapturedSource:
@@ -489,6 +614,7 @@ class SecEdgarSourceAdapter:
             source_id="sec-filing-index",
             uri=f"https://www.sec.gov/Archives/edgar/data/{int(normalized)}/{accession_path}/index.json",
             captured_at=captured_at,
+            deadline_at=deadline_at,
         )
         if filed_at is None:
             return source

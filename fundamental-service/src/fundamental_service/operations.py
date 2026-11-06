@@ -31,12 +31,14 @@ class ServiceError(RuntimeError):
         *,
         status_code: int,
         retryable: bool,
+        retry_after_ms: int | None = None,
     ) -> None:
         super().__init__(message)
         self.code = code
         self.message = message
         self.status_code = status_code
         self.retryable = retryable
+        self.retry_after_ms = retry_after_ms
 
 
 @dataclass(frozen=True)
@@ -48,7 +50,10 @@ class OperationsConfig:
     max_calculation_samples: int = 10_000
     max_forecast_periods: int = 30
     max_request_ms: int = 5_000
+    max_ingestion_ms: int = 120_000
     rate_limit_per_minute: int = 120
+    ingestion_rate_limit_per_minute: int = 10
+    ingestion_authorized_organizations: frozenset[str] = frozenset()
 
     @classmethod
     def testing(cls) -> OperationsConfig:
@@ -83,8 +88,19 @@ class OperationsConfig:
                 "FUNDAMENTAL_SERVICE_MAX_FORECAST_PERIODS", 30
             ),
             max_request_ms=integer("FUNDAMENTAL_SERVICE_MAX_REQUEST_MS", 5_000),
+            max_ingestion_ms=integer("FUNDAMENTAL_SERVICE_MAX_INGESTION_MS", 120_000),
             rate_limit_per_minute=integer(
                 "FUNDAMENTAL_SERVICE_RATE_LIMIT_PER_MINUTE", 120
+            ),
+            ingestion_rate_limit_per_minute=integer(
+                "FUNDAMENTAL_SERVICE_INGESTION_RATE_LIMIT_PER_MINUTE", 10
+            ),
+            ingestion_authorized_organizations=frozenset(
+                item.strip()
+                for item in os.getenv(
+                    "FUNDAMENTAL_SERVICE_INGESTION_ORGANIZATIONS", ""
+                ).split(",")
+                if item.strip()
             ),
         )
 
@@ -178,7 +194,12 @@ def correlation_id(request: Request) -> str:
     return str(uuid4())
 
 
-def enforce_deadline(deadline_at: datetime, config: OperationsConfig) -> datetime:
+def enforce_deadline(
+    deadline_at: datetime,
+    config: OperationsConfig,
+    *,
+    max_request_ms: int | None = None,
+) -> datetime:
     """Validate the caller's absolute deadline without restarting its budget."""
     now = datetime.now(UTC)
     if deadline_at <= now:
@@ -190,7 +211,8 @@ def enforce_deadline(deadline_at: datetime, config: OperationsConfig) -> datetim
         )
     # Keep a local process budget while preserving the original absolute context
     # deadline for downstream propagation and response correlation.
-    return min(deadline_at, now + timedelta(milliseconds=config.max_request_ms))
+    budget_ms = config.max_request_ms if max_request_ms is None else max_request_ms
+    return min(deadline_at, now + timedelta(milliseconds=budget_ms))
 
 
 def guard_body_size(request: Request, config: OperationsConfig) -> None:

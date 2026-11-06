@@ -6,7 +6,7 @@ import hashlib
 import os
 import tempfile
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from typing import Protocol
 
@@ -257,9 +257,11 @@ class CapturedSource:
     media_type: str
     http_status: int
     available_at: datetime
+    captured_at: datetime | None = None
     publication_at: datetime | None = None
     accession_number: str | None = None
     form: str | None = None
+    filing_date: date | None = None
     filed_at: datetime | None = None
     filing_version: str | None = None
     is_amendment: bool = False
@@ -267,7 +269,6 @@ class CapturedSource:
     supersedes_accession: str | None = None
     amendment_scope: str | None = None
     taxonomy_manifest_id: str | None = None
-    captured_at: datetime | None = None
     response_headers: tuple[tuple[str, str], ...] = ()
     declared_size: int | None = None
     received_size: int | None = None
@@ -294,6 +295,10 @@ class SnapshotBuilder:
         policy_version: str,
         sources: tuple[CapturedSource, ...],
         taxonomy_manifest_id: str | None = None,
+        acquisition_key: str | None = None,
+        validation_profile_id: str | None = None,
+        validation_profile_digest: str | None = None,
+        additional_issues: tuple[IssueV1, ...] = (),
         sec_integrity_evidence: SecIntegrityEvidenceV1 | None = None,
     ) -> SourceSnapshotV1:
         snapshot = self.prepare(
@@ -304,6 +309,10 @@ class SnapshotBuilder:
             policy_version=policy_version,
             sources=sources,
             taxonomy_manifest_id=taxonomy_manifest_id,
+            acquisition_key=acquisition_key,
+            validation_profile_id=validation_profile_id,
+            validation_profile_digest=validation_profile_digest,
+            additional_issues=additional_issues,
             sec_integrity_evidence=sec_integrity_evidence,
         )
         self.publish(snapshot)
@@ -319,6 +328,10 @@ class SnapshotBuilder:
         policy_version: str,
         sources: tuple[CapturedSource, ...],
         taxonomy_manifest_id: str | None = None,
+        acquisition_key: str | None = None,
+        validation_profile_id: str | None = None,
+        validation_profile_digest: str | None = None,
+        additional_issues: tuple[IssueV1, ...] = (),
         sec_integrity_evidence: SecIntegrityEvidenceV1 | None = None,
     ) -> SourceSnapshotV1:
         """Persist source bytes and prepare a manifest without publishing it."""
@@ -335,8 +348,21 @@ class SnapshotBuilder:
                     "SNAPSHOT_TIMESTAMP_TIMEZONE_REQUIRED",
                     f"{timestamp_name} must include a timezone",
                 )
+        source_capture_times = [captured_at]
+        for source in sources:
+            source_captured_at = source.captured_at or captured_at
+            if (
+                source_captured_at.tzinfo is None
+                or source_captured_at.utcoffset() is None
+            ):
+                raise SnapshotError(
+                    "SOURCE_TIMESTAMP_TIMEZONE_REQUIRED",
+                    "captured_at must include a timezone",
+                )
+            source_capture_times.append(source_captured_at)
+        snapshot_captured_at = max(source_capture_times)
         records: list[SourceRecordV1] = []
-        issues: list[IssueV1] = []
+        issues: list[IssueV1] = list(additional_issues)
         for source in sources:
             if self.source_register is None:
                 raise SnapshotError(
@@ -356,7 +382,7 @@ class SnapshotBuilder:
                         "SOURCE_TIMESTAMP_TIMEZONE_REQUIRED",
                         f"{timestamp_name} must include a timezone",
                     )
-            if source.available_at > captured_at:
+            if source.available_at > snapshot_captured_at:
                 issues.append(
                     IssueV1(
                         code="SOURCE_CAPTURE_ORDER",
@@ -399,7 +425,7 @@ class SnapshotBuilder:
                     uri=source.uri,
                     role=source.role,
                     available_at=source.available_at,
-                    captured_at=source.captured_at or captured_at,
+                    captured_at=source.captured_at or snapshot_captured_at,
                     publication_at=source.publication_at,
                     http_status=source.http_status,
                     media_type=source.media_type,
@@ -414,6 +440,7 @@ class SnapshotBuilder:
                     parser_version=parser_version,
                     accession_number=source.accession_number,
                     form=source.form,
+                    filing_date=source.filing_date,
                     filed_at=source.filed_at,
                     filing_version=source.filing_version,
                     is_amendment=source.is_amendment,
@@ -438,8 +465,11 @@ class SnapshotBuilder:
             "valuation_timestamp": valuation_timestamp,
             "parser_version": parser_version,
             "policy_version": policy_version,
-            "captured_at": captured_at,
+            "captured_at": snapshot_captured_at,
             "taxonomy_manifest_id": taxonomy_manifest_id,
+            "acquisition_key": acquisition_key,
+            "validation_profile_id": validation_profile_id,
+            "validation_profile_digest": validation_profile_digest,
             "sec_integrity_evidence": sec_integrity_evidence,
             "sources": [
                 record.model_dump(exclude={"captured_at"}) for record in records
@@ -447,7 +477,11 @@ class SnapshotBuilder:
         }
         snapshot_id = f"snapshot-{sha256_digest(identity_payload)[:32]}"
         coverage_status = QualityStatus.VERIFIED
-        if any(record.available_at > valuation_timestamp for record in records):
+        if any(
+            record.role is not SourceRole.ACQUISITION
+            and record.available_at > valuation_timestamp
+            for record in records
+        ):
             coverage_status = QualityStatus.PROVISIONAL
             issues.append(
                 IssueV1(
@@ -459,6 +493,8 @@ class SnapshotBuilder:
                     ),
                 )
             )
+        if any(issue.severity is Severity.WARNING for issue in issues):
+            coverage_status = QualityStatus.PROVISIONAL
         if any(issue.severity in {Severity.ERROR, Severity.FATAL} for issue in issues):
             coverage_status = QualityStatus.ABSTAIN
         snapshot = SourceSnapshotV1(
@@ -466,9 +502,12 @@ class SnapshotBuilder:
             snapshot_id=snapshot_id,
             identity=identity,
             valuation_timestamp=valuation_timestamp,
-            captured_at=captured_at,
+            captured_at=snapshot_captured_at,
             source_records=tuple(records),
             taxonomy_manifest_id=taxonomy_manifest_id,
+            acquisition_key=acquisition_key,
+            validation_profile_id=validation_profile_id,
+            validation_profile_digest=validation_profile_digest,
             parser_version=parser_version,
             policy_version=policy_version,
             coverage_status=coverage_status,
@@ -479,9 +518,12 @@ class SnapshotBuilder:
                     "contract_version": "fundamental.v1",
                     "identity": identity,
                     "valuation_timestamp": valuation_timestamp,
-                    "captured_at": captured_at,
+                    "captured_at": snapshot_captured_at,
                     "source_records": records,
                     "taxonomy_manifest_id": taxonomy_manifest_id,
+                    "acquisition_key": acquisition_key,
+                    "validation_profile_id": validation_profile_id,
+                    "validation_profile_digest": validation_profile_digest,
                     "parser_version": parser_version,
                     "policy_version": policy_version,
                     "coverage_status": coverage_status,
@@ -523,5 +565,7 @@ def select_available_sources(snapshot: SourceSnapshotV1) -> tuple[SourceRecordV1
     return tuple(
         record
         for record in snapshot.source_records
-        if record.available_at <= snapshot.valuation_timestamp
+        if record.role is not SourceRole.ACQUISITION
+        and record.point_in_time_relevant
+        and record.available_at <= snapshot.valuation_timestamp
     )
