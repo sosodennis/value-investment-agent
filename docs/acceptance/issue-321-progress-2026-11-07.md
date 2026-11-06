@@ -7,16 +7,35 @@ This record covers the immutable release activation work on branch
 
 - Issue: #321
 - Pull request: not opened at this checkpoint
-- Base: `origin/main` at `eb4cdd5c597e08743aaaf845c4ed27227b9dff5a`
-- Code checkpoint: `3dbd2ab8fd49f61df866744568860345239c4cad`
-- Evidence document is added after that code checkpoint. Docs-only changes do
-  not change the tested Python behavior.
+- Base: `origin/main` at `4727b9194bd50825869b4737e47daeb109cbd41f`
+- Current synchronization checkpoint: `f900b973` (merge of the issue branch
+  with the latest `origin/main`)
+- Current verification checkpoint: pending the remaining PostgreSQL, Docker,
+  concurrency, recovery, and live acceptance checks below.
 - Release trust-root fixture SHA-256:
   `98d739b587416a41f2dd9efab04f83e244c7fc303cff64d8152041e44dbfeb34`
 - Canary runner source SHA-256:
   `59309c4bc990ff1b9f5de93efd07e07fbd58c212c31097575927b8c79a726b90`
 
 ## Automated checks
+
+### Current synchronization checkpoint
+
+At `f900b973`, the following command exited 0:
+
+```text
+uv run pytest tests/test_release_runner.py tests/test_api.py tests/test_replay.py tests/test_data_release_attestations.py
+58 passed, 1 existing Starlette/httpx deprecation warning
+```
+
+The Compose configuration also passed `docker compose ... config --quiet` for
+the dedicated project `value-investment-agent-321-release-verify`.
+
+The remaining checks must be rerun against the final issue commit before a PR
+is opened. The older results below are retained as historical checkpoints and
+are not being reused as exact-head acceptance evidence.
+
+### Historical checkpoint
 
 The following commands were run at the code checkpoint. Each command exited 0.
 
