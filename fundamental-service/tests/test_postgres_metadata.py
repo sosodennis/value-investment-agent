@@ -1,9 +1,9 @@
 from __future__ import annotations
 
+import base64
 import multiprocessing
 import os
 import time
-import base64
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
@@ -16,6 +16,9 @@ from uuid import uuid4
 import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from fastapi.testclient import TestClient
+from sqlalchemy import text
+from sqlalchemy.exc import DBAPIError
+
 from fundamental_service.app import create_app
 from fundamental_service.contracts import (
     CanonicalFactV1,
@@ -38,8 +41,8 @@ from fundamental_service.data_releases import (
     DataReleaseError,
     DataReleaseManifestV1,
     DataReleaseTrustRootsV1,
-    DataReleaseVerifierV1,
     DataReleaseVerificationV1,
+    DataReleaseVerifierV1,
     sign_data_release_verification,
     sign_mapping_review_evidence,
 )
@@ -63,8 +66,6 @@ from fundamental_service.testsupport import (
     make_internal_envelope,
     make_valuation,
 )
-from sqlalchemy import text
-from sqlalchemy.exc import DBAPIError
 
 DATABASE_URL = os.getenv("FUNDAMENTAL_TEST_DATABASE_URL")
 RELEASE_TEST_RUNNER_KEY = Ed25519PrivateKey.from_private_bytes(b"r" * 32)
@@ -248,7 +249,7 @@ def _fact_for_snapshot(snapshot: SourceSnapshotV1, fact_id: str) -> CanonicalFac
         security_id=snapshot.identity.security_id,
         concept="us-gaap:Revenues",
         normalized_field="revenue",
-        value=Decimal("100"),
+        value=Decimal(100),
         unit="USD",
         scale=0,
         currency="USD",
@@ -734,6 +735,73 @@ def test_data_release_candidate_is_not_persisted_without_trust_roots():
         metadata.close()
 
 
+def test_data_release_candidate_transaction_rolls_back_after_manifest_insert(
+    metadata: PostgresMetadataStore,
+):
+    manifest, verification = _data_release_candidate(uuid4().hex)
+    suffix = uuid4().hex
+    function_name = f"reject_release_verification_{suffix}"
+    trigger_name = f"reject_release_verification_trigger_{suffix}"
+
+    async def install_failure_trigger() -> None:
+        async with metadata._runner._engine.begin() as connection:
+            await connection.execute(
+                text(
+                    f"CREATE FUNCTION fundamental.{function_name}() "
+                    "RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN "
+                    "RAISE EXCEPTION 'injected release verification failure'; END $$"
+                )
+            )
+            await connection.execute(
+                text(
+                    f"CREATE TRIGGER {trigger_name} BEFORE INSERT ON "
+                    "fundamental.data_release_verifications "
+                    f"FOR EACH ROW EXECUTE FUNCTION fundamental.{function_name}()"
+                )
+            )
+
+    async def remove_failure_trigger() -> None:
+        async with metadata._runner._engine.begin() as connection:
+            await connection.execute(
+                text(
+                    "DROP TRIGGER IF EXISTS "
+                    f"{trigger_name} ON fundamental.data_release_verifications"
+                )
+            )
+            await connection.execute(
+                text(f"DROP FUNCTION IF EXISTS fundamental.{function_name}()")
+            )
+
+    async def persisted_counts() -> tuple[int, int]:
+        async with metadata._runner._engine.connect() as connection:
+            manifest_count = await connection.scalar(
+                text(
+                    "SELECT count(*) FROM fundamental.data_release_manifests "
+                    "WHERE manifest_digest=:digest"
+                ),
+                {"digest": manifest.manifest_digest},
+            )
+            verification_count = await connection.scalar(
+                text(
+                    "SELECT count(*) FROM fundamental.data_release_verifications "
+                    "WHERE manifest_digest=:digest"
+                ),
+                {"digest": manifest.manifest_digest},
+            )
+        return int(manifest_count or 0), int(verification_count or 0)
+
+    metadata._runner.run(install_failure_trigger())
+    try:
+        with pytest.raises(DBAPIError, match="injected release verification failure"):
+            metadata.publish_data_release_candidate(manifest, verification)
+    finally:
+        metadata._runner.run(remove_failure_trigger())
+
+    assert metadata._runner.run(persisted_counts()) == (0, 0)
+    metadata.publish_data_release_candidate(manifest, verification)
+    assert metadata.get_data_release_manifest(manifest.manifest_digest) == manifest
+
+
 def test_data_release_audit_failure_rolls_back_pointer_and_can_retry(
     metadata: PostgresMetadataStore,
 ):
@@ -844,6 +912,54 @@ def test_competing_data_release_publishers_share_one_revision(
         return int(count or 0)
 
     assert metadata._runner.run(audit_count()) == 1
+
+
+def test_data_release_pointer_survives_restart_and_legacy_reader_overlap(
+    metadata: PostgresMetadataStore,
+):
+    profile_id = f"sec-public-pit-overlap-{uuid4().hex}"
+    first, first_verification = _data_release_candidate(
+        uuid4().hex, profile_id=profile_id
+    )
+    second, second_verification = _data_release_candidate(
+        uuid4().hex, profile_id=profile_id
+    )
+    metadata.publish_data_release_candidate(first, first_verification)
+    metadata.publish_data_release_candidate(second, second_verification)
+    first_active = metadata.compare_and_swap_data_release(_activation_command(first))
+
+    legacy_reader = PostgresMetadataStore(DATABASE_URL or "", auto_migrate=False)
+    legacy_reader.start()
+    try:
+        second_active = metadata.compare_and_swap_data_release(
+            _activation_command(
+                second,
+                expected_revision=first_active.revision,
+                expected_manifest_digest=first_active.manifest_digest,
+            )
+        )
+        assert legacy_reader.health.schema_version == SCHEMA_VERSION
+        assert legacy_reader.get_active_data_release(profile_id) == second_active
+    finally:
+        legacy_reader.close()
+
+    metadata.close()
+    restarted = PostgresMetadataStore(DATABASE_URL or "", auto_migrate=False)
+    restarted.start()
+    try:
+        assert restarted.get_active_data_release(profile_id) == second_active
+        rolled_back = restarted.compare_and_swap_data_release(
+            _activation_command(
+                first,
+                expected_revision=second_active.revision,
+                expected_manifest_digest=second_active.manifest_digest,
+                operation="rollback",
+            )
+        )
+        assert rolled_back.revision == second_active.revision + 1
+        assert rolled_back.manifest_digest == first.manifest_digest
+    finally:
+        restarted.close()
 
 
 def test_snapshot_metadata_is_immutable(metadata: PostgresMetadataStore):
