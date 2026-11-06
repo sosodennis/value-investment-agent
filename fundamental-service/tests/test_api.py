@@ -1537,6 +1537,86 @@ def test_facts_calculation_evidence_and_replay_keep_the_pinned_release(
     assert replay.dependency_versions["data_release"] == manifest.manifest_digest
 
 
+def test_snapshot_resolution_cache_isolated_by_active_release_dependencies():
+    first_snapshot = _SnapshotRepository().snapshot
+    first_snapshot.snapshot_id = "snapshot-cache-one"
+    first_snapshot.manifest_digest = "a" * 64
+    first_snapshot.parser_version = "arelle-release==2.47.4"
+    first_snapshot.taxonomy_manifest_id = "taxonomy-v1"
+    second_snapshot = _SnapshotRepository().snapshot
+    second_snapshot.snapshot_id = "snapshot-cache-two"
+    second_snapshot.manifest_digest = "b" * 64
+    second_snapshot.parser_version = "arelle-release==2.47.4"
+    second_snapshot.taxonomy_manifest_id = "taxonomy-v1"
+    first_fact = _canonical_fact("fact-cache-one", "revenue")
+    second_fact = _canonical_fact("fact-cache-two", "revenue")
+    facts_by_snapshot = {
+        first_snapshot.snapshot_id: (first_fact,),
+        second_snapshot.snapshot_id: (second_fact,),
+    }
+    manifest_one = _release_manifest_for(first_snapshot, (first_fact,))
+    manifest_two = _release_manifest_for(second_snapshot, (second_fact,))
+    active_state = {
+        "value": ActiveDataReleaseWithManifestV1(
+            active=ActiveDataReleaseV1(
+                profile_id=manifest_one.profile_id,
+                manifest_digest=manifest_one.manifest_digest,
+                revision=1,
+                activated_at=datetime(2026, 1, 1, tzinfo=UTC),
+            ),
+            manifest=manifest_one,
+        )
+    }
+    metadata = SimpleNamespace(
+        get_active_data_release_with_manifest=lambda profile_id: (
+            active_state["value"] if profile_id == manifest_one.profile_id else None
+        )
+    )
+    fact_repository = SimpleNamespace(
+        resolve=lambda *, snapshot, valuation_timestamp, required_fields: (
+            facts_by_snapshot[snapshot.snapshot_id]
+        )
+    )
+    app = create_app(
+        _ReleaseSnapshotRepository(first_snapshot, second_snapshot),
+        fact_repository=fact_repository,
+        metadata_store=metadata,
+    )
+    request = SnapshotResolutionRequestV1(
+        contract_version="fundamental.v1",
+        identity=first_snapshot.identity,
+        valuation_timestamp=first_snapshot.valuation_timestamp,
+        source_selection_policy="pit-v1",
+        coverage_profile="us-gaap-public-v1",
+        required_fields=("revenue",),
+        release_profile_id=manifest_one.profile_id,
+    )
+
+    first = app.state.application.resolve_snapshot(request)
+    repeated = app.state.application.resolve_snapshot(request)
+    assert first.snapshot_id == first_snapshot.snapshot_id
+    assert repeated == first
+    assert "fundamental_service_cache_hit_total 1" in (
+        app.state.metrics.render_prometheus()
+    )
+
+    active_state["value"] = ActiveDataReleaseWithManifestV1(
+        active=ActiveDataReleaseV1(
+            profile_id=manifest_two.profile_id,
+            manifest_digest=manifest_two.manifest_digest,
+            revision=2,
+            activated_at=datetime(2026, 1, 2, tzinfo=UTC),
+        ),
+        manifest=manifest_two,
+    )
+    after_activation = app.state.application.resolve_snapshot(request)
+    assert after_activation.snapshot_id == second_snapshot.snapshot_id
+    assert after_activation.data_release_manifest_digest == manifest_two.manifest_digest
+    assert "fundamental_service_cache_miss_total 2" in (
+        app.state.metrics.render_prometheus()
+    )
+
+
 def test_production_fact_reads_require_a_pinned_release_digest():
     snapshot = _SnapshotRepository().snapshot
     manifest = _release_manifest_for(

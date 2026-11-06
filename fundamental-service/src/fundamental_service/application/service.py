@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field as dataclass_field
 from typing import Any
 
 from pydantic import model_validator
@@ -37,6 +37,7 @@ from ..data_releases import (
     DataReleaseCandidateReceiptV1,
     DataReleaseError,
     DataReleaseManifestV1,
+    ReleaseResolutionCacheKeyV1,
     DataReleaseVerificationV1,
 )
 from ..facts import CanonicalFactRepository
@@ -56,6 +57,7 @@ from ..policies import (
 )
 from ..replay import (
     ArtifactRecordV1,
+    CacheLifecycle,
     ReplayEnvelopeV1,
     ReplayReportV1,
     replay_manifest,
@@ -233,6 +235,11 @@ class FundamentalApplication:
     require_metadata: bool = False
     policy_registry: PolicyRegistry | None = None
     model_inventory: ModelInventory | None = None
+    release_cache: CacheLifecycle = dataclass_field(
+        default_factory=lambda: CacheLifecycle(max_entries=256),
+        repr=False,
+        compare=False,
+    )
 
     @property
     def ready(self) -> bool:
@@ -879,6 +886,8 @@ class FundamentalApplication:
                 retryable=True,
             )
         active_release: ActiveDataReleaseWithManifestV1 | None = None
+        cache_key: str | None = None
+        cache_dependencies: tuple[str, ...] = ()
         if request.release_profile_id is None:
             if self.require_metadata:
                 raise ServiceError(
@@ -930,6 +939,53 @@ class FundamentalApplication:
                     status_code=422,
                     retryable=False,
                 )
+
+            manifest = active_release.manifest
+            identity_digest = sha256_digest(request.identity.model_dump(mode="json"))
+            cache_key_model = ReleaseResolutionCacheKeyV1(
+                profile_id=manifest.profile_id,
+                manifest_digest=manifest.manifest_digest,
+                snapshot_refs=manifest.snapshot_refs,
+                mapping_refs=manifest.mapping_refs,
+                taxonomy_refs=manifest.taxonomy_refs,
+                artifact_refs=manifest.artifact_refs,
+                parser_version=manifest.parser_version,
+                quality_profile_digest=manifest.quality_profile_digest,
+                identity_digest=identity_digest,
+                valuation_timestamp=request.valuation_timestamp,
+                source_selection_policy=request.source_selection_policy,
+                coverage_profile=request.coverage_profile,
+                required_fields=request.required_fields,
+            )
+            cache_key = f"data-release-resolution:v1:{cache_key_model.digest()}"
+            cache_dependencies = (
+                manifest.manifest_digest,
+                manifest.quality_profile_digest,
+                identity_digest,
+                sha256_digest(manifest.parser_version),
+                *(ref.manifest_digest for ref in manifest.snapshot_refs),
+                *(
+                    fact.fact_digest
+                    for snapshot_ref in manifest.snapshot_refs
+                    for fact in snapshot_ref.facts
+                ),
+                *(ref.mapping_digest for ref in manifest.mapping_refs),
+                *(ref.content_hash for ref in manifest.taxonomy_refs),
+                *(ref.content_hash for ref in manifest.artifact_refs),
+            )
+            cache_status, cached_resolution = self.release_cache.get(cache_key)
+            if cache_status == "hit" and isinstance(
+                cached_resolution, SnapshotResolutionV1
+            ):
+                self.metrics.increment("cache_hit_total")
+                return cached_resolution
+            if cache_status == "hit":
+                self.release_cache.invalidate(cache_key)
+                cache_status = "stale"
+            if cache_status == "stale":
+                self.metrics.increment("cache_stale_total")
+            else:
+                self.metrics.increment("cache_miss_total")
 
         candidates = self.snapshot_repository.find(
             identity=request.identity,
@@ -990,7 +1046,7 @@ class FundamentalApplication:
                     facts,
                     required_fields=request.required_fields,
                 )
-            return SnapshotResolutionV1(
+            result = SnapshotResolutionV1(
                 contract_version="fundamental.v1",
                 snapshot_id=snapshot.snapshot_id,
                 data_release_manifest_digest=(
@@ -1018,6 +1074,14 @@ class FundamentalApplication:
                     ),
                 },
             )
+            if cache_key is not None:
+                self.release_cache.put(
+                    cache_key,
+                    result,
+                    cache_dependencies,
+                    ttl_seconds=60,
+                )
+            return result
         raise ServiceError(
             "FACT_NOT_FOUND",
             "required canonical facts are not available for the requested snapshot",

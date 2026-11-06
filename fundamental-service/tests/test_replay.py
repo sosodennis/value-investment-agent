@@ -93,6 +93,17 @@ def test_cache_rebuild_populates_once_for_concurrent_callers():
     assert values == [{"value": 42}, {"value": 42}]
 
 
+def test_bounded_cache_evicts_the_oldest_operational_entry():
+    cache = CacheLifecycle(max_entries=2)
+    cache.put("release-one", 1)
+    cache.put("release-two", 2)
+    cache.put("release-three", 3)
+
+    assert cache.get("release-one") == ("miss", None)
+    assert cache.get("release-two") == ("hit", 2)
+    assert cache.get("release-three") == ("hit", 3)
+
+
 def test_provenance_graph_is_content_addressed():
     observed_at = datetime(2026, 1, 1, tzinfo=timezone.utc)
     metadata = {

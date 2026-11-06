@@ -415,6 +415,32 @@ class ActiveDataReleaseWithManifestV1(ReleaseModel):
         return self
 
 
+class ReleaseResolutionCacheKeyV1(ReleaseModel):
+    profile_id: str = Field(min_length=1)
+    manifest_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    snapshot_refs: tuple[SnapshotRefV1, ...] = Field(min_length=1)
+    mapping_refs: tuple[MappingRefV1, ...] = Field(min_length=1)
+    taxonomy_refs: tuple[ArtifactRefV1, ...] = Field(min_length=1)
+    artifact_refs: tuple[ArtifactRefV1, ...] = Field(min_length=1)
+    parser_version: str = Field(min_length=1)
+    quality_profile_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    identity_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    valuation_timestamp: datetime
+    source_selection_policy: str = Field(min_length=1)
+    coverage_profile: str = Field(min_length=1)
+    required_fields: tuple[str, ...] = Field(min_length=1)
+
+    @field_validator("valuation_timestamp")
+    @classmethod
+    def valuation_timestamp_has_timezone(cls, value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("valuation_timestamp must include a timezone")
+        return value
+
+    def digest(self) -> str:
+        return sha256_digest(self)
+
+
 class DataReleaseRepository(Protocol):
     def publish_candidate(
         self,
@@ -448,6 +474,7 @@ __all__ = [
     "FactRefV1",
     "MappingRefV1",
     "MappingReviewEvidenceV1",
+    "ReleaseResolutionCacheKeyV1",
     "SnapshotRefV1",
     "sign_data_release_verification",
     "sign_mapping_review_evidence",
