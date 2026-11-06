@@ -11,7 +11,7 @@ from datetime import date, datetime, timezone
 from email.utils import parsedate_to_datetime
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
-from urllib.request import Request, urlopen
+from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 from .contracts import SourceRole
 from .snapshots import CapturedSource, LegalSource, SnapshotError, SourceRegister
@@ -75,6 +75,20 @@ class _SecResponse:
     declared_size: int | None
 
 
+class _NoRedirectHandler(HTTPRedirectHandler):
+    """Keep provider redirects visible to the SEC allowlist boundary."""
+
+    def redirect_request(self, *_args: object, **_kwargs: object) -> None:
+        return None
+
+
+_SEC_OPENER = build_opener(_NoRedirectHandler())
+
+
+def _open_sec(request: Request, *, timeout: float) -> object:
+    return _SEC_OPENER.open(request, timeout=timeout)
+
+
 def sec_source_register() -> SourceRegister:
     """Return the allowlist for the public SEC JSON and filing resources."""
     return SourceRegister(
@@ -121,13 +135,13 @@ class SecEdgarSourceAdapter:
         self,
         policy: SecRequestPolicy,
         *,
-        opener: Callable[..., object] = urlopen,
+        opener: Callable[..., object] | None = None,
         sleep: Callable[[float], None] = time.sleep,
         request_slot: Callable[[float], float] | None = None,
         clock: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
     ) -> None:
         self.policy = policy
-        self._opener = opener
+        self._opener = opener or _open_sec
         self._sleep = sleep
         self._request_slot = request_slot
         self._clock = clock
@@ -200,8 +214,14 @@ class SecEdgarSourceAdapter:
                         else self.policy.timeout_seconds,
                     ),
                 ) as response:
-                    payload = self._read_bounded(response, deadline_at)
                     status = int(getattr(response, "status", 200))
+                    if status in {301, 302, 303, 307, 308}:
+                        raise SecSourceError(
+                            "SOURCE_REDIRECT_NOT_ALLOWED",
+                            "SEC source redirects are not permitted",
+                            retryable=False,
+                        )
+                    payload = self._read_bounded(response, deadline_at)
                     media_type = response.headers.get_content_type()
                     available_at = self._clock()
                     response_headers = tuple(
@@ -231,6 +251,12 @@ class SecEdgarSourceAdapter:
                         declared_size=declared_size,
                     )
             except HTTPError as error:
+                if error.code in {301, 302, 303, 307, 308}:
+                    raise SecSourceError(
+                        "SOURCE_REDIRECT_NOT_ALLOWED",
+                        "SEC source redirects are not permitted",
+                        retryable=False,
+                    ) from error
                 last_error = error
                 retryable = error.code == 429 or 500 <= error.code < 600
                 if not retryable or attempt + 1 >= self.policy.max_attempts:

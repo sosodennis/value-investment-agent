@@ -12,12 +12,15 @@ from fundamental_service.sec_source import (
 
 
 class FakeResponse:
-    status = 200
-
-    def __init__(self, payload: bytes):
+    def __init__(
+        self, payload: bytes, *, status: int = 200, location: str | None = None
+    ):
         self._payload = payload
+        self.status = status
         self.headers = Message()
         self.headers["Content-Type"] = "application/json"
+        if location is not None:
+            self.headers["Location"] = location
 
     def read(self) -> bytes:
         return self._payload
@@ -98,6 +101,34 @@ def test_sec_source_rejects_uri_that_does_not_match_registered_endpoint():
         )
     assert error.value.code == "SOURCE_URI_NOT_ALLOWED"
     assert calls == []
+
+
+def test_sec_source_rejects_redirect_before_following_off_host_location():
+    calls = []
+
+    def opener(request, timeout):
+        calls.append(request.full_url)
+        return FakeResponse(
+            b"",
+            status=302,
+            location="https://evil.example/Archives/edgar/data/1/index.json",
+        )
+
+    adapter = SecEdgarSourceAdapter(
+        SecRequestPolicy(
+            user_agent="value-agent test@example.com", min_interval_seconds=0
+        ),
+        opener=opener,
+        sleep=lambda _seconds: None,
+    )
+    with pytest.raises(SecSourceError) as error:
+        adapter.capture_json(
+            source_id="sec-submissions",
+            uri="https://data.sec.gov/submissions/CIK0000000001.json",
+        )
+
+    assert error.value.code == "SOURCE_REDIRECT_NOT_ALLOWED"
+    assert calls == ["https://data.sec.gov/submissions/CIK0000000001.json"]
 
 
 def test_filing_resource_capture_preserves_dts_role_and_metadata():
