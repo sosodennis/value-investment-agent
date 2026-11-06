@@ -8,8 +8,8 @@ from dataclasses import dataclass, replace
 from datetime import datetime
 from io import BytesIO
 from pathlib import Path
-from zipfile import BadZipFile, ZipFile
 from typing import Literal, Protocol
+from zipfile import BadZipFile, ZipFile
 
 from .arelle_parser import (
     ArelleParseReportV1,
