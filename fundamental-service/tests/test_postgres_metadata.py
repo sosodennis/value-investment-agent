@@ -3,6 +3,7 @@ from __future__ import annotations
 import multiprocessing
 import os
 import time
+import base64
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
@@ -36,8 +37,11 @@ from fundamental_service.data_releases import (
     DataReleaseActivationCommandV1,
     DataReleaseError,
     DataReleaseManifestV1,
+    DataReleaseTrustRootsV1,
+    DataReleaseVerifierV1,
     DataReleaseVerificationV1,
     sign_data_release_verification,
+    sign_mapping_review_evidence,
 )
 from fundamental_service.facts import CanonicalMappingV1
 from fundamental_service.metadata import (
@@ -63,12 +67,33 @@ from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 
 DATABASE_URL = os.getenv("FUNDAMENTAL_TEST_DATABASE_URL")
+RELEASE_TEST_RUNNER_KEY = Ed25519PrivateKey.from_private_bytes(b"r" * 32)
+RELEASE_TEST_REVIEWER_KEY = Ed25519PrivateKey.from_private_bytes(b"v" * 32)
 pytestmark = pytest.mark.skipif(
     not DATABASE_URL,
     reason=(
         "FUNDAMENTAL_TEST_DATABASE_URL is required for the PostgreSQL acceptance suite"
     ),
 )
+
+
+def _release_test_trust_roots() -> DataReleaseTrustRootsV1:
+    return DataReleaseTrustRootsV1(
+        verifiers={
+            "postgres-test-runner": DataReleaseVerifierV1(
+                workflow_identity="github://value-investment-agent/postgres-tests",
+                public_key_ed25519_base64=base64.b64encode(
+                    RELEASE_TEST_RUNNER_KEY.public_key().public_bytes_raw()
+                ).decode("ascii"),
+                verification_suite_digest="f" * 64,
+            )
+        },
+        mapping_reviewers={
+            "postgres-test-reviewer": base64.b64encode(
+                RELEASE_TEST_REVIEWER_KEY.public_key().public_bytes_raw()
+            ).decode("ascii")
+        },
+    )
 
 
 def _snapshot(
@@ -487,7 +512,11 @@ def _hold_ingestion_lock_until_terminated(
 @pytest.fixture
 def metadata() -> PostgresMetadataStore:
     assert DATABASE_URL is not None
-    store = PostgresMetadataStore(DATABASE_URL, auto_migrate=True)
+    store = PostgresMetadataStore(
+        DATABASE_URL,
+        auto_migrate=True,
+        data_release_trust_roots=_release_test_trust_roots(),
+    )
     store.start()
     yield store
     store.close()
@@ -553,6 +582,18 @@ def _data_release_candidate(
         **manifest_payload,
         manifest_digest=sha256_digest(manifest_payload),
     )
+    mapping_review = sign_mapping_review_evidence(
+        {
+            "mapping_id": f"mapping-{suffix}",
+            "mapping_digest": "e" * 64,
+            "author_id": "mapping-builder",
+            "reviewer_id": "postgres-test-reviewer",
+            "reviewed_at": datetime(2026, 1, 1, tzinfo=UTC),
+            "evidence_refs": (evidence_ref,),
+            "fixture_digest": sha256_digest({"mapping": suffix}),
+        },
+        RELEASE_TEST_REVIEWER_KEY,
+    )
     verification = sign_data_release_verification(
         {
             "manifest_digest": manifest.manifest_digest,
@@ -563,9 +604,9 @@ def _data_release_candidate(
             "verifier_id": "postgres-test-runner",
             "passed_gate_ids": tuple(sorted(REQUIRED_DATA_RELEASE_GATES)),
             "evidence_refs": (evidence_ref,),
-            "mapping_reviews": (),
+            "mapping_reviews": (mapping_review,),
         },
-        Ed25519PrivateKey.from_private_bytes(b"r" * 32),
+        RELEASE_TEST_RUNNER_KEY,
     )
     return manifest, verification
 
@@ -658,6 +699,33 @@ def test_data_release_activation_is_fenced_and_v2_compatible(
         assert old_version_reader.get_active_data_release(manifest.profile_id) == active
     finally:
         old_version_reader.close()
+
+
+def test_data_release_candidate_is_not_persisted_without_trust_roots():
+    assert DATABASE_URL is not None
+    metadata = PostgresMetadataStore(DATABASE_URL, auto_migrate=True)
+    metadata.start()
+    manifest, verification = _data_release_candidate(uuid4().hex)
+
+    try:
+        with pytest.raises(DataReleaseError) as unconfigured:
+            metadata.publish_data_release_candidate(manifest, verification)
+        assert unconfigured.value.code == "DATA_RELEASE_TRUST_ROOTS_UNCONFIGURED"
+
+        async def candidate_count() -> int:
+            async with metadata._runner._engine.connect() as connection:
+                count = await connection.scalar(
+                    text(
+                        "SELECT count(*) FROM fundamental.data_release_manifests "
+                        "WHERE manifest_digest=:digest"
+                    ),
+                    {"digest": manifest.manifest_digest},
+                )
+            return int(count or 0)
+
+        assert metadata._runner.run(candidate_count()) == 0
+    finally:
+        metadata.close()
 
 
 def test_data_release_audit_failure_rolls_back_pointer_and_can_retry(

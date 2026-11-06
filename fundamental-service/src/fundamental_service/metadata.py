@@ -35,7 +35,9 @@ from .data_releases import (
     DataReleaseActivationCommandV1,
     DataReleaseError,
     DataReleaseManifestV1,
+    DataReleaseTrustRootsV1,
     DataReleaseVerificationV1,
+    verify_data_release_candidate,
 )
 from .facts import (
     CanonicalFactRepository,
@@ -114,11 +116,13 @@ class PostgresMetadataStore:
         *,
         auto_migrate: bool = False,
         schema: str = SCHEMA,
+        data_release_trust_roots: DataReleaseTrustRootsV1 | None = None,
     ) -> None:
         if schema != SCHEMA:
             raise ValueError("Fundamental metadata must use the fundamental schema")
         self.schema = schema
         self.auto_migrate = auto_migrate
+        self._data_release_trust_roots = data_release_trust_roots
         self._runner = _AsyncRunner(database_url)
         self._ready = False
         self._health = MetadataHealth(False, None)
@@ -134,6 +138,10 @@ class PostgresMetadataStore:
     @property
     def health(self) -> MetadataHealth:
         return self._health
+
+    @property
+    def data_release_trust_roots_configured(self) -> bool:
+        return self._data_release_trust_roots is not None
 
     def start(self) -> None:
         try:
@@ -712,11 +720,14 @@ class PostgresMetadataStore:
         verification: DataReleaseVerificationV1,
     ) -> None:
         self._require_data_release_capability()
-        if verification.manifest_digest != manifest.manifest_digest:
+        if self._data_release_trust_roots is None:
             raise DataReleaseError(
-                "DATA_RELEASE_VERIFICATION_MISMATCH",
-                "verification evidence does not match the candidate manifest",
+                "DATA_RELEASE_TRUST_ROOTS_UNCONFIGURED",
+                "data release trust roots are required to publish a candidate",
             )
+        verify_data_release_candidate(
+            manifest, verification, self._data_release_trust_roots
+        )
         self._runner.run(self._publish_data_release_candidate(manifest, verification))
 
     async def _publish_data_release_candidate(

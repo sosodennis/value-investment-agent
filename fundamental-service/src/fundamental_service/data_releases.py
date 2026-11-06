@@ -309,6 +309,37 @@ def verify_mapping_review_evidence(
         ) from exc
 
 
+def verify_data_release_candidate(
+    manifest: DataReleaseManifestV1,
+    verification: DataReleaseVerificationV1,
+    trust_roots: DataReleaseTrustRootsV1,
+) -> None:
+    if verification.manifest_digest != manifest.manifest_digest:
+        raise DataReleaseError(
+            "DATA_RELEASE_VERIFICATION_MISMATCH",
+            "verification evidence does not match the candidate manifest",
+        )
+    verify_data_release_verification(verification, trust_roots)
+
+    expected_reviews = {
+        mapping.mapping_id: mapping.mapping_digest for mapping in manifest.mapping_refs
+    }
+    actual_reviews: dict[str, str] = {}
+    for review in verification.mapping_reviews:
+        if review.mapping_id in actual_reviews:
+            raise DataReleaseError(
+                "DATA_RELEASE_MAPPING_REVIEW_DUPLICATE",
+                "candidate contains duplicate mapping review evidence",
+            )
+        actual_reviews[review.mapping_id] = review.mapping_digest
+        verify_mapping_review_evidence(review, trust_roots)
+    if actual_reviews != expected_reviews:
+        raise DataReleaseError(
+            "DATA_RELEASE_MAPPING_REVIEW_MISMATCH",
+            "candidate mapping references require matching independent reviews",
+        )
+
+
 class DataReleaseActivationCommandV1(ReleaseModel):
     profile_id: str = Field(min_length=1)
     manifest_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
@@ -372,5 +403,6 @@ __all__ = [
     "sign_data_release_verification",
     "sign_mapping_review_evidence",
     "verify_data_release_verification",
+    "verify_data_release_candidate",
     "verify_mapping_review_evidence",
 ]

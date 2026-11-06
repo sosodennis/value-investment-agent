@@ -10,6 +10,7 @@ from pydantic import ValidationError
 from fundamental_service.data_releases import (
     REQUIRED_DATA_RELEASE_GATES,
     DataReleaseError,
+    DataReleaseManifestV1,
     DataReleaseTrustRootsV1,
     DataReleaseVerificationV1,
     DataReleaseVerifierV1,
@@ -17,8 +18,10 @@ from fundamental_service.data_releases import (
     sign_data_release_verification,
     sign_mapping_review_evidence,
     verify_data_release_verification,
+    verify_data_release_candidate,
     verify_mapping_review_evidence,
 )
+from fundamental_service.serialization import sha256_digest
 
 RUNNER_KEY = Ed25519PrivateKey.from_private_bytes(b"r" * 32)
 REVIEWER_KEY = Ed25519PrivateKey.from_private_bytes(b"v" * 32)
@@ -64,10 +67,49 @@ def _mapping_review() -> MappingReviewEvidenceV1:
     )
 
 
-def _verification() -> DataReleaseVerificationV1:
+def _manifest() -> DataReleaseManifestV1:
+    fact_refs = ({"fact_id": "fact-1", "fact_digest": "d" * 64},)
+    payload = {
+        "profile_id": "sec-public-pit",
+        "release_id": "release-1",
+        "created_at": datetime(2026, 10, 1, tzinfo=UTC),
+        "snapshot_refs": (
+            {
+                "snapshot_id": "snapshot-1",
+                "manifest_digest": "e" * 64,
+                "facts": fact_refs,
+                "fact_set_digest": sha256_digest(fact_refs),
+            },
+        ),
+        "mapping_refs": (
+            {
+                "mapping_id": "mapping-revenue-extension-v1",
+                "mapping_digest": "b" * 64,
+            },
+        ),
+        "taxonomy_refs": (
+            {
+                "artifact_id": "taxonomy-1",
+                "content_hash": "c" * 64,
+                "media_type": "application/zip",
+                "role": "taxonomy",
+            },
+        ),
+        "parser_version": "arelle-release==2.47.4",
+        "quality_profile_digest": "d" * 64,
+        "required_fields": ("revenue",),
+        "artifact_refs": (EVIDENCE,),
+    }
+    return DataReleaseManifestV1(**payload, manifest_digest=sha256_digest(payload))
+
+
+def _verification(
+    manifest_digest: str = "b" * 64,
+    mapping_reviews: tuple[MappingReviewEvidenceV1, ...] | None = None,
+) -> DataReleaseVerificationV1:
     return sign_data_release_verification(
         {
-            "manifest_digest": "b" * 64,
+            "manifest_digest": manifest_digest,
             "verification_suite_digest": "a" * 64,
             "source_revision": "c" * 40,
             "verification_run_id": "release-run-42",
@@ -75,7 +117,9 @@ def _verification() -> DataReleaseVerificationV1:
             "verifier_id": "release-ci",
             "passed_gate_ids": tuple(sorted(REQUIRED_DATA_RELEASE_GATES)),
             "evidence_refs": (EVIDENCE,),
-            "mapping_reviews": (_mapping_review(),),
+            "mapping_reviews": (
+                (_mapping_review(),) if mapping_reviews is None else mapping_reviews
+            ),
         },
         RUNNER_KEY,
     )
@@ -87,6 +131,46 @@ def test_trusted_runner_and_independent_mapping_review_signatures_verify():
 
     verify_data_release_verification(verification, roots)
     verify_mapping_review_evidence(verification.mapping_reviews[0], roots)
+
+
+def test_candidate_requires_signed_review_for_each_matching_mapping():
+    manifest = _manifest()
+    roots = _trust_roots()
+    verification = _verification(manifest.manifest_digest)
+
+    verify_data_release_candidate(manifest, verification, roots)
+
+    with pytest.raises(DataReleaseError) as missing_review:
+        verify_data_release_candidate(
+            manifest, _verification(manifest.manifest_digest, ()), roots
+        )
+    assert missing_review.value.code == "DATA_RELEASE_MAPPING_REVIEW_MISMATCH"
+
+    mismatched_review = sign_mapping_review_evidence(
+        {
+            **_mapping_review().model_dump(mode="python", exclude={"signature"}),
+            "mapping_digest": "e" * 64,
+        },
+        REVIEWER_KEY,
+    )
+    with pytest.raises(DataReleaseError) as mismatched:
+        verify_data_release_candidate(
+            manifest,
+            _verification(manifest.manifest_digest, (mismatched_review,)),
+            roots,
+        )
+    assert mismatched.value.code == "DATA_RELEASE_MAPPING_REVIEW_MISMATCH"
+
+    with pytest.raises(DataReleaseError) as duplicate:
+        verify_data_release_candidate(
+            manifest,
+            _verification(
+                manifest.manifest_digest,
+                (_mapping_review(), _mapping_review()),
+            ),
+            roots,
+        )
+    assert duplicate.value.code == "DATA_RELEASE_MAPPING_REVIEW_DUPLICATE"
 
 
 def test_verification_signature_binds_manifest_and_required_gate_set():
