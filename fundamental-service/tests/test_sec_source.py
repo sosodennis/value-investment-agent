@@ -1,6 +1,10 @@
 import json
 from datetime import datetime, timezone
 from email.message import Message
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from threading import Thread
+from urllib.error import HTTPError
+from urllib.request import Request
 
 import pytest
 from fundamental_service.contracts import SourceRole
@@ -8,6 +12,7 @@ from fundamental_service.sec_source import (
     SecEdgarSourceAdapter,
     SecRequestPolicy,
     SecSourceError,
+    _open_sec,
 )
 
 
@@ -129,6 +134,54 @@ def test_sec_source_rejects_redirect_before_following_off_host_location():
 
     assert error.value.code == "SOURCE_REDIRECT_NOT_ALLOWED"
     assert calls == ["https://data.sec.gov/submissions/CIK0000000001.json"]
+
+
+def test_default_sec_transport_does_not_follow_redirect_to_another_origin():
+    destination_requests = []
+
+    class DestinationHandler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            destination_requests.append(self.path)
+            self.send_response(200)
+            self.end_headers()
+
+        def log_message(self, *_args):
+            return
+
+    destination_server = ThreadingHTTPServer(("127.0.0.1", 0), DestinationHandler)
+    destination = f"http://127.0.0.1:{destination_server.server_address[1]}/redirected"
+
+    class RedirectHandler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            self.send_response(302)
+            self.send_header("Location", destination)
+            self.end_headers()
+
+        def log_message(self, *_args):
+            return
+
+    redirect_server = ThreadingHTTPServer(("127.0.0.1", 0), RedirectHandler)
+    servers = (destination_server, redirect_server)
+    threads = tuple(
+        Thread(target=server.serve_forever, daemon=True) for server in servers
+    )
+    try:
+        for thread in threads:
+            thread.start()
+        request = Request(
+            f"http://127.0.0.1:{redirect_server.server_address[1]}/source"
+        )
+        with pytest.raises(HTTPError) as error:
+            _open_sec(request, timeout=2)
+
+        assert error.value.code == 302
+        assert destination_requests == []
+    finally:
+        for server in servers:
+            server.shutdown()
+            server.server_close()
+        for thread in threads:
+            thread.join(timeout=2)
 
 
 def test_filing_resource_capture_preserves_dts_role_and_metadata():
