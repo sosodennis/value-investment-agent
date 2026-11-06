@@ -50,11 +50,11 @@ runs. They are not an acceptance or `VERIFIED` record.
   project were zero for snapshot manifests, canonical facts, snapshot-fact
   links, active release pointers, release manifests, and source acquisition
   audits. This artifact is not evidence of a service-owned snapshot.
-- The Fundamental service project currently uses only
-  `docker-compose.issue280-operations.yml`; its running container has no SEC
-  ingestion configuration. The application backend container has no
-  `FUNDAMENTAL_SERVICE_URL` or `FUNDAMENTAL_SERVICE_TOKEN`, so the browser run
-  cannot be used as a service-backed acceptance run.
+- At the time of this earlier run, the Fundamental service project used only
+  `docker-compose.issue280-operations.yml`; its running container had no SEC
+  ingestion configuration. The application backend container had no
+  `FUNDAMENTAL_SERVICE_URL` or `FUNDAMENTAL_SERVICE_TOKEN`, so that browser run
+  could not be used as a service-backed acceptance run.
 - Viewports, keyboard selection, evidence inspector behavior, and a genuine
   service-backed workspace run are not yet verified.
 
@@ -119,18 +119,43 @@ runs. They are not an acceptance or `VERIFIED` record.
   `/health` returned `{"status":"ok"}` and Fundamental `/readyz` returned
   `{"status":"ready","contract_version":"internal.v1"}`. During the
   run's UTC interval, the Fundamental service log showed no non-health request.
+- The live containers were wired: the backend had both
+  `FUNDAMENTAL_SERVICE_URL` and `FUNDAMENTAL_SERVICE_TOKEN` set, and the
+  Fundamental service container was composed from both
+  `docker-compose.issue280-operations.yml` and
+  `docker-compose.issue312-sec-ingestion.yml`. This corrects the earlier
+  checkpoint's environment state; the live failure was not caused by missing
+  service URL/token or ingestion configuration.
+- Source tracing found the request gap. The workspace calls
+  `startWorkflowRun(threadId, { message: content })`; `RunRequest` makes
+  `valuation_request` optional and no production Agent Core code constructs it.
+  `read_service_valuation_input()` requires that typed input and runs before
+  `client.execute()`. The root request therefore degrades before any service
+  API call, consistent with the empty business-request log and the absent
+  `fundamental_service` artifact projection.
+- Read-only PostgreSQL counts in this issue's Fundamental project were:
+  `snapshot_manifests=0`, `canonical_facts=0`, `snapshot_facts=0`,
+  `data_release_manifests=0`, `release_manifests=0`, and
+  `active_data_release_pointers=0`; the database had 10 model releases and 10
+  policy releases. The service had no snapshot or active data release from
+  which this run could resolve report facts.
+- The Fundamental financial-health node separately logged a cache hit for its
+  Agent-owned `sec_xbrl` payload and direct SEC archive GETs. Those legacy
+  report values are the displayed summary metrics; they are not a substitute
+  for service facts or evidence of same-snapshot valuation binding.
 - Desktop/mobile viewport checks, keyboard fact selection, evidence-inspector
   provenance, and matching service snapshot/valuation trace remain unverified.
 - Result: **incomplete**. The Debate LLM outage is a distinct observed
-  run-failure cause. The Fundamental facts remain unavailable in the report,
-  and this run supplies no service-backed snapshot evidence. No acceptance
-  criterion is marked passed by this diagnostic.
+  run-failure cause. The Fundamental input was not supplied to the service
+  flow, and the service had no snapshot or active release. The report facts
+  remain unavailable and no service-backed snapshot evidence exists. No
+  acceptance criterion is marked passed by this diagnostic.
 
 ## Next
 
-Diagnose why the completed Fundamental workflow produced no snapshot-bound fact
-set in the report, using the typed Agent/service boundary and service-owned
-snapshot evidence. Keep the Debate LLM 502 failure separate from that
-investigation. Then complete the real service-backed report checks, viewport and
-keyboard/evidence-inspector checks, and record all results against the exact
-delivery commit.
+Complete the owning-layer path that supplies a typed snapshot selector and
+valuation context to Fundamental, and prepare a service-owned MSFT snapshot and
+active release in this isolated acceptance project. Keep the Debate LLM 502
+failure separate. Then complete the real service-backed report checks, viewport
+and keyboard/evidence-inspector checks, and record all results against the
+exact delivery commit.
