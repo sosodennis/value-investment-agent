@@ -271,6 +271,10 @@ def test_sec_ingestion_connects_adapter_snapshot_parser_and_fact_selection(
     with pytest.raises(SnapshotError) as blocking_error:
         rejected_service.ingest_filing(**ingestion_args)
     assert blocking_error.value.code == "PARSER_VALIDATION_BLOCKED"
+    with pytest.raises(SnapshotError) as blocking_retry_error:
+        rejected_service.ingest_filing(**ingestion_args)
+    assert blocking_retry_error.value.code == blocking_error.value.code
+    assert blocking_retry_error.value.evidence_ref == blocking_error.value.evidence_ref
     assert (
         rejected_repository.find(
             identity=ingestion_args["identity"],
