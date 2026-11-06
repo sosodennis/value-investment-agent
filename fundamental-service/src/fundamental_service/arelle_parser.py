@@ -6,6 +6,7 @@ import hashlib
 import multiprocessing
 import os
 import queue
+import sys
 import tempfile
 import threading
 import time
@@ -187,7 +188,13 @@ def fact_semantic_digest(report: ArelleParseReportV1) -> str:
 
 def _directory_hash(root: Path) -> str:
     digest = hashlib.sha256()
-    for path in sorted(path for path in root.rglob("*") if path.is_file()):
+    for path in sorted(
+        path
+        for path in root.rglob("*")
+        if path.is_file()
+        and "__pycache__" not in path.relative_to(root).parts
+        and path.suffix not in {".pyc", ".pyo"}
+    ):
         digest.update(str(path.relative_to(root)).encode("utf-8"))
         digest.update(b"\0")
         digest.update(path.read_bytes())
@@ -275,7 +282,12 @@ def _parse_worker(
     expected_source_hash: str | None,
 ) -> None:
     attempted_network = 0
+    bytecode_cache: tempfile.TemporaryDirectory[str] | None = None
     try:
+        bytecode_cache = tempfile.TemporaryDirectory(
+            prefix="fundamental-arelle-pycache-"
+        )
+        sys.pycache_prefix = bytecode_cache.name
         import socket
 
         def block_network(*args: Any, **kwargs: Any) -> None:
@@ -305,6 +317,9 @@ def _parse_worker(
                 "network_attempt_count": attempted_network,
             }
         )
+    finally:
+        if bytecode_cache is not None:
+            bytecode_cache.cleanup()
 
 
 def _parse_in_process(
