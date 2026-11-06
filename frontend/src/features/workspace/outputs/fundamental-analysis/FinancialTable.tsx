@@ -1,10 +1,4 @@
-import React, { memo, useMemo } from 'react';
-import {
-    FinancialReport,
-    TraceableField
-} from '@/types/agents/fundamental';
-import type { ArtifactReference } from '@/types/agents';
-import type { EvidenceSelection } from '../../workspace-evidence-inspector';
+import { memo, useMemo } from 'react';
 import { Info } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import {
@@ -15,253 +9,222 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
+import type { ArtifactReference } from '@/types/agents';
+import type {
+    FundamentalCanonicalFact,
+    FundamentalFactsReadResult,
+    FundamentalFactValue,
+} from '@/types/agents/fundamental-service-facts';
+import type { EvidenceSelection } from '../../workspace-evidence-inspector';
 
 interface FinancialTableProps {
-    reports: FinancialReport[];
-    ticker: string;
+    facts: FundamentalFactsReadResult;
     artifactReference?: ArtifactReference | null;
     onSelectEvidence?: (item: EvidenceSelection) => void;
 }
 
-const FinancialTableComponent: React.FC<FinancialTableProps> = ({ reports, ticker, artifactReference, onSelectEvidence }) => {
-    // Memoize sorted reports to prevent recalculation on every render
-    const sortedReports = useMemo(() => {
-        if (!reports || reports.length === 0) return [];
-        return [...reports].sort((a, b) => {
-            const yearA = parseInt(String(a.base.fiscal_year?.value || 0));
-            const yearB = parseInt(String(b.base.fiscal_year?.value || 0));
-            return yearB - yearA;
-        });
-    }, [reports]);
+const FAMILY_LABELS = {
+    bank: 'Bank',
+    industrial: 'Industrial',
+    reit: 'REIT',
+} as const;
 
-    const headers = useMemo(() => sortedReports.map(r => {
-        const fy = r.base.fiscal_year?.value || 'N/A';
-        const fp = r.base.fiscal_period?.value || 'N/A';
-        return `${fy} (${fp})`;
-    }), [sortedReports]);
+const FinancialTableComponent = ({ facts, artifactReference, onSelectEvidence }: FinancialTableProps) => {
+    const sortedFacts = useMemo(
+        () => [...facts.facts].sort((left, right) => left.normalized_field.localeCompare(right.normalized_field)),
+        [facts.facts],
+    );
+    const familyLabel = facts.identity.family ? FAMILY_LABELS[facts.identity.family] : 'Family unspecified';
 
-    // Early return if no data
-    if (sortedReports.length === 0) return null;
-
-    const formatCurrency = (field: TraceableField | null | undefined) => {
-        if (!field || field.value === null || field.value === undefined) return '-';
-        try {
-            const val = parseFloat(String(field.value));
-            if (isNaN(val)) return String(field.value);
-
-            // Format large numbers
-            if (Math.abs(val) >= 1e9) return `$${(val / 1e9).toFixed(2)}B`;
-            if (Math.abs(val) >= 1e6) return `$${(val / 1e6).toFixed(2)}M`;
-            return `$${val.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
-        } catch {
-            return String(field.value);
-        }
-    };
-
-    const formatNumber = (field: TraceableField | null | undefined) => {
-        if (!field || field.value === null || field.value === undefined) return '-';
-        try {
-            const val = parseFloat(String(field.value));
-            if (isNaN(val)) return String(field.value);
-            return val.toLocaleString(undefined, { maximumFractionDigits: 0 });
-        } catch {
-            return String(field.value);
-        }
-    };
-
-    const formatRatio = (num: TraceableField | null, den: TraceableField | null) => {
-        const n = num?.value ? parseFloat(String(num.value)) : 0;
-        const d = den?.value ? parseFloat(String(den.value)) : 0;
-
-        if (!n || !d) return '-';
-        return (n / d).toFixed(2);
-    }
-
-    const renderRow = (label: string, accessor: (r: FinancialReport) => TraceableField | null | undefined, formatter = formatCurrency) => {
-        return (
-            <TableRow>
-                <TableCell className="font-medium text-muted-foreground">{label}</TableCell>
-                {sortedReports.map((r, i) => (
-                    <TableCell key={i} className="text-right font-mono tabular-nums">
-                        <div className="group relative inline-block">
-                            {renderEvidenceValue(label, formatter(accessor(r)), accessor(r), r, i)}
-                            {accessor(r)?.provenance && (
-                                <div className="invisible group-hover:visible absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 rounded-md border border-border bg-popover p-2 text-left text-xs text-popover-foreground whitespace-pre-wrap break-words">
-                                    {accessor(r)?.provenance?.concept ? `XBRL: ${accessor(r)?.provenance?.concept}` : ''}
-                                    {accessor(r)?.provenance?.expression ? `Calc: ${accessor(r)?.provenance?.expression}` : ''}
-                                    {accessor(r)?.provenance?.description ? `Manual: ${accessor(r)?.provenance?.description}` : ''}
-                                </div>
-                            )}
-                        </div>
-                    </TableCell>
-                ))}
-            </TableRow>
-        );
-    };
-
-    const renderEvidenceValue = (
-        label: string,
-        displayValue: string,
-        field: TraceableField | null | undefined,
-        report: FinancialReport,
-        index: number,
-    ) => {
-        if (!onSelectEvidence || !field || field.value === null || field.value === undefined) {
-            return displayValue;
-        }
-        const concept = field.provenance?.concept;
-        const expression = field.provenance?.expression;
-        const periodValue = report.base.period_end_date?.value;
-        const fiscalYear = report.base.fiscal_year?.value;
-        const fiscalPeriod = report.base.fiscal_period?.value;
-        const period = periodValue !== null && periodValue !== undefined
-            ? String(periodValue)
-            : fiscalYear !== null && fiscalYear !== undefined
-                ? `${String(fiscalYear)}${fiscalPeriod ? ` (${String(fiscalPeriod)})` : ''}`
-                : undefined;
-        const artifactId = artifactReference?.artifact_id;
-        return (
-            <button
-                type="button"
-                className="rounded-sm border-b border-dashed border-primary/50 text-primary underline-offset-2 hover:bg-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                aria-label={`Inspect ${label} evidence for ${period ?? `period ${index + 1}`}`}
-                onClick={() => onSelectEvidence({
-                    id: `fundamental:financial-report:${label}:${index}`,
-                    title: `Financial report · ${label}`,
-                    value: displayValue,
-                    source: concept ? `SEC XBRL concept ${concept}` : artifactId ? `Financial report artifact ${artifactId}` : 'Typed financial report',
-                    period,
-                    formula: expression,
-                    artifactId,
-                    artifactUrl: artifactReference?.download_url,
-                })}
-            >
-                {displayValue}
-            </button>
-        );
-    };
-
-    // Ratios
-    const renderRatioRow = (label: string, numAccessor: (r: FinancialReport) => TraceableField | null, denAccessor: (r: FinancialReport) => TraceableField | null) => {
-        return (
-            <TableRow className="bg-muted/50">
-                <TableCell className="font-semibold text-primary">{label}</TableCell>
-                {sortedReports.map((r, i) => (
-                    <TableCell key={i} className="text-right font-mono font-semibold tabular-nums text-primary">
-                        {formatRatio(numAccessor(r), denAccessor(r))}
-                    </TableCell>
-                ))}
-            </TableRow>
-        );
-    }
-
-    // Determine Type based on first report (robustness check needed?)
-    const extensionType = sortedReports[0]?.extension ?
-        ('inventory' in sortedReports[0].extension ? 'Industrial' :
-            'loans_and_leases' in sortedReports[0].extension ? 'FinancialServices' :
-                'real_estate_assets' in sortedReports[0].extension ? 'RealEstate' : null) : null;
-
-    const getIndustrialField = (
-        report: FinancialReport,
-        field: 'inventory' | 'rd_expense' | 'capex'
-    ): TraceableField | null | undefined => {
-        const extension = report.extension;
-        if (!extension || !('inventory' in extension)) return null;
-        return extension[field];
-    };
-
-    const getFinancialServicesField = (
-        report: FinancialReport,
-        field: 'loans_and_leases' | 'deposits' | 'interest_income'
-    ): TraceableField | null | undefined => {
-        const extension = report.extension;
-        if (!extension || !('loans_and_leases' in extension)) return null;
-        return extension[field];
-    };
-
-    const getRealEstateField = (
-        report: FinancialReport,
-        field: 'real_estate_assets' | 'ffo'
-    ): TraceableField | null | undefined => {
-        const extension = report.extension;
-        if (!extension || !('real_estate_assets' in extension)) return null;
-        return extension[field];
-    };
+    if (sortedFacts.length === 0) return null;
 
     return (
-        <div className="w-full py-2">
+        <section aria-label="Fundamental service facts" className="w-full py-2">
             <Card className="overflow-hidden">
-                <div className="flex items-center justify-between gap-3 bg-muted/50 px-4 py-3">
-                    <h3 className="flex items-center gap-2 font-semibold text-foreground">
-                        <Info size={16} className="text-primary" />
-                        Financial Health Report: <span className="text-primary">{ticker}</span>
-                    </h3>
-                    <span className="rounded-md bg-background px-2 py-1 text-xs text-muted-foreground">
-                        {extensionType || 'General'} Model
-                    </span>
+                <div className="flex flex-wrap items-start justify-between gap-3 border-b bg-muted/50 px-4 py-3">
+                    <div className="min-w-0">
+                        <h3 className="flex items-center gap-2 font-semibold text-foreground">
+                            <Info aria-hidden="true" className="size-4 text-primary" />
+                            Service facts · <span className="text-primary">{facts.identity.issuer_name}</span>
+                        </h3>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                            {familyLabel} · {facts.identity.reporting_basis} · {facts.identity.currency} · {sortedFacts.length} selected facts
+                        </p>
+                    </div>
+                    <dl className="grid min-w-0 gap-1 text-right text-xs text-muted-foreground">
+                        <div>
+                            <dt className="inline">Snapshot: </dt>
+                            <dd className="inline break-all font-mono text-foreground">{facts.snapshot_id}</dd>
+                        </div>
+                        <div>
+                            <dt className="inline">Manifest: </dt>
+                            <dd className="inline break-all font-mono text-foreground">{facts.snapshot_manifest_digest}</dd>
+                        </div>
+                    </dl>
                 </div>
-
                 <div className="overflow-x-auto">
                     <Table>
                         <TableHeader>
                             <TableRow className="bg-background hover:bg-background">
-                                <TableHead className="min-w-48">Metric</TableHead>
-                                {headers.map((h, i) => (
-                                    <TableHead key={i} className="text-right tabular-nums">{h}</TableHead>
-                                ))}
+                                <TableHead className="min-w-48">Canonical fact</TableHead>
+                                <TableHead className="min-w-48">Value</TableHead>
+                                <TableHead>Period</TableHead>
+                                <TableHead>Unit</TableHead>
+                                <TableHead>Quality</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {/* Key Ratios */}
-                            {renderRatioRow('ROE', (r) => r.base.net_income, (r) => r.base.total_equity)}
-                            {renderRatioRow('Debt/Equity', (r) => r.base.total_liabilities, (r) => r.base.total_equity)}
-
-                            <TableRow><TableCell colSpan={headers.length + 1} className="h-2 p-0" /></TableRow>
-
-                            {/* Base Metrics */}
-                            {renderRow('Revenue', (r) => r.base.total_revenue)}
-                            {renderRow('Net Income', (r) => r.base.net_income)}
-                            {renderRow('Op. Cash Flow', (r) => r.base.operating_cash_flow)}
-                            {renderRow('Cash & Eq.', (r) => r.base.cash_and_equivalents)}
-                            {renderRow('Total Assets', (r) => r.base.total_assets)}
-                            {renderRow('Total Liabilities', (r) => r.base.total_liabilities)}
-                            {renderRow('Total Equity', (r) => r.base.total_equity)}
-                            {renderRow('Shares Outstanding', (r) => r.base.shares_outstanding, formatNumber)}
-
-                            {/* Extension Metrics */}
-                            {extensionType === 'Industrial' && (
-                                <>
-                                    <TableRow><TableCell colSpan={headers.length + 1} className="font-semibold text-muted-foreground">Industrial Metrics</TableCell></TableRow>
-                                    {renderRow("Inventory", r => getIndustrialField(r, 'inventory'))}
-                                    {renderRow("R&D Info", r => getIndustrialField(r, 'rd_expense'))}
-                                    {renderRow("Capex", r => getIndustrialField(r, 'capex'))}
-                                </>
-                            )}
-
-                            {extensionType === 'FinancialServices' && (
-                                <>
-                                    <TableRow><TableCell colSpan={headers.length + 1} className="font-semibold text-muted-foreground">Banking Metrics</TableCell></TableRow>
-                                    {renderRow("Loans", r => getFinancialServicesField(r, 'loans_and_leases'))}
-                                    {renderRow("Deposits", r => getFinancialServicesField(r, 'deposits'))}
-                                    {renderRow("Interest Income", r => getFinancialServicesField(r, 'interest_income'))}
-                                </>
-                            )}
-
-                            {extensionType === 'RealEstate' && (
-                                <>
-                                    <TableRow><TableCell colSpan={headers.length + 1} className="font-semibold text-muted-foreground">REIT Metrics</TableCell></TableRow>
-                                    {renderRow("Real Estate Assets", r => getRealEstateField(r, 'real_estate_assets'))}
-                                    {renderRow("FFO", r => getRealEstateField(r, 'ffo'))}
-                                </>
-                            )}
-
+                            {sortedFacts.map((fact) => (
+                                <FactRow
+                                    key={fact.fact_id}
+                                    fact={fact}
+                                    snapshotId={facts.snapshot_id}
+                                    snapshotManifestDigest={facts.snapshot_manifest_digest}
+                                    artifactReference={artifactReference}
+                                    onSelectEvidence={onSelectEvidence}
+                                />
+                            ))}
                         </TableBody>
                     </Table>
                 </div>
             </Card>
-        </div>
+        </section>
     );
 };
 
-// Export with React.memo for performance optimization
+function FactRow({
+    fact,
+    snapshotId,
+    snapshotManifestDigest,
+    artifactReference,
+    onSelectEvidence,
+}: {
+    fact: FundamentalCanonicalFact;
+    snapshotId: string;
+    snapshotManifestDigest: string;
+    artifactReference?: ArtifactReference | null;
+    onSelectEvidence?: (item: EvidenceSelection) => void;
+}) {
+    const value = formatFactValue(fact.value, fact.scale);
+    const period = fact.period.kind === 'instant'
+        ? `Instant · ${fact.period.instant}`
+        : `${fact.period.start} → ${fact.period.end}`;
+    const evidence = buildFactEvidence({
+        fact,
+        value,
+        period,
+        snapshotId,
+        snapshotManifestDigest,
+        artifactReference,
+    });
+
+    return (
+        <TableRow>
+            <TableCell>
+                <div className="font-medium text-foreground">{formatLabel(fact.normalized_field)}</div>
+                <div className="mt-1 break-all font-mono text-xs text-muted-foreground" title={fact.fact_id}>{fact.fact_id}</div>
+            </TableCell>
+            <TableCell className="font-mono tabular-nums">
+                {onSelectEvidence ? (
+                    <button
+                        type="button"
+                        className="max-w-full rounded-sm border-b border-dashed border-primary/50 text-left text-primary underline-offset-2 hover:bg-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        aria-label={`Inspect ${formatLabel(fact.normalized_field)} evidence`}
+                        onClick={() => onSelectEvidence(evidence)}
+                    >
+                        {value}
+                    </button>
+                ) : value}
+            </TableCell>
+            <TableCell className="whitespace-nowrap text-xs text-muted-foreground">{period}</TableCell>
+            <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
+                {fact.currency ? `${fact.currency} · ` : ''}{fact.unit}{fact.scale === 0 ? '' : ` · 10^${fact.scale}`}
+            </TableCell>
+            <TableCell>
+                <span className={qualityClass(fact.quality)}>{fact.quality}</span>
+                {fact.issue_codes.length > 0 && (
+                    <span className="mt-1 block max-w-32 break-words text-xs text-muted-foreground">
+                        {fact.issue_codes.join(', ')}
+                    </span>
+                )}
+            </TableCell>
+        </TableRow>
+    );
+}
+
+function buildFactEvidence({
+    fact,
+    value,
+    period,
+    snapshotId,
+    snapshotManifestDigest,
+    artifactReference,
+}: {
+    fact: FundamentalCanonicalFact;
+    value: string;
+    period: string;
+    snapshotId: string;
+    snapshotManifestDigest: string;
+    artifactReference?: ArtifactReference | null;
+}): EvidenceSelection {
+    const source = fact.source;
+    return {
+        id: `fundamental:service-fact:${fact.fact_id}`,
+        title: `Service fact · ${formatLabel(fact.normalized_field)}`,
+        value,
+        source: `${source.source_role} · ${source.source_url}`,
+        period,
+        confidence: `${fact.quality}${fact.mapping_confidence ? ` · mapping ${fact.mapping_confidence}` : ''}`,
+        artifactId: artifactReference?.artifact_id,
+        artifactUrl: artifactReference?.download_url,
+        factId: fact.fact_id,
+        concept: fact.concept,
+        accessionNumber: fact.accession_number ?? source.accession_number,
+        capturedAt: fact.captured_at,
+        availableAt: fact.available_at,
+        filedAt: fact.filed_at ?? source.filed_at,
+        parserVersion: source.parser_version,
+        taxonomyVersion: fact.taxonomy_version,
+        taxonomyManifestDigest: source.taxonomy_manifest_digest,
+        mappingVersion: source.mapping_version,
+        sourceHash: source.source_hash,
+        snapshotId,
+        snapshotManifestDigest,
+        unit: fact.unit,
+        scale: fact.scale,
+        issueCodes: fact.issue_codes,
+    };
+}
+
+function formatFactValue(value: FundamentalFactValue, scale: number): string {
+    switch (value.kind) {
+        case 'numeric': {
+            const scaled = value.numeric * (10 ** scale);
+            return Number.isFinite(scaled)
+                ? scaled.toLocaleString(undefined, { maximumFractionDigits: 6 })
+                : value.raw;
+        }
+        case 'text':
+            return value.value;
+        case 'boolean':
+            return value.value ? 'True' : 'False';
+        case 'missing':
+            return `Unavailable · ${value.status}: ${value.reason}`;
+        default: {
+            const unreachable: never = value;
+            return unreachable;
+        }
+    }
+}
+
+function formatLabel(value: string): string {
+    return value.replaceAll('_', ' ').replace(/\b\w/g, (character) => character.toUpperCase());
+}
+
+function qualityClass(value: FundamentalCanonicalFact['quality']): string {
+    if (value === 'verified') return 'text-xs font-medium text-success';
+    if (value === 'error' || value === 'abstain') return 'text-xs font-medium text-destructive';
+    return 'text-xs font-medium text-warning';
+}
+
 export const FinancialTable = memo(FinancialTableComponent);
