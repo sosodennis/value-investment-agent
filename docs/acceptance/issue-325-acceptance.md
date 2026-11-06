@@ -1,7 +1,7 @@
 # Issue 325 acceptance evidence
 
-Status: incomplete. This checkpoint records a live UI rejection and the
-synthetic fixture that caused it. It is not an acceptance or `VERIFIED` record.
+Status: incomplete. These checkpoints record live UI rejection and diagnostic
+runs. They are not an acceptance or `VERIFIED` record.
 
 ## Issue and checkpoint
 
@@ -91,10 +91,46 @@ synthetic fixture that caused it. It is not an acceptance or `VERIFIED` record.
   acceptance evidence. Desktop/mobile viewports, keyboard evidence selection,
   and the evidence inspector remain unverified.
 
+## Follow-up live run diagnostic
+
+- Date: 2026-11-07 (local); backend log timestamps are 2026-11-06 UTC.
+- Code under test: `3a333272508240f2ac7a6c2a8e7c0889131a58c4`.
+- Base observed: `origin/main` at `55608191c13ad02a8efddc7079c54c71c702d8dc`.
+- Route: `/workspace`, Personal organization, at `http://127.0.0.1:18681`.
+- Run: `e2fb48bf-ed08-4a1d-84bf-03bc3d325869`; thread
+  `thread_1794005945821`; report artifact
+  `971d776e-2bab-49f3-a72a-21ce962d2156`.
+- UI observation: the Fundamental workflow activity completed, but the report
+  explicitly showed `Fundamental facts unavailable` and stated that the
+  service did not provide a snapshot-bound fact set. No snapshot ID, fact IDs,
+  manifest digest, or source hash was available to verify. The report showed
+  summary values (revenue, net income, total assets, and ROE), while valuation
+  metrics were unavailable. These values do not establish the required
+  service-backed report binding.
+- The overall run failure is separate: the Activity view showed
+  `moderate-verdict` failed with code `failover_exhausted`. Backend logs for
+  this exact run show the LLM provider returning `502 Bad Gateway` for Debate
+  rounds and the final verdict, followed by `LLMProviderError` in
+  `debate.orchestrator.run_verdict`. This explains the run's terminal failure;
+  it does not explain or satisfy the missing Fundamental snapshot facts.
+- The browser recorded `workflow sequence gap requires snapshot recovery` for
+  this thread. The app backend, frontend, PostgreSQL, Redis, LLM provider,
+  Fundamental service, and Fundamental PostgreSQL containers reported healthy;
+  `/health` returned `{"status":"ok"}` and Fundamental `/readyz` returned
+  `{"status":"ready","contract_version":"internal.v1"}`. During the
+  run's UTC interval, the Fundamental service log showed no non-health request.
+- Desktop/mobile viewport checks, keyboard fact selection, evidence-inspector
+  provenance, and matching service snapshot/valuation trace remain unverified.
+- Result: **incomplete**. The Debate LLM outage is a distinct observed
+  run-failure cause. The Fundamental facts remain unavailable in the report,
+  and this run supplies no service-backed snapshot evidence. No acceptance
+  criterion is marked passed by this diagnostic.
+
 ## Next
 
-Continue the real workspace run through service valuation and verify its fact
-IDs, snapshot ID, and manifest digest against the valuation trace. Run desktop
-and mobile route checks, keyboard evidence selection, the evidence inspector,
-and the remaining issue acceptance criteria before updating this record for the
-exact delivery commit.
+Diagnose why the completed Fundamental workflow produced no snapshot-bound fact
+set in the report, using the typed Agent/service boundary and service-owned
+snapshot evidence. Keep the Debate LLM 502 failure separate from that
+investigation. Then complete the real service-backed report checks, viewport and
+keyboard/evidence-inspector checks, and record all results against the exact
+delivery commit.
