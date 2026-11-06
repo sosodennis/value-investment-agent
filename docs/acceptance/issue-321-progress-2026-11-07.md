@@ -10,7 +10,7 @@ This record covers the immutable release activation work on branch
 - Base: `origin/main` at `4727b9194bd50825869b4737e47daeb109cbd41f`
 - Current synchronization checkpoint: `f900b973` (merge of the issue branch
   with the latest `origin/main`)
-- Current verification checkpoint: `e29f7ac7` (tests and static checks below
+- Current verification checkpoint: `b94cf9bb` (tests and static checks below
   were rerun at this exact commit)
 - Release trust-root fixture SHA-256:
   `98d739b587416a41f2dd9efab04f83e244c7fc303cff64d8152041e44dbfeb34`
@@ -21,7 +21,7 @@ This record covers the immutable release activation work on branch
 
 ### Current synchronization checkpoint
 
-At `e29f7ac7`, the following command exited 0:
+At `b94cf9bb`, the following command exited 0:
 
 ```text
 uv run pytest tests/test_release_runner.py tests/test_api.py tests/test_replay.py tests/test_data_release_attestations.py
@@ -50,17 +50,29 @@ python -m compileall -q fundamental-service/src fundamental-service/tests
 git diff --check
 ```
 
-The exact-head rerun produced `58 passed` and `17 passed`, with only the
+The final exact-head rerun produced `58 passed` and `17 passed`, with only the
 existing Starlette/httpx deprecation warning. The Compose service was rebuilt
-from `e29f7ac7`; the image digest is
+from `b94cf9bb`; the image digest is
 `sha256:0b0501f09178e14ff816094517c0eb2c574be7357f7ec3e3d2b487fb8eda7167`.
 Both containers were healthy, `/readyz` returned HTTP 200 with
 `{"status":"ready","contract_version":"internal.v1"}`, and OpenAPI
 listed the four release routes under `/v1/data/releases`.
 
-The remaining checks must be rerun against the final issue commit before a PR
-is opened. The older results below are retained as historical checkpoints and
-are not being reused as exact-head acceptance evidence.
+The pinned pre-commit command over all 14 changed Python files also exited 0 at
+this checkpoint:
+
+```text
+uv run --with pre-commit pre-commit run --config finance-agent-core/.pre-commit-config.yaml --files fundamental-service/src/fundamental_service/app.py fundamental-service/src/fundamental_service/application/service.py fundamental-service/src/fundamental_service/contracts.py fundamental-service/src/fundamental_service/data_releases.py fundamental-service/src/fundamental_service/facts.py fundamental-service/src/fundamental_service/metadata.py fundamental-service/src/fundamental_service/operations.py fundamental-service/src/fundamental_service/release_runner.py fundamental-service/src/fundamental_service/replay.py fundamental-service/tests/test_api.py fundamental-service/tests/test_data_release_attestations.py fundamental-service/tests/test_postgres_metadata.py fundamental-service/tests/test_release_runner.py fundamental-service/tests/test_replay.py
+trim trailing whitespace: Passed
+fix end of files: Passed
+check added large files: Passed
+ruff (v0.3.0): Passed
+ruff-format (v0.3.0): Passed
+```
+
+All required final checks are now recorded above. The older results below are
+retained as historical checkpoints and are not reused as exact-head acceptance
+evidence.
 
 ### Historical checkpoint
 
@@ -119,7 +131,8 @@ route set was checked before the exact-head HTTP probe below.
 
 ## Exact-head HTTP lifecycle probe
 
-The probe ran against the rebuilt `e29f7ac7` image and a new PostgreSQL profile
+The probe ran against the rebuilt `e29f7ac7` executable source (the later
+`b94cf9bb` checkpoint changes only acceptance evidence) and a new PostgreSQL profile
 `live-321-exact-2e8bceda081743ac9b5914417e8a4b37`. It used the deployment trust
 root to sign two candidates and exercised the real HTTP routes. The results
 were:
