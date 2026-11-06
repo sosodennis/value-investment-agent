@@ -109,13 +109,14 @@ fundamental-service/.venv/bin/pytest -q \
   fundamental-service/tests/test_arelle_parser.py::test_microsoft_sec_efm_dqc_replay_allows_verified_fixture
 ```
 
-Docker health, real service-backed snapshot publication from the clean filing,
-and exact-commit acceptance remain pending. Publication remains fail-closed
-until those gates are complete.
+At the time of this checkpoint, Docker health and real service-backed snapshot
+publication remained pending. The later verification checkpoints below record
+the completed container and canonical publication checks.
 
 ## Verification Stack Checkpoint
 
-All checks below ran against exact commit `e7ac1d5d71421cc807a5f5893b60a01cafa5f3fa`.
+All checks in this section ran against exact commit
+`e7ac1d5d71421cc807a5f5893b60a01cafa5f3fa`.
 
 | Check | Result |
 | --- | --- |
@@ -128,14 +129,65 @@ All checks below ran against exact commit `e7ac1d5d71421cc807a5f5893b60a01cafa5f
 | `GET /livez` | exit 0; `{"status":"ok","contract_version":"internal.v1"}` |
 | `GET /readyz` | exit 0; `{"status":"ready","contract_version":"internal.v1"}` |
 | `GET /metrics` | exit 0; request failures, auth failures, source health failures, and replay failures were zero |
-| Full service suite with pinned Arelle/EFM/DQC runtime | `163 passed, 5 skipped, 2 warnings` |
+| Full service suite with pinned Arelle/EFM/DQC runtime | `163 passed, 5 skipped, 2 warnings`; superseded by the PostgreSQL-backed exact-SHA run below |
 
-The five skips are the PostgreSQL metadata tests because the local pytest
-process was not given `FUNDAMENTAL_TEST_DATABASE_URL`; the Docker PostgreSQL
-health check and service readiness above are separate container checks. The
-remaining unrun acceptance is the service-backed SEC ingestion publication
-from a clean verified filing. The current ingestion regression uses a fake
-parser to cover normalization mismatch, raw retention, blocking findings, and
-publication ordering; the real parser-to-snapshot publication path still
-needs a clean filing fixture with the complete referenced taxonomy and a
-service/database-backed invocation.
+The five skips were the PostgreSQL metadata tests because that first local
+pytest process was not given `FUNDAMENTAL_TEST_DATABASE_URL`. The next
+checkpoint connected the full suite to this same Compose PostgreSQL instance,
+added a real parser-to-snapshot acceptance path using Microsoft's canonical
+SEC archive fixture, and corrected the PostgreSQL test manifest fixture for
+the new optional SEC evidence field.
+
+## Real Snapshot Publication Checkpoint
+
+Implementation checkpoint: `e879c94d` (full SHA:
+`e879c94da35cbc753224343bf94f9be4a6a04806`).
+
+The environment-gated
+`test_sec_ingestion_publishes_real_verified_microsoft_fixture` uses the
+committed Microsoft canonical HTML/XSD fixture and the SEC EFM/DQC runtime
+pins above. Its fixture adapter serves only captured archive/index/DTS bytes;
+no network is used. The real parser produces 1,856+ facts with no blocking
+findings, approved Revenue mapping yields a verified fact, the exact archive
+representation creates a selectable snapshot, and replay yields the same
+snapshot manifest and integrity evidence. Both the raw filing member and ZIP
+are retrievable from the content store by their recorded hashes.
+
+| Exact-check command | Result |
+| --- | --- |
+| `ISSUE328_*` pinned runtime variables plus `.venv/bin/pytest -q tests/test_ingestion.py::test_sec_ingestion_publishes_real_verified_microsoft_fixture tests/test_ingestion.py::test_sec_ingestion_connects_adapter_snapshot_parser_and_fact_selection` | exit 0, `2 passed` |
+| `FUNDAMENTAL_TEST_DATABASE_URL=postgresql+asyncpg://fundamental:fundamental@127.0.0.1:18483/fundamental .venv/bin/pytest -q tests/test_postgres_metadata.py` | exit 0, `5 passed` |
+| Full service suite with `FUNDAMENTAL_TEST_DATABASE_URL` and the pinned EFM/DQC runtime | exit 0, `169 passed, 2 warnings` |
+| `ruff format --check`, `ruff check --select E,F,I --ignore E501`, and `git diff --check` on changed Python files | exit 0 |
+
+The two warnings are the existing Starlette/httpx deprecation and calculator
+Pydantic serialization warning. No tests were skipped in the full suite.
+The full-suite command was run on the working tree after `e879c94d`; the
+acceptance-only documentation update is being committed separately and does
+not change application or test code.
+
+Exact commands for the implementation checkpoint:
+
+```sh
+FUNDAMENTAL_TEST_DATABASE_URL=postgresql+asyncpg://fundamental:fundamental@127.0.0.1:18483/fundamental \
+ISSUE328_EDGAR_PLUGIN_DIR=/private/tmp/issue312-validation-runtime-v2/EDGAR-4891c4c9889c77af247428ceff4fa7cc52d534ea \
+ISSUE328_XULE_PLUGIN_DIR=/private/tmp/issue312-validation-runtime-v2/xule-7ca1d7637f333f5c3a02379dbe6f6d6c17c88acc/plugin \
+ISSUE328_DQC_RULESET_PATH=/private/tmp/issue312-validation-runtime-v2/dqc_us_rules-31.0.3/dqc_us_rules/dqc-us-2024-V31-ruleset.zip \
+ISSUE328_TAXONOMY_CACHE_DIR=/tmp/issue312-sec-taxonomy-2023-2024 \
+uv run --project fundamental-service pytest fundamental-service/tests -q
+```
+
+Result: exit 0, `169 passed, 2 warnings`.
+
+```sh
+FUNDAMENTAL_POSTGRES_HOST_PORT=18483 FUNDAMENTAL_SERVICE_HOST_PORT=18083 \
+docker compose -p value-investment-agent-issue-328-sec-integrity \
+  -f compose/verification/docker-compose.issue280-operations.yml up -d --build
+curl -fsS http://127.0.0.1:18083/livez
+curl -fsS http://127.0.0.1:18083/readyz
+```
+
+All commands exited 0. Docker health was `healthy` for PostgreSQL and
+Fundamental service. These checks ran on the same source tree as
+`e879c94da35cbc753224343bf94f9be4a6a04806`; the only subsequent source change
+is this evidence document.
