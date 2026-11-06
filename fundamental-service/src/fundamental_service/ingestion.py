@@ -87,7 +87,21 @@ class SecIngestionService:
             raise SnapshotError(
                 "MAPPING_NOT_APPROVED", "SEC ingestion requires an approved mapping"
             )
-        profile = profile or ArelleValidationProfileV1(profile_id="sec-efm-us-gaap-v1")
+        if profile is None:
+            raise SnapshotError(
+                "VALIDATION_PROFILE_REQUIRED",
+                "SEC ingestion requires an explicitly pinned EFM/DQC profile",
+            )
+        if (
+            profile.validation_mode != "sec-efm-dqc"
+            or profile.edgar_plugin_dir is None
+            or profile.xule_plugin_dir is None
+            or profile.dqc_ruleset_path is None
+        ):
+            raise SnapshotError(
+                "SEC_VALIDATION_REQUIRED",
+                "SEC ingestion requires the pinned sec-efm-dqc profile",
+            )
         index_source = self.source_adapter.capture_filing_index(
             cik=cik,
             accession_number=accession_number,
@@ -164,6 +178,8 @@ class SecIngestionService:
                 taxonomy_cache_dir=taxonomy_cache_dir,
                 source_content_hash=normalized_hash,
             )
+            self._require_validation_evidence(parser_report)
+            archive_report = parser_report
             if assessment.relation == "normalized":
                 archive_report = parse_filing_offline(
                     archive_member_path,
@@ -172,10 +188,11 @@ class SecIngestionService:
                     taxonomy_cache_dir=taxonomy_cache_dir,
                     source_content_hash=archive_member_hash,
                 )
-                if (
-                    fact_semantic_digest(parser_report)
-                    != fact_semantic_digest(archive_report)
-                    or parser_report.finding_codes != archive_report.finding_codes
+                self._require_validation_evidence(archive_report)
+                if fact_semantic_digest(parser_report) != fact_semantic_digest(
+                    archive_report
+                ) or self._finding_signature(parser_report) != self._finding_signature(
+                    archive_report
                 ):
                     raise SnapshotError(
                         "NORMALIZATION_SEMANTIC_MISMATCH",
@@ -183,6 +200,7 @@ class SecIngestionService:
                     )
 
         fact_digest = fact_semantic_digest(parser_report)
+        archive_fact_digest = fact_semantic_digest(archive_report)
         blocking_codes = set(parser_report.blocking_finding_codes())
         finding_evidence = tuple(
             ArelleFindingEvidenceV1(
@@ -232,9 +250,13 @@ class SecIngestionService:
             removed_ranges=assessment.removed_ranges,
             normalized_fact_count=len(parser_report.facts),
             normalized_fact_digest=fact_digest,
-            archive_fact_count=len(parser_report.facts),
-            archive_fact_digest=fact_digest,
+            archive_fact_count=len(archive_report.facts),
+            archive_fact_digest=archive_fact_digest,
             parser_input_hash=parser_report.source_content_hash or "",
+            validation_profile_digest=parser_report.validation_profile_digest,
+            validation_engines=parser_report.validation_engines,
+            validation_evidence=parser_report.validation_evidence,
+            network_attempt_count=parser_report.network_attempt_count,
             taxonomy_manifest_hash=taxonomy_hash,
             arelle_version=profile.arelle_version,
             efm_profile=profile.efm_profile,
@@ -291,3 +313,41 @@ class SecIngestionService:
             selection=selection,
             integrity_evidence=integrity_evidence,
         )
+
+    @staticmethod
+    def _finding_signature(
+        report: ArelleParseReportV1,
+    ) -> tuple[tuple[str, str, bool], ...]:
+        blocking = set(report.blocking_finding_codes())
+        return tuple(
+            sorted(
+                (item.code, item.severity, item.code in blocking)
+                for item in report.findings
+            )
+        )
+
+    @staticmethod
+    def _require_validation_evidence(report: ArelleParseReportV1) -> None:
+        if report.validation_profile.validation_mode != "sec-efm-dqc":
+            raise SnapshotError(
+                "SEC_VALIDATION_REQUIRED",
+                "SEC parser report was not produced by sec-efm-dqc",
+            )
+        if not {"sec-efm", "dqc-us"}.issubset(report.validation_engines):
+            raise SnapshotError(
+                "VALIDATION_EVIDENCE_MISSING",
+                "SEC parser report lacks EFM/DQC engine evidence",
+            )
+        if not {
+            "strict-sec-efm-profile-selected",
+            "dqc-dqcrt-checks-completed",
+        }.issubset(report.validation_evidence):
+            raise SnapshotError(
+                "VALIDATION_EVIDENCE_MISSING",
+                "SEC parser report lacks EFM/DQC completion evidence",
+            )
+        if report.network_attempt_count != 0:
+            raise SnapshotError(
+                "OFFLINE_NETWORK_ATTEMPT",
+                "SEC parser report records a network attempt",
+            )

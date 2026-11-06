@@ -19,12 +19,6 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from .serialization import sha256_digest
 
 
-_NON_BLOCKING_ARELLE_CODES = frozenset(
-    {
-        "ix11.10.1.2:invalidTransformation",
-        "ix11.11.1.2:invalidTransformation",
-    }
-)
 _PLUGIN_ROOT_LOCK = threading.Lock()
 _PLUGIN_ROOTS: dict[str, tuple[tempfile.TemporaryDirectory[str], Path]] = {}
 
@@ -137,17 +131,22 @@ class ArelleParseReportV1(BaseModel):
     validation_evidence: tuple[str, ...] = ()
     parsed_at: datetime
     offline: bool = True
+    network_attempt_count: int = Field(default=0, ge=0)
     source_content_hash: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
     taxonomy_cache_hash: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
 
     def blocking_finding_codes(self) -> tuple[str, ...]:
+        if not self.findings:
+            # Older persisted reports contain only codes. Treat every such
+            # code as blocking; only current reports may carry explicit
+            # severity evidence.
+            return tuple(sorted(set(self.finding_codes)))
         return tuple(
             sorted(
                 {
                     finding.code
                     for finding in self.findings
                     if finding.severity in {"error", "critical", "fatal"}
-                    and finding.code not in _NON_BLOCKING_ARELLE_CODES
                 }
             )
         )
@@ -204,8 +203,6 @@ def _finding_from_log(record: dict[str, Any]) -> ArelleFindingV1 | None:
     if level not in {"error", "critical", "warning", "fatal"}:
         return None
     code = str(record.get("code") or "arelle:unknown")
-    if code in _NON_BLOCKING_ARELLE_CODES:
-        level = "warning"
     message = record.get("message")
     if isinstance(message, dict):
         message_text = str(message.get("text") or code)
@@ -220,12 +217,8 @@ def _unlogged_model_error_findings(
     return tuple(
         ArelleFindingV1(
             code=code,
-            severity="warning" if code in _NON_BLOCKING_ARELLE_CODES else "error",
-            message=(
-                "Arelle reported a known non-blocking Inline XBRL transformation diagnostic."
-                if code in _NON_BLOCKING_ARELLE_CODES
-                else "Arelle reported a model error without a corresponding log record."
-            ),
+            severity="error",
+            message="Arelle reported a model error without a corresponding log record.",
         )
         for code in model_errors
         if code not in logged_codes
@@ -257,20 +250,27 @@ def _parse_worker(
     taxonomy_cache_dir: str | None,
     expected_source_hash: str | None,
 ) -> None:
+    attempted_network = 0
     try:
         import socket
 
         def block_network(*args: Any, **kwargs: Any) -> None:
+            nonlocal attempted_network
+            attempted_network += 1
             raise OSError("offline Arelle worker attempted network access")
 
         socket.socket.connect = block_network
+        socket.socket.connect_ex = block_network
+        report = _parse_in_process(
+            Path(filing_path),
+            ArelleValidationProfileV1.model_validate(profile_data),
+            taxonomy_version,
+            Path(taxonomy_cache_dir) if taxonomy_cache_dir else None,
+            expected_source_hash,
+        )
         result_queue.put(
-            _parse_in_process(
-                Path(filing_path),
-                ArelleValidationProfileV1.model_validate(profile_data),
-                taxonomy_version,
-                Path(taxonomy_cache_dir) if taxonomy_cache_dir else None,
-                expected_source_hash,
+            report.model_copy(
+                update={"network_attempt_count": attempted_network}
             ).model_dump(mode="json")
         )
     except Exception as error:
@@ -278,6 +278,7 @@ def _parse_worker(
             {
                 "error": getattr(error, "code", "XBRL_PARSE_FAILED"),
                 "message": str(error),
+                "network_attempt_count": attempted_network,
             }
         )
 
@@ -464,14 +465,10 @@ def _parse_in_process(
                 "dqc-dqcrt-checks-completed",
             )
         else:
-            blocking_model_errors = tuple(
-                code for code in model_errors if code not in _NON_BLOCKING_ARELLE_CODES
-            )
-            if blocking_model_errors:
+            if model_errors:
                 raise ArelleParserError(
                     "XBRL_PARSE_FAILED",
-                    "Arelle could not load the filing DTS: "
-                    + ", ".join(blocking_model_errors),
+                    "Arelle could not load the filing DTS: " + ", ".join(model_errors),
                 )
         facts: list[ParsedXbrlFactV1] = []
         for fact in getattr(model, "facts", ()):
@@ -593,13 +590,7 @@ def parse_filing_offline(
                 "SOURCE_HASH_MISMATCH", "parser bytes do not match source manifest"
             )
     if deadline_at is None:
-        return _parse_in_process(
-            filing_path,
-            profile,
-            taxonomy_version,
-            taxonomy_cache_dir,
-            source_content_hash,
-        )
+        deadline_at = datetime.now(timezone.utc) + timedelta(minutes=5)
     remaining = (deadline_at - datetime.now(timezone.utc)).total_seconds()
     if remaining <= 0:
         raise ArelleParserError(
@@ -653,6 +644,11 @@ def parse_filing_offline(
                 process.kill()
                 process.join(timeout=0.2)
         result_queue.close()
+    if result.get("network_attempt_count", 0) != 0:
+        raise ArelleParserError(
+            "OFFLINE_NETWORK_ATTEMPT",
+            "offline Arelle worker attempted network access",
+        )
     if "error" in result:
         raise ArelleParserError(
             str(result["error"]), str(result.get("message", "Arelle parse failed"))

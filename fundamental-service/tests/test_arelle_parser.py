@@ -104,8 +104,8 @@ def test_captured_sec_filing_rebuilds_with_pinned_taxonomy_cache_without_network
                 date.fromisoformat(record["end"])
             }
             assert all(fact.context_id for fact in parsed_facts)
-    assert report.finding_codes
     assert attempted_network == []
+    assert report.network_attempt_count == 0
 
 
 def test_sec_capture_manifest_has_verified_hashes_and_amendment_metadata():

@@ -225,7 +225,7 @@ class RemovedByteRangeV1(StrictModel):
 
 class ArelleFindingEvidenceV1(StrictModel):
     code: str = Field(min_length=1)
-    severity: Literal["warning", "error", "fatal"]
+    severity: Literal["warning", "error", "critical", "fatal"]
     blocks: bool
 
 
@@ -262,6 +262,10 @@ class SecIntegrityEvidenceV1(StrictModel):
     archive_fact_count: int = Field(ge=0)
     archive_fact_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
     parser_input_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    validation_profile_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    validation_engines: tuple[str, ...] = ()
+    validation_evidence: tuple[str, ...] = ()
+    network_attempt_count: int = Field(ge=0)
     taxonomy_manifest_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
     arelle_version: str = Field(min_length=1)
     efm_profile: str = Field(min_length=1)
@@ -276,6 +280,15 @@ class SecIntegrityEvidenceV1(StrictModel):
             raise ValueError("captured_at must include a timezone")
         if self.parser_input_hash != self.normalized_content_hash:
             raise ValueError("parser input hash must match normalized source hash")
+        if self.network_attempt_count != 0:
+            raise ValueError("offline SEC validation cannot contain network attempts")
+        if not {"sec-efm", "dqc-us"}.issubset(self.validation_engines):
+            raise ValueError("SEC integrity evidence requires EFM and DQC engines")
+        if not {
+            "strict-sec-efm-profile-selected",
+            "dqc-dqcrt-checks-completed",
+        }.issubset(self.validation_evidence):
+            raise ValueError("SEC integrity evidence requires EFM and DQC evidence")
         if self.normalized_fact_count != self.archive_fact_count:
             raise ValueError("normalized and archive fact counts must match")
         if self.normalized_fact_digest != self.archive_fact_digest:

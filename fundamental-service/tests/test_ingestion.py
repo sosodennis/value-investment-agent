@@ -1,3 +1,4 @@
+import hashlib
 from datetime import datetime, timezone
 from email.message import Message
 import json
@@ -5,6 +6,12 @@ from pathlib import Path
 from zipfile import ZipFile
 
 from fundamental_service.contracts import IdentityV1
+from fundamental_service.arelle_parser import (
+    ArelleParseReportV1,
+    ArelleValidationProfileV1,
+    ParsedXbrlFactV1,
+    _directory_hash,
+)
 from fundamental_service.facts import CanonicalMappingV1
 from fundamental_service.ingestion import SecIngestionService
 from fundamental_service.sec_source import SecEdgarSourceAdapter, SecRequestPolicy
@@ -36,6 +43,7 @@ class Response:
 
 def test_sec_ingestion_connects_adapter_snapshot_parser_and_fact_selection(
     tmp_path: Path,
+    monkeypatch,
 ):
     fixture_root = Path(__file__).parent / "fixtures" / "sec-edgar"
     filing_bytes = (fixture_root / "apple-2024-original-aapl-20240928.htm").read_bytes()
@@ -70,6 +78,59 @@ def test_sec_ingestion_connects_adapter_snapshot_parser_and_fact_selection(
     taxonomy_cache.mkdir()
     with ZipFile(fixture_root / "arelle-taxonomy-cache-2024.zip") as archive:
         archive.extractall(taxonomy_cache)
+    edgar_dir = tmp_path / "edgar"
+    xule_dir = tmp_path / "xule"
+    edgar_dir.mkdir()
+    xule_dir.mkdir()
+    (edgar_dir / "plugin.py").write_text("pinned-edgar")
+    (xule_dir / "plugin.py").write_text("pinned-xule")
+    ruleset = tmp_path / "dqc-ruleset.zip"
+    ruleset.write_bytes(b"pinned-dqc")
+    profile = ArelleValidationProfileV1(
+        profile_id="sec-efm-dqc-fixture-v1",
+        validation_mode="sec-efm-dqc",
+        edgar_plugin_dir=edgar_dir,
+        xule_plugin_dir=xule_dir,
+        dqc_ruleset_path=ruleset,
+        edgar_plugin_sha256=_directory_hash(edgar_dir),
+        xule_plugin_sha256=_directory_hash(xule_dir),
+        dqc_ruleset_sha256=hashlib.sha256(ruleset.read_bytes()).hexdigest(),
+    )
+
+    def fake_parser(
+        path, *, profile, taxonomy_version, taxonomy_cache_dir, source_content_hash
+    ):
+        fact = ParsedXbrlFactV1(
+            concept="us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
+            value="391035000000",
+            context_id="ctx-revenue",
+            unit="iso4217:USD",
+            entity_identifier="0000320193",
+            period_start=datetime(2023, 9, 30, tzinfo=timezone.utc).date(),
+            period_end=datetime(2024, 9, 28, tzinfo=timezone.utc).date(),
+            is_numeric=True,
+            consolidation_scope="consolidated",
+        )
+        return ArelleParseReportV1(
+            filing_path=str(path),
+            parser_version=profile.arelle_version,
+            taxonomy_version=taxonomy_version,
+            validation_profile=profile,
+            validation_profile_digest=profile.digest(),
+            facts=(fact,),
+            validation_engines=("sec-efm", "dqc-us"),
+            validation_evidence=(
+                "strict-sec-efm-profile-selected",
+                "dqc-dqcrt-checks-completed",
+            ),
+            parsed_at=datetime(2026, 11, 4, tzinfo=timezone.utc),
+            source_content_hash=source_content_hash,
+            taxonomy_cache_hash="a" * 64,
+        )
+
+    monkeypatch.setattr(
+        "fundamental_service.ingestion.parse_filing_offline", fake_parser
+    )
 
     adapter = SecEdgarSourceAdapter(
         SecRequestPolicy(
@@ -113,6 +174,7 @@ def test_sec_ingestion_connects_adapter_snapshot_parser_and_fact_selection(
         taxonomy_cache_dir=taxonomy_cache,
         normalized_field="revenue",
         dts_filenames=tuple(dts_bytes),
+        profile=profile,
         mapping=CanonicalMappingV1(
             contract_version="fundamental.v1",
             decision_id="map-revenue-v1",
