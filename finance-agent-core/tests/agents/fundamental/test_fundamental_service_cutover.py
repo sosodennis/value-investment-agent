@@ -12,6 +12,7 @@ from src.agents.fundamental.application.workflow_orchestrator.service_valuation_
     run_service_valuation_flow,
 )
 from src.agents.fundamental.interface.fundamental_service_contracts import (
+    FundamentalFactsReadResultV1,
     FundamentalServiceResponseV1,
 )
 from src.shared.internal_services import (
@@ -39,6 +40,9 @@ class _Client:
         uncertainty_report_references: list[Mapping[str, object]] | None = None,
         calculation_overrides: Mapping[str, object] | None = None,
         calculation_trace_overrides: Mapping[str, object] | None = None,
+        facts_snapshot_id: str | None = None,
+        facts_manifest_digest: str = "e" * 64,
+        facts_ids: list[str] | None = None,
         validation_policy_overrides: Mapping[str, object] | None = None,
         validated_input: Mapping[str, object] | None = None,
         resolved_snapshot: Mapping[str, object] | None = None,
@@ -54,10 +58,14 @@ class _Client:
         self.uncertainty_report_references = uncertainty_report_references
         self.calculation_overrides = dict(calculation_overrides or {})
         self.calculation_trace_overrides = dict(calculation_trace_overrides or {})
+        self.facts_snapshot_id = facts_snapshot_id
+        self.facts_manifest_digest = facts_manifest_digest
+        self.facts_ids = facts_ids
         self.validation_policy_overrides = dict(validation_policy_overrides or {})
         self.validated_input = validated_input
         self.resolved_snapshot = resolved_snapshot
         self.snapshot_policy_version = snapshot_policy_version
+        self.facts_calls: list[dict[str, object]] = []
 
     async def execute(
         self,
@@ -229,6 +237,74 @@ class _Client:
             contract_version="internal.v1",
             schema_version="fundamental.v1",
             result=result,
+        )
+
+    async def read_facts(
+        self,
+        input_payload: Mapping[str, object],
+        **_: object,
+    ) -> FundamentalFactsReadResultV1:
+        self.facts_calls.append(dict(input_payload))
+        if self.failure is not None:
+            raise self.failure
+        fact_ids = self.facts_ids or list(input_payload.get("historical_facts", ()))
+        snapshot_id = self.facts_snapshot_id or str(input_payload["snapshot_id"])
+        facts = [
+            {
+                "contract_version": "fundamental.v1",
+                "fact_id": fact_id,
+                "issuer_id": "320193",
+                "concept": f"us-gaap:{fact_id}",
+                "normalized_field": fact_id,
+                "value": 100,
+                "unit": "USD",
+                "scale": 0,
+                "currency": "USD",
+                "period_end": "2025-09-27",
+                "context": {
+                    "concept_qname": f"us-gaap:{fact_id}",
+                    "period_type": "instant",
+                    "instant": "2025-09-27",
+                    "unit_qname": "iso4217:USD",
+                    "measure": "iso4217:USD",
+                    "entity_scope": "320193",
+                    "consolidation_scope": "consolidated",
+                    "context_id": f"I-{fact_id}",
+                },
+                "as_of": "2025-09-27T00:00:00Z",
+                "available_at": "2025-11-01T00:00:00Z",
+                "captured_at": "2025-11-02T00:00:00Z",
+                "taxonomy_version": "taxonomy-v1",
+                "source": {
+                    "source_url": "https://www.sec.gov/Archives/filing.xml",
+                    "content_hash": "f" * 64,
+                    "source_role": "filing",
+                    "captured_at": "2025-11-02T00:00:00Z",
+                    "available_at": "2025-11-01T00:00:00Z",
+                    "parser_version": "parser-v1",
+                },
+                "quality": "verified",
+            }
+            for fact_id in fact_ids
+        ]
+        return FundamentalFactsReadResultV1.model_validate(
+            {
+                "contract_version": "fundamental.v1",
+                "snapshot_id": snapshot_id,
+                "snapshot_manifest_digest": self.facts_manifest_digest,
+                "identity": {
+                    "issuer_id": "320193",
+                    "issuer_name": "Apple Inc.",
+                    "domicile": "US",
+                    "reporting_basis": "us-gaap",
+                    "security_id": "US0378331005",
+                    "share_class": "common",
+                    "currency": "USD",
+                },
+                "valuation_timestamp": "2026-01-15T00:00:00Z",
+                "quality_status": "verified",
+                "facts": facts,
+            }
         )
 
 

@@ -13,6 +13,7 @@ from src.agents.fundamental.application.fundamental_service_port import (
     FundamentalServiceFailure,
 )
 from src.agents.fundamental.interface.fundamental_service_contracts import (
+    FundamentalFactsReadResultV1,
     FundamentalServiceResponseV1,
 )
 from src.shared.internal_services import get_request_principal
@@ -616,6 +617,63 @@ def _narrow_result(result: Mapping[str, object]) -> JSONObject:
     return projection
 
 
+def _required_fact_fields(input_payload: Mapping[str, object]) -> tuple[str, ...]:
+    """Keep the service-owned normalized field selection through resolution."""
+
+    selector = input_payload.get("snapshot_selector")
+    source = selector if isinstance(selector, Mapping) else input_payload
+    fields = source.get("required_fields")
+    if fields is None:
+        fields = input_payload.get("historical_facts")
+    if not isinstance(fields, list | tuple) or not fields:
+        raise FundamentalServiceFailure(
+            "UPSTREAM_MALFORMED",
+            "valuation input did not include required fact fields",
+            retryable=False,
+            status_code=502,
+        )
+    if any(not isinstance(field, str) or not field for field in fields):
+        raise FundamentalServiceFailure(
+            "UPSTREAM_MALFORMED",
+            "valuation input fact fields must be non-empty strings",
+            retryable=False,
+            status_code=502,
+        )
+    if len(set(fields)) != len(fields):
+        raise FundamentalServiceFailure(
+            "UPSTREAM_MALFORMED",
+            "valuation input fact fields must be unique",
+            retryable=False,
+            status_code=502,
+        )
+    return tuple(fields)
+
+
+def _facts_projection(
+    result: FundamentalFactsReadResultV1,
+    *,
+    expected_snapshot_id: str,
+    expected_snapshot_manifest_digest: str,
+    expected_fact_ids: tuple[str, ...],
+) -> JSONObject:
+    actual_fact_ids = tuple(fact.fact_id for fact in result.facts)
+    if (
+        result.snapshot_id != expected_snapshot_id
+        or result.snapshot_manifest_digest != expected_snapshot_manifest_digest
+        or len(actual_fact_ids) != len(set(actual_fact_ids))
+        or set(expected_fact_ids) != set(actual_fact_ids)
+    ):
+        raise FundamentalServiceFailure(
+            "UPSTREAM_MALFORMED",
+            "Fundamental facts response is not bound to the valuation trace",
+            retryable=False,
+            status_code=502,
+        )
+    projection = result.model_dump(mode="json")
+    projection["fact_ids"] = list(actual_fact_ids)
+    return projection
+
+
 def _calculation_projection(
     response: FundamentalServiceResponseV1,
     *,
@@ -869,6 +927,7 @@ async def run_service_valuation_flow(
     fundamental = _as_mapping(fundamental_raw, context="fundamental_analysis")
     try:
         input_payload = read_service_valuation_input(state)
+        required_fact_fields = _required_fact_fields(input_payload)
         principal = get_request_principal()
         if principal is None:
             raise FundamentalServiceFailure(
@@ -1041,6 +1100,50 @@ async def run_service_valuation_flow(
                 context="validated_input.assumptions",
             ),
             expect_uncertainty_report=expect_uncertainty_report,
+        )
+        service_result = _as_mapping(
+            projection["service_result"], context="fundamental calculation result"
+        )
+        primary_result = service_result.get("base", service_result)
+        primary_result = _as_mapping(
+            primary_result, context="fundamental calculation primary result"
+        )
+        calculation_trace = _as_mapping(
+            primary_result.get("trace"),
+            context="fundamental calculation trace",
+        )
+        valuation_context = _as_mapping(
+            validated_input["valuation_context"],
+            context="validated_input.valuation_context",
+        )
+        facts_result = await client.read_facts(
+            {
+                "contract_version": "fundamental.v1",
+                "snapshot_id": snapshot_id,
+                "data_release_manifest_digest": valuation_context.get(
+                    "data_release_manifest_digest"
+                ),
+                "required_fields": list(required_fact_fields),
+            },
+            principal=principal,
+            correlation_id=correlation_id,
+            deadline_at=deadline_at,
+        )
+        snapshot_manifest_digest = calculation_trace.get("snapshot_manifest_digest")
+        if not isinstance(
+            snapshot_manifest_digest, str
+        ) or not _DIGEST_PATTERN.fullmatch(snapshot_manifest_digest):
+            raise FundamentalServiceFailure(
+                "UPSTREAM_MALFORMED",
+                "Fundamental calculation trace omitted snapshot manifest digest",
+                retryable=False,
+                status_code=502,
+            )
+        projection["facts"] = _facts_projection(
+            facts_result,
+            expected_snapshot_id=snapshot_id,
+            expected_snapshot_manifest_digest=snapshot_manifest_digest,
+            expected_fact_ids=tuple(fact_ids),
         )
         if expect_uncertainty_report:
             samples = uncertainty.get("samples")
