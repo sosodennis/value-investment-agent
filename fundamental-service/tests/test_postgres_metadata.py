@@ -13,6 +13,7 @@ from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from fastapi.testclient import TestClient
 from fundamental_service.app import create_app
 from fundamental_service.contracts import (
@@ -31,10 +32,12 @@ from fundamental_service.contracts import (
     XbrlContextV1,
 )
 from fundamental_service.data_releases import (
+    REQUIRED_DATA_RELEASE_GATES,
     DataReleaseActivationCommandV1,
     DataReleaseError,
     DataReleaseManifestV1,
     DataReleaseVerificationV1,
+    sign_data_release_verification,
 )
 from fundamental_service.facts import CanonicalMappingV1
 from fundamental_service.metadata import (
@@ -550,16 +553,19 @@ def _data_release_candidate(
         **manifest_payload,
         manifest_digest=sha256_digest(manifest_payload),
     )
-    verification_payload = {
-        "manifest_digest": manifest.manifest_digest,
-        "verification_suite_digest": "f" * 64,
-        "passed_gate_ids": ("candidate-integrity",),
-        "evidence_refs": (evidence_ref,),
-        "mapping_reviews": (),
-    }
-    verification = DataReleaseVerificationV1(
-        **verification_payload,
-        verification_digest=sha256_digest(verification_payload),
+    verification = sign_data_release_verification(
+        {
+            "manifest_digest": manifest.manifest_digest,
+            "verification_suite_digest": "f" * 64,
+            "source_revision": "0" * 40,
+            "verification_run_id": f"postgres-release-{suffix}",
+            "workflow_identity": "github://value-investment-agent/postgres-tests",
+            "verifier_id": "postgres-test-runner",
+            "passed_gate_ids": tuple(sorted(REQUIRED_DATA_RELEASE_GATES)),
+            "evidence_refs": (evidence_ref,),
+            "mapping_reviews": (),
+        },
+        Ed25519PrivateKey.from_private_bytes(b"r" * 32),
     )
     return manifest, verification
 
