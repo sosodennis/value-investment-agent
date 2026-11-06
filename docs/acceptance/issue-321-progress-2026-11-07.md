@@ -175,6 +175,14 @@ Both application binaries reached healthy state concurrently and both
 old container was stopped after the probe; the dedicated Compose service
 remained healthy.
 
+## Exact-head controlled soak probe
+
+Using the same pinned profile after recovery, a single subject sent 100 signed
+active-pointer reads over 46.29 seconds, staying below the configured
+`FUNDAMENTAL_SERVICE_RATE_LIMIT_PER_MINUTE=120`. All 100 responses were HTTP
+200 (availability 1.0); p50 latency was 13.73 ms, p95 was 18.74 ms, and the
+maximum was 21.94 ms. No request was rate limited.
+
 ## Live release lifecycle probe
 
 The probe inserted two uniquely named, signed candidates into the dedicated
