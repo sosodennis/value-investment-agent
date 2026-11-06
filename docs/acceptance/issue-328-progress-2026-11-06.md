@@ -191,3 +191,69 @@ All commands exited 0. Docker health was `healthy` for PostgreSQL and
 Fundamental service. These checks ran on the same source tree as
 `e879c94da35cbc753224343bf94f9be4a6a04806`; the only subsequent source change
 is this evidence document.
+
+## Exact-Head Replay and Fail-Closed Checkpoint
+
+The parser replay stability fix is committed at `27ede8578a7c08da71c067c61318289194c3a96`.
+The real AAPL blocking-path integration test is committed at
+`e1f7b434` and is the exact head for this checkpoint. Both commits are on
+`codex/issue-328-sec-integrity` with `main` base
+`bee63cb37da9edb2deb444e14d2fc666aed73d06`.
+
+The replay initially exposed a real repeatability defect: Arelle imported
+Python bytecode into the pinned plugin tree, changing its resource hash before
+the second parse. The parser now isolates worker bytecode in a temporary cache,
+and resource hashes ignore only `__pycache__`, `.pyc`, and `.pyo` artifacts.
+The acceptance test then parses both the normalized AAPL response and the exact
+archive member, compares fact count, semantic fact digest, finding signature,
+validation profile, validation engines, validation evidence, and replay digest,
+and asserts zero network attempts.
+
+| Check | Result |
+| --- | --- |
+| AAPL normalized/archive semantic replay on `27ede857` | exit 0, `1 passed` |
+| Real AAPL ingestion blocking path on `e1f7b434` | exit 0, `1 passed`; `PARSER_VALIDATION_BLOCKED`, zero selectable snapshots, raw bytes retained |
+| Full Fundamental service suite on `e1f7b434` with PostgreSQL and pinned runtime | exit 0, `171 passed, 2 warnings`, no skips |
+| `ruff format --check`, `ruff check --select E,F,I --ignore E501`, `git diff --check` | exit 0 |
+| Docker Compose config | exit 0 |
+| PostgreSQL and Fundamental service health | `healthy` |
+| `GET /livez` and `GET /readyz` | exit 0; `internal.v1` healthy/ready |
+| Service failure counters | request, auth, source-health, freshness, and replay failure counters all `0` |
+
+Exact runtime hashes used for the current checkpoint are EDGAR
+`11e88a8a45c26bbbcf8152f0d5ac7352e8e0623b459effeebaa4097acfcdfacf`, Xule
+`5ffe3f37308fd9f662c37311cb121889e97c2a6954a35ba4af1ead8cd3f0ee55`, DQC
+ruleset `0eb33d095ac0ae08f01c508526b35523534659d661bc62873ac1400deec87930`,
+and taxonomy cache `0accc5ab0d4ce6674083bd82cf878a8619b3ac441da8600e0a03aefb8432a3a3`.
+The rebuilt service image digest is
+`sha256:6fc43fc224dbb7c19276763b878f2629682f48ed0caf87a428f7bddf44ed7cfb`.
+
+The exact full-suite command was:
+
+```sh
+FUNDAMENTAL_TEST_DATABASE_URL=postgresql+asyncpg://fundamental:fundamental@127.0.0.1:18483/fundamental \
+ISSUE328_EDGAR_PLUGIN_DIR=/private/tmp/328-edgar-src \
+ISSUE328_XULE_PLUGIN_DIR=/private/tmp/328-xule-src/plugin \
+ISSUE328_DQC_RULESET_PATH=/private/tmp/328-dqc-src/dqc_us_rules/dqc-us-2024-V31-ruleset.zip \
+ISSUE328_TAXONOMY_CACHE_DIR=/tmp/issue312-sec-taxonomy-2023-2024 \
+fundamental-service/.venv/bin/pytest -q fundamental-service/tests
+```
+
+The exact Docker checks were run with project
+`value-investment-agent-issue-328-sec-integrity`, PostgreSQL port `18483`, and
+Fundamental service port `18083`:
+
+```sh
+FUNDAMENTAL_POSTGRES_HOST_PORT=18483 FUNDAMENTAL_SERVICE_HOST_PORT=18083 \
+docker compose -p value-investment-agent-issue-328-sec-integrity \
+  -f compose/verification/docker-compose.issue280-operations.yml up -d --build fundamental-service
+docker compose -p value-investment-agent-issue-328-sec-integrity \
+  -f compose/verification/docker-compose.issue280-operations.yml ps
+curl -fsS http://127.0.0.1:18083/livez
+curl -fsS http://127.0.0.1:18083/readyz
+curl -fsS http://127.0.0.1:18083/metrics
+```
+
+The intentionally unrun checks are GitHub PR CI, independent review, and the
+final merge/issue-closure verification. #328 remains open and is not yet
+`VERIFIED` because its required PR has not been opened or merged to `main`.
