@@ -766,6 +766,11 @@ service's capture manifest, cache digest, or offline replay is complete.
   healthy on image `sha256:4b32db0b10a477f814802cc6f5072851ae9fdea50b038c948b41f301a9ff5e27`;
   `GET http://127.0.0.1:18082/readyz` returned
   `{"status":"ready","contract_version":"internal.v1"}`.
+  The running image's parser pins were EDGAR plugin
+  `054a21fa824797787acc2c6e98af4bb040c51bbee41b613cee1793db8fd144af`, Xule
+  plugin `63123d67048019e3c49a0efde0e0aa8ec3eba0fc971da56ebd96dea8e40cd713`,
+  and DQC ruleset
+  `0eb33d095ac0ae08f01c508526b35523534659d661bc62873ac1400deec87930`.
 - PostgreSQL schema was read directly from
   `information_schema.columns`. The acquisition table stores
   `acquisition_key`, `snapshot_id`, `fact_ids`, `result_payload`, and caller
@@ -816,14 +821,35 @@ service's capture manifest, cache digest, or offline replay is complete.
   engines `sec-efm` and `dqc-us`, no blocking findings, and zero network
   attempts. Validation evidence was `strict-sec-efm-profile-selected` and
   `dqc-dqcrt-checks-completed`; the profile digest was
-  `70e1b431fc81107c017decf5e124273335d6e212eed3a4e7428f25e153bee373` and
-  taxonomy digest was
+  `639140b39584b3ee3276f09a011403dec911efe41ea1b98773f5f770bd5200d4`, matching
+  the live manifest, and the taxonomy digest was
   `0accc5ab0d4ce6674083bd82cf878a8619b3ac441da8600e0a03aefb8432a3a3`.
+- The repeatable replay command (exit 0) uses
+  `scripts/verify_issue312_sec_replay.py`. It recomputes source hashes, checks
+  the normalization ranges and pinned profile digest, then compares facts from
+  normalized bytes with facts from the SEC ZIP member:
+
+  ```sh
+  uv run --project fundamental-service python scripts/verify_issue312_sec_replay.py \
+    --evidence-dir /private/tmp/issue312-retained-evidence-4fe205a3/objects \
+    --edgar-plugin-dir /private/tmp/issue312-validation-runtime-v2/EDGAR-4891c4c9889c77af247428ceff4fa7cc52d534ea \
+    --xule-plugin-dir /private/tmp/issue312-validation-runtime-v2/xule-7ca1d7637f333f5c3a02379dbe6f6d6c17c88acc/plugin \
+    --dqc-ruleset-path /private/tmp/issue312-validation-runtime-v2/dqc_us_rules-31.0.3/dqc_us_rules/dqc-us-2024-V31-ruleset.zip \
+    --taxonomy-cache-dir /private/tmp/issue312-sec-taxonomy-2023-2024
+  ```
+
+  It returned 1,856 facts, profile digest
+  `639140b39584b3ee3276f09a011403dec911efe41ea1b98773f5f770bd5200d4`, and
+  semantic digest
+  `c1a098e547276a804299bd16e387f5d1967696b34a66786cc429e6815850361d`.
+  `uvx --from ruff==0.14.14 ruff check --select E,F,I scripts/verify_issue312_sec_replay.py`
+  and the matching `ruff format --check` both exited 0.
 - `uv run --project fundamental-service ruff check fundamental-service/src fundamental-service/tests`
   was attempted but exited 2 because the `ruff` executable is absent from that
-  project environment; the following format check did not run. Load/soak and
-  deployment rollout checks remain intentionally unrun. These results do not
-  complete all #312 acceptance criteria or resolve the blocker label. Next:
-  restore a usable Ruff executable, inspect the full 28-commit diff against
-  every #312 criterion, obtain an independent read-only review, run any
-  affected checks, then open the main-based PR and collect its exact-head CI.
+  project environment; Ruff 0.14.14 passed the changed-file `E,F,I` and format
+  checks after the style checkpoint. Load/soak and deployment rollout checks
+  remain intentionally unrun. These results do not complete all #312
+  acceptance criteria or resolve the blocker label. Next: inspect the full
+  issue branch diff against every #312 criterion, obtain an independent
+  read-only review, run any affected checks, then open the main-based PR and
+  collect its exact-head CI.
