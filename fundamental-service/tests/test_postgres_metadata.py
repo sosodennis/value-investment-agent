@@ -672,6 +672,68 @@ def test_sec_ingestion_publish_rolls_back_snapshot_and_facts_then_recovers(
     )
 
 
+def test_unauthorized_sec_ingestion_is_rejected_and_audited_in_postgres(
+    metadata: PostgresMetadataStore,
+):
+    request = _sec_ingestion_request()
+    correlation_id = f"unauthorized-{uuid4().hex}"
+    use_case = object.__new__(SecAcquisitionUseCase)
+    use_case.metadata = metadata
+    use_case.authorized_organizations = frozenset({"org-approved"})
+    use_case.settings = SimpleNamespace(
+        taxonomy_manifest_id=request.taxonomy_manifest_id,
+        taxonomy_version=request.taxonomy_version,
+    )
+    app = create_app(
+        config=OperationsConfig(service_token=TEST_SERVICE_TOKEN),
+        sec_acquisition=use_case,
+    )
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/v1/data/ingestions",
+            headers=auth_headers(organization_id="org-unapproved"),
+            json=make_internal_envelope(
+                request.model_dump(mode="json"),
+                correlation_id=correlation_id,
+                organization_id="org-unapproved",
+            ),
+        )
+
+    assert response.status_code == 403
+    assert response.json()["error"]["code"] == "INGESTION_NOT_AUTHORIZED"
+
+    async def read_audit() -> tuple[str, str, str, tuple[str, ...], str]:
+        async with metadata._runner._engine.connect() as connection:
+            row = (
+                await connection.execute(
+                    text(
+                        "SELECT acquisition_key, caller_principal, organization_id, "
+                        "source_hashes, outcome FROM "
+                        "fundamental.source_acquisition_audits "
+                        "WHERE correlation_id=:correlation_id"
+                    ),
+                    {"correlation_id": correlation_id},
+                )
+            ).one()
+            return (
+                str(row[0]).strip(),
+                str(row[1]),
+                str(row[2]),
+                tuple(row[3]),
+                str(row[4]),
+            )
+
+    audit = metadata._runner.run(read_audit())
+    assert audit == (
+        sha256_digest(SecAcquisitionUseCase._canonical_key_payload(request)),
+        "subject-test",
+        "org-unapproved",
+        (),
+        "INGESTION_NOT_AUTHORIZED",
+    )
+
+
 def test_fifty_sec_ingestion_contenders_across_processes_publish_once(
     metadata: PostgresMetadataStore,
 ):
