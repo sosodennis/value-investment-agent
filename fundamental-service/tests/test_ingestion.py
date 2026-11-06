@@ -539,14 +539,23 @@ def test_sec_ingestion_publishes_real_verified_microsoft_fixture(
         / "microsoft-2024-original-xbrl-test-package.zip"
     )
     with ZipFile(fixture) as archive:
-        filing_bytes = archive.read("msft-20240630.htm")
+        archive_member = archive.read("msft-20240630.htm")
         xsd_bytes = archive.read("msft-20240630.xsd")
+    edge_script = b'<script type="text/javascript"  src="/edge/path/token"></script>'
+    filing_bytes = (
+        archive_member[: -len(b"</body>\n</html>")]
+        + edge_script
+        + b"</body>\n</html>\n"
+    )
     archive_bytes = fixture.read_bytes()
     index_bytes = json.dumps(
         {
             "directory": {
                 "item": [
-                    {"name": "msft-20240630.htm", "size": str(len(filing_bytes))},
+                    {
+                        "name": "msft-20240630.htm",
+                        "size": str(len(archive_member) + 1),
+                    },
                     {
                         "name": "0000950170-24-087843-xbrl.zip",
                         "size": str(len(archive_bytes)),
@@ -635,8 +644,12 @@ def test_sec_ingestion_publishes_real_verified_microsoft_fixture(
     assert result.selection.fact is not None
     assert result.selection.fact.quality.value == "verified"
     assert result.snapshot.sec_integrity_evidence is not None
-    assert result.integrity_evidence.integrity_relation == "exact"
-    assert result.integrity_evidence.normalization_policy_id is None
+    assert result.integrity_evidence.integrity_relation == "normalized"
+    assert (
+        result.integrity_evidence.normalization_policy_id
+        == "sec-edgar-akamai-trailing-script-v2"
+    )
+    assert len(result.integrity_evidence.removed_ranges) == 2
     assert result.integrity_evidence.network_attempt_count == 0
     assert result.integrity_evidence.archive_hash
 
@@ -648,6 +661,12 @@ def test_sec_ingestion_publishes_real_verified_microsoft_fixture(
             result.integrity_evidence.raw_content_hash, media_type="text/html"
         )
         == filing_bytes
+    )
+    assert (
+        content_store.get(
+            result.integrity_evidence.normalized_content_hash, media_type="text/html"
+        )
+        == archive_member
     )
     assert (
         content_store.get(
@@ -719,4 +738,10 @@ def _microsoft_ingestion_response(
         )
     if filename == "msft-20240630.xsd":
         return Response(xsd_bytes, headers={"Content-Type": "application/xml"})
-    return Response(filing_bytes, headers={"Content-Type": "text/html"})
+    return Response(
+        filing_bytes,
+        headers={
+            "Content-Type": "text/html",
+            "X-Akamai-Transformed": "0 - 0 -",
+        },
+    )
