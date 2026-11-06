@@ -151,11 +151,76 @@ runs. They are not an acceptance or `VERIFIED` record.
   remain unavailable and no service-backed snapshot evidence exists. No
   acceptance criterion is marked passed by this diagnostic.
 
+## Request producer contract audit
+
+- Date: 2026-11-07.
+- Status: **blocked; acceptance incomplete**.
+- Issue: #325 remains open with the `blocker` label. No pull request exists.
+- Branch: `codex/issue-325-fundamental-ui`, based on `main`.
+- Code under test: `94ddafe68ac1005b64f72cf6a126cf63cde5cc4e`.
+- The workspace submits only `{ message }` from `frontend/src/hooks/useAgent.ts:86`.
+  `RunRequest.valuation_request` is optional in
+  `finance-agent-core/src/analysis_runtime/interface/routes.py:70-74`.
+  No production Agent Core path constructs the typed request.
+- `CompanyProfile` contains a ticker and descriptive market fields, but no CIK,
+  in `finance-agent-core/src/shared/cross_agent/domain/market_identity.py:6-15`.
+  The profile provider also omits CIK in
+  `finance-agent-core/src/agents/intent/infrastructure/market_data/company_profile_provider.py:34-43`.
+- Snapshot resolution requires a full `IdentityV1` in
+  `fundamental-service/src/fundamental_service/contracts.py:427-436`.
+  SEC ingestion requires both a CIK and identity, then checks that the CIK
+  matches `identity.issuer_id` in `contracts.py:598-640`. The current workspace
+  state cannot supply those fields through the existing typed path.
+- `run_service_valuation_flow()` validates `valuation_request` before its first
+  `client.execute()` call in
+  `finance-agent-core/src/agents/fundamental/application/workflow_orchestrator/service_valuation_flow.py:997-1044`.
+  Missing request data therefore degrades before the Fundamental service
+  receives a business request.
+- The service has a separate `calculate-with-policy` endpoint, but the Agent
+  client exposes only the `validate` and `calculate` operations in
+  `finance-agent-core/src/agents/fundamental/infrastructure/fundamental_service_client.py:39-47`.
+  The current Agent flow accepts a fully populated valuation input. It has no
+  production request producer that obtains the required issuer identity,
+  snapshot, and policy-bound assumptions.
+- Do not infer a CIK from the ticker, reuse Agent-owned SEC reports as service
+  facts, or fabricate a snapshot selector. The owning service contract must
+  provide a verified issuer-identity path before the workspace can construct
+  a valid request.
+
+### Verification at this checkpoint
+
+Source-code checks below ran against commit
+`94ddafe68ac1005b64f72cf6a126cf63cde5cc4e`. Docker health commands report the
+running acceptance environment at this checkpoint.
+
+| Command | Result |
+| --- | --- |
+| `uv run pytest tests/agents/fundamental/test_fundamental_service_client.py tests/agents/fundamental/test_fundamental_service_cutover.py -q` from `finance-agent-core/` | exit 0; 27 passed |
+| `uv run ruff check src api` from `finance-agent-core/` | exit 0 |
+| `python3 scripts/architecture_guard.py` from the repository root | exit 0 |
+| `npm run lint` from `frontend/` | exit 0 |
+| `npm run typecheck` from `frontend/` | exit 0 |
+| `npm run test -- --run` from `frontend/` | exit 0; 52 files and 288 tests passed |
+| `git diff --check` | exit 0 |
+| `docker compose -p value-investment-agent-issue-325-app ps` | exit 0; backend, frontend, PostgreSQL, Redis, and LLM provider healthy |
+| `docker compose -p value-investment-agent-issue-325-fundamental ps` | exit 0; Fundamental service and PostgreSQL healthy |
+| `curl -fsS http://127.0.0.1:18690/readyz` | exit 0; `ready` |
+
+- No pull request exists, so no PR CI result is available.
+- No new workspace run was started at this checkpoint. The earlier run recorded
+  above still has no service snapshot, fact IDs, or manifest digest.
+- Desktop/mobile rendering, keyboard selection, evidence-inspector provenance,
+  and exact snapshot-to-valuation trace binding remain unverified.
+- The previous Debate LLM 502 remains a separate observed failure. This audit
+  does not test or attribute that outage.
+- Result: the focused code checks and Docker health pass. The typed request
+  producer and service-backed workspace acceptance remain blocked. No acceptance
+  criterion is marked passed by this checkpoint.
+
 ## Next
 
-Complete the owning-layer path that supplies a typed snapshot selector and
-valuation context to Fundamental, and prepare a service-owned MSFT snapshot and
-active release in this isolated acceptance project. Keep the Debate LLM 502
-failure separate. Then complete the real service-backed report checks, viewport
-and keyboard/evidence-inspector checks, and record all results against the
-exact delivery commit.
+Add a service-owned, verifiable issuer-identity path and wire it through the
+typed Agent client and request producer. Then prepare an MSFT service snapshot
+and active release in the isolated acceptance project. Run the real workspace
+route and complete the desktop, mobile, keyboard, and evidence-inspector checks.
+Record the results against the exact delivery commit.
