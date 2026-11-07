@@ -1639,6 +1639,9 @@ class PostgresCanonicalFactRepository(CanonicalFactRepository):
     def get(self, fact_id: str) -> CanonicalFactV1:
         return self._metadata.get_fact(fact_id)
 
+    def list(self) -> tuple[CanonicalFactV1, ...]:
+        return tuple(self._metadata.list_facts())
+
     def resolve(
         self,
         *,
