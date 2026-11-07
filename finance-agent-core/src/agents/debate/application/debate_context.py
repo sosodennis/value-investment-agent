@@ -17,7 +17,6 @@ from src.agents.debate.application.state_readers import (
 @dataclass(frozen=True)
 class DebateArtifactContext:
     ticker: str | None
-    financial_reports_artifact_id: str | None
     news_artifact_id: str | None
     technical_artifact_id: str | None
     cached_context_summary_text: str | None
@@ -35,9 +34,6 @@ class DebateConversationContext:
 
 def build_debate_artifact_context(state: Mapping[str, object]) -> DebateArtifactContext:
     ticker = resolved_ticker_from_state(state)
-    financial_reports_artifact_id = _artifact_reference_id(
-        state, key="financial_reports"
-    )
     news_artifact_id = _artifact_reference_id(state, key="news_analysis")
     technical_artifact_id = _artifact_reference_id(state, key="technical_analysis")
     cached_context_summary_text = _cached_context_summary_text(state)
@@ -45,7 +41,6 @@ def build_debate_artifact_context(state: Mapping[str, object]) -> DebateArtifact
 
     return DebateArtifactContext(
         ticker=ticker,
-        financial_reports_artifact_id=financial_reports_artifact_id,
         news_artifact_id=news_artifact_id,
         technical_artifact_id=technical_artifact_id,
         cached_context_summary_text=cached_context_summary_text,

@@ -7,11 +7,10 @@ from src.agents.debate.application.debate_context import (
 from src.shared.cross_agent.domain.market_identity import CompanyProfile
 
 
-def test_build_debate_artifact_context_reads_all_ids_and_cache() -> None:
+def test_build_debate_artifact_context_reads_current_ids_and_cache() -> None:
     state = {
         "company_profile": CompanyProfile(ticker="MSFT", name="Microsoft"),
         "artifact_references": {
-            "financial_reports": {"artifact_id": "fa-1"},
             "news_analysis": {"artifact_id": "news-1"},
             "technical_analysis": {"artifact_id": "ta-1"},
         },
@@ -21,7 +20,6 @@ def test_build_debate_artifact_context_reads_all_ids_and_cache() -> None:
 
     context = build_debate_artifact_context(state)
     assert context.ticker == "MSFT"
-    assert context.financial_reports_artifact_id == "fa-1"
     assert context.news_artifact_id == "news-1"
     assert context.technical_artifact_id == "ta-1"
     assert context.cached_context_summary_text == "cached_summary"
