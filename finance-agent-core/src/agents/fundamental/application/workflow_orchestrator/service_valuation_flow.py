@@ -17,6 +17,9 @@ from src.agents.fundamental.application.workflow_orchestrator.services.service_r
     PreparedServiceValuation,
     prepare_service_valuation_request,
 )
+from src.agents.fundamental.application.workflow_orchestrator.state_readers import (
+    read_intent_state,
+)
 from src.agents.fundamental.interface.fundamental_service_contracts import (
     FundamentalFactsReadResultV1,
     FundamentalServiceResponseV1,
@@ -27,7 +30,10 @@ from src.agents.fundamental.interface.request_contracts import (
 )
 from src.artifacts.public import (
     ARTIFACT_KIND_FINANCIAL_REPORTS,
+    OUTPUT_KIND_FUNDAMENTAL_ANALYSIS,
+    AgentOutputArtifactPayload,
     ArtifactReference,
+    build_artifact_payload,
     to_artifact_reference_payload,
 )
 from src.shared.internal_services import InternalPrincipal, get_request_principal
@@ -991,6 +997,24 @@ def _service_valuation_artifact_payload(
     }
 
 
+def _build_fundamental_output_artifact(
+    *,
+    summary: str,
+    artifact_id: str,
+    preview: JSONObject | None = None,
+) -> AgentOutputArtifactPayload:
+    return build_artifact_payload(
+        kind=OUTPUT_KIND_FUNDAMENTAL_ANALYSIS,
+        summary=summary,
+        preview=preview,
+        reference=ArtifactReference(
+            artifact_id=artifact_id,
+            download_url=f"/api/v1/artifacts/{artifact_id}",
+            type=ARTIFACT_KIND_FINANCIAL_REPORTS,
+        ),
+    )
+
+
 def _calculation_projection(
     response: FundamentalServiceResponseV1,
     *,
@@ -1243,6 +1267,7 @@ async def run_service_valuation_flow(
 ) -> FundamentalNodeResult:
     fundamental_raw = state.get("fundamental_analysis", {})
     fundamental = _as_mapping(fundamental_raw, context="fundamental_analysis")
+    resolved_ticker = read_intent_state(state).resolved_ticker
     try:
         raw_request = state.get("valuation_request")
         if raw_request is None:
@@ -1328,6 +1353,13 @@ async def run_service_valuation_flow(
                         "valuation_status": "not_requested",
                         "quality_status": facts_projection["quality"]["facts_status"],
                         "fundamental_service": facts_projection,
+                        "artifact": _build_fundamental_output_artifact(
+                            summary=(
+                                f"Fundamental facts ready for "
+                                f"{resolved_ticker or ticker}"
+                            ),
+                            artifact_id=artifact_id,
+                        ),
                     }
                 )
                 return FundamentalNodeResult(
@@ -1616,6 +1648,13 @@ async def run_service_valuation_flow(
                 "assumptions": approved_input["assumptions"],
                 "uncertainty": approved_input["uncertainty"],
             },
+            "artifact": _build_fundamental_output_artifact(
+                summary=(
+                    f"Fundamental valuation ready for "
+                    f"{resolved_ticker or _ticker_from_input(approved_input)}"
+                ),
+                artifact_id=artifact_id,
+            ),
         }
     )
     return FundamentalNodeResult(

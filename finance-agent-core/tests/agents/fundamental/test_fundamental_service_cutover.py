@@ -622,6 +622,13 @@ async def test_cutover_resolves_snapshot_and_facts_through_service_boundary() ->
     assert result.update["artifact_references"]["financial_reports"]["artifact_id"] == (
         "service-valuation-artifact"
     )
+    output_artifact = result.update["fundamental_analysis"]["artifact"]
+    assert output_artifact["kind"] == "fundamental_analysis.output"
+    assert output_artifact["version"] == "v1"
+    assert (
+        output_artifact["reference"]
+        == result.update["artifact_references"]["financial_reports"]
+    )
     artifact = runtime.saved_calls[0]["data"]
     assert isinstance(artifact, dict)
     stored_artifact = FinancialReportsArtifactData.model_validate(artifact)
@@ -685,6 +692,14 @@ async def test_cutover_publishes_snapshot_facts_without_fabricating_valuation() 
     assert result.update["fundamental_analysis"]["quality_status"] == "verified"
     assert result.update["artifact_references"]["financial_reports"]["artifact_id"] == (
         "service-valuation-artifact"
+    )
+    output_artifact = result.update["fundamental_analysis"]["artifact"]
+    assert output_artifact["kind"] == "fundamental_analysis.output"
+    assert output_artifact["version"] == "v1"
+    assert output_artifact["preview"] is None
+    assert (
+        output_artifact["reference"]
+        == result.update["artifact_references"]["financial_reports"]
     )
 
     artifact = runtime.saved_calls[0]["data"]
