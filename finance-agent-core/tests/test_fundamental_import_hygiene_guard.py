@@ -433,6 +433,31 @@ def test_release_gate_has_no_retired_replay_manifest_surface() -> None:
     )
 
 
+def test_frontend_has_no_agent_sec_or_legacy_fundamental_fallbacks() -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    frontend_root = repo_root / "frontend" / "src"
+    banned_tokens = (
+        "financial_reports_artifact_id",
+        "replay_source_reports_artifact_id",
+        "reports_artifact_id",
+        "raw_financial_reports",
+        "fetch_financial_reports_payload",
+        "sec_xbrl",
+    )
+    violations: list[str] = []
+    for path in frontend_root.rglob("*"):
+        if path.suffix not in {".ts", ".tsx"} or not path.is_file():
+            continue
+        source = path.read_text(encoding="utf-8")
+        for token in banned_tokens:
+            if token in source:
+                violations.append(f"{path.relative_to(repo_root)}: {token}")
+
+    assert not violations, "Legacy Fundamental browser fallbacks found:\n" + "\n".join(
+        sorted(violations)
+    )
+
+
 def test_calibration_fixtures_are_versioned_and_allowlisted() -> None:
     repo_root = Path(__file__).resolve().parents[2]
     fixtures_root = repo_root / "finance-agent-core" / "tests" / "fixtures"
