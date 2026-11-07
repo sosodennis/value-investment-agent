@@ -255,3 +255,49 @@ Record the results against the exact delivery commit.
   (supported operations), and
   `finance-agent-core/src/shared/cross_agent/domain/market_identity.py`
   (`CompanyProfile`).
+
+## Resumption audit and live handoff
+
+- Date: 2026-11-07.
+- Main and `origin/main`: `809d42d96b625440c38e9e6b51c63a878884eda8`;
+  GitHub's current `main` API response matched.
+- Issues #328, #312, and #321 are closed with `VERIFIED`; #325 remains open
+  with the `blocker` label and has no pull request. Blocker #336 is closed.
+- Relevant merged PRs target `main`: #329 (`10a88e41f3f5d63ec9feebb472dbd4d5469c647f`),
+  #332 (`eb4cdd5c597e08743aaaf845c4ed27227b9dff5a`), #334
+  (`bfb5c22912c0e344f83814af154fcfadda29e45c`), #335
+  (`55608191c13ad02a8efddc7079c54c71c702d8dc`), and #337
+  (`809d42d96b625440c38e9e6b51c63a878884eda8`). GitHub reported the
+  Monorepo Contract Gates workflow successful for each listed merge SHA.
+- Current worktree: `codex/issue-325-fundamental-ui`, clean at
+  `3b2233d43b766097aa729c0a4c46cefa5da156d2`, based on the current main SHA.
+  No CI run exists for this local-only head.
+- Checks previously completed on this exact code SHA: `npm run lint` (exit 0),
+  `npm run typecheck` (exit 0), `npm run test -- --run` (exit 0; 52 files,
+  293 tests), focused Fundamental report tests (exit 0; 9 tests), and
+  `git diff --check` (exit 0).
+- Both isolated Compose configurations passed `config --quiet` (exit 0):
+  `value-investment-agent-issue-325-app` using the root Compose file, override,
+  and `compose/verification/docker-compose.issue325-app-fundamental.yml`;
+  `value-investment-agent-issue-325-fundamental` using
+  `docker-compose.issue280-operations.yml` and
+  `docker-compose.issue312-sec-ingestion.yml`. Pinned SEC taxonomy, EDGAR,
+  Xule, and DQC bind mounts were resolved from the existing service container.
+- Before rebuilding, all seven containers in those projects reported healthy.
+  Their app backend and Fundamental service images predate this worktree head;
+  neither service has a host source bind mount. No route, snapshot, or database
+  result from those images is evidence for the current commit.
+- The current workspace hook sends only `{ message }`; the typed run contract
+  accepts an optional `valuation_request`. Static inspection confirms that,
+  when a complete caller request is absent, the Agent producer returns a
+  `facts_only` artifact and does not create assumptions or a valuation trace.
+  The #336 identity resolver is now on main, but a live request must still
+  establish whether the required caller-owned valuation input is available.
+
+### Next
+
+Rebuild only the issue-325 backend, frontend, and Fundamental service from this
+worktree while retaining both PostgreSQL volumes. Then exercise the real
+workspace route and inspect the service-owned snapshot, facts, and valuation
+trace. If the route cannot provide the required caller assumptions, record the
+remaining owning-layer gap as a linked `blocker`; leave #325 incomplete.
