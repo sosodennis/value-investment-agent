@@ -1007,3 +1007,31 @@ Debate with the known LLM provider `upstream_unavailable` / HTTP 502 failure;
 that external failure is not a Fundamental report rendering failure. Issue
 #325 remains incomplete until the remaining exact-head service/workflow
 acceptance and release gates are rerun and recorded.
+
+## Exact-head final verification gate
+
+- The documentation checkpoint `ee27111f` was verified with the frontend code
+  at `c0e2a5c6`; the documentation-only commit did not change runtime code.
+- Exact-head commands and results:
+
+  | Command | Result |
+  | --- | --- |
+  | `npm run lint` in `frontend/` | exit 0 |
+  | `npm run typecheck` in `frontend/` | exit 0 |
+  | `npm run test -- --run` in `frontend/` | exit 0; 52 files, 293 tests passed |
+  | `uv run --project finance-agent-core pytest finance-agent-core/tests/agents/fundamental/test_fundamental_service_client.py finance-agent-core/tests/agents/fundamental/test_fundamental_service_cutover.py -q` | exit 0; 33 passed |
+  | `python3 scripts/architecture_guard.py` | exit 0 |
+  | `git diff --check` | exit 0 |
+
+- Docker health: all five app containers and both Fundamental containers were
+  healthy. `curl -fsS http://127.0.0.1:8000/health` returned HTTP 200
+  `{"status":"ok"}`. The current Fundamental Compose mapping is
+  `127.0.0.1:18080->8080`; `curl -fsS http://127.0.0.1:18080/readyz` returned
+  HTTP 200 `{"status":"ready","contract_version":"internal.v1"}` and the
+  service image was
+  `sha256:cb18e009a29b09ff1fb4a294357b7dc451ec54e2ec583562ed7373d54cc99e6a`.
+  A probe of the historical `18690` port exited 7 because that port is not
+  mapped by the current project; it did not indicate a container health
+  failure.
+- No pull request or CI result exists yet. The branch remains unmerged and the
+  issue remains open; these checks do not mark #325 `VERIFIED` or close it.
