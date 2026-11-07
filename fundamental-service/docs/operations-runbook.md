@@ -67,6 +67,15 @@ Retry-After handling, bounded retries and response sizes, and the original
 signed deadline. There is no background queue; callers own retry after a
 retryable `INGESTION_IN_PROGRESS` or deadline response.
 
+The pinned Arelle/EFM/DQC worker runs in a child process and shares the
+Fundamental service cgroup with the API process. The verification Compose
+stack therefore gives the service a default 1 GiB memory limit, configurable
+through `FUNDAMENTAL_SERVICE_MEMORY_LIMIT`. A complete Microsoft 2024 10-K
+replay measured a 761.5 MiB cgroup peak; lowering the limit below that observed
+budget can kill the parser worker before it returns a result. When a worker
+does exit without a result, the service includes its process exit code in the
+`XBRL_PARSE_FAILED` diagnostic and publishes no snapshot or facts.
+
 The deployment must mount a reviewed, immutable offline Arelle taxonomy cache
 and set `FUNDAMENTAL_SEC_TAXONOMY_CACHE_DIR`,
 `FUNDAMENTAL_SEC_TAXONOMY_MANIFEST_ID`, `FUNDAMENTAL_SEC_TAXONOMY_VERSION`,
