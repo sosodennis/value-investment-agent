@@ -787,3 +787,22 @@ field even though no valuation calculation is requested and the acceptance
 mapping release does not contain that field. The next code checkpoint will
 make facts-only ingestion use the base FCFF evidence set, then rerun the exact
 workspace route and verify the service-owned snapshot and facts.
+
+## Exact-head backend rebuild checkpoint
+
+- Code under test: `715338b5e12421307e62599137189f34ac90fd32`.
+- The isolated app Compose project was validated with
+  `docker compose ... config --quiet` (exit 0) and only its `backend` service
+  was rebuilt and recreated. The new backend image digest was
+  `sha256:873799b4aa28f9a04678eb20ab897b5a041d9d1250347561e6eeb62414e24`.
+- Existing app PostgreSQL, Redis, frontend, and LLM provider containers were
+  retained. After recreation, `docker compose -p
+  value-investment-agent-issue-325-app ps` reported all five app containers
+  healthy and `curl -fsS http://127.0.0.1:18680/health` returned HTTP 200
+  `{"status":"ok"}`. The backend runtime still had
+  `FUNDAMENTAL_SERVICE_URL=http://host.docker.internal:18690` and the
+  issue-scoped Fundamental service token configured.
+- Commands: app Compose config exit 0; backend image build exit 0; backend
+  recreation exit 0; Docker health and backend health curl exit 0. This
+  checkpoint proves deployment of the producer fix; the workspace route and
+  Fundamental snapshot acceptance were not run yet.
