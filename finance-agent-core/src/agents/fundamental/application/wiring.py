@@ -5,14 +5,11 @@ from src.agents.fundamental.application.workflow_orchestrator.factory import (
     build_fundamental_orchestrator,
     build_fundamental_workflow_runner,
 )
-from src.agents.fundamental.capabilities.artifacts_provenance.public import (
-    fundamental_artifact_repository,
-)
 from src.agents.fundamental.infrastructure import HttpFundamentalServiceClient
 
 
 def build_default_fundamental_workflow_runner() -> FundamentalWorkflowRunner:
-    orchestrator = build_fundamental_orchestrator(port=fundamental_artifact_repository)
+    orchestrator = build_fundamental_orchestrator()
     return build_fundamental_workflow_runner(
         orchestrator=orchestrator,
         fundamental_service_client=HttpFundamentalServiceClient(),
