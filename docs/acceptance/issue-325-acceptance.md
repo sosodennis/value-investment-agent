@@ -373,3 +373,53 @@ valuation input without substituting legacy SEC report data.
 - The same incomplete result was recorded on #325 at
   `https://github.com/sosodennis/value-investment-agent/issues/325#issuecomment-6701490193`;
   #325 remains open with the `blocker` label and no pull request.
+
+## Exact-head diagnostic after #336
+
+- Date: 2026-11-07.
+- Code under test: `58c373d955628e56cabeebb51210c8c6dcb699aa`, branch
+  `codex/issue-325-fundamental-ui`, based on `origin/main` at
+  `9c70bf0da054f528661c7b501e627e0a22aaa3c0`.
+- Compose projects: `value-investment-agent-issue-325-app` and
+  `value-investment-agent-issue-325-fundamental`. The app backend/frontend
+  images were rebuilt as `sha256:19453b8732b51356b8f0969425f9d9da9682e14e4d3c1244fadca91bc08a9e14`
+  and `sha256:ff151e6d37cd7e6cb2d7056f21c531e8e53cc3e9d1873c40dbbc3facd39dbe31`;
+  the Fundamental service image was rebuilt as
+  `sha256:0ab5795055d7ee14126010ae491af6e8a529e3d4595cb58614f74380d21e32db`.
+- Compose `config --quiet` passed for both projects. Backend `/health`,
+  Fundamental `/readyz`, and all required containers were healthy. Existing
+  PostgreSQL volumes were retained; no volume deletion or global cleanup ran.
+- Route: `http://127.0.0.1:18681/workspace`, Personal organization, account
+  `issue325-live-20261107@example.test`. Entered `MSFT`, selected
+  `MSFT / Microsoft Corporation / NASDAQ / 100% match` over `MSFT.TO / Toronto /
+  90%`, then continued from the real workspace.
+- Run: `755b4261-df3d-4997-8205-0056a1813385`; thread
+  `thread_1794034417085`. The activity reached
+  `fundamental_analysis / review-financial-health`. Backend logs for this run
+  show `fundamental_xbrl_payload_cache_hit` from the Agent-owned `sec_xbrl`
+  financial payload path. The Fundamental service log contains only health
+  probes; no business request was received.
+- The run was cancelled after the legacy financial-health path continued. The
+  browser showed `Run cancelled`, `cancelled`, cursor `51`, and `Connection
+  closed`, with the client alert `signal is aborted without reason`.
+- Fundamental PostgreSQL counts after cancellation were all zero:
+  `snapshot_manifests=0`, `canonical_facts=0`, `snapshot_facts=0`,
+  `release_manifests=0`, `active_data_release_pointers=0`, and
+  `sec_ingestion_acquisitions=0`.
+- Desktop route observation used viewport `1440x900`; mobile observation used
+  `390x844`. Both showed the cancelled/degraded state. The evidence inspector
+  showed `0 items` and no report value was selectable, so keyboard evidence
+  selection and provenance inspection could not be verified.
+
+### Diagnostic result
+
+**Incomplete and blocked.** #336 provides issuer identity and the #325 branch
+contains a typed service request producer, but the live workspace still enters
+the old Agent-owned SEC/report financial-health path before reaching service
+valuation. This run is evidence for the owning #327 cleanup blocker only; it
+does not satisfy any service-backed #325 acceptance criterion and must not be
+used to mark #325 `VERIFIED`, merge it, or close it.
+
+The exact cleanup checkpoint that must be applied before the next live run is
+PR #340 branch `codex/issue-327-legacy-cleanup`, currently at
+`cfadb22e4779256ba22d3af6b708ad3fd66b38af`.
