@@ -1160,3 +1160,41 @@ head, PR CI, and provider availability remain unverified here.
   not provide caller-owned `valuation_request`; the overall run ended with
   `signal is aborted without reason`. No valuation trace was produced, so the
   same-snapshot valuation acceptance and final #325 delivery remain pending.
+
+## Checkpoint: caller-owned valuation request remains an owning-layer blocker
+
+- Date: 2026-11-08 (local). Exact code under test: `aacfd72da4cf64d0bc0b82012b77226f9e65be18`.
+- Repository state: #328, #312, and #321 are already merged into `main` through
+  PRs #329 (`10a88e41f3f5d63ec9feebb472dbd4d5469c647f`), #332
+  (`eb4cdd5c597e08743aaaf845c4ed27227b9dff5a`), and #334
+  (`bfb5c22912c0e344f83814af154fcfadda29e45c`), respectively. #325 remains
+  OPEN with the `blocker` label and has no delivery PR.
+- Focused checks:
+
+| Command | Result |
+| --- | --- |
+| `uv run --project finance-agent-core pytest finance-agent-core/tests/analysis_runtime/test_runtime_route_contracts.py::test_start_request_accepts_caller_owned_valuation_request finance-agent-core/tests/agents/fundamental/test_service_request_producer.py::test_producer_returns_explicit_missing_assumptions_reason -q` | exit 0; 2 passed |
+| `npm run test -- --run src/hooks/useAgent.test.tsx` in `frontend/` | exit 0; 1 file, 12 tests passed |
+| `rg -n "startWorkflowRun\\(threadId, \\{ message" frontend/src/hooks/useAgent.ts` | exit 0; production hook sends only `{ message: content }` |
+| `git diff --check` | exit 0 |
+
+- Boundary evidence: `RunRequest.valuation_request` is optional and the
+  browser hook never supplies it. The service producer's covered behavior is
+  to return `valuation_request=None` with reason `caller valuation assumptions
+  are required`, then publish a facts-only projection without approval or a
+  valuation trace.
+- The active Fundamental policy records intentionally contain
+  `assumptions=None`. `ValuationInputV1` requires complete FCFF assumptions;
+  the service's separate `calculate-with-policy` endpoint accepts partial
+  overrides, but Agent Core has no typed operation or pre-approval validation
+  path for that contract. Filling the gap with frontend defaults, Agent-owned
+  SEC facts, or a local calculator would violate the caller-ownership and
+  service-boundary rules.
+
+### Diagnostic result
+
+**Incomplete and blocked.** The facts table and evidence inspector are verified,
+but the exact workspace flow cannot produce a caller-owned valuation trace. The
+remaining change belongs at the Agent-to-Fundamental policy-input contract and
+must be tracked as a blocker before #325 can open a delivery PR. No PR, issue
+closure, or `VERIFIED` status is claimed by this checkpoint.
