@@ -17,6 +17,9 @@ from src.agents.fundamental.application.workflow_orchestrator.state_readers impo
 from src.agents.fundamental.interface.fundamental_service_contracts import (
     FundamentalIdentityResolutionRequestV1,
 )
+from src.agents.fundamental.interface.request_contracts import (
+    FundamentalRequestTimingV1,
+)
 from src.shared.internal_services import InternalPrincipal
 from src.shared.kernel.types import JSONObject
 
@@ -217,6 +220,7 @@ async def prepare_service_valuation_request(
     principal: InternalPrincipal,
     correlation_id: str,
     deadline_at: datetime,
+    request_timing: FundamentalRequestTimingV1 | None = None,
 ) -> PreparedServiceValuation:
     """Resolve identity and ingest the exact snapshot used by valuation.
 
@@ -252,7 +256,16 @@ async def prepare_service_valuation_request(
         if request is not None and request.get("valuation_context") is not None
         else {}
     )
-    valuation_timestamp = _timestamp(valuation_context.get("valuation_timestamp"))
+    valuation_timestamp = (
+        request_timing.valuation_timestamp
+        if request_timing is not None
+        else _timestamp(valuation_context.get("valuation_timestamp"))
+    )
+    fiscal_period_selector = (
+        request_timing.fiscal_period_selector.model_dump(mode="json")
+        if request_timing is not None
+        else None
+    )
 
     resolution = await client.resolve_identity(
         FundamentalIdentityResolutionRequestV1(ticker=ticker),
@@ -296,6 +309,11 @@ async def prepare_service_valuation_request(
                     "valuation_timestamp": valuation_timestamp.isoformat().replace(
                         "+00:00", "Z"
                     ),
+                    **(
+                        {"fiscal_period_selector": fiscal_period_selector}
+                        if fiscal_period_selector is not None
+                        else {}
+                    ),
                     "required_fields": list(required_fields),
                     "mappings": _fact_mappings(required_fields),
                     "source_selection_policy": _INGESTION_POLICY,
@@ -321,6 +339,11 @@ async def prepare_service_valuation_request(
         "release_profile_id": _DATA_RELEASE_PROFILE_ID,
         "identity": identity,
         "valuation_timestamp": valuation_timestamp.isoformat().replace("+00:00", "Z"),
+        **(
+            {"fiscal_period_selector": fiscal_period_selector}
+            if fiscal_period_selector is not None
+            else {}
+        ),
         "source_selection_policy": _SNAPSHOT_POLICY,
         "coverage_profile": _COVERAGE_PROFILE,
         "required_fields": list(required_fields),
@@ -345,6 +368,11 @@ async def prepare_service_valuation_request(
     prepared["valuation_context"] = {
         **valuation_context,
         "valuation_timestamp": snapshot_selector["valuation_timestamp"],
+        **(
+            {"fiscal_period_selector": fiscal_period_selector}
+            if fiscal_period_selector is not None
+            else {}
+        ),
         "source_selection_policy": _SNAPSHOT_POLICY,
         "coverage_profile": _COVERAGE_PROFILE,
     }

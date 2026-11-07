@@ -730,6 +730,7 @@ async def test_cutover_rejects_facts_outside_the_resolved_snapshot(
             request_approval_fn=lambda _request: pytest.fail(
                 "facts-only reporting must not request valuation approval"
             ),
+            clock=lambda: datetime(2026, 11, 4, tzinfo=UTC),
         )
     finally:
         reset_request_principal(token)
