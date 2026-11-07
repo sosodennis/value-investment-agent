@@ -864,3 +864,60 @@ workspace route and verify the service-owned snapshot and facts.
 - This is a verification baseline only. No browser route, service-backed
   snapshot-to-valuation trace, desktop/mobile viewport, keyboard evidence
   selection, or evidence-inspector acceptance is claimed by this checkpoint.
+
+## Allowlist-corrected live run and release-boundary diagnostic
+
+- Date: 2026-11-07 (local). Code under test remained the exact head
+  `c8582ce2f29347fc684eff78ccb75f19b41472e8`.
+- The issue-scoped Fundamental service was recreated with the existing
+  PostgreSQL and service-data volumes retained. Its ingestion organization
+  allowlist was extended to include the disposable app organization
+  `faeae7f6-bcc1-4927-886b-4234d1999d87`; no source or schema files were
+  changed.
+- Compose validation used the two current verification files with the pinned
+  SEC runtime variables: `docker compose ... config --quiet` exited 0;
+  `docker compose ... ps` exited 0 with both services healthy; and
+  `curl -fsS http://127.0.0.1:18690/readyz` exited 0 with
+  `{"status":"ready","contract_version":"internal.v1"}`. The service
+  container image was `sha256:f302fb9f8029f898bf13f7ec6568d6fd434e1c629f05298c1e26182639b9e62c`.
+- Route: `http://127.0.0.1:18881/workspace`, Personal organization, using the
+  authenticated disposable account. The operator entered `MSFT` and selected
+  `MSFT Microsoft Corporation NASDAQ` at 100% match over `MSFT.TO` at 90%.
+  Run `bb1a5923-91e0-4daf-9f21-14055ba8ec14`; thread
+  `thread_1794064175474`.
+- Backend logs showed the cutover path without an Agent-owned SEC report fetch:
+  signed identity resolution returned HTTP 200, and the SEC ingestion request
+  returned HTTP 200 with correlation `5cafd9a55ae5429f81892c3d12a9fba0`.
+  The subsequent signed snapshot resolution returned HTTP 409. A direct
+  replay with correlation `issue325-snapshot-409-20261107` returned the exact
+  error envelope `DATA_RELEASE_FACT_MISMATCH` / `selected canonical facts do
+  not match the pinned data release`.
+- Read-only PostgreSQL inspection identified the owning mismatch. Active
+  profile `sec-public-pit-v1` points to release manifest
+  `57e5404d38c7c7fe9cbf3157981a190dda75dc78baadb6af18e76ff9f813b149`, which
+  declares `snapshot-364ba7b9bf9cdc402222764bb2d605d2` and its five fact
+  digests. The run's ingestion created the newer
+  `snapshot-40c8a9d248e4011b2649615245ab0fa9` with manifest digest
+  `26f810ab7d006a9089b9984ec79031c51e5a327a6012f7dba43ba2e0ff33a437`.
+  The service correctly refused to mix those newly selected canonical facts
+  into the older immutable release. Counts after the run were 8 ingestion
+  acquisitions, 10 snapshot manifests, 496 canonical facts, and 496
+  snapshot-fact links.
+- The Fundamental tab rendered `Report unavailable` with no artifact
+  reference. The overall workflow then failed independently at
+  `moderate-verdict` with `failover_exhausted` after the local LLM provider
+  returned repeated HTTP 502 responses. The run therefore proves the
+  allowlist correction and the service's fail-closed release boundary, but it
+  does not verify a same-snapshot report, valuation trace, desktop/mobile
+  layout, keyboard evidence selection, or evidence-inspector provenance.
+
+### Diagnostic result
+
+**Incomplete and blocked.** The prior 403 organization-policy mismatch is
+resolved. The remaining 409 is the caller-time/release publication contract
+tracked by blocker #347: a request that ingests data after the active immutable
+release cannot resolve the newly created snapshot under that release. Do not
+work around this by disabling release pinning, selecting unbound facts, or
+falling back to an Agent-owned SEC report. The next step is to resolve #347's
+caller-owned timestamp and release-compatible snapshot contract, then rerun
+this exact workspace route before claiming #325 acceptance.
