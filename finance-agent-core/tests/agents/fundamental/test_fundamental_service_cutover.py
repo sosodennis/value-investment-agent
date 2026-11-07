@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 from collections.abc import Mapping
 
 import pytest
@@ -13,9 +15,11 @@ from src.agents.fundamental.application.workflow_orchestrator.service_valuation_
 )
 from src.agents.fundamental.interface.fundamental_service_contracts import (
     FundamentalFactsReadResultV1,
+    FundamentalIdentityResolutionV1,
     FundamentalServiceResponseV1,
 )
 from src.shared.artifacts.artifact_data_models import FinancialReportsArtifactData
+from src.shared.cross_agent.domain.market_identity import CompanyProfile
 from src.shared.internal_services import (
     InternalPrincipal,
     reset_request_principal,
@@ -59,6 +63,8 @@ class _Client:
         facts_snapshot_id: str | None = None,
         facts_manifest_digest: str = "e" * 64,
         facts_ids: list[str] | None = None,
+        facts_identity: Mapping[str, object] | None = None,
+        facts_valuation_timestamp: str = "2026-01-15T00:00:00Z",
         validation_policy_overrides: Mapping[str, object] | None = None,
         validated_input: Mapping[str, object] | None = None,
         resolved_snapshot: Mapping[str, object] | None = None,
@@ -77,6 +83,19 @@ class _Client:
         self.facts_snapshot_id = facts_snapshot_id
         self.facts_manifest_digest = facts_manifest_digest
         self.facts_ids = facts_ids
+        self.facts_identity = dict(
+            facts_identity
+            or {
+                "issuer_id": "320193",
+                "issuer_name": "Apple Inc.",
+                "domicile": "US",
+                "reporting_basis": "us-gaap",
+                "security_id": "US0378331005",
+                "share_class": "common",
+                "currency": "USD",
+            }
+        )
+        self.facts_valuation_timestamp = facts_valuation_timestamp
         self.validation_policy_overrides = dict(validation_policy_overrides or {})
         self.validated_input = validated_input
         self.resolved_snapshot = resolved_snapshot
@@ -269,7 +288,8 @@ class _Client:
             {
                 "contract_version": "fundamental.v1",
                 "fact_id": fact_id,
-                "issuer_id": "320193",
+                "issuer_id": str(self.facts_identity["issuer_id"]),
+                "security_id": self.facts_identity.get("security_id"),
                 "concept": f"us-gaap:{fact_id}",
                 "normalized_field": fact_id,
                 "value": 100,
@@ -308,17 +328,10 @@ class _Client:
                 "contract_version": "fundamental.v1",
                 "snapshot_id": snapshot_id,
                 "snapshot_manifest_digest": self.facts_manifest_digest,
-                "identity": {
-                    "issuer_id": "320193",
-                    "issuer_name": "Apple Inc.",
-                    "domicile": "US",
-                    "reporting_basis": "us-gaap",
-                    "security_id": "US0378331005",
-                    "share_class": "common",
-                    "currency": "USD",
-                },
-                "valuation_timestamp": "2026-01-15T00:00:00Z",
+                "identity": dict(self.facts_identity),
+                "valuation_timestamp": self.facts_valuation_timestamp,
                 "quality_status": "verified",
+                "data_release_manifest_digest": None,
                 "facts": facts,
             }
         )
@@ -402,6 +415,119 @@ def _input(*, monte_carlo: bool = False) -> dict[str, object]:
             ],
         }
     return payload
+
+
+def _resolved_identity() -> FundamentalIdentityResolutionV1:
+    identity = {
+        "issuer_id": "0000320193",
+        "issuer_name": "Apple Inc.",
+        "domicile": "US",
+        "reporting_basis": "us-gaap",
+        "security_id": "AAPL",
+        "share_class": "AAPL",
+        "currency": "USD",
+    }
+    payload = {
+        "ticker": "AAPL",
+        "identity": identity,
+        "mapping_version": "sec-issuer-identity-v1",
+        "source_evidence": [
+            {
+                "source_id": source_id,
+                "source_uri": f"https://sec.test/{source_id}",
+                "content_hash": "a" * 64,
+                "captured_at": "2026-11-07T00:00:00Z",
+                "available_at": "2026-11-07T00:00:00Z",
+                "media_type": "application/json",
+                "byte_count": 1,
+            }
+            for source_id in (
+                "sec-company-tickers",
+                "sec-submissions",
+                "sec-companyfacts",
+            )
+        ],
+    }
+    canonical = json.dumps(
+        payload,
+        ensure_ascii=False,
+        allow_nan=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+    return FundamentalIdentityResolutionV1.model_validate_json(
+        json.dumps(
+            {**payload, "resolution_digest": hashlib.sha256(canonical).hexdigest()},
+            ensure_ascii=False,
+            allow_nan=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+    )
+
+
+class _FactsOnlyClient(_Client):
+    _fact_ids = [
+        "fact-revenue",
+        "fact-operating-income",
+        "fact-cash",
+        "fact-debt",
+        "fact-diluted-shares",
+    ]
+
+    def __init__(self, *, facts_snapshot_id: str | None = None) -> None:
+        identity = _resolved_identity().identity.model_dump(mode="json")
+        super().__init__(
+            facts_snapshot_id=facts_snapshot_id,
+            facts_ids=list(self._fact_ids),
+            facts_identity=identity,
+            facts_valuation_timestamp="2026-11-07T00:00:00Z",
+        )
+        self.identity = identity
+
+    async def resolve_identity(self, request, **_kwargs):
+        self.calls.append(("resolve_identity", request.model_dump(mode="json")))
+        return _resolved_identity()
+
+    async def execute(self, operation, input_payload, **kwargs):
+        if operation == "ingest_sec_data":
+            self.calls.append((operation, dict(input_payload)))
+            result = {
+                "contract_version": "fundamental.v1",
+                "status": "created",
+                "identity": dict(input_payload["identity"]),
+                "valuation_timestamp": input_payload["valuation_timestamp"],
+                "snapshot_id": "snapshot-aapl-ingested",
+                "manifest_digest": "b" * 64,
+                "canonical_fact_ids": list(self._fact_ids),
+                "quality_status": "verified",
+            }
+            return FundamentalServiceResponseV1(
+                correlation_id="trace-facts-only",
+                contract_version="internal.v1",
+                schema_version="fundamental.v1",
+                result=result,
+            )
+        if operation == "resolve_snapshot":
+            self.resolved_snapshot = {
+                "snapshot_id": "snapshot-aapl-resolved",
+                "historical_facts": list(self._fact_ids),
+                "identity": self.identity,
+                "valuation_timestamp": input_payload["valuation_timestamp"],
+                "source_selection_policy": "pit-v1",
+                "coverage_profile": "us-gaap-public-v1",
+                "data_release_manifest_digest": None,
+                "quality": "verified",
+                "issue_codes": [],
+                "provenance": {
+                    "snapshot_id": "snapshot-aapl-resolved",
+                    "mapping_version": "mapping-v1",
+                    "parser_version": "parser-v1",
+                    "taxonomy_version": "taxonomy-v1",
+                    "policy_version": "pit-v1",
+                },
+            }
+        return await super().execute(operation, input_payload, **kwargs)
 
 
 @pytest.mark.asyncio
@@ -491,6 +617,69 @@ async def test_cutover_resolves_snapshot_and_facts_through_service_boundary() ->
     assert service_artifact["valuation_trace"]["fact_ids"] == ["fact-revenue"]
     assert service_artifact["provenance"]["snapshot_id"] == "snapshot-resolved"
     assert service_artifact["hashes"]["snapshot_manifest_digest"] == "e" * 64
+
+
+@pytest.mark.asyncio
+async def test_cutover_publishes_snapshot_facts_without_fabricating_valuation() -> None:
+    client = _FactsOnlyClient()
+    runtime = _Runtime()
+    approval_calls: list[object] = []
+    token = set_request_principal(
+        InternalPrincipal(
+            subject_id="caller-1", organization_id="org-1", membership_id="membership-1"
+        )
+    )
+    try:
+        result = await run_service_valuation_flow(
+            runtime,
+            {
+                "company_profile": CompanyProfile(ticker="AAPL", name="Apple Inc."),
+                "fundamental_analysis": {"model_type": "dcf_standard"},
+            },
+            client=client,
+            request_approval_fn=lambda request: approval_calls.append(request),
+        )
+    finally:
+        reset_request_principal(token)
+
+    assert [operation for operation, _ in client.calls] == [
+        "resolve_identity",
+        "ingest_sec_data",
+        "resolve_snapshot",
+    ]
+    assert client.facts_calls == [
+        {
+            "contract_version": "fundamental.v1",
+            "snapshot_id": "snapshot-aapl-resolved",
+            "data_release_manifest_digest": None,
+            "required_fields": [
+                "revenue",
+                "operating_income",
+                "cash",
+                "debt",
+                "diluted_shares",
+            ],
+        }
+    ]
+    assert approval_calls == []
+    assert result.update["fundamental_analysis"]["valuation_status"] == "not_requested"
+    assert result.update["fundamental_analysis"]["quality_status"] == "verified"
+    assert result.update["artifact_references"]["financial_reports"]["artifact_id"] == (
+        "service-valuation-artifact"
+    )
+
+    artifact = runtime.saved_calls[0]["data"]
+    assert isinstance(artifact, dict)
+    FinancialReportsArtifactData.model_validate(artifact)
+    service_artifact = artifact["fundamental_service"]
+    assert isinstance(service_artifact, dict)
+    assert service_artifact["projection_type"] == "facts_only"
+    assert service_artifact["valuation_status"] == "not_requested"
+    assert service_artifact["snapshot_id"] == "snapshot-aapl-resolved"
+    assert service_artifact["fact_ids"] == _FactsOnlyClient._fact_ids
+    assert "valuation_trace" not in service_artifact
+    assert "valuation_input" not in service_artifact
+    assert artifact["financial_reports"] == []
 
 
 @pytest.mark.parametrize(
