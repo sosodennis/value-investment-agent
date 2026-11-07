@@ -39,6 +39,8 @@ const FinancialTableComponent = ({ facts, artifactReference, onSelectEvidence }:
         [facts.facts],
     );
     const familyLabel = facts.identity.family ? FAMILY_LABELS[facts.identity.family] : 'Family unspecified';
+    const hasQualityWarning = facts.quality_status !== 'verified' || facts.issue_codes.length > 0;
+    const qualityAlertVariant = qualityAlertTone(facts.quality_status);
 
     if (sortedFacts.length === 0) {
         return (
@@ -49,6 +51,9 @@ const FinancialTableComponent = ({ facts, artifactReference, onSelectEvidence }:
                     <AlertDescription>
                         The Fundamental service returned no selectable facts for snapshot{' '}
                         <span className="break-all font-mono text-foreground">{facts.snapshot_id}</span>.
+                        {facts.issue_codes.length > 0 && (
+                            <span className="mt-1 block break-all">Issues: {facts.issue_codes.join(', ')}</span>
+                        )}
                     </AlertDescription>
                 </Alert>
             </section>
@@ -57,6 +62,21 @@ const FinancialTableComponent = ({ facts, artifactReference, onSelectEvidence }:
 
     return (
         <section aria-label="Fundamental service facts" className="w-full py-2">
+            {hasQualityWarning && (
+                <Alert
+                    role={facts.quality_status === 'error' ? 'alert' : 'status'}
+                    variant={qualityAlertVariant}
+                    className="mb-3"
+                >
+                    <Info aria-hidden="true" className="size-4" />
+                    <AlertTitle>Facts quality: {facts.quality_status}</AlertTitle>
+                    {facts.issue_codes.length > 0 && (
+                        <AlertDescription className="break-all">
+                            Issues: {facts.issue_codes.join(', ')}
+                        </AlertDescription>
+                    )}
+                </Alert>
+            )}
             <Card className="overflow-hidden">
                 <div className="flex flex-wrap items-start justify-between gap-3 border-b bg-muted/50 px-4 py-3">
                     <div className="min-w-0">
@@ -250,11 +270,16 @@ function formatFactUnit(fact: FundamentalCanonicalFact): string {
     return fact.scale === 0 ? unit : `${unit} · 10^${fact.scale}`;
 }
 
-function qualityVariant(value: FundamentalCanonicalFact['quality']): 'success' | 'warning' | 'destructive' | 'secondary' {
+function qualityVariant(value: FundamentalCanonicalFact['quality'] | FundamentalFactsReadResult['quality_status']): 'success' | 'warning' | 'destructive' | 'secondary' {
     if (value === 'verified') return 'success';
     if (value === 'error' || value === 'abstain') return 'destructive';
     if (value === 'unsupported') return 'secondary';
     return 'warning';
+}
+
+function qualityAlertTone(value: FundamentalFactsReadResult['quality_status']): 'success' | 'warning' | 'destructive' {
+    const variant = qualityVariant(value);
+    return variant === 'destructive' ? 'destructive' : variant === 'success' ? 'success' : 'warning';
 }
 
 export const FinancialTable = memo(FinancialTableComponent);

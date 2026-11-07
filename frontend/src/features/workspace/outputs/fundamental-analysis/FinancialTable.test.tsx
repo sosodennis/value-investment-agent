@@ -175,6 +175,22 @@ describe('FinancialTable', () => {
         );
     });
 
+    it('surfaces non-verified snapshot quality and issue codes', () => {
+        render(
+            <FinancialTable
+                facts={{
+                    ...facts,
+                    quality_status: 'degraded',
+                    issue_codes: ['SNAPSHOT_PARTIAL'],
+                }}
+            />
+        );
+
+        screen.getByRole('status');
+        screen.getByText('Facts quality: degraded');
+        screen.getByText('Issues: SNAPSHOT_PARTIAL');
+    });
+
     it.each([
         ['bank', 'Bank'],
         ['industrial', 'Industrial'],
