@@ -130,22 +130,18 @@ def _has_supported_currency_facts(us_gaap: Mapping[str, object]) -> bool:
     return has_usd and not has_other_currency
 
 
-def resolve_issuer_identity(
-    request: IdentityResolutionRequestV1,
-    *,
-    ticker_directory: object,
-    submissions: object,
-    companyfacts: object,
-) -> IdentityV1:
-    """Resolve a selected SEC ticker only when all required evidence agrees."""
+def resolve_issuer_cik(
+    request: IdentityResolutionRequestV1, *, ticker_directory: object
+) -> str:
+    """Find one canonical CIK for a ticker before fetching issuer resources."""
     directory = _mapping(ticker_directory)
-    matches = []
-    for raw_record in directory.values():
-        if not isinstance(raw_record, Mapping):
-            continue
-        candidate = raw_record.get("ticker")
-        if isinstance(candidate, str) and candidate.strip().upper() == request.ticker:
-            matches.append(raw_record)
+    matches = [
+        record
+        for record in directory.values()
+        if isinstance(record, Mapping)
+        and isinstance(record.get("ticker"), str)
+        and record["ticker"].strip().upper() == request.ticker
+    ]
     if not matches:
         raise IdentityResolutionError(
             "ISSUER_IDENTITY_UNRESOLVED",
@@ -158,10 +154,26 @@ def resolve_issuer_identity(
             "SEC issuer evidence maps the selected ticker more than once",
             status_code=409,
         )
+    return _cik(matches[0].get("cik_str"))
 
-    ticker_record = matches[0]
-    raw_cik = ticker_record.get("cik_str")
-    cik = _cik(raw_cik)
+
+def resolve_issuer_identity(
+    request: IdentityResolutionRequestV1,
+    *,
+    ticker_directory: object,
+    submissions: object,
+    companyfacts: object,
+) -> IdentityV1:
+    """Resolve a selected SEC ticker only when all required evidence agrees."""
+    directory = _mapping(ticker_directory)
+    cik = resolve_issuer_cik(request, ticker_directory=directory)
+    ticker_record = next(
+        record
+        for record in directory.values()
+        if isinstance(record, Mapping)
+        and isinstance(record.get("ticker"), str)
+        and record["ticker"].strip().upper() == request.ticker
+    )
     issuer_name = _name(ticker_record.get("title"))
 
     issuer = _mapping(submissions)

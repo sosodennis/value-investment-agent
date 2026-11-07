@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
@@ -12,6 +13,9 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from .arelle_parser import ArelleParserError, ArelleValidationProfileV1, _directory_hash
 from .contracts import (
+    IdentityResolutionRequestV1,
+    IdentityResolutionV1,
+    IdentitySourceEvidenceV1,
     QualityStatus,
     SecFilingSelectorV1,
     SecIngestionRequestV1,
@@ -21,11 +25,18 @@ from .contracts import (
 )
 from .facts import CanonicalMappingV1
 from .ingestion import SecIngestionService
+from .issuer_identity import (
+    IdentityResolutionError,
+    resolve_issuer_cik,
+    resolve_issuer_identity,
+)
 from .metadata import PostgresArtifactStore, PostgresMetadataStore
 from .operations import ServiceError
 from .sec_source import SecEdgarSourceAdapter, SecRequestPolicy, SecSourceError
 from .serialization import sha256_digest
-from .snapshots import ContentAddressedStore, SnapshotError
+from .snapshots import CapturedSource, ContentAddressedStore, SnapshotError
+
+IDENTITY_MAPPING_VERSION = "sec-issuer-identity-v1"
 
 
 class _SecPayload(BaseModel):
@@ -111,6 +122,238 @@ class _SelectedFiling:
     @property
     def is_amendment(self) -> bool:
         return self.form.endswith("/A")
+
+
+class SecIdentityResolutionUseCase:
+    """Resolve issuer identity from captured SEC evidence owned by the service."""
+
+    def __init__(
+        self,
+        *,
+        adapter: SecEdgarSourceAdapter,
+        metadata: PostgresMetadataStore,
+        content_store: ContentAddressedStore,
+        authorized_organizations: frozenset[str],
+    ) -> None:
+        self.adapter = adapter
+        self.metadata = metadata
+        self.content_store = content_store
+        self.authorized_organizations = authorized_organizations
+
+    def _audit(
+        self,
+        *,
+        request: IdentityResolutionRequestV1,
+        caller_principal: str,
+        organization_id: str,
+        correlation_id: str,
+        sources: list[CapturedSource],
+        outcome: str,
+    ) -> None:
+        acquisition_key = sha256_digest(
+            {
+                "operation": "resolve-issuer-identity",
+                "ticker": request.ticker,
+                "mapping_version": IDENTITY_MAPPING_VERSION,
+            }
+        )
+        self.metadata.publish_source_audit(
+            acquisition_key=acquisition_key,
+            caller_principal=caller_principal,
+            organization_id=organization_id,
+            correlation_id=correlation_id,
+            source_hashes=tuple(
+                sorted(hashlib.sha256(source.content).hexdigest() for source in sources)
+            ),
+            outcome=outcome,
+        )
+
+    def _store_source(self, source: CapturedSource) -> IdentitySourceEvidenceV1:
+        media_type = source.media_type.split(";", maxsplit=1)[0].strip().lower()
+        if source.http_status != 200 or media_type != "application/json":
+            raise IdentityResolutionError(
+                "ISSUER_IDENTITY_SOURCE_INVALID",
+                "SEC issuer source response has an unsupported representation",
+                status_code=502,
+            )
+        expected_hash = hashlib.sha256(source.content).hexdigest()
+        stored_hash = self.content_store.put(
+            source.content, media_type="application/json"
+        )
+        if stored_hash != expected_hash:
+            raise SnapshotError(
+                "SOURCE_HASH_MISMATCH",
+                "SEC issuer source bytes do not match the content address",
+            )
+        return IdentitySourceEvidenceV1(
+            source_id=source.source_id,
+            source_uri=source.uri,
+            content_hash=stored_hash,
+            captured_at=source.captured_at or source.available_at,
+            available_at=source.available_at,
+            media_type="application/json",
+            byte_count=len(source.content),
+        )
+
+    def execute(
+        self,
+        request: IdentityResolutionRequestV1,
+        *,
+        caller_principal: str,
+        organization_id: str,
+        correlation_id: str,
+        deadline_at: datetime,
+    ) -> IdentityResolutionV1:
+        captured: list[CapturedSource] = []
+        if organization_id not in self.authorized_organizations:
+            self._audit(
+                request=request,
+                caller_principal=caller_principal,
+                organization_id=organization_id,
+                correlation_id=correlation_id,
+                sources=captured,
+                outcome="IDENTITY_RESOLUTION_NOT_AUTHORIZED",
+            )
+            raise ServiceError(
+                "IDENTITY_RESOLUTION_NOT_AUTHORIZED",
+                "organization is not authorized for SEC identity resolution",
+                status_code=403,
+                retryable=False,
+            )
+
+        try:
+            ticker_source = self.adapter.capture_company_tickers(
+                deadline_at=deadline_at
+            )
+            captured.append(ticker_source)
+            ticker_evidence = self._store_source(ticker_source)
+            ticker_directory = json.loads(ticker_source.content)
+            cik = resolve_issuer_cik(request, ticker_directory=ticker_directory)
+
+            submissions_source = self.adapter.capture_submissions(
+                cik, deadline_at=deadline_at
+            )
+            captured.append(submissions_source)
+            submissions_evidence = self._store_source(submissions_source)
+            submissions = json.loads(submissions_source.content)
+
+            facts_source = self.adapter.capture_company_facts(
+                cik, deadline_at=deadline_at
+            )
+            captured.append(facts_source)
+            facts_evidence = self._store_source(facts_source)
+            companyfacts = json.loads(facts_source.content)
+
+            identity = resolve_issuer_identity(
+                request,
+                ticker_directory=ticker_directory,
+                submissions=submissions,
+                companyfacts=companyfacts,
+            )
+            source_evidence = (
+                ticker_evidence,
+                submissions_evidence,
+                facts_evidence,
+            )
+            digest_payload = {
+                "ticker": request.ticker,
+                "identity": identity.model_dump(mode="json"),
+                "mapping_version": IDENTITY_MAPPING_VERSION,
+                "source_evidence": [
+                    source.model_dump(mode="json") for source in source_evidence
+                ],
+            }
+            result = IdentityResolutionV1(
+                ticker=request.ticker,
+                identity=identity,
+                mapping_version=IDENTITY_MAPPING_VERSION,
+                source_evidence=source_evidence,
+                resolution_digest=sha256_digest(digest_payload),
+            )
+            self._audit(
+                request=request,
+                caller_principal=caller_principal,
+                organization_id=organization_id,
+                correlation_id=correlation_id,
+                sources=captured,
+                outcome="identity-resolved",
+            )
+            return result
+        except IdentityResolutionError as error:
+            self._audit(
+                request=request,
+                caller_principal=caller_principal,
+                organization_id=organization_id,
+                correlation_id=correlation_id,
+                sources=captured,
+                outcome=error.code,
+            )
+            raise ServiceError(
+                error.code,
+                str(error),
+                status_code=error.status_code,
+                retryable=False,
+            ) from error
+        except SecSourceError as error:
+            self._audit(
+                request=request,
+                caller_principal=caller_principal,
+                organization_id=organization_id,
+                correlation_id=correlation_id,
+                sources=captured,
+                outcome=error.code,
+            )
+            if error.code == "REQUEST_DEADLINE_EXCEEDED":
+                raise ServiceError(
+                    error.code,
+                    "SEC identity resolution exceeded its request deadline",
+                    status_code=408,
+                    retryable=True,
+                ) from error
+            if error.code == "SOURCE_RATE_LIMITED":
+                raise ServiceError(
+                    "ISSUER_IDENTITY_SOURCE_RATE_LIMITED",
+                    "SEC identity source is temporarily rate limited",
+                    status_code=429,
+                    retryable=True,
+                    retry_after_ms=1000,
+                ) from error
+            raise ServiceError(
+                "ISSUER_IDENTITY_SOURCE_UNAVAILABLE",
+                "SEC issuer evidence is temporarily unavailable",
+                status_code=503,
+                retryable=error.retryable,
+            ) from error
+        except (json.JSONDecodeError, UnicodeDecodeError) as error:
+            self._audit(
+                request=request,
+                caller_principal=caller_principal,
+                organization_id=organization_id,
+                correlation_id=correlation_id,
+                sources=captured,
+                outcome="ISSUER_IDENTITY_SOURCE_INVALID",
+            )
+            raise ServiceError(
+                "ISSUER_IDENTITY_SOURCE_INVALID",
+                "SEC issuer evidence is not valid JSON",
+                status_code=502,
+                retryable=False,
+            ) from error
+        except SnapshotError as error:
+            self._audit(
+                request=request,
+                caller_principal=caller_principal,
+                organization_id=organization_id,
+                correlation_id=correlation_id,
+                sources=captured,
+                outcome=error.code,
+            )
+            raise ServiceError(
+                "ISSUER_IDENTITY_EVIDENCE_UNAVAILABLE",
+                "SEC issuer evidence could not be stored immutably",
+                status_code=503,
+                retryable=True,
+            ) from error
 
 
 class SecAcquisitionUseCase:
@@ -839,5 +1082,27 @@ def build_runtime_sec_acquisition(
         metadata=metadata,
         content_store=content_store,
         settings=settings,
+        authorized_organizations=authorized_organizations,
+    )
+
+
+def build_runtime_sec_identity_resolution(
+    *,
+    metadata: PostgresMetadataStore,
+    content_store: ContentAddressedStore,
+    user_agent: str | None,
+    authorized_organizations: frozenset[str],
+) -> SecIdentityResolutionUseCase | None:
+    """Build SEC identity resolution without requiring parser artifacts."""
+    if not user_agent:
+        return None
+    adapter = SecEdgarSourceAdapter(
+        policy=SecRequestPolicy(user_agent=user_agent),
+        request_slot=metadata.reserve_sec_provider_request_slot,
+    )
+    return SecIdentityResolutionUseCase(
+        adapter=adapter,
+        metadata=metadata,
+        content_store=content_store,
         authorized_organizations=authorized_organizations,
     )

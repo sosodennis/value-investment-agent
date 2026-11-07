@@ -167,7 +167,7 @@ async def authorize_operation(
     request.state.correlation_id = context.correlation_id
     request_budget_ms = (
         config.max_ingestion_ms
-        if request.url.path == "/v1/data/ingestions"
+        if request.url.path in {"/v1/data/ingestions", "/v1/identity/resolve"}
         else config.max_request_ms
     )
     request.state.deadline = enforce_deadline(
