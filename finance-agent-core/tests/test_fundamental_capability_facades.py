@@ -4,12 +4,6 @@ from importlib import import_module
 from types import ModuleType
 
 FACADE_EXPORTS: dict[str, set[str]] = {
-    "artifacts_provenance": {
-        "FundamentalArtifactModel",
-        "IFundamentalReportRepo",
-        "fundamental_artifact_repository",
-        "parse_fundamental_artifact_model",
-    },
     "core_valuation": {
         "ParamBuildResult",
         "ParamBuilderPayload",

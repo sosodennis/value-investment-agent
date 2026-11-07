@@ -1,4 +1,4 @@
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -74,21 +74,7 @@ async def test_model_selection_node_ignores_legacy_report_artifact():
         "fundamental_analysis": {"financial_reports_artifact_id": "artifact_1"},
     }
 
-    with (
-        patch(
-            "src.agents.fundamental.capabilities.artifacts_provenance.infrastructure.fundamental_artifact_repository.FundamentalArtifactRepository.load_financial_reports_bundle",
-            new=AsyncMock(
-                side_effect=AssertionError("legacy report load must not run")
-            ),
-        ),
-        patch(
-            "src.agents.fundamental.capabilities.artifacts_provenance.infrastructure.fundamental_artifact_repository.FundamentalArtifactRepository.save_financial_reports",
-            new=AsyncMock(
-                side_effect=AssertionError("legacy report save must not run")
-            ),
-        ),
-    ):
-        command = await _fundamental_nodes()["model_selection"](state)
+    command = await _fundamental_nodes()["model_selection"](state)
 
     assert command.goto == "calculation"
     assert "error_logs" not in command.update

@@ -3,16 +3,17 @@ from __future__ import annotations
 import pytest
 
 from src.agents.debate.interface.contracts import parse_debate_artifact_model
-from src.agents.fundamental.capabilities.artifacts_provenance.interface.contracts import (
-    parse_fundamental_artifact_model,
-)
 from src.agents.news.interface.contracts import parse_news_artifact_model
 from src.agents.technical.interface.contracts import (
     parse_technical_artifact_model,
 )
+from src.artifacts.public import (
+    ARTIFACT_KIND_FINANCIAL_REPORTS,
+    parse_artifact_data_json,
+)
 
 
-def test_canonicalize_fundamental_artifact_normalizes_reports() -> None:
+def test_canonicalize_financial_reports_artifact_preserves_reports() -> None:
     payload = {
         "ticker": "AAPL",
         "model_type": "saas",
@@ -52,12 +53,16 @@ def test_canonicalize_fundamental_artifact_normalizes_reports() -> None:
         },
     }
 
-    normalized = parse_fundamental_artifact_model(payload)
+    normalized = parse_artifact_data_json(
+        ARTIFACT_KIND_FINANCIAL_REPORTS,
+        payload,
+        context="test.financial_reports",
+    )
 
-    assert normalized["company_name"] == "AAPL"
-    assert normalized["sector"] == "Unknown"
-    assert normalized["industry"] == "Unknown"
-    assert normalized["reasoning"] == ""
+    assert normalized["company_name"] is None
+    assert normalized["sector"] is None
+    assert normalized["industry"] is None
+    assert normalized["reasoning"] is None
 
     report = normalized["financial_reports"][0]
     assert report["industry_type"] == "FinancialServices"

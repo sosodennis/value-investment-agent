@@ -56,7 +56,6 @@ def test_rehomed_fundamental_capabilities_have_no_legacy_imports() -> None:
         repo_root / "finance-agent-core" / "scripts",
     ]
     moved_capabilities = (
-        "artifacts_provenance",
         "core_valuation",
         "financial_statements",
         "forward_signals",
@@ -294,7 +293,6 @@ def test_no_active_fundamental_sec_or_report_fallback_imports() -> None:
     banned_prefixes = (
         "src.agents.fundamental.capabilities.financial_statements.infrastructure.sec_xbrl",
         "src.agents.fundamental.capabilities.forward_signals.infrastructure.sec_xbrl",
-        "src.agents.fundamental.capabilities.artifacts_provenance.infrastructure.fundamental_artifact_repository",
         "src.agents.fundamental.application.workflow_orchestrator.valuation_flow",
         "src.agents.fundamental.application.workflow_orchestrator.services.model_selection_artifact_service",
         "src.agents.fundamental.application.workflow_orchestrator.services.valuation_",
