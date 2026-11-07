@@ -457,6 +457,28 @@ filing was acquired and no snapshot or fact was published. The next checkpoint
 must provision the canonical mapping release through the Fundamental-owned
 metadata path, then rerun the same request before changing application code.
 
+### Single-field parser control
+
+- Date: 2026-11-07.
+- Reused the same healthy service, disposable Fundamental database, pinned
+  validation runtime, taxonomy bundle, and 2024 MSFT 10-K accession above.
+- Sent a signed ingestion request for only `revenue`, using the published
+  `sec-us-gaap-v1-revenue` mapping and a 130-second request deadline.
+- Correlation ID: `issue325-debug-revenue-20261107-1`; acquisition key:
+  `efd6824baadee5103581382a0eba621fea46d64db2b9fe3626276d0df59496c8`.
+- The service returned HTTP 422 `XBRL_PARSE_FAILED` after 8.08 seconds with
+  `offline SEC parser exited without a result`. The source audit persisted
+  that outcome; `sec_ingestion_acquisitions`, snapshots, and canonical facts
+  remain empty for this attempt.
+
+### Diagnostic result
+
+**Incomplete and blocked.** Mapping lookup succeeds for the single-field
+control, but the offline parser worker exits before returning a parse result.
+The failure is not caused by the number of requested mappings. The worker's
+exit cause remains undetermined; inspect its resource limit and retained parser
+inputs before any service or application code change.
+
 ## Exact combined service identity boundary probe
 
 - Date: 2026-11-07.
