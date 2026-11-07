@@ -166,6 +166,14 @@ def _request() -> dict[str, object]:
     }
 
 
+def _compact_request() -> dict[str, object]:
+    return {
+        "assumptions": {"trace": {"description": "caller-owned"}},
+        "uncertainty": {"mode": "none"},
+        "requested_as_of": "2026-11-07T00:00:00Z",
+    }
+
+
 @pytest.mark.asyncio
 async def test_producer_resolves_identity_then_ingests_and_pins_request() -> None:
     client = _Client(ingestion=_ingestion())
@@ -201,6 +209,47 @@ async def test_producer_resolves_identity_then_ingests_and_pins_request() -> Non
         "fact-operating-income",
     ]
     assert prepared.valuation_request["identity"] == prepared.identity
+
+
+@pytest.mark.asyncio
+async def test_producer_enriches_compact_caller_request_without_inventing_inputs() -> (
+    None
+):
+    client = _Client(ingestion=_ingestion())
+
+    prepared = await prepare_service_valuation_request(
+        _state(request=_compact_request()),
+        client=client,
+        principal=_principal(),
+        correlation_id="correlation-1",
+        deadline_at=datetime(2026, 11, 7, tzinfo=UTC),
+    )
+
+    assert prepared.valuation_request is not None
+    assert (
+        prepared.valuation_request["assumptions"] == _compact_request()["assumptions"]
+    )
+    assert prepared.valuation_request["model_id"] == "fcff_dcf"
+    assert prepared.valuation_request["model_version"] == "fcff_dcf-v1"
+    assert prepared.valuation_request["policy_id"] == "fcff_dcf-us-gaap-public-v1"
+    assert prepared.valuation_request["quality"] == {"status": "verified"}
+    assert prepared.valuation_request["provenance"] == {
+        "snapshot_id": "pending",
+        "fact_ids": [],
+        "mapping_version": "sec-us-gaap-v1",
+        "parser_version": "2.47.4",
+        "taxonomy_version": "us-gaap-2023-2024",
+        "policy_version": "sec-public-pit-v1",
+    }
+    assert prepared.valuation_request["valuation_context"] == {
+        "valuation_timestamp": "2026-11-07T00:00:00Z",
+        "source_selection_policy": "pit-v1",
+        "coverage_profile": "us-gaap-public-v1",
+    }
+    assert [operation for operation, _ in client.calls] == [
+        "resolve_identity",
+        "ingest_sec_data",
+    ]
 
 
 @pytest.mark.asyncio

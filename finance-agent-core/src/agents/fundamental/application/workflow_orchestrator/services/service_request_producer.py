@@ -33,6 +33,10 @@ _MODEL_VERSION = {
     "fcff_dcf": "fcff_dcf-v1",
     "transition_fcff_dcf": "transition_fcff_dcf-v1",
 }
+_POLICY_ID = {
+    "fcff_dcf": "fcff_dcf-us-gaap-public-v1",
+    "transition_fcff_dcf": "transition_fcff_dcf-us-gaap-public-v1",
+}
 _BASE_REQUIRED_FIELDS = (
     "revenue",
     "operating_income",
@@ -52,6 +56,18 @@ _TAXONOMY_MANIFEST_ID = "sec-us-gaap-2023-2024-public-bundle"
 _TAXONOMY_VERSION = "us-gaap-2023-2024"
 _POLICY_VERSION = "sec-public-pit-v1"
 _MAPPING_VERSION = "sec-us-gaap-v1"
+_COMPACT_REQUEST_FIELDS = frozenset(
+    {
+        "contract_version",
+        "model_id",
+        "model_version",
+        "policy_id",
+        "assumptions",
+        "uncertainty",
+        "requested_as_of",
+        "fiscal_period_selector",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -125,6 +141,75 @@ def _model_id(
             status_code=422,
         )
     return candidate
+
+
+def is_compact_valuation_request(value: Mapping[str, object]) -> bool:
+    """Return whether a request contains caller inputs but no service evidence."""
+
+    return not {
+        "identity",
+        "valuation_context",
+        "quality",
+        "provenance",
+    }.intersection(value)
+
+
+def _normalize_compact_request(
+    request: Mapping[str, object],
+    *,
+    model_id: str,
+    valuation_context: Mapping[str, object],
+    valuation_timestamp: datetime,
+    fiscal_period_selector: JSONObject | None,
+) -> JSONObject:
+    unknown = sorted(set(request).difference(_COMPACT_REQUEST_FIELDS))
+    if unknown:
+        raise FundamentalServiceFailure(
+            "VALUATION_INPUT_INVALID",
+            "compact valuation request contains unsupported fields: "
+            + ", ".join(unknown),
+            retryable=False,
+            status_code=422,
+        )
+    assumptions = request.get("assumptions")
+    if not isinstance(assumptions, Mapping):
+        raise FundamentalServiceFailure(
+            "VALUATION_INPUT_INVALID",
+            "compact valuation request requires caller-owned assumptions",
+            retryable=False,
+            status_code=422,
+        )
+    normalized: JSONObject = dict(request)
+    normalized["contract_version"] = "fundamental.v1"
+    normalized["model_id"] = model_id
+    normalized["model_version"] = (
+        normalized.get("model_version") or _MODEL_VERSION[model_id]
+    )
+    normalized["policy_id"] = normalized.get("policy_id") or _POLICY_ID[model_id]
+    normalized["uncertainty"] = dict(normalized.get("uncertainty") or {"mode": "none"})
+    normalized["quality"] = {"status": "verified"}
+    normalized["provenance"] = {
+        "snapshot_id": "pending",
+        "fact_ids": [],
+        "mapping_version": _MAPPING_VERSION,
+        "parser_version": _PARSER_VERSION,
+        "taxonomy_version": _TAXONOMY_VERSION,
+        "policy_version": _POLICY_VERSION,
+    }
+    normalized["valuation_context"] = {
+        **valuation_context,
+        "valuation_timestamp": valuation_timestamp.isoformat().replace("+00:00", "Z"),
+        **(
+            {"fiscal_period_selector": fiscal_period_selector}
+            if fiscal_period_selector is not None
+            else {}
+        ),
+        "source_selection_policy": _SNAPSHOT_POLICY,
+        "coverage_profile": _COVERAGE_PROFILE,
+    }
+    normalized.pop("input_digest", None)
+    normalized.pop("caller_approval", None)
+    return normalized
 
 
 def _required_fields(model_id: str) -> tuple[str, ...]:
@@ -259,7 +344,10 @@ async def prepare_service_valuation_request(
     valuation_timestamp = (
         request_timing.valuation_timestamp
         if request_timing is not None
-        else _timestamp(valuation_context.get("valuation_timestamp"))
+        else _timestamp(
+            valuation_context.get("valuation_timestamp")
+            or (request.get("requested_as_of") if request is not None else None)
+        )
     )
     fiscal_period_selector = (
         request_timing.fiscal_period_selector.model_dump(mode="json")
@@ -311,6 +399,7 @@ async def prepare_service_valuation_request(
         "coverage_profile": _COVERAGE_PROFILE,
         "required_fields": list(required_fields),
     }
+    compact_request = request is not None and is_compact_valuation_request(request)
     if request is None:
         # A report-only request reads the already activated immutable release.
         # Ingesting here would create a new snapshot outside that release and
@@ -359,7 +448,17 @@ async def prepare_service_valuation_request(
         identity=identity,
         valuation_timestamp=valuation_timestamp,
     )
-    prepared = dict(request)
+    prepared = (
+        _normalize_compact_request(
+            request,
+            model_id=model_id,
+            valuation_context=valuation_context,
+            valuation_timestamp=valuation_timestamp,
+            fiscal_period_selector=fiscal_period_selector,
+        )
+        if compact_request
+        else dict(request)
+    )
     prepared["contract_version"] = "fundamental.v1"
     prepared["identity"] = identity
     prepared["model_id"] = model_id
@@ -369,7 +468,11 @@ async def prepare_service_valuation_request(
     prepared["historical_facts"] = list(ingestion["canonical_fact_ids"])
     prepared["snapshot_selector"] = snapshot_selector
     prepared["valuation_context"] = {
-        **valuation_context,
+        **(
+            _mapping(prepared.get("valuation_context"), context="valuation_context")
+            if compact_request
+            else valuation_context
+        ),
         "valuation_timestamp": snapshot_selector["valuation_timestamp"],
         **(
             {"fiscal_period_selector": fiscal_period_selector}
@@ -387,4 +490,8 @@ async def prepare_service_valuation_request(
     )
 
 
-__all__ = ["PreparedServiceValuation", "prepare_service_valuation_request"]
+__all__ = [
+    "PreparedServiceValuation",
+    "is_compact_valuation_request",
+    "prepare_service_valuation_request",
+]

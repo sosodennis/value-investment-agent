@@ -15,6 +15,7 @@ from src.agents.fundamental.application.fundamental_service_port import (
 )
 from src.agents.fundamental.application.workflow_orchestrator.services.service_request_producer import (
     PreparedServiceValuation,
+    is_compact_valuation_request,
     prepare_service_valuation_request,
 )
 from src.agents.fundamental.application.workflow_orchestrator.state_readers import (
@@ -176,6 +177,8 @@ def _validate_service_input(
     context: str = "valuation_request",
 ) -> JSONObject:
     input_mapping = _as_mapping(raw_input, context=context)
+    if is_compact_valuation_request(input_mapping):
+        return _validate_compact_service_input(input_mapping, context=context)
     has_selector = "snapshot_selector" in input_mapping
     has_request_timing = (
         "requested_as_of" in input_mapping or "required_fields" in input_mapping
@@ -244,6 +247,47 @@ def _validate_service_input(
         value = input_mapping[field]
         if not isinstance(value, str) or not value.strip():
             raise ValueError(f"valuation_request.{field} must be a non-empty string")
+    return dict(input_mapping)
+
+
+def _validate_compact_service_input(
+    input_mapping: Mapping[str, object], *, context: str
+) -> JSONObject:
+    """Validate the caller-owned portion before the service producer enriches it."""
+
+    supported = {
+        "contract_version",
+        "model_id",
+        "model_version",
+        "policy_id",
+        "assumptions",
+        "uncertainty",
+        "requested_as_of",
+        "fiscal_period_selector",
+    }
+    unknown = sorted(set(input_mapping).difference(supported))
+    if unknown:
+        raise ValueError(
+            f"{context} compact input contains unsupported fields: "
+            + ", ".join(unknown)
+        )
+    contract_version = input_mapping.get("contract_version", "fundamental.v1")
+    if contract_version != "fundamental.v1":
+        raise ValueError(f"{context}.contract_version must be fundamental.v1")
+    assumptions = input_mapping.get("assumptions")
+    if not isinstance(assumptions, Mapping):
+        raise ValueError(f"{context}.assumptions must be an object")
+    uncertainty = input_mapping.get("uncertainty", {"mode": "none"})
+    if not isinstance(uncertainty, Mapping):
+        raise ValueError(f"{context}.uncertainty must be an object")
+    if uncertainty.get("mode") == "scenarios":
+        raise ValueError(
+            "scenario payloads are not part of the frozen valuation contract"
+        )
+    for field in ("model_id", "model_version", "policy_id"):
+        value = input_mapping.get(field)
+        if value is not None and (not isinstance(value, str) or not value.strip()):
+            raise ValueError(f"{context}.{field} must be a non-empty string")
     return dict(input_mapping)
 
 
@@ -1304,10 +1348,16 @@ async def run_service_valuation_flow(
         input_payload: JSONObject | None = None
         if raw_request is not None:
             input_payload = read_service_valuation_input(state)
+            compact_request = is_compact_valuation_request(input_payload)
             request_timing = FundamentalRequestTimingV1.accept(
                 input_payload, clock=clock
             )
             input_payload = apply_request_timing(input_payload, request_timing)
+            if compact_request:
+                # The producer owns service identity, ingestion, snapshot and
+                # provenance enrichment. Do not treat a compact caller request
+                # as a pre-bound service input.
+                input_payload = None
         else:
             request_timing = FundamentalRequestTimingV1.accept({}, clock=clock)
         fundamental = {
@@ -1410,6 +1460,9 @@ async def run_service_valuation_flow(
                 )
             input_payload = prepared.valuation_request
         assert input_payload is not None
+        # Snapshot resolution replaces the selector with canonical fact IDs;
+        # retain the service-owned normalized field selection for the later
+        # facts read.
         required_fact_fields = _required_fact_fields(input_payload)
         selector = input_payload.get("snapshot_selector")
         source_selection_policy_version: str | None = None

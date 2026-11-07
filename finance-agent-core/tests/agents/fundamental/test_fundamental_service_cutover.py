@@ -679,6 +679,61 @@ async def test_cutover_resolves_snapshot_and_facts_through_service_boundary() ->
 
 
 @pytest.mark.asyncio
+async def test_cutover_enriches_compact_caller_request_before_snapshot_resolution() -> (
+    None
+):
+    client = _FactsOnlyClient(snapshot_timestamp="2026-11-01T00:00:00Z")
+    runtime = _Runtime()
+    compact = {
+        "assumptions": _input()["assumptions"],
+        "uncertainty": {"mode": "none"},
+        "requested_as_of": "2026-11-04T00:00:00Z",
+    }
+    token = set_request_principal(
+        InternalPrincipal(
+            subject_id="caller-1", organization_id="org-1", membership_id="membership-1"
+        )
+    )
+    try:
+        result = await run_service_valuation_flow(
+            runtime,
+            {
+                "valuation_request": compact,
+                "company_profile": CompanyProfile(ticker="AAPL", name="Apple Inc."),
+                "fundamental_analysis": {"model_type": "dcf_standard"},
+            },
+            client=client,
+            request_approval_fn=lambda _request: {
+                "type": "valuation_approval",
+                "contract_version": "v1",
+                "decision": "approve",
+            },
+            clock=lambda: datetime(2026, 11, 4, tzinfo=UTC),
+        )
+    finally:
+        reset_request_principal(token)
+
+    assert [operation for operation, _ in client.calls] == [
+        "resolve_identity",
+        "ingest_sec_data",
+        "resolve_snapshot",
+        "validate",
+        "calculate",
+    ]
+    assert client.calls[1][1]["identity"]["issuer_id"] == "0000320193"
+    assert client.calls[2][1]["required_fields"] == [
+        "revenue",
+        "operating_income",
+        "cash",
+        "debt",
+        "diluted_shares",
+    ]
+    assert client.calls[3][1]["historical_facts"] == _FactsOnlyClient._fact_ids
+    assert client.calls[3][1]["assumptions"] == compact["assumptions"]
+    assert result.update["fundamental_analysis"]["valuation_status"] == "completed"
+
+
+@pytest.mark.asyncio
 async def test_cutover_publishes_snapshot_facts_without_fabricating_valuation() -> None:
     client = _FactsOnlyClient(snapshot_timestamp="2026-11-01T00:00:00Z")
     runtime = _Runtime()
