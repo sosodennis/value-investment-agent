@@ -715,6 +715,7 @@ class SecAcquisitionUseCase:
             accepted_at=filing.accepted_at,
             captured_at=captured_at,
             valuation_timestamp=request.valuation_timestamp,
+            fiscal_period_selector=request.fiscal_period_selector,
             parser_version=request.parser_version,
             policy_version=request.policy_version,
             taxonomy_manifest_id=request.taxonomy_manifest_id,

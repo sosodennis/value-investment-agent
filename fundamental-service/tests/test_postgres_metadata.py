@@ -22,6 +22,7 @@ from sqlalchemy.exc import DBAPIError
 from fundamental_service.app import create_app
 from fundamental_service.contracts import (
     CanonicalFactV1,
+    FiscalPeriodSelectorV1,
     IdentityV1,
     PeriodType,
     QualityStatus,
@@ -136,6 +137,10 @@ def _snapshot(
         "snapshot_id": f"snapshot-{suffix}",
         "identity": identity,
         "valuation_timestamp": valuation_timestamp or now,
+        "fiscal_period_selector": FiscalPeriodSelectorV1(
+            mode="latest_complete", count=3
+        ),
+        "resolved_fiscal_periods": (),
         "captured_at": now,
         "source_records": (source,),
         "taxonomy_manifest_id": taxonomy_manifest_id,

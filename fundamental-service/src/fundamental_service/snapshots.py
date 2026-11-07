@@ -19,6 +19,7 @@ from .contracts import (
     SourceRecordV1,
     SourceRole,
     SourceSnapshotV1,
+    FiscalPeriodSelectorV1,
 )
 from .serialization import canonical_bytes, is_digest, sha256_digest
 
@@ -294,6 +295,7 @@ class SnapshotBuilder:
         parser_version: str,
         policy_version: str,
         sources: tuple[CapturedSource, ...],
+        fiscal_period_selector: FiscalPeriodSelectorV1 | None = None,
         taxonomy_manifest_id: str | None = None,
         acquisition_key: str | None = None,
         validation_profile_id: str | None = None,
@@ -308,6 +310,7 @@ class SnapshotBuilder:
             parser_version=parser_version,
             policy_version=policy_version,
             sources=sources,
+            fiscal_period_selector=fiscal_period_selector,
             taxonomy_manifest_id=taxonomy_manifest_id,
             acquisition_key=acquisition_key,
             validation_profile_id=validation_profile_id,
@@ -327,6 +330,7 @@ class SnapshotBuilder:
         parser_version: str,
         policy_version: str,
         sources: tuple[CapturedSource, ...],
+        fiscal_period_selector: FiscalPeriodSelectorV1 | None = None,
         taxonomy_manifest_id: str | None = None,
         acquisition_key: str | None = None,
         validation_profile_id: str | None = None,
@@ -463,6 +467,8 @@ class SnapshotBuilder:
         identity_payload = {
             "identity": identity,
             "valuation_timestamp": valuation_timestamp,
+            "fiscal_period_selector": fiscal_period_selector
+            or FiscalPeriodSelectorV1(mode="latest_complete", count=3),
             "parser_version": parser_version,
             "policy_version": policy_version,
             "captured_at": snapshot_captured_at,
@@ -502,6 +508,8 @@ class SnapshotBuilder:
             snapshot_id=snapshot_id,
             identity=identity,
             valuation_timestamp=valuation_timestamp,
+            fiscal_period_selector=fiscal_period_selector
+            or FiscalPeriodSelectorV1(mode="latest_complete", count=3),
             captured_at=snapshot_captured_at,
             source_records=tuple(records),
             taxonomy_manifest_id=taxonomy_manifest_id,
@@ -518,6 +526,11 @@ class SnapshotBuilder:
                     "contract_version": "fundamental.v1",
                     "identity": identity,
                     "valuation_timestamp": valuation_timestamp,
+                    "fiscal_period_selector": (
+                        fiscal_period_selector
+                        or FiscalPeriodSelectorV1(mode="latest_complete", count=3)
+                    ),
+                    "resolved_fiscal_periods": (),
                     "captured_at": snapshot_captured_at,
                     "source_records": records,
                     "taxonomy_manifest_id": taxonomy_manifest_id,

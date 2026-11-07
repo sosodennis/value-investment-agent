@@ -178,6 +178,33 @@ def apply_request_timing(
     updated.pop("requested_as_of", None)
     updated.pop("fiscal_period_selector", None)
     updated["valuation_context"] = context
+    if "historical_facts" not in updated:
+        identity = updated.get("identity")
+        required_fields = updated.get("required_fields") or context.get(
+            "required_fields"
+        )
+        source_selection_policy = context.get("source_selection_policy")
+        coverage_profile = context.get("coverage_profile")
+        if (
+            isinstance(identity, Mapping)
+            and isinstance(required_fields, list | tuple)
+            and required_fields
+            and isinstance(source_selection_policy, str)
+            and isinstance(coverage_profile, str)
+        ):
+            updated["snapshot_selector"] = {
+                "contract_version": "fundamental.v1",
+                "identity": dict(identity),
+                "valuation_timestamp": timing.valuation_timestamp.isoformat(),
+                "fiscal_period_selector": timing.fiscal_period_selector.model_dump(
+                    mode="json"
+                ),
+                "source_selection_policy": source_selection_policy,
+                "coverage_profile": coverage_profile,
+                "required_fields": list(required_fields),
+            }
+            updated.pop("required_fields", None)
+            context.pop("required_fields", None)
     return updated
 
 

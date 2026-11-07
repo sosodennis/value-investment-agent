@@ -58,6 +58,8 @@ class CanonicalFactRepository(Protocol):
 
     def get(self, fact_id: str) -> CanonicalFactV1: ...
 
+    def list(self) -> tuple[CanonicalFactV1, ...]: ...
+
     def resolve(
         self,
         *,
@@ -108,6 +110,15 @@ class FilesystemCanonicalFactRepository:
                 "FACT_NOT_FOUND", f"fact {fact_id} is unavailable"
             ) from exc
 
+    def list(self) -> tuple[CanonicalFactV1, ...]:
+        facts: list[CanonicalFactV1] = []
+        for path in sorted(self.root.glob("*.json")):
+            try:
+                facts.append(CanonicalFactV1.model_validate_json(path.read_bytes()))
+            except (OSError, ValueError):
+                continue
+        return tuple(facts)
+
     def resolve(
         self,
         *,
@@ -115,15 +126,8 @@ class FilesystemCanonicalFactRepository:
         valuation_timestamp: datetime,
         required_fields: tuple[str, ...],
     ) -> tuple[CanonicalFactV1, ...]:
-        candidates: list[CanonicalFactV1] = []
-        for path in sorted(self.root.glob("*.json")):
-            try:
-                fact = CanonicalFactV1.model_validate_json(path.read_bytes())
-            except (OSError, ValueError):
-                continue
-            candidates.append(fact)
         return resolve_canonical_facts(
-            candidates,
+            self.list(),
             snapshot=snapshot,
             valuation_timestamp=valuation_timestamp,
             required_fields=required_fields,

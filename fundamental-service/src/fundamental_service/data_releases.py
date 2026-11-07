@@ -429,6 +429,7 @@ class ReleaseResolutionCacheKeyV1(ReleaseModel):
     source_selection_policy: str = Field(min_length=1)
     coverage_profile: str = Field(min_length=1)
     required_fields: tuple[str, ...] = Field(min_length=1)
+    fiscal_period_selector_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
 
     @field_validator("valuation_timestamp")
     @classmethod

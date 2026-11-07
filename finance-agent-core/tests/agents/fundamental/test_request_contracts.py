@@ -96,3 +96,28 @@ def test_apply_request_timing_removes_external_only_fields() -> None:
         "2026-01-01T00:00:00+00:00"
     )
     assert payload["valuation_context"]["fiscal_period_selector"]["count"] == 3
+
+
+def test_apply_request_timing_builds_cold_start_snapshot_selector() -> None:
+    timing = FundamentalRequestTimingV1.accept(
+        {"requested_as_of": datetime(2026, 1, 1, tzinfo=UTC)}
+    )
+    payload = apply_request_timing(
+        {
+            "requested_as_of": datetime(2026, 1, 1, tzinfo=UTC),
+            "required_fields": ["revenue", "operating_income"],
+            "identity": {"issuer_id": "0000789019", "security_id": "MSFT"},
+            "valuation_context": {
+                "source_selection_policy": "pit-v1",
+                "coverage_profile": "us-gaap-public-v1",
+            },
+        },
+        timing,
+    )
+
+    assert "required_fields" not in payload
+    assert payload["snapshot_selector"]["required_fields"] == [
+        "revenue",
+        "operating_income",
+    ]
+    assert payload["snapshot_selector"]["fiscal_period_selector"]["count"] == 3

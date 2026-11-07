@@ -46,6 +46,7 @@ from .snapshots import (
     SnapshotError,
     SnapshotRepository,
     SourceSnapshotV1,
+    FiscalPeriodSelectorV1,
 )
 
 _MAX_SEC_XBRL_ARCHIVE_BYTES = 24_000_000
@@ -210,6 +211,7 @@ class SecIngestionService:
         filed_at: datetime,
         captured_at: datetime,
         valuation_timestamp: datetime,
+        fiscal_period_selector: FiscalPeriodSelectorV1 | None = None,
         parser_version: str,
         policy_version: str,
         taxonomy_manifest_id: str | None,
@@ -509,6 +511,7 @@ class SecIngestionService:
         snapshot = self.builder.prepare(
             identity=identity,
             valuation_timestamp=valuation_timestamp,
+            fiscal_period_selector=fiscal_period_selector,
             captured_at=captured_at,
             parser_version=parser_version,
             policy_version=policy_version,

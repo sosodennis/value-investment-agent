@@ -198,6 +198,68 @@ class IdentityResolutionV1(StrictModel):
         return self
 
 
+class FiscalPeriodV1(StrictModel):
+    """One issuer fiscal year selected by the caller."""
+
+    fiscal_year: int = Field(ge=1900, le=2200)
+
+
+class FiscalPeriodSelectorV1(StrictModel):
+    """Versioned caller-owned fiscal-period selection policy."""
+
+    version: Literal["fundamental.fiscal-period-selector.v1"] = (
+        "fundamental.fiscal-period-selector.v1"
+    )
+    mode: Literal["latest_complete", "explicit_periods"]
+    count: int | None = Field(default=None, ge=1, le=10)
+    periods: tuple[FiscalPeriodV1, ...] = ()
+
+    @field_validator("periods", mode="before")
+    @classmethod
+    def normalize_periods(cls, value: object) -> object:
+        return tuple(value) if isinstance(value, list) else value
+
+    @model_validator(mode="after")
+    def selector_shape(self) -> FiscalPeriodSelectorV1:
+        if self.mode == "latest_complete":
+            if self.count is None:
+                object.__setattr__(self, "count", 3)
+            if self.periods:
+                raise ValueError("latest_complete selector cannot include periods")
+        elif self.count is not None:
+            raise ValueError("explicit_periods selector cannot include count")
+        elif not self.periods:
+            raise ValueError("explicit_periods selector requires periods")
+        years = tuple(period.fiscal_year for period in self.periods)
+        if len(years) != len(set(years)):
+            raise ValueError("fiscal periods must be unique")
+        return self
+
+
+class ResolvedFiscalPeriodV1(StrictModel):
+    fiscal_year: int = Field(ge=1900, le=2200)
+    period_start: date
+    period_end: date
+    available_at: datetime
+
+    @model_validator(mode="after")
+    def period_is_valid(self) -> ResolvedFiscalPeriodV1:
+        if self.period_start > self.period_end:
+            raise ValueError("period_start must not be after period_end")
+        if self.available_at.tzinfo is None or self.available_at.utcoffset() is None:
+            raise ValueError("available_at must include a timezone")
+        return self
+
+
+class FiscalPeriodResolutionV1(StrictModel):
+    status: Literal["resolved", "degraded", "abstained", "unavailable"]
+    selector: FiscalPeriodSelectorV1
+    requested_fiscal_years: tuple[int, ...] = Field(min_length=1)
+    resolved_periods: tuple[ResolvedFiscalPeriodV1, ...] = ()
+    missing_fiscal_years: tuple[int, ...] = ()
+    issue_codes: tuple[str, ...] = ()
+
+
 class DimensionV1(StrictModel):
     name: str = Field(min_length=1)
     member: str = Field(min_length=1)
@@ -436,6 +498,10 @@ class SourceSnapshotV1(StrictModel):
     snapshot_id: str = Field(min_length=1)
     identity: IdentityV1
     valuation_timestamp: datetime
+    fiscal_period_selector: FiscalPeriodSelectorV1 = FiscalPeriodSelectorV1(
+        mode="latest_complete", count=3
+    )
+    resolved_fiscal_periods: tuple[ResolvedFiscalPeriodV1, ...] = ()
     captured_at: datetime
     source_records: tuple[SourceRecordV1, ...] = Field(min_length=1)
     taxonomy_manifest_id: str | None = None
@@ -491,6 +557,7 @@ class SnapshotResolutionRequestV1(StrictModel):
     release_profile_id: str | None = Field(default=None, min_length=1)
     identity: IdentityV1
     valuation_timestamp: datetime
+    fiscal_period_selector: FiscalPeriodSelectorV1 | None = None
     source_selection_policy: Literal["pit-v1"]
     coverage_profile: str = Field(min_length=1)
     required_fields: tuple[str, ...] = Field(min_length=1)
@@ -532,11 +599,16 @@ class SnapshotResolutionV1(StrictModel):
     historical_facts: tuple[str, ...] = Field(min_length=1)
     identity: IdentityV1
     valuation_timestamp: datetime
+    fiscal_period_selector: FiscalPeriodSelectorV1 = FiscalPeriodSelectorV1(
+        mode="latest_complete", count=3
+    )
+    resolved_fiscal_periods: tuple[ResolvedFiscalPeriodV1, ...] = ()
+    fiscal_period_resolution: FiscalPeriodResolutionV1 | None = None
     source_selection_policy: str = Field(min_length=1)
     coverage_profile: str = Field(min_length=1)
     quality: QualityStatus
     issue_codes: tuple[str, ...] = ()
-    provenance: dict[str, str | None]
+    provenance: dict[str, object]
 
 
 class MissingValueV1(StrictModel):
@@ -663,6 +735,9 @@ class SecIngestionRequestV1(StrictModel):
     cik: str = Field(pattern=r"^\d{10}$")
     ticker: str = Field(pattern=r"^[A-Z0-9][A-Z0-9.-]{0,14}$")
     valuation_timestamp: datetime
+    fiscal_period_selector: FiscalPeriodSelectorV1 = FiscalPeriodSelectorV1(
+        mode="latest_complete", count=3
+    )
     required_fields: tuple[str, ...] = Field(min_length=1, max_length=32)
     mappings: tuple[SecMappingReferenceV1, ...] = Field(min_length=1, max_length=32)
     source_selection_policy: Literal["sec-pit-v1"]
@@ -719,6 +794,10 @@ class SecIngestionResponseV1(StrictModel):
     status: Literal["created", "reused", "degraded", "abstain"]
     identity: IdentityV1
     valuation_timestamp: datetime
+    fiscal_period_selector: FiscalPeriodSelectorV1 = FiscalPeriodSelectorV1(
+        mode="latest_complete", count=3
+    )
+    resolved_fiscal_periods: tuple[ResolvedFiscalPeriodV1, ...] = ()
     snapshot_id: str | None = None
     manifest_digest: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
     canonical_fact_ids: tuple[str, ...] = ()
@@ -1012,6 +1091,10 @@ class QualityInputV1(StrictModel):
 class ValuationContextV1(StrictModel):
     valuation_timestamp: datetime
     data_snapshot_id: str = Field(min_length=1)
+    fiscal_period_selector: FiscalPeriodSelectorV1 = FiscalPeriodSelectorV1(
+        mode="latest_complete", count=3
+    )
+    resolved_fiscal_periods: tuple[ResolvedFiscalPeriodV1, ...] = ()
     data_release_manifest_digest: str | None = Field(
         default=None, pattern=r"^[0-9a-f]{64}$"
     )
@@ -1022,6 +1105,10 @@ class ValuationContextV1(StrictModel):
 class ProvenanceInputV1(StrictModel):
     snapshot_id: str = Field(min_length=1)
     fact_ids: tuple[str, ...] = ()
+    fiscal_period_selector: FiscalPeriodSelectorV1 = FiscalPeriodSelectorV1(
+        mode="latest_complete", count=3
+    )
+    resolved_fiscal_periods: tuple[ResolvedFiscalPeriodV1, ...] = ()
     mapping_version: str = Field(min_length=1)
     parser_version: str = Field(min_length=1)
     taxonomy_version: str = Field(min_length=1)
@@ -1220,6 +1307,9 @@ class ArtifactReferenceV1(StrictModel):
 
 
 class CalculationTraceV1(StrictModel):
+    valuation_timestamp: datetime
+    fiscal_period_selector: FiscalPeriodSelectorV1
+    resolved_fiscal_periods: tuple[ResolvedFiscalPeriodV1, ...] = ()
     source_selection_policy: str = Field(min_length=1)
     source_selection_policy_version: str = Field(min_length=1)
     snapshot_id: str = Field(min_length=1)
@@ -1258,6 +1348,7 @@ class CalculationArtifactV1(StrictModel):
     issue_codes: tuple[str, ...] = ()
     missing_evidence: tuple[str, ...] = ()
     snapshot_id: str = Field(min_length=1)
+    valuation_timestamp: datetime
     evaluated_at: datetime
     correlation_id: str = Field(min_length=1)
 
