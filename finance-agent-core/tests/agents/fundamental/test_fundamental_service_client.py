@@ -109,6 +109,9 @@ def _facts_success(correlation_id: str) -> dict[str, object]:
                     "quality": "verified",
                     "mapping_decision_id": "mapping-revenue-v1",
                     "mapping_confidence": "high",
+                    "rejected_candidate_reasons": [
+                        {"candidate_id": "segment", "reason": "not consolidated"}
+                    ],
                     "point_in_time_policy": "sec-pit-v1",
                 }
             ],

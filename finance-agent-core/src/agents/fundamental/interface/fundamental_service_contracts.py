@@ -182,6 +182,13 @@ class FundamentalMissingValueV1(BaseModel):
     reason: str = Field(min_length=1)
 
 
+class FundamentalCandidateRejectionV1(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    candidate_id: str = Field(min_length=1)
+    reason: str = Field(min_length=1)
+
+
 class FundamentalCanonicalFactV1(BaseModel):
     """Typed fact projection; no browser or Agent-side SEC fallback is implied."""
 
@@ -222,6 +229,7 @@ class FundamentalCanonicalFactV1(BaseModel):
     mapping_decision_id: str | None = None
     mapping_confidence: Literal["high", "medium", "low", "unresolved"] | None = None
     rejected_candidates: tuple[str, ...] = ()
+    rejected_candidate_reasons: tuple[FundamentalCandidateRejectionV1, ...] = ()
     point_in_time_policy: str | None = None
     selection_reason: str | None = None
 
@@ -247,6 +255,7 @@ class FundamentalFactsReadResultV1(BaseModel):
 
 
 __all__ = [
+    "FundamentalCandidateRejectionV1",
     "FundamentalCanonicalFactV1",
     "FundamentalFactsReadResultV1",
     "FundamentalIdentityResolutionRequestV1",
