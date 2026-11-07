@@ -13,7 +13,10 @@ from fundamental_service.contracts import (
 )
 from fundamental_service.operations import ServiceError
 from fundamental_service.serialization import sha256_digest
-from fundamental_service.source_acquisition import SecAcquisitionUseCase
+from fundamental_service.source_acquisition import (
+    SecAcquisitionUseCase,
+    parse_supported_filing_years,
+)
 
 
 def test_sec_filing_index_selects_only_primary_schema_and_linkbases():
@@ -77,6 +80,69 @@ def test_sec_filing_index_selects_only_primary_schema_and_linkbases():
     )
 
 
+def _submissions_with_filings(*filings: dict[str, object]):
+    recent = {
+        "accessionNumber": [item["accession"] for item in filings],
+        "filingDate": [item["filing_date"] for item in filings],
+        "acceptanceDateTime": [item["accepted_at"] for item in filings],
+        "form": [item["form"] for item in filings],
+        "primaryDocument": [item["primary_document"] for item in filings],
+        "isXBRL": [1 for _ in filings],
+    }
+    return SimpleNamespace(filings=SimpleNamespace(recent=SimpleNamespace(**recent)))
+
+
+def test_default_filing_selection_skips_years_outside_installed_runtime():
+    submissions = _submissions_with_filings(
+        {
+            "accession": "0000789019-26-000001",
+            "filing_date": "2026-11-03",
+            "accepted_at": "2026-11-03T12:00:00Z",
+            "form": "10-K",
+            "primary_document": "msft-20260930.htm",
+        },
+        {
+            "accession": "0000789019-24-000001",
+            "filing_date": "2024-07-30",
+            "accepted_at": "2024-07-30T12:00:00Z",
+            "form": "10-K",
+            "primary_document": "msft-20240630.htm",
+        },
+    )
+
+    selected = SecAcquisitionUseCase._select_filing(
+        submissions,
+        SecFilingSelectorV1(),
+        datetime(2026, 11, 7, tzinfo=UTC),
+        supported_filing_years=(2024,),
+    )
+
+    assert selected.accession_number == "0000789019-24-000001"
+
+
+def test_explicit_filing_outside_installed_runtime_fails_closed():
+    submissions = _submissions_with_filings(
+        {
+            "accession": "0000789019-26-000001",
+            "filing_date": "2026-11-03",
+            "accepted_at": "2026-11-03T12:00:00Z",
+            "form": "10-K",
+            "primary_document": "msft-20260930.htm",
+        }
+    )
+
+    with pytest.raises(ServiceError) as error:
+        SecAcquisitionUseCase._select_filing(
+            submissions,
+            SecFilingSelectorV1(accession_number="0000789019-26-000001"),
+            datetime(2026, 11, 7, tzinfo=UTC),
+            supported_filing_years=(2024,),
+        )
+
+    assert error.value.code == "FILING_RUNTIME_INCOMPATIBLE"
+    assert error.value.retryable is False
+
+
 def _sec_request() -> SecIngestionRequestV1:
     return SecIngestionRequestV1(
         contract_version="fundamental.v1",
@@ -117,6 +183,7 @@ def _runtime_settings() -> SimpleNamespace:
         taxonomy_manifest_id="sec-us-gaap-2023-2024-public-bundle",
         taxonomy_version="us-gaap-2023-2024",
         taxonomy_cache_sha256="c" * 64,
+        supported_filing_years=(2024,),
         edgar_plugin_dir=Path("/runtime/arelle/EDGAR"),
         xule_plugin_dir=Path("/runtime/arelle/Xule"),
         dqc_ruleset_path=Path("/runtime/arelle/dqc-ruleset.xml"),
@@ -181,13 +248,36 @@ def test_runtime_acquisition_key_binds_validation_and_taxonomy_digests():
         **{**vars(_runtime_settings()), "taxonomy_cache_sha256": "f" * 64}
     )
     changed_taxonomy = use_case._runtime_key_payload(request, _validation_profile())
+    use_case.settings = SimpleNamespace(
+        **{**vars(_runtime_settings()), "supported_filing_years": (2023, 2024)}
+    )
+    changed_compatible_years = use_case._runtime_key_payload(
+        request, _validation_profile()
+    )
 
     assert baseline["runtime_releases"] == {
         "taxonomy_cache_sha256": "c" * 64,
         "validation_profile_digest": _validation_profile().digest(),
+        "supported_filing_years": (2024,),
     }
     assert sha256_digest(baseline) != sha256_digest(changed_profile)
     assert sha256_digest(baseline) != sha256_digest(changed_taxonomy)
+    assert sha256_digest(baseline) != sha256_digest(changed_compatible_years)
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    (("2024", (2024,)), ("2024,2023,2024", (2023, 2024)), (None, None)),
+)
+def test_supported_filing_years_parse_deterministically(value, expected):
+    assert parse_supported_filing_years(value) == expected
+
+
+def test_supported_filing_years_reject_invalid_configuration():
+    with pytest.raises(ValueError, match="comma-separated years"):
+        parse_supported_filing_years("2024,current")
+    with pytest.raises(ValueError, match="invalid year"):
+        parse_supported_filing_years("1800")
 
 
 class _AuditMetadata:
