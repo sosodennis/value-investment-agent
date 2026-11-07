@@ -1090,3 +1090,25 @@ overall workspace run still has the independent Debate LLM provider
 `VERIFIED` or close it until the required service/workflow acceptance is
 rerun on the delivery PR and the external provider gate is resolved or
 explicitly accepted by the owning issue.
+
+## Exact-head contract and UI static verification checkpoint
+
+- Date: 2026-11-08 (local).
+- Exact head: `48e37819fba2f5d0e1f46a6c65b5a236ea3bb846`.
+- This checkpoint validates the clean branch head after the semantic UI and
+  focus acceptance record. It does not claim a delivery PR, CI, or live route
+  acceptance.
+
+| Command | Result |
+| --- | --- |
+| `uv run --project finance-agent-core pytest finance-agent-core/tests/agents/fundamental/test_fundamental_service_client.py finance-agent-core/tests/agents/fundamental/test_fundamental_service_cutover.py finance-agent-core/tests/agents/fundamental/test_request_contracts.py finance-agent-core/tests/agents/fundamental/test_service_request_producer.py -q` | exit 0; 46 passed in 2.36s |
+| `npm run lint` in `frontend/` | exit 0 |
+| `npm run typecheck` in `frontend/` | exit 0 |
+| `npm run test -- --run` in `frontend/` | exit 0; 52 files and 296 tests passed |
+| `python3 scripts/architecture_guard.py` | exit 0; no boundary violations |
+| `python3 -m compileall -q finance-agent-core/src finance-agent-core/api` | exit 0 |
+| `git diff --check` | exit 0 |
+
+The branch was clean before and after these checks. The service-backed
+workspace route, exact snapshot-to-valuation trace, Docker rebuild from this
+head, PR CI, and provider availability remain unverified here.
