@@ -72,10 +72,10 @@ describe('FundamentalAnalysisOutput', () => {
 
         screen.getByTestId('financial-table');
         screen.getByText('Valuation not requested');
-        expect(screen.queryByText('Analyst Valuation Score')).not.toBeInTheDocument();
-        expect(screen.queryByText('Revenue')).not.toBeInTheDocument();
-        expect(screen.queryByText('Intrinsic Value')).not.toBeInTheDocument();
-        expect(screen.queryByText('Legacy report')).not.toBeInTheDocument();
+        expect(screen.queryByText('Analyst Valuation Score')).toBeNull();
+        expect(screen.queryByText('Revenue')).toBeNull();
+        expect(screen.queryByText('Intrinsic Value')).toBeNull();
+        expect(screen.queryByText('Legacy report')).toBeNull();
     });
 
     it('does not use preview metrics when a completed run has no service facts', () => {
@@ -93,8 +93,8 @@ describe('FundamentalAnalysisOutput', () => {
         );
 
         screen.getByText('Fundamental facts unavailable');
-        expect(screen.queryByText('Revenue')).not.toBeInTheDocument();
-        expect(screen.queryByText('Intrinsic Value')).not.toBeInTheDocument();
+        expect(screen.queryByText('Revenue')).toBeNull();
+        expect(screen.queryByText('Intrinsic Value')).toBeNull();
     });
 
     it('does not use preview metrics after a run error without service facts', () => {
@@ -112,8 +112,8 @@ describe('FundamentalAnalysisOutput', () => {
         );
 
         screen.getByText('Financial analysis failed');
-        expect(screen.queryByText('Revenue')).not.toBeInTheDocument();
-        expect(screen.queryByText('Intrinsic Value')).not.toBeInTheDocument();
+        expect(screen.queryByText('Revenue')).toBeNull();
+        expect(screen.queryByText('Intrinsic Value')).toBeNull();
     });
 
     it('always renders deterministic valuation cards when preview exists and MC is disabled', () => {
@@ -197,6 +197,10 @@ describe('FundamentalAnalysisOutput', () => {
         mockUseArtifact.mockReturnValue({
             data: {
                 ticker: 'AAPL',
+                fundamental_service: {
+                    projection_type: 'valuation',
+                    facts: { facts: [] },
+                },
                 model_type: 'dcf',
                 company_name: 'Apple Inc.',
                 sector: 'Technology',
@@ -393,6 +397,10 @@ describe('FundamentalAnalysisOutput', () => {
         mockUseArtifact.mockReturnValue({
             data: {
                 ticker: 'NVDA',
+                fundamental_service: {
+                    projection_type: 'valuation',
+                    facts: { facts: [] },
+                },
                 model_type: 'dcf_growth',
                 company_name: 'NVIDIA Corporation',
                 sector: 'Technology',
