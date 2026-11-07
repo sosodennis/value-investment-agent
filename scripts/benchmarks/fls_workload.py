@@ -1,4 +1,9 @@
-"""Measure the existing SEC forward-looking statement classifier."""
+"""LEGACY-FUNDAMENTAL-MIGRATION-EVIDENCE: measure the FLS classifier.
+
+This historical model-inference benchmark retains a dynamic import of the
+Agent-owned SEC text adapter for migration evidence only. It is not a
+production, release-gate, or service-ingestion entrypoint.
+"""
 
 from __future__ import annotations
 

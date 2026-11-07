@@ -8,13 +8,14 @@ import pytest
 
 from api.server import app
 from src.agents.debate.interface.contracts import parse_debate_artifact_model
-from src.agents.fundamental.capabilities.artifacts_provenance.interface.contracts import (
-    parse_fundamental_artifact_model,
-)
 from src.agents.news.interface.contracts import parse_news_artifact_model
 from src.agents.technical.interface.contracts import parse_technical_artifact_model
 from src.artifacts.application.wiring import build_default_artifact_service
-from src.artifacts.public import build_artifact_envelope
+from src.artifacts.public import (
+    ARTIFACT_KIND_FINANCIAL_REPORTS,
+    build_artifact_envelope,
+    parse_artifact_data_json,
+)
 from src.auth.entrypoint import Principal, require_current_user
 
 
@@ -106,7 +107,8 @@ async def test_get_artifact_preserves_versioned_api_response_and_empty_payload(
 async def test_get_artifact_returns_canonical_fundamental_news_debate_and_technical_data(
     authenticated_api: ArtifactApiDoubles,
 ) -> None:
-    fundamental = parse_fundamental_artifact_model(
+    fundamental = parse_artifact_data_json(
+        ARTIFACT_KIND_FINANCIAL_REPORTS,
         {
             "ticker": "AAPL",
             "model_type": "saas",
@@ -124,7 +126,8 @@ async def test_get_artifact_returns_canonical_fundamental_news_debate_and_techni
                     },
                 }
             ],
-        }
+        },
+        context="test.financial_reports",
     )
     news = parse_news_artifact_model(_news_payload())
     debate = parse_debate_artifact_model(

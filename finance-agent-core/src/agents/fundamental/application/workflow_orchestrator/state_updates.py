@@ -1,11 +1,6 @@
 from __future__ import annotations
 
-from src.artifacts.public import (
-    ARTIFACT_KIND_FINANCIAL_REPORTS,
-    AgentOutputArtifactPayload,
-    ArtifactReference,
-    to_artifact_reference_payload,
-)
+from src.artifacts.public import AgentOutputArtifactPayload
 from src.shared.kernel.types import JSONObject
 
 
@@ -25,13 +20,12 @@ def build_financial_health_missing_ticker_update() -> JSONObject:
 
 def build_financial_health_success_update(
     *,
-    reports_artifact_id: str | None,
     artifact: AgentOutputArtifactPayload | None,
     diagnostics: JSONObject | None = None,
     quality_gates: JSONObject | None = None,
 ) -> JSONObject:
     fa_update: JSONObject = {
-        "financial_reports_artifact_id": reports_artifact_id,
+        "service_snapshot_status": "unavailable",
     }
     if diagnostics is not None:
         fa_update["xbrl_diagnostics"] = diagnostics
@@ -48,16 +42,6 @@ def build_financial_health_success_update(
             "model_selection": "running",
         },
     }
-    if reports_artifact_id:
-        update["artifact_references"] = {
-            "financial_reports": to_artifact_reference_payload(
-                ArtifactReference(
-                    artifact_id=reports_artifact_id,
-                    download_url=f"/api/v1/artifacts/{reports_artifact_id}",
-                    type=ARTIFACT_KIND_FINANCIAL_REPORTS,
-                )
-            )
-        }
     return update
 
 
@@ -80,17 +64,6 @@ def build_model_selection_success_update(
             "calculation": "running",
         },
     }
-    artifact_id = fa_update.get("financial_reports_artifact_id")
-    if isinstance(artifact_id, str) and artifact_id:
-        update["artifact_references"] = {
-            "financial_reports": to_artifact_reference_payload(
-                ArtifactReference(
-                    artifact_id=artifact_id,
-                    download_url=f"/api/v1/artifacts/{artifact_id}",
-                    type=ARTIFACT_KIND_FINANCIAL_REPORTS,
-                )
-            )
-        }
     return update
 
 

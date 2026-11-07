@@ -1,3 +1,10 @@
+"""LEGACY-FUNDAMENTAL-MIGRATION-EVIDENCE: quarantined SEC benchmark.
+
+This benchmark exercises the Agent-owned SEC text adapter for migration
+evidence only. It is not a production, release-gate, or service-ingestion
+entrypoint and must not be imported by runtime code.
+"""
+
 # ruff: noqa: E402
 
 from __future__ import annotations

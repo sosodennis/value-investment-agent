@@ -22,6 +22,7 @@ DebateSourceLoadStatus = Literal[
     "missing_artifact_id",
     "artifact_not_found",
     "empty_payload",
+    "service_snapshot_unavailable",
 ]
 
 

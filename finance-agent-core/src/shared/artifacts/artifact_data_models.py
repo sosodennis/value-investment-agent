@@ -32,7 +32,6 @@ class FinancialReportsArtifactData(BaseModel):
     reasoning: str | None = None
     status: Literal["done"] | None = None
     replay_schema_version: str | None = None
-    replay_source_reports_artifact_id: str | None = None
     replay_market_snapshot: dict[str, object] | None = None
     replay_params_dump: dict[str, object] | None = None
     replay_calculation_metrics: dict[str, object] | None = None

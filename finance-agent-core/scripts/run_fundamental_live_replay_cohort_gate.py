@@ -5,7 +5,7 @@ import json
 import os
 import subprocess
 import sys
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -129,9 +129,6 @@ def main() -> int:
             "arelle_runtime_lock_wait_p90_ms": (max_arelle_runtime_lock_wait_p90_ms),
         },
     )
-    enable_prewarm = _resolve_prewarm_enabled(config)
-    prewarm_default_years = _resolve_prewarm_default_years(config)
-
     stage_dir = stage_root / f"{stage_prefix}_{cycle_tag}"
     stage_dir.mkdir(parents=True, exist_ok=True)
 
@@ -159,12 +156,6 @@ def main() -> int:
         ]
         + (["--discover-recursive"] if discover_recursive else [])
         + (["--latest-per-ticker"] if latest_per_ticker else [])
-    )
-
-    prewarm_summary = _run_xbrl_prewarm_from_manifest(
-        manifest_path=manifest_path,
-        default_years=prewarm_default_years,
-        enabled=enable_prewarm,
     )
 
     _run_command(
@@ -283,7 +274,6 @@ def main() -> int:
         "max_arelle_parse_latency_p90_ms": max_arelle_parse_latency_p90_ms,
         "max_arelle_runtime_lock_wait_p90_ms": max_arelle_runtime_lock_wait_p90_ms,
         "max_validation_rule_drift_count": max_validation_rule_drift_count,
-        "prewarm": prewarm_summary,
         "run_path": str(run_path),
     }
     run_path.write_text(
@@ -506,170 +496,6 @@ def _resolve_optional_gate_int(
     if isinstance(raw, bool) or not isinstance(raw, int):
         raise TypeError(f"{config_key} must be integer")
     return raw
-
-
-def _resolve_prewarm_enabled(config: Mapping[str, object]) -> bool:
-    env_raw = os.getenv("FUNDAMENTAL_LIVE_REPLAY_ENABLE_PREWARM", "").strip().lower()
-    if env_raw in {"1", "true", "yes", "y", "on"}:
-        return True
-    if env_raw in {"0", "false", "no", "n", "off"}:
-        return False
-    return _optional_bool(config, key="enable_prewarm", default=False)
-
-
-def _resolve_prewarm_default_years(config: Mapping[str, object]) -> int:
-    env_raw = os.getenv("FUNDAMENTAL_LIVE_REPLAY_PREWARM_DEFAULT_YEARS", "").strip()
-    if env_raw:
-        try:
-            parsed = int(env_raw)
-            if parsed > 0:
-                return parsed
-        except ValueError:
-            pass
-    raw = config.get("prewarm_default_years")
-    if isinstance(raw, int) and not isinstance(raw, bool) and raw > 0:
-        return raw
-    return 5
-
-
-def _run_xbrl_prewarm_from_manifest(
-    *,
-    manifest_path: Path,
-    default_years: int,
-    enabled: bool,
-    fetch_payload_fn: Callable[[str, int], Mapping[str, object]] | None = None,
-) -> dict[str, object]:
-    summary: dict[str, object] = {
-        "enabled": enabled,
-        "requested_tickers": 0,
-        "succeeded_tickers": 0,
-        "failed_tickers": 0,
-        "errors": [],
-        "cache_hit_after_prewarm_rate": None,
-    }
-    if not enabled:
-        return summary
-
-    requests = _build_prewarm_requests_from_manifest(
-        manifest_path=manifest_path,
-        default_years=default_years,
-    )
-    summary["requested_tickers"] = len(requests)
-    if not requests:
-        return summary
-
-    fetch_fn = fetch_payload_fn or _resolve_prewarm_fetch_payload_fn()
-    if fetch_fn is None:
-        summary["failed_tickers"] = len(requests)
-        summary["errors"] = ["prewarm_fetch_fn_unavailable"]
-        return summary
-
-    cache_hit_true = 0
-    for ticker, years in requests.items():
-        try:
-            payload = fetch_fn(ticker, years)
-        except Exception as exc:
-            summary["failed_tickers"] = int(summary["failed_tickers"]) + 1
-            errors = summary.get("errors")
-            if isinstance(errors, list):
-                errors.append(f"{ticker}:{type(exc).__name__}")
-            continue
-
-        summary["succeeded_tickers"] = int(summary["succeeded_tickers"]) + 1
-        diagnostics_raw = (
-            payload.get("diagnostics") if isinstance(payload, Mapping) else None
-        )
-        if not isinstance(diagnostics_raw, Mapping):
-            continue
-        cache_raw = diagnostics_raw.get("cache")
-        if not isinstance(cache_raw, Mapping):
-            continue
-        cache_hit = cache_raw.get("cache_hit")
-        if isinstance(cache_hit, bool) and cache_hit:
-            cache_hit_true += 1
-
-    succeeded = int(summary["succeeded_tickers"])
-    if succeeded > 0:
-        summary["cache_hit_after_prewarm_rate"] = round(cache_hit_true / succeeded, 6)
-    return summary
-
-
-def _build_prewarm_requests_from_manifest(
-    *,
-    manifest_path: Path,
-    default_years: int,
-) -> dict[str, int]:
-    payload = json.loads(manifest_path.read_text(encoding="utf-8"))
-    if not isinstance(payload, Mapping):
-        return {}
-    cases_raw = payload.get("cases")
-    if not isinstance(cases_raw, Sequence) or isinstance(cases_raw, str | bytes):
-        return {}
-
-    requests: dict[str, int] = {}
-    for item in cases_raw:
-        if not isinstance(item, Mapping):
-            continue
-        input_path_raw = item.get("input_path")
-        if not isinstance(input_path_raw, str) or not input_path_raw.strip():
-            continue
-        input_path = _resolve_manifest_input_path(
-            manifest_path=manifest_path,
-            input_path=input_path_raw,
-        )
-        ticker, years = _extract_prewarm_request_from_input(
-            input_path=input_path,
-            default_years=default_years,
-        )
-        if ticker is None:
-            continue
-        current_years = requests.get(ticker, 0)
-        requests[ticker] = max(current_years, years)
-    return requests
-
-
-def _resolve_manifest_input_path(*, manifest_path: Path, input_path: str) -> Path:
-    path = Path(input_path)
-    if path.is_absolute():
-        return path
-    return (manifest_path.parent / path).resolve()
-
-
-def _extract_prewarm_request_from_input(
-    *,
-    input_path: Path,
-    default_years: int,
-) -> tuple[str | None, int]:
-    try:
-        payload = json.loads(input_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return None, default_years
-    if not isinstance(payload, Mapping):
-        return None, default_years
-    ticker_raw = payload.get("ticker")
-    if not isinstance(ticker_raw, str) or not ticker_raw.strip():
-        return None, default_years
-    ticker = ticker_raw.strip().upper()
-    reports_raw = payload.get("reports")
-    if isinstance(reports_raw, Sequence) and not isinstance(reports_raw, str | bytes):
-        report_count = len(reports_raw)
-        if report_count > 0:
-            return ticker, report_count
-    return ticker, default_years
-
-
-def _resolve_prewarm_fetch_payload_fn() -> (
-    Callable[[str, int], Mapping[str, object]] | None
-):
-    if str(PROJECT_ROOT) not in sys.path:
-        sys.path.append(str(PROJECT_ROOT))
-    try:
-        from src.agents.fundamental.financial_statements.infrastructure.sec_xbrl.fetch.provider import (
-            fetch_financial_payload,
-        )
-    except Exception:
-        return None
-    return fetch_financial_payload
 
 
 def _optional_float(payload: Mapping[str, object], *, key: str) -> float | None:

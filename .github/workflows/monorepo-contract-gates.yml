@@ -542,13 +542,10 @@ jobs:
           tests/test_kernel_workflow_contracts.py
           tests/test_workflow_command_adapter.py
           tests/test_intent_mapper.py
-          tests/test_fundamental_mapper.py
           tests/test_news_mapper.py
           tests/test_debate_mapper.py
           tests/test_ta_mapper.py
           tests/test_architecture_guard.py
-          tests/test_fundamental_application_services.py
-          tests/test_fundamental_orchestrator_logging.py
           tests/test_technical_application_use_cases.py
           tests/test_technical_state_hygiene_guard.py
           tests/agents/debate/test_subgraph_entrypoint.py

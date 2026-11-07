@@ -1,1 +1,0 @@
-"""artifacts provenance infrastructure layer."""

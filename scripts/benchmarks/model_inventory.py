@@ -1,4 +1,9 @@
-"""Probe each model-backed workload in a fresh process."""
+"""LEGACY-FUNDAMENTAL-MIGRATION-EVIDENCE: probe model workloads.
+
+The ``sec_fls`` and ``sec_dense`` workloads retain dynamic imports of the
+Agent-owned SEC text adapters for historical model-inference evidence. This
+benchmark is not a production, release-gate, or service-ingestion entrypoint.
+"""
 
 from __future__ import annotations
 

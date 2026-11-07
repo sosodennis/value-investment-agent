@@ -17,7 +17,6 @@ class IntentState:
 class FundamentalState:
     context: dict[str, object]
     model_type: str | None
-    financial_reports_artifact_id: str | None
 
 
 def _read_non_empty_string(value: object) -> str | None:
@@ -61,12 +60,7 @@ def read_fundamental_state(state: Mapping[str, object]) -> FundamentalState:
     context = dict(fundamental_ctx)
 
     model_type = _read_non_empty_string(context.get("model_type"))
-    reports_artifact_id = _read_non_empty_string(
-        context.get("financial_reports_artifact_id")
-    )
-
     return FundamentalState(
         context=context,
         model_type=model_type,
-        financial_reports_artifact_id=reports_artifact_id,
     )

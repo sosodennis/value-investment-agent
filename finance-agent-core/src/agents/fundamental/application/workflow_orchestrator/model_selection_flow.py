@@ -16,14 +16,9 @@ from src.agents.fundamental.application.workflow_orchestrator.state_updates impo
 from src.agents.fundamental.capabilities.core_valuation.public import (
     resolve_calculator_model_type,
 )
-from src.agents.fundamental.capabilities.forward_signals.public import (
-    ForwardSignalPayload,
-)
 from src.agents.fundamental.capabilities.model_selection.public import (
     FundamentalSelectionReport,
-    project_selection_reports,
 )
-from src.artifacts.public import AgentOutputArtifactPayload
 from src.shared.cross_agent.domain.market_identity import CompanyProfile
 from src.shared.kernel.tools.logger import get_logger, log_event
 from src.shared.kernel.types import JSONObject
@@ -34,26 +29,9 @@ FundamentalNodeResult = WorkflowNodeResult
 
 
 class ModelSelectionRuntime(Protocol):
-    async def load_financial_reports_bundle(
-        self, artifact_id: str
-    ) -> tuple[list[JSONObject], list[ForwardSignalPayload] | None] | None: ...
+    """Compatibility seam for the orchestrator-owned workflow runner."""
 
-    def enrich_reasoning_with_health_context(
-        self,
-        reasoning: str,
-        financial_reports: list[FundamentalSelectionReport],
-    ) -> str: ...
-
-    async def build_and_store_model_selection_artifact(
-        self,
-        *,
-        intent_ctx: dict[str, object],
-        resolved_ticker: str | None,
-        model_type: str,
-        reasoning: str,
-        financial_reports: list[JSONObject],
-        forward_signals: list[ForwardSignalPayload] | None,
-    ) -> tuple[AgentOutputArtifactPayload | None, str | None]: ...
+    pass
 
 
 async def run_model_selection_flow(
@@ -104,138 +82,17 @@ async def run_model_selection_flow(
             )
 
         fundamental_state = read_fundamental_state(state)
-        reports_artifact_id = fundamental_state.financial_reports_artifact_id
-        financial_reports: list[JSONObject] = []
-        forward_signals: list[ForwardSignalPayload] | None = None
         selection_reports: list[FundamentalSelectionReport] = []
-        if reports_artifact_id is not None:
-            bundle = await runtime.load_financial_reports_bundle(reports_artifact_id)
-            if bundle is None:
-                log_event(
-                    logger,
-                    event="fundamental_model_selection_reports_artifact_not_found",
-                    message="fundamental model selection failed due to missing reports artifact payload",
-                    level=logging.ERROR,
-                    error_code="FUNDAMENTAL_REPORTS_ARTIFACT_NOT_FOUND",
-                    fields={
-                        "ticker": resolved_ticker,
-                        "reports_artifact_id": reports_artifact_id,
-                    },
-                )
-                log_event(
-                    logger,
-                    event="fundamental_model_selection_completed",
-                    message="fundamental model selection completed",
-                    level=logging.ERROR,
-                    fields={
-                        "ticker": resolved_ticker,
-                        "status": "error",
-                        "is_degraded": True,
-                        "error_code": "FUNDAMENTAL_REPORTS_ARTIFACT_NOT_FOUND",
-                        "reports_artifact_id": reports_artifact_id,
-                        "reports_count": 0,
-                        "forward_signal_count": 0,
-                    },
-                )
-                return FundamentalNodeResult(
-                    update=build_node_error_update(
-                        node="model_selection",
-                        error=(
-                            "Financial reports artifact not found: "
-                            f"{reports_artifact_id}"
-                        ),
-                    ),
-                    goto="END",
-                )
-            loaded_reports, loaded_forward_signals = bundle
-            selection_reports = project_selection_reports(loaded_reports)
-            financial_reports = loaded_reports
-            forward_signals = loaded_forward_signals
 
         selection = select_valuation_model_fn(profile, selection_reports)
         model = selection.model
         reasoning = selection.reasoning
 
-        if financial_reports:
-            reasoning = runtime.enrich_reasoning_with_health_context(
-                reasoning,
-                selection_reports,
-            )
-
         model_type = resolve_calculator_model_type(model.value)
-
-        artifact: AgentOutputArtifactPayload | None
-        report_id: str | None
-        try:
-            (
-                artifact,
-                report_id,
-            ) = await runtime.build_and_store_model_selection_artifact(
-                intent_ctx=intent_state.context,
-                resolved_ticker=resolved_ticker,
-                model_type=model_type,
-                reasoning=reasoning,
-                financial_reports=financial_reports,
-                forward_signals=forward_signals,
-            )
-        except Exception as exc:
-            log_event(
-                logger,
-                event="fundamental_model_selection_artifact_failed",
-                message="fundamental model selection artifact generation failed",
-                level=logging.ERROR,
-                error_code="FUNDAMENTAL_MODEL_ARTIFACT_FAILED",
-                fields={
-                    "exception": str(exc),
-                    "ticker": resolved_ticker,
-                    "degrade_source": "model_selection_artifact",
-                    "fallback_mode": "continue_without_artifact",
-                    "input_count": len(financial_reports),
-                    "output_count": 0,
-                },
-            )
-            artifact, report_id = None, None
-
-        resolved_reports_artifact_id = report_id or reports_artifact_id
-        if resolved_reports_artifact_id is None:
-            log_event(
-                logger,
-                event="fundamental_model_selection_report_id_missing",
-                message="fundamental model selection missing reports artifact id for valuation handoff",
-                level=logging.ERROR,
-                error_code="FUNDAMENTAL_MODEL_SELECTION_REPORT_ID_MISSING",
-                fields={
-                    "ticker": resolved_ticker,
-                    "model_type": model_type,
-                    "reports_count": len(financial_reports),
-                    "forward_signal_count": len(forward_signals or []),
-                },
-            )
-            log_event(
-                logger,
-                event="fundamental_model_selection_completed",
-                message="fundamental model selection completed",
-                level=logging.ERROR,
-                fields={
-                    "ticker": resolved_ticker,
-                    "status": "error",
-                    "is_degraded": True,
-                    "error_code": "FUNDAMENTAL_MODEL_SELECTION_REPORT_ID_MISSING",
-                    "reports_count": len(financial_reports),
-                    "forward_signal_count": len(forward_signals or []),
-                },
-            )
-            return FundamentalNodeResult(
-                update=build_node_error_update(
-                    node="model_selection",
-                    error="Missing financial reports artifact id for valuation handoff",
-                ),
-                goto="END",
-            )
 
         fa_update: JSONObject = {
             "model_type": model_type,
-            "financial_reports_artifact_id": resolved_reports_artifact_id,
+            "model_selection_reasoning": reasoning,
         }
         prior_quality_gates = fundamental_state.context.get("xbrl_quality_gates")
         if isinstance(prior_quality_gates, Mapping):
@@ -243,25 +100,49 @@ async def run_model_selection_flow(
         prior_diagnostics = fundamental_state.context.get("xbrl_diagnostics")
         if isinstance(prior_diagnostics, Mapping):
             fa_update["xbrl_diagnostics"] = dict(prior_diagnostics)
-        if artifact is not None:
-            fa_update["artifact"] = artifact
 
-        reports_count = len(financial_reports)
-        forward_signal_count = len(forward_signals or [])
-        is_degraded = artifact is None
+        quality_status = (
+            prior_quality_gates.get("status")
+            if isinstance(prior_quality_gates, Mapping)
+            else None
+        )
+        diagnostics_reason = (
+            prior_diagnostics.get("reason")
+            if isinstance(prior_diagnostics, Mapping)
+            else None
+        )
+        service_facts_unavailable = (
+            quality_status in {None, "unavailable", "error", "block"}
+            or diagnostics_reason == "service_snapshot_request_required"
+        )
+        fa_update.update(
+            {
+                "model_selection_status": (
+                    "degraded" if service_facts_unavailable else "ready"
+                ),
+                "service_facts_status": (
+                    "unavailable" if service_facts_unavailable else "available"
+                ),
+            }
+        )
+
+        if service_facts_unavailable:
+            fa_update["degraded_reason"] = "fundamental_service_facts_unavailable"
+
         log_event(
             logger,
             event="fundamental_model_selection_completed",
             message="fundamental model selection completed",
-            level=logging.WARNING if is_degraded else logging.INFO,
+            level=logging.WARNING if service_facts_unavailable else logging.INFO,
             fields={
                 "ticker": resolved_ticker,
                 "status": "done",
-                "is_degraded": is_degraded,
+                "is_degraded": service_facts_unavailable,
                 "model_type": model_type,
-                "reports_count": reports_count,
-                "forward_signal_count": forward_signal_count,
-                "artifact_written": artifact is not None,
+                "reports_count": 0,
+                "forward_signal_count": 0,
+                "artifact_written": False,
+                "service_facts_status": fa_update["service_facts_status"],
             },
         )
         return FundamentalNodeResult(

@@ -83,7 +83,6 @@ async def prepare_debate_reports(
 ) -> PreparedDebateReports:
     artifact_context = build_debate_artifact_context(state)
     source_data = await source_reader.load_debate_source_data(
-        financial_reports_artifact_id=artifact_context.financial_reports_artifact_id,
         news_artifact_id=artifact_context.news_artifact_id,
         technical_artifact_id=artifact_context.technical_artifact_id,
     )
