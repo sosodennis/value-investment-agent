@@ -370,3 +370,6 @@ valuation input without substituting legacy SEC report data.
   with the exact run, log, and zero-row Fundamental DB evidence above. This
   records the acceptance compromise in the owning layer; no workaround or UI
   concealment was added.
+- The same incomplete result was recorded on #325 at
+  `https://github.com/sosodennis/value-investment-agent/issues/325#issuecomment-6701490193`;
+  #325 remains open with the `blocker` label and no pull request.
