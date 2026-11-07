@@ -219,3 +219,24 @@ uv run pytest tests/test_error_handling_fundamental.py \
 ```
 
 Exit `0`; 31 passed with four third-party `edgar` deprecation warnings.
+
+## Exact Commit Preflight
+
+The cleanup preflight was rerun against exact commit `a88d6412488b224880ae892165d4c0a6249b8384`:
+
+| Check | Result |
+| --- | --- |
+| `uv run pytest tests/agents/fundamental tests/test_error_handling_fundamental.py tests/test_fundamental_capability_facades.py tests/test_fundamental_import_hygiene_guard.py tests/test_sec_xbrl_financial_payload_service.py tests/test_sec_text_forward_signals.py tests/test_sec_text_forward_signals_eval.py -q` | exit `0`; 85 passed, 4 third-party `edgar` deprecation warnings |
+| `npm run test -- --run` | exit `0`; 50 files, 273 tests passed |
+| `npm run typecheck` | exit `0` |
+| `npm run lint` | exit `0` |
+| `bash scripts/generate-contracts.sh` followed by generated-file diff check | exit `0`; generation is idempotent |
+| `python3 scripts/architecture_guard.py` | exit `0`; no boundary violations |
+| `git diff --check` | exit `0` |
+
+No Docker stack was started for this cleanup preflight. The healthy Compose
+projects visible on the host belong to other issue worktrees and are not
+evidence for this commit. Service-backed workspace acceptance for #325,
+provider-backed SEC ingestion, CI status, and the main-based pull request
+remain unverified and must be recorded separately before the relevant issue is
+marked complete.
