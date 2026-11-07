@@ -63,6 +63,17 @@ def test_known_issuer_resolves_with_selected_ticker_as_opaque_series_key():
     assert identity.share_class == "AAPL"
 
 
+def test_known_issuer_allows_unrelated_foreign_currency_facts_with_usd_reporting():
+    ticker_directory, submissions, companyfacts = valid_sources()
+    companyfacts["facts"]["us-gaap"]["DebtInstrumentFaceAmount"] = {
+        "units": {"EUR": [{"val": 550_000_000}]}
+    }
+
+    identity = resolve(sources=(ticker_directory, submissions, companyfacts))
+
+    assert identity.currency == "USD"
+
+
 def test_selected_ticker_is_normalized_and_rejected_if_not_supported():
     assert IdentityResolutionRequestV1(ticker=" brk-b ").ticker == "BRK-B"
     with pytest.raises(ValidationError):
@@ -121,8 +132,8 @@ def test_mismatched_issuer_evidence_fails_closed(source_index, field, value):
         (2, lambda value: value["facts"].update({"us-gaap": {}})),
         (
             2,
-            lambda value: value["facts"]["us-gaap"]["Revenue"]["units"].update(
-                {"EUR": [{"val": 1}]}
+            lambda value: value["facts"]["us-gaap"]["Revenue"].update(
+                {"units": {"EUR": [{"val": 1}]}}
             ),
         ),
     ],
