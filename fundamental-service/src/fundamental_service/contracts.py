@@ -610,6 +610,13 @@ class SnapshotResolutionV1(StrictModel):
     issue_codes: tuple[str, ...] = ()
     provenance: dict[str, object]
 
+    @field_validator("valuation_timestamp")
+    @classmethod
+    def timestamp_has_timezone(cls, value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("valuation_timestamp must include a timezone")
+        return value
+
 
 class MissingValueV1(StrictModel):
     status: Literal["missing", "not_applicable", "unsupported", "unresolved"]
@@ -701,6 +708,13 @@ class FactsReadResponseV1(StrictModel):
     quality_status: QualityStatus
     issue_codes: tuple[str, ...] = ()
     facts: tuple[CanonicalFactV1, ...] = Field(min_length=1)
+
+    @field_validator("valuation_timestamp")
+    @classmethod
+    def timestamp_has_timezone(cls, value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("valuation_timestamp must include a timezone")
+        return value
 
 
 class SecFilingSelectorV1(StrictModel):
@@ -823,6 +837,13 @@ class SecIngestionResponseV1(StrictModel):
         if self.reused != (self.status == "reused"):
             raise ValueError("reused flag must match ingestion status")
         return self
+
+    @field_validator("valuation_timestamp")
+    @classmethod
+    def timestamp_has_timezone(cls, value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("valuation_timestamp must include a timezone")
+        return value
 
 
 class ForecastAssumptionsV1(StrictModel):
@@ -1101,6 +1122,13 @@ class ValuationContextV1(StrictModel):
     source_selection_policy: str = Field(min_length=1)
     coverage_profile: str = Field(min_length=1)
 
+    @field_validator("valuation_timestamp")
+    @classmethod
+    def timestamp_has_timezone(cls, value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("valuation_timestamp must include a timezone")
+        return value
+
 
 class ProvenanceInputV1(StrictModel):
     snapshot_id: str = Field(min_length=1)
@@ -1327,6 +1355,13 @@ class CalculationTraceV1(StrictModel):
     assumptions_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
     calculation_version: str = Field(min_length=1)
 
+    @field_validator("valuation_timestamp")
+    @classmethod
+    def timestamp_has_timezone(cls, value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("valuation_timestamp must include a timezone")
+        return value
+
 
 class CalculationArtifactV1(StrictModel):
     contract_version: Literal["fundamental.v1"]
@@ -1351,6 +1386,13 @@ class CalculationArtifactV1(StrictModel):
     valuation_timestamp: datetime
     evaluated_at: datetime
     correlation_id: str = Field(min_length=1)
+
+    @field_validator("valuation_timestamp", "evaluated_at")
+    @classmethod
+    def timestamps_have_timezone(cls, value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("calculation timestamps must include a timezone")
+        return value
 
 
 class CalculationEvidenceV1(StrictModel):

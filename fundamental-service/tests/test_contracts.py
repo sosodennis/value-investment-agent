@@ -101,3 +101,13 @@ def test_unknown_fields_and_invalid_digest_are_rejected():
         ValuationInputV1(**{**valuation().model_dump(), "unexpected": True})
     with pytest.raises(ValidationError):
         ValuationInputV1(**{**valuation().model_dump(), "input_digest": "0" * 64})
+
+
+def test_valuation_context_rejects_naive_timestamp():
+    with pytest.raises(ValidationError, match="valuation_timestamp"):
+        ValuationContextV1(
+            valuation_timestamp=datetime(2026, 1, 1),
+            data_snapshot_id="snapshot-1",
+            source_selection_policy="pit-v1",
+            coverage_profile="us-gaap-public-v1",
+        )
