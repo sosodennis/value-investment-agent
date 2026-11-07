@@ -26,10 +26,13 @@ The focused service tests cover SEC source capture, ambiguous and mismatched ide
 
 ## Remaining verification
 
-- No Docker project has been built from this branch. The healthy #325 containers use a different worktree and do not count as #336 health evidence.
+- The isolated Docker project `value-investment-agent-issue-336-issuer-identity` uses PostgreSQL host port `18694` and service host port `18693`.
+- The service image built from code checkpoint `9253f820656b3fa976ce2c14e08eaf88d5fba3b9` has digest `sha256:aec7b3e0c6f29124815129019c2d3202f0d57dc4fb84eaf897823f459797c5b3`.
+- PostgreSQL became healthy, but the Fundamental service exited with code 1 because the configured EDGAR plugin hash did not match the mounted directory. The service health check did not pass. `/readyz` returned connection error 7.
+- The healthy #325 containers use a different worktree and do not count as #336 health evidence.
 - No live SEC identity resolution has run through the #336 service image.
 - No resolved identity has yet been sent through the existing ingestion and snapshot-resolution HTTP routes.
 - The full service suite skipped 25 checks. Their reasons are not yet classified.
 - No PR or PR CI exists. Issue #336 and its dependent issue #325 remain open.
 
-The next checkpoint is an isolated Docker service run on unique host ports. It must verify the resolver response against the existing SEC ingestion and snapshot contracts before this issue can move to acceptance review.
+The next checkpoint is to identify the matching pinned EDGAR plugin artifact, rebuild the isolated service, and verify its resolver response against the existing SEC ingestion and snapshot contracts.
