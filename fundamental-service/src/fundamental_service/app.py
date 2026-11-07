@@ -25,6 +25,8 @@ from .contracts import (
     CalculationArtifactV1,
     FactsReadRequestV1,
     FactsReadResponseV1,
+    IdentityResolutionRequestV1,
+    IdentityResolutionV1,
     PolicyValuationInputV1,
     SecIngestionRequestV1,
     SecIngestionResponseV1,
@@ -82,7 +84,12 @@ from .snapshots import (
     FilesystemContentStore,
     SnapshotRepository,
 )
-from .source_acquisition import SecAcquisitionUseCase, build_runtime_sec_acquisition
+from .source_acquisition import (
+    SecAcquisitionUseCase,
+    SecIdentityResolutionUseCase,
+    build_runtime_sec_acquisition,
+    build_runtime_sec_identity_resolution,
+)
 from .uncertainty import UncertaintyReportV1
 
 LOGGER = logging.getLogger("fundamental_service")
@@ -112,6 +119,7 @@ def create_app(
     policy_registry: PolicyRegistry | None = None,
     model_inventory: ModelInventory | None = None,
     sec_acquisition: SecAcquisitionUseCase | None = None,
+    identity_resolution: SecIdentityResolutionUseCase | None = None,
 ) -> FastAPI:
     """Assemble transport, application use cases, and runtime resources."""
 
@@ -189,7 +197,10 @@ def create_app(
     app.state.metadata_store = metadata_store
     app.state.model_inventory = model_inventory
     app.state.sec_acquisition = sec_acquisition
-    ingestion_limiter = RateLimiter(runtime_config.ingestion_rate_limit_per_minute)
+    app.state.identity_resolution = identity_resolution
+    sec_acquisition_limiter = RateLimiter(
+        runtime_config.ingestion_rate_limit_per_minute
+    )
 
     def release_actor(
         request: Request, allowed_organizations: frozenset[str]
@@ -230,15 +241,23 @@ def create_app(
                         status_code=429,
                         retryable=True,
                     )
-                if (
-                    request.url.path == "/v1/data/ingestions"
-                    and not ingestion_limiter.allow(
+                sec_acquisition_paths = {
+                    "/v1/data/ingestions",
+                    "/v1/identity/resolve",
+                }
+                if request.url.path in sec_acquisition_paths and not (
+                    sec_acquisition_limiter.allow(
                         context.principal.organization_id or "unscoped"
                     )
                 ):
+                    is_identity_resolution = request.url.path == "/v1/identity/resolve"
                     raise ServiceError(
-                        "INGESTION_RATE_LIMITED",
-                        "organization SEC ingestion quota is exhausted",
+                        "IDENTITY_RESOLUTION_RATE_LIMITED"
+                        if is_identity_resolution
+                        else "INGESTION_RATE_LIMITED",
+                        "organization SEC identity resolution quota is exhausted"
+                        if is_identity_resolution
+                        else "organization SEC ingestion quota is exhausted",
                         status_code=429,
                         retryable=True,
                         retry_after_ms=60_000,
@@ -382,6 +401,44 @@ def create_app(
     async def resolve_snapshot(request: Request) -> JSONResponse:
         value = decode_input(request, SnapshotResolutionRequestV1)
         return success_response(request, application.resolve_snapshot(value))
+
+    @app.post(
+        "/v1/identity/resolve",
+        response_model=TypedFundamentalResponseEnvelopeV1[IdentityResolutionV1],
+        openapi_extra={
+            "requestBody": {
+                "required": True,
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "$ref": "#/components/schemas/"
+                            "FundamentalIdentityResolutionRequestEnvelopeV1"
+                        }
+                    }
+                },
+            }
+        },
+    )
+    async def resolve_identity(request: Request) -> JSONResponse:
+        use_case = app.state.identity_resolution
+        if not isinstance(use_case, SecIdentityResolutionUseCase):
+            raise ServiceError(
+                "IDENTITY_RESOLUTION_UNAVAILABLE",
+                "SEC identity resolution is not configured for this deployment",
+                status_code=503,
+                retryable=True,
+            )
+        value = decode_input(request, IdentityResolutionRequestV1)
+        context = request.state.context
+        result = await run_in_threadpool(
+            use_case.execute,
+            value,
+            caller_principal=context.principal.subject_id,
+            organization_id=context.principal.organization_id,
+            correlation_id=context.correlation_id,
+            deadline_at=request.state.deadline,
+        )
+        return success_response(request, result)
 
     @app.post(
         "/v1/data/releases/candidates",
@@ -681,6 +738,10 @@ def create_app(
                 TypedFundamentalRequestEnvelopeV1[SecIngestionRequestV1],
             ),
             (
+                "FundamentalIdentityResolutionRequestEnvelopeV1",
+                TypedFundamentalRequestEnvelopeV1[IdentityResolutionRequestV1],
+            ),
+            (
                 "FundamentalDataReleaseCandidateRequestEnvelopeV1",
                 TypedFundamentalRequestEnvelopeV1[DataReleaseCandidatePublishRequestV1],
             ),
@@ -764,6 +825,12 @@ def create_runtime_app() -> FastAPI:
         dqc_ruleset_sha256=dqc_ruleset_sha256,
         authorized_organizations=config.ingestion_authorized_organizations,
     )
+    identity_resolution = build_runtime_sec_identity_resolution(
+        metadata=metadata_store,
+        content_store=content_store,
+        user_agent=os.getenv("FUNDAMENTAL_SEC_USER_AGENT"),
+        authorized_organizations=config.ingestion_authorized_organizations,
+    )
     return create_app(
         snapshot_repository=PostgresSnapshotRepository(metadata_store),
         artifact_store=PostgresArtifactStore(metadata_store, content_store),
@@ -778,6 +845,7 @@ def create_runtime_app() -> FastAPI:
             repository=MetadataPolicyRepository(metadata_store),
         ),
         sec_acquisition=sec_acquisition,
+        identity_resolution=identity_resolution,
     )
 
 

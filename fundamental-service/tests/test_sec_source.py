@@ -1,3 +1,4 @@
+import hashlib
 import json
 from datetime import datetime, timezone
 from email.message import Message
@@ -56,6 +57,50 @@ def test_companyfacts_capture_is_public_and_hashable():
     assert source.source_id == "sec-companyfacts"
     assert source.uri.endswith("CIK0000320193.json")
     assert calls[0][1] == "value-agent test@example.com"
+
+
+def test_company_ticker_directory_capture_is_exact_and_hashable():
+    payload = b'{"0":{"cik_str":320193,"ticker":"AAPL","title":"Apple Inc."}}'
+    calls = []
+
+    def opener(request, timeout):
+        calls.append((request.full_url, request.headers["User-agent"], timeout))
+        return FakeResponse(payload)
+
+    source = SecEdgarSourceAdapter(
+        SecRequestPolicy(
+            user_agent="value-agent test@example.com", min_interval_seconds=0
+        ),
+        opener=opener,
+        sleep=lambda _seconds: None,
+    ).capture_company_tickers()
+
+    assert source.source_id == "sec-company-tickers"
+    assert source.role is SourceRole.ACQUISITION
+    assert source.uri == "https://www.sec.gov/files/company_tickers.json"
+    assert (
+        hashlib.sha256(source.content).hexdigest()
+        == hashlib.sha256(payload).hexdigest()
+    )
+    assert calls[0][0] == source.uri
+    assert calls[0][1] == "value-agent test@example.com"
+
+
+def test_company_ticker_directory_rejects_noncanonical_uri():
+    calls = []
+    adapter = SecEdgarSourceAdapter(
+        SecRequestPolicy(user_agent="value-agent test@example.com"),
+        opener=lambda *_args, **_kwargs: calls.append(True),
+    )
+
+    with pytest.raises(SecSourceError) as error:
+        adapter.capture_json(
+            source_id="sec-company-tickers",
+            uri="https://www.sec.gov/files/company_tickers.json?redirect=example.test",
+        )
+
+    assert error.value.code == "SOURCE_URI_NOT_ALLOWED"
+    assert calls == []
 
 
 def test_rate_limit_retries_then_returns_stable_error():

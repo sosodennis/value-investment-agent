@@ -9,6 +9,7 @@ implementation or retries through a local calculator.
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -23,6 +24,8 @@ from src.agents.fundamental.application.fundamental_service_port import (
     FundamentalServiceFailure,
 )
 from src.agents.fundamental.interface.fundamental_service_contracts import (
+    FundamentalIdentityResolutionRequestV1,
+    FundamentalIdentityResolutionV1,
     FundamentalServiceErrorV1,
     FundamentalServiceResponseV1,
 )
@@ -37,6 +40,7 @@ _DEFAULT_INGESTION_TIMEOUT_SECONDS: Final[float] = 120.0
 _DEFAULT_MAX_ATTEMPTS: Final[int] = 2
 _OPERATION_PATHS: dict[FundamentalOperation, str] = {
     "ingest_sec_data": "/v1/data/ingestions",
+    "resolve_identity": "/v1/identity/resolve",
     "resolve_snapshot": "/v1/data/snapshots/resolve",
     "validate": "/v1/valuation/validate",
     "calculate": "/v1/valuation/calculate",
@@ -167,7 +171,7 @@ class HttpFundamentalServiceClient:
             headers["X-Organization-ID"] = principal.organization_id
         operation_timeout = (
             self._settings.ingestion_timeout_seconds
-            if operation == "ingest_sec_data"
+            if operation in {"ingest_sec_data", "resolve_identity"}
             else self._settings.timeout_seconds
         )
 
@@ -277,6 +281,34 @@ class HttpFundamentalServiceClient:
             retryable=False,
             status_code=503,
         )
+
+    async def resolve_identity(
+        self,
+        request: FundamentalIdentityResolutionRequestV1,
+        *,
+        principal: InternalPrincipal,
+        correlation_id: str,
+        deadline_at: datetime,
+    ) -> FundamentalIdentityResolutionV1:
+        """Call the service resolver and validate its complete evidence digest."""
+        response = await self.execute(
+            "resolve_identity",
+            request.model_dump(mode="json"),
+            principal=principal,
+            correlation_id=correlation_id,
+            deadline_at=deadline_at,
+        )
+        try:
+            return FundamentalIdentityResolutionV1.model_validate_json(
+                json.dumps(response.result)
+            )
+        except (ValidationError, TypeError, ValueError) as error:
+            raise FundamentalServiceFailure(
+                "UPSTREAM_MALFORMED",
+                "Fundamental service returned an invalid identity response",
+                retryable=False,
+                status_code=502,
+            ) from error
 
 
 __all__ = ["FundamentalServiceClientSettings", "HttpFundamentalServiceClient"]

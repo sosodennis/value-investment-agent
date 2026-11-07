@@ -7,12 +7,15 @@ from datetime import datetime
 from typing import Literal, Protocol
 
 from src.agents.fundamental.interface.fundamental_service_contracts import (
+    FundamentalIdentityResolutionRequestV1,
+    FundamentalIdentityResolutionV1,
     FundamentalServiceResponseV1,
 )
 from src.shared.internal_services import InternalPrincipal
 
 FundamentalOperation = Literal[
     "ingest_sec_data",
+    "resolve_identity",
     "resolve_snapshot",
     "validate",
     "calculate",
@@ -54,8 +57,22 @@ class FundamentalServiceClient(Protocol):
     ) -> FundamentalServiceResponseV1: ...
 
 
+class FundamentalIdentityResolver(Protocol):
+    """Typed caller port for SEC-backed issuer identity resolution."""
+
+    async def resolve_identity(
+        self,
+        request: FundamentalIdentityResolutionRequestV1,
+        *,
+        principal: InternalPrincipal,
+        correlation_id: str,
+        deadline_at: datetime,
+    ) -> FundamentalIdentityResolutionV1: ...
+
+
 __all__ = [
     "FundamentalOperation",
     "FundamentalServiceClient",
     "FundamentalServiceFailure",
+    "FundamentalIdentityResolver",
 ]
