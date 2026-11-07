@@ -89,8 +89,8 @@ workflow and its report-artifact tests are deleted. The replacement service
 valuation coverage remains in
 `tests/agents/fundamental/test_fundamental_service_cutover.py`.
 
-The debate-side legacy report reader removal is the next uncommitted unit. Its
-focused checks passed at `88d60e2c291539626e1e81b5cb9a56a813c8f9f0`: 41 tests across debate
+The debate-side legacy report reader removal was completed at
+`88d60e2c291539626e1e81b5cb9a56a813c8f9f0`. Its focused checks passed: 41 tests across debate
 context/source-reader/mapper and Fundamental service cutover; Ruff check and
 format; and architecture guard. A collection attempt including
 `tests/test_debate_optimization.py` remains blocked by that existing test's
