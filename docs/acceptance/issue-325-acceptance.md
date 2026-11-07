@@ -479,6 +479,52 @@ The failure is not caused by the number of requested mappings. The worker's
 exit cause remains undetermined; inspect its resource limit and retained parser
 inputs before any service or application code change.
 
+## Parser worker cgroup OOM replay
+
+- Date: 2026-11-07.
+- Code under test: `eeb33c3b8beb78aaf93b10afb6315609f99bb355` on
+  `codex/issue-325-fundamental-ui`, with `origin/main` at
+  `08afd4660bd98d999d76d5ea9b7424cd30adc34c`.
+- Compose project: `value-investment-agent-issue-325-fundamental`.
+  The Fundamental service container was
+  `value-investment-agent-issue-325-fundamental-fundamental-service-1`; its
+  configured cgroup limit was `536870912` bytes (512 MiB).
+- The disposable PostgreSQL volume was provisioned with the already verified
+  `sec-revenue-v1` mapping (`mapping_digest`
+  `21b8aaccbfd32095c6b39489632358ca122d8bc343505da21b6cb60e0c02615b`) so
+  this replay reached the parser. No records were deleted or reset.
+- A signed `internal.v1` request used MSFT CIK `0000789019`, accession
+  `0000950170-24-087843`, valuation cutoff `2025-06-30T00:00:00Z`, one
+  required field (`revenue`), and a unique policy version. Correlation ID was
+  `issue325-oom-replay-20261107-3`.
+- A 200 ms host monitor recorded service RSS from `185.3 MiB` to `461.6 MiB`
+  of `512 MiB` while the request was active. The API returned HTTP 422 after
+  `9.006799` seconds with `XBRL_PARSE_FAILED` and
+  `offline SEC parser exited without a result`.
+- The same request shape was replayed with correlation ID
+  `issue325-oom-replay-20261107-4`. The cgroup counters changed from
+  `oom=4`, `oom_kill=4`, `memory.peak=536870912` to `oom=5`, `oom_kill=5`,
+  `memory.peak=536870912`; the container stayed `running` with
+  `restarts=0`. The API returned HTTP 422 after `8.47894` seconds with the
+  same parser error.
+- The PostgreSQL source audit persisted both parser outcomes as
+  `XBRL_PARSE_FAILED` with no source hashes. After the replays,
+  `sec_ingestion_acquisitions`, `snapshot_manifests`, and `canonical_facts`
+  remained zero. The temporary monitor/request artifacts were
+  `/tmp/issue325-memory-monitor-325.uUWrjU`,
+  `/tmp/issue325-oom-before.llVYAd`, `/tmp/issue325-oom-after.MsUBDy`, and
+  `/tmp/issue325-ingestion-request-325b.VyHIqK`.
+
+### Diagnostic result
+
+**Incomplete and blocked.** The parser worker is killed by the Fundamental
+service cgroup at its 512 MiB limit while parsing this accession. The service
+process remains alive, but it receives no parser result and fails closed before
+publishing an acquisition, snapshot, or canonical fact. This is a
+Fundamental service/runtime blocker; the UI must not conceal it. The next
+checkpoint must make the parser resource budget and child-process failure
+observable and provide a bounded runtime fix, then rerun this exact replay.
+
 ## Exact combined service identity boundary probe
 
 - Date: 2026-11-07.
