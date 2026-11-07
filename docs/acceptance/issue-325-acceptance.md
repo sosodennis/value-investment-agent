@@ -525,6 +525,49 @@ Fundamental service/runtime blocker; the UI must not conceal it. The next
 checkpoint must make the parser resource budget and child-process failure
 observable and provide a bounded runtime fix, then rerun this exact replay.
 
+## Exact-head bounded parser replay
+
+- Code checkpoint: `2e035b194f42d9cb9aa03d27873f5e3bbcdf9165`.
+- Compose project: `value-investment-agent-issue-325-fundamental`; the rebuilt
+  Fundamental image was
+  `sha256:dd673ecb034adba4447f1e4666b65719b10b5aab3c5055c00918da698c542314`.
+  PostgreSQL host port was `18691` and Fundamental service host port was
+  `18690`.
+- The verification Compose memory limit resolved to `1073741824` bytes (1 GiB)
+  from `FUNDAMENTAL_SERVICE_MEMORY_LIMIT=1g`. Both PostgreSQL and Fundamental
+  service containers were `healthy`; `/livez` and `/readyz` returned HTTP 200.
+- A signed request for MSFT CIK `0000789019`, accession
+  `0000950170-24-087843`, one `revenue` mapping, and correlation ID
+  `issue325-oom-fixed-replay-20261107-1` completed in `20.496562` seconds.
+  It returned HTTP 200 with `status=created`, `quality_status=verified`, 57
+  canonical fact IDs, snapshot
+  `snapshot-7d3614b0c9f4007f24af408f3aca234d`, and manifest digest
+  `10972fb6f3879c771c9cc830f5816cf719d9d61d1a777c94488d2f807e635269`.
+- The parser issue codes were the previously observed non-blocking
+  `EFM.5.02.05.14.hidden-fact-eligible-for-transform`, `EFM.6.05.42`, and
+  `ixbrl:selfClosedTagWarning`; no blocking finding was returned.
+- cgroup counters remained `oom=0`, `oom_kill=0`, and
+  `oom_group_kill=0`; `memory.peak` was `728510464` bytes (approximately
+  694.8 MiB), below the 1 GiB limit. The container stayed running with
+  `oom=false` and `restarts=0`.
+- PostgreSQL counts after the replay were two acquisitions, two snapshot
+  manifests, and 114 canonical facts. The earlier failed attempts remain
+  audit-only and did not publish facts.
+- The full Fundamental service suite at this exact code checkpoint returned
+  `253 passed, 2 skipped, 1 warning` in `119.48s`. The skips are the existing
+  runtime-gated parser tests without their optional pinned environment; the
+  live replay above exercised the configured runtime path.
+
+### Diagnostic result
+
+**Runtime blocker resolved; issue acceptance remains incomplete.** The service
+now has a bounded, configurable parser budget that is sufficient for the
+pinned Microsoft replay, and the same request publishes a verified immutable
+snapshot without cgroup OOM. The remaining #325 work is the Agent-to-service
+request producer and real workspace route acceptance, including same-snapshot
+fact/valuation trace, desktop/mobile UI, keyboard operation, and evidence
+inspector verification.
+
 ## Exact combined service identity boundary probe
 
 - Date: 2026-11-07.
