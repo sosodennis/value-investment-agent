@@ -117,6 +117,13 @@ S4 calibration input and unversioned local defaults. These are not active
 workspace inputs; they are retained evidence with their existing producer
 paths.
 
+The replay runner cleanup in this branch also removes the dormant XBRL
+cache-prewarm flags and direct Agent-owned SEC fetch from
+`scripts/run_fundamental_live_replay_cohort_gate.py`. Offline replay remains
+fixture-based, and service-backed prewarm is deferred until the Fundamental
+service supplies the replacement snapshot contract. The migration tests that
+exercise the quarantined SEC/XBRL adapters remain retained evidence.
+
 The separate tracked subtree `finance-agent-core/finance-agent-core/reports/`
 contains seven duplicate replay outputs from the March 2026 project layout.
 They have no repository callers, embed machine-specific absolute paths, and are

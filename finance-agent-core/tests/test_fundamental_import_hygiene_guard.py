@@ -322,6 +322,64 @@ def test_no_active_fundamental_sec_or_report_fallback_imports() -> None:
     )
 
 
+def test_replay_gate_has_no_agent_sec_fallback_imports_or_flags() -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    runner = (
+        repo_root
+        / "finance-agent-core"
+        / "scripts"
+        / "run_fundamental_live_replay_cohort_gate.py"
+    )
+    source = runner.read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    banned_prefixes = (
+        "src.agents.fundamental.capabilities.financial_statements.infrastructure.sec_xbrl",
+        "src.agents.fundamental.capabilities.forward_signals.infrastructure.sec_xbrl",
+        "src.agents.fundamental.financial_statements.infrastructure.sec_xbrl",
+    )
+    violations: list[str] = []
+    for node in ast.walk(tree):
+        imported_modules: list[str] = []
+        if isinstance(node, ast.ImportFrom) and node.module:
+            imported_modules.append(node.module)
+        elif isinstance(node, ast.Import):
+            imported_modules.extend(alias.name for alias in node.names)
+        for module_name in imported_modules:
+            if any(
+                _is_banned_import(module_name, prefix) for prefix in banned_prefixes
+            ):
+                violations.append(
+                    f"{runner.relative_to(repo_root)}:{node.lineno}: {module_name}"
+                )
+
+    assert not violations, "Replay gate imports Agent-owned SEC code:\n" + "\n".join(
+        sorted(violations)
+    )
+    for retired_flag in (
+        "FUNDAMENTAL_LIVE_REPLAY_ENABLE_PREWARM",
+        "FUNDAMENTAL_LIVE_REPLAY_PREWARM_DEFAULT_YEARS",
+        "enable_prewarm",
+        "prewarm_default_years",
+    ):
+        assert retired_flag not in source
+
+
+def test_no_legacy_fundamental_state_keys_in_runtime_source() -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    source_root = repo_root / "finance-agent-core" / "src" / "agents" / "fundamental"
+    banned_keys = ("financial_reports_artifact_id",)
+    violations: list[str] = []
+    for path in source_root.rglob("*.py"):
+        source = path.read_text(encoding="utf-8")
+        for key in banned_keys:
+            if key in source:
+                violations.append(f"{path.relative_to(repo_root)}: {key}")
+
+    assert not violations, "Legacy Fundamental state keys found:\n" + "\n".join(
+        sorted(violations)
+    )
+
+
 def test_calibration_fixtures_are_versioned_and_allowlisted() -> None:
     repo_root = Path(__file__).resolve().parents[2]
     fixtures_root = repo_root / "finance-agent-core" / "tests" / "fixtures"
