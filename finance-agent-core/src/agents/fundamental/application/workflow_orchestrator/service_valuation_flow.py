@@ -15,6 +15,10 @@ from src.agents.fundamental.application.fundamental_service_port import (
 from src.agents.fundamental.interface.fundamental_service_contracts import (
     FundamentalServiceResponseV1,
 )
+from src.agents.fundamental.interface.request_contracts import (
+    FundamentalRequestTimingV1,
+    apply_request_timing,
+)
 from src.shared.internal_services import get_request_principal
 from src.shared.kernel.correlation import resolve_correlation_id
 from src.shared.kernel.types import JSONObject
@@ -43,6 +47,8 @@ _SUPPORTED_INPUT_FIELDS = _REQUIRED_INPUT_FIELDS | {
     "input_digest",
     "caller_approval",
     "snapshot_selector",
+    "requested_as_of",
+    "fiscal_period_selector",
 }
 _LEGACY_INPUT_FIELDS = frozenset(
     {
@@ -864,11 +870,18 @@ async def run_service_valuation_flow(
     client: FundamentalServiceClient,
     request_approval_fn: Callable[[JSONObject], object],
     timeout_seconds: float = 10.0,
+    clock: Callable[[], datetime] | None = None,
 ) -> FundamentalNodeResult:
     fundamental_raw = state.get("fundamental_analysis", {})
     fundamental = _as_mapping(fundamental_raw, context="fundamental_analysis")
     try:
         input_payload = read_service_valuation_input(state)
+        request_timing = FundamentalRequestTimingV1.accept(input_payload, clock=clock)
+        input_payload = apply_request_timing(input_payload, request_timing)
+        fundamental = {
+            **fundamental,
+            "request_timing": request_timing.model_dump(mode="json"),
+        }
         principal = get_request_principal()
         if principal is None:
             raise FundamentalServiceFailure(

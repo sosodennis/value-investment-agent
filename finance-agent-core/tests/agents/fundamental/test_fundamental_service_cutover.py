@@ -355,6 +355,17 @@ async def test_cutover_resolves_snapshot_and_facts_through_service_boundary() ->
     )
     assert client.calls[1][1]["provenance"]["policy_version"] == "policy-v1"
     assert result.update["fundamental_analysis"]["input_digest"] == "a" * 64
+    assert (
+        result.update["fundamental_analysis"]["request_timing"]["valuation_timestamp"]
+        == "2026-11-04T00:00:00Z"
+    )
+    assert result.update["fundamental_analysis"]["request_timing"][
+        "fiscal_period_selector"
+    ] == {
+        "version": "fundamental.fiscal-period-selector.v1",
+        "mode": "latest_complete",
+        "count": 3,
+    }
 
 
 @pytest.mark.parametrize(

@@ -132,6 +132,11 @@ class FundamentalRequestTimingV1(_StrictRequestModel):
 
     @staticmethod
     def _coerce_timestamp(value: object, *, name: str) -> datetime:
+        if isinstance(value, str):
+            try:
+                value = datetime.fromisoformat(value.replace("Z", "+00:00"))
+            except ValueError as exc:
+                raise ValueError(f"{name} must be an ISO-8601 datetime") from exc
         if not isinstance(value, datetime):
             raise ValueError(f"{name} must be a datetime")
         if value.tzinfo is None or value.utcoffset() is None:
