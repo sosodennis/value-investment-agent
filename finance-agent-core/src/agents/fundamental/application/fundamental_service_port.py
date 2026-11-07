@@ -67,6 +67,15 @@ class FundamentalServiceClient(Protocol):
         deadline_at: datetime,
     ) -> FundamentalFactsReadResultV1: ...
 
+    async def resolve_identity(
+        self,
+        request: FundamentalIdentityResolutionRequestV1,
+        *,
+        principal: InternalPrincipal,
+        correlation_id: str,
+        deadline_at: datetime,
+    ) -> FundamentalIdentityResolutionV1: ...
+
 
 class FundamentalIdentityResolver(Protocol):
     """Typed caller port for SEC-backed issuer identity resolution."""
