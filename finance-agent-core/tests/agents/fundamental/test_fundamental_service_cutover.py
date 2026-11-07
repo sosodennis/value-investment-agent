@@ -487,7 +487,7 @@ class _FactsOnlyClient(_Client):
         facts_snapshot_id: str | None = None,
         facts_ids: list[str] | None = None,
         resolved_fact_ids: list[str] | None = None,
-        snapshot_timestamp: str = "2026-11-07T00:00:00Z",
+        snapshot_timestamp: str = "2026-11-01T00:00:00Z",
     ) -> None:
         identity = _resolved_identity().identity.model_dump(mode="json")
         self.resolved_fact_ids = list(resolved_fact_ids or self._fact_ids)
