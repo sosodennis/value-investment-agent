@@ -45,6 +45,7 @@ export function WorkspacePage({ assistantId = 'agent', initialTicker = null, ini
     const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
     const [activeTab, setActiveTab] = useState<ReportTab>('activity');
     const [selectedEvidence, setSelectedEvidence] = useState<EvidenceSelection | null>(null);
+    const [mobileEvidenceOpen, setMobileEvidenceOpen] = useState(false);
     const autoStarted = useRef(false);
     const agents: AgentInfo[] = useMemo(() => AGENT_CONFIGS.map((config) => ({
         id: config.id,
@@ -73,6 +74,13 @@ export function WorkspacePage({ assistantId = 'agent', initialTicker = null, ini
             adaptAgentOutput(evidenceAgent.id, output, `workspace_evidence.${evidenceAgent.id}`),
         );
     }, [agent.agentOutputs, evidenceAgent]);
+
+    function handleSelectEvidence(item: EvidenceSelection) {
+        setSelectedEvidence(item);
+        if (typeof window !== 'undefined' && window.innerWidth < 1440) {
+            setMobileEvidenceOpen(true);
+        }
+    }
 
     useEffect(() => {
         if (!historyThreadId || !historyRunId) return;
@@ -103,7 +111,7 @@ export function WorkspacePage({ assistantId = 'agent', initialTicker = null, ini
                 <div className="flex min-w-0 items-center gap-3">
                     <div className="flex items-center gap-2 min-[1440px]:hidden">
                         <Sheet><SheetTrigger asChild><Button variant="outline" size="icon" aria-label="Open agent list"><Menu /></Button></SheetTrigger><SheetContent side="left" className="w-[min(22rem,90vw)] p-0"><SheetHeader className="border-b px-4 py-4"><SheetTitle>Analysis agents</SheetTitle></SheetHeader>{roster}</SheetContent></Sheet>
-                        <Sheet><SheetTrigger asChild><EvidenceInspectorTrigger /></SheetTrigger><SheetContent side="right" className="w-[min(24rem,94vw)] p-0"><EvidenceInspector items={evidenceItems} selected={selectedEvidence} onSelect={setSelectedEvidence} /></SheetContent></Sheet>
+                        <Sheet open={mobileEvidenceOpen} onOpenChange={setMobileEvidenceOpen}><SheetTrigger asChild><EvidenceInspectorTrigger /></SheetTrigger><SheetContent side="right" className="w-[min(24rem,94vw)] p-0"><EvidenceInspector items={evidenceItems} selected={selectedEvidence} onSelect={handleSelectEvidence} /></SheetContent></Sheet>
                     </div>
                     <div className="min-w-0"><p className="text-xs text-muted-foreground">Analysis workspace</p><h1 className="truncate text-lg font-semibold">{routeIntent.kind === 'invalid-history' ? 'Analysis link unavailable' : ticker || agent.workflow ? ticker || 'Analysis run' : routeIntent.kind === 'exact-run' ? 'Analysis run' : 'New analysis'}</h1></div>
                 </div>
@@ -136,13 +144,13 @@ export function WorkspacePage({ assistantId = 'agent', initialTicker = null, ini
                             {reportTabs.map((tab) => <TabsTrigger key={tab.id} value={tab.id} className="min-h-10 shrink-0 rounded-none border-b-2 border-transparent px-3 data-[state=active]:border-primary data-[state=active]:bg-transparent">{tab.label}</TabsTrigger>)}
                         </TabsList>
                         <TabsContent value="activity"><ActivityPanel workflow={agent.workflow} connectionState={agent.connectionState} onResumeInteraction={agent.submitCommand} isSubmitting={agent.isSubmittingInteraction} onRetry={agent.retryRun} isRetrying={isLoading} /></TabsContent>
-                        {reportTabs.filter((item): item is { id: Exclude<ReportTab, 'activity'>; label: string } => item.id !== 'activity').map((item) => <TabsContent key={item.id} value={item.id}><ReportPanel tab={item.id} outputs={agent.agentOutputs} statuses={agent.agentStatuses} ticker={ticker} onSelectEvidence={setSelectedEvidence} selectedEvidenceId={selectedEvidence?.id} /></TabsContent>)}
+                        {reportTabs.filter((item): item is { id: Exclude<ReportTab, 'activity'>; label: string } => item.id !== 'activity').map((item) => <TabsContent key={item.id} value={item.id}><ReportPanel tab={item.id} outputs={agent.agentOutputs} statuses={agent.agentStatuses} ticker={ticker} onSelectEvidence={handleSelectEvidence} selectedEvidenceId={selectedEvidence?.id} /></TabsContent>)}
                     </Tabs>
                         </section>
                     </ResizablePanel>
                     <ResizableHandle index={1} className="hidden min-[1440px]:flex" />
                     <ResizablePanel index={2} className="hidden border-l min-[1440px]:block">
-                        <EvidenceInspector items={evidenceItems} selected={selectedEvidence} onSelect={setSelectedEvidence} />
+                        <EvidenceInspector items={evidenceItems} selected={selectedEvidence} onSelect={handleSelectEvidence} />
                     </ResizablePanel>
                 </ResizableGroup>
             </div>

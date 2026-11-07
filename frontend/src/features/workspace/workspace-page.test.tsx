@@ -400,6 +400,7 @@ describe('WorkspacePage', () => {
     });
 
     it('keeps the desktop workbench resizable and exposes selected report evidence', () => {
+        Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1440 });
         const output: StandardAgentOutput = {
             kind: 'debate.output', version: 'v1', summary: 'Evidence-backed debate.',
             preview: { verdict_display: 'Positive outlook', thesis_display: '0.82' },
@@ -439,5 +440,27 @@ describe('WorkspacePage', () => {
         const dialog = screen.getByRole('dialog');
         expect(dialog).toBeTruthy();
         expect(within(dialog).getByText('Evidence inspector')).toBeTruthy();
+    });
+
+    it('opens the mobile evidence sheet when a report value is selected', () => {
+        Object.defineProperty(window, 'innerWidth', { configurable: true, value: 390 });
+        hook.value = defaultHook({
+            agentOutputs: {
+                debate: {
+                    kind: 'debate.output', version: 'v1', summary: 'Evidence-backed debate.',
+                    preview: { verdict_display: 'Positive outlook' },
+                    reference: { artifact_id: 'artifact-debate-1', download_url: '/api/v1/artifacts/artifact-debate-1', type: 'debate' },
+                },
+            },
+            agentStatuses: { debate: 'done' },
+        });
+        render(<WorkspacePage />);
+
+        fireEvent.click(screen.getByRole('tab', { name: 'Debate' }));
+        fireEvent.click(screen.getByRole('button', { name: /Verdict Display/i }));
+
+        const dialog = screen.getByRole('dialog');
+        expect(within(dialog).getByText('Evidence inspector')).toBeTruthy();
+        expect(within(dialog).getByText('Debate Arena summary')).toBeTruthy();
     });
 });
