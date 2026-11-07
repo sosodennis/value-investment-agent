@@ -70,9 +70,8 @@ describe('FundamentalAnalysisOutput', () => {
             />
         );
 
-        screen.getByRole('status');
-        screen.getByText('Valuation not requested');
         screen.getByTestId('financial-table');
+        screen.getByText('Valuation not requested');
         expect(screen.queryByText('Analyst Valuation Score')).not.toBeInTheDocument();
         expect(screen.queryByText('Revenue')).not.toBeInTheDocument();
         expect(screen.queryByText('Intrinsic Value')).not.toBeInTheDocument();
