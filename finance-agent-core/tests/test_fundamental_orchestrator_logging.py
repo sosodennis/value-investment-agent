@@ -1425,10 +1425,9 @@ async def test_run_valuation_reports_error_when_snapshot_save_fails() -> None:
 
 
 @pytest.mark.asyncio
-async def test_run_model_selection_fails_fast_when_reports_artifact_id_missing() -> (
-    None
-):
-    orchestrator = _build_orchestrator_with_port(_FailingSavePort())
+async def test_run_model_selection_continues_without_legacy_reports_artifact() -> None:
+    port = _FailingSavePort()
+    orchestrator = _build_orchestrator_with_port(port)
     state = _build_health_state()
 
     with patch(
@@ -1439,10 +1438,14 @@ async def test_run_model_selection_fails_fast_when_reports_artifact_id_missing()
             select_valuation_model_fn=select_valuation_model,
         )
 
-    assert result.goto == "END"
-    error_logs = result.update.get("error_logs")
-    assert isinstance(error_logs, list) and error_logs
-    assert "artifact id" in str(error_logs[0].get("error", "")).lower()
+    assert result.goto == "calculation"
+    assert "error_logs" not in result.update
+    fundamental = result.update["fundamental_analysis"]
+    assert fundamental["model_selection_status"] == "degraded"
+    assert fundamental["service_facts_status"] == "unavailable"
+    assert "financial_reports_artifact_id" not in fundamental
+    assert "artifact_references" not in result.update
+    assert port.saved_data is None
 
     completion_call = next(
         call
@@ -1450,5 +1453,7 @@ async def test_run_model_selection_fails_fast_when_reports_artifact_id_missing()
         if call.kwargs.get("event") == "fundamental_model_selection_completed"
     )
     fields = completion_call.kwargs["fields"]
-    assert fields["status"] == "error"
-    assert fields["error_code"] == "FUNDAMENTAL_MODEL_SELECTION_REPORT_ID_MISSING"
+    assert fields["status"] == "done"
+    assert fields["is_degraded"] is True
+    assert fields["artifact_written"] is False
+    assert fields["service_facts_status"] == "unavailable"

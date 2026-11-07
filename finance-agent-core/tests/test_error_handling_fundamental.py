@@ -63,7 +63,7 @@ async def test_model_selection_node_error_log():
 
 
 @pytest.mark.asyncio
-async def test_model_selection_node_accepts_canonical_report_shape():
+async def test_model_selection_node_ignores_legacy_report_artifact():
     state = {
         "company_profile": {
             "ticker": "GME",
@@ -74,34 +74,26 @@ async def test_model_selection_node_accepts_canonical_report_shape():
         "fundamental_analysis": {"financial_reports_artifact_id": "artifact_1"},
     }
 
-    canonical_reports = [
-        {
-            "base": {
-                "fiscal_year": {"value": "2024"},
-                "fiscal_period": {"value": "FY"},
-                "sic_code": {"value": "5734"},
-                "total_revenue": {"value": 3823000000.0},
-                "net_income": {"value": 131300000.0},
-                "operating_cash_flow": {"value": 145700000.0},
-                "total_equity": {"value": 4929800000.0},
-                "total_assets": {"value": 5875400000.0},
-            },
-            "extension_type": "Industrial",
-            "extension": {"inventory": {"value": 1.0}},
-        }
-    ]
-
     with (
         patch(
             "src.agents.fundamental.capabilities.artifacts_provenance.infrastructure.fundamental_artifact_repository.FundamentalArtifactRepository.load_financial_reports_bundle",
-            new=AsyncMock(return_value=(canonical_reports, None)),
+            new=AsyncMock(
+                side_effect=AssertionError("legacy report load must not run")
+            ),
         ),
         patch(
             "src.agents.fundamental.capabilities.artifacts_provenance.infrastructure.fundamental_artifact_repository.FundamentalArtifactRepository.save_financial_reports",
-            new=AsyncMock(return_value="artifact_saved"),
+            new=AsyncMock(
+                side_effect=AssertionError("legacy report save must not run")
+            ),
         ),
     ):
         command = await _fundamental_nodes()["model_selection"](state)
 
     assert command.goto == "calculation"
     assert "error_logs" not in command.update
+    context = command.update["fundamental_analysis"]
+    assert context["model_selection_status"] == "degraded"
+    assert context["service_facts_status"] == "unavailable"
+    assert "financial_reports_artifact_id" not in context
+    assert "artifact_references" not in command.update
