@@ -474,4 +474,5 @@ identity boundary is exercised, but the merged #336 resolver rejects a valid
 USD-reporting issuer solely because its companyfacts includes unrelated
 historical EUR facts. This is an owning Fundamental identity-policy defect,
 not a browser workaround or an SEC fallback opportunity. A linked blocker is
-required before the MSFT service-backed acceptance can proceed.
+required before the MSFT service-backed acceptance can proceed. Blocker #341
+tracks the service-owned policy fix and is linked to #336 and #325.
