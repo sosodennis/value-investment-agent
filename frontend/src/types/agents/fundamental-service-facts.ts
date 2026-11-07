@@ -196,7 +196,8 @@ export interface FundamentalArtifactHashes {
     source_content_hashes: string[];
 }
 
-export interface FundamentalServiceArtifact {
+export interface FundamentalServiceValuationArtifact {
+    projection_type: 'valuation';
     contract_version: 'fundamental.v1';
     snapshot_id: string;
     snapshot_manifest_digest: string;
@@ -219,6 +220,35 @@ export interface FundamentalServiceArtifact {
     issue_codes: string[];
     missing_evidence: string[];
 }
+
+export interface FundamentalFactsOnlyArtifactQuality {
+    facts_status: FundamentalQualityStatus;
+    issue_codes: string[];
+}
+
+export interface FundamentalFactsOnlyArtifactHashes {
+    snapshot_manifest_digest: string;
+    data_release_manifest_digest?: string;
+    source_content_hashes: string[];
+}
+
+export interface FundamentalServiceFactsOnlyArtifact {
+    projection_type: 'facts_only';
+    valuation_status: 'not_requested';
+    contract_version: 'fundamental.v1';
+    snapshot_id: string;
+    snapshot_manifest_digest: string;
+    fact_ids: string[];
+    facts: FundamentalFactsReadResult;
+    provenance: FundamentalArtifactProvenance;
+    quality: FundamentalFactsOnlyArtifactQuality;
+    hashes: FundamentalFactsOnlyArtifactHashes;
+    issue_codes: string[];
+}
+
+export type FundamentalServiceArtifact =
+    | FundamentalServiceValuationArtifact
+    | FundamentalServiceFactsOnlyArtifact;
 
 const DIGEST_PATTERN = /^[0-9a-f]{64}$/;
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
@@ -761,13 +791,131 @@ const parseOptionalArtifactNumber = (value: unknown, context: string): number | 
     return parseOptionalNumber(value, context);
 };
 
-export const parseFundamentalServiceArtifact = (
-    value: unknown,
-    context = 'fundamental_service'
-): FundamentalServiceArtifact => {
-    const record = parseRecord(value, context);
+const parseFactsOnlyArtifact = (
+    record: Record<string, unknown>,
+    context: string
+): FundamentalServiceFactsOnlyArtifact => {
+    const valuationFields = [
+        'valuation_trace',
+        'valuation_input',
+        'input_digest',
+        'result_hash',
+        'intrinsic_value',
+        'per_share_value',
+        'calculation_version',
+        'calculation_status',
+        'evaluated_at',
+    ];
+    if (valuationFields.some((field) => record[field] !== undefined && record[field] !== null)) {
+        throw new TypeError(`${context} facts-only projection cannot include valuation data.`);
+    }
     if (record.contract_version !== 'fundamental.v1') {
         throw new TypeError(`${context}.contract_version must be fundamental.v1.`);
+    }
+    if (record.valuation_status !== 'not_requested') {
+        throw new TypeError(`${context}.valuation_status must be not_requested.`);
+    }
+    const facts = parseFundamentalFacts(record.facts, `${context}.facts`);
+    const snapshotId = parseString(record.snapshot_id, `${context}.snapshot_id`);
+    const snapshotManifestDigest = parseDigest(
+        record.snapshot_manifest_digest,
+        `${context}.snapshot_manifest_digest`
+    );
+    const factIds = parseStringArray(record.fact_ids, `${context}.fact_ids`);
+    if (snapshotId !== facts.snapshot_id) {
+        throw new TypeError(`${context}.snapshot_id is not bound to facts.`);
+    }
+    if (snapshotManifestDigest !== facts.snapshot_manifest_digest) {
+        throw new TypeError(`${context}.snapshot_manifest_digest is not bound to facts.`);
+    }
+    const expectedFactIds = facts.facts.map((fact) => fact.fact_id).sort();
+    if ([...factIds].sort().join('\u0000') !== expectedFactIds.join('\u0000')) {
+        throw new TypeError(`${context}.fact_ids are not bound to facts.`);
+    }
+    const provenance = parseProvenanceMetadata(record.provenance, `${context}.provenance`);
+    if (provenance.snapshot_id !== undefined && provenance.snapshot_id !== snapshotId) {
+        throw new TypeError(`${context}.provenance.snapshot_id does not match snapshot_id.`);
+    }
+    if (
+        provenance.fact_ids !== undefined &&
+        [...provenance.fact_ids].sort().join('\u0000') !== expectedFactIds.join('\u0000')
+    ) {
+        throw new TypeError(`${context}.provenance.fact_ids do not match facts.`);
+    }
+    const qualityRecord = parseRecord(record.quality, `${context}.quality`);
+    const factsStatus = parseQuality(
+        qualityRecord.facts_status,
+        `${context}.quality.facts_status`
+    );
+    if (factsStatus !== facts.quality_status) {
+        throw new TypeError(`${context}.quality.facts_status does not match facts.`);
+    }
+    const qualityIssueCodes = parseStringArray(
+        qualityRecord.issue_codes,
+        `${context}.quality.issue_codes`
+    );
+    const issueCodes = parseStringArray(record.issue_codes, `${context}.issue_codes`);
+    if (qualityIssueCodes.join('\u0000') !== issueCodes.join('\u0000')) {
+        throw new TypeError(`${context}.quality.issue_codes do not match issue_codes.`);
+    }
+    const hashesRecord = parseRecord(record.hashes, `${context}.hashes`);
+    const hashSnapshotDigest = parseDigest(
+        hashesRecord.snapshot_manifest_digest,
+        `${context}.hashes.snapshot_manifest_digest`
+    );
+    if (hashSnapshotDigest !== snapshotManifestDigest) {
+        throw new TypeError(`${context}.hashes.snapshot_manifest_digest does not match snapshot_manifest_digest.`);
+    }
+    const releaseDigestValue = parseOptionalString(
+        hashesRecord.data_release_manifest_digest,
+        `${context}.hashes.data_release_manifest_digest`
+    );
+    const releaseDigest = releaseDigestValue === undefined
+        ? undefined
+        : parseDigest(releaseDigestValue, `${context}.hashes.data_release_manifest_digest`);
+    if (releaseDigest !== facts.data_release_manifest_digest) {
+        throw new TypeError(`${context}.hashes.data_release_manifest_digest does not match facts.`);
+    }
+    const sourceContentHashes = parseRequiredDigestArray(
+        hashesRecord.source_content_hashes,
+        `${context}.hashes.source_content_hashes`
+    );
+    const expectedSourceHashes = [
+        ...new Set(facts.facts.map((fact) => fact.source.source_hash)),
+    ].sort();
+    if ([...sourceContentHashes].sort().join('\u0000') !== expectedSourceHashes.join('\u0000')) {
+        throw new TypeError(`${context}.hashes.source_content_hashes do not match facts.`);
+    }
+    return {
+        projection_type: 'facts_only',
+        valuation_status: 'not_requested',
+        contract_version: 'fundamental.v1',
+        snapshot_id: snapshotId,
+        snapshot_manifest_digest: snapshotManifestDigest,
+        fact_ids: factIds,
+        facts,
+        provenance,
+        quality: { facts_status: factsStatus, issue_codes: qualityIssueCodes },
+        hashes: {
+            snapshot_manifest_digest: hashSnapshotDigest,
+            ...(releaseDigest === undefined
+                ? {}
+                : { data_release_manifest_digest: releaseDigest }),
+            source_content_hashes: sourceContentHashes,
+        },
+        issue_codes: issueCodes,
+    };
+};
+
+const parseValuationArtifact = (
+    record: Record<string, unknown>,
+    context: string
+): FundamentalServiceValuationArtifact => {
+    if (record.contract_version !== 'fundamental.v1') {
+        throw new TypeError(`${context}.contract_version must be fundamental.v1.`);
+    }
+    if (record.projection_type !== undefined && record.projection_type !== 'valuation') {
+        throw new TypeError(`${context}.projection_type must be valuation.`);
     }
     const facts = parseFundamentalFacts(record.facts, `${context}.facts`);
     const snapshotId = parseString(record.snapshot_id, `${context}.snapshot_id`);
@@ -808,10 +956,11 @@ export const parseFundamentalServiceArtifact = (
     if (hashes.snapshot_manifest_digest !== snapshotManifestDigest) {
         throw new TypeError(`${context}.hashes.snapshot_manifest_digest does not match snapshot_manifest_digest.`);
     }
-    const parseOptionalProjectionString = (field: keyof FundamentalServiceArtifact): string | undefined =>
+    const parseOptionalProjectionString = (field: keyof FundamentalServiceValuationArtifact): string | undefined =>
         parseOptionalString(record[field], `${context}.${field}`);
     const qualityStatus = parseOptionalProjectionString('quality_status');
-    const parsed: FundamentalServiceArtifact = {
+    const parsed: FundamentalServiceValuationArtifact = {
+        projection_type: 'valuation',
         contract_version: 'fundamental.v1',
         snapshot_id: snapshotId,
         snapshot_manifest_digest: snapshotManifestDigest,
@@ -844,4 +993,18 @@ export const parseFundamentalServiceArtifact = (
     const perShareValue = parseOptionalArtifactNumber(record.per_share_value, `${context}.per_share_value`);
     if (perShareValue !== undefined) parsed.per_share_value = perShareValue;
     return parsed;
+};
+
+export const parseFundamentalServiceArtifact = (
+    value: unknown,
+    context = 'fundamental_service'
+): FundamentalServiceArtifact => {
+    const record = parseRecord(value, context);
+    if (record.projection_type === 'facts_only') {
+        return parseFactsOnlyArtifact(record, context);
+    }
+    if (record.projection_type !== undefined && record.projection_type !== 'valuation') {
+        throw new TypeError(`${context}.projection_type must be valuation | facts_only.`);
+    }
+    return parseValuationArtifact(record, context);
 };

@@ -918,6 +918,7 @@ def _service_valuation_artifact_payload(
     artifact_projection = dict(projection)
     artifact_projection.update(
         {
+            "projection_type": "valuation",
             "contract_version": "fundamental.v1",
             "snapshot_id": snapshot_id,
             "snapshot_manifest_digest": snapshot_manifest_digest,

@@ -266,6 +266,9 @@ describe('parseFundamentalServiceArtifact', () => {
         (family) => {
             const parsed = parseFundamentalServiceArtifact(serviceArtifact(family));
 
+            if (parsed.projection_type !== 'valuation') {
+                throw new Error('Expected a valuation projection.');
+            }
             expect(parsed.facts.identity.family).toBe(family);
             expect(parsed.fact_ids).toEqual(['fact-revenue']);
             expect(parsed.valuation_trace.fact_ids).toEqual(['fact-revenue']);
