@@ -64,7 +64,6 @@ FACADE_EXPORTS: dict[str, set[str]] = {
         "DEFAULT_SCORING_WEIGHTS",
         "MODEL_SPECS",
         "FinancialHealthInsights",
-        "FundamentalPreviewMetrics",
         "FundamentalSelectionReport",
         "ModelCandidate",
         "ModelSelectionResult",
@@ -76,9 +75,6 @@ FACADE_EXPORTS: dict[str, set[str]] = {
         "build_model_selection_reasoning",
         "calculate_revenue_cagr",
         "extract_latest_health_insights",
-        "extract_latest_preview_metrics",
-        "project_selection_reports",
-        "project_selection_reports_from_models",
         "select_valuation_model",
     },
     "market_data": {
