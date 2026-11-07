@@ -61,8 +61,13 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
     const [expandedEvidenceRows, setExpandedEvidenceRows] = useState<Record<string, boolean>>(
         {}
     );
-    const reports = artifactData?.financial_reports ?? previewData?.financial_reports ?? [];
-    const serviceFacts = artifactData?.fundamental_service?.facts;
+    const reports = artifactData?.financial_reports ?? [];
+    const serviceProjection = artifactData?.fundamental_service;
+    const serviceFacts = serviceProjection?.facts;
+    const hasValuationServiceProjection =
+        serviceProjection?.projection_type === 'valuation' && Boolean(serviceFacts);
+    const isFactsOnlyProjection = serviceProjection?.projection_type === 'facts_only';
+    const canShowValuationPreview = hasPreview && hasValuationServiceProjection;
     const forwardSignals: ForwardSignal[] = artifactData?.forward_signals ?? [];
     const modelTypeRaw = artifactData?.model_type;
     const modelTypeDisplay = useMemo(() => {
@@ -581,7 +586,7 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
         return date.toISOString().slice(0, 10);
     };
 
-    if (status === 'error' && reports.length === 0 && !hasPreview) {
+    if (status === 'error' && reports.length === 0 && !canShowValuationPreview && !serviceFacts) {
         return (
             <Alert variant="destructive" role="alert">
                 <AlertTitle>Financial analysis failed</AlertTitle>
@@ -590,7 +595,7 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
         );
     }
 
-    if (artifactError && !hasPreview) {
+    if (artifactError && !canShowValuationPreview && !serviceFacts) {
         const message = artifactError instanceof Error
             ? artifactError.message
             : 'The financial report could not be loaded.';
@@ -605,7 +610,7 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
         );
     }
 
-    if (status !== 'done' && reports.length === 0 && !hasPreview) {
+    if (status !== 'done' && reports.length === 0 && !canShowValuationPreview && !serviceFacts) {
         return (
             <AgentLoadingState
                 type="full"
@@ -627,7 +632,7 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
                     <h3 className="text-xs uppercase tracking-[0.2em] font-bold text-muted-foreground">Financial Data Matrix</h3>
                 </div>
                 <div className="flex items-center gap-2">
-                    {modelTypeDisplay && (
+                    {hasValuationServiceProjection && modelTypeDisplay && (
                         <Badge variant="outline">
                             Model: {modelTypeDisplay.label} ({modelTypeDisplay.code})
                         </Badge>
@@ -642,7 +647,7 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
                 </div>
             </div>
 
-            {artifactError && hasPreview ? (
+            {artifactError && canShowValuationPreview ? (
                 <ArtifactLoadError
                     title="Full financial report unavailable"
                     error={artifactError instanceof Error
@@ -655,7 +660,7 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
             ) : null}
 
             {/* Preview Section - Valuation & Metrics */}
-            {hasPreview && (
+            {canShowValuationPreview && (
                 <div className="space-y-4 ">
                     {valuationScore !== undefined && (
                         <Card className="flex flex-wrap items-center justify-between gap-3 p-4">
@@ -1351,6 +1356,16 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
                         ))}
                     </div>
                 </div>
+            )}
+
+            {isFactsOnlyProjection && (
+                <Alert role="status">
+                    <BarChart3 aria-hidden="true" className="size-4 text-muted-foreground" />
+                    <AlertTitle>Valuation not requested</AlertTitle>
+                    <AlertDescription>
+                        This run provides snapshot-bound facts only. No valuation assumptions or calculation were requested.
+                    </AlertDescription>
+                </Alert>
             )}
 
             {serviceFacts ? (
