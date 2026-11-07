@@ -599,6 +599,7 @@ def resolve_canonical_facts(
 ) -> tuple[CanonicalFactV1, ...]:
     """Resolve stored facts through one shared, deterministic PIT policy."""
 
+    candidates = tuple(candidates)
     source_records = {item.content_hash: item for item in snapshot.source_records}
     requested = set(required_fields)
     eligible: list[CanonicalFactV1] = []
@@ -637,35 +638,57 @@ def resolve_canonical_facts(
             continue
         eligible.append(fact)
 
-    fact_groups: dict[tuple[object, ...], list[CanonicalFactV1]] = {}
-    for fact in eligible:
-        fact_groups.setdefault(_canonical_fact_key(fact, snapshot), []).append(fact)
-
-    selected_by_key: list[CanonicalFactV1] = []
-    for group in fact_groups.values():
-        chosen, key_rejections = _select_canonical_fact_key(group)
-        rejected_reasons.update(key_rejections)
-        selected_by_key.append(chosen)
-
-    filing_groups: dict[tuple[str | None, str | None, str], list[CanonicalFactV1]] = {}
-    for fact in selected_by_key:
-        filing_key = (
-            fact.accession_number,
-            fact.filing_version,
-            fact.source.content_hash,
-        )
-        filing_groups.setdefault(filing_key, []).append(fact)
-    selected_by_filing: list[CanonicalFactV1] = []
-    for group in filing_groups.values():
-        chosen, key_rejections = _select_latest_period_in_filing(group)
-        rejected_reasons.update(key_rejections)
-        selected_by_filing.append(chosen)
-
     resolved: list[CanonicalFactV1] = []
     for field in required_fields:
-        field_facts = [
-            fact for fact in selected_by_filing if fact.normalized_field == field
-        ]
+        field_candidates = tuple(
+            fact for fact in eligible if fact.normalized_field == field
+        )
+        consolidated_candidates = tuple(
+            fact
+            for fact in eligible
+            if fact.normalized_field == field
+            and not fact.context.dimensions
+            and fact.context.consolidation_scope == "consolidated"
+        )
+        if not consolidated_candidates:
+            raise SnapshotError(
+                "FACT_CONFLICT",
+                f"no unique eligible consolidated fact is available for {field}",
+            )
+        rejected_reasons.update(
+            {
+                fact.fact_id: "non_consolidated_or_dimensional_candidate"
+                for fact in field_candidates
+                if fact not in consolidated_candidates
+            }
+        )
+
+        fact_groups: dict[tuple[object, ...], list[CanonicalFactV1]] = {}
+        for fact in consolidated_candidates:
+            fact_groups.setdefault(_canonical_fact_key(fact, snapshot), []).append(fact)
+        selected_by_key: list[CanonicalFactV1] = []
+        for group in fact_groups.values():
+            chosen, key_rejections = _select_canonical_fact_key(group)
+            rejected_reasons.update(key_rejections)
+            selected_by_key.append(chosen)
+
+        filing_groups: dict[
+            tuple[str | None, str | None, str], list[CanonicalFactV1]
+        ] = {}
+        for fact in selected_by_key:
+            filing_key = (
+                fact.accession_number,
+                fact.filing_version,
+                fact.source.content_hash,
+            )
+            filing_groups.setdefault(filing_key, []).append(fact)
+        selected_by_filing: list[CanonicalFactV1] = []
+        for group in filing_groups.values():
+            chosen, key_rejections = _select_latest_period_in_filing(group)
+            rejected_reasons.update(key_rejections)
+            selected_by_filing.append(chosen)
+
+        field_facts = selected_by_filing
         if not field_facts:
             raise SnapshotError(
                 "FACT_NOT_FOUND",
