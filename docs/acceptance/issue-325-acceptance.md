@@ -953,3 +953,57 @@ this exact workspace route before claiming #325 acceptance.
 retrieval. The next owning-layer change is to restore Fundamental's artifact
 persistence through the shared artifact storage port and add a production-wiring
 regression test before rerunning the live route.
+
+## Exact-head responsive UI checkpoint
+
+- Date: 2026-11-08 (local). Code under test: `c0e2a5c6617204a114f06d4d6568b30c4b4605fa`
+  (`fix(#325): constrain workspace report width`).
+- The workspace report row now carries `min-w-0`. Before this change, the
+  hidden desktop panels left the mobile grid row at 455.5px wide inside a
+  390px viewport, which clipped report helper text, status alerts, and
+  snapshot metadata at the page edge. The change lets the report panel inherit
+  the viewport width; the facts table keeps its existing local horizontal
+  scroll container for its five-column desktop shape.
+- Static checks on the exact commit:
+
+  | Command | Result |
+  | --- | --- |
+  | `npm run lint` in `frontend/` | exit 0 |
+  | `npm run typecheck` in `frontend/` | exit 0 |
+  | `npm run test -- --run src/features/workspace/workspace-page.test.tsx src/features/workspace/outputs/fundamental-analysis/FinancialTable.test.tsx src/features/workspace/outputs/fundamental-analysis/FundamentalAnalysisOutput.test.tsx` | exit 0; 3 files, 33 tests passed |
+  | `git diff --check` | exit 0 |
+  | frontend Docker production build | exit 0; image `sha256:a9b28f004985f28368996cf8b4511c15ddff1958908c716f632011ac465d4e6f` |
+  | frontend container health | healthy |
+
+- Live route: `http://127.0.0.1:3000/workspace?thread_id=thread_1794086274214&run_id=e2c1b17a-321c-41df-b5b5-6b2dedc0e7a2`.
+  The service-backed Fundamental artifact remained
+  `85bf2cb3-081b-4c5b-8a5f-c021017ec91d`, with snapshot
+  `snapshot-82c9a009e0dd280f7d2e64d05b047262` and snapshot manifest
+  `e54c631839298d340b1737bb661c7e0d05f7abef4a5e2bc17cf3acca42b9a698`.
+- At viewport `390x844`, browser measurement reported
+  `document.body.scrollWidth=390` and `document.documentElement.scrollWidth=390`.
+  Report evidence and Fundamental service facts each occupied `x=16..374`
+  (`358px`), and the valuation status alert also stayed within that range.
+  The table's inner wrapper retained its intended `850px` content width and
+  handled the extra columns with local horizontal scrolling; it did not widen
+  the document. The screenshot showed wrapped report helper text, valuation
+  explanation, snapshot/manifest metadata, fact IDs, and values without
+  page-level clipping.
+- At viewport `1440x900`, document and body scroll widths both equaled
+  `1440px`; the Fundamental report, facts matrix, snapshot metadata, and
+  valuation status were visible in the desktop panel.
+- Keyboard acceptance: focusing `Inspect Revenue evidence` and pressing
+  `Enter` opened the Evidence inspector. It displayed the source URL, period,
+  confidence, fact ID, concept, accession, filed/available/captured timestamps,
+  parser, taxonomy, source hash, snapshot ID, snapshot manifest digest, unit,
+  and issue codes. Provenance fields absent from the artifact were rendered as
+  `Unavailable` rather than inferred.
+
+### Diagnostic result
+
+The responsive report layout and keyboard evidence flow pass on the exact
+frontend checkpoint. The overall workspace run still ended independently in
+Debate with the known LLM provider `upstream_unavailable` / HTTP 502 failure;
+that external failure is not a Fundamental report rendering failure. Issue
+#325 remains incomplete until the remaining exact-head service/workflow
+acceptance and release gates are rerun and recorded.
