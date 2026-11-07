@@ -45,7 +45,7 @@ are listed separately so cleanup can prove they disappear.
 | Agent SEC/XBRL acquisition | `capabilities/financial_statements/infrastructure/sec_xbrl/`, `capabilities/forward_signals/infrastructure/sec_xbrl/`, and their old provider imports | No default production wiring. Keep only for migration tests until service-backed request production and #325 evidence replace them; then delete or move to an explicit archive. |
 | Report artifact persistence | `application/workflow_orchestrator/financial_health_flow.py`, `state_updates.py`, `capabilities/artifacts_provenance/`, and `services/model_selection_artifact_service.py` | The default health flow no longer writes reports; model-selection read/write was removed in `dabc98dc`. Debate no longer loads this artifact kind; the repository is retained only for explicit artifact-contract tests and historical migration evidence. |
 | Legacy valuation path | `application/workflow_orchestrator/valuation_flow.py`, `services/valuation_execution_context_service.py`, and report snapshot helpers | Removed in the next cleanup checkpoint because the default runner calls `service_valuation_flow.py`; the deleted path had no production caller. Its logging/application-service tests were deleted with it because they asserted obsolete report loading and persistence. |
-| Raw report serializers and preview adapters | `interface/workflow_orchestrator/serializers.py`, `preview_projection_service.py`, and report projection helpers | Retain only where a current contract test proves a caller-owned typed projection; remove report-shaped compatibility functions after callers migrate. |
+| Raw report serializers and preview adapters | `interface/workflow_orchestrator/serializers.py`, `preview_projection_service.py`, `mappers.py`, `formatters.py`, and model-selection report projection | Removed in `5f877d82` and `2c7a7338`; no active caller or service-contract test requires the report-shaped compatibility layer. |
 
 ## Acceptance gates still open
 
@@ -66,6 +66,49 @@ The state-contract and import-guard checkpoint is
 the production caller layers. The debate reader checkpoint is
 `88d60e2c291539626e1e81b5cb9a56a813c8f9f0`; it removes the financial report
 typed port and returns an explicit service-snapshot-unavailable issue.
+
+## Generated report cleanup decision
+
+The tracked report inventory was rechecked at commit
+`437d7909417ca9770f309a38b698e6790ffffc4a` with
+`git ls-files finance-agent-core/reports`. The following files are disposable
+Agent Core diagnostics: they are exploratory cohort slices, benchmark output,
+tuning trials, or unversioned local calibration output. No active workflow, CI
+job, test, or acceptance record reads them, and they do not contain
+service-owned canonical facts or raw filing bytes:
+
+- `reports/fb005_consensus_cohort_slice3.json`
+- `reports/fb005_consensus_cohort_slice4.json`
+- `reports/fb005_consensus_cohort_slice5.json`
+- `reports/fb005_consensus_cohort_slice5b.json`
+- `reports/fb005_consensus_cohort_slice6.json`
+- `reports/fb005_consensus_cohort_slice7.json`
+- `reports/fb005_msft_replay_slice7.json`
+- `reports/forward_signal_calibration.mapping.ci.json`
+- `reports/forward_signal_calibration_dataset_ci.jsonl`
+- `reports/fundamental_cohort_replay_s4_xbrl_only.json`
+- `reports/fundamental_mc_kernel_profile.json`
+- `reports/fundamental_mc_kernel_profile.md`
+- `reports/fundamental_replay_tuning_trial_2026-03-07.json`
+- `reports/s4_cohort_replay_report.json`
+
+Their rebuild sources remain checked in: the forward-signal calibration replay
+fixture and pipeline under
+`tests/fixtures/forward_signal_calibration_pipeline_replay_fixture.json` and
+`scripts/run_forward_signal_calibration_pipeline.py`, deterministic replay
+inputs under `tests/fixtures/fundamental_replay_inputs/` with the replay-check
+scripts, and the Monte Carlo benchmark under
+`scripts/profile_monte_carlo_batch_kernels.py`. The cleanup removes only the
+generated outputs; it does not reset fixtures, service calibration, mappings,
+release manifests, or retained acceptance reports.
+
+The following report classes remain retained because runbooks, CI, or historical
+acceptance evidence reference them: versioned backtest/release-gate reports,
+versioned replay manifests/checks/cohort gates, cohort release checklists, the
+versioned forward-signal calibration mapping/dataset pair, and the runbook-linked
+S4 calibration input and unversioned local defaults. These are not active
+workspace inputs; they are retained evidence with their existing producer
+paths.
 
 ## Evidence for this checkpoint
 
