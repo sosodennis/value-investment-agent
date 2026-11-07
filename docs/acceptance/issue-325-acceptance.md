@@ -713,3 +713,23 @@ the owning SEC boundary. Blocker #345 tracks this service-owned compatibility
 gap. The independent Debate provider outage also prevents
 the workspace run from reaching a completed terminal state. No acceptance
 criterion is marked passed by this probe.
+
+## Runtime restoration checkpoint
+
+- After the temporary DQC 2026 compatibility probe, the isolated project
+  `value-investment-agent-issue-325-fundamental` was recreated without
+  removing its PostgreSQL named volume.
+- The Fundamental service now uses the pinned DQC 2024 ruleset
+  `/private/tmp/issue312-validation-runtime-v2/dqc_us_rules-31.0.3/dqc_us_rules/dqc-us-2024-V31-ruleset.zip`
+  with SHA-256
+  `0eb33d095ac0ae08f01c508526b35523534659d661bc62873ac1400deec87930`.
+  The taxonomy cache remains `us-gaap-2023-2024` with directory hash
+  `0accc5ab0d4ce6674083bd82cf878a8619b3ac441da8600e0a03aefb8432a3a3`.
+- `docker compose -p value-investment-agent-issue-325-fundamental ... config
+  --quiet` exited 0 before recreation. PostgreSQL and Fundamental service
+  were healthy afterwards, and `GET http://127.0.0.1:18690/readyz` returned
+  HTTP 200 with `{"status":"ready","contract_version":"internal.v1"}`.
+- PostgreSQL retained `snapshot_manifests=8` and `canonical_facts=280`; no
+  volume or repository data was deleted. This restores the documented pinned
+  runtime but does not resolve #345 or mark any #325 acceptance criterion
+  passed.
