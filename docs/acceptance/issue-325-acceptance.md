@@ -424,6 +424,39 @@ The exact cleanup checkpoint that must be applied before the next live run is
 PR #340 branch `codex/issue-327-legacy-cleanup`, currently at
 `cfadb22e4779256ba22d3af6b708ad3fd66b38af`.
 
+## Exact mapping boundary probe
+
+- Date: 2026-11-07.
+- Code under test: `ac456d070103d910004d99a0cd1441dc70179091`, branch
+  `codex/issue-325-fundamental-ui`.
+- Compose project: `value-investment-agent-issue-325-fundamental`; the
+  Fundamental service and PostgreSQL containers were healthy and
+  `/readyz` returned HTTP 200.
+- A signed `internal.v1` `POST /v1/identity/resolve` for `MSFT` using the
+  Personal organization `43f50f0f-c6ff-4fb2-b4d2-ed366bc55613` returned HTTP
+  200 and resolved CIK `0000789019`, US-GAAP, and USD.
+- The following signed `POST /v1/data/ingestions` used the exact producer
+  request shape: required fields `revenue`, `operating_income`, `cash`,
+  `debt`, and `diluted_shares`, mapping IDs `sec-us-gaap-v1-<field>`, the
+  pinned `2.47.4` / `sec-efm-us-dqc-v31.0.3` runtime, and the installed
+  `sec-us-gaap-2023-2024-public-bundle` taxonomy. It returned HTTP 422 with
+  stable code `FACT_MAPPING_UNRESOLVED` and message
+  `requested mapping release is unavailable`.
+- The Fundamental PostgreSQL database had zero `mapping_decisions`,
+  `sec_ingestion_acquisitions`, `snapshot_manifests`, `canonical_facts`,
+  `snapshot_facts`, `release_manifests`, and `active_data_release_pointers`.
+  The source audit recorded the identity resolution and the failed ingestion
+  correlation `issue325-debug-ingestion-20261107-2`.
+
+### Diagnostic result
+
+**Incomplete and blocked.** The signed identity boundary and pinned SEC
+runtime are reachable, but the producer's mapping IDs have no corresponding
+service-owned mapping records in the disposable verification database. No SEC
+filing was acquired and no snapshot or fact was published. The next checkpoint
+must provision the canonical mapping release through the Fundamental-owned
+metadata path, then rerun the same request before changing application code.
+
 ## Exact combined service identity boundary probe
 
 - Date: 2026-11-07.
