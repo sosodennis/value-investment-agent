@@ -43,7 +43,7 @@ function fact(overrides: Partial<FundamentalCanonicalFact>): FundamentalCanonica
         issuer_id: 'issuer-1',
         concept: 'us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax',
         normalized_field: 'revenue',
-        value: { kind: 'numeric', raw: '12.5', numeric: 12.5 },
+        value: { kind: 'numeric', raw: '12500', numeric: 12500 },
         unit: 'USD',
         scale: 3,
         currency: 'USD',
@@ -173,6 +173,29 @@ describe('FinancialTable', () => {
         expect(rowText.findIndex((row) => row.includes('fact-revenue'))).toBeLessThan(
             rowText.findIndex((row) => row.includes('fact-quarter'))
         );
+    });
+
+    it('renders canonical base-unit values without applying source scale twice', () => {
+        render(
+            <FinancialTable
+                facts={{
+                    ...facts,
+                    facts: [fact({
+                        fact_id: 'fact-live-revenue',
+                        normalized_field: 'reported_revenue',
+                        value: {
+                            kind: 'numeric',
+                            raw: '245122000000',
+                            numeric: 245122000000,
+                        },
+                        scale: 6,
+                    })],
+                }}
+            />
+        );
+
+        screen.getByText('245,122,000,000');
+        expect(screen.queryByText('245,122,000,000,000,000')).toBeNull();
     });
 
     it('surfaces non-verified snapshot quality and issue codes', () => {

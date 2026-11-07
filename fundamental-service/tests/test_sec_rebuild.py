@@ -386,6 +386,7 @@ def test_captured_sec_bytes_rebuild_to_point_in_time_canonical_fact(tmp_path: Pa
     selection = select_canonical_fact(revenue, datetime(2025, 1, 1, tzinfo=UTC))
     assert selection.fact is not None
     assert selection.fact.value == 391035000000
+    assert selection.fact.scale == 6
     assert selection.fact.source.content_hash == filing_record["sha256"]
     assert selection.fact.context.context_id
     assert selection.fact.available_at <= datetime(2025, 1, 1, tzinfo=UTC)

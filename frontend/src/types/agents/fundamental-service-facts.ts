@@ -64,6 +64,7 @@ export interface FundamentalMissingValue {
 
 export interface FundamentalNumericValue {
     kind: 'numeric';
+    /** Canonical service value in base units; `scale` remains source metadata. */
     raw: string;
     numeric: number;
 }

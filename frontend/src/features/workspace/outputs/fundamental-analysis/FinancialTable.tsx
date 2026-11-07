@@ -145,7 +145,7 @@ function FactRow({
     artifactReference?: ArtifactReference | null;
     onSelectEvidence?: (item: EvidenceSelection) => void;
 }) {
-    const value = formatFactValue(fact.value, fact.scale);
+    const value = formatFactValue(fact.value);
     const period = fact.period.kind === 'instant'
         ? `Instant · ${fact.period.instant}`
         : `${fact.period.start} → ${fact.period.end}`;
@@ -238,12 +238,11 @@ function buildFactEvidence({
     };
 }
 
-function formatFactValue(value: FundamentalFactValue, scale: number): string {
+function formatFactValue(value: FundamentalFactValue): string {
     switch (value.kind) {
         case 'numeric': {
-            const scaled = value.numeric * (10 ** scale);
-            return Number.isFinite(scaled)
-                ? scaled.toLocaleString(undefined, { maximumFractionDigits: 6 })
+            return Number.isFinite(value.numeric)
+                ? value.numeric.toLocaleString(undefined, { maximumFractionDigits: 6 })
                 : value.raw;
         }
         case 'text':
