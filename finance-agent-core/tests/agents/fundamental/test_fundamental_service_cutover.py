@@ -606,9 +606,6 @@ async def test_cutover_resolves_snapshot_and_facts_through_service_boundary() ->
         "fact_ids"
     ] == ["fact-revenue"]
     assert result.update["fundamental_analysis"]["input_digest"] == "a" * 64
-    assert result.update["fundamental_analysis"]["financial_reports_artifact_id"] == (
-        "service-valuation-artifact"
-    )
     assert result.update["artifact_references"]["financial_reports"]["artifact_id"] == (
         "service-valuation-artifact"
     )

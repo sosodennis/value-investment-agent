@@ -1279,7 +1279,6 @@ async def run_service_valuation_flow(
                     {
                         "valuation_status": "not_requested",
                         "quality_status": facts_projection["quality"]["facts_status"],
-                        "financial_reports_artifact_id": artifact_id,
                         "fundamental_service": facts_projection,
                     }
                 )
@@ -1562,7 +1561,6 @@ async def run_service_valuation_flow(
             "quality_status": projection["quality_status"],
             "input_digest": projection["input_digest"],
             "result_hash": projection["result_hash"],
-            "financial_reports_artifact_id": artifact_id,
             "fundamental_service": projection,
             "assumption_breakdown": {
                 "source": "fundamental-service",
