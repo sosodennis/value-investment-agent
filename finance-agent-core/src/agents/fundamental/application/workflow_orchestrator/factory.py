@@ -14,10 +14,19 @@ from src.agents.fundamental.application.workflow_orchestrator.orchestrator impor
 from src.agents.fundamental.capabilities.model_selection.public import (
     select_valuation_model,
 )
+from src.artifacts.public import ArtifactStoragePort, build_default_artifact_service
 
 
-def build_fundamental_orchestrator() -> FundamentalOrchestrator:
-    return FundamentalOrchestrator()
+def build_fundamental_orchestrator(
+    *, artifact_storage: ArtifactStoragePort | None = None
+) -> FundamentalOrchestrator:
+    return FundamentalOrchestrator(
+        artifact_storage=(
+            artifact_storage
+            if artifact_storage is not None
+            else build_default_artifact_service()
+        )
+    )
 
 
 @dataclass(frozen=True)

@@ -10,6 +10,9 @@ import pytest
 from src.agents.fundamental.application.fundamental_service_port import (
     FundamentalServiceFailure,
 )
+from src.agents.fundamental.application.workflow_orchestrator.orchestrator import (
+    FundamentalOrchestrator,
+)
 from src.agents.fundamental.application.workflow_orchestrator.service_valuation_flow import (  # noqa: E501
     read_service_valuation_input,
     run_service_valuation_flow,
@@ -46,6 +49,31 @@ class _Runtime:
             {"data": data, "produced_by": produced_by, "key_prefix": key_prefix}
         )
         return "service-valuation-artifact"
+
+
+class _ArtifactStorage:
+    def __init__(self) -> None:
+        self.saved_calls: list[dict[str, object]] = []
+
+    async def save_artifact(
+        self,
+        *,
+        data: dict[str, object],
+        artifact_type: str,
+        produced_by: str,
+        key_prefix: str | None = None,
+        thread_id: str | None = None,
+    ) -> str:
+        self.saved_calls.append(
+            {
+                "data": data,
+                "artifact_type": artifact_type,
+                "produced_by": produced_by,
+                "key_prefix": key_prefix,
+                "thread_id": thread_id,
+            }
+        )
+        return "production-service-facts-artifact"
 
 
 class _Client:
@@ -719,6 +747,43 @@ async def test_cutover_publishes_snapshot_facts_without_fabricating_valuation() 
     assert "valuation_trace" not in service_artifact
     assert "valuation_input" not in service_artifact
     assert artifact["financial_reports"] == []
+
+
+@pytest.mark.asyncio
+async def test_production_orchestrator_persists_facts_artifact() -> None:
+    client = _FactsOnlyClient(snapshot_timestamp="2026-11-01T00:00:00Z")
+    storage = _ArtifactStorage()
+    orchestrator = FundamentalOrchestrator(artifact_storage=storage)
+    token = set_request_principal(
+        InternalPrincipal(
+            subject_id="caller-1", organization_id="org-1", membership_id="membership-1"
+        )
+    )
+    try:
+        result = await orchestrator.run_service_valuation(
+            {
+                "company_profile": CompanyProfile(ticker="AAPL", name="Apple Inc."),
+                "fundamental_analysis": {"model_type": "dcf_standard"},
+            },
+            client=client,
+            request_approval_fn=lambda request: pytest.fail(
+                "facts-only reporting must not request valuation approval"
+            ),
+        )
+    finally:
+        reset_request_principal(token)
+
+    assert len(storage.saved_calls) == 1
+    saved = storage.saved_calls[0]
+    assert saved["artifact_type"] == "financial_reports"
+    assert saved["produced_by"] == "fundamental_analysis.service_facts"
+    assert saved["key_prefix"] == "fundamental_service_facts"
+    artifact = saved["data"]
+    assert isinstance(artifact, dict)
+    FinancialReportsArtifactData.model_validate(artifact)
+    assert result.update["artifact_references"]["financial_reports"]["artifact_id"] == (
+        "production-service-facts-artifact"
+    )
 
 
 @pytest.mark.parametrize(

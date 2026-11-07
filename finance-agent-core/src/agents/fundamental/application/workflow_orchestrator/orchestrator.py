@@ -19,6 +19,7 @@ from src.agents.fundamental.application.workflow_orchestrator.service_valuation_
 from src.agents.fundamental.capabilities.model_selection.public import (
     FundamentalSelectionReport,
 )
+from src.artifacts.public import ARTIFACT_KIND_FINANCIAL_REPORTS, ArtifactStoragePort
 from src.shared.cross_agent.domain.market_identity import CompanyProfile
 from src.shared.kernel.types import JSONObject
 from src.shared.kernel.workflow_contracts import WorkflowNodeResult
@@ -29,6 +30,22 @@ FundamentalNodeResult = WorkflowNodeResult
 @dataclass(frozen=True)
 class FundamentalOrchestrator:
     """Coordinate the typed Fundamental caller workflow."""
+
+    artifact_storage: ArtifactStoragePort
+
+    async def save_financial_reports(
+        self,
+        *,
+        data: JSONObject,
+        produced_by: str,
+        key_prefix: str | None = None,
+    ) -> str:
+        return await self.artifact_storage.save_artifact(
+            data=data,
+            artifact_type=ARTIFACT_KIND_FINANCIAL_REPORTS,
+            produced_by=produced_by,
+            key_prefix=key_prefix,
+        )
 
     async def run_financial_health(
         self,
