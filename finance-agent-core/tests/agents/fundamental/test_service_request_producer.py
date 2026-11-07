@@ -190,6 +190,7 @@ async def test_producer_resolves_identity_then_ingests_and_pins_request() -> Non
         "diluted_shares",
     ]
     assert prepared.snapshot_selector["identity"] == prepared.identity
+    assert prepared.snapshot_selector["release_profile_id"] == "sec-public-pit-v1"
     assert prepared.snapshot_selector["valuation_timestamp"] == "2026-11-07T00:00:00Z"
     assert prepared.valuation_request is not None
     assert prepared.valuation_request["historical_facts"] == [
@@ -214,6 +215,7 @@ async def test_producer_returns_explicit_missing_assumptions_reason() -> None:
     assert prepared.valuation_request is None
     assert prepared.reason == "caller valuation assumptions are required"
     assert prepared.ingestion["snapshot_id"] == "snapshot-aapl-1"
+    assert prepared.snapshot_selector["release_profile_id"] == "sec-public-pit-v1"
 
 
 @pytest.mark.asyncio

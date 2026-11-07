@@ -40,6 +40,7 @@ _BASE_REQUIRED_FIELDS = (
 _TRANSITION_REQUIRED_FIELDS = _BASE_REQUIRED_FIELDS + ("filed_operating_evidence",)
 _INGESTION_POLICY = "sec-pit-v1"
 _SNAPSHOT_POLICY = "pit-v1"
+_DATA_RELEASE_PROFILE_ID = "sec-public-pit-v1"
 _COVERAGE_PROFILE = "us-gaap-public-v1"
 _LEGAL_USE_PROFILE = "sec-public-us-v1"
 _PARSER_VERSION = "2.47.4"
@@ -317,6 +318,7 @@ async def prepare_service_valuation_request(
     )
     snapshot_selector: JSONObject = {
         "contract_version": "fundamental.v1",
+        "release_profile_id": _DATA_RELEASE_PROFILE_ID,
         "identity": identity,
         "valuation_timestamp": valuation_timestamp.isoformat().replace("+00:00", "Z"),
         "source_selection_policy": _SNAPSHOT_POLICY,
