@@ -476,3 +476,46 @@ historical EUR facts. This is an owning Fundamental identity-policy defect,
 not a browser workaround or an SEC fallback opportunity. A linked blocker is
 required before the MSFT service-backed acceptance can proceed. Blocker #341
 tracks the service-owned policy fix and is linked to #336 and #325.
+
+## Exact MSFT identity, ingestion, and release boundary probe
+
+- Date: 2026-11-07.
+- Code under test: #341 checkpoint `ea4f4264`; the isolated Fundamental image
+  was `sha256:98f4fffb33403bc0ee2a46f6971b4e86dc7997c7abc5d78e987576943cd5fbcb`.
+  The service project was `value-investment-agent-341-msft-identity` with
+  PostgreSQL on `18797` and the service on `18796`; both containers were
+  healthy and `/readyz` returned `{"status":"ready","contract_version":"internal.v1"}`.
+- Signed `POST /v1/identity/resolve` for `MSFT` returned HTTP 200 with issuer
+  `0000789019`, `MICROSOFT CORP`, US-GAAP/USD, resolution digest
+  `ccd17e08802ee2216c0d751f2407a77421e7943ea3dffc57f16bdf17847e4cf4`, and the
+  SEC source hashes already recorded for the corrected identity path.
+- Signed `POST /v1/data/ingestions` with accession
+  `0000950170-24-087843`, valuation cutoff `2025-06-30T00:00:00Z`, and the
+  approved `sec-revenue-v1` mapping returned HTTP 200 `status=created`,
+  `quality_status=verified`, snapshot
+  `snapshot-23146d7e2b74d2d512cbc714181c1192`, manifest digest
+  `d77bfbd757323f330de38b69aea03ca4a742b88818becc0f799d98d92c9b2311`,
+  validation profile digest
+  `639140b39584b3ee3276f09a011403dec911efe41ea1b98773f5f770bd5200d4`, and
+  57 canonical fact IDs. Reported parser issue codes were
+  `EFM.5.02.05.14.hidden-fact-eligible-for-transform`, `EFM.6.05.42`, and
+  `ixbrl:selfClosedTagWarning`; no blocking finding was reported.
+- An immutable release candidate was published and activated through the
+  authenticated release routes. Profile `sec-public-pit-msft-issue341` was
+  active at revision 1 with manifest digest
+  `846c625f1d051260a6016e4f948911edc5710d4bde05388df0c4c610c48edd15`.
+- Signed `POST /v1/data/snapshots/resolve` for that profile and the same MSFT
+  identity returned HTTP 422 `FACT_CONFLICT` with
+  `canonical fact selection is not verified for this snapshot`. The 57 facts
+  all use the normalized field `revenue`; they include both the consolidated
+  dimensionless total and product/geography dimensional facts at the same
+  availability timestamp. No Agent or browser fallback was used.
+
+### Diagnostic result
+
+**Incomplete and blocked.** The identity, ingestion, immutable snapshot, and
+release activation boundaries now execute with real SEC data. Field-level
+snapshot resolution still fails closed because the ingestion publication keeps
+segment facts under the same normalized field without selecting the unique
+consolidated fact for this request. Blocker #342 tracks the service-owned
+selection fix and is linked to #312, #321, and #325.
