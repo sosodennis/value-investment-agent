@@ -522,6 +522,7 @@ class _FactsOnlyClient(_Client):
                 result=result,
             )
         if operation == "resolve_snapshot":
+            self.facts_valuation_timestamp = str(input_payload["valuation_timestamp"])
             self.resolved_snapshot = {
                 "contract_version": "fundamental.v1",
                 "snapshot_id": "snapshot-aapl-resolved",
@@ -663,7 +664,6 @@ async def test_cutover_publishes_snapshot_facts_without_fabricating_valuation() 
 
     assert [operation for operation, _ in client.calls] == [
         "resolve_identity",
-        "ingest_sec_data",
         "resolve_snapshot",
     ]
     assert client.facts_calls == [
@@ -737,7 +737,6 @@ async def test_cutover_rejects_facts_outside_the_resolved_snapshot(
 
     assert [operation for operation, _ in client.calls] == [
         "resolve_identity",
-        "ingest_sec_data",
         "resolve_snapshot",
     ]
     assert len(client.facts_calls) == 1

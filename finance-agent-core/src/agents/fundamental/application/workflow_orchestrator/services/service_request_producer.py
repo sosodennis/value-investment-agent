@@ -263,7 +263,7 @@ async def prepare_service_valuation_request(
     )
     fiscal_period_selector = (
         request_timing.fiscal_period_selector.model_dump(mode="json")
-        if request_timing is not None
+        if request_timing is not None and request is not None
         else None
     )
 
@@ -297,6 +297,31 @@ async def prepare_service_valuation_request(
             status_code=502,
         )
     required_fields = _required_fields(model_id)
+    snapshot_selector: JSONObject = {
+        "contract_version": "fundamental.v1",
+        "release_profile_id": _DATA_RELEASE_PROFILE_ID,
+        "identity": identity,
+        "valuation_timestamp": valuation_timestamp.isoformat().replace("+00:00", "Z"),
+        **(
+            {"fiscal_period_selector": fiscal_period_selector}
+            if fiscal_period_selector is not None
+            else {}
+        ),
+        "source_selection_policy": _SNAPSHOT_POLICY,
+        "coverage_profile": _COVERAGE_PROFILE,
+        "required_fields": list(required_fields),
+    }
+    if request is None:
+        # A report-only request reads the already activated immutable release.
+        # Ingesting here would create a new snapshot outside that release and
+        # make the subsequent release-bound resolution fail closed.
+        return PreparedServiceValuation(
+            valuation_request=None,
+            identity=identity,
+            ingestion={},
+            snapshot_selector=snapshot_selector,
+            reason="caller valuation assumptions are required",
+        )
     ingestion = _validate_ingestion_result(
         (
             await client.execute(
@@ -334,28 +359,6 @@ async def prepare_service_valuation_request(
         identity=identity,
         valuation_timestamp=valuation_timestamp,
     )
-    snapshot_selector: JSONObject = {
-        "contract_version": "fundamental.v1",
-        "release_profile_id": _DATA_RELEASE_PROFILE_ID,
-        "identity": identity,
-        "valuation_timestamp": valuation_timestamp.isoformat().replace("+00:00", "Z"),
-        **(
-            {"fiscal_period_selector": fiscal_period_selector}
-            if fiscal_period_selector is not None
-            else {}
-        ),
-        "source_selection_policy": _SNAPSHOT_POLICY,
-        "coverage_profile": _COVERAGE_PROFILE,
-        "required_fields": list(required_fields),
-    }
-    if request is None:
-        return PreparedServiceValuation(
-            valuation_request=None,
-            identity=identity,
-            ingestion=ingestion,
-            snapshot_selector=snapshot_selector,
-            reason="caller valuation assumptions are required",
-        )
     prepared = dict(request)
     prepared["contract_version"] = "fundamental.v1"
     prepared["identity"] = identity

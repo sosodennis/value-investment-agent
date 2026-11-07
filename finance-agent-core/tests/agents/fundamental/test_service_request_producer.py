@@ -17,6 +17,9 @@ from src.agents.fundamental.interface.fundamental_service_contracts import (
     FundamentalIdentityResolutionV1,
     FundamentalServiceResponseV1,
 )
+from src.agents.fundamental.interface.request_contracts import (
+    FundamentalRequestTimingV1,
+)
 from src.shared.cross_agent.domain.market_identity import CompanyProfile
 from src.shared.internal_services import InternalPrincipal
 
@@ -214,8 +217,35 @@ async def test_producer_returns_explicit_missing_assumptions_reason() -> None:
 
     assert prepared.valuation_request is None
     assert prepared.reason == "caller valuation assumptions are required"
-    assert prepared.ingestion["snapshot_id"] == "snapshot-aapl-1"
+    assert prepared.ingestion == {}
     assert prepared.snapshot_selector["release_profile_id"] == "sec-public-pit-v1"
+    assert "fiscal_period_selector" not in prepared.snapshot_selector
+    assert [operation for operation, _ in client.calls] == ["resolve_identity"]
+
+
+@pytest.mark.asyncio
+async def test_facts_only_request_uses_accepted_timestamp_without_ingestion_or_fiscal_selector() -> (
+    None
+):
+    client = _Client(ingestion=_ingestion())
+    timing = FundamentalRequestTimingV1.accept(
+        {}, clock=lambda: datetime(2026, 11, 8, 0, 0, tzinfo=UTC)
+    )
+
+    prepared = await prepare_service_valuation_request(
+        _state(),
+        client=client,
+        principal=_principal(),
+        correlation_id="correlation-1",
+        deadline_at=datetime(2026, 11, 8, tzinfo=UTC),
+        request_timing=timing,
+    )
+
+    assert prepared.valuation_request is None
+    assert prepared.ingestion == {}
+    assert prepared.snapshot_selector["valuation_timestamp"] == ("2026-11-08T00:00:00Z")
+    assert "fiscal_period_selector" not in prepared.snapshot_selector
+    assert [operation for operation, _ in client.calls] == ["resolve_identity"]
 
 
 @pytest.mark.asyncio
@@ -231,13 +261,14 @@ async def test_facts_only_projection_uses_base_evidence_for_growth_model() -> No
     )
 
     assert prepared.valuation_request is None
-    assert client.calls[1][1]["required_fields"] == [
+    assert prepared.snapshot_selector["required_fields"] == [
         "revenue",
         "operating_income",
         "cash",
         "debt",
         "diluted_shares",
     ]
+    assert [operation for operation, _ in client.calls] == ["resolve_identity"]
 
 
 @pytest.mark.asyncio
