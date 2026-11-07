@@ -19,7 +19,6 @@ class DebateSourceReaderPort(Protocol):
     async def load_debate_source_data(
         self,
         *,
-        financial_reports_artifact_id: str | None,
         news_artifact_id: str | None,
         technical_artifact_id: str | None,
     ) -> DebateSourceData: ...

@@ -4,12 +4,6 @@ from importlib import import_module
 from types import ModuleType
 
 FACADE_EXPORTS: dict[str, set[str]] = {
-    "artifacts_provenance": {
-        "FundamentalArtifactModel",
-        "IFundamentalReportRepo",
-        "fundamental_artifact_repository",
-        "parse_fundamental_artifact_model",
-    },
     "core_valuation": {
         "ParamBuildResult",
         "ParamBuilderPayload",
@@ -33,7 +27,6 @@ FACADE_EXPORTS: dict[str, set[str]] = {
         "TraceableProvenance",
         "TraceableValue",
         "ValuationModelRuntime",
-        "fetch_financial_reports_payload",
         "parse_calculation_metrics",
         "parse_financial_reports_model",
         "parse_financial_statements_payload",
@@ -50,12 +43,8 @@ FACADE_EXPORTS: dict[str, set[str]] = {
         "ForwardSignalPolicyResult",
         "ForwardSignalSourceLocator",
         "apply_forward_signal_policy",
-        "build_finbert_direction_reviewer",
-        "build_forward_looking_filter",
         "calibrate_signal_basis_points",
         "extract_forward_signals",
-        "extract_forward_signals_from_sec_text",
-        "extract_forward_signals_from_xbrl_reports",
         "parse_forward_signal_calibration_config",
         "parse_forward_signals",
         "serialize_forward_signals",
@@ -64,7 +53,6 @@ FACADE_EXPORTS: dict[str, set[str]] = {
         "DEFAULT_SCORING_WEIGHTS",
         "MODEL_SPECS",
         "FinancialHealthInsights",
-        "FundamentalPreviewMetrics",
         "FundamentalSelectionReport",
         "ModelCandidate",
         "ModelSelectionResult",
@@ -76,9 +64,6 @@ FACADE_EXPORTS: dict[str, set[str]] = {
         "build_model_selection_reasoning",
         "calculate_revenue_cagr",
         "extract_latest_health_insights",
-        "extract_latest_preview_metrics",
-        "project_selection_reports",
-        "project_selection_reports_from_models",
         "select_valuation_model",
     },
     "market_data": {
@@ -110,3 +95,14 @@ def test_market_data_public_facade_hides_infrastructure_assembly() -> None:
 
     assert not hasattr(facade, "build_market_data_service")
     assert not hasattr(facade, "YahooFinanceProvider")
+
+
+def test_fundamental_public_facades_hide_agent_owned_sec_adapters() -> None:
+    financial_statements = _load_facade("financial_statements")
+    forward_signals = _load_facade("forward_signals")
+
+    assert not hasattr(financial_statements, "fetch_financial_reports_payload")
+    assert not hasattr(forward_signals, "build_finbert_direction_reviewer")
+    assert not hasattr(forward_signals, "build_forward_looking_filter")
+    assert not hasattr(forward_signals, "extract_forward_signals_from_sec_text")
+    assert not hasattr(forward_signals, "extract_forward_signals_from_xbrl_reports")

@@ -12,8 +12,6 @@
     "NVDA"
   ],
   "latest_per_ticker": true,
-  "enable_prewarm": false,
-  "prewarm_default_years": 5,
   "min_cases": 2,
   "min_unique_tickers": 2,
   "min_pass_rate": 1.0,

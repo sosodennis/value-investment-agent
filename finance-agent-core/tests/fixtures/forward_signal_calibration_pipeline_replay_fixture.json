@@ -1,4 +1,5 @@
 {
+  "fixture_version": "forward_signal_calibration_pipeline_v1",
   "results": [
     {
       "ticker": "AAPL",

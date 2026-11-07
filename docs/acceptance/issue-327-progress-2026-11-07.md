@@ -1,0 +1,174 @@
+# Issue #327 Agent Core Ownership Audit
+
+Issue: [#327](https://github.com/sosodennis/value-investment-agent/issues/327)
+Branch: `codex/issue-327-legacy-cleanup`
+Base under audit: `9c70bf0da054f528661c7b501e627e0a22aaa3c0`
+
+> **Historical checkpoint record.** The baseline and default-wiring sections
+> below describe the state observed before the later cleanup commits on this
+> branch. They remain as acceptance evidence; they do not describe the current
+> production path. The current inventory is maintained in
+> [`issue-327-inventory-2026-11-07.md`](issue-327-inventory-2026-11-07.md).
+
+## Baseline
+
+The current branch passes the architecture guard and the focused Fundamental
+Agent suite before cleanup:
+
+```sh
+python3 scripts/architecture_guard.py
+uv run --project finance-agent-core pytest -q \
+  finance-agent-core/tests/agents/fundamental \
+  finance-agent-core/tests/test_error_handling_fundamental.py \
+  finance-agent-core/tests/test_fundamental_orchestrator_logging.py \
+  finance-agent-core/tests/test_fundamental_capability_facades.py \
+  finance-agent-core/tests/test_sec_xbrl_financial_payload_service.py
+```
+
+Results: architecture guard exit `0`; pytest exit `0`, `73 passed, 4
+warnings in 49.84s`. The warnings are third-party `edgar` deprecation
+warnings. No application failure was observed in this baseline.
+
+## Active Legacy Path (historical baseline)
+
+The live ownership problem is in the default Fundamental workflow wiring:
+
+1. `finance-agent-core/src/agents/fundamental/application/wiring.py:14-16`
+   imports the Agent-owned `fetch_financial_reports_payload` facade.
+2. `finance-agent-core/src/agents/fundamental/application/wiring.py:77-88`
+   injects that provider into the default production runner.
+3. `finance-agent-core/src/agents/fundamental/application/workflow_orchestrator/factory.py:100-134`
+   calls the injected provider from `run_financial_health` and parses its
+   financial-report payload.
+4. `finance-agent-core/src/agents/fundamental/application/workflow_orchestrator/financial_health_flow.py:53-126`
+   fetches SEC/XBRL data, extracts forward signals from those reports, and
+   persists a `financial_reports` artifact.
+5. `finance-agent-core/src/agents/fundamental/application/workflow_orchestrator/model_selection_flow.py:107-178`
+   loads that artifact for model selection; the valuation flow also carries
+   `financial_reports`/`raw_financial_reports` references.
+
+This is the path observed in the #325 live diagnostic: Agent-owned
+`sec_xbrl` requests occurred before any Fundamental service business request.
+The service database remained empty, so the report was not proven to use a
+service-owned snapshot.
+
+## Ownership Classification
+
+| Area | Current classification | Decision for #327 |
+| --- | --- | --- |
+| Fundamental service client and typed service contracts | Agent-owned boundary adapter | Retain; this is the only runtime boundary for service operations. |
+| `financial_health_flow` direct SEC/XBRL fetch and `financial_reports` artifact | Obsolete duplicate service-owned evidence path | Remove from the production runner and make the absence explicit/degraded until the service-backed request producer is available. |
+| `capabilities/financial_statements/infrastructure/sec_xbrl` parser and fetcher | Legacy Agent-owned SEC implementation | Quarantine behind tests during migration; remove active imports and fallback entrypoints first, then delete only after replacement evidence is checked in. |
+| Artifact repository `financial_reports` persistence | Legacy report artifact store | Retain only for migration tests until service facts replace its callers; remove active workflow writes/readers with their callers. |
+| Service valuation flow, trace and immutable snapshot fields | Service-owned contract projection | Retain and strengthen boundary tests; it is the replacement path. |
+| Core valuation domain calculators and typed caller assumptions | Agent-owned deterministic projection/caller inputs | Retain; no formula or policy ownership change. |
+| Calibration/replay reports and fixtures | Mixed: active regression evidence versus obsolete generated output | Inventory each class before deletion; do not delete canonical service calibration or retained audit evidence. |
+
+## Dependency and Acceptance Gap
+
+Issue #336's issuer resolver is on `main` through PR #337, but the current
+workspace run still sends only `message` unless a caller supplies a complete
+`valuation_request` (`analysis_runtime/interface/routes.py:70-75` and
+`analysis_runtime/infrastructure/langgraph_runner.py:308-319`). Therefore this
+checkpoint does not claim #325 acceptance: a service-backed snapshot, matching
+fact IDs/digest, live evidence inspector, and desktop/mobile route evidence
+remain unverified. The legacy SEC path must be removed in its owning layer
+without pretending that a missing request is a verified valuation.
+
+## Next Checkpoint
+
+Remove the default runner's direct `fetch_financial_reports_payload` injection,
+replace the financial-health behavior with a typed service-boundary/degraded
+outcome, migrate affected tests to assert no Agent-owned SEC fetch, and commit
+that focused change before broader artifact cleanup.
+
+## Default Wiring Checkpoint (historical checkpoint)
+
+Checkpoint commit: `3005b52dddcfd2183c886504078bcaea80213ee1`.
+
+The production default wiring no longer imports the Agent-owned SEC/XBRL
+fetcher, model-inference-backed SEC text signal producer, or XBRL signal
+producer. It now emits an explicit `service_snapshot_pending` degraded payload
+until a typed service-owned snapshot request is supplied. Empty financial-health
+data no longer invokes forward-signal extraction, so the old SEC text fallback
+cannot run on this path and no `financial_reports` artifact is written.
+
+The regression test patches the former SEC fetcher to raise if called, invokes
+the default financial-health node, and asserts a `model_selection` handoff with
+`service_snapshot_request_required` diagnostics and no artifact reference.
+
+| Check | Result |
+| --- | --- |
+| `python3 scripts/architecture_guard.py` | exit `0`; no boundary violations |
+| Focused default-wiring regression | exit `0`; `3 passed, 4 warnings` |
+| Fundamental Agent, orchestrator, facade, and SEC payload baseline | exit `0`; `73 passed, 4 warnings in 3.23s` |
+| Commit hooks | exit `0`; whitespace, YAML, large-file, Ruff, and Ruff format checks passed |
+
+The legacy financial-statements parser, artifact repository, and historical
+fixtures remain present for the next migration unit; no active default wiring
+references them after this checkpoint.
+
+## Subsequent Cleanup Checkpoints
+
+The later checkpoints supersede the "next migration unit" wording above while
+preserving the original evidence:
+
+- `dabc98dc`: removed the Fundamental report artifact state contract from the
+  migration callers and added import guards.
+- `88d60e2c`: removed the Debate-side legacy report reader.
+- `746acf00`: removed the uncalled legacy valuation workflow and report helpers.
+- `da010797`: removed the dead Fundamental `artifacts_provenance` repository,
+  port, parser, and tests.
+- `0eeda593`: refreshed the architecture dependency report after capability
+  removal.
+- `a1a456b5`: removed Agent-owned SEC/XBRL adapters from Fundamental public
+  facades while retaining migration evidence tests.
+
+The issue remains open because service-backed snapshot production, exact #327
+acceptance evidence, and the later #325 live workflow have not yet been
+verified on a main-based pull request.
+
+## Main-based exact-head verification checkpoint
+
+- Branch: `codex/issue-327-legacy-cleanup`
+- Sync commit: `922c405d` (`sync(#327): include merged Fundamental service fixes`)
+- Base: `origin/main` at `d67d7766` (merged #342 fact selector)
+- Pull request: #340, still open and intentionally uses `Refs #327` until merge verification completes.
+
+The cleanup branch was clean before synchronization. The main-based merge
+preserved the cleanup commits and added the already merged service-owned
+identity/fact fixes without changing the cleanup scope.
+
+All checks below ran against exact commit `922c405d` and exited 0:
+
+```text
+uv run --project finance-agent-core pytest -q \
+  finance-agent-core/tests/agents/fundamental \
+  finance-agent-core/tests/test_error_handling_fundamental.py \
+  finance-agent-core/tests/test_fundamental_capability_facades.py \
+  finance-agent-core/tests/test_fundamental_import_hygiene_guard.py \
+  finance-agent-core/tests/test_sec_xbrl_financial_payload_service.py \
+  finance-agent-core/tests/test_sec_text_forward_signals.py \
+  finance-agent-core/tests/test_sec_text_forward_signals_eval.py
+85 passed, 4 third-party edgar deprecation warnings
+
+npm run test -- --run
+50 files, 273 tests passed
+
+npm run typecheck
+npm run lint
+
+bash scripts/generate-contracts.sh
+generated contract diff: clean (idempotent)
+
+python3 scripts/architecture_guard.py
+no boundary violations
+
+git diff --check
+clean
+```
+
+No Docker service acceptance is claimed for #327 itself. The separate
+#341/#342 Fundamental Compose evidence is recorded in the #342 checkpoint;
+#325 still requires its combined workspace route, viewport, keyboard, and
+evidence-inspector acceptance before it can be marked verified.

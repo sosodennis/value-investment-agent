@@ -1,4 +1,4 @@
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -14,26 +14,26 @@ def _fundamental_nodes() -> dict[str, FundamentalNode]:
 
 
 @pytest.mark.asyncio
-async def test_financial_health_node_error_log():
-    # Simulate a network error during data fetching
+async def test_financial_health_node_waits_for_service_snapshot_without_sec_fetch():
     state = {
         "company_profile": {"ticker": "AAPL", "name": "Apple Inc."},
     }
 
     with patch(
-        "src.agents.fundamental.application.wiring.fetch_financial_reports_payload"
-    ) as mock_fetch:
-        mock_fetch.side_effect = Exception("Network Timeout")
-
+        "src.agents.fundamental.capabilities.financial_statements.infrastructure.sec_xbrl.extract.financial_payload_service.fetch_financial_reports_payload",
+        side_effect=AssertionError("Agent-owned SEC fetch must not run"),
+    ):
         command = await _fundamental_nodes()["financial_health"](state)
 
-        assert "error_logs" in command.update
-        assert command.update["error_logs"][0]["node"] == "financial_health"
-        assert "Network Timeout" in command.update["error_logs"][0]["error"]
-        assert (
-            command.update["workflow_activity_updates"]["financial_health"] == "error"
-        )
-        assert command.goto == "__end__"
+    assert "error_logs" not in command.update
+    assert command.update["workflow_activity_updates"]["financial_health"] == "done"
+    assert command.goto == "model_selection"
+    context = command.update["fundamental_analysis"]
+    assert context["xbrl_diagnostics"]["reason"] == (
+        "service_snapshot_request_required"
+    )
+    assert context["xbrl_quality_gates"]["status"] == "unavailable"
+    assert "artifact_references" not in command.update
 
 
 @pytest.mark.asyncio
@@ -63,7 +63,7 @@ async def test_model_selection_node_error_log():
 
 
 @pytest.mark.asyncio
-async def test_model_selection_node_accepts_canonical_report_shape():
+async def test_model_selection_node_ignores_legacy_report_artifact():
     state = {
         "company_profile": {
             "ticker": "GME",
@@ -74,34 +74,12 @@ async def test_model_selection_node_accepts_canonical_report_shape():
         "fundamental_analysis": {"financial_reports_artifact_id": "artifact_1"},
     }
 
-    canonical_reports = [
-        {
-            "base": {
-                "fiscal_year": {"value": "2024"},
-                "fiscal_period": {"value": "FY"},
-                "sic_code": {"value": "5734"},
-                "total_revenue": {"value": 3823000000.0},
-                "net_income": {"value": 131300000.0},
-                "operating_cash_flow": {"value": 145700000.0},
-                "total_equity": {"value": 4929800000.0},
-                "total_assets": {"value": 5875400000.0},
-            },
-            "extension_type": "Industrial",
-            "extension": {"inventory": {"value": 1.0}},
-        }
-    ]
-
-    with (
-        patch(
-            "src.agents.fundamental.capabilities.artifacts_provenance.infrastructure.fundamental_artifact_repository.FundamentalArtifactRepository.load_financial_reports_bundle",
-            new=AsyncMock(return_value=(canonical_reports, None)),
-        ),
-        patch(
-            "src.agents.fundamental.capabilities.artifacts_provenance.infrastructure.fundamental_artifact_repository.FundamentalArtifactRepository.save_financial_reports",
-            new=AsyncMock(return_value="artifact_saved"),
-        ),
-    ):
-        command = await _fundamental_nodes()["model_selection"](state)
+    command = await _fundamental_nodes()["model_selection"](state)
 
     assert command.goto == "calculation"
     assert "error_logs" not in command.update
+    context = command.update["fundamental_analysis"]
+    assert context["model_selection_status"] == "degraded"
+    assert context["service_facts_status"] == "unavailable"
+    assert "financial_reports_artifact_id" not in context
+    assert "artifact_references" not in command.update
