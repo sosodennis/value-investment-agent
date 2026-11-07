@@ -709,6 +709,7 @@ identity-to-ingestion producer path and the Fundamental workflow reaches its
 calculation boundary. The service-backed report cannot be accepted while the
 default current filing is incompatible with the pinned validation runtime;
 the service must select or provision a compatible verified filing/release under
-the owning SEC boundary. The independent Debate provider outage also prevents
+the owning SEC boundary. Blocker #345 tracks this service-owned compatibility
+gap. The independent Debate provider outage also prevents
 the workspace run from reaching a completed terminal state. No acceptance
 criterion is marked passed by this probe.
