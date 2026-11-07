@@ -67,7 +67,6 @@ _US_INCORPORATION_STATES = frozenset(
         "VI",
     )
 )
-_CURRENCY_UNIT = re.compile(r"^([A-Z]{3})(?:\s*/.*)?$")
 
 
 class IdentityResolutionError(ValueError):
@@ -110,7 +109,6 @@ def _cik(value: object) -> str:
 
 def _has_supported_currency_facts(us_gaap: Mapping[str, object]) -> bool:
     has_usd = False
-    has_other_currency = False
     for raw_fact in us_gaap.values():
         if not isinstance(raw_fact, Mapping):
             continue
@@ -124,10 +122,7 @@ def _has_supported_currency_facts(us_gaap: Mapping[str, object]) -> bool:
                 continue
             if raw_unit == "USD":
                 has_usd = True
-            match = _CURRENCY_UNIT.fullmatch(raw_unit)
-            if match and match.group(1) != "USD":
-                has_other_currency = True
-    return has_usd and not has_other_currency
+    return has_usd
 
 
 def resolve_issuer_cik(
