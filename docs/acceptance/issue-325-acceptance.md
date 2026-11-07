@@ -733,3 +733,57 @@ criterion is marked passed by this probe.
   volume or repository data was deleted. This restores the documented pinned
   runtime but does not resolve #345 or mark any #325 acceptance criterion
   passed.
+
+## Exact live service-backed run after #345 merge
+
+- Date: 2026-11-07 (local). Code under test was the exact branch head
+  `cc26190aa729bd9048a958b27fb6bcf4180f4f4c`, including merged #345
+  compatibility changes. The dedicated project was
+  `value-investment-agent-issue-325-fundamental`; its Fundamental service and
+  PostgreSQL containers were healthy, and `GET http://127.0.0.1:18690/readyz`
+  returned HTTP 200 `{"status":"ready","contract_version":"internal.v1"}`.
+- The running Fundamental service configuration was inspected directly:
+  organization allowlist included
+  `org-sec-ingestion-test,43f50f0f-c6ff-4fb2-b4d2-ed366bc55613`, supported
+  years were `2023,2024`, supported forms were `10-K`, the validation runtime
+  was the pinned `us-gaap-2023-2024` bundle with DQC ruleset SHA-256
+  `0eb33d095ac0ae08f01c508526b35523534659d661bc62873ac1400deec87930`, and
+  the service cgroup limit was `1073741824` bytes (1 GiB).
+- On the real `http://127.0.0.1:18681/workspace` route, a fresh run was
+  `24ffeefc-6f67-4b62-9579-23e264d4a553` on thread
+  `thread_1794057889777`. The operator selected
+  `MSFT Microsoft Corporation NASDAQ` at 100% over `MSFT.TO` at 90%.
+  Fundamental activity reached `calculate-valuation` and completed without an
+  Agent-owned SEC fetch. The overall run later failed independently at Debate
+  `moderate-verdict` with `failover_exhausted`; the LLM provider returned HTTP
+  502 for the verdict path.
+- The service log recorded signed identity resolution HTTP 200 followed by
+  signed ingestion HTTP 422. A direct replay of the same producer-shaped
+  request (correlation `issue325-diagnose-ingest-20261107-b`) returned the
+  stable error `FACT_MAPPING_UNRESOLVED` / `requested mapping release is
+  unavailable`. Read-only PostgreSQL inspection showed 7 mappings and the
+  missing `sec-us-gaap-v1-filed_operating_evidence`; the existing mappings
+  covered revenue, operating income, cash, debt, and diluted shares.
+- Agent Core therefore correctly rendered `Report unavailable` and did not
+  publish a snapshot-bound report artifact for this run. Database counts after
+  the run were `sec_ingestion_acquisitions=6`, `snapshot_manifests=8`,
+  `canonical_facts=280`, and `snapshot_facts=280`; no new snapshot was
+  attributed to this failed request. No UI acceptance criterion is marked
+  passed by this run.
+- Commands and exit codes: `docker compose -p
+  value-investment-agent-issue-325-fundamental ps` exit 0; `curl -fsS
+  http://127.0.0.1:18690/readyz` exit 0; direct signed identity/ingestion
+  replay exit 0 with the recorded HTTP 200/422 responses; browser route and
+  activity inspection completed. Desktop/mobile viewport, keyboard evidence
+  selection, evidence inspector, and same-snapshot valuation trace remain
+  unverified. This is a diagnostic checkpoint, not `VERIFIED` acceptance.
+
+### Diagnostic result
+
+The pinned parser runtime and service boundary are healthy. The remaining
+failure is a request-shape/fixture mismatch: the no-assumptions facts-only
+path selects the transition model's additional `filed_operating_evidence`
+field even though no valuation calculation is requested and the acceptance
+mapping release does not contain that field. The next code checkpoint will
+make facts-only ingestion use the base FCFF evidence set, then rerun the exact
+workspace route and verify the service-owned snapshot and facts.
