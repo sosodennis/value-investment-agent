@@ -921,3 +921,35 @@ work around this by disabling release pinning, selecting unbound facts, or
 falling back to an Agent-owned SEC report. The next step is to resolve #347's
 caller-owned timestamp and release-compatible snapshot contract, then rerun
 this exact workspace route before claiming #325 acceptance.
+
+## Checkpoint: live artifact-save failure after snapshot boundary
+
+- Date: 2026-11-08 (local). Code under test: `ddda9d8d` (`test(#325): keep snapshot fixture before request time`).
+- Live route: `http://127.0.0.1:3000/workspace`; thread `thread_1794085200693`; run
+  `c29b7e13-060c-4460-ab88-e61af9290560`.
+- The Fundamental identity, snapshot, and facts endpoints all returned HTTP 200. The
+  immutable snapshot timestamp contract also passed: facts returned the resolved
+  `snapshot_timestamp`, which was earlier than the caller `valuation_timestamp`.
+- The Fundamental subgraph checkpoint namespace
+  `fundamental_agent:7279ff54-b2b4-6bcc-a9e5-f3878a31584b` reached checkpoint
+  `00000000000000000000000000000005.0.6550448588202731`. Decoding its
+  `fundamental_analysis` channel with `ormsgpack` showed
+  `service_failure.code=ARTIFACT_SAVE_FAILED` and no `artifact` or
+  `artifact_references` output.
+- Source inspection identifies the owning wiring defect: `run_service_valuation_flow`
+  invokes `runtime.save_financial_reports`, while production
+  `FundamentalOrchestrator` no longer implements that method after the #327 legacy
+  capability cleanup. The test-only `_Runtime` does implement it, so the existing
+  cutover tests did not exercise production wiring. The resulting `AttributeError`
+  is caught and reduced to `ARTIFACT_SAVE_FAILED`.
+- The overall run still ended independently at Debate `moderate-verdict` with
+  `failover_exhausted` after repeated LLM provider HTTP 502 responses. No
+  `fundamental_service_facts` artifact was persisted, and the UI remained
+  `Report unavailable`.
+
+### Diagnostic result
+
+**Incomplete and blocked.** The service boundary is now verified through facts
+retrieval. The next owning-layer change is to restore Fundamental's artifact
+persistence through the shared artifact storage port and add a production-wiring
+regression test before rerunning the live route.
