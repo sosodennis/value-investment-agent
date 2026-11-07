@@ -475,11 +475,18 @@ class _FactsOnlyClient(_Client):
         "fact-diluted-shares",
     ]
 
-    def __init__(self, *, facts_snapshot_id: str | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        facts_snapshot_id: str | None = None,
+        facts_ids: list[str] | None = None,
+        resolved_fact_ids: list[str] | None = None,
+    ) -> None:
         identity = _resolved_identity().identity.model_dump(mode="json")
+        self.resolved_fact_ids = list(resolved_fact_ids or self._fact_ids)
         super().__init__(
             facts_snapshot_id=facts_snapshot_id,
-            facts_ids=list(self._fact_ids),
+            facts_ids=facts_ids if facts_ids is not None else self.resolved_fact_ids,
             facts_identity=identity,
             facts_valuation_timestamp="2026-11-07T00:00:00Z",
         )
@@ -492,6 +499,7 @@ class _FactsOnlyClient(_Client):
     async def execute(self, operation, input_payload, **kwargs):
         if operation == "ingest_sec_data":
             self.calls.append((operation, dict(input_payload)))
+            self.facts_valuation_timestamp = str(input_payload["valuation_timestamp"])
             result = {
                 "contract_version": "fundamental.v1",
                 "status": "created",
@@ -510,8 +518,9 @@ class _FactsOnlyClient(_Client):
             )
         if operation == "resolve_snapshot":
             self.resolved_snapshot = {
+                "contract_version": "fundamental.v1",
                 "snapshot_id": "snapshot-aapl-resolved",
-                "historical_facts": list(self._fact_ids),
+                "historical_facts": self.resolved_fact_ids,
                 "identity": self.identity,
                 "valuation_timestamp": input_payload["valuation_timestamp"],
                 "source_selection_policy": "pit-v1",
@@ -680,6 +689,54 @@ async def test_cutover_publishes_snapshot_facts_without_fabricating_valuation() 
     assert "valuation_trace" not in service_artifact
     assert "valuation_input" not in service_artifact
     assert artifact["financial_reports"] == []
+
+
+@pytest.mark.parametrize(
+    "client_options",
+    (
+        {"facts_snapshot_id": "snapshot-aapl-other"},
+        {"facts_ids": ["fact-revenue"]},
+    ),
+)
+@pytest.mark.asyncio
+async def test_cutover_rejects_facts_outside_the_resolved_snapshot(
+    client_options: Mapping[str, object],
+) -> None:
+    client = _FactsOnlyClient(**client_options)
+    runtime = _Runtime()
+    token = set_request_principal(
+        InternalPrincipal(
+            subject_id="caller-1", organization_id="org-1", membership_id="membership-1"
+        )
+    )
+    try:
+        result = await run_service_valuation_flow(
+            runtime,
+            {
+                "company_profile": CompanyProfile(ticker="AAPL", name="Apple Inc."),
+                "fundamental_analysis": {"model_type": "dcf_standard"},
+            },
+            client=client,
+            request_approval_fn=lambda _request: pytest.fail(
+                "facts-only reporting must not request valuation approval"
+            ),
+        )
+    finally:
+        reset_request_principal(token)
+
+    assert [operation for operation, _ in client.calls] == [
+        "resolve_identity",
+        "ingest_sec_data",
+        "resolve_snapshot",
+    ]
+    assert len(client.facts_calls) == 1
+    assert result.update["fundamental_analysis"]["valuation_status"] == (
+        "service_unavailable"
+    )
+    assert result.update["fundamental_analysis"]["service_failure"]["code"] == (
+        "UPSTREAM_MALFORMED"
+    )
+    assert runtime.saved_calls == []
 
 
 @pytest.mark.parametrize(
