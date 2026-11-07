@@ -7,6 +7,9 @@ from datetime import UTC, datetime
 
 import pytest
 
+from src.agents.fundamental.application.fundamental_service_port import (
+    FundamentalServiceFailure,
+)
 from src.agents.fundamental.application.workflow_orchestrator.services.service_request_producer import (
     prepare_service_valuation_request,
 )
@@ -62,17 +65,27 @@ class _Client:
             separators=(",", ":"),
             sort_keys=True,
         ).encode("utf-8")
-        return FundamentalIdentityResolutionV1(
-            **payload, resolution_digest=hashlib.sha256(canonical).hexdigest()
+        return FundamentalIdentityResolutionV1.model_validate_json(
+            json.dumps(
+                {**payload, "resolution_digest": hashlib.sha256(canonical).hexdigest()},
+                ensure_ascii=False,
+                allow_nan=False,
+                separators=(",", ":"),
+                sort_keys=True,
+            )
         )
 
     async def execute(self, operation, input_payload, **_kwargs):
         self.calls.append((operation, dict(input_payload)))
+        result = {
+            **self.ingestion,
+            "valuation_timestamp": input_payload["valuation_timestamp"],
+        }
         return FundamentalServiceResponseV1(
             contract_version="internal.v1",
             schema_version="fundamental.v1",
             correlation_id="correlation-1",
-            result=self.ingestion,
+            result=result,
         )
 
 
@@ -205,7 +218,7 @@ async def test_producer_rejects_identity_mismatch_before_ingestion() -> None:
     request = _request()
     request["identity"] = {"issuer_id": "0000000001"}
 
-    with pytest.raises(Exception, match="identity"):
+    with pytest.raises(FundamentalServiceFailure, match="identity") as error:
         await prepare_service_valuation_request(
             _state(request=request),
             client=client,
@@ -214,6 +227,7 @@ async def test_producer_rejects_identity_mismatch_before_ingestion() -> None:
             deadline_at=datetime(2026, 11, 7, tzinfo=UTC),
         )
 
+    assert error.value.code == "IDENTITY_MISMATCH"
     assert [operation for operation, _ in client.calls] == ["resolve_identity"]
 
 
@@ -221,7 +235,7 @@ async def test_producer_rejects_identity_mismatch_before_ingestion() -> None:
 async def test_producer_rejects_degraded_ingestion_without_snapshot() -> None:
     client = _Client(ingestion=_ingestion(status="degraded"))
 
-    with pytest.raises(Exception, match="degraded"):
+    with pytest.raises(FundamentalServiceFailure) as error:
         await prepare_service_valuation_request(
             _state(request=_request()),
             client=client,
@@ -230,12 +244,14 @@ async def test_producer_rejects_degraded_ingestion_without_snapshot() -> None:
             deadline_at=datetime(2026, 11, 7, tzinfo=UTC),
         )
 
+    assert error.value.code == "SEC_INGESTION_DEGRADED"
+
 
 @pytest.mark.asyncio
 async def test_producer_rejects_missing_ticker_without_service_calls() -> None:
     client = _Client(ingestion=_ingestion())
 
-    with pytest.raises(Exception, match="ticker"):
+    with pytest.raises(FundamentalServiceFailure) as error:
         await prepare_service_valuation_request(
             {"company_profile": None, "fundamental_analysis": {}},
             client=client,
@@ -244,4 +260,5 @@ async def test_producer_rejects_missing_ticker_without_service_calls() -> None:
             deadline_at=datetime(2026, 11, 7, tzinfo=UTC),
         )
 
+    assert error.value.code == "FUNDAMENTAL_TICKER_MISSING"
     assert client.calls == []
