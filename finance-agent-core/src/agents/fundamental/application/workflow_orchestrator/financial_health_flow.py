@@ -101,11 +101,13 @@ async def run_financial_health_flow(
         reports_data = payload.financial_reports
         diagnostics = payload.diagnostics
         quality_gates = payload.quality_gates
-        forward_signals = await asyncio.to_thread(
-            extract_forward_signals_fn,
-            resolved_ticker,
-            reports_data,
-        )
+        forward_signals = None
+        if reports_data:
+            forward_signals = await asyncio.to_thread(
+                extract_forward_signals_fn,
+                resolved_ticker,
+                reports_data,
+            )
         reports_artifact_id: str | None = None
         artifact: AgentOutputArtifactPayload | None = None
 
@@ -140,11 +142,11 @@ async def run_financial_health_flow(
                 event="fundamental_financial_health_empty_reports",
                 message="financial health reports unavailable; continuing without reports",
                 level=logging.WARNING,
-                error_code="FUNDAMENTAL_REPORTS_UNAVAILABLE",
+                error_code="FUNDAMENTAL_SERVICE_FACTS_UNAVAILABLE",
                 fields={
                     "ticker": resolved_ticker,
-                    "degrade_source": "xbrl_reports",
-                    "fallback_mode": "continue_without_reports",
+                    "degrade_source": "fundamental_service",
+                    "fallback_mode": "service_snapshot_pending",
                     "input_count": 0,
                     "output_count": 0,
                 },

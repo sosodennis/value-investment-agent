@@ -11,79 +11,43 @@ from src.agents.fundamental.application.workflow_orchestrator.ports import (
 from src.agents.fundamental.capabilities.artifacts_provenance.public import (
     fundamental_artifact_repository,
 )
-from src.agents.fundamental.capabilities.financial_statements.public import (
-    fetch_financial_reports_payload,
-)
-from src.agents.fundamental.capabilities.forward_signals.public import (
-    build_finbert_direction_reviewer,
-    build_forward_looking_filter,
-    extract_forward_signals,
-    extract_forward_signals_from_sec_text,
-    extract_forward_signals_from_xbrl_reports,
-)
 from src.agents.fundamental.infrastructure import HttpFundamentalServiceClient
-from src.model_inference.entrypoint import get_model_inference
 
 
-def _normalize_financial_reports_contract(
-    payload: dict[str, object],
+def _service_snapshot_pending_payload(
+    ticker: str, *, years: int = 5
 ) -> FundamentalFinancialStatementsPayload:
-    reports_raw = payload.get("financial_reports")
-    financial_reports = reports_raw if isinstance(reports_raw, list) else []
+    """Keep the Agent degraded until a service-owned snapshot is supplied."""
 
-    diagnostics_raw = payload.get("diagnostics")
-    diagnostics = dict(diagnostics_raw) if isinstance(diagnostics_raw, dict) else None
-
-    quality_gates_raw = payload.get("quality_gates")
-    quality_gates = (
-        dict(quality_gates_raw) if isinstance(quality_gates_raw, dict) else None
-    )
-
+    _ = years
     return {
-        "financial_reports": financial_reports,
-        "diagnostics": diagnostics,
-        "quality_gates": quality_gates,
+        "financial_reports": [],
+        "diagnostics": {
+            "status": "unavailable",
+            "reason": "service_snapshot_request_required",
+            "ticker": ticker,
+        },
+        "quality_gates": {
+            "status": "unavailable",
+            "source": "fundamental_service",
+            "blocking_count": 0,
+        },
     }
 
 
-_model_inference = get_model_inference()
-_fls_filter = build_forward_looking_filter(_model_inference)
-_finbert_direction_reviewer = build_finbert_direction_reviewer(_model_inference)
+def _no_forward_signals(*, ticker: str, reports_raw: list[dict[str, object]]) -> None:
+    """Legacy signal extraction has no input until service facts are present."""
 
-
-def _extract_forward_signals_text(
-    *, ticker: str, rules_sector: str | None = None
-) -> list[dict[str, object]]:
-    return extract_forward_signals_from_sec_text(
-        ticker=ticker,
-        rules_sector=rules_sector,
-        filter_forward_looking_sentences_with_stats_fn=_fls_filter,
-        review_signal_direction_with_finbert_fn=_finbert_direction_reviewer,
-    )
-
-
-def _extract_forward_signals(
-    ticker: str,
-    reports_raw: list[dict[str, object]],
-) -> list[dict[str, object]]:
-    return extract_forward_signals(
-        ticker=ticker,
-        reports_raw=reports_raw,
-        extract_xbrl_fn=extract_forward_signals_from_xbrl_reports,
-        extract_text_fn=_extract_forward_signals_text,
-    )
+    _ = (ticker, reports_raw)
+    return None
 
 
 def build_default_fundamental_workflow_runner() -> FundamentalWorkflowRunner:
     orchestrator = build_fundamental_orchestrator(port=fundamental_artifact_repository)
     return build_fundamental_workflow_runner(
         orchestrator=orchestrator,
-        fetch_financial_reports_fn=(
-            lambda ticker, *, years=5: _normalize_financial_reports_contract(
-                fetch_financial_reports_payload(ticker=ticker, years=years)
-            )
-        ),
-        extract_forward_signals_fn=_extract_forward_signals,
+        fetch_financial_reports_fn=_service_snapshot_pending_payload,
+        extract_forward_signals_fn=_no_forward_signals,
         fundamental_service_client=HttpFundamentalServiceClient(),
     )
 

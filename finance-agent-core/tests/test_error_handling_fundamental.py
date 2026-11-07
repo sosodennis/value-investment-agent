@@ -14,26 +14,26 @@ def _fundamental_nodes() -> dict[str, FundamentalNode]:
 
 
 @pytest.mark.asyncio
-async def test_financial_health_node_error_log():
-    # Simulate a network error during data fetching
+async def test_financial_health_node_waits_for_service_snapshot_without_sec_fetch():
     state = {
         "company_profile": {"ticker": "AAPL", "name": "Apple Inc."},
     }
 
     with patch(
-        "src.agents.fundamental.application.wiring.fetch_financial_reports_payload"
-    ) as mock_fetch:
-        mock_fetch.side_effect = Exception("Network Timeout")
-
+        "src.agents.fundamental.capabilities.financial_statements.infrastructure.sec_xbrl.extract.financial_payload_service.fetch_financial_reports_payload",
+        side_effect=AssertionError("Agent-owned SEC fetch must not run"),
+    ):
         command = await _fundamental_nodes()["financial_health"](state)
 
-        assert "error_logs" in command.update
-        assert command.update["error_logs"][0]["node"] == "financial_health"
-        assert "Network Timeout" in command.update["error_logs"][0]["error"]
-        assert (
-            command.update["workflow_activity_updates"]["financial_health"] == "error"
-        )
-        assert command.goto == "__end__"
+    assert "error_logs" not in command.update
+    assert command.update["workflow_activity_updates"]["financial_health"] == "done"
+    assert command.goto == "model_selection"
+    context = command.update["fundamental_analysis"]
+    assert context["xbrl_diagnostics"]["reason"] == (
+        "service_snapshot_request_required"
+    )
+    assert context["xbrl_quality_gates"]["status"] == "unavailable"
+    assert "artifact_references" not in command.update
 
 
 @pytest.mark.asyncio
