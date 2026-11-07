@@ -845,3 +845,22 @@ workspace route and verify the service-owned snapshot and facts.
   valuation trace, manifest binding, desktop/mobile layout, keyboard
   operation, or evidence inspector. The exact HTTP 422 error payload must be
   replayed and traced in the Fundamental service before any UI acceptance.
+
+## Current-head baseline checkpoint
+
+- Date: 2026-11-07.
+- Code under test: `e68b9f31` (`fix(#325): pin snapshot release profile in producer`),
+  based on `origin/main` at `83fb733d9b23d51712ba30c41818e46e1fafa24b`.
+- Agent focused checks: `uv run pytest tests/agents/fundamental/test_service_request_producer.py tests/agents/fundamental/test_fundamental_service_client.py tests/agents/fundamental/test_fundamental_service_cutover.py -q`
+  exited 0 (`38 passed`).
+- Frontend checks: `npm run lint` exited 0, `npm run typecheck` exited 0,
+  and `npm run test -- --run` exited 0 (`52` files, `293` tests passed).
+- Boundary checks: `python3 scripts/architecture_guard.py` exited 0 and
+  `git diff --check` exited 0.
+- Fundamental Compose project:
+  `value-investment-agent-issue-325-fundamental`. PostgreSQL and Fundamental
+  service were healthy; `curl -fsS http://127.0.0.1:18690/readyz` exited 0
+  with `{"status":"ready","contract_version":"internal.v1"}`.
+- This is a verification baseline only. No browser route, service-backed
+  snapshot-to-valuation trace, desktop/mobile viewport, keyboard evidence
+  selection, or evidence-inspector acceptance is claimed by this checkpoint.
