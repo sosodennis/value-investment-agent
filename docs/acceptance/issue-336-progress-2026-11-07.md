@@ -62,7 +62,23 @@ The focused service tests cover SEC source capture, ambiguous and mismatched ide
   `0000320193-24-000123`, required field `revenue`, and the pinned Arelle
   `2.47.4` / `sec-efm-us-dqc-v31.0.3` profile. The service returned HTTP 422
   `FACT_MAPPING_UNRESOLVED` before acquisition, so no snapshot was published.
-  This is a deployment-data gap to investigate before claiming the identity can
-  feed the existing ingestion and snapshot contracts.
+- The disposable verification database was then seeded through the existing
+  service-owned `PostgresMetadataStore.publish_mapping` API with the approved
+  `sec-revenue-v1` mapping (`us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax`,
+  mapping version `sec-us-gaap-v1`, mapping digest
+  `2c5ac7dca0856e509c6f0baaf5c15040094bba2988d9a81daf41af3d17e48d44`). The
+  same signed ingestion request reached the parser and returned HTTP 422
+  `PARSER_VALIDATION_BLOCKED`; PostgreSQL contains zero ingestion acquisitions,
+  zero snapshots, and zero canonical facts, while the audit table records the
+  `PARSER_VALIDATION_BLOCKED` outcome. This is the expected fail-closed result
+  for the known AAPL filing and proves the resolved identity crosses the
+  existing ingestion boundary without a second SEC path.
+- A signed `POST /v1/data/snapshots/resolve` request carrying the same AAPL
+  identity returned HTTP 422 `DATA_RELEASE_PROFILE_REQUIRED` without a release
+  profile, and HTTP 503 `DATA_RELEASE_NOT_ACTIVE` when pinned to
+  `sec-public-pit-v1`; neither path performed a local fallback or published
+  data. A successful snapshot lookup therefore remains unavailable in this
+  fresh verification database until a data release is activated by the owning
+  #321 workflow.
 
 The next checkpoint is to rebuild the isolated service with the recomputed resource hashes and verify its resolver response against the existing SEC ingestion and snapshot contracts.
