@@ -124,8 +124,12 @@ def _ingestion(*, status: str = "created") -> dict[str, object]:
     }
 
 
-def _state(*, request: Mapping[str, object] | None = None) -> dict[str, object]:
-    fundamental: dict[str, object] = {"model_type": "dcf_standard"}
+def _state(
+    *,
+    request: Mapping[str, object] | None = None,
+    model_type: str = "dcf_standard",
+) -> dict[str, object]:
+    fundamental: dict[str, object] = {"model_type": model_type}
     if request is not None:
         fundamental["valuation_request"] = dict(request)
     return {
@@ -210,6 +214,28 @@ async def test_producer_returns_explicit_missing_assumptions_reason() -> None:
     assert prepared.valuation_request is None
     assert prepared.reason == "caller valuation assumptions are required"
     assert prepared.ingestion["snapshot_id"] == "snapshot-aapl-1"
+
+
+@pytest.mark.asyncio
+async def test_facts_only_projection_uses_base_evidence_for_growth_model() -> None:
+    client = _Client(ingestion=_ingestion())
+
+    prepared = await prepare_service_valuation_request(
+        _state(model_type="dcf_growth"),
+        client=client,
+        principal=_principal(),
+        correlation_id="correlation-1",
+        deadline_at=datetime(2026, 11, 7, tzinfo=UTC),
+    )
+
+    assert prepared.valuation_request is None
+    assert client.calls[1][1]["required_fields"] == [
+        "revenue",
+        "operating_income",
+        "cash",
+        "debt",
+        "diluted_shares",
+    ]
 
 
 @pytest.mark.asyncio

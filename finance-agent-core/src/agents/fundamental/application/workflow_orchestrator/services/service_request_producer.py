@@ -105,6 +105,11 @@ def _model_id(
     request: Mapping[str, object] | None,
     fundamental: Mapping[str, object],
 ) -> str:
+    # Facts-only reports do not carry caller-owned assumptions, so they must
+    # request only the base evidence set. Transition-only evidence belongs to
+    # an explicit valuation request for the transition model.
+    if request is None:
+        return "fcff_dcf"
     candidate = request.get("model_id") if request is not None else None
     if not isinstance(candidate, str) or not candidate:
         candidate = _MODEL_BY_SELECTION.get(fundamental.get("model_type"))
