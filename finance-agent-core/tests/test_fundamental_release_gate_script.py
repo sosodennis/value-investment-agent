@@ -40,7 +40,6 @@ def _base_env(*, project_root: Path, tmp_path: Path) -> dict[str, str]:
         project_root / "tests" / "fixtures" / "fundamental_replay_inputs"
     )
     env.pop("FUNDAMENTAL_FORWARD_SIGNAL_CALIBRATION_MAPPING_PATH", None)
-    env.pop("FUNDAMENTAL_REPLAY_MANIFEST_PATH", None)
     env.pop("FUNDAMENTAL_REPLAY_REPORT_PATH", None)
     env.pop("FUNDAMENTAL_MIN_REPLAY_TRACE_CONTRACT_PASS_RATE", None)
     env.pop("FUNDAMENTAL_MAX_REPLAY_INTRINSIC_DELTA_P90_ABS", None)
@@ -78,25 +77,6 @@ def test_release_gate_script_generates_report(tmp_path: Path) -> None:
     assert isinstance(summary, dict)
     assert summary.get("calibration_gate_passed") is True
     assert summary.get("drift_count") == 0
-
-
-def test_release_gate_script_ignores_legacy_manifest_env(tmp_path: Path) -> None:
-    project_root = Path(__file__).resolve().parents[1]
-    script_path = project_root / "scripts" / "run_fundamental_release_gate.sh"
-    report_path = tmp_path / "release_gate_report.json"
-    env = _base_env(project_root=project_root, tmp_path=tmp_path)
-    env["FUNDAMENTAL_REPLAY_MANIFEST_PATH"] = str(tmp_path / "missing_manifest.json")
-
-    completed = subprocess.run(
-        ["bash", str(script_path), str(report_path)],
-        check=False,
-        capture_output=True,
-        text=True,
-        cwd=project_root,
-        env=env,
-    )
-
-    assert completed.returncode == 0
 
 
 def test_release_gate_script_fails_on_degraded_calibration(tmp_path: Path) -> None:

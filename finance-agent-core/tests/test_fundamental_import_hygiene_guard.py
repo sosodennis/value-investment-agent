@@ -413,6 +413,26 @@ def test_no_legacy_fundamental_state_keys_in_runtime_source() -> None:
     )
 
 
+def test_release_gate_has_no_retired_replay_manifest_surface() -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    retired_flag = "FUNDAMENTAL_REPLAY_MANIFEST_PATH"
+    paths = (
+        repo_root
+        / "finance-agent-core"
+        / "scripts"
+        / "run_fundamental_release_gate.sh",
+        repo_root / "finance-agent-core" / "docs" / "fundamental_backtest_runbook.md",
+    )
+    violations = [
+        f"{path.relative_to(repo_root)}: {retired_flag}"
+        for path in paths
+        if retired_flag in path.read_text(encoding="utf-8")
+    ]
+    assert not violations, "Retired replay manifest flag found:\n" + "\n".join(
+        violations
+    )
+
+
 def test_calibration_fixtures_are_versioned_and_allowlisted() -> None:
     repo_root = Path(__file__).resolve().parents[2]
     fixtures_root = repo_root / "finance-agent-core" / "tests" / "fixtures"

@@ -132,6 +132,11 @@ benchmark evidence: `finance-agent-core/scripts/benchmark_fls_backends.py`,
 these exact paths and their quarantine marker; no other executable script may
 import the Agent-owned SEC adapters.
 
+The retired `FUNDAMENTAL_REPLAY_MANIFEST_PATH` environment flag was removed
+from the active release-gate test and runbook surface. The canonical live replay
+cohort variables remain the supported release contract; the old flag is retained
+only in historical backlog notes.
+
 The separate tracked subtree `finance-agent-core/finance-agent-core/reports/`
 contains seven duplicate replay outputs from the March 2026 project layout.
 They have no repository callers, embed machine-specific absolute paths, and are

@@ -108,8 +108,7 @@ Validate staged report files before commit:
 UV_CACHE_DIR=/tmp/.uv-cache uv run --project finance-agent-core python finance-agent-core/scripts/validate_reports_vcs_policy.py
 ```
 
-Release gate now runs canonical live replay cohort checks only (no legacy
-`FUNDAMENTAL_REPLAY_MANIFEST_PATH` path):
+Release gate now runs canonical live replay cohort checks only:
 
 ```bash
 FUNDAMENTAL_LIVE_REPLAY_COHORT_CONFIG_PATH=finance-agent-core/config/fundamental_live_replay_cohort_config_ci.json \
