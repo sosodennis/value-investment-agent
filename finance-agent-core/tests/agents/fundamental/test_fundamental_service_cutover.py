@@ -128,6 +128,7 @@ class _Client:
                         "historical_facts": ["fact-revenue"],
                         "identity": input_payload["identity"],
                         "valuation_timestamp": input_payload["valuation_timestamp"],
+                        "snapshot_timestamp": input_payload["valuation_timestamp"],
                         "source_selection_policy": "pit-v1",
                         "coverage_profile": "us-gaap-public-v1",
                         "quality": "verified",
@@ -486,6 +487,7 @@ class _FactsOnlyClient(_Client):
         facts_snapshot_id: str | None = None,
         facts_ids: list[str] | None = None,
         resolved_fact_ids: list[str] | None = None,
+        snapshot_timestamp: str = "2026-11-07T00:00:00Z",
     ) -> None:
         identity = _resolved_identity().identity.model_dump(mode="json")
         self.resolved_fact_ids = list(resolved_fact_ids or self._fact_ids)
@@ -493,9 +495,10 @@ class _FactsOnlyClient(_Client):
             facts_snapshot_id=facts_snapshot_id,
             facts_ids=facts_ids if facts_ids is not None else self.resolved_fact_ids,
             facts_identity=identity,
-            facts_valuation_timestamp="2026-11-07T00:00:00Z",
+            facts_valuation_timestamp=snapshot_timestamp,
         )
         self.identity = identity
+        self.snapshot_timestamp = snapshot_timestamp
 
     async def resolve_identity(self, request, **_kwargs):
         self.calls.append(("resolve_identity", request.model_dump(mode="json")))
@@ -522,13 +525,14 @@ class _FactsOnlyClient(_Client):
                 result=result,
             )
         if operation == "resolve_snapshot":
-            self.facts_valuation_timestamp = str(input_payload["valuation_timestamp"])
+            self.facts_valuation_timestamp = self.snapshot_timestamp
             self.resolved_snapshot = {
                 "contract_version": "fundamental.v1",
                 "snapshot_id": "snapshot-aapl-resolved",
                 "historical_facts": self.resolved_fact_ids,
                 "identity": self.identity,
                 "valuation_timestamp": input_payload["valuation_timestamp"],
+                "snapshot_timestamp": self.snapshot_timestamp,
                 "source_selection_policy": "pit-v1",
                 "coverage_profile": "us-gaap-public-v1",
                 "data_release_manifest_digest": None,
@@ -648,7 +652,7 @@ async def test_cutover_resolves_snapshot_and_facts_through_service_boundary() ->
 
 @pytest.mark.asyncio
 async def test_cutover_publishes_snapshot_facts_without_fabricating_valuation() -> None:
-    client = _FactsOnlyClient()
+    client = _FactsOnlyClient(snapshot_timestamp="2026-11-01T00:00:00Z")
     runtime = _Runtime()
     approval_calls: list[object] = []
     token = set_request_principal(
@@ -710,6 +714,7 @@ async def test_cutover_publishes_snapshot_facts_without_fabricating_valuation() 
     assert service_artifact["projection_type"] == "facts_only"
     assert service_artifact["valuation_status"] == "not_requested"
     assert service_artifact["snapshot_id"] == "snapshot-aapl-resolved"
+    assert service_artifact["snapshot_timestamp"] == "2026-11-01T00:00:00Z"
     assert service_artifact["fact_ids"] == _FactsOnlyClient._fact_ids
     assert "valuation_trace" not in service_artifact
     assert "valuation_input" not in service_artifact

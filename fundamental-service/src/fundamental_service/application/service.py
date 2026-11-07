@@ -1098,6 +1098,7 @@ class FundamentalApplication:
                 historical_facts=tuple(fact.fact_id for fact in facts),
                 identity=snapshot.identity,
                 valuation_timestamp=request.valuation_timestamp,
+                snapshot_timestamp=snapshot.valuation_timestamp,
                 fiscal_period_selector=fiscal_selector,
                 resolved_fiscal_periods=resolved_periods,
                 fiscal_period_resolution=period_resolution,

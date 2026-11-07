@@ -332,6 +332,7 @@ def _resolved_snapshot_input(
     facts = result.get("historical_facts")
     resolved_identity = result.get("identity")
     resolved_timestamp = result.get("valuation_timestamp")
+    resolved_snapshot_timestamp = result.get("snapshot_timestamp")
     resolved_policy = result.get("source_selection_policy")
     resolved_profile = result.get("coverage_profile")
     input_selector = input_payload.get("snapshot_selector")
@@ -365,6 +366,7 @@ def _resolved_snapshot_input(
         or any(not isinstance(item, str) or not item for item in facts)
         or not isinstance(resolved_identity, Mapping)
         or not isinstance(resolved_timestamp, str)
+        or not isinstance(resolved_snapshot_timestamp, str)
         or not isinstance(resolved_policy, str)
         or not isinstance(resolved_profile, str)
         or not isinstance(resolved_selector, Mapping)
@@ -387,6 +389,20 @@ def _resolved_snapshot_input(
         raise FundamentalServiceFailure(
             "UPSTREAM_MALFORMED",
             "Fundamental snapshot resolution changed the requested identity",
+            retryable=False,
+            status_code=502,
+        )
+    effective_timestamp = _timestamp_utc(
+        resolved_timestamp, context="Fundamental snapshot valuation_timestamp"
+    )
+    snapshot_timestamp = _timestamp_utc(
+        resolved_snapshot_timestamp,
+        context="Fundamental snapshot snapshot_timestamp",
+    )
+    if snapshot_timestamp > effective_timestamp:
+        raise FundamentalServiceFailure(
+            "UPSTREAM_MALFORMED",
+            "Fundamental snapshot resolution returned a future snapshot",
             retryable=False,
             status_code=502,
         )
@@ -784,6 +800,7 @@ async def _facts_only_projection(
     fact_ids = selection.get("historical_facts")
     identity = selection.get("identity")
     selected_at = selection.get("valuation_timestamp")
+    snapshot_at = selection.get("snapshot_timestamp")
     provenance_raw = selection.get("provenance")
     release_digest = selection.get("data_release_manifest_digest")
     if (
@@ -796,6 +813,7 @@ async def _facts_only_projection(
         or len(set(fact_ids)) != len(fact_ids)
         or not isinstance(identity, Mapping)
         or not _payload_equal(identity, prepared.identity)
+        or not isinstance(snapshot_at, str)
         or selection.get("source_selection_policy")
         != selector.get("source_selection_policy")
         or selection.get("coverage_profile") != selector.get("coverage_profile")
@@ -842,6 +860,9 @@ async def _facts_only_projection(
     selected_timestamp = _timestamp_utc(
         selected_at, context="Fundamental facts selection valuation_timestamp"
     )
+    snapshot_timestamp = _timestamp_utc(
+        snapshot_at, context="Fundamental facts selection snapshot_timestamp"
+    )
     requested_timestamp = _timestamp_utc(
         selector.get("valuation_timestamp"),
         context="Fundamental facts selector valuation_timestamp",
@@ -850,6 +871,13 @@ async def _facts_only_projection(
         raise FundamentalServiceFailure(
             "UPSTREAM_MALFORMED",
             "Fundamental facts selection changed the point-in-time timestamp",
+            retryable=False,
+            status_code=502,
+        )
+    if snapshot_timestamp > selected_timestamp:
+        raise FundamentalServiceFailure(
+            "UPSTREAM_MALFORMED",
+            "Fundamental facts selection returned a future snapshot",
             retryable=False,
             status_code=502,
         )
@@ -881,7 +909,7 @@ async def _facts_only_projection(
             facts_result.valuation_timestamp,
             context="Fundamental facts valuation_timestamp",
         )
-        != selected_timestamp
+        != snapshot_timestamp
         or facts_result.data_release_manifest_digest != release_digest
         or (
             expected_snapshot_digest is not None
@@ -916,6 +944,7 @@ async def _facts_only_projection(
         "projection_type": "facts_only",
         "valuation_status": "not_requested",
         "snapshot_id": snapshot_id,
+        "snapshot_timestamp": snapshot_timestamp.isoformat().replace("+00:00", "Z"),
         "snapshot_manifest_digest": facts_result.snapshot_manifest_digest,
         "fact_ids": list(fact_ids),
         "facts": facts,

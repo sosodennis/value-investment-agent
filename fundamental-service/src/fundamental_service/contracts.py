@@ -599,6 +599,7 @@ class SnapshotResolutionV1(StrictModel):
     historical_facts: tuple[str, ...] = Field(min_length=1)
     identity: IdentityV1
     valuation_timestamp: datetime
+    snapshot_timestamp: datetime
     fiscal_period_selector: FiscalPeriodSelectorV1 = FiscalPeriodSelectorV1(
         mode="latest_complete", count=3
     )
@@ -610,7 +611,7 @@ class SnapshotResolutionV1(StrictModel):
     issue_codes: tuple[str, ...] = ()
     provenance: dict[str, object]
 
-    @field_validator("valuation_timestamp")
+    @field_validator("valuation_timestamp", "snapshot_timestamp")
     @classmethod
     def timestamp_has_timezone(cls, value: datetime) -> datetime:
         if value.tzinfo is None or value.utcoffset() is None:

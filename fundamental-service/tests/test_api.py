@@ -475,7 +475,8 @@ def test_snapshot_resolution_returns_immutable_snapshot_timestamp():
     result = response.json()["result"]
     assert result["snapshot_id"] == snapshot.snapshot_id
     assert result["historical_facts"] == ["fact-revenue"]
-    assert result["valuation_timestamp"] == "2026-01-01T00:00:00Z"
+    assert result["valuation_timestamp"] == "2026-11-07T00:00:00Z"
+    assert result["snapshot_timestamp"] == "2026-01-01T00:00:00Z"
 
 
 def test_facts_read_is_snapshot_scoped_point_in_time_and_documented():
