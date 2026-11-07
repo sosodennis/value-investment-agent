@@ -37,6 +37,7 @@ from .serialization import sha256_digest
 from .snapshots import CapturedSource, ContentAddressedStore, SnapshotError
 
 IDENTITY_MAPPING_VERSION = "sec-issuer-identity-v1"
+_SUPPORTED_SEC_FILING_FORMS = frozenset({"10-K", "10-K/A", "10-Q", "10-Q/A"})
 
 
 class _SecPayload(BaseModel):
@@ -88,8 +89,28 @@ class SecAcquisitionSettings:
     edgar_plugin_sha256: str
     xule_plugin_sha256: str
     dqc_ruleset_sha256: str
+    supported_filing_years: tuple[int, ...]
+    supported_filing_forms: tuple[str, ...]
 
     def __post_init__(self) -> None:
+        if (
+            not self.supported_filing_years
+            or tuple(sorted(set(self.supported_filing_years)))
+            != self.supported_filing_years
+        ):
+            raise ValueError("SEC validation runtime must declare sorted filing years")
+        if any(year < 2000 or year > 2100 for year in self.supported_filing_years):
+            raise ValueError("SEC validation runtime filing years are invalid")
+        if (
+            not self.supported_filing_forms
+            or tuple(sorted(set(self.supported_filing_forms)))
+            != self.supported_filing_forms
+            or any(
+                form not in _SUPPORTED_SEC_FILING_FORMS
+                for form in self.supported_filing_forms
+            )
+        ):
+            raise ValueError("SEC validation runtime filing forms are invalid")
         if not self.taxonomy_cache_dir.is_dir():
             raise ValueError("pinned SEC taxonomy cache is unavailable")
         if _directory_hash(self.taxonomy_cache_dir) != self.taxonomy_cache_sha256:
@@ -109,6 +130,35 @@ class SecAcquisitionSettings:
             != self.dqc_ruleset_sha256
         ):
             raise ValueError("pinned DQC ruleset hash does not match")
+
+
+def parse_supported_filing_years(value: str | None) -> tuple[int, ...] | None:
+    """Decode the deployment's certified SEC filing-year compatibility pin."""
+    if value is None or not value.strip():
+        return None
+    try:
+        years = tuple(sorted({int(item.strip()) for item in value.split(",")}))
+    except ValueError as error:
+        raise ValueError(
+            "FUNDAMENTAL_SEC_SUPPORTED_FILING_YEARS must be comma-separated years"
+        ) from error
+    if not years or any(year < 2000 or year > 2100 for year in years):
+        raise ValueError(
+            "FUNDAMENTAL_SEC_SUPPORTED_FILING_YEARS contains an invalid year"
+        )
+    return years
+
+
+def parse_supported_filing_forms(value: str | None) -> tuple[str, ...] | None:
+    """Decode the deployment's certified SEC filing-form compatibility pin."""
+    if value is None or not value.strip():
+        return None
+    forms = tuple(sorted({item.strip() for item in value.split(",") if item.strip()}))
+    if not forms or any(form not in _SUPPORTED_SEC_FILING_FORMS for form in forms):
+        raise ValueError(
+            "FUNDAMENTAL_SEC_SUPPORTED_FILING_FORMS contains an invalid form"
+        )
+    return forms
 
 
 @dataclass(frozen=True)
@@ -426,6 +476,8 @@ class SecAcquisitionUseCase:
         payload["runtime_releases"] = {
             "taxonomy_cache_sha256": self.settings.taxonomy_cache_sha256,
             "validation_profile_digest": validation_profile.digest(),
+            "supported_filing_years": self.settings.supported_filing_years,
+            "supported_filing_forms": self.settings.supported_filing_forms,
         }
         return payload
 
@@ -623,7 +675,11 @@ class SecAcquisitionUseCase:
         )
         submissions = self._decode_submissions(submissions_source.content, request)
         filing = self._select_filing(
-            submissions, request.filing, request.valuation_timestamp
+            submissions,
+            request.filing,
+            request.valuation_timestamp,
+            supported_filing_years=self.settings.supported_filing_years,
+            supported_filing_forms=self.settings.supported_filing_forms,
         )
         index_source = self.adapter.capture_filing_index(
             cik=request.cik,
@@ -844,12 +900,16 @@ class SecAcquisitionUseCase:
         submissions: _Submissions,
         selector: SecFilingSelectorV1,
         valuation_timestamp: datetime,
+        *,
+        supported_filing_years: tuple[int, ...],
+        supported_filing_forms: tuple[str, ...],
     ) -> _SelectedFiling:
         recent = submissions.filings.recent
         cutoff_date = valuation_timestamp.date() - timedelta(
             days=selector.lookback_days
         )
         eligible = []
+        incompatible_count = 0
         for index, accession in enumerate(recent.accessionNumber):
             if selector.accession_number and accession != selector.accession_number:
                 continue
@@ -879,6 +939,28 @@ class SecAcquisitionUseCase:
                 continue
             if filing_date < cutoff_date:
                 continue
+            if filing_date.year not in supported_filing_years:
+                incompatible_count += 1
+                if selector.accession_number:
+                    raise ServiceError(
+                        "FILING_RUNTIME_INCOMPATIBLE",
+                        "requested SEC filing is outside the installed "
+                        "validation runtime",
+                        status_code=422,
+                        retryable=False,
+                    )
+                continue
+            if form not in supported_filing_forms:
+                incompatible_count += 1
+                if selector.accession_number:
+                    raise ServiceError(
+                        "FILING_RUNTIME_INCOMPATIBLE",
+                        "requested SEC filing is outside the installed "
+                        "validation runtime",
+                        status_code=422,
+                        retryable=False,
+                    )
+                continue
             eligible.append(
                 _SelectedFiling(
                     accession_number=accession,
@@ -889,6 +971,13 @@ class SecAcquisitionUseCase:
                 )
             )
         if not eligible:
+            if incompatible_count:
+                raise ServiceError(
+                    "FILING_RUNTIME_INCOMPATIBLE",
+                    "no eligible SEC filing matches the installed validation runtime",
+                    status_code=422,
+                    retryable=False,
+                )
             raise ServiceError(
                 "FILING_NOT_AVAILABLE_AS_OF",
                 "no eligible SEC filing is available at the requested cutoff",
@@ -1035,6 +1124,8 @@ def build_runtime_sec_acquisition(
     edgar_plugin_sha256: str | None,
     xule_plugin_sha256: str | None,
     dqc_ruleset_sha256: str | None,
+    supported_filing_years: tuple[int, ...] | None,
+    supported_filing_forms: tuple[str, ...] | None,
     authorized_organizations: frozenset[str],
 ) -> SecAcquisitionUseCase | None:
     values = (
@@ -1050,6 +1141,8 @@ def build_runtime_sec_acquisition(
         edgar_plugin_sha256,
         xule_plugin_sha256,
         dqc_ruleset_sha256,
+        supported_filing_years,
+        supported_filing_forms,
     )
     if not all(values):
         return None
@@ -1064,6 +1157,8 @@ def build_runtime_sec_acquisition(
         edgar_plugin_sha256=edgar_plugin_sha256 or "",
         xule_plugin_sha256=xule_plugin_sha256 or "",
         dqc_ruleset_sha256=dqc_ruleset_sha256 or "",
+        supported_filing_years=supported_filing_years or (),
+        supported_filing_forms=supported_filing_forms or (),
     )
     adapter = SecEdgarSourceAdapter(
         policy=SecRequestPolicy(user_agent=user_agent or ""),
