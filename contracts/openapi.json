@@ -2594,17 +2594,6 @@
             ],
             "title": "Replay Schema Version"
           },
-          "replay_source_reports_artifact_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Replay Source Reports Artifact Id"
-          },
           "sector": {
             "anyOf": [
               {

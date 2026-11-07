@@ -1735,8 +1735,6 @@ export interface components {
             } | null;
             /** Replay Schema Version */
             replay_schema_version?: string | null;
-            /** Replay Source Reports Artifact Id */
-            replay_source_reports_artifact_id?: string | null;
             /** Sector */
             sector?: string | null;
             /** Status */
