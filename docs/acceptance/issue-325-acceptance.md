@@ -423,3 +423,55 @@ used to mark #325 `VERIFIED`, merge it, or close it.
 The exact cleanup checkpoint that must be applied before the next live run is
 PR #340 branch `codex/issue-327-legacy-cleanup`, currently at
 `cfadb22e4779256ba22d3af6b708ad3fd66b38af`.
+
+## Exact combined service identity boundary probe
+
+- Date: 2026-11-07.
+- Combined source: #325 `a9df879656be5673a38152fe1226776362c36b73` with the
+  #327 cleanup tree merged without commit; the detached verification tree was
+  `/Users/denniswong/.codex/worktrees/issue-325-327-acceptance-v2`.
+- Compose projects were isolated as
+  `value-investment-agent-325-327-acceptance-app` and
+  `value-investment-agent-325-327-acceptance-fundamental`. Backend image digest
+  was `sha256:1f96b0ff50771869094b9676de0e3dbffaeb8786ae5bb5596e632eb5e806c7fc`,
+  frontend was
+  `sha256:fadb3a2101124ee08d47c729f339d47933d9c0c55c7b67cbd7f31e0c339a7a02`,
+  and Fundamental service was
+  `sha256:7a89e2865e7a6c435fbc863fa19302080b28a5c580d160ea952835744cd3b483`.
+  `GET http://127.0.0.1:18780/health` and
+  `GET http://127.0.0.1:18790/readyz` returned HTTP 200; all required
+  containers were healthy.
+- A signed `internal.v1` `POST /v1/identity/resolve` for `MSFT` reached the
+  service with principal `issue-325-acceptance`, organization
+  `org-sec-ingestion-test`, and correlation ID
+  `issue-325-live-msft-identity`. It returned HTTP 422
+  `ISSUER_IDENTITY_UNSUPPORTED` with the stable message
+  `SEC companyfacts does not establish USD reporting`.
+- The service persisted the three SEC source captures before validation. The
+  audit outcome was `ISSUER_IDENTITY_UNSUPPORTED`, with source hashes
+  `76b4b2abb9f7dd0e9cff38e2f20336952bb41806057b2dd1033e244f3e1faec2`,
+  `1a4256a23be814a5193601a2c733d1da647c45da4d73dfe98eee58e32f8f9251`, and
+  `8c1903c041f5c27e86ed15f37debb1f41882b7904bba129ef9edc76478b1e8ea`.
+  Direct inspection of the latter SEC companyfacts capture found 562 US-GAAP
+  concepts with USD units and three historical EUR observations for
+  `DebtInstrumentFaceAmount`; the issuer is not missing USD reporting.
+- A control request for `AAPL` on the same service returned HTTP 200 with CIK
+  `0000320193`, Apple Inc., US-GAAP/USD, source hashes
+  `76b4b2abb9f7dd0e9cff38e2f20336952bb41806057b2dd1033e244f3e1faec2`,
+  `0b0e61bf3ab6ea0c33a95bca99be8defad712262d378282d6e9e343856548fae`, and
+  `f085735b4d08fb116ade18d24247ffabe11df8eb52eae6556b165831f15ef1ad`, and
+  resolution digest
+  `bc50f34c93d65fdf421fb8729946594d3f28032e2e10908ef1cbdee2bd8f1b91`.
+- Fundamental PostgreSQL remained empty after both probes:
+  `snapshot_manifests=0`, `canonical_facts=0`, `snapshot_facts=0`, and
+  `sec_ingestion_acquisitions=0`. No ingestion, snapshot, valuation trace, or
+  UI evidence was claimed.
+
+### Diagnostic result
+
+**Incomplete and blocked.** The combined service is reachable and the signed
+identity boundary is exercised, but the merged #336 resolver rejects a valid
+USD-reporting issuer solely because its companyfacts includes unrelated
+historical EUR facts. This is an owning Fundamental identity-policy defect,
+not a browser workaround or an SEC fallback opportunity. A linked blocker is
+required before the MSFT service-backed acceptance can proceed.
