@@ -127,3 +127,48 @@ preserving the original evidence:
 The issue remains open because service-backed snapshot production, exact #327
 acceptance evidence, and the later #325 live workflow have not yet been
 verified on a main-based pull request.
+
+## Main-based exact-head verification checkpoint
+
+- Branch: `codex/issue-327-legacy-cleanup`
+- Sync commit: `922c405d` (`sync(#327): include merged Fundamental service fixes`)
+- Base: `origin/main` at `d67d7766` (merged #342 fact selector)
+- Pull request: #340, still open and intentionally uses `Refs #327` until merge verification completes.
+
+The cleanup branch was clean before synchronization. The main-based merge
+preserved the cleanup commits and added the already merged service-owned
+identity/fact fixes without changing the cleanup scope.
+
+All checks below ran against exact commit `922c405d` and exited 0:
+
+```text
+uv run --project finance-agent-core pytest -q \
+  finance-agent-core/tests/agents/fundamental \
+  finance-agent-core/tests/test_error_handling_fundamental.py \
+  finance-agent-core/tests/test_fundamental_capability_facades.py \
+  finance-agent-core/tests/test_fundamental_import_hygiene_guard.py \
+  finance-agent-core/tests/test_sec_xbrl_financial_payload_service.py \
+  finance-agent-core/tests/test_sec_text_forward_signals.py \
+  finance-agent-core/tests/test_sec_text_forward_signals_eval.py
+85 passed, 4 third-party edgar deprecation warnings
+
+npm run test -- --run
+50 files, 273 tests passed
+
+npm run typecheck
+npm run lint
+
+bash scripts/generate-contracts.sh
+generated contract diff: clean (idempotent)
+
+python3 scripts/architecture_guard.py
+no boundary violations
+
+git diff --check
+clean
+```
+
+No Docker service acceptance is claimed for #327 itself. The separate
+#341/#342 Fundamental Compose evidence is recorded in the #342 checkpoint;
+#325 still requires its combined workspace route, viewport, keyboard, and
+evidence-inspector acceptance before it can be marked verified.
