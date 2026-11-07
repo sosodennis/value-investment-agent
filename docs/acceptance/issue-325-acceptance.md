@@ -806,3 +806,42 @@ workspace route and verify the service-owned snapshot and facts.
   recreation exit 0; Docker health and backend health curl exit 0. This
   checkpoint proves deployment of the producer fix; the workspace route and
   Fundamental snapshot acceptance were not run yet.
+
+## Deadline-aligned live workspace run
+
+- Date: 2026-11-07 (local). Code under test was the exact branch head
+  `b806bc4c18f694ba69edc681bf3cdbffbbce28fb`, including the workflow deadline
+  alignment with the Fundamental ingestion budget.
+- Route: `http://127.0.0.1:18681/workspace`, Personal organization. The
+  operator entered `MSFT` and selected `MSFT Microsoft Corporation NASDAQ` at
+  100% match.
+- Run: `098e6b16-e41b-43cb-b71a-882386abddf7`; thread
+  `thread_1794059640677`. Fundamental identity resolution returned HTTP 200,
+  and the producer ingestion request returned HTTP 200 with correlation ID
+  `9451148ae2e34b769bec04bb9c5fb6e4`.
+- The subsequent service snapshot-resolution request returned HTTP 422. The
+  service recorded snapshot candidate
+  `snapshot-364ba7b9bf9cdc402222764bb2d605d2` and manifest digest
+  `144d2069533e31534249a71ac7a005472e656671b584b33cdcd535846b9b01f5`, but
+  did not return a selectable snapshot-bound fact set to Agent Core. The UI
+  therefore showed `Report unavailable` and did not fabricate a report.
+- Fundamental PostgreSQL read-only counts after the run were 7 acquisition
+  rows, 9 snapshot manifests, 388 canonical facts, and 388 snapshot-fact
+  links. These counts do not establish that this failed resolution produced a
+  new selectable snapshot.
+- The overall workspace run separately failed in Debate because the LLM
+  provider returned HTTP 502 and the workflow ended with `failover_exhausted`.
+  This provider failure is independent of the Fundamental HTTP 422 and is not
+  treated as a report acceptance result.
+- Docker health remained green for the app and Fundamental projects; the
+  Fundamental `/readyz` endpoint returned HTTP 200. The rebuilt Fundamental
+  image was `sha256:1b2580dd6450471a8e09d3935f9778b0287dbd9fa99a7256f353695a975c8d1d`.
+  Its configured runtime used years `2023,2024`, forms `10-K`, a 1 GiB memory
+  limit, and DQC ruleset SHA-256
+  `0eb33d095ac0ae08f01c508526b35523534659d661bc62873ac1400deec87930`.
+- Result: **incomplete and blocked**. This run verifies the deadline-aligned
+  producer reaches the service and that degraded report behavior is visible,
+  but it does not verify a service-owned snapshot, matching fact IDs,
+  valuation trace, manifest binding, desktop/mobile layout, keyboard
+  operation, or evidence inspector. The exact HTTP 422 error payload must be
+  replayed and traced in the Fundamental service before any UI acceptance.
