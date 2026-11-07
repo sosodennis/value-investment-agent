@@ -37,4 +37,32 @@ The focused service tests cover SEC source capture, ambiguous and mismatched ide
 - The full service suite skipped 25 checks. Their reasons are not yet classified.
 - No PR or PR CI exists. Issue #336 and its dependent issue #325 remain open.
 
+## Live service checkpoint
+
+- The isolated Compose project `value-investment-agent-issue-336-issuer-identity`
+  reported healthy PostgreSQL and Fundamental service containers. `GET
+  http://127.0.0.1:18693/readyz` exited 0 with HTTP 200 and
+  `{"status":"ready","contract_version":"internal.v1"}`. The running
+  Fundamental image ID is
+  `sha256:aec7b3e0c6f29124815129019c2d3202f0d57dc4fb84eaf897823f459797c5b3`.
+- A signed `internal.v1` request using Bearer `integration-token`, organization
+  `org-sec-ingestion-test`, and correlation ID
+  `issue-336-live-identity-aapl` reached `POST
+  http://127.0.0.1:18693/v1/identity/resolve` and exited 0 with HTTP 200. The
+  service resolved `AAPL` to issuer `0000320193`, `Apple Inc.`, US GAAP, USD,
+  and returned `mapping_version=sec-issuer-identity-v1`. The three captured SEC
+  source records had byte counts `796507`, `164533`, and `3859564`, content
+  hashes `76b4b2abb9f7dd0e9cff38e2f20336952bb41806057b2dd1033e244f3e1faec2`,
+  `73e35ef6e705188999d1cd868727a0ac7524cd470cca647f60033f6318eff3c4`, and
+  `f085735b4d08fb116ade18d24247ffabe11df8eb52eae6556b165831f15ef1ad`, and
+  resolution digest
+  `bcbcebee7916effd630fb47aef0929bc6c899c826f1927b643f07da27b53a00f`.
+- The same resolved identity was submitted to `POST
+  http://127.0.0.1:18693/v1/data/ingestions` with AAPL accession
+  `0000320193-24-000123`, required field `revenue`, and the pinned Arelle
+  `2.47.4` / `sec-efm-us-dqc-v31.0.3` profile. The service returned HTTP 422
+  `FACT_MAPPING_UNRESOLVED` before acquisition, so no snapshot was published.
+  This is a deployment-data gap to investigate before claiming the identity can
+  feed the existing ingestion and snapshot contracts.
+
 The next checkpoint is to rebuild the isolated service with the recomputed resource hashes and verify its resolver response against the existing SEC ingestion and snapshot contracts.
