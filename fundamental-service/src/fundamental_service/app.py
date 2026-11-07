@@ -645,6 +645,29 @@ def create_app(
         return success_response(request, application.validate_valuation(value))
 
     @app.post(
+        "/v1/valuation/validate-with-policy",
+        response_model=None,
+        openapi_extra={
+            "requestBody": {
+                "required": True,
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "$ref": (
+                                "#/components/schemas/"
+                                "FundamentalPolicyValidationRequestEnvelopeV1"
+                            )
+                        }
+                    }
+                },
+            }
+        },
+    )
+    async def validate_with_policy(request: Request) -> JSONResponse:
+        value = decode_input(request, PolicyValuationInputV1)
+        return success_response(request, application.validate_with_policy(value))
+
+    @app.post(
         "/v1/valuation/calculate",
         response_model=TypedFundamentalResponseEnvelopeV1[
             CalculationArtifactV1 | UncertaintyReportV1
@@ -733,6 +756,10 @@ def create_app(
             ),
             (
                 "FundamentalPolicyCalculationRequestEnvelopeV1",
+                TypedFundamentalRequestEnvelopeV1[PolicyValuationInputV1],
+            ),
+            (
+                "FundamentalPolicyValidationRequestEnvelopeV1",
                 TypedFundamentalRequestEnvelopeV1[PolicyValuationInputV1],
             ),
             (

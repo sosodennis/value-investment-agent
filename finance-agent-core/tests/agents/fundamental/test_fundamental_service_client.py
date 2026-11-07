@@ -208,6 +208,31 @@ async def test_client_sends_signed_context_and_versioned_envelope() -> None:
 
 
 @pytest.mark.asyncio
+async def test_client_routes_policy_validation_to_its_versioned_endpoint() -> None:
+    captured: list[httpx.Request] = []
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        captured.append(request)
+        body = json.loads(request.content)
+        return httpx.Response(200, json=_success(body["context"]["correlation_id"]))
+
+    client = HttpFundamentalServiceClient(
+        _settings(), client=httpx.AsyncClient(transport=httpx.MockTransport(respond))
+    )
+    await client.execute(
+        "validate_with_policy",
+        {"contract_version": "fundamental.v1", "policy_id": "policy-v1"},
+        principal=_principal(),
+        correlation_id="correlation-policy-validation",
+        deadline_at=datetime.now(UTC) + timedelta(seconds=5),
+    )
+
+    assert captured[0].url.path == "/v1/valuation/validate-with-policy"
+    assert captured[0].method == "POST"
+    await client.aclose()
+
+
+@pytest.mark.asyncio
 async def test_client_calls_sec_ingestion_with_its_bounded_service_timeout() -> None:
     captured: list[httpx.Request] = []
 

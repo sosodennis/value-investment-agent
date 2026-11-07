@@ -20,6 +20,7 @@ FundamentalOperation = Literal[
     "resolve_snapshot",
     "read_facts",
     "validate",
+    "validate_with_policy",
     "calculate",
     "uncertainty",
     "replay",

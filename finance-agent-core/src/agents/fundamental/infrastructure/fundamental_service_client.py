@@ -48,6 +48,7 @@ _OPERATION_PATHS: dict[FundamentalOperation, str] = {
     "resolve_snapshot": "/v1/data/snapshots/resolve",
     "read_facts": "/v1/data/facts",
     "validate": "/v1/valuation/validate",
+    "validate_with_policy": "/v1/valuation/validate-with-policy",
     "calculate": "/v1/valuation/calculate",
     "uncertainty": "/v1/valuation/uncertainty",
     "replay": "/v1/valuation/replay",

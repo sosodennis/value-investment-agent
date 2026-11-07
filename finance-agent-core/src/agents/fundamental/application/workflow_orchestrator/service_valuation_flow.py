@@ -519,6 +519,7 @@ def _caller_values_preserved(
     returned: object,
     *,
     path: tuple[str | int, ...] = (),
+    allow_additional_fields: bool = False,
 ) -> bool:
     """Preserve caller values and permit only known inert schema defaults."""
 
@@ -527,11 +528,16 @@ def _caller_values_preserved(
             return False
         for key, value in supplied.items():
             if key not in returned or not _caller_values_preserved(
-                value, returned[key], path=path + (str(key),)
+                value,
+                returned[key],
+                path=path + (str(key),),
+                allow_additional_fields=allow_additional_fields,
             ):
                 return False
         return all(
-            key in supplied or _is_schema_default(path + (str(key),), value)
+            key in supplied
+            or allow_additional_fields
+            or _is_schema_default(path + (str(key),), value)
             for key, value in returned.items()
         )
     if isinstance(supplied, list | tuple):
@@ -539,7 +545,12 @@ def _caller_values_preserved(
             isinstance(returned, list | tuple)
             and len(supplied) == len(returned)
             and all(
-                _caller_values_preserved(left, right, path=path + (index,))
+                _caller_values_preserved(
+                    left,
+                    right,
+                    path=path + (index,),
+                    allow_additional_fields=allow_additional_fields,
+                )
                 for index, (left, right) in enumerate(
                     zip(supplied, returned, strict=True)
                 )
@@ -1346,6 +1357,7 @@ async def run_service_valuation_flow(
         if raw_request is None:
             raw_request = fundamental.get(_SERVICE_INPUT_KEY)
         input_payload: JSONObject | None = None
+        compact_request = False
         if raw_request is not None:
             input_payload = read_service_valuation_input(state)
             compact_request = is_compact_valuation_request(input_payload)
@@ -1481,8 +1493,9 @@ async def run_service_valuation_flow(
             input_payload, source_selection_policy_version = _resolved_snapshot_input(
                 input_payload, _response_result(resolution_response)
             )
+        validation_operation = "validate_with_policy" if compact_request else "validate"
         validation_response = await client.execute(
-            "validate",
+            validation_operation,
             input_payload,
             principal=principal,
             correlation_id=correlation_id,
@@ -1499,6 +1512,7 @@ async def run_service_valuation_flow(
             input_payload.get("assumptions"),
             validated_input.get("assumptions"),
             path=("assumptions",),
+            allow_additional_fields=compact_request,
         ):
             raise FundamentalServiceFailure(
                 "INPUT_ASSUMPTIONS_CHANGED",

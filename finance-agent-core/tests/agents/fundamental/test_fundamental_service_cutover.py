@@ -171,8 +171,15 @@ class _Client:
                     }
                 ),
             )
-        if operation == "validate":
+        if operation in {"validate", "validate_with_policy"}:
             validated_input = dict(self.validated_input or input_payload)
+            if operation == "validate_with_policy":
+                supplied_assumptions = validated_input["assumptions"]
+                if isinstance(supplied_assumptions, Mapping):
+                    validated_input["assumptions"] = {
+                        **_input()["assumptions"],
+                        **supplied_assumptions,
+                    }
             validated_input["input_digest"] = "a" * 64
             provenance = validated_input["provenance"]
             policy_resolution = {
@@ -685,7 +692,7 @@ async def test_cutover_enriches_compact_caller_request_before_snapshot_resolutio
     client = _FactsOnlyClient(snapshot_timestamp="2026-11-01T00:00:00Z")
     runtime = _Runtime()
     compact = {
-        "assumptions": _input()["assumptions"],
+        "assumptions": {"terminal_growth": "0.02"},
         "uncertainty": {"mode": "none"},
         "requested_as_of": "2026-11-04T00:00:00Z",
     }
@@ -717,7 +724,7 @@ async def test_cutover_enriches_compact_caller_request_before_snapshot_resolutio
         "resolve_identity",
         "ingest_sec_data",
         "resolve_snapshot",
-        "validate",
+        "validate_with_policy",
         "calculate",
     ]
     assert client.calls[1][1]["identity"]["issuer_id"] == "0000320193"

@@ -11,8 +11,6 @@ from types import SimpleNamespace
 import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from fastapi.testclient import TestClient
-from pydantic import ValidationError
-
 from fundamental_service.app import create_app, create_runtime_app
 from fundamental_service.application.service import (
     FundamentalApplication,
@@ -69,6 +67,7 @@ from fundamental_service.testsupport import (
     make_valuation,
 )
 from fundamental_service.uncertainty import UncertaintyEvidenceV1
+from pydantic import ValidationError
 
 
 def _bind_initial_policy(valuation):
@@ -561,6 +560,31 @@ def test_policy_calculation_merges_overrides_and_uses_the_explicit_calculator(
     partial["assumptions"] = {"terminal_growth": "0"}
     partial["policy_id"] = policy.policy_id
 
+    validation = client.post(
+        "/v1/valuation/validate-with-policy",
+        headers=auth_headers(),
+        json=make_internal_envelope(partial),
+    )
+    assert validation.status_code == 200, validation.text
+    validation_body = validation.json()["result"]
+    assert validation_body["input"]["assumptions"]["terminal_growth"] == "0"
+    assert validation_body["input"]["assumptions"]["wacc"]["risk_free_rate"] == str(
+        base.assumptions.wacc.risk_free_rate
+    )
+    assert validation_body["input_digest"] == validation_body["input"]["input_digest"]
+    assert (
+        validation_body["policy_resolution"]["precedence"][
+            "assumptions.terminal_growth"
+        ]
+        == "caller"
+    )
+    assert (
+        validation_body["policy_resolution"]["precedence"][
+            "assumptions.wacc.risk_free_rate"
+        ]
+        == "policy"
+    )
+
     policy_result = client.post(
         "/v1/valuation/calculate-with-policy",
         headers=auth_headers(),
@@ -625,6 +649,7 @@ def test_policy_calculation_merges_overrides_and_uses_the_explicit_calculator(
     paths = client.app.openapi()["paths"]
     assert "requestBody" in paths["/v1/valuation/calculate"]["post"]
     assert "requestBody" in paths["/v1/valuation/calculate-with-policy"]["post"]
+    assert "requestBody" in paths["/v1/valuation/validate-with-policy"]["post"]
     calculate_envelope = client.app.openapi()["components"]["schemas"][
         "FundamentalCalculationRequestEnvelopeV1"
     ]
@@ -643,6 +668,12 @@ def test_policy_calculation_merges_overrides_and_uses_the_explicit_calculator(
     assert policy_envelope["properties"]["input"]["$ref"].endswith(
         "/PolicyValuationInputV1"
     )
+    policy_validation_envelope = client.app.openapi()["components"]["schemas"][
+        "FundamentalPolicyValidationRequestEnvelopeV1"
+    ]
+    assert policy_validation_envelope["properties"]["input"]["$ref"].endswith(
+        "/PolicyValuationInputV1"
+    )
 
 
 def test_policy_calculation_missing_release_and_unresolved_assumptions_are_stable():
@@ -653,6 +684,14 @@ def test_policy_calculation_missing_release_and_unresolved_assumptions_are_stabl
     request = base.model_dump(mode="json")
     request["assumptions"] = {"terminal_growth": "0.02"}
     request["policy_id"] = "missing-policy"
+
+    missing_validation = client.post(
+        "/v1/valuation/validate-with-policy",
+        headers=auth_headers(),
+        json=make_internal_envelope(request),
+    )
+    assert missing_validation.status_code == 404
+    assert missing_validation.json()["error"]["code"] == "POLICY_NOT_FOUND"
 
     missing = client.post(
         "/v1/valuation/calculate-with-policy",
@@ -665,6 +704,15 @@ def test_policy_calculation_missing_release_and_unresolved_assumptions_are_stabl
     unsupported = base.model_dump(mode="json")
     unsupported["assumptions"] = {"terminal_growth": "0.02"}
     unsupported["policy_id"] = "fcff_dcf-us-gaap-public-v1"
+    incomplete_validation = client.post(
+        "/v1/valuation/validate-with-policy",
+        headers=auth_headers(),
+        json=make_internal_envelope(unsupported),
+    )
+    assert incomplete_validation.status_code == 422
+    assert incomplete_validation.json()["error"]["code"] == (
+        "POLICY_ASSUMPTIONS_INCOMPLETE"
+    )
     incomplete = client.post(
         "/v1/valuation/calculate-with-policy",
         headers=auth_headers(),
