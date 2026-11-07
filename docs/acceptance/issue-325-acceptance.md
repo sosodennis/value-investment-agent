@@ -301,3 +301,61 @@ worktree while retaining both PostgreSQL volumes. Then exercise the real
 workspace route and inspect the service-owned snapshot, facts, and valuation
 trace. If the route cannot provide the required caller assumptions, record the
 remaining owning-layer gap as a linked `blocker`; leave #325 incomplete.
+
+## Exact-commit rebuild and live route diagnostic
+
+- Date: 2026-11-07.
+- Code under test: `38b5def58d23a887e58f13e41ff3fb4221b76df2`.
+- Compose config was rechecked before mutation with `docker compose ... config
+  --quiet` (exit 0) for both isolated projects. The app project used
+  `docker-compose.yml`, `docker-compose.override.yml`, and
+  `compose/verification/docker-compose.issue325-app-fundamental.yml`; the
+  Fundamental project used `docker-compose.issue280-operations.yml` and
+  `docker-compose.issue312-sec-ingestion.yml`.
+- Exact build commands and results: app `backend` build (exit 0), app
+  `frontend` build (exit 0; Next.js production compile and TypeScript passed),
+  and Fundamental `fundamental-service` build (exit 0; pinned Arelle 2.47.4
+  installed). Only the three required service images were rebuilt.
+- `docker compose ... up -d backend frontend` and `docker compose ... up -d
+  fundamental-service` exited 0. The existing app and Fundamental PostgreSQL
+  volumes were retained; no `down --volumes` or global cleanup ran.
+- New container health: app frontend, backend, PostgreSQL, Redis, and LLM
+  provider healthy; Fundamental service and PostgreSQL healthy. Fundamental
+  `/readyz` returned `{"status":"ready","contract_version":"internal.v1"}`.
+  The rebuilt image digests were recorded locally as app backend
+  `sha256:19453b8732b51356f0969425f9d9da9682e14e4d3c1244fadca91bc08a9e14`,
+  Fundamental service
+  `sha256:0ab5795055d7ee14126010ae491af6e8a529e3d4595cb58614f74380d21e32db`,
+  and frontend
+  `sha256:ff151e6d37cd7e6cb2d7056f21c531e8e53cc3e9d1873c40dbbc3facd39dbe31`.
+- Route: `http://127.0.0.1:18681/workspace`, Personal organization, account
+  `issue325-live-20261107@example.test`, desktop browser session. Entered
+  `MSFT`, selected `MSFT / Microsoft Corporation / NASDAQ / 100% match` over
+  `MSFT.TO / Toronto / 90%`, and continued with the selected company.
+- Run: `6931b7df-38e3-4ee9-aca6-b8eb1283c7e8`; thread
+  `thread_1794020551914`. The activity view reached
+  `fundamental_analysis / review-financial-health`, while technical and news
+  subgraphs completed. The backend log for this exact run shows direct
+  `data.sec.gov` and `www.sec.gov/Archives` requests from Agent-owned
+  `sec_xbrl`; the Fundamental service log contains only startup, health probes,
+  and one earlier intentionally malformed resolver probe (`400 invalid_request`).
+- The run was cancelled from the workspace after the legacy health node kept
+  traversing historical SEC filings. The browser visibly reported `Run
+  cancelled`, `cancelled`, cursor 51, and `Connection closed` (exit is a UI
+  observation, not a shell command). No service-backed snapshot, fact IDs,
+  manifest digest, valuation trace, or evidence inspector result was produced.
+- Immediate Fundamental PostgreSQL counts after cancellation were all zero:
+  `snapshot_manifests`, `canonical_facts`, `snapshot_facts`,
+  `release_manifests`, `active_data_release_pointers`, and
+  `sec_ingestion_acquisitions`. This run therefore cannot satisfy any
+  service-backed acceptance criterion.
+
+### Diagnostic result
+
+**Incomplete and blocked.** The exact-commit containers are healthy, but the
+real workspace route still performs a long Agent-owned SEC financial-health
+fetch before the service valuation stage. The UI run was cancelled before any
+service ingestion or facts projection. Do not mark #325 `VERIFIED`, merge it,
+or close it. The remaining gap is in the owning Agent workflow/request
+producer: it must reach the typed Fundamental service path with caller-owned
+valuation input without substituting legacy SEC report data.
