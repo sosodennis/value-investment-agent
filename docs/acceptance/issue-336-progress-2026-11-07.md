@@ -7,7 +7,7 @@ This record is a work-in-progress checkpoint. It is not an acceptance or VERIFIE
 - Issue: #336, blocker for #325
 - Branch: `codex/issue-336-issuer-identity`
 - Base: `origin/main` at `55608191c13ad02a8efddc7079c54c71c702d8dc`
-- Code checkpoint tested: `d789069e28057494068d3a09f52586b55c955e2b`
+- Code checkpoint tested: `235068c7c9d3c17c9853b139143c35836be2d9f5`
 - Pull request: none
 - CI: none
 
@@ -81,4 +81,36 @@ The focused service tests cover SEC source capture, ambiguous and mismatched ide
   fresh verification database until a data release is activated by the owning
   #321 workflow.
 
-The next checkpoint is to rebuild the isolated service with the recomputed resource hashes and verify its resolver response against the existing SEC ingestion and snapshot contracts.
+The next checkpoint is to open a PR for #336, obtain the exact-head CI/review
+result, and keep #325 blocked until the resolver and its evidence are accepted.
+
+## Exact-HEAD verification checkpoint
+
+All code checks below ran against `235068c7c9d3c17c9853b139143c35836be2d9f5`;
+the following evidence commits only edit this acceptance record.
+
+- `cd fundamental-service && uv run pytest tests/test_sec_source.py tests/test_issuer_identity.py tests/test_identity_resolution_api.py -q`: exit 0,
+  31 passed in 1.73s.
+- `cd fundamental-service && uv run pytest -q`: exit 0, 225 passed, 25
+  skipped, and one existing Pydantic serializer warning. The 25 skips are six
+  pinned EFM/DQC parser or ingestion checks without `ISSUE328_*` runtime paths
+  and nineteen PostgreSQL checks without `FUNDAMENTAL_TEST_DATABASE_URL`;
+  Docker live evidence above covers the running database/service boundary.
+- `cd finance-agent-core && uv run pytest tests/agents/fundamental -q`: exit 0,
+  40 passed with four existing `edgartools` deprecation warnings.
+- `cd finance-agent-core && uv run ruff check
+  src/agents/fundamental/application/fundamental_service_port.py
+  src/agents/fundamental/infrastructure/fundamental_service_client.py
+  src/agents/fundamental/interface/fundamental_service_contracts.py
+  tests/agents/fundamental/test_fundamental_service_client.py`: exit 0.
+- `python3 scripts/architecture_guard.py`: exit 0, no boundary violations.
+- `git diff --check origin/main...HEAD`: exit 0.
+- Docker containers remained healthy and `GET /readyz` returned HTTP 200
+  `{"status":"ready","contract_version":"internal.v1"}`. The service image
+  remained `sha256:aec7b3e0c6f29124815129019c2d3202f0d57dc4fb84eaf897823f459797c5b3`.
+
+The code is ready for a PR-scoped review, but this record remains WIP: no PR or
+CI exists yet, no successful snapshot was available because AAPL is correctly
+blocked and the fresh database has no active release, and the unconfigured
+offline parser/PostgreSQL test skips above are intentionally not claimed as
+passed.
