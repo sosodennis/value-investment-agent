@@ -359,3 +359,14 @@ service ingestion or facts projection. Do not mark #325 `VERIFIED`, merge it,
 or close it. The remaining gap is in the owning Agent workflow/request
 producer: it must reach the typed Fundamental service path with caller-owned
 valuation input without substituting legacy SEC report data.
+
+### Linked blocker record
+
+- Existing issue #327 owns removal of active Agent Core legacy reports,
+  fixtures, and direct SEC/report fallback paths. It was previously open
+  without a blocker label.
+- On 2026-11-07, #327 was labeled `blocker` and received comment
+  `https://github.com/sosodennis/value-investment-agent/issues/327#issuecomment-6701466961`
+  with the exact run, log, and zero-row Fundamental DB evidence above. This
+  records the acceptance compromise in the owning layer; no workaround or UI
+  concealment was added.
