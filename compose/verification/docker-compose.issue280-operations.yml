@@ -47,8 +47,8 @@ services:
       resources:
         limits:
           cpus: "1.0"
-          memory: 512M
-    mem_limit: 512m
+          memory: ${FUNDAMENTAL_SERVICE_MEMORY_LIMIT:-1G}
+    mem_limit: ${FUNDAMENTAL_SERVICE_MEMORY_LIMIT:-1g}
     cpus: 1.0
     stop_grace_period: 10s
     init: true

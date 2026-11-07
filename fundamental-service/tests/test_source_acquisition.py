@@ -15,6 +15,7 @@ from fundamental_service.operations import ServiceError
 from fundamental_service.serialization import sha256_digest
 from fundamental_service.source_acquisition import (
     SecAcquisitionUseCase,
+    parse_supported_filing_forms,
     parse_supported_filing_years,
 )
 
@@ -115,6 +116,7 @@ def test_default_filing_selection_skips_years_outside_installed_runtime():
         SecFilingSelectorV1(),
         datetime(2026, 11, 7, tzinfo=UTC),
         supported_filing_years=(2024,),
+        supported_filing_forms=("10-K",),
     )
 
     assert selected.accession_number == "0000789019-24-000001"
@@ -137,6 +139,7 @@ def test_explicit_filing_outside_installed_runtime_fails_closed():
             SecFilingSelectorV1(accession_number="0000789019-26-000001"),
             datetime(2026, 11, 7, tzinfo=UTC),
             supported_filing_years=(2024,),
+            supported_filing_forms=("10-K",),
         )
 
     assert error.value.code == "FILING_RUNTIME_INCOMPATIBLE"
@@ -190,6 +193,7 @@ def _runtime_settings() -> SimpleNamespace:
         edgar_plugin_sha256="a" * 64,
         xule_plugin_sha256="b" * 64,
         dqc_ruleset_sha256="d" * 64,
+        supported_filing_forms=("10-K",),
     )
 
 
@@ -259,6 +263,7 @@ def test_runtime_acquisition_key_binds_validation_and_taxonomy_digests():
         "taxonomy_cache_sha256": "c" * 64,
         "validation_profile_digest": _validation_profile().digest(),
         "supported_filing_years": (2024,),
+        "supported_filing_forms": ("10-K",),
     }
     assert sha256_digest(baseline) != sha256_digest(changed_profile)
     assert sha256_digest(baseline) != sha256_digest(changed_taxonomy)
@@ -278,6 +283,48 @@ def test_supported_filing_years_reject_invalid_configuration():
         parse_supported_filing_years("2024,current")
     with pytest.raises(ValueError, match="invalid year"):
         parse_supported_filing_years("1800")
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    (("10-K", ("10-K",)), ("10-Q,10-K,10-K", ("10-K", "10-Q")), (None, None)),
+)
+def test_supported_filing_forms_parse_deterministically(value, expected):
+    assert parse_supported_filing_forms(value) == expected
+
+
+def test_supported_filing_forms_reject_invalid_configuration():
+    with pytest.raises(ValueError, match="invalid form"):
+        parse_supported_filing_forms("10-K,8-K")
+
+
+def test_default_filing_selection_skips_unsupported_forms():
+    submissions = _submissions_with_filings(
+        {
+            "accession": "0000789019-24-000002",
+            "filing_date": "2024-10-30",
+            "accepted_at": "2024-10-30T12:00:00Z",
+            "form": "10-Q",
+            "primary_document": "msft-20240930.htm",
+        },
+        {
+            "accession": "0000789019-24-000001",
+            "filing_date": "2024-07-30",
+            "accepted_at": "2024-07-30T12:00:00Z",
+            "form": "10-K",
+            "primary_document": "msft-20240630.htm",
+        },
+    )
+
+    selected = SecAcquisitionUseCase._select_filing(
+        submissions,
+        SecFilingSelectorV1(),
+        datetime(2026, 11, 7, tzinfo=UTC),
+        supported_filing_years=(2024,),
+        supported_filing_forms=("10-K",),
+    )
+
+    assert selected.accession_number == "0000789019-24-000001"
 
 
 class _AuditMetadata:
