@@ -43,15 +43,15 @@ are listed separately so cleanup can prove they disappear.
 | Area | Current paths/references | Decision |
 | --- | --- | --- |
 | Agent SEC/XBRL acquisition | `capabilities/financial_statements/infrastructure/sec_xbrl/`, `capabilities/forward_signals/infrastructure/sec_xbrl/`, and their old provider imports | No default production wiring. Keep only for migration tests until service-backed request production and #325 evidence replace them; then delete or move to an explicit archive. |
-| Report artifact persistence | `application/workflow_orchestrator/financial_health_flow.py`, `state_updates.py`, `capabilities/artifacts_provenance/`, and `services/model_selection_artifact_service.py` | The default health flow no longer writes reports; model-selection read/write was removed in `dabc98dc`. Debate no longer loads this artifact kind; the repository is retained only for explicit artifact-contract tests and historical migration evidence. |
+| Report artifact persistence | `application/workflow_orchestrator/financial_health_flow.py`, `state_updates.py`, and `services/model_selection_artifact_service.py` | The default health flow no longer writes reports; model-selection read/write was removed in `dabc98dc`. The dead Fundamental `artifacts_provenance` repository, port, parser, and tests were removed in `da010797`. The shared `financial_reports` artifact contract remains because service valuation writes the current service-backed artifact; Debate does not load it and reports an explicit service-snapshot-unavailable issue. |
 | Legacy valuation path | `application/workflow_orchestrator/valuation_flow.py`, `services/valuation_execution_context_service.py`, and report snapshot helpers | Removed in the next cleanup checkpoint because the default runner calls `service_valuation_flow.py`; the deleted path had no production caller. Its logging/application-service tests were deleted with it because they asserted obsolete report loading and persistence. |
 | Raw report serializers and preview adapters | `interface/workflow_orchestrator/serializers.py`, `preview_projection_service.py`, `mappers.py`, `formatters.py`, and model-selection report projection | Removed in `5f877d82` and `2c7a7338`; no active caller or service-contract test requires the report-shaped compatibility layer. |
 
 ## Acceptance gates still open
 
-1. Add a repository guard proving no active Agent Core workflow imports the SEC
-   acquisition or legacy report artifact reader, then prove the default graph
-   cannot reach either fallback.
+1. The production caller import guard and default-graph fallback checks are
+   recorded at `6ad95777` and `da010797`; keep them passing while the legacy
+   SEC acquisition modules remain quarantined for migration evidence.
 2. Inventory and delete or archive unowned calibration/replay outputs without
    deleting service-owned canonical evidence.
 3. Add guard tests for forbidden Agent-side SEC/report imports and legacy state
@@ -66,6 +66,13 @@ The state-contract and import-guard checkpoint is
 the production caller layers. The debate reader checkpoint is
 `88d60e2c291539626e1e81b5cb9a56a813c8f9f0`; it removes the financial report
 typed port and returns an explicit service-snapshot-unavailable issue.
+
+The dead Fundamental artifact capability removal checkpoint is
+`da010797ac086938d1a7ae00ac68139eb2679869`. It removes the uncalled
+`artifacts_provenance` repository, port, agent-specific artifact parser, and
+their tests. API and serializer tests now validate the shared
+`FinancialReportsArtifactData` contract used by the service-backed valuation
+artifact.
 
 ## Generated report cleanup decision
 
@@ -126,6 +133,32 @@ remain the rebuild source.
 | `uv run ruff check ...` and `uv run ruff format --check ...` | exit `0` |
 | `python3 scripts/architecture_guard.py` | exit `0`; no boundary violations |
 | `git diff --check` and commit hooks | exit `0` |
+
+The artifact capability removal was verified at `da010797` with:
+
+```sh
+uv run pytest tests/test_artifact_api_contract.py \
+  tests/test_artifact_contract_registry.py \
+  tests/test_output_contract_serializers.py \
+  tests/test_fundamental_capability_facades.py \
+  tests/test_fundamental_import_hygiene_guard.py \
+  tests/test_error_handling_fundamental.py -q
+uv run ruff check tests/test_artifact_api_contract.py \
+  tests/test_output_contract_serializers.py \
+  tests/test_fundamental_capability_facades.py \
+  tests/test_fundamental_import_hygiene_guard.py \
+  tests/test_error_handling_fundamental.py
+uv run ruff format --check tests/test_artifact_api_contract.py \
+  tests/test_output_contract_serializers.py \
+  tests/test_fundamental_capability_facades.py \
+  tests/test_fundamental_import_hygiene_guard.py \
+  tests/test_error_handling_fundamental.py
+python3 scripts/architecture_guard.py
+git diff --check
+```
+
+Results: 34 passed, Ruff check and format passed, architecture guard passed,
+and `git diff --check` passed. The commit hooks also passed.
 
 The legacy valuation removal was verified at `746acf00` with:
 
