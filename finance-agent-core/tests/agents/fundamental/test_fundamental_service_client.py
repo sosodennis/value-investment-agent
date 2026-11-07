@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from datetime import UTC, datetime, timedelta
 
@@ -12,6 +13,9 @@ from src.agents.fundamental.application.fundamental_service_port import (
 from src.agents.fundamental.infrastructure.fundamental_service_client import (
     FundamentalServiceClientSettings,
     HttpFundamentalServiceClient,
+)
+from src.agents.fundamental.interface.fundamental_service_contracts import (
+    FundamentalIdentityResolutionRequestV1,
 )
 from src.shared.internal_services import InternalPrincipal
 
@@ -112,6 +116,55 @@ def _facts_success(correlation_id: str) -> dict[str, object]:
     }
 
 
+def _identity_result() -> dict[str, object]:
+    payload: dict[str, object] = {
+        "ticker": "AAPL",
+        "identity": {
+            "issuer_id": "0000320193",
+            "issuer_name": "Apple Inc.",
+            "domicile": "US",
+            "reporting_basis": "us-gaap",
+            "security_id": "AAPL",
+            "share_class": "AAPL",
+            "currency": "USD",
+        },
+        "mapping_version": "sec-issuer-identity-v1",
+        "source_evidence": [
+            {
+                "source_id": source_id,
+                "source_uri": source_uri,
+                "content_hash": "a" * 64,
+                "captured_at": "2026-11-07T00:00:00Z",
+                "available_at": "2026-11-07T00:00:00Z",
+                "media_type": "application/json",
+                "byte_count": 1,
+            }
+            for source_id, source_uri in (
+                (
+                    "sec-company-tickers",
+                    "https://www.sec.gov/files/company_tickers.json",
+                ),
+                (
+                    "sec-submissions",
+                    "https://data.sec.gov/submissions/CIK0000320193.json",
+                ),
+                (
+                    "sec-companyfacts",
+                    "https://data.sec.gov/api/xbrl/companyfacts/CIK0000320193.json",
+                ),
+            )
+        ],
+    }
+    canonical = json.dumps(
+        payload,
+        ensure_ascii=False,
+        allow_nan=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+    return {**payload, "resolution_digest": hashlib.sha256(canonical).hexdigest()}
+
+
 @pytest.mark.asyncio
 async def test_client_sends_signed_context_and_versioned_envelope() -> None:
     captured: list[httpx.Request] = []
@@ -209,6 +262,72 @@ async def test_client_reads_typed_facts_from_the_immutable_snapshot_endpoint() -
     assert result.identity.issuer_id == "320193"
     assert result.facts[0].fact_id == "fact-revenue-2025"
     assert result.facts[0].source.content_hash == "b" * 64
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_client_resolves_identity_with_typed_digest_bound_response() -> None:
+    captured: list[httpx.Request] = []
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        captured.append(request)
+        body = json.loads(request.content)
+        return httpx.Response(
+            200,
+            json={
+                **_success(body["context"]["correlation_id"]),
+                "result": _identity_result(),
+            },
+        )
+
+    client = HttpFundamentalServiceClient(
+        _settings(), client=httpx.AsyncClient(transport=httpx.MockTransport(respond))
+    )
+    result = await client.resolve_identity(
+        FundamentalIdentityResolutionRequestV1(ticker=" aapl "),
+        principal=_principal(),
+        correlation_id="correlation-identity",
+        deadline_at=datetime.now(UTC) + timedelta(seconds=180),
+    )
+
+    assert result.ticker == "AAPL"
+    assert result.identity.issuer_id == "0000320193"
+    assert result.resolution_digest
+    assert captured[0].url.path == "/v1/identity/resolve"
+    assert captured[0].extensions["timeout"]["read"] == 120.0
+    assert json.loads(captured[0].content)["input"] == {"ticker": "AAPL"}
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_client_rejects_identity_response_with_changed_source_hash() -> None:
+    invalid_result = _identity_result()
+    invalid_result["source_evidence"][0]["content_hash"] = "b" * 64
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        return httpx.Response(
+            200,
+            json={
+                **_success(body["context"]["correlation_id"]),
+                "result": invalid_result,
+            },
+        )
+
+    client = HttpFundamentalServiceClient(
+        _settings(max_attempts=1),
+        client=httpx.AsyncClient(transport=httpx.MockTransport(respond)),
+    )
+
+    with pytest.raises(FundamentalServiceFailure) as error:
+        await client.resolve_identity(
+            FundamentalIdentityResolutionRequestV1(ticker="AAPL"),
+            principal=_principal(),
+            correlation_id="correlation-identity-invalid",
+            deadline_at=datetime.now(UTC) + timedelta(seconds=5),
+        )
+
+    assert error.value.code == "UPSTREAM_MALFORMED"
     await client.aclose()
 
 

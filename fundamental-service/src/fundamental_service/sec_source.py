@@ -95,6 +95,9 @@ def sec_source_register() -> SourceRegister:
         (
             LegalSource("sec-companyfacts", SourceRole.FACTS, SEC_TERMS, "indefinite"),
             LegalSource(
+                "sec-company-tickers", SourceRole.ACQUISITION, SEC_TERMS, "indefinite"
+            ),
+            LegalSource(
                 "sec-submissions", SourceRole.ACQUISITION, SEC_TERMS, "indefinite"
             ),
             LegalSource(
@@ -345,6 +348,7 @@ class SecEdgarSourceAdapter:
     ) -> CapturedSource:
         if source_id not in {
             "sec-companyfacts",
+            "sec-company-tickers",
             "sec-submissions",
             "sec-filing-index",
         }:
@@ -355,6 +359,8 @@ class SecEdgarSourceAdapter:
             expected_prefixes = (f"{self.policy.base_url}/api/xbrl/companyfacts/",)
         elif source_id == "sec-submissions":
             expected_prefixes = (f"{self.policy.base_url}/submissions/",)
+        elif source_id == "sec-company-tickers":
+            expected_prefixes = ("https://www.sec.gov/files/company_tickers.json",)
         else:
             expected_prefixes = ("https://www.sec.gov/Archives/edgar/data/",)
         parsed = urlsplit(uri)
@@ -369,7 +375,11 @@ class SecEdgarSourceAdapter:
             or parsed.port is not None
             or parsed.username is not None
             or parsed.password is not None
-            or not uri.startswith(expected_prefixes)
+            or (
+                uri != expected_prefixes[0]
+                if source_id == "sec-company-tickers"
+                else not uri.startswith(expected_prefixes)
+            )
         ):
             raise SecSourceError(
                 "SOURCE_URI_NOT_ALLOWED",
@@ -389,6 +399,8 @@ class SecEdgarSourceAdapter:
             role=(
                 SourceRole.FACTS
                 if source_id == "sec-companyfacts"
+                else SourceRole.ACQUISITION
+                if source_id in {"sec-company-tickers", "sec-submissions"}
                 else SourceRole.REFERENCE
             ),
             content=payload,
@@ -403,7 +415,11 @@ class SecEdgarSourceAdapter:
         )
 
     def capture_company_facts(
-        self, cik: str, *, captured_at: datetime | None = None
+        self,
+        cik: str,
+        *,
+        captured_at: datetime | None = None,
+        deadline_at: datetime | None = None,
     ) -> CapturedSource:
         normalized = cik.strip().lstrip("0") or "0"
         if not normalized.isdigit() or len(normalized) > 10:
@@ -412,6 +428,17 @@ class SecEdgarSourceAdapter:
             source_id="sec-companyfacts",
             uri=f"{self.policy.base_url}/api/xbrl/companyfacts/CIK{int(normalized):010d}.json",
             captured_at=captured_at,
+            deadline_at=deadline_at,
+        )
+
+    def capture_company_tickers(
+        self, *, deadline_at: datetime | None = None
+    ) -> CapturedSource:
+        """Capture SEC's public ticker-to-CIK reference as immutable evidence."""
+        return self.capture_json(
+            source_id="sec-company-tickers",
+            uri="https://www.sec.gov/files/company_tickers.json",
+            deadline_at=deadline_at,
         )
 
     def capture_submissions(
