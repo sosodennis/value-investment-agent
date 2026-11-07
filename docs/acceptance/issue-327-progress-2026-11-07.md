@@ -75,3 +75,29 @@ Remove the default runner's direct `fetch_financial_reports_payload` injection,
 replace the financial-health behavior with a typed service-boundary/degraded
 outcome, migrate affected tests to assert no Agent-owned SEC fetch, and commit
 that focused change before broader artifact cleanup.
+
+## Default Wiring Checkpoint
+
+Checkpoint commit: `3005b52dddcfd2183c886504078bcaea80213ee1`.
+
+The production default wiring no longer imports the Agent-owned SEC/XBRL
+fetcher, model-inference-backed SEC text signal producer, or XBRL signal
+producer. It now emits an explicit `service_snapshot_pending` degraded payload
+until a typed service-owned snapshot request is supplied. Empty financial-health
+data no longer invokes forward-signal extraction, so the old SEC text fallback
+cannot run on this path and no `financial_reports` artifact is written.
+
+The regression test patches the former SEC fetcher to raise if called, invokes
+the default financial-health node, and asserts a `model_selection` handoff with
+`service_snapshot_request_required` diagnostics and no artifact reference.
+
+| Check | Result |
+| --- | --- |
+| `python3 scripts/architecture_guard.py` | exit `0`; no boundary violations |
+| Focused default-wiring regression | exit `0`; `3 passed, 4 warnings` |
+| Fundamental Agent, orchestrator, facade, and SEC payload baseline | exit `0`; `73 passed, 4 warnings in 3.23s` |
+| Commit hooks | exit `0`; whitespace, YAML, large-file, Ruff, and Ruff format checks passed |
+
+The legacy financial-statements parser, artifact repository, and historical
+fixtures remain present for the next migration unit; no active default wiring
+references them after this checkpoint.
