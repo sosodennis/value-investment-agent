@@ -89,6 +89,8 @@ from .source_acquisition import (
     SecIdentityResolutionUseCase,
     build_runtime_sec_acquisition,
     build_runtime_sec_identity_resolution,
+    parse_supported_filing_forms,
+    parse_supported_filing_years,
 )
 from .uncertainty import UncertaintyReportV1
 
@@ -806,6 +808,12 @@ def create_runtime_app() -> FastAPI:
     edgar_plugin_sha256 = os.getenv("FUNDAMENTAL_SEC_EDGAR_PLUGIN_SHA256")
     xule_plugin_sha256 = os.getenv("FUNDAMENTAL_SEC_XULE_PLUGIN_SHA256")
     dqc_ruleset_sha256 = os.getenv("FUNDAMENTAL_SEC_DQC_RULESET_SHA256")
+    supported_filing_years = parse_supported_filing_years(
+        os.getenv("FUNDAMENTAL_SEC_SUPPORTED_FILING_YEARS")
+    )
+    supported_filing_forms = parse_supported_filing_forms(
+        os.getenv("FUNDAMENTAL_SEC_SUPPORTED_FILING_FORMS")
+    )
     sec_acquisition = build_runtime_sec_acquisition(
         metadata=metadata_store,
         content_store=content_store,
@@ -823,6 +831,8 @@ def create_runtime_app() -> FastAPI:
         edgar_plugin_sha256=edgar_plugin_sha256,
         xule_plugin_sha256=xule_plugin_sha256,
         dqc_ruleset_sha256=dqc_ruleset_sha256,
+        supported_filing_years=supported_filing_years,
+        supported_filing_forms=supported_filing_forms,
         authorized_organizations=config.ingestion_authorized_organizations,
     )
     identity_resolution = build_runtime_sec_identity_resolution(
