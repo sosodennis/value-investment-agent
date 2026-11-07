@@ -24,6 +24,15 @@ describe('FundamentalAnalysisOutput', () => {
     });
 
     const renderComponent = (previewData: ParsedFinancialPreview) => {
+        mockUseArtifact.mockReturnValue({
+            data: {
+                fundamental_service: {
+                    projection_type: 'valuation',
+                    facts: { facts: [] },
+                },
+            },
+            isLoading: false,
+        });
         render(
             <FundamentalAnalysisOutput
                 reference={null}
@@ -33,6 +42,80 @@ describe('FundamentalAnalysisOutput', () => {
             />
         );
     };
+
+    it('shows service facts without legacy valuation preview when valuation was not requested', () => {
+        mockUseArtifact.mockReturnValue({
+            data: {
+                fundamental_service: {
+                    projection_type: 'facts_only',
+                    valuation_status: 'not_requested',
+                    facts: { facts: [] },
+                },
+                financial_reports: [{ company_name: 'Legacy report' }],
+            },
+            isLoading: false,
+        });
+
+        render(
+            <FundamentalAnalysisOutput
+                reference={null}
+                previewData={{
+                    ticker: 'AAPL',
+                    valuation_score: 91,
+                    key_metrics: { Revenue: '$10B' },
+                    intrinsic_value: 123,
+                }}
+                resolvedTicker="AAPL"
+                status="done"
+            />
+        );
+
+        screen.getByRole('status');
+        screen.getByText('Valuation not requested');
+        screen.getByTestId('financial-table');
+        expect(screen.queryByText('Analyst Valuation Score')).not.toBeInTheDocument();
+        expect(screen.queryByText('Revenue')).not.toBeInTheDocument();
+        expect(screen.queryByText('Intrinsic Value')).not.toBeInTheDocument();
+        expect(screen.queryByText('Legacy report')).not.toBeInTheDocument();
+    });
+
+    it('does not use preview metrics when a completed run has no service facts', () => {
+        render(
+            <FundamentalAnalysisOutput
+                reference={null}
+                previewData={{
+                    ticker: 'AAPL',
+                    key_metrics: { Revenue: '$10B' },
+                    intrinsic_value: 123,
+                }}
+                resolvedTicker="AAPL"
+                status="done"
+            />
+        );
+
+        screen.getByText('Fundamental facts unavailable');
+        expect(screen.queryByText('Revenue')).not.toBeInTheDocument();
+        expect(screen.queryByText('Intrinsic Value')).not.toBeInTheDocument();
+    });
+
+    it('does not use preview metrics after a run error without service facts', () => {
+        render(
+            <FundamentalAnalysisOutput
+                reference={null}
+                previewData={{
+                    ticker: 'AAPL',
+                    key_metrics: { Revenue: '$10B' },
+                    intrinsic_value: 123,
+                }}
+                resolvedTicker="AAPL"
+                status="error"
+            />
+        );
+
+        screen.getByText('Financial analysis failed');
+        expect(screen.queryByText('Revenue')).not.toBeInTheDocument();
+        expect(screen.queryByText('Intrinsic Value')).not.toBeInTheDocument();
+    });
 
     it('always renders deterministic valuation cards when preview exists and MC is disabled', () => {
         renderComponent({
