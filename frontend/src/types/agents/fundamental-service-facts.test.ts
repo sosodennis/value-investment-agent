@@ -78,6 +78,7 @@ const result = (
 });
 
 const serviceArtifact = (family: 'bank' | 'industrial' | 'reit' = 'industrial') => ({
+    projection_type: 'valuation',
     contract_version: 'fundamental.v1',
     snapshot_id: 'snapshot-1',
     snapshot_manifest_digest: digest,
@@ -128,6 +129,34 @@ const serviceArtifact = (family: 'bank' | 'industrial' | 'reit' = 'industrial') 
     evaluated_at: '2026-11-07T00:00:00Z',
     issue_codes: [],
     missing_evidence: [],
+});
+
+const factsOnlyArtifact = () => ({
+    projection_type: 'facts_only',
+    valuation_status: 'not_requested',
+    contract_version: 'fundamental.v1',
+    snapshot_id: 'snapshot-1',
+    snapshot_manifest_digest: digest,
+    fact_ids: ['fact-revenue'],
+    facts: result([fact()]),
+    provenance: {
+        snapshot_id: 'snapshot-1',
+        fact_ids: ['fact-revenue'],
+        mapping_version: 'mapping-v1',
+        parser_version: 'parser-v1',
+        taxonomy_version: 'taxonomy-v1',
+        policy_version: 'pit-v1',
+    },
+    quality: {
+        facts_status: 'verified',
+        issue_codes: [],
+    },
+    hashes: {
+        snapshot_manifest_digest: digest,
+        data_release_manifest_digest: digest,
+        source_content_hashes: [digest],
+    },
+    issue_codes: [],
 });
 
 describe('parseFundamentalFacts', () => {
@@ -264,6 +293,25 @@ describe('parseFundamentalServiceArtifact', () => {
 
         expect(() => parseFundamentalServiceArtifact(payload)).toThrowError(
             'fundamental_service.fact_ids are not bound to facts and valuation_trace.'
+        );
+    });
+
+    it('parses facts-only projections without creating valuation trace data', () => {
+        const parsed = parseFundamentalServiceArtifact(factsOnlyArtifact());
+
+        expect(parsed).toHaveProperty('projection_type', 'facts_only');
+        expect(parsed).toHaveProperty('valuation_status', 'not_requested');
+        expect(parsed.snapshot_id).toBe(parsed.facts.snapshot_id);
+        expect(parsed.fact_ids).toEqual(['fact-revenue']);
+        expect('valuation_trace' in parsed).toBe(false);
+    });
+
+    it('rejects valuation fields on a facts-only projection', () => {
+        const payload: Record<string, unknown> = factsOnlyArtifact();
+        payload.valuation_trace = serviceArtifact().valuation_trace;
+
+        expect(() => parseFundamentalServiceArtifact(payload)).toThrowError(
+            'fundamental_service facts-only projection cannot include valuation data.'
         );
     });
 });
