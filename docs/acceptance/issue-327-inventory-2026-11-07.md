@@ -110,6 +110,14 @@ S4 calibration input and unversioned local defaults. These are not active
 workspace inputs; they are retained evidence with their existing producer
 paths.
 
+The separate tracked subtree `finance-agent-core/finance-agent-core/reports/`
+contains seven duplicate replay outputs from the March 2026 project layout.
+They have no repository callers, embed machine-specific absolute paths, and are
+not referenced by the current replay fixtures or acceptance records. They are
+removed as obsolete generated output in the following checkpoint; the current
+replay manifest/check scripts and `tests/fixtures/fundamental_replay_inputs/`
+remain the rebuild source.
+
 ## Evidence for this checkpoint
 
 | Check | Result |

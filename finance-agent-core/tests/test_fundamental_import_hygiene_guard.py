@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import json
 from pathlib import Path
 
 
@@ -321,3 +322,24 @@ def test_no_active_fundamental_sec_or_report_fallback_imports() -> None:
     assert not violations, "Active Fundamental fallback imports found:\n" + "\n".join(
         sorted(violations)
     )
+
+
+def test_calibration_fixtures_are_versioned_and_allowlisted() -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    fixtures_root = repo_root / "finance-agent-core" / "tests" / "fixtures"
+    calibration_fixtures = sorted(
+        path
+        for path in fixtures_root.rglob("*")
+        if path.is_file() and "calibr" in path.name.lower()
+    )
+    expected_fixture = (
+        fixtures_root / "forward_signal_calibration_pipeline_replay_fixture.json"
+    )
+    assert calibration_fixtures == [expected_fixture], (
+        "Unversioned or duplicate Fundamental calibration fixtures found:\n"
+        + "\n".join(str(path.relative_to(repo_root)) for path in calibration_fixtures)
+    )
+
+    payload = json.loads(expected_fixture.read_text(encoding="utf-8"))
+    assert payload.get("fixture_version") == "forward_signal_calibration_pipeline_v1"
+    assert isinstance(payload.get("results"), list) and payload["results"]
