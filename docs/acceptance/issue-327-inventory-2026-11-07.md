@@ -124,6 +124,14 @@ fixture-based, and service-backed prewarm is deferred until the Fundamental
 service supplies the replacement snapshot contract. The migration tests that
 exercise the quarantined SEC/XBRL adapters remain retained evidence.
 
+The remaining direct SEC/XBRL imports are limited to explicitly quarantined
+benchmark evidence: `finance-agent-core/scripts/benchmark_fls_backends.py`,
+`finance-agent-core/scripts/benchmark_sec_forward_signals.py`,
+`scripts/benchmarks/fls_workload.py`, and
+`scripts/benchmarks/model_inventory.py`. The import-hygiene guard requires
+these exact paths and their quarantine marker; no other executable script may
+import the Agent-owned SEC adapters.
+
 The separate tracked subtree `finance-agent-core/finance-agent-core/reports/`
 contains seven duplicate replay outputs from the March 2026 project layout.
 They have no repository callers, embed machine-specific absolute paths, and are

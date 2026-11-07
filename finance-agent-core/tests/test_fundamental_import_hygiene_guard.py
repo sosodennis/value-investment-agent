@@ -364,6 +364,39 @@ def test_replay_gate_has_no_agent_sec_fallback_imports_or_flags() -> None:
         assert retired_flag not in source
 
 
+def test_legacy_sec_script_imports_are_explicitly_quarantined() -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    scan_roots = (
+        repo_root / "finance-agent-core" / "scripts",
+        repo_root / "scripts" / "benchmarks",
+    )
+    allowed_paths = {
+        "finance-agent-core/scripts/benchmark_fls_backends.py",
+        "finance-agent-core/scripts/benchmark_sec_forward_signals.py",
+        "scripts/benchmarks/fls_workload.py",
+        "scripts/benchmarks/model_inventory.py",
+    }
+    legacy_markers = (
+        "sec_xbrl",
+        "fundamental.financial_statements.infrastructure",
+    )
+    violations: list[str] = []
+    for root in scan_roots:
+        for path in root.rglob("*.py"):
+            relative = path.relative_to(repo_root).as_posix()
+            source = path.read_text(encoding="utf-8")
+            if not any(marker in source for marker in legacy_markers):
+                continue
+            if relative not in allowed_paths:
+                violations.append(f"{relative}: legacy SEC import")
+            elif "LEGACY-FUNDAMENTAL-MIGRATION-EVIDENCE" not in source:
+                violations.append(f"{relative}: missing quarantine marker")
+
+    assert not violations, "Unquarantined legacy SEC scripts found:\n" + "\n".join(
+        sorted(violations)
+    )
+
+
 def test_no_legacy_fundamental_state_keys_in_runtime_source() -> None:
     repo_root = Path(__file__).resolve().parents[2]
     source_root = repo_root / "finance-agent-core" / "src" / "agents" / "fundamental"
