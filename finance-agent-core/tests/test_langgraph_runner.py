@@ -571,6 +571,49 @@ async def test_runner_emits_compact_output_on_completed_agent_subgraph() -> None
 
 
 @pytest.mark.asyncio
+async def test_runner_emits_fundamental_output_for_service_artifact() -> None:
+    items = await _run(
+        [
+            {
+                "event": "on_chain_end",
+                "run_id": "fundamental-node",
+                "parent_ids": [],
+                "metadata": _metadata(
+                    agent_id="fundamental_analysis",
+                    workflow_activity_kind="agent",
+                    langgraph_node="fundamental_agent",
+                ),
+                "data": {
+                    "output": {
+                        "fundamental_analysis": {
+                            "artifact": {
+                                "kind": "fundamental_analysis.output",
+                                "version": "v1",
+                                "summary": "Fundamental facts ready for AAPL",
+                                "preview": None,
+                                "reference": {
+                                    "artifact_id": "artifact-1",
+                                    "type": "financial_reports",
+                                },
+                            }
+                        }
+                    }
+                },
+            }
+        ]
+    )
+
+    assert len(items) == 2
+    _, output = items
+    assert isinstance(output, WorkflowAgentOutput)
+    assert output.agent_id == "fundamental_analysis"
+    assert output.output_kind == "fundamental_analysis.output"
+    assert output.preview is None
+    assert output.artifact_id == "artifact-1"
+    assert output.artifact_type == "financial_reports"
+
+
+@pytest.mark.asyncio
 async def test_runner_rejects_oversized_preview_without_artifact_reference() -> None:
     with pytest.raises(InvalidRunnerOutputError, match="artifact reference"):
         await _run(
