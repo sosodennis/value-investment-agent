@@ -119,7 +119,7 @@ export function WorkspacePage({ assistantId = 'agent', initialTicker = null, ini
                 {agent.threadId && <p className="ml-auto max-w-full truncate font-mono text-xs text-muted-foreground" title={agent.threadId}>Thread {agent.threadId}</p>}
             </form>}
 
-            <div className="min-h-0">
+            <div className="min-h-0 min-w-0">
                 <ResizableGroup direction="horizontal" defaultSizes={[18, 58, 24]} minSizes={[15, 34, 18]} className="h-full min-h-[32rem]">
                     <ResizablePanel index={0} className="hidden border-r min-[1440px]:block">
                         <aside aria-label="Analysis agents">{roster}</aside>
