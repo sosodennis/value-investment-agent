@@ -6,11 +6,11 @@ It groups internal imports by their owning workflow, agent layer, capability, or
 
 ## Scan result
 
-- Python modules with imports scanned: 720.
-- Resolved internal `src.*` imports: 4555.
+- Python modules with imports scanned: 704.
+- Resolved internal `src.*` imports: 4413.
 - Architecture findings: 0.
-- Capability packages observed: 18.
-- Cross-capability dependency edges: 13.
+- Capability packages observed: 17.
+- Cross-capability dependency edges: 10.
 
 The architecture guard found no forbidden imports, migration-only paths, or capability cycles.
 All observed ownership edges satisfy the guard rules.
@@ -76,58 +76,44 @@ All observed ownership edges satisfy the guard rules.
 | `debate entrypoint` | `debate application` | 1 |
 | `debate entrypoint` | `debate composition` | 1 |
 | `debate entrypoint` | `debate workflow` | 3 |
-| `debate infrastructure` | `artifacts feature` | 10 |
+| `debate infrastructure` | `artifacts feature` | 9 |
 | `debate infrastructure` | `debate application` | 2 |
 | `debate infrastructure` | `debate interface` | 1 |
-| `debate infrastructure` | `shared contracts` | 10 |
+| `debate infrastructure` | `shared contracts` | 9 |
 | `debate interface` | `debate domain` | 4 |
 | `debate interface` | `shared contracts` | 13 |
 | `debate workflow` | `artifacts feature` | 1 |
 | `debate workflow` | `debate application` | 2 |
 | `debate workflow` | `llm_provider.llm_provider capability` | 1 |
 | `debate workflow` | `shared contracts` | 3 |
-| `fundamental application` | `artifacts feature` | 14 |
+| `fundamental application` | `artifacts feature` | 1 |
 | `fundamental application` | `fundamental interface` | 6 |
-| `fundamental application` | `fundamental.artifacts_provenance capability` | 3 |
-| `fundamental application` | `fundamental.core_valuation capability` | 8 |
-| `fundamental application` | `fundamental.financial_statements capability` | 6 |
-| `fundamental application` | `fundamental.forward_signals capability` | 13 |
-| `fundamental application` | `fundamental.model_selection capability` | 6 |
-| `fundamental application` | `shared contracts` | 28 |
-| `fundamental composition` | `fundamental application` | 4 |
-| `fundamental composition` | `fundamental.artifacts_provenance capability` | 1 |
-| `fundamental composition` | `fundamental.financial_statements capability` | 1 |
-| `fundamental composition` | `fundamental.forward_signals capability` | 5 |
-| `fundamental composition` | `fundamental.market_data capability` | 1 |
-| `fundamental composition` | `model_inference feature` | 1 |
+| `fundamental application` | `fundamental.core_valuation capability` | 1 |
+| `fundamental application` | `fundamental.model_selection capability` | 3 |
+| `fundamental application` | `shared contracts` | 20 |
+| `fundamental composition` | `fundamental application` | 3 |
+| `fundamental composition` | `fundamental infrastructure` | 1 |
 | `fundamental domain` | `shared contracts` | 6 |
 | `fundamental entrypoint` | `fundamental composition` | 1 |
 | `fundamental entrypoint` | `fundamental workflow` | 7 |
-| `fundamental interface` | `artifacts feature` | 5 |
-| `fundamental interface` | `fundamental.artifacts_provenance capability` | 1 |
-| `fundamental interface` | `fundamental.financial_statements capability` | 1 |
-| `fundamental interface` | `fundamental.forward_signals capability` | 2 |
-| `fundamental interface` | `fundamental.model_selection capability` | 2 |
-| `fundamental interface` | `shared contracts` | 7 |
+| `fundamental infrastructure` | `fundamental application` | 2 |
+| `fundamental infrastructure` | `fundamental interface` | 4 |
+| `fundamental infrastructure` | `shared contracts` | 2 |
+| `fundamental interface` | `shared contracts` | 1 |
 | `fundamental workflow` | `artifacts feature` | 1 |
 | `fundamental workflow` | `shared contracts` | 3 |
-| `fundamental.artifacts_provenance capability` | `artifacts feature` | 3 |
-| `fundamental.artifacts_provenance capability` | `fundamental.financial_statements capability` | 3 |
-| `fundamental.artifacts_provenance capability` | `fundamental.forward_signals capability` | 3 |
-| `fundamental.artifacts_provenance capability` | `shared contracts` | 8 |
 | `fundamental.core_valuation capability` | `fundamental domain` | 37 |
 | `fundamental.core_valuation capability` | `fundamental.financial_statements capability` | 1 |
 | `fundamental.core_valuation capability` | `fundamental.forward_signals capability` | 7 |
 | `fundamental.core_valuation capability` | `shared contracts` | 15 |
 | `fundamental.financial_statements capability` | `fundamental domain` | 29 |
-| `fundamental.financial_statements capability` | `shared contracts` | 37 |
+| `fundamental.financial_statements capability` | `shared contracts` | 38 |
 | `fundamental.forward_signals capability` | `fundamental.financial_statements capability` | 3 |
 | `fundamental.forward_signals capability` | `model_inference feature` | 4 |
 | `fundamental.forward_signals capability` | `shared contracts` | 24 |
 | `fundamental.market_data capability` | `shared contracts` | 5 |
 | `fundamental.model_selection capability` | `fundamental.core_valuation capability` | 3 |
-| `fundamental.model_selection capability` | `fundamental.financial_statements capability` | 2 |
-| `fundamental.model_selection capability` | `shared contracts` | 5 |
+| `fundamental.model_selection capability` | `shared contracts` | 4 |
 | `infrastructure feature` | `audit feature` | 1 |
 | `infrastructure feature` | `auth feature` | 8 |
 | `infrastructure feature` | `notifications feature` | 3 |
@@ -259,7 +245,6 @@ Each node names a capability package. Edges show observed imports between capabi
 
 ```mermaid
 flowchart LR
-    fundamental_artifacts_provenance["fundamental.artifacts_provenance"]
     fundamental_core_valuation["fundamental.core_valuation"]
     fundamental_financial_statements["fundamental.financial_statements"]
     fundamental_forward_signals["fundamental.forward_signals"]
@@ -277,13 +262,10 @@ flowchart LR
     technical_regime["technical.regime"]
     technical_signal_fusion["technical.signal_fusion"]
     technical_verification["technical.verification"]
-    fundamental_artifacts_provenance --> fundamental_financial_statements
-    fundamental_artifacts_provenance --> fundamental_forward_signals
     fundamental_core_valuation --> fundamental_financial_statements
     fundamental_core_valuation --> fundamental_forward_signals
     fundamental_forward_signals --> fundamental_financial_statements
     fundamental_model_selection --> fundamental_core_valuation
-    fundamental_model_selection --> fundamental_financial_statements
     technical_governance --> technical_calibration
     technical_governance --> technical_interpretation
     technical_governance --> technical_signal_fusion
@@ -294,13 +276,10 @@ flowchart LR
 
 | Source capability | Target capability | Import count |
 | --- | --- | ---: |
-| `fundamental.artifacts_provenance` | `fundamental.financial_statements` | 3 |
-| `fundamental.artifacts_provenance` | `fundamental.forward_signals` | 3 |
 | `fundamental.core_valuation` | `fundamental.financial_statements` | 1 |
 | `fundamental.core_valuation` | `fundamental.forward_signals` | 7 |
 | `fundamental.forward_signals` | `fundamental.financial_statements` | 3 |
 | `fundamental.model_selection` | `fundamental.core_valuation` | 3 |
-| `fundamental.model_selection` | `fundamental.financial_statements` | 2 |
 | `technical.governance` | `technical.calibration` | 2 |
 | `technical.governance` | `technical.interpretation` | 1 |
 | `technical.governance` | `technical.signal_fusion` | 1 |
