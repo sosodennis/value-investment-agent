@@ -1112,3 +1112,51 @@ explicitly accepted by the owning issue.
 The branch was clean before and after these checks. The service-backed
 workspace route, exact snapshot-to-valuation trace, Docker rebuild from this
 head, PR CI, and provider availability remain unverified here.
+
+## Exact-head canonical scale and live UI verification checkpoint
+
+- Date: 2026-11-08 (local). Exact code under test: `6197c987d41c1c4c9b12aa347c075697992b63c2` (`fix(#325): render canonical facts in base units`).
+- Contract evidence: the Fundamental service rebuild fixture passed with
+  `selection.fact.value == 391035000000` and `selection.fact.scale == 6`.
+  Arelle's canonical numeric value is already in base units; `scale` is retained
+  as source metadata. The frontend no longer applies `10 ** scale` a second time.
+
+| Command | Result |
+| --- | --- |
+| `npm run test -- --run src/features/workspace/outputs/fundamental-analysis/FinancialTable.test.tsx src/types/agents/fundamental-service-facts.test.ts` | exit 0; 2 files, 19 tests passed |
+| `npm run typecheck` in `frontend/` | exit 0 |
+| `uv run --project fundamental-service pytest fundamental-service/tests/test_sec_rebuild.py -q` | exit 0; 6 passed |
+| `git diff --check` | exit 0 |
+| issue-325 app Compose `config --quiet` | exit 0 |
+| frontend Docker production build | exit 0; image `sha256:17540104fd46d9e8bb2b0fd2993a4a13c7a09e9e310ae95132c06ab70a877fb4` |
+| frontend, backend, and Fundamental service health | healthy; backend image `sha256:55f3ff6a1de1fb48bac91f7efb7d56d92b10f0117420c4e9f542affff222d185`, Fundamental image `sha256:cb18e009a29b09ff1fb4a294357b7dc451ec54e2ec583562ed7373d54cc99e6a` |
+| `curl -fsS http://127.0.0.1:8000/health` | exit 0; `{"status":"ok"}` |
+| `curl -fsS http://127.0.0.1:18080/readyz` | exit 0; `{"status":"ready","contract_version":"internal.v1"}` |
+
+- Live route: `http://127.0.0.1:3000/workspace?thread_id=thread_1794090358201&run_id=dc50a8bb-5c7b-43a8-ba1d-d7f02da5efc5`.
+  Artifact `bcf37dff-d75e-4af2-a39e-5760197aa004` rendered snapshot
+  `snapshot-82c9a009e0dd280f7d2e64d05b047262` with manifest
+  `e54c631839298d340b1737bb661c7e0d05f7abef4a5e2bc17cf3acca42b9a698`.
+- The five verified facts rendered as base-unit values: cash
+  `18,315,000,000`, debt `44,937,000,000`, operating income `109,433,000,000`,
+  revenue `245,122,000,000`, and diluted shares `7,469,000,000`. Each retained
+  `10^6` source scale in the unit metadata without multiplying the displayed
+  value again.
+- Revenue evidence inspector showed source URL, period, `verified · mapping
+  high`, fact ID `sec-fact-0d1b9aafd1825e2369a2461a`, concept, accession
+  `0000950170-24-087843`, filed/available/captured timestamps, parser `2.47.4`,
+  taxonomy `us-gaap-2023-2024`, source hash
+  `4c2c360b4d2c20a773438b786956a0e8d62a8cd6ab8b3a3d4d5970bd283b6d0c`, the
+  snapshot and manifest digests, unit, and issue codes. Missing taxonomy
+  manifest and mapping provenance remained `Unavailable`.
+- At `1440x900`, `innerWidth=1440`, body/document scroll widths were both
+  `1440`, and the report remained bounded with the desktop inspector visible.
+  At `390x844`, body/document scroll widths were both `390` and the report
+  width was `358`; the facts table retained local horizontal scrolling.
+  Pressing `Enter` on `Inspect Revenue evidence` opened the mobile inspector;
+  closing it restored focus to that same button (`aria-label="Inspect Revenue
+  evidence"`).
+- This run still reported `Valuation not requested` because the workspace did
+  not provide caller-owned `valuation_request`; the overall run ended with
+  `signal is aborted without reason`. No valuation trace was produced, so the
+  same-snapshot valuation acceptance and final #325 delivery remain pending.
