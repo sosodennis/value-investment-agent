@@ -437,6 +437,47 @@ def test_snapshot_resolution_returns_service_owned_snapshot_and_fact_refs():
     assert response.json()["result"]["historical_facts"] == ["fact-revenue"]
 
 
+def test_snapshot_resolution_returns_immutable_snapshot_timestamp():
+    valuation = make_valuation()
+    snapshot = SimpleNamespace(
+        snapshot_id="snapshot-immutable-time",
+        identity=valuation.identity,
+        valuation_timestamp=datetime(2026, 1, 1, tzinfo=UTC),
+        coverage_status=QualityStatus.VERIFIED,
+        issues=(),
+        parser_version="parser-v1",
+        taxonomy_manifest_id="taxonomy-v1",
+        policy_version="policy-v1",
+        source_records=(),
+    )
+    client = TestClient(
+        create_app(
+            _ResolvingSnapshotRepository(snapshot),
+            fact_repository=_FactRepository(),
+        )
+    )
+    request = SnapshotResolutionRequestV1(
+        contract_version="fundamental.v1",
+        identity=valuation.identity,
+        valuation_timestamp=datetime(2026, 11, 7, tzinfo=UTC),
+        source_selection_policy="pit-v1",
+        coverage_profile="us-gaap-public-v1",
+        required_fields=("revenue",),
+    )
+
+    response = client.post(
+        "/v1/data/snapshots/resolve",
+        headers=auth_headers(),
+        json=make_internal_envelope(request.model_dump(mode="json")),
+    )
+
+    assert response.status_code == 200
+    result = response.json()["result"]
+    assert result["snapshot_id"] == snapshot.snapshot_id
+    assert result["historical_facts"] == ["fact-revenue"]
+    assert result["valuation_timestamp"] == "2026-01-01T00:00:00Z"
+
+
 def test_facts_read_is_snapshot_scoped_point_in_time_and_documented():
     app = create_app(_SnapshotRepository(), fact_repository=_FactRepository())
     client = TestClient(app)
