@@ -29,10 +29,12 @@ The focused service tests cover SEC source capture, ambiguous and mismatched ide
 - The isolated Docker project `value-investment-agent-issue-336-issuer-identity` uses PostgreSQL host port `18694` and service host port `18693`.
 - The service image built from code checkpoint `9253f820656b3fa976ce2c14e08eaf88d5fba3b9` has digest `sha256:aec7b3e0c6f29124815129019c2d3202f0d57dc4fb84eaf897823f459797c5b3`.
 - PostgreSQL became healthy, but the Fundamental service exited with code 1 because the configured EDGAR plugin hash did not match the mounted directory. The service health check did not pass. `/readyz` returned connection error 7.
+- The attempted plugin hashes came from the earlier #312 progress record. Commit `27ede857` changed `arelle_parser._directory_hash` to ignore `__pycache__`, `.pyc`, and `.pyo` files, so those recorded hashes no longer match the current stable hash function.
+- Recomputing the mounted resources with the current helper produced EDGAR hash `054a21fa824797787acc2c6e98af4bb040c51bbee41b613cee1793db8fd144af` and Xule hash `63123d67048019e3c49a0efde0e0aa8ec3eba0fc971da56ebd96dea8e40cd713`. The taxonomy cache hash remains `23201023716b144aefca4864bc6e4ee055aad864f2e13f3ff1ef652354a1d42c`.
 - The healthy #325 containers use a different worktree and do not count as #336 health evidence.
 - No live SEC identity resolution has run through the #336 service image.
 - No resolved identity has yet been sent through the existing ingestion and snapshot-resolution HTTP routes.
 - The full service suite skipped 25 checks. Their reasons are not yet classified.
 - No PR or PR CI exists. Issue #336 and its dependent issue #325 remain open.
 
-The next checkpoint is to identify the matching pinned EDGAR plugin artifact, rebuild the isolated service, and verify its resolver response against the existing SEC ingestion and snapshot contracts.
+The next checkpoint is to rebuild the isolated service with the recomputed resource hashes and verify its resolver response against the existing SEC ingestion and snapshot contracts.
