@@ -1035,3 +1035,58 @@ acceptance and release gates are rerun and recorded.
   failure.
 - No pull request or CI result exists yet. The branch remains unmerged and the
   issue remains open; these checks do not mark #325 `VERIFIED` or close it.
+
+## Exact-head semantic UI and focus acceptance
+
+- Date: 2026-11-08 (local). Code under test: `dfddf265` (`fix(#325): restore
+  evidence focus on mobile close`). This exact head includes the responsive
+  width fix, semantic facts-table states, mobile evidence-sheet selection, and
+  focus restoration.
+- Full exact-head checks:
+
+  | Command | Result |
+  | --- | --- |
+  | `npm run lint` in `frontend/` | exit 0 |
+  | `npm run typecheck` in `frontend/` | exit 0 |
+  | `npm run test -- --run` in `frontend/` | exit 0; 52 files, 296 tests passed |
+  | `uv run --project finance-agent-core pytest finance-agent-core/tests/agents/fundamental/test_fundamental_service_client.py finance-agent-core/tests/agents/fundamental/test_fundamental_service_cutover.py -q` | exit 0; 33 passed |
+  | `python3 scripts/architecture_guard.py` | exit 0 |
+  | `git diff --check` | exit 0 |
+  | frontend Docker production build | exit 0; image `sha256:4c2652a2a0f0954892f4309dd3f544c9908c4da220e8f8f2c00f5be9b5afb2ac` |
+  | frontend container health | healthy |
+
+- The live route remained
+  `http://127.0.0.1:3000/workspace?thread_id=thread_1794086274214&run_id=e2c1b17a-321c-41df-b5b5-6b2dedc0e7a2`, with artifact
+  `85bf2cb3-081b-4c5b-8a5f-c021017ec91d`, snapshot
+  `snapshot-82c9a009e0dd280f7d2e64d05b047262`, and snapshot manifest
+  `e54c631839298d340b1737bb661c7e0d05f7abef4a5e2bc17cf3acca42b9a698`.
+- At `390x844`, DOM measurement returned
+  `innerWidth=390`, `document.body.scrollWidth=390`,
+  `document.documentElement.scrollWidth=390`, workspace report row width
+  `390px`, and report-evidence width `358px` at `x=16`. The facts table exposed
+  a meaningful caption, five `scope="col"` headers, and five text-labelled
+  quality badges. The wide facts content remained inside its local horizontal
+  scroll container.
+- Keyboard flow at `390x844`: pressing `Enter` on `Inspect Revenue evidence`
+  opened the mobile Evidence inspector. The inspector showed the source URL,
+  period, confidence, fact ID, concept, accession, filed/available/captured
+  timestamps, parser, taxonomy, source hash, snapshot, manifest, unit, and
+  issue codes. Missing taxonomy-manifest and mapping provenance remained
+  explicitly `Unavailable`. Closing the Sheet restored focus to the original
+  `Inspect Revenue evidence` button immediately and after settling.
+- At `1440x900`, body/document scroll widths both equaled `1440px`, the
+  persistent desktop Evidence inspector was present, and the same table
+  caption/header semantics were exposed. The report remained bounded within
+  the center panel.
+
+### Current status
+
+The report display, responsive layout, semantic table states, mobile evidence
+selection, keyboard close behavior, and focus restoration now pass on the exact
+branch head. #325 is still **incomplete and blocked** for delivery: no PR or
+PR-CI result exists, the issue remains OPEN with its `blocker` label, and the
+overall workspace run still has the independent Debate LLM provider
+`upstream_unavailable` / HTTP 502 failure recorded above. Do not mark the issue
+`VERIFIED` or close it until the required service/workflow acceptance is
+rerun on the delivery PR and the external provider gate is resolved or
+explicitly accepted by the owning issue.
