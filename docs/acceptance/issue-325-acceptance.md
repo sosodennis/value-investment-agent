@@ -663,3 +663,52 @@ snapshot resolution still fails closed because the ingestion publication keeps
 segment facts under the same normalized field without selecting the unique
 consolidated fact for this request. Blocker #342 tracks the service-owned
 selection fix and is linked to #312, #321, and #325.
+
+## Exact live workspace producer and filing-compatibility probe
+
+- Date: 2026-11-07 (local); the app route was
+  `http://127.0.0.1:18681/workspace` in the Personal organization.
+- Code under test: `e05300d6a46277fa76ab46562e4b10ab56d0b43c` on
+  `codex/issue-325-fundamental-ui`.
+- Compose projects were isolated as `value-investment-agent-issue-325-app`
+  and `value-investment-agent-issue-325-fundamental`. Backend, frontend,
+  PostgreSQL, Redis, LLM provider, Fundamental service, and Fundamental
+  PostgreSQL were healthy; `GET http://127.0.0.1:18690/readyz` returned HTTP
+  200 with `{"status":"ready","contract_version":"internal.v1"}`.
+- A fresh workspace run `436d527c-4cf3-48f2-87b0-7e0fe429d421` reached the
+  actual ticker clarification. The operator selected `MSFT Microsoft
+  Corporation NASDAQ` at 100% match over `MSFT.TO` at 90%. Fundamental
+  activities `review-financial-health`, `select-model`, and
+  `calculate-valuation` ran through the service cutover path; no Agent-owned
+  SEC fetch was observed.
+- The service accepted the signed identity request for organization
+  `43f50f0f-c6ff-4fb2-b4d2-ed366bc55613` and returned HTTP 200. The following
+  service ingestion request used the producer's five required fields and
+  approved `sec-us-gaap-v1-*` mappings, but default filing selection returned
+  HTTP 422 `DQC_VALIDATION_UNAVAILABLE` (`DQC rules did not run`). The current
+  runtime has a pinned 2023–2024 taxonomy/DQC bundle while the 2026 valuation
+  cutoff selects a 2026 MSFT filing. No snapshot or canonical facts were
+  published for this live run; the PostgreSQL audit recorded outcome `failed`.
+- A control request with the same signed context and the same five required
+  fields, pinned to the already verified MSFT accession
+  `0000950170-24-087843`, returned HTTP 200 `status=created`,
+  `quality_status=verified`, 57 canonical fact IDs, snapshot
+  `snapshot-c53955e8dec8c8ef1c38cd388a765328`, and manifest digest
+  `dffe2cd2e02dc280462556db25de854887e96ac1b23b62f513bdad6f1935c6da`.
+  The parser reported only the known non-blocking EFM/iXBRL diagnostics.
+- The run's overall terminal failure was separate: Debate `moderate-verdict`
+  returned `failover_exhausted` after the LLM provider returned HTTP 502. The
+  Fundamental report therefore did not render a completed artifact, and no
+  desktop/mobile, keyboard, evidence-inspector, or same-snapshot valuation
+  trace acceptance is claimed.
+
+### Diagnostic result
+
+**Incomplete and blocked.** The live workspace now proves the signed
+identity-to-ingestion producer path and the Fundamental workflow reaches its
+calculation boundary. The service-backed report cannot be accepted while the
+default current filing is incompatible with the pinned validation runtime;
+the service must select or provision a compatible verified filing/release under
+the owning SEC boundary. The independent Debate provider outage also prevents
+the workspace run from reaching a completed terminal state. No acceptance
+criterion is marked passed by this probe.
