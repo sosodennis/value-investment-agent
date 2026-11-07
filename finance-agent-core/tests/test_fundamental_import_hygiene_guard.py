@@ -278,3 +278,46 @@ def test_no_legacy_generic_fundamental_module_files() -> None:
     assert not existing, "Legacy generic module files should be removed:\n" + "\n".join(
         sorted(str(path.relative_to(repo_root)) for path in existing)
     )
+
+
+def test_no_active_fundamental_sec_or_report_fallback_imports() -> None:
+    """Production caller layers must not reintroduce the retired fallback seams."""
+
+    repo_root = Path(__file__).resolve().parents[2]
+    source_root = repo_root / "finance-agent-core" / "src" / "agents" / "fundamental"
+    scan_roots = (
+        source_root / "application",
+        source_root / "workflow",
+        source_root / "interface",
+    )
+    banned_prefixes = (
+        "src.agents.fundamental.capabilities.financial_statements.infrastructure.sec_xbrl",
+        "src.agents.fundamental.capabilities.forward_signals.infrastructure.sec_xbrl",
+        "src.agents.fundamental.capabilities.artifacts_provenance.infrastructure.fundamental_artifact_repository",
+        "src.agents.fundamental.application.workflow_orchestrator.valuation_flow",
+        "src.agents.fundamental.application.workflow_orchestrator.services.model_selection_artifact_service",
+        "src.agents.fundamental.application.workflow_orchestrator.services.valuation_",
+    )
+
+    violations: list[str] = []
+    for root in scan_roots:
+        for path in root.rglob("*.py"):
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+            for node in ast.walk(tree):
+                imported_modules: list[str] = []
+                if isinstance(node, ast.ImportFrom) and node.module:
+                    imported_modules.append(node.module)
+                elif isinstance(node, ast.Import):
+                    imported_modules.extend(alias.name for alias in node.names)
+                for module_name in imported_modules:
+                    if any(
+                        _is_banned_import(module_name, prefix)
+                        for prefix in banned_prefixes
+                    ):
+                        violations.append(
+                            f"{path.relative_to(repo_root)}:{node.lineno}: {module_name}"
+                        )
+
+    assert not violations, "Active Fundamental fallback imports found:\n" + "\n".join(
+        sorted(violations)
+    )

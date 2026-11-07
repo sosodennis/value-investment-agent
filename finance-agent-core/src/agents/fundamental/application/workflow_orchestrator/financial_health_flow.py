@@ -105,7 +105,6 @@ async def run_financial_health_flow(
     )
     return FundamentalNodeResult(
         update=build_financial_health_success_update(
-            reports_artifact_id=None,
             artifact=None,
             diagnostics=diagnostics,
             quality_gates=quality_gates,
