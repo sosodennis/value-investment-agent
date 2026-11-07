@@ -22,6 +22,7 @@ from ..contracts import (
     CalculationTraceV1,
     FactsReadRequestV1,
     FactsReadResponseV1,
+    FiscalPeriodSelectorV1,
     PolicyValuationInputV1,
     QualityStatus,
     SnapshotResolutionRequestV1,
@@ -42,6 +43,7 @@ from ..data_releases import (
     ReleaseResolutionCacheKeyV1,
 )
 from ..facts import CanonicalFactRepository, canonical_fact_digest
+from ..fiscal_periods import resolve_fiscal_periods
 from ..governance import ModelInventory
 from ..operations import (
     OperationalMetrics,
@@ -632,6 +634,9 @@ class FundamentalApplication:
                 retryable=False,
             )
         return CalculationTraceV1(
+            valuation_timestamp=request.valuation_context.valuation_timestamp,
+            fiscal_period_selector=request.valuation_context.fiscal_period_selector,
+            resolved_fiscal_periods=request.valuation_context.resolved_fiscal_periods,
             source_selection_policy=request.valuation_context.source_selection_policy,
             source_selection_policy_version=snapshot.policy_version,
             snapshot_id=snapshot.snapshot_id,
@@ -886,6 +891,9 @@ class FundamentalApplication:
                 retryable=True,
             )
         active_release: ActiveDataReleaseWithManifestV1 | None = None
+        fiscal_selector = request.fiscal_period_selector or FiscalPeriodSelectorV1(
+            mode="latest_complete", count=3
+        )
         cache_key: str | None = None
         cache_dependencies: tuple[str, ...] = ()
         if request.release_profile_id is None:
@@ -956,6 +964,9 @@ class FundamentalApplication:
                 source_selection_policy=request.source_selection_policy,
                 coverage_profile=request.coverage_profile,
                 required_fields=request.required_fields,
+                fiscal_period_selector_digest=sha256_digest(
+                    fiscal_selector.model_dump(mode="json")
+                ),
             )
             cache_key = f"data-release-resolution:v1:{cache_key_model.digest()}"
             cache_dependencies = (
@@ -1013,6 +1024,7 @@ class FundamentalApplication:
                 status_code=404,
                 retryable=False,
             )
+        selector_requested = request.fiscal_period_selector is not None
         for snapshot in candidates:
             declared_snapshot = (
                 None
@@ -1039,6 +1051,35 @@ class FundamentalApplication:
                 if error.code == "FACT_NOT_FOUND":
                     continue
                 raise _snapshot_error(error) from error
+            period_resolution = None
+            resolved_periods = ()
+            if selector_requested:
+                list_facts = getattr(self.fact_repository, "list", None)
+                if not callable(list_facts):
+                    raise ServiceError(
+                        "FISCAL_PERIODS_UNAVAILABLE",
+                        "the fact repository cannot resolve issuer fiscal periods",
+                        status_code=503,
+                        retryable=True,
+                    )
+                selection = resolve_fiscal_periods(
+                    list_facts(),
+                    snapshot=snapshot,
+                    valuation_timestamp=request.valuation_timestamp,
+                    selector=fiscal_selector,
+                    required_fields=request.required_fields,
+                )
+                period_resolution = selection.resolution
+                resolved_periods = period_resolution.resolved_periods
+                if period_resolution.status != "resolved":
+                    raise ServiceError(
+                        period_resolution.issue_codes[0],
+                        "requested fiscal periods are not fully available as of "
+                        "the valuation timestamp",
+                        status_code=422,
+                        retryable=False,
+                    )
+                facts = selection.facts
             if declared_snapshot is not None:
                 self._verify_release_snapshot_and_facts(
                     active_release.manifest,
@@ -1057,6 +1098,9 @@ class FundamentalApplication:
                 historical_facts=tuple(fact.fact_id for fact in facts),
                 identity=snapshot.identity,
                 valuation_timestamp=request.valuation_timestamp,
+                fiscal_period_selector=fiscal_selector,
+                resolved_fiscal_periods=resolved_periods,
+                fiscal_period_resolution=period_resolution,
                 source_selection_policy=request.source_selection_policy,
                 coverage_profile=request.coverage_profile,
                 quality=snapshot.coverage_status,
@@ -1067,6 +1111,10 @@ class FundamentalApplication:
                     "parser_version": snapshot.parser_version,
                     "taxonomy_version": snapshot.taxonomy_manifest_id,
                     "policy_version": snapshot.policy_version,
+                    "fiscal_period_selector": fiscal_selector.model_dump(mode="json"),
+                    "resolved_fiscal_periods": [
+                        period.model_dump(mode="json") for period in resolved_periods
+                    ],
                     "data_release_manifest_digest": (
                         None
                         if active_release is None

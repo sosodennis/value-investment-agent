@@ -296,6 +296,7 @@ def calculate_bank_excess_return(
         model_version=request.model_version,
         policy_version=request.policy_id,
         snapshot_id=request.valuation_context.data_snapshot_id,
+        valuation_timestamp=request.valuation_context.valuation_timestamp,
         evaluated_at=request.valuation_context.valuation_timestamp,
         correlation_id=correlation_id,
     )

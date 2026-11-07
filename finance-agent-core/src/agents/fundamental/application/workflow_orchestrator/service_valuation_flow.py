@@ -15,6 +15,10 @@ from src.agents.fundamental.application.fundamental_service_port import (
 from src.agents.fundamental.interface.fundamental_service_contracts import (
     FundamentalServiceResponseV1,
 )
+from src.agents.fundamental.interface.request_contracts import (
+    FundamentalRequestTimingV1,
+    apply_request_timing,
+)
 from src.shared.internal_services import get_request_principal
 from src.shared.kernel.correlation import resolve_correlation_id
 from src.shared.kernel.types import JSONObject
@@ -43,6 +47,9 @@ _SUPPORTED_INPUT_FIELDS = _REQUIRED_INPUT_FIELDS | {
     "input_digest",
     "caller_approval",
     "snapshot_selector",
+    "requested_as_of",
+    "fiscal_period_selector",
+    "required_fields",
 }
 _LEGACY_INPUT_FIELDS = frozenset(
     {
@@ -145,8 +152,11 @@ def _validate_service_input(
 ) -> JSONObject:
     input_mapping = _as_mapping(raw_input, context=context)
     has_selector = "snapshot_selector" in input_mapping
+    has_request_timing = (
+        "requested_as_of" in input_mapping or "required_fields" in input_mapping
+    )
     required_fields = _REQUIRED_INPUT_FIELDS - (
-        {"historical_facts"} if has_selector else set()
+        {"historical_facts"} if has_selector or has_request_timing else set()
     )
     missing = sorted(required_fields.difference(input_mapping))
     if missing:
@@ -299,6 +309,23 @@ def _resolved_snapshot_input(
     resolved_timestamp = result.get("valuation_timestamp")
     resolved_policy = result.get("source_selection_policy")
     resolved_profile = result.get("coverage_profile")
+    input_selector = input_payload.get("snapshot_selector")
+    input_context = input_payload.get("valuation_context")
+    input_selector = input_selector if isinstance(input_selector, Mapping) else {}
+    input_context = input_context if isinstance(input_context, Mapping) else {}
+    resolved_selector = (
+        result.get("fiscal_period_selector")
+        or input_selector.get("fiscal_period_selector")
+        or input_context.get("fiscal_period_selector")
+    )
+    if resolved_selector is None:
+        resolved_selector = {
+            "version": "fundamental.fiscal-period-selector.v1",
+            "mode": "latest_complete",
+            "count": 3,
+        }
+    resolved_periods = result.get("resolved_fiscal_periods", ())
+    period_resolution = result.get("fiscal_period_resolution")
     provenance_raw = result.get("provenance")
     source_selection_policy_version = (
         provenance_raw.get("policy_version")
@@ -315,6 +342,8 @@ def _resolved_snapshot_input(
         or not isinstance(resolved_timestamp, str)
         or not isinstance(resolved_policy, str)
         or not isinstance(resolved_profile, str)
+        or not isinstance(resolved_selector, Mapping)
+        or not isinstance(resolved_periods, list | tuple)
         or not isinstance(provenance_raw, Mapping)
         or not isinstance(source_selection_policy_version, str)
         or not source_selection_policy_version
@@ -348,6 +377,8 @@ def _resolved_snapshot_input(
         "valuation_timestamp": resolved_timestamp,
         "source_selection_policy": resolved_policy,
         "coverage_profile": resolved_profile,
+        "fiscal_period_selector": dict(resolved_selector),
+        "resolved_fiscal_periods": list(resolved_periods),
     }
     updated["provenance"] = {
         **provenance,
@@ -358,7 +389,11 @@ def _resolved_snapshot_input(
         },
         "snapshot_id": snapshot_id,
         "fact_ids": list(facts),
+        "fiscal_period_selector": dict(resolved_selector),
+        "resolved_fiscal_periods": list(resolved_periods),
     }
+    if isinstance(period_resolution, Mapping):
+        updated["provenance"]["fiscal_period_resolution"] = dict(period_resolution)
     quality = result.get("quality")
     if isinstance(quality, str) and quality:
         current_quality = _as_mapping(
@@ -864,11 +899,18 @@ async def run_service_valuation_flow(
     client: FundamentalServiceClient,
     request_approval_fn: Callable[[JSONObject], object],
     timeout_seconds: float = 10.0,
+    clock: Callable[[], datetime] | None = None,
 ) -> FundamentalNodeResult:
     fundamental_raw = state.get("fundamental_analysis", {})
     fundamental = _as_mapping(fundamental_raw, context="fundamental_analysis")
     try:
         input_payload = read_service_valuation_input(state)
+        request_timing = FundamentalRequestTimingV1.accept(input_payload, clock=clock)
+        input_payload = apply_request_timing(input_payload, request_timing)
+        fundamental = {
+            **fundamental,
+            "request_timing": request_timing.model_dump(mode="json"),
+        }
         principal = get_request_principal()
         if principal is None:
             raise FundamentalServiceFailure(
