@@ -9,6 +9,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Protocol
 
 from src.agents.fundamental.application.fundamental_service_port import (
+    FUNDAMENTAL_SERVICE_WORKFLOW_TIMEOUT_SECONDS,
     FundamentalServiceClient,
     FundamentalServiceFailure,
 )
@@ -1202,7 +1203,7 @@ async def run_service_valuation_flow(
     *,
     client: FundamentalServiceClient,
     request_approval_fn: Callable[[JSONObject], object],
-    timeout_seconds: float = 10.0,
+    timeout_seconds: float = FUNDAMENTAL_SERVICE_WORKFLOW_TIMEOUT_SECONDS,
 ) -> FundamentalNodeResult:
     fundamental_raw = state.get("fundamental_analysis", {})
     fundamental = _as_mapping(fundamental_raw, context="fundamental_analysis")

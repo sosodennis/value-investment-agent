@@ -20,6 +20,7 @@ import httpx
 from pydantic import ValidationError
 
 from src.agents.fundamental.application.fundamental_service_port import (
+    FUNDAMENTAL_SERVICE_WORKFLOW_TIMEOUT_SECONDS,
     FundamentalOperation,
     FundamentalServiceFailure,
 )
@@ -37,7 +38,9 @@ from src.shared.internal_services import (
 
 _DEFAULT_URL: Final[str] = "http://fundamental-service:8080"
 _DEFAULT_TIMEOUT_SECONDS: Final[float] = 10.0
-_DEFAULT_INGESTION_TIMEOUT_SECONDS: Final[float] = 120.0
+_DEFAULT_INGESTION_TIMEOUT_SECONDS: Final[float] = (
+    FUNDAMENTAL_SERVICE_WORKFLOW_TIMEOUT_SECONDS
+)
 _DEFAULT_MAX_ATTEMPTS: Final[int] = 2
 _OPERATION_PATHS: dict[FundamentalOperation, str] = {
     "ingest_sec_data": "/v1/data/ingestions",

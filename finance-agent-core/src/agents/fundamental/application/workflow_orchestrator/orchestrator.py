@@ -4,6 +4,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 
 from src.agents.fundamental.application.fundamental_service_port import (
+    FUNDAMENTAL_SERVICE_WORKFLOW_TIMEOUT_SECONDS,
     FundamentalServiceClient,
 )
 from src.agents.fundamental.application.workflow_orchestrator.financial_health_flow import (
@@ -55,7 +56,7 @@ class FundamentalOrchestrator:
         *,
         client: FundamentalServiceClient,
         request_approval_fn: Callable[[JSONObject], object],
-        timeout_seconds: float = 10.0,
+        timeout_seconds: float = FUNDAMENTAL_SERVICE_WORKFLOW_TIMEOUT_SECONDS,
     ) -> FundamentalNodeResult:
         """Run caller-owned approval around the stateless Fundamental service."""
 

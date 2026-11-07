@@ -25,6 +25,11 @@ FundamentalOperation = Literal[
     "replay",
 ]
 
+# The caller deadline must cover the Fundamental service's bounded SEC parser
+# budget; a shorter workflow deadline aborts valid ingestion before the service
+# can publish its immutable snapshot.
+FUNDAMENTAL_SERVICE_WORKFLOW_TIMEOUT_SECONDS = 120.0
+
 
 class FundamentalServiceFailure(RuntimeError):
     """A typed unavailable/degraded outcome from the service boundary."""
@@ -91,6 +96,7 @@ class FundamentalIdentityResolver(Protocol):
 
 
 __all__ = [
+    "FUNDAMENTAL_SERVICE_WORKFLOW_TIMEOUT_SECONDS",
     "FundamentalOperation",
     "FundamentalServiceClient",
     "FundamentalServiceFailure",

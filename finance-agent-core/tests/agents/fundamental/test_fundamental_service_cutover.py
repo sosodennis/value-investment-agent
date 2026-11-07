@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 from collections.abc import Mapping
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -71,6 +72,7 @@ class _Client:
         snapshot_policy_version: str = "pit-v1",
     ):
         self.calls: list[tuple[str, dict[str, object]]] = []
+        self.deadlines: list[datetime] = []
         self.failure = failure
         self.result_digest = result_digest
         self.uncertainty_report_digest = uncertainty_report_digest or result_digest
@@ -106,9 +108,12 @@ class _Client:
         self,
         operation: str,
         input_payload: Mapping[str, object],
-        **_: object,
+        **kwargs: object,
     ) -> FundamentalServiceResponseV1:
         self.calls.append((operation, dict(input_payload)))
+        deadline_at = kwargs.get("deadline_at")
+        if isinstance(deadline_at, datetime):
+            self.deadlines.append(deadline_at)
         if self.failure is not None:
             raise self.failure
         if operation == "resolve_snapshot":
@@ -558,6 +563,7 @@ async def test_cutover_resolves_snapshot_and_facts_through_service_boundary() ->
             subject_id="caller-1", organization_id="org-1", membership_id="membership-1"
         )
     )
+    started_at = datetime.now(UTC)
     try:
         result = await run_service_valuation_flow(
             runtime,
@@ -577,6 +583,12 @@ async def test_cutover_resolves_snapshot_and_facts_through_service_boundary() ->
         "validate",
         "calculate",
     ]
+    assert client.deadlines
+    assert (
+        timedelta(seconds=110)
+        < client.deadlines[0] - started_at
+        < timedelta(seconds=130)
+    )
     assert client.calls[1][1]["historical_facts"] == ["fact-revenue"]
     assert client.calls[1][1]["valuation_context"]["data_snapshot_id"] == (
         "snapshot-resolved"
