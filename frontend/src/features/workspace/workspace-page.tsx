@@ -46,6 +46,7 @@ export function WorkspacePage({ assistantId = 'agent', initialTicker = null, ini
     const [activeTab, setActiveTab] = useState<ReportTab>('activity');
     const [selectedEvidence, setSelectedEvidence] = useState<EvidenceSelection | null>(null);
     const [mobileEvidenceOpen, setMobileEvidenceOpen] = useState(false);
+    const mobileEvidenceReturnFocus = useRef<HTMLElement | null>(null);
     const autoStarted = useRef(false);
     const agents: AgentInfo[] = useMemo(() => AGENT_CONFIGS.map((config) => ({
         id: config.id,
@@ -78,7 +79,20 @@ export function WorkspacePage({ assistantId = 'agent', initialTicker = null, ini
     function handleSelectEvidence(item: EvidenceSelection) {
         setSelectedEvidence(item);
         if (typeof window !== 'undefined' && window.innerWidth < 1440) {
+            const activeElement = document.activeElement;
+            mobileEvidenceReturnFocus.current = activeElement instanceof HTMLElement
+                ? activeElement
+                : null;
             setMobileEvidenceOpen(true);
+        }
+    }
+
+    function handleMobileEvidenceOpenChange(open: boolean) {
+        setMobileEvidenceOpen(open);
+        if (!open) {
+            const returnFocus = mobileEvidenceReturnFocus.current;
+            mobileEvidenceReturnFocus.current = null;
+            window.setTimeout(() => returnFocus?.focus(), 0);
         }
     }
 
@@ -111,7 +125,7 @@ export function WorkspacePage({ assistantId = 'agent', initialTicker = null, ini
                 <div className="flex min-w-0 items-center gap-3">
                     <div className="flex items-center gap-2 min-[1440px]:hidden">
                         <Sheet><SheetTrigger asChild><Button variant="outline" size="icon" aria-label="Open agent list"><Menu /></Button></SheetTrigger><SheetContent side="left" className="w-[min(22rem,90vw)] p-0"><SheetHeader className="border-b px-4 py-4"><SheetTitle>Analysis agents</SheetTitle></SheetHeader>{roster}</SheetContent></Sheet>
-                        <Sheet open={mobileEvidenceOpen} onOpenChange={setMobileEvidenceOpen}><SheetTrigger asChild><EvidenceInspectorTrigger /></SheetTrigger><SheetContent side="right" className="w-[min(24rem,94vw)] p-0"><EvidenceInspector items={evidenceItems} selected={selectedEvidence} onSelect={handleSelectEvidence} /></SheetContent></Sheet>
+                        <Sheet open={mobileEvidenceOpen} onOpenChange={handleMobileEvidenceOpenChange}><SheetTrigger asChild><EvidenceInspectorTrigger /></SheetTrigger><SheetContent side="right" className="w-[min(24rem,94vw)] p-0"><EvidenceInspector items={evidenceItems} selected={selectedEvidence} onSelect={handleSelectEvidence} /></SheetContent></Sheet>
                     </div>
                     <div className="min-w-0"><p className="text-xs text-muted-foreground">Analysis workspace</p><h1 className="truncate text-lg font-semibold">{routeIntent.kind === 'invalid-history' ? 'Analysis link unavailable' : ticker || agent.workflow ? ticker || 'Analysis run' : routeIntent.kind === 'exact-run' ? 'Analysis run' : 'New analysis'}</h1></div>
                 </div>

@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
     createWorkflowActivityState,
@@ -442,7 +442,7 @@ describe('WorkspacePage', () => {
         expect(within(dialog).getByText('Evidence inspector')).toBeTruthy();
     });
 
-    it('opens the mobile evidence sheet when a report value is selected', () => {
+    it('opens the mobile evidence sheet when a report value is selected', async () => {
         Object.defineProperty(window, 'innerWidth', { configurable: true, value: 390 });
         hook.value = defaultHook({
             agentOutputs: {
@@ -457,10 +457,14 @@ describe('WorkspacePage', () => {
         render(<WorkspacePage />);
 
         fireEvent.click(screen.getByRole('tab', { name: 'Debate' }));
-        fireEvent.click(screen.getByRole('button', { name: /Verdict Display/i }));
+        const evidenceButton = screen.getByRole('button', { name: /Verdict Display/i });
+        evidenceButton.focus();
+        fireEvent.click(evidenceButton);
 
         const dialog = screen.getByRole('dialog');
         expect(within(dialog).getByText('Evidence inspector')).toBeTruthy();
         expect(within(dialog).getByText('Debate Arena summary')).toBeTruthy();
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Close navigation' }));
+        await waitFor(() => expect(document.activeElement).toBe(evidenceButton));
     });
 });
