@@ -4,6 +4,12 @@ Issue: [#327](https://github.com/sosodennis/value-investment-agent/issues/327)
 Branch: `codex/issue-327-legacy-cleanup`
 Base under audit: `9c70bf0da054f528661c7b501e627e0a22aaa3c0`
 
+> **Historical checkpoint record.** The baseline and default-wiring sections
+> below describe the state observed before the later cleanup commits on this
+> branch. They remain as acceptance evidence; they do not describe the current
+> production path. The current inventory is maintained in
+> [`issue-327-inventory-2026-11-07.md`](issue-327-inventory-2026-11-07.md).
+
 ## Baseline
 
 The current branch passes the architecture guard and the focused Fundamental
@@ -23,7 +29,7 @@ Results: architecture guard exit `0`; pytest exit `0`, `73 passed, 4
 warnings in 49.84s`. The warnings are third-party `edgar` deprecation
 warnings. No application failure was observed in this baseline.
 
-## Active Legacy Path
+## Active Legacy Path (historical baseline)
 
 The live ownership problem is in the default Fundamental workflow wiring:
 
@@ -76,7 +82,7 @@ replace the financial-health behavior with a typed service-boundary/degraded
 outcome, migrate affected tests to assert no Agent-owned SEC fetch, and commit
 that focused change before broader artifact cleanup.
 
-## Default Wiring Checkpoint
+## Default Wiring Checkpoint (historical checkpoint)
 
 Checkpoint commit: `3005b52dddcfd2183c886504078bcaea80213ee1`.
 
@@ -101,3 +107,23 @@ the default financial-health node, and asserts a `model_selection` handoff with
 The legacy financial-statements parser, artifact repository, and historical
 fixtures remain present for the next migration unit; no active default wiring
 references them after this checkpoint.
+
+## Subsequent Cleanup Checkpoints
+
+The later checkpoints supersede the "next migration unit" wording above while
+preserving the original evidence:
+
+- `dabc98dc`: removed the Fundamental report artifact state contract from the
+  migration callers and added import guards.
+- `88d60e2c`: removed the Debate-side legacy report reader.
+- `746acf00`: removed the uncalled legacy valuation workflow and report helpers.
+- `da010797`: removed the dead Fundamental `artifacts_provenance` repository,
+  port, parser, and tests.
+- `0eeda593`: refreshed the architecture dependency report after capability
+  removal.
+- `a1a456b5`: removed Agent-owned SEC/XBRL adapters from Fundamental public
+  facades while retaining migration evidence tests.
+
+The issue remains open because service-backed snapshot production, exact #327
+acceptance evidence, and the later #325 live workflow have not yet been
+verified on a main-based pull request.

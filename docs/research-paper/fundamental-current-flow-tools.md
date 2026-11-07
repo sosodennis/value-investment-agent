@@ -1,4 +1,14 @@
-# Agent Deep Dive: fundamental
+# Historical Architecture Snapshot: Fundamental Agent Deep Dive
+
+> **Historical evidence, not current architecture.** This snapshot records the
+> Fundamental Agent tree and runtime observed before the #327 cleanup. It is
+> retained to explain the migration decisions and evidence collected at that
+> time. The `artifacts_provenance` capability, legacy `valuation_flow.py`, and
+> `financial_reports_artifact_id` state path described below were subsequently
+> removed or retired from the production caller. For the current ownership
+> inventory and acceptance status, use
+> [`docs/acceptance/issue-327-inventory-2026-11-07.md`](../acceptance/issue-327-inventory-2026-11-07.md)
+> and [`docs/acceptance/issue-327-progress-2026-11-07.md`](../acceptance/issue-327-progress-2026-11-07.md).
 
 ## Architecture and State
 
