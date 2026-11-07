@@ -13,16 +13,8 @@ from src.agents.fundamental.application.workflow_orchestrator.orchestrator impor
     FundamentalNodeResult,
     FundamentalOrchestrator,
 )
-from src.agents.fundamental.application.workflow_orchestrator.ports import (
-    FundamentalFinancialStatementsPayload,
-    IFundamentalFinancialStatementsProvider,
-    IFundamentalForwardSignalsProvider,
-)
 from src.agents.fundamental.capabilities.artifacts_provenance.public import (
     IFundamentalReportRepo,
-)
-from src.agents.fundamental.capabilities.financial_statements.public import (
-    parse_financial_statements_payload,
 )
 from src.agents.fundamental.capabilities.model_selection.public import (
     select_valuation_model,
@@ -100,38 +92,13 @@ def build_fundamental_orchestrator(
 @dataclass(frozen=True)
 class FundamentalWorkflowRunner:
     orchestrator: FundamentalOrchestrator
-    fetch_financial_reports_fn: IFundamentalFinancialStatementsProvider
-    extract_forward_signals_fn: IFundamentalForwardSignalsProvider
     fundamental_service_client: FundamentalServiceClient
     service_timeout_seconds: float = 10.0
-    financial_payload_years: int = 5
 
     async def run_financial_health(
         self, state: Mapping[str, object]
     ) -> FundamentalNodeResult:
-        def _fetch_and_parse_financial_statements_payload(
-            ticker: str,
-        ):
-            payload: FundamentalFinancialStatementsPayload = (
-                self.fetch_financial_reports_fn(
-                    ticker, years=self.financial_payload_years
-                )
-            )
-            return parse_financial_statements_payload(
-                payload,
-                context="financial_health.payload",
-            )
-
-        return await self.orchestrator.run_financial_health(
-            state,
-            fetch_financial_reports_fn=_fetch_and_parse_financial_statements_payload,
-            extract_forward_signals_fn=lambda ticker, reports_raw: (
-                self.extract_forward_signals_fn(
-                    ticker=ticker,
-                    reports_raw=reports_raw,
-                )
-            ),
-        )
+        return await self.orchestrator.run_financial_health(state)
 
     async def run_model_selection(
         self, state: Mapping[str, object]
@@ -158,17 +125,11 @@ class FundamentalWorkflowRunner:
 def build_fundamental_workflow_runner(
     *,
     orchestrator: FundamentalOrchestrator,
-    fetch_financial_reports_fn: IFundamentalFinancialStatementsProvider,
-    extract_forward_signals_fn: IFundamentalForwardSignalsProvider,
     fundamental_service_client: FundamentalServiceClient,
     service_timeout_seconds: float = 10.0,
-    financial_payload_years: int = 5,
 ) -> FundamentalWorkflowRunner:
     return FundamentalWorkflowRunner(
         orchestrator=orchestrator,
-        fetch_financial_reports_fn=fetch_financial_reports_fn,
-        extract_forward_signals_fn=extract_forward_signals_fn,
         fundamental_service_client=fundamental_service_client,
         service_timeout_seconds=service_timeout_seconds,
-        financial_payload_years=financial_payload_years,
     )

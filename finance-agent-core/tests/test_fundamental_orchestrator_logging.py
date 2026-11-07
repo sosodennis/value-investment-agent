@@ -18,15 +18,9 @@ from src.agents.fundamental.application.workflow_orchestrator.services.valuation
 from src.agents.fundamental.capabilities.core_valuation.domain.parameterization.contracts import (
     ParamBuildResult,
 )
-from src.agents.fundamental.capabilities.financial_statements.interface.parsers import (
-    parse_financial_statements_payload,
-)
 from src.agents.fundamental.capabilities.forward_signals.interface.contracts import (
     ForwardSignalEvidence,
     ForwardSignalPayload,
-)
-from src.agents.fundamental.capabilities.forward_signals.interface.serializers import (
-    serialize_forward_signals,
 )
 from src.agents.fundamental.capabilities.model_selection.domain.model_selection import (
     select_valuation_model,
@@ -982,48 +976,25 @@ async def test_run_valuation_stops_on_audit_failure_before_calculator() -> None:
 
 
 @pytest.mark.asyncio
-async def test_run_financial_health_persists_forward_signals_in_financial_reports_artifact() -> (
+async def test_run_financial_health_waits_for_service_snapshot_without_legacy_artifact() -> (
     None
 ):
     orchestrator = _build_orchestrator()
     fake_port = orchestrator.port
     assert isinstance(fake_port, _FakePort)
 
-    forward_signal = _build_forward_signal(
-        signal_id="sec_xbrl_growth_2025",
-        source_type="manual",
-    )
-    payload = parse_financial_statements_payload(
-        {
-            "financial_reports": [
-                {
-                    "base": {},
-                    "industry_type": "Industrial",
-                    "extension_type": "Industrial",
-                    "extension": {},
-                }
-            ],
-            "diagnostics": {"source": "test_fixture"},
-            "quality_gates": {"status": "pass"},
-        },
-        context="test.financial_health",
-    )
-
-    result = await orchestrator.run_financial_health(
-        _build_health_state(),
-        fetch_financial_reports_fn=lambda _ticker: payload,
-        extract_forward_signals_fn=lambda _ticker, _reports: [forward_signal],
-    )
+    result = await orchestrator.run_financial_health(_build_health_state())
 
     assert result.goto == "model_selection"
-    assert isinstance(fake_port.saved_data, dict)
-    expected_forward_signals = serialize_forward_signals([forward_signal])
-    assert fake_port.saved_data["forward_signals"] == expected_forward_signals
-    assert fake_port.saved_data["quality_gates"]["status"] == "pass"
+    assert fake_port.saved_data is None
     fa_update = result.update["fundamental_analysis"]
     assert isinstance(fa_update, Mapping)
     assert isinstance(fa_update.get("xbrl_quality_gates"), Mapping)
-    assert fa_update["xbrl_quality_gates"]["status"] == "pass"
+    assert fa_update["xbrl_quality_gates"]["status"] == "unavailable"
+    assert fa_update["xbrl_diagnostics"]["reason"] == (
+        "service_snapshot_request_required"
+    )
+    assert "artifact_references" not in result.update
 
 
 @pytest.mark.asyncio

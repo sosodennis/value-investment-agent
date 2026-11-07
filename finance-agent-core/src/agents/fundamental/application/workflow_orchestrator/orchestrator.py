@@ -10,7 +10,6 @@ from src.agents.fundamental.application.workflow_orchestrator.dto import (
     FundamentalAppContextDTO,
 )
 from src.agents.fundamental.application.workflow_orchestrator.financial_health_flow import (
-    FinancialStatementsPayload,
     run_financial_health_flow,
 )
 from src.agents.fundamental.application.workflow_orchestrator.model_selection_flow import (
@@ -179,18 +178,8 @@ class FundamentalOrchestrator:
     async def run_financial_health(
         self,
         state: Mapping[str, object],
-        *,
-        fetch_financial_reports_fn: Callable[[str], FinancialStatementsPayload],
-        extract_forward_signals_fn: Callable[
-            [str, list[JSONObject]], list[ForwardSignalPayload] | None
-        ],
     ) -> FundamentalNodeResult:
-        return await run_financial_health_flow(
-            self,
-            state,
-            fetch_financial_reports_fn=fetch_financial_reports_fn,
-            extract_forward_signals_fn=extract_forward_signals_fn,
-        )
+        return await run_financial_health_flow(self, state)
 
     async def run_model_selection(
         self,
