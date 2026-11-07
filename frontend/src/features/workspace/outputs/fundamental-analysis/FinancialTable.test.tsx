@@ -141,10 +141,22 @@ const facts: FundamentalFactsReadResult = {
 };
 
 describe('FinancialTable', () => {
+    it('renders an explicit status when the service snapshot has no selectable facts', () => {
+        render(<FinancialTable facts={{ ...facts, facts: [] }} />);
+
+        screen.getByRole('status');
+        screen.getByText('No canonical facts available');
+        screen.getByText(/snapshot-1/);
+        expect(screen.queryByRole('table')).toBeNull();
+    });
+
     it('renders typed family, period, units, numeric states, and quality metadata', () => {
         render(<FinancialTable facts={facts} />);
 
         screen.getByText('Example Bank');
+        screen.getByText(/Canonical facts selected from the immutable snapshot-1 snapshot/);
+        expect(screen.getAllByRole('columnheader').every((header) => header.getAttribute('scope') === 'col')).toBe(true);
+        expect(screen.getAllByLabelText('Quality: verified')).toHaveLength(4);
         screen.getByText(/Bank · us-gaap · USD · 7 selected facts/);
         screen.getByText('12,500');
         screen.getByText('8.25');

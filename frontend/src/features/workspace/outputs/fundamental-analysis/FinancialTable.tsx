@@ -1,9 +1,12 @@
 import { memo, useMemo } from 'react';
 import { Info } from 'lucide-react';
 import { Card } from '@/components/ui/card';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
 import {
     Table,
     TableBody,
+    TableCaption,
     TableCell,
     TableHead,
     TableHeader,
@@ -37,7 +40,20 @@ const FinancialTableComponent = ({ facts, artifactReference, onSelectEvidence }:
     );
     const familyLabel = facts.identity.family ? FAMILY_LABELS[facts.identity.family] : 'Family unspecified';
 
-    if (sortedFacts.length === 0) return null;
+    if (sortedFacts.length === 0) {
+        return (
+            <section aria-label="Fundamental service facts" className="w-full py-2">
+                <Alert role="status">
+                    <Info aria-hidden="true" className="size-4 text-muted-foreground" />
+                    <AlertTitle>No canonical facts available</AlertTitle>
+                    <AlertDescription>
+                        The Fundamental service returned no selectable facts for snapshot{' '}
+                        <span className="break-all font-mono text-foreground">{facts.snapshot_id}</span>.
+                    </AlertDescription>
+                </Alert>
+            </section>
+        );
+    }
 
     return (
         <section aria-label="Fundamental service facts" className="w-full py-2">
@@ -67,11 +83,11 @@ const FinancialTableComponent = ({ facts, artifactReference, onSelectEvidence }:
                     <Table>
                         <TableHeader>
                             <TableRow className="bg-background hover:bg-background">
-                                <TableHead className="min-w-48">Canonical fact</TableHead>
-                                <TableHead className="min-w-48">Value</TableHead>
-                                <TableHead>Period</TableHead>
-                                <TableHead>Unit</TableHead>
-                                <TableHead>Quality</TableHead>
+                        <TableHead scope="col" className="min-w-48">Canonical fact</TableHead>
+                        <TableHead scope="col" className="min-w-48">Value</TableHead>
+                        <TableHead scope="col">Period</TableHead>
+                        <TableHead scope="col">Unit</TableHead>
+                        <TableHead scope="col">Quality</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -86,6 +102,9 @@ const FinancialTableComponent = ({ facts, artifactReference, onSelectEvidence }:
                                 />
                             ))}
                         </TableBody>
+                        <TableCaption className="px-3 pb-3 text-left">
+                            Canonical facts selected from the immutable {facts.snapshot_id} snapshot.
+                        </TableCaption>
                     </Table>
                 </div>
             </Card>
@@ -142,9 +161,11 @@ function FactRow({
                 {formatFactUnit(fact)}
             </TableCell>
             <TableCell>
-                <span className={qualityClass(fact.quality)}>{fact.quality}</span>
+                <Badge variant={qualityVariant(fact.quality)} aria-label={`Quality: ${fact.quality}`}>
+                    {fact.quality}
+                </Badge>
                 {fact.issue_codes.length > 0 && (
-                    <span className="mt-1 block max-w-32 break-words text-xs text-muted-foreground">
+                    <span className="mt-1 block max-w-32 break-all text-xs text-muted-foreground">
                         {fact.issue_codes.join(', ')}
                     </span>
                 )}
@@ -229,10 +250,11 @@ function formatFactUnit(fact: FundamentalCanonicalFact): string {
     return fact.scale === 0 ? unit : `${unit} · 10^${fact.scale}`;
 }
 
-function qualityClass(value: FundamentalCanonicalFact['quality']): string {
-    if (value === 'verified') return 'text-xs font-medium text-success';
-    if (value === 'error' || value === 'abstain') return 'text-xs font-medium text-destructive';
-    return 'text-xs font-medium text-warning';
+function qualityVariant(value: FundamentalCanonicalFact['quality']): 'success' | 'warning' | 'destructive' | 'secondary' {
+    if (value === 'verified') return 'success';
+    if (value === 'error' || value === 'abstain') return 'destructive';
+    if (value === 'unsupported') return 'secondary';
+    return 'warning';
 }
 
 export const FinancialTable = memo(FinancialTableComponent);
