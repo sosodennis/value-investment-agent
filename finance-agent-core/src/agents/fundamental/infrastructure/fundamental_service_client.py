@@ -52,6 +52,9 @@ _OPERATION_PATHS: dict[FundamentalOperation, str] = {
     "uncertainty": "/v1/valuation/uncertainty",
     "replay": "/v1/valuation/replay",
 }
+_OPERATION_METHODS: dict[FundamentalOperation, str] = {
+    "read_facts": "GET",
+}
 
 
 @dataclass(frozen=True)
@@ -193,7 +196,8 @@ class HttpFundamentalServiceClient:
                     status_code=408,
                 )
             try:
-                response = await self._client.post(
+                response = await self._client.request(
+                    _OPERATION_METHODS.get(operation, "POST"),
                     f"{self._settings.base_url}{path}",
                     json=payload,
                     headers=headers,

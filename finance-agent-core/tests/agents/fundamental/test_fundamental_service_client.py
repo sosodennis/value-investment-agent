@@ -257,6 +257,7 @@ async def test_client_reads_typed_facts_from_the_immutable_snapshot_endpoint() -
     )
 
     assert captured[0].url.path == "/v1/data/facts"
+    assert captured[0].method == "GET"
     assert result.snapshot_id == "snapshot-aapl-2025"
     assert result.snapshot_manifest_digest == "a" * 64
     assert result.identity.issuer_id == "320193"
