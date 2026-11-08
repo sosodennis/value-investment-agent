@@ -1225,3 +1225,66 @@ but the exact workspace flow cannot produce a caller-owned valuation trace. The
 remaining change belongs at the Agent-to-Fundamental policy-input contract and
 must be tracked as a blocker before #325 can open a delivery PR. No PR, issue
 closure, or `VERIFIED` status is claimed by this checkpoint.
+
+## Checkpoint: artifact valuation rendering and exact-head live UI
+
+- Date: 2026-11-08 (local). Exact code under test: `49893d87`
+  (`checkpoint(#325): normalize service valuation results`). This head includes
+  the artifact-only valuation UI from `8e836836` and parser normalization for
+  decimal-string results nested in `fundamental_service.service_result`.
+- The service artifact uses `service_result.intrinsic_value` and
+  `service_result.per_share_value` as decimal strings. The frontend parser now
+  validates finite decimal strings at the boundary and exposes them through the
+  typed valuation projection; no calculation or mapping logic was moved into
+  the browser.
+
+| Command or observation | Result |
+| --- | --- |
+| `npm run lint` in `frontend/` | exit 0 |
+| `npm run typecheck` in `frontend/` | exit 0 |
+| `npm run test -- --run` in `frontend/` | exit 0; 52 files, 301 tests passed |
+| `npm run build` in `frontend/` | exit 0 |
+| issue-325 app Compose `config --quiet` | exit 0 |
+| exact-head frontend Docker build and `up -d --no-deps frontend` | exit 0; image `sha256:581a6e2d4106013e974cae467820baef4138b5d5ab3504d33fa0cf235e30397f`, healthy |
+| `curl -fsS http://127.0.0.1:8000/health` | exit 0; `{"status":"ok"}` |
+| `curl -fsS http://127.0.0.1:18080/readyz` | exit 0; `{"status":"ready","contract_version":"internal.v1"}` |
+
+- Live route: `http://127.0.0.1:3000/workspace?thread_id=thread_1794100388555&run_id=7f8ea357-2d1c-449c-b037-1070a4b871f5`.
+  Artifact `7cbfd951-9784-4b8f-bdc6-06d75162e96d` rendered model `fcff_dcf`,
+  `completed` calculation, intrinsic value `$160.77`, and per-share value
+  `$1.61` without a live preview payload. The artifact trace rendered the
+  snapshot `snapshot-82c9a009e0dd280f7d2e64d05b047262`, snapshot manifest
+  `e54c631839298d340b1737bb661c7e0d05f7abef4a5e2bc17cf3acca42b9a698`, data
+  release manifest
+  `11b1376de0a90187b25f6e517b98971b0ee750f02fd86555474161018cb7edc8`, input
+  digest `6cd0cb73885bc66c255bd7da7d1100c0f126bfe05fb7e66bb9a4931ed4d3a229`,
+  result hash `4c073493d490158af0237548768157c35edd9b41e2e2ff3a27705f6e38eaeb37`,
+  and policy digest
+  `6281c1a261016f6b03cc0cdcffeca7bc12572b264256a7070b392cc833d2b781`.
+- The facts table rendered five verified service facts with their fact IDs,
+  periods, units, base-unit values, snapshot manifest, and data-release
+  manifest. Revenue evidence showed the SEC source URL, accession
+  `0000950170-24-087843`, filed/available/captured timestamps, parser `2.47.4`,
+  taxonomy `us-gaap-2023-2024`, source hash
+  `4c2c360b4d2c20a773438b786956a0e8d62a8cd6ab8b3a3d4d5970bd283b6d0c`, and
+  explicit `Unavailable` values for absent taxonomy-manifest and mapping
+  metadata.
+- At `1440x900`, `innerWidth`, body scroll width, and document scroll width were
+  all `1440`; the report remained bounded and the desktop evidence inspector
+  was visible. At `390x844`, body/document scroll widths were both `390` and the
+  Fundamental service facts region measured `358px`; the table retained local
+  horizontal scrolling without widening the page.
+- Clicking `Inspect Revenue evidence` opened the mobile inspector. Pressing
+  `Escape` closed it and restored focus to the same button (`aria-label="Inspect
+  Revenue evidence"`).
+
+### Diagnostic result
+
+The Fundamental artifact rendering, trace/release metadata, responsive layout,
+keyboard evidence selection, and provenance inspector pass on exact head
+`49893d87`. The overall historical run still ended independently in Debate with
+the recorded LLM provider HTTP 502 / `failover_exhausted`; the Fundamental
+subgraph completed and this provider failure does not invalidate the report
+rendering evidence. #325 remains incomplete and blocked until a delivery PR,
+PR-CI result, and the outstanding caller-owned valuation/provider gates are
+resolved. This checkpoint does not mark the issue `VERIFIED` or close it.
