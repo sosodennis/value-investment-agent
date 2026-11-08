@@ -34,7 +34,7 @@ export type CompactFundamentalValuationRequest = Record<string, unknown> & {
     policy_id: 'fcff_dcf-us-gaap-public-v1';
     assumptions: {
         forecast: {
-            base_revenue?: string;
+            base_revenue: string;
             revenue_growth: string[];
             operating_margin: string[];
             reinvestment_rate: string[];
@@ -120,7 +120,10 @@ function buildRequest(state: FormState): CompactFundamentalValuationRequest {
     if (decimalNumber(state.dilutedShares, 'Diluted shares') <= 0) {
         throw new TypeError('Diluted shares must be greater than 0.');
     }
-    const baseRevenue = state.baseRevenue.trim();
+    const baseRevenue = parseDecimal(state.baseRevenue, 'Base revenue');
+    if (decimalNumber(baseRevenue, 'Base revenue') <= 0) {
+        throw new TypeError('Base revenue must be greater than 0.');
+    }
     return {
         contract_version: 'fundamental.v1',
         model_id: 'fcff_dcf',
@@ -128,7 +131,7 @@ function buildRequest(state: FormState): CompactFundamentalValuationRequest {
         policy_id: 'fcff_dcf-us-gaap-public-v1',
         assumptions: {
             forecast: {
-                ...(baseRevenue ? { base_revenue: parseDecimal(baseRevenue, 'Base revenue') } : {}),
+                base_revenue: baseRevenue,
                 revenue_growth: parseDecimalList(state.revenueGrowth, 'Revenue growth'),
                 operating_margin: parseDecimalList(state.operatingMargin, 'Operating margin'),
                 reinvestment_rate: parseDecimalList(state.reinvestmentRate, 'Reinvestment rate'),
@@ -192,7 +195,7 @@ export function ValuationAssumptionsEditor({
             </p>
             <div className="mt-3 grid gap-3 md:grid-cols-3">
                 <AssumptionGroup title="Forecast" description="Comma-separated values represent the forecast years.">
-                    <DecimalField id="base-revenue" label="Base revenue (optional)" value={state.baseRevenue} onChange={update('baseRevenue')} />
+                    <DecimalField id="base-revenue" label="Base revenue" value={state.baseRevenue} onChange={update('baseRevenue')} />
                     <DecimalField id="revenue-growth" label="Revenue growth" value={state.revenueGrowth} onChange={update('revenueGrowth')} placeholder="0.05, 0.05, 0.04" />
                     <DecimalField id="operating-margin" label="Operating margin" value={state.operatingMargin} onChange={update('operatingMargin')} placeholder="0.15, 0.16, 0.17" />
                     <DecimalField id="reinvestment-rate" label="Reinvestment rate" value={state.reinvestmentRate} onChange={update('reinvestmentRate')} placeholder="0.20, 0.18, 0.16" />

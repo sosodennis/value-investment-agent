@@ -155,6 +155,7 @@ describe('WorkspacePage', () => {
         fireEvent.change(screen.getByLabelText('Company ticker'), { target: { value: 'aapl' } });
 
         const values: Record<string, string> = {
+            'Base revenue': '100',
             'Revenue growth': '0.05, 0.05, 0.04',
             'Operating margin': '0.15, 0.16, 0.17',
             'Reinvestment rate': '0.20, 0.18, 0.16',
@@ -188,6 +189,7 @@ describe('WorkspacePage', () => {
                 contract_version: 'fundamental.v1',
                 model_id: 'fcff_dcf',
                 assumptions: expect.objectContaining({
+                    forecast: expect.objectContaining({ base_revenue: '100' }),
                     wacc: expect.objectContaining({ debt_weight: '0.2', equity_weight: '0.8' }),
                     terminal_growth: '0.02',
                 }),
