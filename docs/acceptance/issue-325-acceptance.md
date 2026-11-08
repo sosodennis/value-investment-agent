@@ -1373,3 +1373,86 @@ The exact delivery head is running in the isolated issue-325 app and
 Fundamental projects with healthy dependencies. This checkpoint verifies the
 runtime substrate only; it does not mark the live workflow, artifact
 provenance, responsive UI, or issue acceptance complete.
+
+## Checkpoint: exact-head service-backed workflow and UI acceptance
+
+- Date: 2026-11-08 (local). Runtime code under test: `2df43324af4c60a410052316e8af2387fce16ddb` (`fix(#325): require positive base revenue`).
+  The follow-up documentation checkpoint is the commit containing this section;
+  it changes no runtime code.
+- PR #349 is open with base `main`; its current remote head before this
+  checkpoint was `5899cc937a3af184b5fa4ef4b0c30329b4eb51e8`. Existing PR checks
+  were green for that earlier head (`backend-lint-test`,
+  `frontend-lint-type-test`, `fundamental-offline-fixture-contracts`, contract
+  gates and related checks); `fundamental-release-gate` was skipped. This live
+  acceptance is recorded against the exact local runtime head above and still
+  needs a new PR check run after publishing the checkpoint commit.
+- Compose projects: `value-investment-agent-issue-325-app` and
+  `value-investment-agent-issue-325-fundamental`; existing named volumes were
+  retained. The exact-head app rebuild produced backend image
+  `sha256:fb8f1733a38ec94e6bc6b6af7defe2ced230022914a6a78fe8212c89a0870093`
+  and frontend image
+  `sha256:6f2fcc579af3acf05916b408ffc4a82f5e6d5b1adeb82d8d99f655140f26fe07`.
+  The Fundamental service image was
+  `sha256:0161fc7fce39b0c5e87cc54cc942adee1111df67858d43cfb143b252ddfec46f`.
+- Health checks passed: app `GET /health` returned HTTP 200
+  `{"status":"ok"}`; Fundamental `GET /readyz` returned HTTP 200
+  `{"status":"ready","contract_version":"internal.v1"}`; all seven app
+  and Fundamental containers reported healthy.
+- Live route: `http://127.0.0.1:3000/workspace`; selected issuer `MSFT
+  Microsoft Corporation NASDAQ`; thread `thread_1794111836140`; run
+  `afd99495-bafe-431c-95e2-32e297cb39c7`. Caller-owned assumptions included
+  positive `base_revenue=100`; the Fundamental approval interaction was
+  accepted. PostgreSQL persisted run status `completed` at
+  `2026-11-08 04:27:25.939246` UTC.
+- Fundamental service request log for this run showed HTTP 200 for identity
+  resolve, SEC ingestion, snapshot resolve, policy validation, calculation and
+  facts retrieval. The report artifact is
+  `a7fa1d0c-7a46-47c1-bdc6-3b151cbd9c6b` (`financial_reports/v1`), with
+  `calculation_status=completed`, `quality_status=verified`, input digest
+  `f44cc5d694ed806ef625dc1624442a20bf5839bcf5505fce42d052870226c0b5`, result
+  hash `c2ac9b65df230f4f4e3c56af99e5dc445650ec144f4eeb5fe6c189b77e4e7fc5`,
+  intrinsic value `196.21116330175915588470966586957670981098119321894`, and
+  per-share value `1.9621116330175915588470966586957670981098119321894`.
+- The artifact and the valuation trace bind to the same snapshot
+  `snapshot-82c9a009e0dd280f7d2e64d05b047262`, snapshot manifest
+  `e54c631839298d340b1737bb661c7e0d05f7abef4a5e2bc17cf3acca42b9a698`, and
+  data-release manifest
+  `11b1376de0a90187b25f6e517b98971b0ee750f02fd86555474161018cb7edc8`.
+  The five selected fact IDs are
+  `sec-fact-0d1b9aafd1825e2369a2461a`,
+  `sec-fact-01975091afb6fb325632f913`,
+  `sec-fact-24f691126f90539e7c7657c9`,
+  `sec-fact-41c45c91d1c17ee19fcbf3ce`, and
+  `sec-fact-2a6950a8e0f6c7d7f439e5c5`. PostgreSQL confirmed
+  `snapshot_manifests=23`, `canonical_facts=1900`, and `snapshot_facts=1900`
+  in the isolated Fundamental database; the exact snapshot row exists with
+  the manifest digest above.
+- Fundamental tab acceptance passed. It rendered `completed`, model
+  `fcff_dcf`, `$196.21`, `$1.96`, the valuation trace digests, a canonical
+  facts table with five `verified` rows, periods and units, and base-unit
+  values (for example revenue `245,122,000,000` with source scale `10^6`).
+  The debate artifact was typed `abstained` with
+  `LLM_PROVIDER_FAILOVER_EXHAUSTED`; this degraded debate result did not remove
+  the completed Fundamental artifact or valuation trace.
+- At desktop `1440x900`, the persistent Evidence inspector was visible. At
+  mobile `390x844`, pressing `Enter` on the focused `Inspect Revenue evidence`
+  button opened the evidence sheet. It showed the SEC source URL, period,
+  confidence, fact ID, concept, accession, filed/available/captured times,
+  parser `2.47.4`, taxonomy, source hash, snapshot, snapshot manifest, unit,
+  and issue codes; absent taxonomy-manifest and mapping provenance rendered as
+  `Unavailable`. Closing the sheet restored focus to the same
+  `Inspect Revenue evidence` button.
+- The browser still displayed the stale presentation alert
+  `Workflow request failed: signal is aborted without reason` after the SSE
+  connection closed, while persisted run status, activity cursor, artifact and
+  Fundamental service calls were complete. This is recorded as a browser/SSE
+  presentation risk; no acceptance claim is made that the alert is resolved.
+
+### Diagnostic result
+
+The service-backed Fundamental workflow, same-snapshot valuation trace, typed
+debate abstention, report rendering, desktop/mobile layout, keyboard evidence
+selection and focus restoration passed on the exact runtime head. #325 remains
+open with its `blocker` label and PR #349 remains open; PR checks must be rerun
+for the checkpoint commit, and the stale SSE alert plus external provider
+availability remain known risks before issue closure or `VERIFIED` status.
