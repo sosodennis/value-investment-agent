@@ -241,6 +241,7 @@ async def test_producer_enriches_compact_caller_request_without_inventing_inputs
         "taxonomy_version": "us-gaap-2023-2024",
         "policy_version": "sec-public-pit-v1",
     }
+    assert "fiscal_period_selector" not in prepared.snapshot_selector
     assert prepared.valuation_request["valuation_context"] == {
         "valuation_timestamp": "2026-11-07T00:00:00Z",
         "source_selection_policy": "pit-v1",
@@ -250,6 +251,44 @@ async def test_producer_enriches_compact_caller_request_without_inventing_inputs
         "resolve_identity",
         "ingest_sec_data",
     ]
+
+
+@pytest.mark.asyncio
+async def test_producer_preserves_explicit_fiscal_period_selector() -> None:
+    client = _Client(ingestion=_ingestion())
+    request = _compact_request()
+    request["valuation_context"] = {
+        "fiscal_period_selector": {
+            "mode": "latest_complete",
+            "count": 1,
+        }
+    }
+
+    prepared = await prepare_service_valuation_request(
+        _state(request=request),
+        client=client,
+        principal=_principal(),
+        correlation_id="correlation-1",
+        deadline_at=datetime(2026, 11, 7, tzinfo=UTC),
+        request_timing=FundamentalRequestTimingV1.accept(
+            request,
+            clock=lambda: datetime(2026, 11, 7, tzinfo=UTC),
+        ),
+    )
+
+    assert prepared.snapshot_selector["fiscal_period_selector"] == {
+        "version": "fundamental.fiscal-period-selector.v1",
+        "mode": "latest_complete",
+        "count": 1,
+    }
+    assert prepared.valuation_request is not None
+    assert prepared.valuation_request["valuation_context"][
+        "fiscal_period_selector"
+    ] == {
+        "version": "fundamental.fiscal-period-selector.v1",
+        "mode": "latest_complete",
+        "count": 1,
+    }
 
 
 @pytest.mark.asyncio

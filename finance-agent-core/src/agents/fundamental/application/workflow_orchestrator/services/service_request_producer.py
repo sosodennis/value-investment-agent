@@ -220,6 +220,17 @@ def _required_fields(model_id: str) -> tuple[str, ...]:
     )
 
 
+def _explicit_fiscal_period_selector(
+    request: Mapping[str, object],
+) -> JSONObject | None:
+    selector = request.get("fiscal_period_selector")
+    if selector is None:
+        context = request.get("valuation_context")
+        if isinstance(context, Mapping):
+            selector = context.get("fiscal_period_selector")
+    return dict(selector) if isinstance(selector, Mapping) else None
+
+
 def _fact_mappings(required_fields: tuple[str, ...]) -> list[JSONObject]:
     return [
         {
@@ -349,9 +360,12 @@ async def prepare_service_valuation_request(
             or (request.get("requested_as_of") if request is not None else None)
         )
     )
+    explicit_fiscal_period_selector = (
+        _explicit_fiscal_period_selector(request) if request is not None else None
+    )
     fiscal_period_selector = (
         request_timing.fiscal_period_selector.model_dump(mode="json")
-        if request_timing is not None and request is not None
+        if request_timing is not None and explicit_fiscal_period_selector is not None
         else None
     )
 
