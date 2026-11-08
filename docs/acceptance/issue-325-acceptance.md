@@ -1456,3 +1456,45 @@ selection and focus restoration passed on the exact runtime head. #325 remains
 open with its `blocker` label and PR #349 remains open; PR checks must be rerun
 for the checkpoint commit, and the stale SSE alert plus external provider
 availability remain known risks before issue closure or `VERIFIED` status.
+
+## Checkpoint: full-workflow stage ledger and PR CI recheck
+
+- Date: 2026-11-08 (local). Exact delivery head: `fb7e70a3010d1f358c62587966a262313a629116`.
+  This checkpoint contains only generated contract synchronization after the
+  live runtime checkpoint; the live run itself executed on its parent runtime
+  head `2df43324af4c60a410052316e8af2387fce16ddb`.
+- The complete enabled workflow for thread
+  `thread_1794111836140` / run
+  `afd99495-bafe-431c-95e2-32e297cb39c7` reached `Workflow completed` at
+  activity cursor `89`; PostgreSQL `workflow_runs.status` is `completed`.
+  The terminal stage ledger recorded: issuer clarification completed with
+  selected `MSFT`; Fundamental `Analyze fundamentals` completed and emitted
+  artifact `a7fa1d0c-7a46-47c1-bdc6-3b151cbd9c6b` (`financial_reports`);
+  Technical `Analyze technical signals` completed and emitted
+  `1d6a7194-e291-485c-b27e-4ff1b2bf385f` (`ta_full_report`); News `Research
+  financial news` and `Search news` completed; research consolidation and
+  debate preparation/evidence extraction completed; Debate `Review the
+  investment case` completed and emitted `d7cd8e9f-6384-4d8b-838f-fbfbba67b288`
+  (`debate_facts`) and `44a7d0f4-8992-4f29-9cf8-df59c1a9af9c`
+  (`debate_final_report`).
+- The debate final artifact is typed `status=abstained`, with
+  `degraded_reasons=[LLM_PROVIDER_FAILOVER_EXHAUSTED]` and an explicit
+  provider-unavailable explanation. This is the declared terminal degraded
+  outcome for the Debate subgraph; the overall workflow still completed and
+  the Fundamental valuation artifact remained verified.
+- PR #349 now points at `fb7e70a3010d1f358c62587966a262313a629116` with base
+  `main`. The exact-head GitHub checks all passed: `backend-lint-test`,
+  `frontend-lint-type-test`, `fundamental-offline-fixture-contracts`,
+  `notification-postgres-integration`, `contract-codegen-check`,
+  `contract-policy`,
+  `production-compose-secret-contract`, `search-service-contract-gate`,
+  `llm-provider-contract-gate`, `llm-provider-service-contract-gate`, and
+  `model-inference-service-contract-gate`. `fundamental-release-gate` was
+  skipped by the workflow; no failed check remains.
+
+### Diagnostic result
+
+The full workflow ledger, same-run artifact references, exact-head generated
+contract state, and PR CI recheck are recorded. The PR and issue remain open;
+the stale browser SSE alert and provider-abstained debate are explicit risks,
+so this checkpoint does not claim issue closure or `VERIFIED` status.
