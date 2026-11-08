@@ -1331,3 +1331,45 @@ PR, or close the issue. The next owning-layer action is to restore a working
 LLM provider configuration or deliver an explicit typed Debate degraded/
 abstained terminal contract, then rerun the complete workflow against a new
 exact commit.
+
+## Exact-head container rebuild checkpoint
+
+- Date: 2026-11-08 (local). Code under test: `785a30250e23c22e8dadfd9c5d324069d51e12c1`.
+- Compose projects: `value-investment-agent-issue-325-app` and
+  `value-investment-agent-issue-325-fundamental`. Existing named volumes were
+  retained.
+- The app stack was validated and rebuilt with:
+  `docker compose --env-file /tmp/issue325-runtime.env -p
+  value-investment-agent-issue-325-app -f docker-compose.yml -f
+  docker-compose.override.yml -f
+  compose/verification/docker-compose.issue325-app-fundamental.yml config
+  --quiet` (exit 0), followed by `up -d --no-deps --build backend frontend`
+  (exit 0).
+- The Fundamental stack was validated with the pinned offline taxonomy,
+  EDGAR, Xule, and DQC host paths and the digest values already present in the
+  running service environment:
+  `docker compose --env-file /tmp/issue325-runtime.env -p
+  value-investment-agent-issue-325-fundamental -f
+  compose/verification/docker-compose.issue280-operations.yml -f
+  compose/verification/docker-compose.issue312-sec-ingestion.yml config
+  --quiet` (exit 0), followed by `up -d --no-deps --build fundamental-service`
+  (exit 0).
+- Rebuilt image digests: app backend
+  `sha256:fb8f1733a38ec94e6bc6b6af7defe2ced230022914a6a78fe8212c89a0870093`,
+  app frontend
+  `sha256:261052b610a627ddebe0140dcd25ab855321a03179d959c7b594ffa0753ed710`,
+  Fundamental service
+  `sha256:0161fc7fce39b0c5e87cc54cc942adee1111df67858d43cfb143b252ddfec46f`.
+- `docker compose -p value-investment-agent-issue-325-app ps` and
+  `docker compose -p value-investment-agent-issue-325-fundamental ps` reported
+  all seven required containers healthy. `curl -fsS
+  http://127.0.0.1:8000/health` returned `{"status":"ok"}` and
+  `curl -fsS http://127.0.0.1:18080/readyz` returned
+  `{"status":"ready","contract_version":"internal.v1"}` (both exit 0).
+
+### Diagnostic result
+
+The exact delivery head is running in the isolated issue-325 app and
+Fundamental projects with healthy dependencies. This checkpoint verifies the
+runtime substrate only; it does not mark the live workflow, artifact
+provenance, responsive UI, or issue acceptance complete.
