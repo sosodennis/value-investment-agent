@@ -57,7 +57,6 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
         'financial_reports'
     );
 
-    const hasPreview = !!previewData;
     const [expandedEvidenceRows, setExpandedEvidenceRows] = useState<Record<string, boolean>>(
         {}
     );
@@ -291,6 +290,18 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
     const valuationReleaseDigest =
         valuationProjection?.hashes?.data_release_manifest_digest ??
         serviceFacts?.data_release_manifest_digest;
+    const hasLegacyValuationPreview = Boolean(
+        previewData &&
+            (valuationScore !== undefined ||
+                Object.keys(previewKeyMetrics).length > 0 ||
+                typeof equityValue === 'number' ||
+                typeof upsidePotential === 'number' ||
+                assumptionBreakdown ||
+                dataFreshness ||
+                valuationDiagnostics ||
+                distributionSummary ||
+                distributionScenarios)
+    );
     const assumptionHighlights = useMemo(
         () => assumptionBreakdown?.assumptions?.slice(0, 2) ?? [],
         [assumptionBreakdown]
@@ -515,7 +526,7 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
         tone?: 'bull' | 'bear';
         unavailable?: boolean;
     };
-    const valuationCards: ValuationCard[] = hasPreview
+    const valuationCards: ValuationCard[] = hasLegacyValuationPreview
         ? [
               {
                   label: 'Intrinsic Value',

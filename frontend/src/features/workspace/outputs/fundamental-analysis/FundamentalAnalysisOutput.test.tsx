@@ -155,6 +155,36 @@ describe('FundamentalAnalysisOutput', () => {
         screen.getByText('f'.repeat(64));
     });
 
+    it('keeps artifact per-share results visible when preview only contains identity data', () => {
+        mockUseArtifact.mockReturnValue({
+            data: {
+                fundamental_service: {
+                    projection_type: 'valuation',
+                    snapshot_id: 'snapshot-msft',
+                    snapshot_manifest_digest: 'e'.repeat(64),
+                    facts: { facts: [] },
+                    hashes: {},
+                    valuation_trace: {},
+                    intrinsic_value: 160.77,
+                    per_share_value: 1.61,
+                },
+            },
+            isLoading: false,
+        });
+
+        render(
+            <FundamentalAnalysisOutput
+                reference={null}
+                previewData={{ ticker: 'MSFT' }}
+                resolvedTicker="MSFT"
+                status="done"
+            />
+        );
+
+        screen.getByText('Per-Share Value');
+        expect(screen.queryByText('Equity Value')).toBeNull();
+    });
+
     it('always renders deterministic valuation cards when preview exists and MC is disabled', () => {
         renderComponent({
             ticker: 'AAPL',
