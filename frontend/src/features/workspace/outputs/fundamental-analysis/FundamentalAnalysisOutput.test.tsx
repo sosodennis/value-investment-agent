@@ -116,6 +116,45 @@ describe('FundamentalAnalysisOutput', () => {
         expect(screen.queryByText('Intrinsic Value')).toBeNull();
     });
 
+    it('renders valuation results and trace from the service artifact without live preview data', () => {
+        const releaseDigest = 'd'.repeat(64);
+        mockUseArtifact.mockReturnValue({
+            data: {
+                model_type: 'fcff_dcf',
+                fundamental_service: {
+                    projection_type: 'valuation',
+                    snapshot_id: 'snapshot-msft',
+                    snapshot_manifest_digest: 'e'.repeat(64),
+                    facts: { facts: [], data_release_manifest_digest: releaseDigest },
+                    hashes: { data_release_manifest_digest: releaseDigest },
+                    valuation_trace: { policy_digest: 'f'.repeat(64) },
+                    calculation_status: 'completed',
+                    intrinsic_value: 160.7746478873,
+                    per_share_value: 1.6077464788,
+                },
+            },
+            isLoading: false,
+        });
+
+        render(
+            <FundamentalAnalysisOutput
+                reference={null}
+                previewData={null}
+                resolvedTicker="MSFT"
+                status="done"
+            />
+        );
+
+        screen.getByText('Intrinsic Value');
+        screen.getByText('$160.77');
+        screen.getByText('Per-Share Value');
+        screen.getByText('$1.61');
+        screen.getByRole('group', { name: 'Valuation trace' });
+        screen.getByText('snapshot-msft');
+        screen.getByText(releaseDigest);
+        screen.getByText('f'.repeat(64));
+    });
+
     it('always renders deterministic valuation cards when preview exists and MC is disabled', () => {
         renderComponent({
             ticker: 'AAPL',

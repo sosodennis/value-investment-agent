@@ -97,6 +97,14 @@ const FinancialTableComponent = ({ facts, artifactReference, onSelectEvidence }:
                             <dt className="inline">Manifest: </dt>
                             <dd className="inline break-all font-mono text-foreground">{facts.snapshot_manifest_digest}</dd>
                         </div>
+                        {facts.data_release_manifest_digest && (
+                            <div>
+                                <dt className="inline">Data release: </dt>
+                                <dd className="inline break-all font-mono text-foreground">
+                                    {facts.data_release_manifest_digest}
+                                </dd>
+                            </div>
+                        )}
                     </dl>
                 </div>
                 <div className="overflow-x-auto">

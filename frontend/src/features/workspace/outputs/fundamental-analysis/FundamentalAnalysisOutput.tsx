@@ -64,10 +64,11 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
     const reports = artifactData?.financial_reports ?? [];
     const serviceProjection = artifactData?.fundamental_service;
     const serviceFacts = serviceProjection?.facts;
-    const hasValuationServiceProjection =
-        serviceProjection?.projection_type === 'valuation' && Boolean(serviceFacts);
+    const valuationProjection =
+        serviceProjection?.projection_type === 'valuation' ? serviceProjection : null;
+    const hasValuationServiceProjection = Boolean(valuationProjection?.facts);
     const isFactsOnlyProjection = serviceProjection?.projection_type === 'facts_only';
-    const canShowValuationPreview = hasPreview && hasValuationServiceProjection;
+    const canShowValuationPreview = hasValuationServiceProjection;
     const forwardSignals: ForwardSignal[] = artifactData?.forward_signals ?? [];
     const modelTypeRaw = artifactData?.model_type;
     const modelTypeDisplay = useMemo(() => {
@@ -284,8 +285,12 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
         sensitivityTopDrivers.length - sensitivityTopDriversPreview.length
     );
     const equityValue = previewData?.equity_value;
-    const intrinsicValue = previewData?.intrinsic_value;
+    const intrinsicValue = previewData?.intrinsic_value ?? valuationProjection?.intrinsic_value;
+    const perShareValue = valuationProjection?.per_share_value;
     const upsidePotential = previewData?.upside_potential;
+    const valuationReleaseDigest =
+        valuationProjection?.hashes?.data_release_manifest_digest ??
+        serviceFacts?.data_release_manifest_digest;
     const assumptionHighlights = useMemo(
         () => assumptionBreakdown?.assumptions?.slice(0, 2) ?? [],
         [assumptionBreakdown]
@@ -510,38 +515,57 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
         tone?: 'bull' | 'bear';
         unavailable?: boolean;
     };
-    const valuationCards: ValuationCard[] = [
-        {
-            label: 'Intrinsic Value',
-            value:
-                typeof intrinsicValue === 'number'
-                    ? formatCurrencyCompact(intrinsicValue)
-                    : 'N/A',
-            unavailable: typeof intrinsicValue !== 'number',
-        },
-        {
-            label: 'Equity Value',
-            value:
-                typeof equityValue === 'number'
-                    ? formatCurrencyCompact(equityValue)
-                    : 'N/A',
-            unavailable: typeof equityValue !== 'number',
-        },
-        {
-            label: 'Upside Potential',
-            value:
-                typeof upsidePotential === 'number'
-                    ? formatPercent(upsidePotential)
-                    : 'N/A',
-            tone:
-                typeof upsidePotential === 'number'
-                    ? upsidePotential >= 0
-                        ? 'bull'
-                        : 'bear'
-                    : undefined,
-            unavailable: typeof upsidePotential !== 'number',
-        },
-    ];
+    const valuationCards: ValuationCard[] = hasPreview
+        ? [
+              {
+                  label: 'Intrinsic Value',
+                  value:
+                      typeof intrinsicValue === 'number'
+                          ? formatCurrencyCompact(intrinsicValue)
+                          : 'N/A',
+                  unavailable: typeof intrinsicValue !== 'number',
+              },
+              {
+                  label: 'Equity Value',
+                  value:
+                      typeof equityValue === 'number'
+                          ? formatCurrencyCompact(equityValue)
+                          : 'N/A',
+                  unavailable: typeof equityValue !== 'number',
+              },
+              {
+                  label: 'Upside Potential',
+                  value:
+                      typeof upsidePotential === 'number'
+                          ? formatPercent(upsidePotential)
+                          : 'N/A',
+                  tone:
+                      typeof upsidePotential === 'number'
+                          ? upsidePotential >= 0
+                              ? 'bull'
+                              : 'bear'
+                          : undefined,
+                  unavailable: typeof upsidePotential !== 'number',
+              },
+          ]
+        : [
+              {
+                  label: 'Intrinsic Value',
+                  value:
+                      typeof intrinsicValue === 'number'
+                          ? formatCurrencyCompact(intrinsicValue)
+                          : 'N/A',
+                  unavailable: typeof intrinsicValue !== 'number',
+              },
+              {
+                  label: 'Per-Share Value',
+                  value:
+                      typeof perShareValue === 'number'
+                          ? formatCurrencyCompact(perShareValue)
+                          : 'N/A',
+                  unavailable: typeof perShareValue !== 'number',
+              },
+          ];
     const hasValuationValue = valuationCards.some((card) => !card.unavailable);
 
 
@@ -722,6 +746,36 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
                             </div>
                         )}
                     </div>
+
+                    {valuationProjection && (
+                        <Card role="group" aria-label="Valuation trace" className="grid gap-3 p-4">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                                <span className="text-xs uppercase tracking-tighter text-muted-foreground">
+                                    Valuation Trace
+                                </span>
+                                <Badge variant="outline">
+                                    {valuationProjection.calculation_status ?? 'status unavailable'}
+                                </Badge>
+                            </div>
+                            <dl className="grid gap-2 text-xs sm:grid-cols-2">
+                                <TraceField label="Snapshot" value={valuationProjection.snapshot_id} />
+                                <TraceField
+                                    label="Snapshot manifest"
+                                    value={valuationProjection.snapshot_manifest_digest}
+                                />
+                                <TraceField
+                                    label="Data release manifest"
+                                    value={valuationReleaseDigest}
+                                />
+                                <TraceField label="Input digest" value={valuationProjection.input_digest} />
+                                <TraceField label="Result hash" value={valuationProjection.result_hash} />
+                                <TraceField
+                                    label="Policy digest"
+                                    value={valuationProjection.valuation_trace?.policy_digest}
+                                />
+                            </dl>
+                        </Card>
+                    )}
 
                     {(assumptionBreakdown || dataFreshness || valuationDiagnostics) && (
                         <div className="grid grid-cols-1 gap-4 items-start">
@@ -1388,6 +1442,15 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
         </div>
     );
 };
+
+function TraceField({ label, value }: { label: string; value?: string }) {
+    return (
+        <div className="min-w-0">
+            <dt className="text-muted-foreground">{label}</dt>
+            <dd className="break-all font-mono text-foreground">{value ?? 'Unavailable'}</dd>
+        </div>
+    );
+}
 
 // Export with explicit props generic to stabilize memoized component type inference.
 export const FundamentalAnalysisOutput = memo<FundamentalAnalysisOutputProps>(

@@ -70,6 +70,7 @@ function fact(overrides: Partial<FundamentalCanonicalFact>): FundamentalCanonica
 const facts: FundamentalFactsReadResult = {
     contract_version: 'fundamental.v1',
     snapshot_id: 'snapshot-1',
+    data_release_manifest_digest: 'd'.repeat(64),
     snapshot_manifest_digest: 'c'.repeat(64),
     identity: {
         issuer_id: 'issuer-1',
@@ -155,6 +156,8 @@ describe('FinancialTable', () => {
 
         screen.getByText('Example Bank');
         screen.getByText(/Canonical facts selected from the immutable snapshot-1 snapshot/);
+        screen.getByText(/Data release:/);
+        screen.getByText('d'.repeat(64));
         expect(screen.getAllByRole('columnheader').every((header) => header.getAttribute('scope') === 'col')).toBe(true);
         expect(screen.getAllByLabelText('Quality: verified')).toHaveLength(4);
         screen.getByText(/Bank · us-gaap · USD · 7 selected facts/);
