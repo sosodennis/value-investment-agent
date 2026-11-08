@@ -1,3 +1,5 @@
+import type { FundamentalServiceArtifact } from './fundamental-service-facts';
+
 export interface Provenance {
     concept?: string;
     expression?: string;
@@ -134,6 +136,7 @@ export interface FundamentalAnalysisSuccess {
     industry: string;
     reasoning: string;
     financial_reports: FinancialReport[];
+    fundamental_service?: FundamentalServiceArtifact;
     forward_signals?: ForwardSignal[];
     valuation_diagnostics?: FundamentalValuationDiagnostics;
     status: 'done';

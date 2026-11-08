@@ -75,6 +75,30 @@ const DebateOutputComponent: React.FC<DebateOutputProps> = ({
         );
     }
 
+    if (artifactData?.status === 'abstained' || artifactData?.status === 'degraded') {
+        return (
+            <Card role="status" className="border-warning/50 bg-warning/5 p-5">
+                <div className="flex items-start gap-3">
+                    <AlertTriangle size={18} className="mt-0.5 shrink-0 text-warning" aria-hidden="true" />
+                    <div className="min-w-0 space-y-3">
+                        <div className="flex flex-wrap items-center gap-2">
+                            <h3 className="text-sm font-semibold">Debate result unavailable</h3>
+                            <Badge variant="warning">{artifactData.status === 'abstained' ? 'Abstained' : 'Degraded'}</Badge>
+                        </div>
+                        <p className="text-sm text-muted-foreground">{artifactData.abstention_reason}</p>
+                        <div>
+                            <p className="text-xs font-semibold uppercase text-muted-foreground">Reason codes</p>
+                            <ul className="mt-1 list-inside list-disc text-xs text-muted-foreground">
+                                {artifactData.degraded_reasons.map((reason) => <li key={reason}>{reason}</li>)}
+                            </ul>
+                        </div>
+                        {resolvedTicker ? <p className="text-xs text-muted-foreground">Ticker: <span className="font-mono text-foreground">{resolvedTicker}</span></p> : null}
+                    </div>
+                </div>
+            </Card>
+        );
+    }
+
     const conclusion = artifactData;
     const direction = artifactData?.final_verdict || 'NEUTRAL';
     const directionLabel = artifactData?.final_verdict ?? (isPreviewOnly ? 'Preview' : 'Not reported');

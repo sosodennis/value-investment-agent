@@ -48,6 +48,7 @@ from src.llm_provider.entrypoint import (
     ChatMessage,
     ChatRole,
     CompletionRequest,
+    LLMProviderError,
     LLMProviderPort,
     LLMRequestClass,
     ModelRoute,
@@ -688,6 +689,88 @@ class DebateOrchestrator:
                 },
                 goto="END",
             )
+        except LLMProviderError as exc:
+            exc_text = bounded_text(exc)
+            log_event(
+                logger,
+                event="debate_verdict_failed",
+                message="debate verdict failed",
+                level=logging.ERROR,
+                error_code="DEBATE_VERDICT_FAILED",
+                fields={"ticker": ticker, "exception": exc_text},
+            )
+            error_code = exc.code.value
+            degraded_reasons = [f"LLM_PROVIDER_{error_code.upper()}"]
+            history = [
+                message
+                for message in state.get("history", [])
+                if isinstance(message, BaseMessage)
+            ]
+            current_round = 0
+            debate_state = state.get("debate")
+            if isinstance(debate_state, Mapping):
+                raw_round = debate_state.get("current_round")
+                if isinstance(raw_round, int) and not isinstance(raw_round, bool):
+                    current_round = max(0, raw_round)
+            abstention_reason = (
+                "Debate verdict unavailable because the configured language-model "
+                "provider did not return a response."
+            )
+            degraded_data: JSONObject = {
+                "status": "abstained",
+                "degraded_reasons": degraded_reasons,
+                "abstention_reason": abstention_reason,
+                "debate_rounds": current_round,
+            }
+            valid_facts = await self._load_valid_facts(state)
+            full_report_data = build_final_report_payload(
+                conclusion_data=degraded_data,
+                valid_facts=valid_facts,
+                history=history,
+            )
+            report_id = await self.artifact_port.save_final_report(
+                data=full_report_data,
+                produced_by="debate.verdict",
+                key_prefix=ticker,
+            )
+            artifact = self._build_abstained_artifact(
+                reason=abstention_reason,
+                degraded_reasons=degraded_reasons,
+                debate_rounds=current_round,
+                report_id=report_id,
+            )
+            log_event(
+                logger,
+                event="debate_verdict_abstained",
+                message="debate verdict abstained after provider failure",
+                level=logging.WARNING,
+                error_code="DEBATE_VERDICT_ABSTAINED",
+                fields={
+                    "ticker": ticker,
+                    "provider_error_code": error_code,
+                    "degraded_reasons": degraded_reasons,
+                    "report_id": report_id,
+                },
+            )
+            return DebateNodeResult(
+                update={
+                    "debate": {
+                        **degraded_data,
+                        "report_id": report_id,
+                        "artifact": artifact,
+                    },
+                    "workflow_activity_updates": {"verdict": "degraded"},
+                    "error_logs": [
+                        {
+                            "node": "verdict",
+                            "error": abstention_reason,
+                            "error_code": error_code,
+                            "severity": "warning",
+                        }
+                    ],
+                },
+                goto="END",
+            )
         except Exception as exc:
             exc_text = bounded_text(exc)
             log_event(
@@ -771,6 +854,39 @@ class DebateOrchestrator:
                 message="failed to generate debate output artifact",
                 level=logging.ERROR,
                 error_code="DEBATE_OUTPUT_ARTIFACT_FAILED",
+                fields={"exception": exc_text},
+            )
+            return None
+
+    def _build_abstained_artifact(
+        self,
+        *,
+        reason: str,
+        degraded_reasons: list[str],
+        debate_rounds: int,
+        report_id: str | None,
+    ) -> AgentOutputArtifactPayload | None:
+        try:
+            preview: JSONObject = {
+                "status": "abstained",
+                "status_label": "Debate abstained",
+                "reason_display": reason,
+                "degraded_reasons": degraded_reasons,
+                "debate_rounds_display": f"Completed {debate_rounds} rounds before abstaining",
+            }
+            return self.build_output_artifact_fn(
+                "Debate abstained: provider unavailable",
+                preview,
+                report_id,
+            )
+        except Exception as exc:
+            exc_text = bounded_text(exc)
+            log_event(
+                logger,
+                event="debate_abstained_artifact_failed",
+                message="failed to generate debate abstention artifact",
+                level=logging.ERROR,
+                error_code="DEBATE_ABSTAINED_ARTIFACT_FAILED",
                 fields={"exception": exc_text},
             )
             return None

@@ -572,6 +572,73 @@ class FundamentalApplication:
                 retryable=False,
             ) from error
 
+    def _resolve_policy_overrides(
+        self, value: PolicyValuationInputV1
+    ) -> tuple[ValuationInputV1, Any]:
+        if self.policy_registry is None:
+            raise ServiceError(
+                "POLICY_UNAVAILABLE",
+                "no service-owned policy registry is available",
+                status_code=503,
+                retryable=True,
+            )
+        try:
+            policy = self.policy_registry.select_policy(
+                model_id=value.model_id,
+                model_version=value.model_version,
+                valuation_timestamp=value.valuation_context.valuation_timestamp,
+                policy_id=value.policy_id,
+            )
+            return resolve_policy_overrides(request=value, policy=policy)
+        except PolicyError as error:
+            raise _policy_error(error) from error
+        except ValueError as error:
+            raise ServiceError(
+                "POLICY_INVALID",
+                str(error),
+                status_code=422,
+                retryable=False,
+            ) from error
+        except Exception as error:  # pragma: no cover - persistence boundary
+            raise ServiceError(
+                "POLICY_UNAVAILABLE",
+                "service-owned policy registry is temporarily unavailable",
+                status_code=503,
+                retryable=True,
+            ) from error
+
+    def _validation_response(
+        self, value: ValuationInputV1, resolution: Any
+    ) -> ValidationResponseV1:
+        issue_codes = value.quality.issue_codes
+        missing_evidence = value.quality.missing_evidence
+        quality_status = value.quality.status
+        release_issues = self._model_release_issues(value)
+        if release_issues:
+            quality_status = QualityStatus.UNSUPPORTED
+            issue_codes = (*issue_codes, *release_issues)
+            missing_evidence = (
+                *missing_evidence,
+                "complete_model_source_cohort_challenger_calibration_release",
+            )
+        else:
+            self.snapshot(value.valuation_context.data_snapshot_id)
+            self._verify_fact_references(value)
+        if resolution.selection_mode == "exploratory_active":
+            if quality_status is QualityStatus.VERIFIED:
+                quality_status = QualityStatus.PROVISIONAL
+            issue_codes = (*issue_codes, "POLICY_NOT_PINNED_EXPLORATORY")
+            missing_evidence = (*missing_evidence, "caller_pinned_policy_id")
+        return ValidationResponseV1(
+            contract_version="fundamental.v1",
+            input=value,
+            input_digest=value.input_digest,
+            quality_status=quality_status,
+            policy_resolution=resolution,
+            issue_codes=issue_codes,
+            missing_evidence=missing_evidence,
+        )
+
     def _model_release_issues(self, value: ValuationInputV1) -> tuple[str, ...]:
         if value.model_id not in {"fcff_dcf", "transition_fcff_dcf"}:
             return ("MODEL_FAMILY_NOT_RELEASED",)
@@ -1098,6 +1165,7 @@ class FundamentalApplication:
                 historical_facts=tuple(fact.fact_id for fact in facts),
                 identity=snapshot.identity,
                 valuation_timestamp=request.valuation_timestamp,
+                snapshot_timestamp=snapshot.valuation_timestamp,
                 fiscal_period_selector=fiscal_selector,
                 resolved_fiscal_periods=resolved_periods,
                 fiscal_period_resolution=period_resolution,
@@ -1167,34 +1235,13 @@ class FundamentalApplication:
     def validate_valuation(self, value: ValuationInputV1) -> ValidationResponseV1:
         resolved = validate(value)
         resolved, resolution = self._resolve_policy(resolved)
-        issue_codes = resolved.quality.issue_codes
-        missing_evidence = resolved.quality.missing_evidence
-        quality_status = resolved.quality.status
-        release_issues = self._model_release_issues(resolved)
-        if release_issues:
-            quality_status = QualityStatus.UNSUPPORTED
-            issue_codes = (*issue_codes, *release_issues)
-            missing_evidence = (
-                *missing_evidence,
-                "complete_model_source_cohort_challenger_calibration_release",
-            )
-        else:
-            self.snapshot(value.valuation_context.data_snapshot_id)
-            self._verify_fact_references(value)
-        if resolution.selection_mode == "exploratory_active":
-            if quality_status is QualityStatus.VERIFIED:
-                quality_status = QualityStatus.PROVISIONAL
-            issue_codes = (*issue_codes, "POLICY_NOT_PINNED_EXPLORATORY")
-            missing_evidence = (*missing_evidence, "caller_pinned_policy_id")
-        return ValidationResponseV1(
-            contract_version="fundamental.v1",
-            input=resolved,
-            input_digest=resolved.input_digest,
-            quality_status=quality_status,
-            policy_resolution=resolution,
-            issue_codes=issue_codes,
-            missing_evidence=missing_evidence,
-        )
+        return self._validation_response(resolved, resolution)
+
+    def validate_with_policy(
+        self, value: PolicyValuationInputV1
+    ) -> ValidationResponseV1:
+        resolved, resolution = self._resolve_policy_overrides(value)
+        return self._validation_response(resolved, resolution)
 
     def validate_uncertainty(self, value: UncertaintyRequestV1) -> ValidationResponseV1:
         return self.validate_valuation(value.base_input())
@@ -1218,35 +1265,7 @@ class FundamentalApplication:
     def calculate_with_policy(
         self, value: PolicyValuationInputV1, *, correlation_id: str
     ) -> CalculationArtifactV1 | UncertaintyReportV1:
-        if self.policy_registry is None:
-            raise ServiceError(
-                "POLICY_UNAVAILABLE",
-                "no service-owned policy registry is available",
-                status_code=503,
-                retryable=True,
-            )
-        try:
-            policy = self.policy_registry.select_policy(
-                model_id=value.model_id,
-                model_version=value.model_version,
-                valuation_timestamp=value.valuation_context.valuation_timestamp,
-                policy_id=value.policy_id,
-            )
-        except PolicyError as error:
-            raise _policy_error(error) from error
-        except Exception as error:  # pragma: no cover - persistence boundary
-            raise ServiceError(
-                "POLICY_UNAVAILABLE",
-                "service-owned policy registry is temporarily unavailable",
-                status_code=503,
-                retryable=True,
-            ) from error
-        try:
-            resolved, resolution = resolve_policy_overrides(
-                request=value, policy=policy
-            )
-        except PolicyError as error:
-            raise _policy_error(error) from error
+        resolved, resolution = self._resolve_policy_overrides(value)
         return self._calculate_resolved(
             resolved, resolution, correlation_id=correlation_id
         )

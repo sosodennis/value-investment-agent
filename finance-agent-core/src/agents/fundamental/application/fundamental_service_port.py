@@ -7,6 +7,7 @@ from datetime import datetime
 from typing import Literal, Protocol
 
 from src.agents.fundamental.interface.fundamental_service_contracts import (
+    FundamentalFactsReadResultV1,
     FundamentalIdentityResolutionRequestV1,
     FundamentalIdentityResolutionV1,
     FundamentalServiceResponseV1,
@@ -17,11 +18,18 @@ FundamentalOperation = Literal[
     "ingest_sec_data",
     "resolve_identity",
     "resolve_snapshot",
+    "read_facts",
     "validate",
+    "validate_with_policy",
     "calculate",
     "uncertainty",
     "replay",
 ]
+
+# The caller deadline must cover the Fundamental service's bounded SEC parser
+# budget; a shorter workflow deadline aborts valid ingestion before the service
+# can publish its immutable snapshot.
+FUNDAMENTAL_SERVICE_WORKFLOW_TIMEOUT_SECONDS = 120.0
 
 
 class FundamentalServiceFailure(RuntimeError):
@@ -56,6 +64,24 @@ class FundamentalServiceClient(Protocol):
         deadline_at: datetime,
     ) -> FundamentalServiceResponseV1: ...
 
+    async def read_facts(
+        self,
+        input_payload: Mapping[str, object],
+        *,
+        principal: InternalPrincipal,
+        correlation_id: str,
+        deadline_at: datetime,
+    ) -> FundamentalFactsReadResultV1: ...
+
+    async def resolve_identity(
+        self,
+        request: FundamentalIdentityResolutionRequestV1,
+        *,
+        principal: InternalPrincipal,
+        correlation_id: str,
+        deadline_at: datetime,
+    ) -> FundamentalIdentityResolutionV1: ...
+
 
 class FundamentalIdentityResolver(Protocol):
     """Typed caller port for SEC-backed issuer identity resolution."""
@@ -71,6 +97,7 @@ class FundamentalIdentityResolver(Protocol):
 
 
 __all__ = [
+    "FUNDAMENTAL_SERVICE_WORKFLOW_TIMEOUT_SECONDS",
     "FundamentalOperation",
     "FundamentalServiceClient",
     "FundamentalServiceFailure",

@@ -54,12 +54,18 @@ export interface DebateConclusion {
 }
 
 export interface DebateSuccess extends DebateConclusion {
+    status?: 'completed';
     history?: DebateHistoryMessage[];
     facts?: EvidenceFact[]; // registry of evidence facts
 }
 
-export interface DebateError {
-    message: string;
+export interface DebateAbstained extends Partial<DebateConclusion> {
+    status: 'degraded' | 'abstained';
+    degraded_reasons: string[];
+    abstention_reason: string;
+    debate_rounds: number;
+    history?: DebateHistoryMessage[];
+    facts?: EvidenceFact[];
 }
 
-export type DebateResult = DebateSuccess | DebateError;
+export type DebateResult = DebateSuccess | DebateAbstained;

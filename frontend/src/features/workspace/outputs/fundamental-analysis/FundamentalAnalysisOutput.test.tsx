@@ -24,6 +24,15 @@ describe('FundamentalAnalysisOutput', () => {
     });
 
     const renderComponent = (previewData: ParsedFinancialPreview) => {
+        mockUseArtifact.mockReturnValue({
+            data: {
+                fundamental_service: {
+                    projection_type: 'valuation',
+                    facts: { facts: [] },
+                },
+            },
+            isLoading: false,
+        });
         render(
             <FundamentalAnalysisOutput
                 reference={null}
@@ -33,6 +42,148 @@ describe('FundamentalAnalysisOutput', () => {
             />
         );
     };
+
+    it('shows service facts without legacy valuation preview when valuation was not requested', () => {
+        mockUseArtifact.mockReturnValue({
+            data: {
+                fundamental_service: {
+                    projection_type: 'facts_only',
+                    valuation_status: 'not_requested',
+                    facts: { facts: [] },
+                },
+                financial_reports: [{ company_name: 'Legacy report' }],
+            },
+            isLoading: false,
+        });
+
+        render(
+            <FundamentalAnalysisOutput
+                reference={null}
+                previewData={{
+                    ticker: 'AAPL',
+                    valuation_score: 91,
+                    key_metrics: { Revenue: '$10B' },
+                    intrinsic_value: 123,
+                }}
+                resolvedTicker="AAPL"
+                status="done"
+            />
+        );
+
+        screen.getByTestId('financial-table');
+        screen.getByText('Valuation not requested');
+        expect(screen.queryByText('Analyst Valuation Score')).toBeNull();
+        expect(screen.queryByText('Revenue')).toBeNull();
+        expect(screen.queryByText('Intrinsic Value')).toBeNull();
+        expect(screen.queryByText('Legacy report')).toBeNull();
+    });
+
+    it('does not use preview metrics when a completed run has no service facts', () => {
+        render(
+            <FundamentalAnalysisOutput
+                reference={null}
+                previewData={{
+                    ticker: 'AAPL',
+                    key_metrics: { Revenue: '$10B' },
+                    intrinsic_value: 123,
+                }}
+                resolvedTicker="AAPL"
+                status="done"
+            />
+        );
+
+        screen.getByText('Fundamental facts unavailable');
+        expect(screen.queryByText('Revenue')).toBeNull();
+        expect(screen.queryByText('Intrinsic Value')).toBeNull();
+    });
+
+    it('does not use preview metrics after a run error without service facts', () => {
+        render(
+            <FundamentalAnalysisOutput
+                reference={null}
+                previewData={{
+                    ticker: 'AAPL',
+                    key_metrics: { Revenue: '$10B' },
+                    intrinsic_value: 123,
+                }}
+                resolvedTicker="AAPL"
+                status="error"
+            />
+        );
+
+        screen.getByText('Financial analysis failed');
+        expect(screen.queryByText('Revenue')).toBeNull();
+        expect(screen.queryByText('Intrinsic Value')).toBeNull();
+    });
+
+    it('renders valuation results and trace from the service artifact without live preview data', () => {
+        const releaseDigest = 'd'.repeat(64);
+        mockUseArtifact.mockReturnValue({
+            data: {
+                model_type: 'fcff_dcf',
+                fundamental_service: {
+                    projection_type: 'valuation',
+                    snapshot_id: 'snapshot-msft',
+                    snapshot_manifest_digest: 'e'.repeat(64),
+                    facts: { facts: [], data_release_manifest_digest: releaseDigest },
+                    hashes: { data_release_manifest_digest: releaseDigest },
+                    valuation_trace: { policy_digest: 'f'.repeat(64) },
+                    calculation_status: 'completed',
+                    intrinsic_value: 160.7746478873,
+                    per_share_value: 1.6077464788,
+                },
+            },
+            isLoading: false,
+        });
+
+        render(
+            <FundamentalAnalysisOutput
+                reference={null}
+                previewData={null}
+                resolvedTicker="MSFT"
+                status="done"
+            />
+        );
+
+        screen.getByText('Intrinsic Value');
+        screen.getByText('$160.77');
+        screen.getByText('Per-Share Value');
+        screen.getByText('$1.61');
+        screen.getByRole('group', { name: 'Valuation trace' });
+        screen.getByText('snapshot-msft');
+        screen.getByText(releaseDigest);
+        screen.getByText('f'.repeat(64));
+    });
+
+    it('keeps artifact per-share results visible when preview only contains identity data', () => {
+        mockUseArtifact.mockReturnValue({
+            data: {
+                fundamental_service: {
+                    projection_type: 'valuation',
+                    snapshot_id: 'snapshot-msft',
+                    snapshot_manifest_digest: 'e'.repeat(64),
+                    facts: { facts: [] },
+                    hashes: {},
+                    valuation_trace: {},
+                    intrinsic_value: 160.77,
+                    per_share_value: 1.61,
+                },
+            },
+            isLoading: false,
+        });
+
+        render(
+            <FundamentalAnalysisOutput
+                reference={null}
+                previewData={{ ticker: 'MSFT' }}
+                resolvedTicker="MSFT"
+                status="done"
+            />
+        );
+
+        screen.getByText('Per-Share Value');
+        expect(screen.queryByText('Equity Value')).toBeNull();
+    });
 
     it('always renders deterministic valuation cards when preview exists and MC is disabled', () => {
         renderComponent({
@@ -115,6 +266,10 @@ describe('FundamentalAnalysisOutput', () => {
         mockUseArtifact.mockReturnValue({
             data: {
                 ticker: 'AAPL',
+                fundamental_service: {
+                    projection_type: 'valuation',
+                    facts: { facts: [] },
+                },
                 model_type: 'dcf',
                 company_name: 'Apple Inc.',
                 sector: 'Technology',
@@ -311,6 +466,10 @@ describe('FundamentalAnalysisOutput', () => {
         mockUseArtifact.mockReturnValue({
             data: {
                 ticker: 'NVDA',
+                fundamental_service: {
+                    projection_type: 'valuation',
+                    facts: { facts: [] },
+                },
                 model_type: 'dcf_growth',
                 company_name: 'NVIDIA Corporation',
                 sector: 'Technology',

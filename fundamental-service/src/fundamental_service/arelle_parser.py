@@ -684,9 +684,15 @@ def parse_filing_offline(
                 result = result_queue.get(timeout=min(0.1, remaining))
             except queue.Empty:
                 if not process.is_alive():
+                    exit_code = process.exitcode
+                    exit_detail = (
+                        f" (worker exit code {exit_code})"
+                        if exit_code is not None
+                        else ""
+                    )
                     raise ArelleParserError(
                         "XBRL_PARSE_FAILED",
-                        "offline SEC parser exited without a result",
+                        "offline SEC parser exited without a result" + exit_detail,
                     )
         process.join(timeout=max(0, monotonic_deadline - time.monotonic()))
         if process.is_alive():

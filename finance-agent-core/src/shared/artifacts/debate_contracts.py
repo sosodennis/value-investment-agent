@@ -3,7 +3,7 @@ from __future__ import annotations
 import math
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from src.shared.artifacts.model_shared import (
     to_json,
@@ -91,6 +91,7 @@ class EvidenceFactModel(BaseModel):
 class DebateArtifactModel(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
+    status: Literal["completed"] | None = None
     scenario_analysis: dict[
         Literal["bull_case", "bear_case", "base_case"], ScenarioModel
     ]
@@ -122,9 +123,28 @@ class DebateArtifactModel(BaseModel):
         return value
 
 
+class DebateAbstainedArtifactModel(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    status: Literal["degraded", "abstained"]
+    degraded_reasons: list[str] = Field(min_length=1)
+    abstention_reason: str
+    debate_rounds: DebateRounds
+    history: list[DebateHistoryMessageModel] | None = None
+    facts: list[EvidenceFactModel] | None = None
+
+
 def parse_debate_artifact_model(value: object) -> JSONObject:
+    if not isinstance(value, dict):
+        raise TypeError("debate artifact must be an object")
+    status = value.get("status", "completed")
+    model_type: type[BaseModel] = (
+        DebateAbstainedArtifactModel
+        if status in {"degraded", "abstained"}
+        else DebateArtifactModel
+    )
     return validate_and_dump(
-        DebateArtifactModel,
+        model_type,
         value,
         "debate artifact",
         exclude_none=True,

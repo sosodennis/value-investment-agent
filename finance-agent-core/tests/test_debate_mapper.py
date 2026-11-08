@@ -4,6 +4,7 @@ import pytest
 from langchain_core.messages import AIMessage
 from pydantic import ValidationError
 
+from src.agents.debate.application.orchestrator import DebateOrchestrator
 from src.agents.debate.domain.entities import DebateVerdictDraft, EvidenceFact
 from src.agents.debate.interface.preview_projection_service import (
     summarize_debate_for_preview,
@@ -14,7 +15,12 @@ from src.agents.debate.interface.serializers import (
     build_final_report_payload,
 )
 from src.agents.fundamental.domain.shared.contracts.traceable import ManualProvenance
-from src.shared.artifacts.debate_contracts import DebateHistoryMessageModel
+from src.llm_provider.entrypoint import LLMErrorCode, LLMProviderError, ModelRoute
+from src.shared.artifacts.debate_contracts import (
+    DebateHistoryMessageModel,
+    parse_debate_artifact_model,
+)
+from src.shared.cross_agent.domain.market_identity import CompanyProfile
 
 
 def test_summarize_debate_for_preview_full():
@@ -131,6 +137,96 @@ def test_build_final_report_payload_serializes_facts_and_history():
     assert payload["history"][0]["round_num"] == 2
     assert payload["history"][1]["round_num"] == 2
     assert "round_num" not in payload["history"][2]
+
+
+def test_parse_debate_artifact_model_preserves_typed_abstention() -> None:
+    payload = parse_debate_artifact_model(
+        {
+            "status": "abstained",
+            "degraded_reasons": ["LLM_PROVIDER_FAILOVER_EXHAUSTED"],
+            "abstention_reason": "Debate verdict unavailable because the provider did not return a response.",
+            "debate_rounds": 2,
+            "history": [{"content": "The last completed argument."}],
+            "facts": [],
+        }
+    )
+
+    assert payload["status"] == "abstained"
+    assert payload["degraded_reasons"] == ["LLM_PROVIDER_FAILOVER_EXHAUSTED"]
+    assert payload["debate_rounds"] == 2
+    assert payload["history"][0]["content"] == "The last completed argument."
+
+
+@pytest.mark.asyncio
+async def test_verdict_provider_failure_returns_abstained_artifact() -> None:
+    class _FailingProvider:
+        async def acomplete_structured(self, _request: object) -> object:
+            raise LLMProviderError(
+                code=LLMErrorCode.FAILOVER_EXHAUSTED,
+                provider="llm-provider-service",
+                model="default",
+                request_id="request-1",
+                reason="provider unavailable",
+                retryable=True,
+            )
+
+    class _ArtifactPort:
+        def __init__(self) -> None:
+            self.saved: dict[str, object] | None = None
+
+        async def load_facts_bundle(self, _artifact_id: str) -> None:
+            return None
+
+        async def save_final_report(
+            self, data: dict[str, object], **_kwargs: object
+        ) -> str:
+            self.saved = data
+            return "report-1"
+
+    artifact_port = _ArtifactPort()
+    orchestrator = DebateOrchestrator(
+        source_reader=object(),
+        artifact_port=artifact_port,
+        llm_provider=_FailingProvider(),
+        llm_route=ModelRoute(alias="default"),
+        get_sycophancy_detector_fn=lambda: object(),
+        summarize_preview_fn=lambda _ctx: {},
+        build_output_artifact_fn=lambda summary, preview, report_id: {
+            "kind": "debate.output",
+            "version": "v1",
+            "summary": summary,
+            "preview": preview,
+            "reference": (
+                {
+                    "artifact_id": report_id,
+                    "download_url": f"/api/v1/artifacts/{report_id}",
+                    "type": "debate_final_report",
+                }
+                if report_id
+                else None
+            ),
+        },
+        get_risk_free_rate_fn=lambda: 0.04,
+        get_payoff_map_fn=lambda _ticker, _risk_profile: {},
+    )
+
+    result = await orchestrator.run_verdict(
+        {
+            "company_profile": CompanyProfile(ticker="MSFT", name="Microsoft"),
+            "debate": {"current_round": 2},
+            "history": [AIMessage(content="Completed argument.")],
+        }
+    )
+
+    assert result.goto == "END"
+    assert result.update["workflow_activity_updates"] == {"verdict": "degraded"}
+    debate = result.update["debate"]
+    assert isinstance(debate, dict)
+    assert debate["status"] == "abstained"
+    assert debate["degraded_reasons"] == ["LLM_PROVIDER_FAILOVER_EXHAUSTED"]
+    assert debate["report_id"] == "report-1"
+    assert artifact_port.saved is not None
+    assert artifact_port.saved["status"] == "abstained"
 
 
 def test_verdict_draft_uses_fixed_scenarios_and_builds_artifact_contract() -> None:

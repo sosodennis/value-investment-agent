@@ -20,10 +20,12 @@ import httpx
 from pydantic import ValidationError
 
 from src.agents.fundamental.application.fundamental_service_port import (
+    FUNDAMENTAL_SERVICE_WORKFLOW_TIMEOUT_SECONDS,
     FundamentalOperation,
     FundamentalServiceFailure,
 )
 from src.agents.fundamental.interface.fundamental_service_contracts import (
+    FundamentalFactsReadResultV1,
     FundamentalIdentityResolutionRequestV1,
     FundamentalIdentityResolutionV1,
     FundamentalServiceErrorV1,
@@ -36,16 +38,23 @@ from src.shared.internal_services import (
 
 _DEFAULT_URL: Final[str] = "http://fundamental-service:8080"
 _DEFAULT_TIMEOUT_SECONDS: Final[float] = 10.0
-_DEFAULT_INGESTION_TIMEOUT_SECONDS: Final[float] = 120.0
+_DEFAULT_INGESTION_TIMEOUT_SECONDS: Final[float] = (
+    FUNDAMENTAL_SERVICE_WORKFLOW_TIMEOUT_SECONDS
+)
 _DEFAULT_MAX_ATTEMPTS: Final[int] = 2
 _OPERATION_PATHS: dict[FundamentalOperation, str] = {
     "ingest_sec_data": "/v1/data/ingestions",
     "resolve_identity": "/v1/identity/resolve",
     "resolve_snapshot": "/v1/data/snapshots/resolve",
+    "read_facts": "/v1/data/facts",
     "validate": "/v1/valuation/validate",
+    "validate_with_policy": "/v1/valuation/validate-with-policy",
     "calculate": "/v1/valuation/calculate",
     "uncertainty": "/v1/valuation/uncertainty",
     "replay": "/v1/valuation/replay",
+}
+_OPERATION_METHODS: dict[FundamentalOperation, str] = {
+    "read_facts": "GET",
 }
 
 
@@ -188,7 +197,8 @@ class HttpFundamentalServiceClient:
                     status_code=408,
                 )
             try:
-                response = await self._client.post(
+                response = await self._client.request(
+                    _OPERATION_METHODS.get(operation, "POST"),
                     f"{self._settings.base_url}{path}",
                     json=payload,
                     headers=headers,
@@ -281,6 +291,33 @@ class HttpFundamentalServiceClient:
             retryable=False,
             status_code=503,
         )
+
+    async def read_facts(
+        self,
+        input_payload: Mapping[str, object],
+        *,
+        principal: InternalPrincipal,
+        correlation_id: str,
+        deadline_at: datetime,
+    ) -> FundamentalFactsReadResultV1:
+        """Read and validate the immutable fact projection for one snapshot."""
+
+        response = await self.execute(
+            "read_facts",
+            input_payload,
+            principal=principal,
+            correlation_id=correlation_id,
+            deadline_at=deadline_at,
+        )
+        try:
+            return FundamentalFactsReadResultV1.model_validate(response.result)
+        except ValidationError as exc:
+            raise FundamentalServiceFailure(
+                "UPSTREAM_MALFORMED",
+                "Fundamental service returned an invalid facts projection",
+                retryable=False,
+                status_code=502,
+            ) from exc
 
     async def resolve_identity(
         self,

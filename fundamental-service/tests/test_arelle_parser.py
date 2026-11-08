@@ -1,6 +1,7 @@
 import hashlib
 import json
 import os
+import queue
 import socket
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
@@ -68,6 +69,48 @@ def test_parser_uses_deadline_worker_for_isolated_replay():
     )
     assert report.offline is True
     assert any(fact.concept.endswith("Revenue") for fact in report.facts)
+
+
+def test_parser_reports_worker_exit_code_when_no_result(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    class _EmptyQueue:
+        def get(self, *, timeout):
+            raise queue.Empty
+
+        def close(self):
+            return None
+
+    class _DeadProcess:
+        exitcode = -9
+
+        def start(self):
+            return None
+
+        def is_alive(self):
+            return False
+
+        def join(self, timeout=None):
+            return None
+
+    class _Context:
+        def Queue(self, maxsize):
+            return _EmptyQueue()
+
+        def Process(self, **kwargs):
+            return _DeadProcess()
+
+    monkeypatch.setattr(
+        "fundamental_service.arelle_parser.multiprocessing.get_context",
+        lambda name: _Context(),
+    )
+
+    with pytest.raises(ArelleParserError, match="worker exit code -9"):
+        parse_filing_offline(
+            Path(__file__).parent / "fixtures" / "simple.xbrl",
+            profile=ArelleValidationProfileV1(profile_id="sec-efm-us-gaap-v1"),
+            taxonomy_version="fixture-taxonomy-v1",
+        )
 
 
 def test_apple_sec_efm_dqc_replay_with_pinned_runtime(
@@ -467,8 +510,8 @@ def test_aapl_efm_image_resolution_is_offline_and_preserves_other_errors(
         pytest.skip("pinned SEC EFM runtime paths are not configured")
 
     from arelle.CntlrCmdLine import CntlrCmdLine, ParserForDynamicPlugins
-    from arelle.RuntimeOptions import RuntimeOptions
     from arelle.logging.handlers.LogToXmlHandler import LogToXmlHandler
+    from arelle.RuntimeOptions import RuntimeOptions
 
     fixture_root = Path(__file__).parent / "fixtures" / "sec-edgar"
     raw_content = (fixture_root / "apple-2024-original-aapl-20240928.htm").read_bytes()

@@ -21,6 +21,7 @@ import type { WorkspaceRouteIntent } from './workspace-route-intent';
 import { ResizableGroup, ResizableHandle, ResizablePanel } from '@/components/ui/resizable';
 import { EvidenceInspector, EvidenceInspectorTrigger, buildEvidenceItems, type EvidenceSelection } from './workspace-evidence-inspector';
 import { adaptAgentOutput } from '@/types/agents/output-adapter';
+import { ValuationAssumptionsEditor, type CompactFundamentalValuationRequest } from './valuation-assumptions';
 
 type WorkspacePageProps = { assistantId?: string; initialTicker?: string | null; initialPrompt?: string | null; autoStart?: boolean; routeIntent?: WorkspaceRouteIntent };
 const NEW_ANALYSIS_INTENT: WorkspaceRouteIntent = { kind: 'new-analysis' };
@@ -45,6 +46,9 @@ export function WorkspacePage({ assistantId = 'agent', initialTicker = null, ini
     const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
     const [activeTab, setActiveTab] = useState<ReportTab>('activity');
     const [selectedEvidence, setSelectedEvidence] = useState<EvidenceSelection | null>(null);
+    const [mobileEvidenceOpen, setMobileEvidenceOpen] = useState(false);
+    const [valuationRequest, setValuationRequest] = useState<CompactFundamentalValuationRequest | null>(null);
+    const mobileEvidenceReturnFocus = useRef<HTMLElement | null>(null);
     const autoStarted = useRef(false);
     const agents: AgentInfo[] = useMemo(() => AGENT_CONFIGS.map((config) => ({
         id: config.id,
@@ -74,6 +78,26 @@ export function WorkspacePage({ assistantId = 'agent', initialTicker = null, ini
         );
     }, [agent.agentOutputs, evidenceAgent]);
 
+    function handleSelectEvidence(item: EvidenceSelection) {
+        setSelectedEvidence(item);
+        if (typeof window !== 'undefined' && window.innerWidth < 1440) {
+            const activeElement = document.activeElement;
+            mobileEvidenceReturnFocus.current = activeElement instanceof HTMLElement
+                ? activeElement
+                : null;
+            setMobileEvidenceOpen(true);
+        }
+    }
+
+    function handleMobileEvidenceOpenChange(open: boolean) {
+        setMobileEvidenceOpen(open);
+        if (!open) {
+            const returnFocus = mobileEvidenceReturnFocus.current;
+            mobileEvidenceReturnFocus.current = null;
+            window.setTimeout(() => returnFocus?.focus(), 0);
+        }
+    }
+
     useEffect(() => {
         if (!historyThreadId || !historyRunId) return;
         void loadHistory(historyThreadId, historyRunId);
@@ -93,6 +117,13 @@ export function WorkspacePage({ assistantId = 'agent', initialTicker = null, ini
         void agent.sendMessage(`Valuate ${symbol}`, true);
     }
 
+    function startValuation() {
+        const symbol = ticker.trim().toUpperCase();
+        if (routeIntent.kind !== 'new-analysis' || !symbol || !valuationRequest || agent.isLoading) return;
+        setTicker(symbol);
+        void agent.sendMessage(`Valuate ${symbol}`, true, valuationRequest);
+    }
+
     const roster = <AgentRoster agents={agents} selected={selectedAgentId ?? preferredAgentId} onSelect={(id) => {
         setSelectedAgentId(id);
         if (isReportTab(id)) setActiveTab(id);
@@ -103,7 +134,7 @@ export function WorkspacePage({ assistantId = 'agent', initialTicker = null, ini
                 <div className="flex min-w-0 items-center gap-3">
                     <div className="flex items-center gap-2 min-[1440px]:hidden">
                         <Sheet><SheetTrigger asChild><Button variant="outline" size="icon" aria-label="Open agent list"><Menu /></Button></SheetTrigger><SheetContent side="left" className="w-[min(22rem,90vw)] p-0"><SheetHeader className="border-b px-4 py-4"><SheetTitle>Analysis agents</SheetTitle></SheetHeader>{roster}</SheetContent></Sheet>
-                        <Sheet><SheetTrigger asChild><EvidenceInspectorTrigger /></SheetTrigger><SheetContent side="right" className="w-[min(24rem,94vw)] p-0"><EvidenceInspector items={evidenceItems} selected={selectedEvidence} onSelect={setSelectedEvidence} /></SheetContent></Sheet>
+                        <Sheet open={mobileEvidenceOpen} onOpenChange={handleMobileEvidenceOpenChange}><SheetTrigger asChild><EvidenceInspectorTrigger /></SheetTrigger><SheetContent side="right" className="w-[min(24rem,94vw)] p-0"><EvidenceInspector items={evidenceItems} selected={selectedEvidence} onSelect={handleSelectEvidence} /></SheetContent></Sheet>
                     </div>
                     <div className="min-w-0"><p className="text-xs text-muted-foreground">Analysis workspace</p><h1 className="truncate text-lg font-semibold">{routeIntent.kind === 'invalid-history' ? 'Analysis link unavailable' : ticker || agent.workflow ? ticker || 'Analysis run' : routeIntent.kind === 'exact-run' ? 'Analysis run' : 'New analysis'}</h1></div>
                 </div>
@@ -113,13 +144,17 @@ export function WorkspacePage({ assistantId = 'agent', initialTicker = null, ini
                 </div>
             </header>
 
-            {routeIntent.kind === 'new-analysis' && <form className="flex flex-wrap items-end gap-3 border-b bg-muted/20 px-4 py-4 sm:px-6" onSubmit={startRun}>
-                <Field label="Company ticker" htmlFor="workspace-ticker" className="w-full max-w-sm"><Input id="workspace-ticker" autoComplete="off" value={ticker} onChange={(event) => setTicker(event.target.value.toUpperCase())} placeholder="AAPL" maxLength={16} /></Field>
-                <Button type="submit" disabled={!ticker.trim() || agent.isLoading}>{agent.isLoading ? <Loader2 className="animate-spin" /> : <Play />}{agent.isLoading ? 'Starting…' : 'Start analysis'}</Button>
-                {agent.threadId && <p className="ml-auto max-w-full truncate font-mono text-xs text-muted-foreground" title={agent.threadId}>Thread {agent.threadId}</p>}
+            {routeIntent.kind === 'new-analysis' && <form className="border-b bg-muted/20 px-4 py-4 sm:px-6" onSubmit={startRun}>
+                <div className="flex flex-wrap items-end gap-3">
+                    <Field label="Company ticker" htmlFor="workspace-ticker" className="w-full max-w-sm"><Input id="workspace-ticker" autoComplete="off" value={ticker} onChange={(event) => setTicker(event.target.value.toUpperCase())} placeholder="AAPL" maxLength={16} /></Field>
+                    <Button type="submit" disabled={!ticker.trim() || agent.isLoading}>{agent.isLoading ? <Loader2 className="animate-spin" /> : <Play />}{agent.isLoading ? 'Starting…' : 'Start analysis'}</Button>
+                    <Button type="button" variant="secondary" onClick={startValuation} disabled={!ticker.trim() || !valuationRequest || agent.isLoading}>{agent.isLoading ? <Loader2 className="animate-spin" /> : <Play />}{agent.isLoading ? 'Starting…' : 'Start valuation'}</Button>
+                    {agent.threadId && <p className="ml-auto max-w-full truncate font-mono text-xs text-muted-foreground" title={agent.threadId}>Thread {agent.threadId}</p>}
+                </div>
+                <ValuationAssumptionsEditor disabled={agent.isLoading} onRequestChange={setValuationRequest} />
             </form>}
 
-            <div className="min-h-0">
+            <div className="min-h-0 min-w-0">
                 <ResizableGroup direction="horizontal" defaultSizes={[18, 58, 24]} minSizes={[15, 34, 18]} className="h-full min-h-[32rem]">
                     <ResizablePanel index={0} className="hidden border-r min-[1440px]:block">
                         <aside aria-label="Analysis agents">{roster}</aside>
@@ -136,13 +171,13 @@ export function WorkspacePage({ assistantId = 'agent', initialTicker = null, ini
                             {reportTabs.map((tab) => <TabsTrigger key={tab.id} value={tab.id} className="min-h-10 shrink-0 rounded-none border-b-2 border-transparent px-3 data-[state=active]:border-primary data-[state=active]:bg-transparent">{tab.label}</TabsTrigger>)}
                         </TabsList>
                         <TabsContent value="activity"><ActivityPanel workflow={agent.workflow} connectionState={agent.connectionState} onResumeInteraction={agent.submitCommand} isSubmitting={agent.isSubmittingInteraction} onRetry={agent.retryRun} isRetrying={isLoading} /></TabsContent>
-                        {reportTabs.filter((item): item is { id: Exclude<ReportTab, 'activity'>; label: string } => item.id !== 'activity').map((item) => <TabsContent key={item.id} value={item.id}><ReportPanel tab={item.id} outputs={agent.agentOutputs} statuses={agent.agentStatuses} ticker={ticker} onSelectEvidence={setSelectedEvidence} selectedEvidenceId={selectedEvidence?.id} /></TabsContent>)}
+                        {reportTabs.filter((item): item is { id: Exclude<ReportTab, 'activity'>; label: string } => item.id !== 'activity').map((item) => <TabsContent key={item.id} value={item.id}><ReportPanel tab={item.id} outputs={agent.agentOutputs} statuses={agent.agentStatuses} ticker={ticker} onSelectEvidence={handleSelectEvidence} selectedEvidenceId={selectedEvidence?.id} /></TabsContent>)}
                     </Tabs>
                         </section>
                     </ResizablePanel>
                     <ResizableHandle index={1} className="hidden min-[1440px]:flex" />
                     <ResizablePanel index={2} className="hidden border-l min-[1440px]:block">
-                        <EvidenceInspector items={evidenceItems} selected={selectedEvidence} onSelect={setSelectedEvidence} />
+                        <EvidenceInspector items={evidenceItems} selected={selectedEvidence} onSelect={handleSelectEvidence} />
                     </ResizablePanel>
                 </ResizableGroup>
             </div>

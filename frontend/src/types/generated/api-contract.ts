@@ -1490,6 +1490,8 @@ export interface components {
             scenario_analysis: {
                 [key: string]: components["schemas"]["ScenarioModel"];
             };
+            /** Status */
+            status?: "completed" | null;
             /** Supporting Factors */
             supporting_factors: string[];
             /** Winning Thesis */
@@ -1700,11 +1702,15 @@ export interface components {
                 [key: string]: unknown;
             } | null;
             /** Financial Reports */
-            financial_reports: components["schemas"]["FinancialReportModel"][];
+            financial_reports?: components["schemas"]["FinancialReportModel"][];
             /** Forward Signals */
             forward_signals?: {
                 [key: string]: unknown;
             }[] | null;
+            /** Fundamental Service */
+            fundamental_service?: {
+                [key: string]: unknown;
+            } | null;
             /** Industry */
             industry?: string | null;
             /** Model Type */

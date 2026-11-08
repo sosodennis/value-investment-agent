@@ -12,7 +12,6 @@ import { ValuationDistributionSection } from './ValuationDistributionSection';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
-import { EmptyState } from '@/components/ui/empty-state';
 import type { EvidenceSelection } from '../../workspace-evidence-inspector';
 
 const MODEL_LABEL_BY_TYPE: Record<string, string> = {
@@ -41,7 +40,6 @@ export interface FundamentalAnalysisOutputProps {
 const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProps> = ({
     reference,
     previewData,
-    resolvedTicker,
     status,
     onSelectEvidence,
 }) => {
@@ -59,11 +57,17 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
         'financial_reports'
     );
 
-    const hasPreview = !!previewData;
     const [expandedEvidenceRows, setExpandedEvidenceRows] = useState<Record<string, boolean>>(
         {}
     );
-    const reports = artifactData?.financial_reports ?? previewData?.financial_reports ?? [];
+    const reports = artifactData?.financial_reports ?? [];
+    const serviceProjection = artifactData?.fundamental_service;
+    const serviceFacts = serviceProjection?.facts;
+    const valuationProjection =
+        serviceProjection?.projection_type === 'valuation' ? serviceProjection : null;
+    const hasValuationServiceProjection = Boolean(valuationProjection?.facts);
+    const isFactsOnlyProjection = serviceProjection?.projection_type === 'facts_only';
+    const canShowValuationPreview = hasValuationServiceProjection;
     const forwardSignals: ForwardSignal[] = artifactData?.forward_signals ?? [];
     const modelTypeRaw = artifactData?.model_type;
     const modelTypeDisplay = useMemo(() => {
@@ -280,8 +284,24 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
         sensitivityTopDrivers.length - sensitivityTopDriversPreview.length
     );
     const equityValue = previewData?.equity_value;
-    const intrinsicValue = previewData?.intrinsic_value;
+    const intrinsicValue = previewData?.intrinsic_value ?? valuationProjection?.intrinsic_value;
+    const perShareValue = valuationProjection?.per_share_value;
     const upsidePotential = previewData?.upside_potential;
+    const valuationReleaseDigest =
+        valuationProjection?.hashes?.data_release_manifest_digest ??
+        serviceFacts?.data_release_manifest_digest;
+    const hasLegacyValuationPreview = Boolean(
+        previewData &&
+            (valuationScore !== undefined ||
+                Object.keys(previewKeyMetrics).length > 0 ||
+                typeof equityValue === 'number' ||
+                typeof upsidePotential === 'number' ||
+                assumptionBreakdown ||
+                dataFreshness ||
+                valuationDiagnostics ||
+                distributionSummary ||
+                distributionScenarios)
+    );
     const assumptionHighlights = useMemo(
         () => assumptionBreakdown?.assumptions?.slice(0, 2) ?? [],
         [assumptionBreakdown]
@@ -506,38 +526,57 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
         tone?: 'bull' | 'bear';
         unavailable?: boolean;
     };
-    const valuationCards: ValuationCard[] = [
-        {
-            label: 'Intrinsic Value',
-            value:
-                typeof intrinsicValue === 'number'
-                    ? formatCurrencyCompact(intrinsicValue)
-                    : 'N/A',
-            unavailable: typeof intrinsicValue !== 'number',
-        },
-        {
-            label: 'Equity Value',
-            value:
-                typeof equityValue === 'number'
-                    ? formatCurrencyCompact(equityValue)
-                    : 'N/A',
-            unavailable: typeof equityValue !== 'number',
-        },
-        {
-            label: 'Upside Potential',
-            value:
-                typeof upsidePotential === 'number'
-                    ? formatPercent(upsidePotential)
-                    : 'N/A',
-            tone:
-                typeof upsidePotential === 'number'
-                    ? upsidePotential >= 0
-                        ? 'bull'
-                        : 'bear'
-                    : undefined,
-            unavailable: typeof upsidePotential !== 'number',
-        },
-    ];
+    const valuationCards: ValuationCard[] = hasLegacyValuationPreview
+        ? [
+              {
+                  label: 'Intrinsic Value',
+                  value:
+                      typeof intrinsicValue === 'number'
+                          ? formatCurrencyCompact(intrinsicValue)
+                          : 'N/A',
+                  unavailable: typeof intrinsicValue !== 'number',
+              },
+              {
+                  label: 'Equity Value',
+                  value:
+                      typeof equityValue === 'number'
+                          ? formatCurrencyCompact(equityValue)
+                          : 'N/A',
+                  unavailable: typeof equityValue !== 'number',
+              },
+              {
+                  label: 'Upside Potential',
+                  value:
+                      typeof upsidePotential === 'number'
+                          ? formatPercent(upsidePotential)
+                          : 'N/A',
+                  tone:
+                      typeof upsidePotential === 'number'
+                          ? upsidePotential >= 0
+                              ? 'bull'
+                              : 'bear'
+                          : undefined,
+                  unavailable: typeof upsidePotential !== 'number',
+              },
+          ]
+        : [
+              {
+                  label: 'Intrinsic Value',
+                  value:
+                      typeof intrinsicValue === 'number'
+                          ? formatCurrencyCompact(intrinsicValue)
+                          : 'N/A',
+                  unavailable: typeof intrinsicValue !== 'number',
+              },
+              {
+                  label: 'Per-Share Value',
+                  value:
+                      typeof perShareValue === 'number'
+                          ? formatCurrencyCompact(perShareValue)
+                          : 'N/A',
+                  unavailable: typeof perShareValue !== 'number',
+              },
+          ];
     const hasValuationValue = valuationCards.some((card) => !card.unavailable);
 
 
@@ -582,7 +621,7 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
         return date.toISOString().slice(0, 10);
     };
 
-    if (status === 'error' && reports.length === 0 && !hasPreview) {
+    if (status === 'error' && reports.length === 0 && !canShowValuationPreview && !serviceFacts) {
         return (
             <Alert variant="destructive" role="alert">
                 <AlertTitle>Financial analysis failed</AlertTitle>
@@ -591,7 +630,7 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
         );
     }
 
-    if (artifactError && !hasPreview) {
+    if (artifactError && !canShowValuationPreview && !serviceFacts) {
         const message = artifactError instanceof Error
             ? artifactError.message
             : 'The financial report could not be loaded.';
@@ -606,7 +645,7 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
         );
     }
 
-    if (status !== 'done' && reports.length === 0 && !hasPreview) {
+    if (status !== 'done' && reports.length === 0 && !canShowValuationPreview && !serviceFacts) {
         return (
             <AgentLoadingState
                 type="full"
@@ -628,7 +667,7 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
                     <h3 className="text-xs uppercase tracking-[0.2em] font-bold text-muted-foreground">Financial Data Matrix</h3>
                 </div>
                 <div className="flex items-center gap-2">
-                    {modelTypeDisplay && (
+                    {hasValuationServiceProjection && modelTypeDisplay && (
                         <Badge variant="outline">
                             Model: {modelTypeDisplay.label} ({modelTypeDisplay.code})
                         </Badge>
@@ -643,7 +682,7 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
                 </div>
             </div>
 
-            {artifactError && hasPreview ? (
+            {artifactError && canShowValuationPreview ? (
                 <ArtifactLoadError
                     title="Full financial report unavailable"
                     error={artifactError instanceof Error
@@ -656,7 +695,7 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
             ) : null}
 
             {/* Preview Section - Valuation & Metrics */}
-            {hasPreview && (
+            {canShowValuationPreview && (
                 <div className="space-y-4 ">
                     {valuationScore !== undefined && (
                         <Card className="flex flex-wrap items-center justify-between gap-3 p-4">
@@ -718,6 +757,36 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
                             </div>
                         )}
                     </div>
+
+                    {valuationProjection && (
+                        <Card role="group" aria-label="Valuation trace" className="grid gap-3 p-4">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                                <span className="text-xs uppercase tracking-tighter text-muted-foreground">
+                                    Valuation Trace
+                                </span>
+                                <Badge variant="outline">
+                                    {valuationProjection.calculation_status ?? 'status unavailable'}
+                                </Badge>
+                            </div>
+                            <dl className="grid gap-2 text-xs sm:grid-cols-2">
+                                <TraceField label="Snapshot" value={valuationProjection.snapshot_id} />
+                                <TraceField
+                                    label="Snapshot manifest"
+                                    value={valuationProjection.snapshot_manifest_digest}
+                                />
+                                <TraceField
+                                    label="Data release manifest"
+                                    value={valuationReleaseDigest}
+                                />
+                                <TraceField label="Input digest" value={valuationProjection.input_digest} />
+                                <TraceField label="Result hash" value={valuationProjection.result_hash} />
+                                <TraceField
+                                    label="Policy digest"
+                                    value={valuationProjection.valuation_trace?.policy_digest}
+                                />
+                            </dl>
+                        </Card>
+                    )}
 
                     {(assumptionBreakdown || dataFreshness || valuationDiagnostics) && (
                         <div className="grid grid-cols-1 gap-4 items-start">
@@ -1354,26 +1423,45 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
                 </div>
             )}
 
-            {reports.length > 0 ? (
+            {isFactsOnlyProjection && (
+                <Alert role="status">
+                    <BarChart3 aria-hidden="true" className="size-4 text-muted-foreground" />
+                    <AlertTitle>Valuation not requested</AlertTitle>
+                    <AlertDescription>
+                        This run provides snapshot-bound facts only. No valuation assumptions or calculation were requested.
+                    </AlertDescription>
+                </Alert>
+            )}
+
+            {serviceFacts ? (
                 <FinancialTable
-                    reports={reports}
-                    ticker={resolvedTicker || 'N/A'}
+                    facts={serviceFacts}
                     artifactReference={reference}
                     onSelectEvidence={onSelectEvidence}
                 />
             ) : isReferenceLoading ? (
                 <AgentLoadingState type="block" title="Loading financial reports…" />
             ) : (
-                <EmptyState
-                    className="rounded-lg bg-muted/30 px-4 py-8"
-                    icon={<BarChart3 aria-hidden="true" />}
-                    title="No financial reports available"
-                    description="The completed run did not include financial statements."
-                />
+                <Alert role="status">
+                    <BarChart3 aria-hidden="true" className="size-4 text-warning" />
+                    <AlertTitle>Fundamental facts unavailable</AlertTitle>
+                    <AlertDescription>
+                        The service did not provide a snapshot-bound fact set for this run. The report is degraded and no legacy financial table is shown.
+                    </AlertDescription>
+                </Alert>
             )}
         </div>
     );
 };
+
+function TraceField({ label, value }: { label: string; value?: string }) {
+    return (
+        <div className="min-w-0">
+            <dt className="text-muted-foreground">{label}</dt>
+            <dd className="break-all font-mono text-foreground">{value ?? 'Unavailable'}</dd>
+        </div>
+    );
+}
 
 // Export with explicit props generic to stabilize memoized component type inference.
 export const FundamentalAnalysisOutput = memo<FundamentalAnalysisOutputProps>(

@@ -1688,6 +1688,18 @@
             "title": "Scenario Analysis",
             "type": "object"
           },
+          "status": {
+            "anyOf": [
+              {
+                "const": "completed",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
           "supporting_factors": {
             "items": {
               "type": "string"
@@ -2476,6 +2488,18 @@
             ],
             "title": "Forward Signals"
           },
+          "fundamental_service": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fundamental Service"
+          },
           "industry": {
             "anyOf": [
               {
@@ -2653,9 +2677,6 @@
             "title": "Valuation Preview"
           }
         },
-        "required": [
-          "financial_reports"
-        ],
         "title": "FinancialReportsArtifactData",
         "type": "object"
       },

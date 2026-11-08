@@ -126,6 +126,36 @@ describe('useAgent workflow runtime', () => {
         expect(result.current.error).toBeNull();
     });
 
+    it('sends caller-owned valuation input with a new run', async () => {
+        fetchMock
+            .mockResolvedValueOnce(new Response(JSON.stringify({ thread_id: 'thread_1', run_id: 'valuation-run', status: 'started' }), { status: 202 }))
+            .mockResolvedValueOnce(new Response(JSON.stringify(snapshot({ run_id: 'valuation-run', run_status: 'completed', active_activities: [] })), { status: 200 }))
+            .mockResolvedValueOnce(streamResponse({
+                event_id: 'valuation-event', seq_id: 1, event_version: 'v2',
+                event_name: 'workflow.activity', thread_id: 'thread_1', run_id: 'valuation-run',
+                occurred_at: '2026-10-24T00:00:00Z',
+                payload: activity({ activity_id: 'workflow', run_id: 'valuation-run', status: 'completed' }),
+            }))
+            .mockResolvedValueOnce(new Response(JSON.stringify(snapshot({
+                run_id: 'valuation-run', cursor: 1, run_status: 'completed', active_activities: [],
+            })), { status: 200 }));
+        const { result } = renderHook(() => useAgent());
+        const valuationRequest = {
+            contract_version: 'fundamental.v1',
+            model_id: 'fcff_dcf',
+            assumptions: { terminal_growth: '0.02' },
+            uncertainty: { mode: 'none' },
+        };
+
+        await act(async () => result.current.sendMessage('Valuate AAPL', true, valuationRequest));
+
+        const request = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
+        expect(JSON.parse(String(request?.body))).toMatchObject({
+            message: 'Valuate AAPL',
+            valuation_request: valuationRequest,
+        });
+    });
+
     it('tracks a pending interaction submission independently from the run stream', async () => {
         const pendingInteraction = {
             identity: {
@@ -260,6 +290,16 @@ describe('useAgent workflow runtime', () => {
         await waitFor(() => expect(result.current.error).toContain('History unavailable.'));
         expect(result.current.workflow).toBeNull();
         expect(fetchMock).toHaveBeenCalledOnce();
+    });
+
+    it('does not surface a user-facing error when a stream is aborted', async () => {
+        fetchMock.mockRejectedValueOnce(new DOMException('signal is aborted without reason', 'AbortError'));
+        const { result } = renderHook(() => useAgent());
+
+        await act(async () => result.current.loadHistory('thread_1', 'run_1'));
+
+        await waitFor(() => expect(result.current.isLoading).toBe(false));
+        expect(result.current.error).toBeNull();
     });
 
     it('applies terminal events and closes the connection', async () => {

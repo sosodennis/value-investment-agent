@@ -7,6 +7,12 @@ import { useAgentReducer } from './useAgentReducer';
 
 const makeThreadId = () => `thread_${Date.now()}`;
 const toError = (value: unknown, fallback: string) => value instanceof Error ? value.message : fallback;
+const isAbortError = (value: unknown) => {
+    if (typeof value !== 'object' || value === null) return false;
+    const hasAbortName = 'name' in value && value.name === 'AbortError';
+    const hasAbortMessage = 'message' in value && value.message === 'signal is aborted without reason';
+    return hasAbortName || hasAbortMessage;
+};
 const STANDARD_OUTPUT_KINDS: readonly StandardAgentOutput['kind'][] = [
     'intent_extraction.output',
     'fundamental_analysis.output',
@@ -17,6 +23,16 @@ const STANDARD_OUTPUT_KINDS: readonly StandardAgentOutput['kind'][] = [
 
 const isStandardOutputKind = (value: string): value is StandardAgentOutput['kind'] =>
     STANDARD_OUTPUT_KINDS.some((kind) => kind === value);
+
+const isPreviewRecord = (value: unknown): value is Record<string, unknown> =>
+    typeof value === 'object' && value !== null && !Array.isArray(value);
+
+const hasDegradedPreview = (output: StandardAgentOutput): boolean => {
+    const preview = output.preview;
+    if (!isPreviewRecord(preview)) return false;
+    const status = preview.status;
+    return status === 'degraded' || status === 'abstained';
+};
 
 export function useAgent(assistantId = 'agent') {
     void assistantId;
@@ -60,7 +76,7 @@ export function useAgent(assistantId = 'agent') {
                 cursor = snapshot.cursor;
                 projection = createWorkflowActivityState(snapshot);
             } catch (error) {
-                if (controller.signal.aborted) { setConnection('disconnected'); return; }
+                if (controller.signal.aborted || isAbortError(error)) { setConnection('disconnected'); return; }
                 clientLogger.error('workflow.stream.error', { threadId, attempt, error: toError(error, 'stream failed') });
                 snapshot = await getActivitySnapshot(threadId, { runId: expectedRunId, signal: controller.signal });
                 if (snapshot.run_id !== expectedRunId) throw new TypeError('activity snapshot run identity mismatch.');
@@ -75,7 +91,11 @@ export function useAgent(assistantId = 'agent') {
         setConnection('closed');
     }, [hydrateWorkflow, processWorkflowEvent, setConnection]);
 
-    const sendMessage = useCallback(async (content: string, newSession = false) => {
+    const sendMessage = useCallback(async (
+        content: string,
+        newSession = false,
+        valuationRequest?: Record<string, unknown>,
+    ) => {
         submittingInteractionRef.current = null;
         setSubmittingInteractionId(null);
         setIsLoading(true);
@@ -83,14 +103,19 @@ export function useAgent(assistantId = 'agent') {
         if (threadId !== state.threadId) initSession(threadId);
         addUserMessage({ id: `user_${Date.now()}`, role: 'user', content, type: 'text' });
         try {
-            const run = await startWorkflowRun(threadId, { message: content });
+            const run = await startWorkflowRun(threadId, {
+                message: content,
+                valuation_request: valuationRequest,
+            });
             setRun(run.run_id);
             const snapshot = await getActivitySnapshot(threadId, { runId: run.run_id });
             if (snapshot.run_id !== run.run_id) throw new TypeError('activity snapshot run identity mismatch.');
             hydrateWorkflow(snapshot);
             setIsLoading(false);
             await attachStream(threadId, snapshot, run.run_id);
-        } catch (error) { setError(toError(error, 'Failed to start workflow run.')); } finally { setIsLoading(false); }
+        } catch (error) {
+            if (!isAbortError(error)) setError(toError(error, 'Failed to start workflow run.'));
+        } finally { setIsLoading(false); }
     }, [addUserMessage, attachStream, hydrateWorkflow, initSession, setError, setRun, state.threadId]);
 
     const submitCommand = useCallback(async (interaction: WorkflowInteraction, response: InteractionResponse) => {
@@ -124,7 +149,9 @@ export function useAgent(assistantId = 'agent') {
             hydrateWorkflow(snapshot);
             setIsLoading(false);
             await attachStream(state.threadId, snapshot, run.run_id);
-        } catch (error) { setError(toError(error, 'Failed to resume workflow run.')); } finally {
+        } catch (error) {
+            if (!isAbortError(error)) setError(toError(error, 'Failed to resume workflow run.'));
+        } finally {
             if (submittingInteractionRef.current === interactionId) {
                 submittingInteractionRef.current = null;
                 setSubmittingInteractionId(null);
@@ -152,7 +179,7 @@ export function useAgent(assistantId = 'agent') {
             hydrateWorkflow(snapshot);
             await attachStream(state.threadId, snapshot, retry.run_id);
         } catch (error) {
-            setError(toError(error, 'Failed to retry workflow run.'));
+            if (!isAbortError(error)) setError(toError(error, 'Failed to retry workflow run.'));
         } finally {
             setIsLoading(false);
         }
@@ -171,7 +198,9 @@ export function useAgent(assistantId = 'agent') {
             hydrateWorkflow(snapshot);
             setIsLoading(false);
             if (snapshot.run_status === 'running' || snapshot.run_status === 'waiting' || snapshot.run_status === 'queued') await attachStream(threadId, snapshot, snapshot.run_id);
-        } catch (error) { setError(toError(error, 'Failed to load workflow snapshot.')); } finally { setIsLoading(false); }
+        } catch (error) {
+            if (!isAbortError(error)) setError(toError(error, 'Failed to load workflow snapshot.'));
+        } finally { setIsLoading(false); }
     }, [attachStream, hydrateWorkflow, reset, setConnection, setError]);
 
     const cancelRun = useCallback(async () => {
@@ -208,6 +237,10 @@ export function useAgent(assistantId = 'agent') {
                 type: output.artifact_type ?? output.output_kind,
             } : null,
         };
+        const agentOutput = agentOutputs[output.agent_id];
+        if (agentOutput && hasDegradedPreview(agentOutput)) {
+            agentStatuses[output.agent_id] = 'degraded';
+        }
     }
     return {
         messages: state.messages,

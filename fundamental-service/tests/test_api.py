@@ -11,8 +11,6 @@ from types import SimpleNamespace
 import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from fastapi.testclient import TestClient
-from pydantic import ValidationError
-
 from fundamental_service.app import create_app, create_runtime_app
 from fundamental_service.application.service import (
     FundamentalApplication,
@@ -69,6 +67,7 @@ from fundamental_service.testsupport import (
     make_valuation,
 )
 from fundamental_service.uncertainty import UncertaintyEvidenceV1
+from pydantic import ValidationError
 
 
 def _bind_initial_policy(valuation):
@@ -437,6 +436,48 @@ def test_snapshot_resolution_returns_service_owned_snapshot_and_fact_refs():
     assert response.json()["result"]["historical_facts"] == ["fact-revenue"]
 
 
+def test_snapshot_resolution_returns_immutable_snapshot_timestamp():
+    valuation = make_valuation()
+    snapshot = SimpleNamespace(
+        snapshot_id="snapshot-immutable-time",
+        identity=valuation.identity,
+        valuation_timestamp=datetime(2026, 1, 1, tzinfo=UTC),
+        coverage_status=QualityStatus.VERIFIED,
+        issues=(),
+        parser_version="parser-v1",
+        taxonomy_manifest_id="taxonomy-v1",
+        policy_version="policy-v1",
+        source_records=(),
+    )
+    client = TestClient(
+        create_app(
+            _ResolvingSnapshotRepository(snapshot),
+            fact_repository=_FactRepository(),
+        )
+    )
+    request = SnapshotResolutionRequestV1(
+        contract_version="fundamental.v1",
+        identity=valuation.identity,
+        valuation_timestamp=datetime(2026, 11, 7, tzinfo=UTC),
+        source_selection_policy="pit-v1",
+        coverage_profile="us-gaap-public-v1",
+        required_fields=("revenue",),
+    )
+
+    response = client.post(
+        "/v1/data/snapshots/resolve",
+        headers=auth_headers(),
+        json=make_internal_envelope(request.model_dump(mode="json")),
+    )
+
+    assert response.status_code == 200
+    result = response.json()["result"]
+    assert result["snapshot_id"] == snapshot.snapshot_id
+    assert result["historical_facts"] == ["fact-revenue"]
+    assert result["valuation_timestamp"] == "2026-11-07T00:00:00Z"
+    assert result["snapshot_timestamp"] == "2026-01-01T00:00:00Z"
+
+
 def test_facts_read_is_snapshot_scoped_point_in_time_and_documented():
     app = create_app(_SnapshotRepository(), fact_repository=_FactRepository())
     client = TestClient(app)
@@ -519,6 +560,31 @@ def test_policy_calculation_merges_overrides_and_uses_the_explicit_calculator(
     partial["assumptions"] = {"terminal_growth": "0"}
     partial["policy_id"] = policy.policy_id
 
+    validation = client.post(
+        "/v1/valuation/validate-with-policy",
+        headers=auth_headers(),
+        json=make_internal_envelope(partial),
+    )
+    assert validation.status_code == 200, validation.text
+    validation_body = validation.json()["result"]
+    assert validation_body["input"]["assumptions"]["terminal_growth"] == "0"
+    assert validation_body["input"]["assumptions"]["wacc"]["risk_free_rate"] == str(
+        base.assumptions.wacc.risk_free_rate
+    )
+    assert validation_body["input_digest"] == validation_body["input"]["input_digest"]
+    assert (
+        validation_body["policy_resolution"]["precedence"][
+            "assumptions.terminal_growth"
+        ]
+        == "caller"
+    )
+    assert (
+        validation_body["policy_resolution"]["precedence"][
+            "assumptions.wacc.risk_free_rate"
+        ]
+        == "policy"
+    )
+
     policy_result = client.post(
         "/v1/valuation/calculate-with-policy",
         headers=auth_headers(),
@@ -583,6 +649,7 @@ def test_policy_calculation_merges_overrides_and_uses_the_explicit_calculator(
     paths = client.app.openapi()["paths"]
     assert "requestBody" in paths["/v1/valuation/calculate"]["post"]
     assert "requestBody" in paths["/v1/valuation/calculate-with-policy"]["post"]
+    assert "requestBody" in paths["/v1/valuation/validate-with-policy"]["post"]
     calculate_envelope = client.app.openapi()["components"]["schemas"][
         "FundamentalCalculationRequestEnvelopeV1"
     ]
@@ -601,6 +668,12 @@ def test_policy_calculation_merges_overrides_and_uses_the_explicit_calculator(
     assert policy_envelope["properties"]["input"]["$ref"].endswith(
         "/PolicyValuationInputV1"
     )
+    policy_validation_envelope = client.app.openapi()["components"]["schemas"][
+        "FundamentalPolicyValidationRequestEnvelopeV1"
+    ]
+    assert policy_validation_envelope["properties"]["input"]["$ref"].endswith(
+        "/PolicyValuationInputV1"
+    )
 
 
 def test_policy_calculation_missing_release_and_unresolved_assumptions_are_stable():
@@ -611,6 +684,14 @@ def test_policy_calculation_missing_release_and_unresolved_assumptions_are_stabl
     request = base.model_dump(mode="json")
     request["assumptions"] = {"terminal_growth": "0.02"}
     request["policy_id"] = "missing-policy"
+
+    missing_validation = client.post(
+        "/v1/valuation/validate-with-policy",
+        headers=auth_headers(),
+        json=make_internal_envelope(request),
+    )
+    assert missing_validation.status_code == 404
+    assert missing_validation.json()["error"]["code"] == "POLICY_NOT_FOUND"
 
     missing = client.post(
         "/v1/valuation/calculate-with-policy",
@@ -623,6 +704,15 @@ def test_policy_calculation_missing_release_and_unresolved_assumptions_are_stabl
     unsupported = base.model_dump(mode="json")
     unsupported["assumptions"] = {"terminal_growth": "0.02"}
     unsupported["policy_id"] = "fcff_dcf-us-gaap-public-v1"
+    incomplete_validation = client.post(
+        "/v1/valuation/validate-with-policy",
+        headers=auth_headers(),
+        json=make_internal_envelope(unsupported),
+    )
+    assert incomplete_validation.status_code == 422
+    assert incomplete_validation.json()["error"]["code"] == (
+        "POLICY_ASSUMPTIONS_INCOMPLETE"
+    )
     incomplete = client.post(
         "/v1/valuation/calculate-with-policy",
         headers=auth_headers(),

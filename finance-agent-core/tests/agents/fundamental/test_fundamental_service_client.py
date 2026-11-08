@@ -46,6 +46,79 @@ def _success(correlation_id: str) -> dict[str, object]:
     }
 
 
+def _facts_success(correlation_id: str) -> dict[str, object]:
+    return {
+        "contract_version": "internal.v1",
+        "schema_version": "fundamental.v1",
+        "correlation_id": correlation_id,
+        "result": {
+            "contract_version": "fundamental.v1",
+            "snapshot_id": "snapshot-aapl-2025",
+            "snapshot_manifest_digest": "a" * 64,
+            "identity": {
+                "issuer_id": "320193",
+                "issuer_name": "Apple Inc.",
+                "domicile": "US",
+                "reporting_basis": "us-gaap",
+                "security_id": "US0378331005",
+                "share_class": "common",
+                "currency": "USD",
+            },
+            "valuation_timestamp": "2026-01-15T00:00:00Z",
+            "quality_status": "verified",
+            "facts": [
+                {
+                    "contract_version": "fundamental.v1",
+                    "fact_id": "fact-revenue-2025",
+                    "issuer_id": "320193",
+                    "concept": "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
+                    "normalized_field": "total_revenue",
+                    "value": 100,
+                    "unit": "USD",
+                    "scale": 0,
+                    "currency": "USD",
+                    "period_start": "2024-10-01",
+                    "period_end": "2025-09-27",
+                    "context": {
+                        "concept_qname": "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
+                        "period_type": "duration",
+                        "start_date": "2024-10-01",
+                        "end_date": "2025-09-27",
+                        "unit_qname": "iso4217:USD",
+                        "measure": "iso4217:USD",
+                        "entity_scope": "320193",
+                        "consolidation_scope": "consolidated",
+                        "context_id": "D2025",
+                    },
+                    "as_of": "2025-09-27T00:00:00Z",
+                    "available_at": "2025-11-01T00:00:00Z",
+                    "captured_at": "2025-11-02T00:00:00Z",
+                    "accession_number": "0000320193-25-000073",
+                    "taxonomy_version": "us-gaap-2025",
+                    "source": {
+                        "source_url": "https://www.sec.gov/Archives/filing.xml",
+                        "content_hash": "b" * 64,
+                        "source_role": "filing",
+                        "captured_at": "2025-11-02T00:00:00Z",
+                        "available_at": "2025-11-01T00:00:00Z",
+                        "filed_at": "2025-11-01T00:00:00Z",
+                        "accession_number": "0000320193-25-000073",
+                        "parser_version": "2.47.4",
+                        "taxonomy_version": "us-gaap-2025",
+                    },
+                    "quality": "verified",
+                    "mapping_decision_id": "mapping-revenue-v1",
+                    "mapping_confidence": "high",
+                    "rejected_candidate_reasons": [
+                        {"candidate_id": "segment", "reason": "not consolidated"}
+                    ],
+                    "point_in_time_policy": "sec-pit-v1",
+                }
+            ],
+        },
+    }
+
+
 def _identity_result() -> dict[str, object]:
     payload: dict[str, object] = {
         "ticker": "AAPL",
@@ -135,6 +208,31 @@ async def test_client_sends_signed_context_and_versioned_envelope() -> None:
 
 
 @pytest.mark.asyncio
+async def test_client_routes_policy_validation_to_its_versioned_endpoint() -> None:
+    captured: list[httpx.Request] = []
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        captured.append(request)
+        body = json.loads(request.content)
+        return httpx.Response(200, json=_success(body["context"]["correlation_id"]))
+
+    client = HttpFundamentalServiceClient(
+        _settings(), client=httpx.AsyncClient(transport=httpx.MockTransport(respond))
+    )
+    await client.execute(
+        "validate_with_policy",
+        {"contract_version": "fundamental.v1", "policy_id": "policy-v1"},
+        principal=_principal(),
+        correlation_id="correlation-policy-validation",
+        deadline_at=datetime.now(UTC) + timedelta(seconds=5),
+    )
+
+    assert captured[0].url.path == "/v1/valuation/validate-with-policy"
+    assert captured[0].method == "POST"
+    await client.aclose()
+
+
+@pytest.mark.asyncio
 async def test_client_calls_sec_ingestion_with_its_bounded_service_timeout() -> None:
     captured: list[httpx.Request] = []
 
@@ -158,6 +256,41 @@ async def test_client_calls_sec_ingestion_with_its_bounded_service_timeout() -> 
     assert captured[0].url.path == "/v1/data/ingestions"
     assert captured[0].extensions["timeout"]["read"] == 120.0
     assert json.loads(captured[0].content)["input"]["ticker"] == "MSFT"
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_client_reads_typed_facts_from_the_immutable_snapshot_endpoint() -> None:
+    captured: list[httpx.Request] = []
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        captured.append(request)
+        body = json.loads(request.content)
+        return httpx.Response(
+            200, json=_facts_success(body["context"]["correlation_id"])
+        )
+
+    client = HttpFundamentalServiceClient(
+        _settings(), client=httpx.AsyncClient(transport=httpx.MockTransport(respond))
+    )
+    result = await client.read_facts(
+        {
+            "contract_version": "fundamental.v1",
+            "snapshot_id": "snapshot-aapl-2025",
+            "required_fields": ["total_revenue"],
+        },
+        principal=_principal(),
+        correlation_id="correlation-facts",
+        deadline_at=datetime.now(UTC) + timedelta(seconds=5),
+    )
+
+    assert captured[0].url.path == "/v1/data/facts"
+    assert captured[0].method == "GET"
+    assert result.snapshot_id == "snapshot-aapl-2025"
+    assert result.snapshot_manifest_digest == "a" * 64
+    assert result.identity.issuer_id == "320193"
+    assert result.facts[0].fact_id == "fact-revenue-2025"
+    assert result.facts[0].source.content_hash == "b" * 64
     await client.aclose()
 
 

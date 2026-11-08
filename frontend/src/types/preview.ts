@@ -36,6 +36,10 @@ export interface TechnicalPreview extends UnknownRecord {
 }
 
 export interface DebatePreview extends UnknownRecord {
+    status?: 'completed' | 'degraded' | 'abstained';
+    status_label?: string;
+    reason_display?: string;
+    degraded_reasons?: string[];
     verdict_display?: string;
     thesis_display?: string;
     catalyst_display?: string;
