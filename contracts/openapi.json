@@ -2476,6 +2476,18 @@
             ],
             "title": "Forward Signals"
           },
+          "fundamental_service": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fundamental Service"
+          },
           "industry": {
             "anyOf": [
               {
@@ -2653,9 +2665,6 @@
             "title": "Valuation Preview"
           }
         },
-        "required": [
-          "financial_reports"
-        ],
         "title": "FinancialReportsArtifactData",
         "type": "object"
       },
