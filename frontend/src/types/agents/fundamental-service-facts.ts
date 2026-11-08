@@ -789,6 +789,13 @@ const parseArtifactHashes = (
 
 const parseOptionalArtifactNumber = (value: unknown, context: string): number | undefined => {
     if (value === undefined || value === null) return undefined;
+    if (typeof value === 'string') {
+        const numeric = Number(value);
+        if (value.trim().length === 0 || !Number.isFinite(numeric)) {
+            throw new TypeError(`${context} must be a finite number.`);
+        }
+        return numeric;
+    }
     return parseOptionalNumber(value, context);
 };
 
@@ -989,9 +996,18 @@ const parseValuationArtifact = (
     const evaluatedAt = parseOptionalProjectionString('evaluated_at');
     if (evaluatedAt !== undefined) parsed.evaluated_at = parseTimestamp(evaluatedAt, `${context}.evaluated_at`);
     if (qualityStatus !== undefined) parsed.quality_status = parseQuality(qualityStatus, `${context}.quality_status`);
-    const intrinsicValue = parseOptionalArtifactNumber(record.intrinsic_value, `${context}.intrinsic_value`);
+    const serviceResult = record.service_result === undefined || record.service_result === null
+        ? undefined
+        : parseRecord(record.service_result, `${context}.service_result`);
+    const intrinsicValue = parseOptionalArtifactNumber(
+        record.intrinsic_value ?? serviceResult?.intrinsic_value,
+        `${context}.intrinsic_value`
+    );
     if (intrinsicValue !== undefined) parsed.intrinsic_value = intrinsicValue;
-    const perShareValue = parseOptionalArtifactNumber(record.per_share_value, `${context}.per_share_value`);
+    const perShareValue = parseOptionalArtifactNumber(
+        record.per_share_value ?? serviceResult?.per_share_value,
+        `${context}.per_share_value`
+    );
     if (perShareValue !== undefined) parsed.per_share_value = perShareValue;
     return parsed;
 };

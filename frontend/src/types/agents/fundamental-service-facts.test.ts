@@ -281,6 +281,22 @@ describe('parseFundamentalServiceArtifact', () => {
         }
     );
 
+    it('normalizes calculation values nested in the service result', () => {
+        const payload: Record<string, unknown> = serviceArtifact();
+        payload.service_result = {
+            intrinsic_value: '123.45',
+            per_share_value: '1.23',
+        };
+
+        const parsed = parseFundamentalServiceArtifact(payload);
+
+        if (parsed.projection_type !== 'valuation') {
+            throw new Error('Expected a valuation projection.');
+        }
+        expect(parsed.intrinsic_value).toBe(123.45);
+        expect(parsed.per_share_value).toBe(1.23);
+    });
+
     it('rejects a projection whose snapshot binding changes between sections', () => {
         const payload = serviceArtifact();
         payload.valuation_trace.snapshot_id = 'other-snapshot';
