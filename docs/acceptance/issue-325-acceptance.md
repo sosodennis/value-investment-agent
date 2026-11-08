@@ -3,6 +3,33 @@
 Status: incomplete. These checkpoints record live UI rejection and diagnostic
 runs. They are not an acceptance or `VERIFIED` record.
 
+## Runtime wiring checkpoint (2026-11-08)
+
+- Code under test: `261b9afa94c62972f183404bad380b771c347348`.
+- The caller-side run `bb83520d-5289-46c5-8c8d-94927174d006` was inspected
+  from the LangGraph PostgreSQL checkpoints. The Fundamental subgraph recorded
+  `SERVICE_NOT_CONFIGURED` with `FUNDAMENTAL_SERVICE_TOKEN is required` before
+  any calculation request was sent. This was a deployment wiring failure, not
+  a Fundamental service response.
+- The backend container's Compose labels showed that the app stack had been
+  started without `compose/verification/docker-compose.issue325-app-fundamental.yml`.
+  The existing `/tmp/issue325-runtime.env` supplied the issue-scoped service
+  URL (`http://host.docker.internal:18080`) and token.
+- Reapplied the complete app stack configuration and rebuilt only backend:
+  `docker compose --env-file /tmp/issue325-runtime.env -p
+  value-investment-agent-issue-325-app -f docker-compose.yml -f
+  docker-compose.override.yml -f
+  compose/verification/docker-compose.issue325-app-fundamental.yml up -d
+  --no-deps --build backend` (exit 0).
+- Verified the rendered Compose configuration with `config --quiet` (exit 0),
+  backend `/health` (HTTP 200), and container environment inspection showing
+  both `FUNDAMENTAL_SERVICE_URL` and `FUNDAMENTAL_SERVICE_TOKEN` present.
+  App backend, frontend, PostgreSQL, Redis, LLM provider, Fundamental service,
+  and Fundamental PostgreSQL were healthy after recreation.
+- This checkpoint only proves runtime wiring. The workspace route still needs
+  a new service-backed run and the report, fact IDs, release digest, valuation
+  trace, and evidence inspector remain unverified.
+
 ## Issue and checkpoint
 
 - Issue: #325, open with the `blocker` label.
