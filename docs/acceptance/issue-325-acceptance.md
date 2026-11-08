@@ -1291,3 +1291,43 @@ subgraph completed and this provider failure does not invalidate the report
 rendering evidence. #325 remains incomplete and blocked until a delivery PR,
 PR-CI result, and the outstanding caller-owned valuation/provider gates are
 resolved. This checkpoint does not mark the issue `VERIFIED` or close it.
+
+## Checkpoint: exact-head complete workflow retry and provider blocker
+
+- Date: 2026-11-08 (local). Exact code under test: `599704e9`
+  (`checkpoint(#325): sync generated artifact contract`). The exact-head
+  frontend image was already rebuilt from this commit before the retry.
+- Live route: `http://127.0.0.1:3000/workspace`.
+  Browser actions were: enter caller-owned MSFT valuation assumptions, start a
+  valuation, select `MSFT Microsoft Corporation NASDAQ`, approve the validated
+  Fundamental service parameters, and wait for all enabled subgraphs.
+- Run identity: thread `thread_1794103058106`, run
+  `decfacc8-58e8-4b43-8afa-d14dd67a261d`. The browser viewport was `714x767`,
+  with body and document scroll widths both `714`.
+
+| Command or observation | Result |
+| --- | --- |
+| `docker ps` for the issue-325 frontend/backend/Fundamental/LLM/Postgres containers | exit 0; all listed containers healthy |
+| `curl -fsS http://127.0.0.1:8000/health` | exit 0; `{"status":"ok"}` |
+| `curl -fsS http://127.0.0.1:18080/readyz` | exit 0; `{"status":"ready","contract_version":"internal.v1"}` |
+| Browser issuer selection and Fundamental approval | completed; Fundamental calculation entered running state |
+| Backend and LLM-provider logs for run `decfacc8-58e8-4b43-8afa-d14dd67a261d` | Debate bull, bear, moderator, and verdict requests all returned HTTP 502 `failover_exhausted`; runtime emitted `workflow execution failed` |
+| Browser terminal state | `Workflow request failed: signal is aborted without reason`; no complete workflow success or typed degraded/abstained result was rendered |
+| `docker compose -p value-investment-agent-issue-325-fundamental-ui config --quiet` from the current shell | exit 1 because `LLM_PROVIDER_ENCRYPTION_KEY` was not exported; existing containers were not replaced |
+| `git diff --check` | exit 0 |
+
+The Fundamental calculation approval path and Technical/News subgraphs reached
+their observed states, but the enabled Debate subgraph cannot complete while
+the configured LLM provider returns 502. The failure is reproducible in the
+exact-head environment and is outside the Fundamental report renderer. No
+new artifact/source/snapshot hash was produced for this failed run; the
+successful artifact hashes remain recorded in the preceding checkpoint.
+
+### Diagnostic result
+
+**Incomplete and blocked.** PR #349 remains open, issue #325 remains open with
+the `blocker` label, and this checkpoint does not claim `VERIFIED`, merge the
+PR, or close the issue. The next owning-layer action is to restore a working
+LLM provider configuration or deliver an explicit typed Debate degraded/
+abstained terminal contract, then rerun the complete workflow against a new
+exact commit.
