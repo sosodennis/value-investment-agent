@@ -1490,6 +1490,8 @@ export interface components {
             scenario_analysis: {
                 [key: string]: components["schemas"]["ScenarioModel"];
             };
+            /** Status */
+            status?: "completed" | null;
             /** Supporting Factors */
             supporting_factors: string[];
             /** Winning Thesis */
