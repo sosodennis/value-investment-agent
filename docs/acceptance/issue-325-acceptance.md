@@ -1498,3 +1498,36 @@ The full workflow ledger, same-run artifact references, exact-head generated
 contract state, and PR CI recheck are recorded. The PR and issue remain open;
 the stale browser SSE alert and provider-abstained debate are explicit risks,
 so this checkpoint does not claim issue closure or `VERIFIED` status.
+
+## Checkpoint: abort presentation fix and exact-head reload
+
+- Date: 2026-11-08 (local). Exact runtime commit:
+  `e26631cdf09a83c7f64d4c3f4bdb7de9d8732d00` (`fix(#325): ignore aborted
+  workflow streams`). The hook now ignores only explicit `AbortError` or
+  `signal is aborted without reason` failures caused by replacing/closing an
+  SSE stream; HTTP, identity, sequence-gap and schema errors remain user-facing.
+- Regression checks: `npm run test -- --run src/hooks/useAgent.test.tsx`
+  exited 0 with 14 tests passed; `npm run typecheck` exited 0; `npm run lint`
+  exited 0; `git diff --check` exited 0; commit hooks passed.
+- The exact-head frontend Docker rebuild and production build exited 0. Image
+  digest: `sha256:6f5c9614b96c69f2c66e0241eba765d3f3bcb9c08b5786e6bbf49eb1d20f8fd8`;
+  the frontend container was recreated from this image.
+- Reloaded the completed run at
+  `http://127.0.0.1:3000/workspace?thread_id=thread_1794111836140&run_id=afd99495-bafe-431c-95e2-32e297cb39c7`
+  on the mobile `390x844` viewport. The page showed `Run ... · cursor 89`,
+  `completed`, `Disconnected`, and no `Workflow request failed` alert. The
+  Fundamental tab still rendered artifact
+  `a7fa1d0c-7a46-47c1-bdc6-3b151cbd9c6b`, intrinsic `$196.21`, per-share `$1.96`,
+  snapshot `snapshot-82c9a009e0dd280f7d2e64d05b047262`, manifest
+  `e54c631839298d340b1737bb661c7e0d05f7abef4a5e2bc17cf3acca42b9a698`, data
+  release `11b1376de0a90187b25f6e517b98971b0ee750f02fd86555474161018cb7edc8`,
+  and five verified service facts.
+
+### Diagnostic result
+
+The stale abort presentation alert is fixed and verified against the existing
+completed service-backed run. The Debate artifact remains a typed provider
+abstention, while the Fundamental report and valuation trace remain complete.
+PR #349 and issue #325 are still open pending the repository's required
+delivery decision and review; no issue closure or `VERIFIED` status is claimed
+by this checkpoint.
