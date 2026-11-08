@@ -292,6 +292,16 @@ describe('useAgent workflow runtime', () => {
         expect(fetchMock).toHaveBeenCalledOnce();
     });
 
+    it('does not surface a user-facing error when a stream is aborted', async () => {
+        fetchMock.mockRejectedValueOnce(new DOMException('signal is aborted without reason', 'AbortError'));
+        const { result } = renderHook(() => useAgent());
+
+        await act(async () => result.current.loadHistory('thread_1', 'run_1'));
+
+        await waitFor(() => expect(result.current.isLoading).toBe(false));
+        expect(result.current.error).toBeNull();
+    });
+
     it('applies terminal events and closes the connection', async () => {
         const terminal = { event_id: 'evt_2', seq_id: 2, event_version: 'v2', event_name: 'workflow.activity', thread_id: 'thread_1', run_id: 'run_1', occurred_at: '2026-10-24T00:00:00Z', payload: activity({ status: 'completed' }) };
         fetchMock
