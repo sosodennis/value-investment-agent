@@ -1228,10 +1228,10 @@ closure, or `VERIFIED` status is claimed by this checkpoint.
 
 ## Checkpoint: artifact valuation rendering and exact-head live UI
 
-- Date: 2026-11-08 (local). Exact code under test: `49893d87`
-  (`checkpoint(#325): normalize service valuation results`). This head includes
-  the artifact-only valuation UI from `8e836836` and parser normalization for
-  decimal-string results nested in `fundamental_service.service_result`.
+- Date: 2026-11-08 (local). Exact code under test: `70a7ceec`
+  (`checkpoint(#325): preserve partial preview valuation`). This head includes
+  the artifact-only valuation UI from `8e836836`, parser normalization from
+  `49893d87`, and the partial-preview regression fix.
 - The service artifact uses `service_result.intrinsic_value` and
   `service_result.per_share_value` as decimal strings. The frontend parser now
   validates finite decimal strings at the boundary and exposes them through the
@@ -1242,10 +1242,13 @@ closure, or `VERIFIED` status is claimed by this checkpoint.
 | --- | --- |
 | `npm run lint` in `frontend/` | exit 0 |
 | `npm run typecheck` in `frontend/` | exit 0 |
-| `npm run test -- --run` in `frontend/` | exit 0; 52 files, 301 tests passed |
+| `npm run test -- --run` in `frontend/` | exit 0; 52 files, 302 tests passed |
 | `npm run build` in `frontend/` | exit 0 |
+| `uv run --project finance-agent-core pytest finance-agent-core/tests/agents/fundamental/test_fundamental_service_client.py finance-agent-core/tests/agents/fundamental/test_fundamental_service_cutover.py finance-agent-core/tests/agents/fundamental/test_request_contracts.py finance-agent-core/tests/agents/fundamental/test_service_request_producer.py -q` | exit 0; 51 passed in 3.15s |
+| `python3 scripts/architecture_guard.py` and `python3 -m compileall -q finance-agent-core/src finance-agent-core/api` | exit 0; no boundary violations |
+| `git diff --check` | exit 0 |
 | issue-325 app Compose `config --quiet` | exit 0 |
-| exact-head frontend Docker build and `up -d --no-deps frontend` | exit 0; image `sha256:581a6e2d4106013e974cae467820baef4138b5d5ab3504d33fa0cf235e30397f`, healthy |
+| exact-head frontend Docker build and `up -d --no-deps frontend` | exit 0; image `sha256:956b7b74c6e6f588235ff7f1e9c2bd7a768081e976b0f614034ea164869f2f5a`, healthy |
 | `curl -fsS http://127.0.0.1:8000/health` | exit 0; `{"status":"ok"}` |
 | `curl -fsS http://127.0.0.1:18080/readyz` | exit 0; `{"status":"ready","contract_version":"internal.v1"}` |
 
@@ -1282,7 +1285,7 @@ closure, or `VERIFIED` status is claimed by this checkpoint.
 
 The Fundamental artifact rendering, trace/release metadata, responsive layout,
 keyboard evidence selection, and provenance inspector pass on exact head
-`49893d87`. The overall historical run still ended independently in Debate with
+`70a7ceec`. The overall historical run still ended independently in Debate with
 the recorded LLM provider HTTP 502 / `failover_exhausted`; the Fundamental
 subgraph completed and this provider failure does not invalidate the report
 rendering evidence. #325 remains incomplete and blocked until a delivery PR,
