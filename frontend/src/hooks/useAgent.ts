@@ -75,7 +75,11 @@ export function useAgent(assistantId = 'agent') {
         setConnection('closed');
     }, [hydrateWorkflow, processWorkflowEvent, setConnection]);
 
-    const sendMessage = useCallback(async (content: string, newSession = false) => {
+    const sendMessage = useCallback(async (
+        content: string,
+        newSession = false,
+        valuationRequest?: Record<string, unknown>,
+    ) => {
         submittingInteractionRef.current = null;
         setSubmittingInteractionId(null);
         setIsLoading(true);
@@ -83,7 +87,10 @@ export function useAgent(assistantId = 'agent') {
         if (threadId !== state.threadId) initSession(threadId);
         addUserMessage({ id: `user_${Date.now()}`, role: 'user', content, type: 'text' });
         try {
-            const run = await startWorkflowRun(threadId, { message: content });
+            const run = await startWorkflowRun(threadId, {
+                message: content,
+                valuation_request: valuationRequest,
+            });
             setRun(run.run_id);
             const snapshot = await getActivitySnapshot(threadId, { runId: run.run_id });
             if (snapshot.run_id !== run.run_id) throw new TypeError('activity snapshot run identity mismatch.');

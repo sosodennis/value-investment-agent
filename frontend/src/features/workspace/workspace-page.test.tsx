@@ -149,6 +149,52 @@ describe('WorkspacePage', () => {
         expect(screen.getByText('Running')).toBeTruthy();
     });
 
+    it('starts a valuation only after complete caller-owned assumptions are entered', async () => {
+        hook.value = defaultHook();
+        render(<WorkspacePage />);
+        fireEvent.change(screen.getByLabelText('Company ticker'), { target: { value: 'aapl' } });
+
+        const values: Record<string, string> = {
+            'Revenue growth': '0.05, 0.05, 0.04',
+            'Operating margin': '0.15, 0.16, 0.17',
+            'Reinvestment rate': '0.20, 0.18, 0.16',
+            'Risk-free rate': '0.04',
+            Beta: '1.1',
+            'Equity risk premium': '0.05',
+            'Pre-tax cost of debt': '0.05',
+            'Tax rate': '0.21',
+            'Debt weight': '0.2',
+            'Equity weight': '0.8',
+            'Terminal growth': '0.02',
+            Cash: '10',
+            Debt: '5',
+            'Preferred stock': '0',
+            'Lease liabilities': '0',
+            'Non-controlling interest': '0',
+            'Diluted shares': '100',
+            'Assumption trace': 'Fixture caller assumptions',
+        };
+        for (const [label, value] of Object.entries(values)) {
+            fireEvent.change(screen.getByLabelText(label), { target: { value } });
+        }
+
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Start valuation' }).hasAttribute('disabled')).toBe(false));
+        fireEvent.click(screen.getByRole('button', { name: 'Start valuation' }));
+
+        expect(hook.sendMessage).toHaveBeenCalledWith(
+            'Valuate AAPL',
+            true,
+            expect.objectContaining({
+                contract_version: 'fundamental.v1',
+                model_id: 'fcff_dcf',
+                assumptions: expect.objectContaining({
+                    wacc: expect.objectContaining({ debt_weight: '0.2', equity_weight: '0.8' }),
+                    terminal_growth: '0.02',
+                }),
+            }),
+        );
+    });
+
     it('keeps backend retry and resume attempt counts out of user-facing activity', () => {
         hook.value = defaultHook({
             workflow: workflowState({

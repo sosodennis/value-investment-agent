@@ -21,6 +21,7 @@ import type { WorkspaceRouteIntent } from './workspace-route-intent';
 import { ResizableGroup, ResizableHandle, ResizablePanel } from '@/components/ui/resizable';
 import { EvidenceInspector, EvidenceInspectorTrigger, buildEvidenceItems, type EvidenceSelection } from './workspace-evidence-inspector';
 import { adaptAgentOutput } from '@/types/agents/output-adapter';
+import { ValuationAssumptionsEditor, type CompactFundamentalValuationRequest } from './valuation-assumptions';
 
 type WorkspacePageProps = { assistantId?: string; initialTicker?: string | null; initialPrompt?: string | null; autoStart?: boolean; routeIntent?: WorkspaceRouteIntent };
 const NEW_ANALYSIS_INTENT: WorkspaceRouteIntent = { kind: 'new-analysis' };
@@ -46,6 +47,7 @@ export function WorkspacePage({ assistantId = 'agent', initialTicker = null, ini
     const [activeTab, setActiveTab] = useState<ReportTab>('activity');
     const [selectedEvidence, setSelectedEvidence] = useState<EvidenceSelection | null>(null);
     const [mobileEvidenceOpen, setMobileEvidenceOpen] = useState(false);
+    const [valuationRequest, setValuationRequest] = useState<CompactFundamentalValuationRequest | null>(null);
     const mobileEvidenceReturnFocus = useRef<HTMLElement | null>(null);
     const autoStarted = useRef(false);
     const agents: AgentInfo[] = useMemo(() => AGENT_CONFIGS.map((config) => ({
@@ -115,6 +117,13 @@ export function WorkspacePage({ assistantId = 'agent', initialTicker = null, ini
         void agent.sendMessage(`Valuate ${symbol}`, true);
     }
 
+    function startValuation() {
+        const symbol = ticker.trim().toUpperCase();
+        if (routeIntent.kind !== 'new-analysis' || !symbol || !valuationRequest || agent.isLoading) return;
+        setTicker(symbol);
+        void agent.sendMessage(`Valuate ${symbol}`, true, valuationRequest);
+    }
+
     const roster = <AgentRoster agents={agents} selected={selectedAgentId ?? preferredAgentId} onSelect={(id) => {
         setSelectedAgentId(id);
         if (isReportTab(id)) setActiveTab(id);
@@ -135,10 +144,14 @@ export function WorkspacePage({ assistantId = 'agent', initialTicker = null, ini
                 </div>
             </header>
 
-            {routeIntent.kind === 'new-analysis' && <form className="flex flex-wrap items-end gap-3 border-b bg-muted/20 px-4 py-4 sm:px-6" onSubmit={startRun}>
-                <Field label="Company ticker" htmlFor="workspace-ticker" className="w-full max-w-sm"><Input id="workspace-ticker" autoComplete="off" value={ticker} onChange={(event) => setTicker(event.target.value.toUpperCase())} placeholder="AAPL" maxLength={16} /></Field>
-                <Button type="submit" disabled={!ticker.trim() || agent.isLoading}>{agent.isLoading ? <Loader2 className="animate-spin" /> : <Play />}{agent.isLoading ? 'Starting…' : 'Start analysis'}</Button>
-                {agent.threadId && <p className="ml-auto max-w-full truncate font-mono text-xs text-muted-foreground" title={agent.threadId}>Thread {agent.threadId}</p>}
+            {routeIntent.kind === 'new-analysis' && <form className="border-b bg-muted/20 px-4 py-4 sm:px-6" onSubmit={startRun}>
+                <div className="flex flex-wrap items-end gap-3">
+                    <Field label="Company ticker" htmlFor="workspace-ticker" className="w-full max-w-sm"><Input id="workspace-ticker" autoComplete="off" value={ticker} onChange={(event) => setTicker(event.target.value.toUpperCase())} placeholder="AAPL" maxLength={16} /></Field>
+                    <Button type="submit" disabled={!ticker.trim() || agent.isLoading}>{agent.isLoading ? <Loader2 className="animate-spin" /> : <Play />}{agent.isLoading ? 'Starting…' : 'Start analysis'}</Button>
+                    <Button type="button" variant="secondary" onClick={startValuation} disabled={!ticker.trim() || !valuationRequest || agent.isLoading}>{agent.isLoading ? <Loader2 className="animate-spin" /> : <Play />}{agent.isLoading ? 'Starting…' : 'Start valuation'}</Button>
+                    {agent.threadId && <p className="ml-auto max-w-full truncate font-mono text-xs text-muted-foreground" title={agent.threadId}>Thread {agent.threadId}</p>}
+                </div>
+                <ValuationAssumptionsEditor disabled={agent.isLoading} onRequestChange={setValuationRequest} />
             </form>}
 
             <div className="min-h-0 min-w-0">
