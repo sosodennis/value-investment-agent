@@ -396,6 +396,7 @@ def _resolved_snapshot_input(
         }
     resolved_periods = result.get("resolved_fiscal_periods", ())
     period_resolution = result.get("fiscal_period_resolution")
+    release_digest = result.get("data_release_manifest_digest")
     provenance_raw = result.get("provenance")
     source_selection_policy_version = (
         provenance_raw.get("policy_version")
@@ -418,6 +419,11 @@ def _resolved_snapshot_input(
         or not isinstance(provenance_raw, Mapping)
         or not isinstance(source_selection_policy_version, str)
         or not source_selection_policy_version
+        or (release_digest is not None and not isinstance(release_digest, str))
+        or (
+            isinstance(release_digest, str)
+            and not _DIGEST_PATTERN.fullmatch(release_digest)
+        )
     ):
         raise FundamentalServiceFailure(
             "UPSTREAM_MALFORMED",
@@ -464,13 +470,19 @@ def _resolved_snapshot_input(
         "coverage_profile": resolved_profile,
         "fiscal_period_selector": dict(resolved_selector),
         "resolved_fiscal_periods": list(resolved_periods),
+        **(
+            {"data_release_manifest_digest": release_digest}
+            if release_digest is not None
+            else {}
+        ),
     }
     updated["provenance"] = {
         **provenance,
         **{
             key: value
             for key, value in provenance_raw.items()
-            if value is not None and key != "policy_version"
+            if key in {"mapping_version", "parser_version", "taxonomy_version"}
+            and value is not None
         },
         "snapshot_id": snapshot_id,
         "fact_ids": list(facts),

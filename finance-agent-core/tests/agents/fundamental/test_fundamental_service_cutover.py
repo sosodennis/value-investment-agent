@@ -686,6 +686,78 @@ async def test_cutover_resolves_snapshot_and_facts_through_service_boundary() ->
 
 
 @pytest.mark.asyncio
+async def test_cutover_binds_release_digest_to_context_without_provenance_leak() -> (
+    None
+):
+    payload = _input()
+    payload.pop("historical_facts")
+    payload["snapshot_selector"] = {
+        "contract_version": "fundamental.v1",
+        "identity": payload["identity"],
+        "valuation_timestamp": payload["valuation_context"]["valuation_timestamp"],
+        "source_selection_policy": "pit-v1",
+        "coverage_profile": "us-gaap-public-v1",
+        "required_fields": ["revenue"],
+    }
+    release_digest = "c" * 64
+    client = _Client(
+        resolved_snapshot={
+            "contract_version": "fundamental.v1",
+            "snapshot_id": "snapshot-released",
+            "historical_facts": ["fact-revenue"],
+            "identity": payload["identity"],
+            "valuation_timestamp": payload["valuation_context"]["valuation_timestamp"],
+            "snapshot_timestamp": "2026-11-03T00:00:00Z",
+            "source_selection_policy": "pit-v1",
+            "coverage_profile": "us-gaap-public-v1",
+            "data_release_manifest_digest": release_digest,
+            "quality": "verified",
+            "issue_codes": [],
+            "provenance": {
+                "snapshot_id": "snapshot-released",
+                "mapping_version": "mapping-v1",
+                "parser_version": "parser-v1",
+                "taxonomy_version": "taxonomy-v1",
+                "policy_version": "pit-v1",
+                "data_release_manifest_digest": release_digest,
+            },
+        }
+    )
+    token = set_request_principal(
+        InternalPrincipal(
+            subject_id="caller-1", organization_id="org-1", membership_id="membership-1"
+        )
+    )
+    try:
+        await run_service_valuation_flow(
+            _Runtime(),
+            {"valuation_request": payload},
+            client=client,
+            request_approval_fn=lambda _request: {
+                "type": "valuation_approval",
+                "contract_version": "v1",
+                "decision": "approve",
+            },
+        )
+    finally:
+        reset_request_principal(token)
+
+    assert [operation for operation, _ in client.calls] == [
+        "resolve_snapshot",
+        "validate",
+        "calculate",
+    ]
+    validated = client.calls[1][1]
+    assert validated["valuation_context"]["data_release_manifest_digest"] == (
+        release_digest
+    )
+    assert "data_release_manifest_digest" not in validated["provenance"]
+    assert client.calls[2][1]["valuation_context"]["data_release_manifest_digest"] == (
+        release_digest
+    )
+
+
+@pytest.mark.asyncio
 async def test_cutover_enriches_compact_caller_request_before_snapshot_resolution() -> (
     None
 ):
