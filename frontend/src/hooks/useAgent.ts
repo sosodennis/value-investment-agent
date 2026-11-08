@@ -18,6 +18,16 @@ const STANDARD_OUTPUT_KINDS: readonly StandardAgentOutput['kind'][] = [
 const isStandardOutputKind = (value: string): value is StandardAgentOutput['kind'] =>
     STANDARD_OUTPUT_KINDS.some((kind) => kind === value);
 
+const isPreviewRecord = (value: unknown): value is Record<string, unknown> =>
+    typeof value === 'object' && value !== null && !Array.isArray(value);
+
+const hasDegradedPreview = (output: StandardAgentOutput): boolean => {
+    const preview = output.preview;
+    if (!isPreviewRecord(preview)) return false;
+    const status = preview.status;
+    return status === 'degraded' || status === 'abstained';
+};
+
 export function useAgent(assistantId = 'agent') {
     void assistantId;
     const { state, initSession, setRun, hydrateWorkflow, processWorkflowEvent, setConnection, addUserMessage, setError, reset } = useAgentReducer();
@@ -215,6 +225,10 @@ export function useAgent(assistantId = 'agent') {
                 type: output.artifact_type ?? output.output_kind,
             } : null,
         };
+        const agentOutput = agentOutputs[output.agent_id];
+        if (agentOutput && hasDegradedPreview(agentOutput)) {
+            agentStatuses[output.agent_id] = 'degraded';
+        }
     }
     return {
         messages: state.messages,

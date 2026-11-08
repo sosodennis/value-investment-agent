@@ -24,6 +24,19 @@ export const parseDebatePreview = (
     const record = toRecord(value, context);
 
     const preview: DebatePreview = {};
+    const status = parseOptionalString(record.status, `${context}.status`);
+    if (status !== undefined && !['completed', 'degraded', 'abstained'].includes(status)) {
+        throw new TypeError(`${context}.status has unsupported value.`);
+    }
+    const statusLabel = parseOptionalString(record.status_label, `${context}.status_label`);
+    const reason = parseOptionalString(record.reason_display, `${context}.reason_display`);
+    let reasons: string[] | undefined;
+    if (record.degraded_reasons !== undefined) {
+        if (!Array.isArray(record.degraded_reasons) || !record.degraded_reasons.every((item) => typeof item === 'string')) {
+            throw new TypeError(`${context}.degraded_reasons must be an array of strings.`);
+        }
+        reasons = record.degraded_reasons;
+    }
     const verdict = parseOptionalString(
         record.verdict_display,
         `${context}.verdict_display`
@@ -42,6 +55,12 @@ export const parseDebatePreview = (
         `${context}.debate_rounds_display`
     );
 
+    if (status === 'completed' || status === 'degraded' || status === 'abstained') {
+        preview.status = status;
+    }
+    if (statusLabel !== undefined) preview.status_label = statusLabel;
+    if (reason !== undefined) preview.reason_display = reason;
+    if (reasons !== undefined) preview.degraded_reasons = reasons;
     if (verdict !== undefined) preview.verdict_display = verdict;
     if (thesis !== undefined) preview.thesis_display = thesis;
     if (catalyst !== undefined) preview.catalyst_display = catalyst;

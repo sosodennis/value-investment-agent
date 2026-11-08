@@ -1,5 +1,6 @@
 import {
     DebateHistoryMessage,
+    DebateResult,
     DebateSuccess,
     Direction,
     EvidenceFact,
@@ -1700,15 +1701,57 @@ const parseEvidenceFact = (value: unknown, context: string): EvidenceFact => {
 export const parseDebateArtifact = (
     value: unknown,
     context = 'debate artifact'
-): DebateSuccess => {
+): DebateResult => {
     const record = toRecord(value, context);
+    const status = parseNullableOptionalString(record.status, `${context}.status`);
+    if (
+        status !== undefined &&
+        status !== null &&
+        status !== 'completed' &&
+        status !== 'degraded' &&
+        status !== 'abstained'
+    ) {
+        throw new TypeError(`${context}.status has unsupported value.`);
+    }
+    const historyRaw = record.history;
+    const factsRaw = record.facts;
+    if (status === 'degraded' || status === 'abstained') {
+        const artifact: DebateResult = {
+            status,
+            degraded_reasons: parseStringArray(
+                record.degraded_reasons,
+                `${context}.degraded_reasons`
+            ),
+            abstention_reason: parseString(
+                record.abstention_reason,
+                `${context}.abstention_reason`
+            ),
+            debate_rounds: parseNumber(record.debate_rounds, `${context}.debate_rounds`),
+        };
+        if (historyRaw !== undefined) {
+            if (!Array.isArray(historyRaw)) {
+                throw new TypeError(`${context}.history must be an array.`);
+            }
+            artifact.history = historyRaw.map((entry, idx) =>
+                parseDebateHistoryMessage(entry, `${context}.history[${idx}]`)
+            );
+        }
+        if (factsRaw !== undefined) {
+            if (!Array.isArray(factsRaw)) {
+                throw new TypeError(`${context}.facts must be an array.`);
+            }
+            artifact.facts = factsRaw.map((entry, idx) =>
+                parseEvidenceFact(entry, `${context}.facts[${idx}]`)
+            );
+        }
+        return artifact;
+    }
+
     const scenarioAnalysisRecord = toRecord(
         record.scenario_analysis,
         `${context}.scenario_analysis`
     );
 
-    const historyRaw = record.history;
-    const factsRaw = record.facts;
     const artifact: DebateSuccess = {
         scenario_analysis: {
             bull_case: parseScenario(
@@ -1738,6 +1781,7 @@ export const parseDebateArtifact = (
         ),
         debate_rounds: parseNumber(record.debate_rounds, `${context}.debate_rounds`),
     };
+    if (status === 'completed') artifact.status = status;
 
     const rrRatio = parseNullableOptionalNumber(record.rr_ratio, `${context}.rr_ratio`);
     if (rrRatio !== undefined) artifact.rr_ratio = rrRatio;

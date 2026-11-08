@@ -255,6 +255,22 @@ describe('artifact parsers', () => {
         expect(parsed.history?.[0]?.round_num).toBe(3);
     });
 
+    it('parses typed debate abstention without requiring a verdict', () => {
+        const parsed = parseDebateArtifact({
+            status: 'abstained',
+            degraded_reasons: ['LLM_PROVIDER_FAILOVER_EXHAUSTED'],
+            abstention_reason: 'The provider did not return a response.',
+            debate_rounds: 2,
+            facts: [],
+        });
+
+        expect(parsed.status).toBe('abstained');
+        if (parsed.status === 'abstained' || parsed.status === 'degraded') {
+            expect(parsed.degraded_reasons).toEqual(['LLM_PROVIDER_FAILOVER_EXHAUSTED']);
+            expect(parsed.abstention_reason).toContain('provider');
+        }
+    });
+
     it.each([0, 1.5, true, '2'])(
         'rejects invalid debate history round number %s',
         (roundNum) => {
