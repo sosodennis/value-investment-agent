@@ -313,6 +313,86 @@ class FundamentalValuationEvidenceReadResultV1(BaseModel):
     facts: tuple[FundamentalCanonicalFactV1, ...] = ()
 
 
+class FundamentalForwardEvidenceSourceV1(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+
+    source_id: str = Field(min_length=1, max_length=256)
+    source_url: str = Field(min_length=1, max_length=2048)
+    publisher: str = Field(min_length=1, max_length=256)
+    source_type: Literal[
+        "issuer_guidance", "analyst_estimate", "debt_terms", "search_discovery"
+    ]
+    retained_passage: str = Field(min_length=20, max_length=8192)
+    content_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    published_at: datetime
+    retrieved_at: datetime
+    license_status: Literal["approved", "unknown", "rejected"]
+    license_reference: str | None = Field(default=None, max_length=2048)
+
+
+class FundamentalForwardEvidenceClaimV1(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+
+    claim_id: str = Field(min_length=1, max_length=256)
+    issuer_id: str = Field(min_length=1, max_length=256)
+    ticker: str = Field(min_length=1, max_length=32, pattern=r"^[A-Z0-9.-]+$")
+    model_id: Literal["fcff_dcf", "transition_fcff_dcf"]
+    metric: Literal[
+        "revenue_growth", "operating_margin", "reinvestment_rate", "debt_term"
+    ]
+    assumption_path: str | None = Field(default=None, max_length=256)
+    value: Decimal
+    unit: Literal["ratio", "currency", "days", "text"]
+    fiscal_period: str = Field(min_length=2, max_length=32)
+    period_type: Literal["annual", "quarterly"]
+    period_end: date
+    extraction_method: Literal["structured_provider", "llm_from_source_passage"]
+    source: FundamentalForwardEvidenceSourceV1
+    status: Literal["accepted", "excluded"]
+    issue_codes: tuple[str, ...] = ()
+    exclusion_reasons: tuple[str, ...] = ()
+
+
+class FundamentalForwardEvidenceBudgetPolicyV1(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+
+    policy_version: str = "forward-evidence-policy-v1"
+    max_search_queries: int = Field(default=2, ge=1, le=5)
+    max_results_per_query: int = Field(default=5, ge=1, le=20)
+    max_source_bytes: int = Field(default=120_000, ge=1_000, le=1_000_000)
+    max_llm_claims: int = Field(default=8, ge=1, le=32)
+    max_duration_ms: int = Field(default=15_000, ge=500, le=120_000)
+
+
+class FundamentalForwardEvidenceUsageV1(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+
+    search_queries: int = Field(default=0, ge=0)
+    search_results: int = Field(default=0, ge=0)
+    source_fetches: int = Field(default=0, ge=0)
+    llm_calls: int = Field(default=0, ge=0)
+    llm_input_bytes: int = Field(default=0, ge=0)
+    llm_output_tokens: int | None = Field(default=None, ge=0)
+    elapsed_ms: int = Field(default=0, ge=0)
+
+
+class FundamentalForwardEvidenceReviewResultV1(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+
+    contract_version: Literal["fundamental.v1"]
+    status: Literal["prepared", "unsupported", "unavailable"]
+    label: Literal["forward-looking external evidence"]
+    policy_version: str
+    automatic_preparation_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    claims: tuple[FundamentalForwardEvidenceClaimV1, ...] = ()
+    accepted_claim_ids: tuple[str, ...] = ()
+    excluded_claim_ids: tuple[str, ...] = ()
+    issue_codes: tuple[str, ...] = ()
+    budget: FundamentalForwardEvidenceBudgetPolicyV1
+    usage: FundamentalForwardEvidenceUsageV1
+    reference_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
 __all__ = [
     "FundamentalCandidateRejectionV1",
     "FundamentalCanonicalFactV1",
@@ -325,4 +405,9 @@ __all__ = [
     "FundamentalServiceResponseV1",
     "FundamentalValuationPreparationResultV1",
     "FundamentalValuationEvidenceReadResultV1",
+    "FundamentalForwardEvidenceSourceV1",
+    "FundamentalForwardEvidenceClaimV1",
+    "FundamentalForwardEvidenceBudgetPolicyV1",
+    "FundamentalForwardEvidenceUsageV1",
+    "FundamentalForwardEvidenceReviewResultV1",
 ]

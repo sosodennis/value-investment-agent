@@ -99,6 +99,11 @@ from .valuation_preparation import (
     AutomaticValuationPreparationV1,
     ManualValuationOverrideRequestV1,
 )
+from .forward_evidence import (
+    ForwardEvidenceReviewRequestV1,
+    ForwardEvidenceReviewResponseV1,
+    review_forward_evidence,
+)
 
 LOGGER = logging.getLogger("fundamental_service")
 
@@ -478,6 +483,31 @@ def create_app(
     async def override_prepared_valuation(request: Request) -> JSONResponse:
         value = decode_input(request, ManualValuationOverrideRequestV1)
         return success_response(request, application.apply_manual_override(value))
+
+    @app.post(
+        "/v1/valuation/forward-evidence/review",
+        response_model=TypedFundamentalResponseEnvelopeV1[
+            ForwardEvidenceReviewResponseV1
+        ],
+        openapi_extra={
+            "requestBody": {
+                "required": True,
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "$ref": (
+                                "#/components/schemas/"
+                                "FundamentalForwardEvidenceReviewRequestEnvelopeV1"
+                            )
+                        }
+                    }
+                },
+            }
+        },
+    )
+    async def review_forward_evidence_route(request: Request) -> JSONResponse:
+        value = decode_input(request, ForwardEvidenceReviewRequestV1)
+        return success_response(request, review_forward_evidence(value))
 
     @app.get(
         "/v1/policies/{policy_id}",
@@ -864,6 +894,10 @@ def create_app(
             (
                 "FundamentalManualValuationOverrideRequestEnvelopeV1",
                 TypedFundamentalRequestEnvelopeV1[ManualValuationOverrideRequestV1],
+            ),
+            (
+                "FundamentalForwardEvidenceReviewRequestEnvelopeV1",
+                TypedFundamentalRequestEnvelopeV1[ForwardEvidenceReviewRequestV1],
             ),
             (
                 "FundamentalPolicyLookupRequestEnvelopeV1",
