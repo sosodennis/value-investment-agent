@@ -162,3 +162,52 @@ bytes. The targeted regression command passed all four cases. Next, run the
 full focused suite on the fix commit, resume the same fixed sample, and report
 the measured threshold status without replacing issuers or promoting an
 unsupported threshold.
+
+## Latest complete cohort and report
+
+The completed capture ran with code commit
+`a9ede6398fdb694a9e03746e57f711e8e401e17c` and the main checkout's ignored
+`.env`. The command exited 0 with status `complete`: 100 selected and captured
+issuer clusters, with no transport failures or invalid snapshots. It reused the
+68 verified snapshots and added snapshots for the remaining selected issuers.
+The final capture manifest SHA-256 is
+`afad3f92f2597383d16afec2cc85850fbf5919106d3cb827a6e8112022836242`.
+
+The report command exited 0 on two runs. The first run wrote the report; the
+second returned `wrote: false` with the same SHA-256,
+`ee29c9cff88757b4be7e9eb58747dc5eba86e6a072d25f081f3cfd2e4337c3b3`.
+The 6,951,874-byte JSON is stored as `report.json.gz` at 331,027 bytes. Its
+SHA-256 is `57bfdf339c0f3cf5deeb58492a592f720e643569c0d0d3cafcfc68e8045ed88b`.
+`gzip -dc report.json.gz | shasum -a 256` reproduces the uncompressed JSON
+SHA-256 above.
+
+Both models retain all 100 issuer clusters in their denominator. Each model
+has 78 five-period measurement windows. The candidate rule, three complete
+periods in the latest five, has 0 eligible issuers out of 100. A first
+subsequent original 10-K is available for 91 issuers, but complete first-
+subsequent labels are 0 out of 100, or 0 out of 91 when conditioned on a next
+filing. Revenue and contract-liability coverage each reaches three periods for
+0 out of 100 issuers. Historical forecast accuracy was not measured because no
+Fundamental Service forecasts exist for these decision dates.
+
+The report records threshold status
+`history_evidence_measured_threshold_review_required` and
+`supported_history_threshold: null`. The 100-cluster sample-size criterion is
+met, but the observed field coverage and out-of-sample labels do not support a
+history eligibility threshold. Keep affected results provisional or abstained.
+Do not treat the candidate three-of-five rule as validated. The report excludes
+current ticker/survival data, analyst estimates, Search, and LLM-extracted
+values.
+
+On code commit `a9ede6398fdb694a9e03746e57f711e8e401e17c`, the focused
+Fundamental Service suite passed 49 tests, `python3
+scripts/architecture_guard.py` passed, and `git diff origin/main...HEAD --check`
+passed. Commit hooks passed Ruff, Ruff format, whitespace, and the 500 KB
+large-file check. No Docker or service-backed acceptance ran; this issue
+validates SEC snapshot capture and the offline report. The `.env.example`
+contains a quoted placeholder, and the local contact remains only in the
+ignored `.env`.
+
+Status: WIP, not VERIFIED. The measured evidence supports no threshold, so #359
+remains open and #351 remains blocked until the source mapping and abstention
+policy can use this result. Do not start #352.
