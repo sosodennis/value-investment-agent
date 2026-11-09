@@ -182,6 +182,7 @@ def _approved_market_policy(
     }
     return ApprovedMarketPolicyInputsV1(
         policy_version=policy.policy_version,
+        capital_weight_basis=market_inputs.capital_weight_basis,
         risk_free_rate=market_inputs.risk_free_rate,
         beta=market_inputs.beta,
         equity_risk_premium=market_inputs.equity_risk_premium,
@@ -190,6 +191,7 @@ def _approved_market_policy(
         equity_weight=market_inputs.equity_weight,
         terminal_growth=market_inputs.terminal_growth,
         evidence=evidence,
+        evidence_methods={item.role: item.method for item in market_inputs.evidence},
     )
 
 

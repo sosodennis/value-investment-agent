@@ -194,6 +194,9 @@ class MarketPolicyInputsV1(StrictModel):
     """Versioned service-owned WACC inputs with per-role evidence."""
 
     policy_version: str = Field(min_length=1)
+    capital_weight_basis: Literal["market_observed", "approved_policy"] = (
+        "approved_policy"
+    )
     risk_free_rate: Decimal
     beta: Decimal
     equity_risk_premium: Decimal
@@ -240,6 +243,21 @@ class MarketPolicyInputsV1(StrictModel):
             for value in (self.debt_weight, self.equity_weight)
         ):
             raise ValueError("market policy weights must be between zero and one")
+        weight_methods = {
+            evidence_by_role[role].method for role in ("debt_weight", "equity_weight")
+        }
+        if self.capital_weight_basis == "market_observed" and weight_methods != {
+            "observed_source"
+        }:
+            raise ValueError(
+                "market-observed capital weights require observed-source evidence"
+            )
+        if self.capital_weight_basis == "approved_policy" and weight_methods != {
+            "approved_policy"
+        }:
+            raise ValueError(
+                "approved-policy capital weights require approved-policy evidence"
+            )
         if self.terminal_growth >= Decimal("1"):
             raise ValueError("terminal growth must be below 100 percent")
         return self

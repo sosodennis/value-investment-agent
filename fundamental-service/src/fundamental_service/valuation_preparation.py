@@ -80,6 +80,9 @@ class ApprovedMarketPolicyInputsV1(StrictModel):
     """Explicit, source-bound non-SEC inputs required by FCFF preparation."""
 
     policy_version: str = Field(min_length=1)
+    capital_weight_basis: Literal["market_observed", "approved_policy"] = (
+        "approved_policy"
+    )
     risk_free_rate: Decimal | None = None
     beta: Decimal | None = None
     equity_risk_premium: Decimal | None = None
@@ -88,6 +91,9 @@ class ApprovedMarketPolicyInputsV1(StrictModel):
     equity_weight: Decimal | None = None
     terminal_growth: Decimal | None = None
     evidence: dict[str, TraceV1] = Field(default_factory=dict)
+    evidence_methods: dict[str, Literal["observed_source", "approved_policy"]] = Field(
+        default_factory=dict
+    )
 
     @model_validator(mode="after")
     def evidence_matches_values(self) -> ApprovedMarketPolicyInputsV1:
@@ -109,6 +115,23 @@ class ApprovedMarketPolicyInputsV1(StrictModel):
             raise ValueError(
                 "approved market and policy inputs require source evidence: "
                 + ", ".join(missing)
+            )
+        methods = {
+            field: self.evidence_methods.get(field, "approved_policy")
+            for field in required
+        }
+        weight_methods = {methods[field] for field in ("debt_weight", "equity_weight")}
+        if self.capital_weight_basis == "market_observed" and weight_methods != {
+            "observed_source"
+        }:
+            raise ValueError(
+                "market-observed capital weights require observed-source evidence"
+            )
+        if self.capital_weight_basis == "approved_policy" and weight_methods != {
+            "approved_policy"
+        }:
+            raise ValueError(
+                "approved-policy capital weights require approved-policy evidence"
             )
         if self.debt_weight is not None and self.equity_weight is not None:
             if not all(
@@ -393,7 +416,10 @@ def derive_historical_metrics(
                     "reinvestment_rate",
                     period,
                     (capex - depreciation + delta_working_capital) / nopat,
-                    "(capital_expenditure - depreciation_and_amortization + delta_operating_working_capital) / nopat",
+                    (
+                        "(capital_expenditure - depreciation_and_amortization + "
+                        "delta_operating_working_capital) / nopat"
+                    ),
                     (
                         fields["capital_expenditure"],
                         fields["depreciation_and_amortization"],
@@ -677,7 +703,10 @@ def _transition_filing_evidence(
     if invalid:
         raise PreparationError(
             "TRANSITION_EVIDENCE_INVALID",
-            "transition evidence must be verified, filed, accession-bound, and point-in-time eligible",
+            (
+                "transition evidence must be verified, filed, accession-bound, "
+                "and point-in-time eligible"
+            ),
             missing=tuple(f"filed_operating_evidence:{fact_id}" for fact_id in invalid),
         )
     return tuple(sorted(evidence, key=lambda fact: fact.fact_id))
@@ -952,7 +981,10 @@ def prepare_automatic_valuation(
             expression="service-owned historical metrics and approved policy inputs",
             inputs=tuple(item.fact_id for item in selected.facts),
             description=(
-                "automatic deterministic FCFF preparation with pinned transition filing evidence"
+                (
+                    "automatic deterministic FCFF preparation with pinned "
+                    "transition filing evidence"
+                )
                 if transition_evidence
                 else "automatic deterministic FCFF preparation"
             ),
@@ -1024,7 +1056,10 @@ def prepare_automatic_valuation(
                 f"assumptions.forecast.revenue_growth[{index}]",
                 value,
                 "derived",
-                "mean(historical revenue_growth) * (forecast_periods - index) / forecast_periods",
+                (
+                    "mean(historical revenue_growth) * (forecast_periods - index) "
+                    "/ forecast_periods"
+                ),
                 facts=growth_facts,
                 policy_version=policy_version,
                 as_of=latest_fact_time(growth_facts),
@@ -1068,7 +1103,11 @@ def prepare_automatic_valuation(
             _assumption_evidence(
                 f"assumptions.wacc.{field}",
                 getattr(market_policy, field),
-                "approved_policy",
+                (
+                    "approved_source"
+                    if market_policy.evidence_methods.get(field) == "observed_source"
+                    else "approved_policy"
+                ),
                 "released market policy input",
                 trace=market_policy.evidence[field],
                 policy_version=market_policy.policy_version,
@@ -1098,7 +1137,10 @@ def prepare_automatic_valuation(
             "assumptions.capital_bridge.debt",
             capital.debt,
             "derived",
-            "current_interest_bearing_debt + long_term_interest_bearing_debt + convertible_instruments",
+            (
+                "current_interest_bearing_debt + long_term_interest_bearing_debt "
+                "+ convertible_instruments"
+            ),
             facts=(
                 capital_fact_map["current_interest_bearing_debt"],
                 capital_fact_map["long_term_interest_bearing_debt"],

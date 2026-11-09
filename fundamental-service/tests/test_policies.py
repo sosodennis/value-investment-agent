@@ -16,7 +16,7 @@ from fundamental_service.calibration import (
     IntervalMetricsV1,
     MetricBundleV1,
 )
-from fundamental_service.contracts import QualityStatus
+from fundamental_service.contracts import MarketPolicyInputsV1, QualityStatus
 from fundamental_service.governance import (
     ModelEvidenceArtifactV1,
     ModelInventory,
@@ -76,6 +76,7 @@ def test_initial_fcff_policies_expose_dated_market_inputs_without_forecast_defau
     inputs = policies["fcff_dcf"].market_inputs
     assert inputs is not None
     assert inputs.policy_version == "fcff-market-policy-2025-v1"
+    assert inputs.capital_weight_basis == "approved_policy"
     assert inputs.risk_free_rate == Decimal("0.046")
     assert {item.role for item in inputs.evidence} == {
         "risk_free_rate",
@@ -94,9 +95,25 @@ def test_initial_fcff_policies_expose_dated_market_inputs_without_forecast_defau
         item for item in inputs.evidence if item.role == "risk_free_rate"
     ).source_id == ("fred-observations")
     assert (
+        next(item for item in inputs.evidence if item.role == "risk_free_rate").method
+        == "observed_source"
+    )
+    assert {
+        item.method
+        for item in inputs.evidence
+        if item.role in {"debt_weight", "equity_weight"}
+    } == {"approved_policy"}
+    assert (
         _approved_market_policy(
             policies["fcff_dcf"],
             valuation_timestamp=datetime(2024, 12, 31, tzinfo=timezone.utc),
+        )
+        is None
+    )
+    assert (
+        _approved_market_policy(
+            policies["fcff_dcf"],
+            valuation_timestamp=datetime(2025, 1, 2, tzinfo=timezone.utc),
         )
         is None
     )
@@ -107,6 +124,15 @@ def test_initial_fcff_policies_expose_dated_market_inputs_without_forecast_defau
         )
         is not None
     )
+
+
+def test_market_observed_weight_basis_rejects_policy_weight_evidence():
+    inputs = initial_policy_records()[0].market_inputs
+    assert inputs is not None
+    payload = inputs.model_dump(mode="python")
+    payload["capital_weight_basis"] = "market_observed"
+    with pytest.raises(ValueError, match="market-observed capital weights"):
+        MarketPolicyInputsV1(**payload)
 
 
 def test_expansion_inventory_is_ordered_with_complete_non_placeholder_specs():

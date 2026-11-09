@@ -234,6 +234,15 @@ def test_released_market_policy_prepares_without_caller_assumptions() -> None:
         "1cf8c2d38f773142b58b772bde5028d12f00dfd72bf37b40c2327e15d418ea28",
     )
     assert risk_free.as_of == datetime(2025, 1, 3, tzinfo=UTC)
+    assert risk_free.method == "approved_source"
+    assert (
+        next(
+            item
+            for item in result.assumptions_evidence
+            if item.path == "assumptions.wacc.debt_weight"
+        ).method
+        == "approved_policy"
+    )
 
 
 def test_missing_market_policy_requires_input_without_default_values() -> None:
