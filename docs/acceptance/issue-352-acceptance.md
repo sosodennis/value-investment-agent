@@ -35,6 +35,28 @@ This is a work-in-progress record. It does not mark #352 accepted or verified.
   inputs, release coverage, service-backed success artifact, and full PR/CI,
   merge, exact-commit verification, and issue closure.
 
+## Transition evidence gate checkpoint (2026-11-10)
+
+- This checkpoint is WIP and does not mark #352 accepted or verified.
+- `transition_fcff_dcf` preparation now requires `filed_operating_evidence` to
+  remain bound to a pinned SEC filing source: verified quality, a non-empty
+  accession, matching source accession, an eligible period/as-of timestamp,
+  and the release-selected evidence fact ID. Invalid or absent evidence returns
+  `abstained` with `TRANSITION_EVIDENCE_MISSING` or
+  `TRANSITION_EVIDENCE_INVALID`; narrative evidence is never converted into a
+  numeric model input.
+- A valid transition evidence fact is retained in the prepared input trace so
+  the calculation provenance includes the filing fact ID.
+- `uv run --project fundamental-service pytest
+  fundamental-service/tests/test_valuation_preparation.py -q` — exit 0; 7
+  passed.
+- `uv run --with ruff ruff check --select E,F,I --ignore E501
+  fundamental-service/src/fundamental_service/valuation_preparation.py
+  fundamental-service/tests/test_valuation_preparation.py` — exit 0.
+- Remaining: supported manual override provenance and digest replay, wired
+  point-in-time market/policy inputs, release coverage, service-backed success
+  artifact, and full PR/CI, merge, exact-commit verification, and issue closure.
+
 ## Baseline findings
 
 - Fundamental Service currently selects facts from one immutable snapshot and calculates a caller-complete `ValuationInputV1`. Its facts request selects one point-in-time fact per normalized field; the normal Agent producer requests a narrow set and does not read aligned annual series.

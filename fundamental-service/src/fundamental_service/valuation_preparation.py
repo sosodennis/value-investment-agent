@@ -18,6 +18,7 @@ from .contracts import (
     ForecastAssumptionsV1,
     QualityInputV1,
     QualityStatus,
+    SourceRole,
     SourceSnapshotV1,
     StrictModel,
     TraceV1,
@@ -446,6 +447,41 @@ def _assumption_evidence(
     )
 
 
+def _transition_filing_evidence(
+    facts: Iterable[CanonicalFactV1],
+    *,
+    snapshot: SourceSnapshotV1,
+) -> tuple[CanonicalFactV1, ...]:
+    """Require transition evidence to remain tied to a filed SEC source."""
+
+    evidence = tuple(
+        fact for fact in facts if fact.normalized_field == "filed_operating_evidence"
+    )
+    if not evidence:
+        raise PreparationError(
+            "TRANSITION_EVIDENCE_MISSING",
+            "transition FCFF requires pinned filing operating evidence",
+            missing=("filed_operating_evidence",),
+        )
+    invalid = tuple(
+        fact.fact_id
+        for fact in evidence
+        if fact.source.source_role is not SourceRole.FILING
+        or not fact.accession_number
+        or fact.source.accession_number != fact.accession_number
+        or fact.period_end > snapshot.valuation_timestamp.date()
+        or fact.available_at > snapshot.valuation_timestamp
+        or fact.quality is not QualityStatus.VERIFIED
+    )
+    if invalid:
+        raise PreparationError(
+            "TRANSITION_EVIDENCE_INVALID",
+            "transition evidence must be verified, filed, accession-bound, and point-in-time eligible",
+            missing=tuple(f"filed_operating_evidence:{fact_id}" for fact_id in invalid),
+        )
+    return tuple(sorted(evidence, key=lambda fact: fact.fact_id))
+
+
 def prepare_automatic_valuation(
     facts: Iterable[CanonicalFactV1],
     *,
@@ -481,6 +517,31 @@ def prepare_automatic_valuation(
             facts=selected.facts,
             snapshot=snapshot,
         )
+    transition_evidence: tuple[CanonicalFactV1, ...] = ()
+    if profile.transition_filing_evidence_required:
+        try:
+            transition_evidence = _transition_filing_evidence(
+                selected.facts,
+                snapshot=snapshot,
+            )
+        except PreparationError as error:
+            metrics = HistoricalMetricsV1(
+                profile_id=profile.profile_id,
+                profile_digest=profile.digest,
+                quality_status=QualityStatus.ABSTAIN,
+                issue_codes=(error.code,),
+                missing_evidence=error.missing,
+            )
+            return _blocked_from_metrics(
+                metrics,
+                profile=profile,
+                model_id=model_id,
+                model_version=model_version,
+                policy_id=policy_id,
+                policy_version=policy_version,
+                facts=selected.facts,
+                snapshot=snapshot,
+            )
     try:
         history = resolve_annual_history(
             selected.facts,
@@ -686,7 +747,11 @@ def prepare_automatic_valuation(
         trace=TraceV1(
             expression="service-owned historical metrics and approved policy inputs",
             inputs=tuple(item.fact_id for item in selected.facts),
-            description="automatic deterministic FCFF preparation",
+            description=(
+                "automatic deterministic FCFF preparation with pinned transition filing evidence"
+                if transition_evidence
+                else "automatic deterministic FCFF preparation"
+            ),
         ),
     )
     history_years = tuple(period.fiscal_year for period in history.periods)

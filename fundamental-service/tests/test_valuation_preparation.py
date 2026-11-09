@@ -1,7 +1,13 @@
 from datetime import UTC, datetime
 from decimal import Decimal
 
-from fundamental_service.contracts import IdentityV1, PeriodType, QualityStatus, TraceV1
+from fundamental_service.contracts import (
+    IdentityV1,
+    PeriodType,
+    QualityStatus,
+    SourceRole,
+    TraceV1,
+)
 from fundamental_service.valuation_preparation import (
     ApprovedMarketPolicyInputsV1,
     prepare_automatic_valuation,
@@ -147,7 +153,12 @@ def _market_policy() -> ApprovedMarketPolicyInputsV1:
     )
 
 
-def _prepare(facts: tuple, *, market_policy=None):
+def _prepare(
+    facts: tuple,
+    *,
+    market_policy=None,
+    model_id: str = "fcff_dcf",
+):
     return prepare_automatic_valuation(
         facts,
         snapshot=_snapshot(
@@ -163,8 +174,8 @@ def _prepare(facts: tuple, *, market_policy=None):
             ),
             valuation_timestamp=VALUATION_TIME,
         ),
-        model_id="fcff_dcf",
-        model_version="fcff_dcf-v1",
+        model_id=model_id,
+        model_version=f"{model_id}-v1",
         policy_id="fcff_dcf-us-gaap-public-v1",
         policy_version="fcff_dcf-v1-quality-v1",
         data_release_manifest_digest=RELEASE_DIGEST,
@@ -265,3 +276,44 @@ def test_transition_filing_evidence_can_be_non_numeric_but_remains_release_bound
 
     assert filing.fact_id not in selection.rejected_fact_ids
     assert filing in selection.facts
+
+
+def test_transition_preparation_requires_valid_filed_evidence() -> None:
+    filing = _fact("filed_operating_evidence", 2025, "1").model_copy(
+        update={"value": "filed evidence"}
+    )
+
+    result = _prepare(
+        (*_facts(), filing),
+        market_policy=_market_policy(),
+        model_id="transition_fcff_dcf",
+    )
+
+    assert result.status == "prepared"
+    assert result.input is not None
+    assert filing.fact_id in result.input.assumptions.trace.inputs
+    assert (
+        "pinned transition filing evidence"
+        in result.input.assumptions.trace.description
+    )
+
+
+def test_transition_preparation_abstains_on_unbound_filing_evidence() -> None:
+    filing = _fact("filed_operating_evidence", 2025, "1").model_copy(
+        update={
+            "value": "filed evidence",
+            "source": _fact("filed_operating_evidence", 2025, "1").source.model_copy(
+                update={"source_role": SourceRole.FACTS}
+            ),
+        }
+    )
+
+    result = _prepare(
+        (*_facts(), filing),
+        market_policy=_market_policy(),
+        model_id="transition_fcff_dcf",
+    )
+
+    assert result.status == "abstained"
+    assert result.quality_status is QualityStatus.ABSTAIN
+    assert "TRANSITION_EVIDENCE_INVALID" in result.issue_codes
