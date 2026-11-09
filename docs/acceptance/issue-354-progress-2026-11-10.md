@@ -60,3 +60,41 @@ Validation for this exact commit:
 Next step: rebuild the isolated #354 Fundamental service and rerun the
 browser acceptance to verify that ingestion, preparation review, evidence,
 quality, provenance, and approval are rendered in the Fundamental tab.
+
+## Checkpoint: MSFT service control and parser resource blocker
+
+The isolated Fundamental service was rebuilt from the #354 verification
+configuration with the approved SEC User-Agent already present in the runtime
+environment. The service-owned PostgreSQL database retained the 33 immutable
+`sec-us-gaap-v1-*` mappings provisioned for this issue.
+
+- A signed MSFT identity request for organization
+  `07539eaf-4b6d-46cc-a91b-9763fe182339` returned HTTP 200 and resolved CIK
+  `0000789019`, `MICROSOFT CORP`, US-GAAP/USD, and ticker/share class `MSFT`.
+- A minimal signed producer-shaped ingestion request for the pinned accession
+  `0000950170-24-087843`, required field `revenue`, and mapping
+  `sec-us-gaap-v1-revenue` returned HTTP 200 `status=created` with
+  `quality_status=verified`. The immutable snapshot was
+  `snapshot-98727c1cf8636f4decad0cfe1bb6b3fb` with manifest digest
+  `f40c5a145b601724749d136ca38ac7636dd24dd12cf85cd0915dd8c5088a9619` and
+  correlation `issue-354-msft-ingestion-control-2`.
+- A service-owned multi-field control using the same accession and the
+  8/16/32-field prefixes returned the redacted HTTP 400
+  `invalid_request` response. The exact service logs recorded the same
+  response for correlations `issue-354-msft-prefix-8-20261110`,
+  `issue-354-msft-prefix-16-20261110`, and
+  `issue-354-msft-prefix-32-20261110`.
+- After the bounded multi-field probes, Docker reported
+  `OOMKilled=true` for `value-investment-agent-354-fundamental-fundamental-service-1`.
+  The service was restarted with `docker start` using the existing isolated
+  container configuration and returned to healthy readiness; PostgreSQL and
+  the published mapping records were preserved.
+- No partial snapshot or canonical fact publication was accepted for the
+  failed multi-field request. The normal #354 automatic path therefore still
+  cannot be marked verified because it has not completed preparation, evidence
+  review, approval, and calculation against a full producer-shaped request.
+
+This exposes a new owning-layer blocker: [#365](https://github.com/sosodennis/value-investment-agent/issues/365)
+tracks bounded SEC parser memory/concurrency and a stable typed resource
+failure. #354 remains WIP and open until #365 is resolved, the exact-head
+service-backed replay passes, and the workspace acceptance is rerun.
