@@ -3,7 +3,7 @@
 This record tracks work in progress. It is not an acceptance or `VERIFIED`
 record.
 
-## Current state after #356 merge
+## Prior checkpoint after #356 merge
 
 - Issue: #351, first incomplete issue in the requested sequence; state OPEN.
 - Branch: `codex/issue-351-valuation-evidence`.
@@ -42,13 +42,53 @@ record.
   live SEC submissions request proves endpoint access only; it is not cohort
   or service-ingestion evidence.
 
+## Current state after #359 merge
+
+- Issue #351 remains OPEN and is the first incomplete issue in the requested
+  sequence. Branch: `codex/issue-351-valuation-evidence`.
+- The branch now includes merge checkpoint
+  `7e441d98f38939c57c13442e35e9210f149b1749`, which brings in #359's merged
+  evidence from `main` at `a2956589d4f01fb0754368406c00ac6f6928e568` without
+  rewriting the existing #351 commits.
+- PR #358 remains OPEN as a draft. It targets `main` and references #351.
+  Required checks are running on head `7e441d98f38939c57c13442e35e9210f149b1749`.
+  It does not claim to close #351.
+- Blocker #359 is CLOSED by PR #360 at merge commit
+  `a2956589d4f01fb0754368406c00ac6f6928e568`. Its final report retains the
+  100-issuer denominator, returns `underpowered`, leaves
+  `supported_history_threshold` null, and requires provisional or abstained
+  results. The report hash is
+  `1a3995af98d3fda2166873c25f0ba981d89016ae6f6f98dc4515a077eac41b9f`; the
+  capture manifest hash is
+  `afad3f92f2597383d16afec2cc85850fbf5919106d3cb827a6e8112022836242`.
+- The report's 0/100 revenue coverage counts only
+  `RevenueFromContractWithCustomerExcludingAssessedTax`. A read-only Company
+  Facts request for CIK `0001539778` returned HTTP 200 with response hash
+  `6bfb258021d1976a47e06b42f3bebacbcef28d5b30fb54085a102cd839acd1c1`. The
+  #359 point-in-time audit reports qualifying `us-gaap:Revenues` facts for
+  decision accession `0001477932-16-007985`, where the listed concept has no
+  qualifying facts. This identifies a mapping gap; it does not approve a
+  universal alias or validate the history threshold.
+- `FUNDAMENTAL_SEC_USER_AGENT` is set in the ignored main-checkout `.env`.
+  `.env.example` on the branch and `main` contains only the
+  `contact@example.com` placeholder. The real contact was not printed,
+  committed, or posted to GitHub.
+- New blocker #361 is OPEN and formally blocks #351. It tracks the lack of
+  canonical historical service forecasts and complete out-of-sample labels,
+  plus the need to review the revenue mapping before any threshold decision.
+  Issues #352 through #355 remain OPEN and have not started. #355 remains
+  optional and outside the core valuation dependency path.
+- #351 remains WIP and unverified. The three-of-five rule remains an
+  unvalidated candidate and cannot grant `verified` status. Do not start #352.
+
 ## Current acceptance progress
 
 | Criterion | Evidence | Status |
 | --- | --- | --- |
 | Inventory each required input for both released models. | Section 24.4.4 classifies SEC facts, derived metrics, forecasts, market inputs, policy inputs, capital bridge fields, and optional forward references. | Draft matrix present; final review pending. |
 | Separate computability from evidence quality and define time, freshness, and quality gates. | The matrix keeps period and availability rules, immutable evidence references, versioned freshness policy, and typed degraded, provisional, unsupported, or abstained outcomes. | Draft matrix present; final review pending. |
-| Define a numerical history threshold from representative coverage and chronological OOS evidence. | #356 report SHA-256 `ce5f3f374071c63181dfa6fbd0b5a0501ebb6abd1ba3062ff7e73f0ba92fbc76` reports no supported threshold. The matrix keeps three-of-five unvalidated and forbids it from granting `verified`. Blocker #359 records the missing cohort/OOS work. | NOT MET; #351 remains OPEN and #352 must not start. |
+| Define a numerical history threshold from representative coverage and chronological OOS evidence. | The merged #359 report covers 100 issuer clusters but records 0/100 eligible issuers, 0/100 complete first-subsequent labels, and no historical Fundamental Service forecast accuracy for either model. It returns `underpowered` and keeps `supported_history_threshold` null. The three-of-five rule remains unvalidated. Blocker #361 records the remaining replay dependency. | NOT MET; #351 remains OPEN and #352 must not start. |
+| Resolve how SEC revenue concept coverage maps to the canonical field. | The #359 report counts only `RevenueFromContractWithCustomerExcludingAssessedTax`; its point-in-time audit found `us-gaap:Revenues` facts for the sample decision accession. The matrix now treats this as candidate mapping evidence, not a universal alias. | Source gap identified; reviewed mapping evidence remains outstanding. |
 | Specify the multi-period data contract needed by #352. | The current producer requests point-in-time `revenue`, `operating_income`, `cash`, `debt`, and `diluted_shares`, plus transition filing evidence. The matrix names required annual duration and instant series with source and selection metadata. | Draft contract requirements documented. |
 | Define fallback, editability, and required confirmation. | Source facts and derived history are read-only. Policy-marked assumptions may be overridden with preserved automatic evidence, `ManualProvenance`, a new digest, and caller-owned approval. | Draft policy documented; final review pending. |
 | Keep guidance, analysts, Search, and LLM out of the default path. | The matrix assigns them to an optional reference path; #355 remains independent of the core sequence. | Draft policy documented; final review pending. |
@@ -75,16 +115,31 @@ documentation and the environment example only.
 
 ## Current delivery gate
 
-- #358 is a draft PR. Branch protection requires zero approving reviews; no
-  review was requested or recorded. Required CI passed on
-  `e720005fd8e5a51009a535b6c00a29af27665410`, but that does not satisfy the
-  unresolved numerical-threshold acceptance criterion.
-- #359 is the linked `blocker` issue. #351 cannot be verified or merged and
-  #352 cannot start until representative point-in-time cohort evidence
-  supports the model-specific history decision.
+- #358 remains a draft PR. Merge checkpoint `7e441d98` is pushed. Its required
+  checks were still running when this checkpoint was recorded. No review has
+  been requested or recorded.
+- #359 is closed, but its underpowered result does not satisfy #351's
+  numerical-threshold criterion. Blocker #361 now tracks the missing
+  service-owned historical forecasts, complete labels, and reviewed source
+  mapping. #351 cannot be verified or merged while that criterion remains
+  unmet.
+- #352 cannot start until #351's acceptance criteria pass and its PR merges
+  into `main`.
 - No Docker Compose project was started for this documentation-only slice.
 
-## Verification on latest code checkpoint
+## Verification on merge checkpoint `7e441d98`
+
+Commit `7e441d98f38939c57c13442e35e9210f149b1749` passed the merge-conflict
+check and repository commit hooks. `git diff --cached --check` passed before
+the commit. A read-only Company Facts GET using the local configured
+User-Agent returned HTTP 200 and response SHA-256
+`6bfb258021d1976a47e06b42f3bebacbcef28d5b30fb54085a102cd839acd1c1`.
+
+No unit suite, architecture guard, Docker stack, or service-backed end-to-end
+check has run on this checkpoint. The PR's required GitHub checks were still
+in progress when this record was written. The threshold remains unsupported.
+
+## Verification on prior code checkpoint
 
 Checkpoint `e720005fd8e5a51009a535b6c00a29af27665410` records the WIP
 acceptance state. These checks ran against that exact commit:
