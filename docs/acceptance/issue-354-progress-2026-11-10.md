@@ -122,3 +122,66 @@ facts.
 The 2 GiB memory update was applied only to the running verification container
 and is not a repository fix. It must not be counted as acceptance evidence for
 the delivered commit.
+
+## Checkpoint: terminal degraded rendering and browser acceptance
+
+Checkpoint commit: `f7741fa6` (`fix(#354): render completed degraded fundamental artifacts`).
+
+The service-owned degraded projection is a terminal report outcome. The
+Fundamental tab now keeps its typed failure code, message, retryability, and
+quality issue visible without also showing the `Processing financials…`
+loading state. The regression test covers an artifact that has loaded while
+the workflow status is still `idle`, which is the state observed during the
+service-backed degraded run.
+
+Validation on the exact checkpoint commit:
+
+- `npm test -- --run src/features/workspace/outputs/fundamental-analysis/FundamentalAnalysisOutput.test.tsx src/features/workspace/outputs/fundamental-analysis/FundamentalReviewPanel.test.tsx src/features/workspace/workspace-page.test.tsx src/types/agents/artifact-parsers.test.ts src/types/agents/fundamental-service-facts.test.ts` — exit 0, 5 files and 73 tests passed.
+- `npm run typecheck` — exit 0.
+- `npm run lint` — exit 0.
+- `uv run pytest -q tests/agents/fundamental/test_fundamental_service_client.py tests/agents/fundamental/test_fundamental_service_cutover.py tests/agents/fundamental/test_service_request_producer.py` — exit 0, 48 passed.
+- `uv run --extra dev pytest -q tests/test_contracts.py tests/test_source_acquisition.py` — exit 0, 21 passed.
+- `python3 scripts/architecture_guard.py` — exit 0.
+- `git diff --check` — exit 0.
+- Frontend image build — exit 0; image digest `sha256:6b09f96d028103b8707929724e90e0c32f1a136b6ebae9754b72c0d62aadd9d0`.
+
+Fresh service-backed browser acceptance used `/workspace` at 1280×720 CSS
+pixels (device pixel ratio 2) with the isolated #354 Compose projects. The
+run selected `MSFT` over `MSFT.TO` and completed as:
+
+- thread `thread_1794265183914`
+- run `62449180-9af4-4c41-ad84-cb2bc85b3923`
+- Fundamental artifact `a2b79c8f-f00f-467a-80d5-e3960c1e01de`
+
+The Fundamental Service identity request returned HTTP 200. The existing
+snapshot-only cohort did not contain every required verified fact for the
+automatic valuation request, so ingestion returned HTTP 422
+`REQUIRED_FACTS_UNAVAILABLE`. The run failed closed with no partial snapshot
+or canonical facts published. The Fundamental tab showed `Automatic valuation
+degraded`, the service code and review-required state, and
+`Fundamental facts unavailable`; it did not show a loading state. The Evidence
+inspector opened the persisted artifact and identified the exact thread/run.
+
+The Activity, Technical, News, and Debate tabs remained separate views for the
+same run. Technical rendered its own report; News showed its own unavailable
+state; Debate rendered its own provider-abstained report. The Fundamental
+review/edit/confirmation controls are covered by the focused workspace and
+`FundamentalReviewPanel` tests above; this service-backed browser run is
+explicitly degraded because the existing snapshots are underpowered for the
+full automatic request.
+
+Docker health at browser acceptance:
+
+- Workspace backend `127.0.0.1:18810/health` — HTTP 200.
+- Workspace frontend `127.0.0.1:18811` — healthy container.
+- Fundamental Service `127.0.0.1:18690/readyz` — HTTP 200 with
+  `{"status":"ready","contract_version":"internal.v1"}`.
+- Fundamental PostgreSQL — healthy container.
+
+The isolated backend logs showed the Fundamental identity and ingestion calls
+for this run. Search/LLM failures were isolated to the separate News,
+Technical, and Debate tabs; Fundamental valuation did not use their outputs.
+
+Status: #354 implementation and service-backed degraded acceptance are
+complete on the checkpoint commit. Pull request, required CI/review, merge,
+issue closure, and cleanup remain pending.
