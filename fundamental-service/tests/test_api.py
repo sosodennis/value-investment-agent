@@ -1028,7 +1028,7 @@ def test_validation_error_logs_a_sanitized_field_path(caplog):
     records = [
         record
         for record in caplog.records
-        if record.getMessage() == "fundamental_validation_error"
+        if record.getMessage().startswith("fundamental_validation_error")
     ]
     assert len(records) == 1
     assert records[0].diagnostics[0]["field_path"] == "model_id"

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
@@ -37,6 +38,7 @@ from .serialization import sha256_digest
 from .snapshots import CapturedSource, ContentAddressedStore, SnapshotError
 
 IDENTITY_MAPPING_VERSION = "sec-issuer-identity-v1"
+LOGGER = logging.getLogger("fundamental_service")
 _SUPPORTED_SEC_FILING_FORMS = frozenset({"10-K", "10-K/A", "10-Q", "10-Q/A"})
 
 
@@ -708,7 +710,7 @@ class SecAcquisitionUseCase:
         filing_archive_filename = self._select_filing_archive_filename(
             index_source.content, filing.accession_number
         )
-        mappings = self._resolve_mappings(request)
+        mappings = self._resolve_mappings(request, correlation_id=correlation_id)
         captured_at = datetime.now(UTC)
         preparation = self.ingestion.prepare_filing(
             identity=request.identity,
@@ -831,13 +833,26 @@ class SecAcquisitionUseCase:
         )
 
     def _resolve_mappings(
-        self, request: SecIngestionRequestV1
+        self, request: SecIngestionRequestV1, *, correlation_id: str
     ) -> tuple[CanonicalMappingV1, ...]:
         mappings = []
-        for reference in request.mappings:
+        for index, reference in enumerate(request.mappings):
             try:
                 mapping = self.metadata.get_mapping(reference.decision_id)
             except SnapshotError as error:
+                LOGGER.warning(
+                    "fundamental_mapping_error %s",
+                    json.dumps(
+                        {
+                            "correlation_id": correlation_id,
+                            "error_code": "FACT_MAPPING_UNRESOLVED",
+                            "field_path": f"mappings[{index}]",
+                            "normalized_field": reference.normalized_field,
+                        },
+                        sort_keys=True,
+                        separators=(",", ":"),
+                    ),
+                )
                 raise ServiceError(
                     "FACT_MAPPING_UNRESOLVED",
                     "requested mapping release is unavailable",
@@ -848,6 +863,19 @@ class SecAcquisitionUseCase:
                 mapping.mapping_version != reference.mapping_version
                 or mapping.normalized_field != reference.normalized_field
             ):
+                LOGGER.warning(
+                    "fundamental_mapping_error %s",
+                    json.dumps(
+                        {
+                            "correlation_id": correlation_id,
+                            "error_code": "FACT_MAPPING_UNRESOLVED",
+                            "field_path": f"mappings[{index}]",
+                            "normalized_field": reference.normalized_field,
+                        },
+                        sort_keys=True,
+                        separators=(",", ":"),
+                    ),
+                )
                 raise ServiceError(
                     "FACT_MAPPING_UNRESOLVED",
                     "requested mapping release is unavailable",

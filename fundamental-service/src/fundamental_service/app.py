@@ -115,8 +115,18 @@ def _validation_error(
             }
             for item in error.errors()
         )
+        diagnostic_payload = json.dumps(
+            {
+                "correlation_id": getattr(request.state, "correlation_id", "unknown"),
+                "path": request.url.path,
+                "diagnostics": diagnostics,
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        )
         LOGGER.warning(
-            "fundamental_validation_error",
+            "fundamental_validation_error %s",
+            diagnostic_payload,
             extra={
                 "correlation_id": getattr(request.state, "correlation_id", "unknown"),
                 "path": request.url.path,
