@@ -637,8 +637,26 @@ def apply_manual_override(
         preparation.input.assumptions, path=path, value=value
     )
     updated_input = preparation.input.model_copy(
-        update={"assumptions": assumptions}
+        update={
+            "assumptions": assumptions,
+            "uncertainty": UncertaintyV1(mode="none"),
+            "input_digest": None,
+            "caller_approval": None,
+        }
     ).with_digest()
+    if preparation.input.uncertainty.mode == "monte_carlo":
+        updated_input = updated_input.model_copy(
+            update={
+                "uncertainty": build_default_uncertainty(
+                    updated_input,
+                    historical_metrics=preparation.historical_metrics.metrics,
+                    policy_version=(
+                        preparation.input.uncertainty.policy_version
+                        or DEFAULT_UNCERTAINTY_POLICY_VERSION
+                    ),
+                )
+            }
+        ).with_digest()
     manual_evidence = automatic[0].model_copy(
         update={
             "value": value,

@@ -91,7 +91,10 @@ def with_calculation_result_hash(
 
 
 def calculate(
-    request: ValuationInputV1, *, correlation_id: str = "local"
+    request: ValuationInputV1,
+    *,
+    correlation_id: str = "local",
+    allow_provisional: bool = False,
 ) -> CalculationArtifactV1:
     if (
         request.caller_approval is not None
@@ -111,7 +114,9 @@ def calculate(
         if hasattr(request.quality, "status")
         else QualityStatus(request.quality["status"])
     )
-    if quality_status is not QualityStatus.VERIFIED:
+    if quality_status is not QualityStatus.VERIFIED and not (
+        allow_provisional and quality_status is QualityStatus.PROVISIONAL
+    ):
         raise CalculationRefusal(
             "QUALITY_NOT_VERIFIED", "calculation requires verified quality"
         )
@@ -302,7 +307,7 @@ def calculate(
         contract_version="fundamental.v1",
         calculation_version="calculator-v1",
         calculation_status=CalculationStatus.COMPLETED,
-        quality_status=QualityStatus.VERIFIED,
+        quality_status=quality_status,
         input_digest=input_digest,
         intrinsic_value=equity,
         per_share_value=per_share,

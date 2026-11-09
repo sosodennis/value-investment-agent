@@ -3,6 +3,7 @@ from decimal import Decimal
 import pytest
 from fundamental_service.contracts import (
     DistributionProvenanceV1,
+    QualityStatus,
     UncertaintyV1,
 )
 from fundamental_service.testsupport import make_valuation
@@ -42,12 +43,40 @@ def test_seeded_monte_carlo_reproduces_and_sensitivity_is_explicit():
     first = run_uncertainty(request, monte_carlo=spec, sensitivity=sensitivity)
     second = run_uncertainty(request, monte_carlo=spec, sensitivity=sensitivity)
     assert first.quantiles == second.quantiles
+    assert first.result_hash == second.result_hash
     assert first.valid_samples == 10
     assert (
         first.sensitivity["assumptions.terminal_growth"][0]
         != first.sensitivity["assumptions.terminal_growth"][1]
     )
     assert first.dominant_drivers == ("assumptions.terminal_growth",)
+
+
+def test_invalid_draws_are_accounted_for_and_abstain_explicitly():
+    request = make_valuation().with_digest()
+    spec = MonteCarloRequestV1(
+        uncertainty=UncertaintyV1(
+            mode="monte_carlo",
+            samples=5,
+            seed=1,
+            invalid_draw_policy="abstain",
+            parameters=(
+                {
+                    "path": "assumptions.terminal_growth",
+                    "distribution": "uniform",
+                    "lower": Decimal("0.08"),
+                    "upper": Decimal("0.20"),
+                },
+            ),
+        )
+    )
+
+    report = run_uncertainty(request, monte_carlo=spec)
+
+    assert report.status is QualityStatus.ABSTAIN
+    assert report.valid_samples + report.invalid_samples == report.requested_samples
+    assert report.invalid_samples == 5
+    assert report.invalid_reasons == {"CALCULATION_REFUSAL": 5}
 
 
 def test_monte_carlo_requires_complete_specification():

@@ -81,6 +81,7 @@ from ..uncertainty import (
     SensitivityRequestV1,
     UncertaintyEvidenceV1,
     UncertaintyReportV1,
+    is_service_owned_monte_carlo,
     run_uncertainty,
     validate_uncertainty_controls,
 )
@@ -1562,7 +1563,12 @@ class FundamentalApplication:
                 update={"input_digest": calculation_input.input_digest}
             )
         try:
-            result = calculate(calculation_input, correlation_id=correlation_id)
+            service_owned_uncertainty = is_service_owned_monte_carlo(resolved)
+            result = calculate(
+                calculation_input,
+                correlation_id=correlation_id,
+                allow_provisional=service_owned_uncertainty,
+            )
         except CalculationRefusal as error:
             raise ServiceError(
                 error.code,
@@ -1582,7 +1588,11 @@ class FundamentalApplication:
         if not has_uncertainty:
             return result
         try:
-            uncertainty = run_uncertainty(resolved, base_result=result)
+            uncertainty = run_uncertainty(
+                resolved,
+                base_result=result,
+                allow_provisional=service_owned_uncertainty,
+            )
         except (CalculationRefusal, ValueError) as error:
             raise ServiceError(
                 getattr(error, "code", "uncertainty_invalid"),
