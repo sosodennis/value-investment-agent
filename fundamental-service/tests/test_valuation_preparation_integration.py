@@ -85,17 +85,19 @@ def test_http_prepare_composes_complete_release_and_policy_inputs(tmp_path: Path
         config=OperationsConfig(service_token=TEST_SERVICE_TOKEN),
     )
 
-    response = TestClient(app).post(
+    client = TestClient(app)
+    request_payload = make_internal_envelope(
+        {
+            "contract_version": "fundamental.v1",
+            "snapshot_id": snapshot.snapshot_id,
+            "data_release_manifest_digest": manifest.manifest_digest,
+            "model_id": "fcff_dcf",
+        }
+    )
+    response = client.post(
         "/v1/valuation/prepare",
         headers=auth_headers(),
-        json=make_internal_envelope(
-            {
-                "contract_version": "fundamental.v1",
-                "snapshot_id": snapshot.snapshot_id,
-                "data_release_manifest_digest": manifest.manifest_digest,
-                "model_id": "fcff_dcf",
-            }
-        ),
+        json=request_payload,
     )
 
     assert response.status_code == 200, response.text
@@ -122,3 +124,14 @@ def test_http_prepare_composes_complete_release_and_policy_inputs(tmp_path: Path
         == "approved_policy"
     )
     assert len(result["preparation_digest"]) == 64
+
+    repeat = client.post(
+        "/v1/valuation/prepare",
+        headers=auth_headers(),
+        json=request_payload,
+    )
+    assert repeat.status_code == 200, repeat.text
+    repeat_result = repeat.json()["result"]
+    assert repeat_result["status"] == "prepared"
+    assert repeat_result["quality_status"] == "provisional"
+    assert repeat_result["preparation_digest"] == result["preparation_digest"]
