@@ -11,6 +11,8 @@ from fundamental_service.uncertainty import (
     SensitivityRequestV1,
     run_uncertainty,
 )
+from fundamental_service.uncertainty_policy import build_default_uncertainty
+from fundamental_service.valuation_preparation import HistoricalMetricV1
 
 
 def test_seeded_monte_carlo_reproduces_and_sensitivity_is_explicit():
@@ -85,6 +87,68 @@ def test_versioned_monte_carlo_requires_parameter_provenance():
                 },
             ),
         )
+
+
+def test_default_policy_uses_empirical_history_and_policy_prior_with_stable_seed():
+    request = make_valuation()
+    metrics = tuple(
+        HistoricalMetricV1(
+            metric_id=metric_id,
+            fiscal_year=year,
+            value=Decimal(value),
+            unit="ratio",
+            formula="fixture",
+            fact_ids=(f"{metric_id}-{year}",),
+            period_end=f"{year}-12-31",
+        )
+        for metric_id, count in (
+            ("revenue_growth", 3),
+            ("operating_margin", 4),
+            ("reinvestment_rate", 3),
+        )
+        for year, value in zip(
+            range(2021, 2021 + count),
+            ("0.03", "0.05", "0.07", "0.08"),
+            strict=False,
+        )
+    )
+    first = build_default_uncertainty(request, historical_metrics=metrics)
+    second = build_default_uncertainty(request, historical_metrics=metrics)
+
+    assert first == second
+    assert first.samples == 256
+    assert first.invalid_draw_policy == "skip"
+    assert first.policy_version == "fcff-monte-carlo-policy-v1"
+    assert first.seed is not None
+    assert all(item.provenance is not None for item in first.parameters)
+    assert [item.provenance.source_kind for item in first.parameters] == [
+        "empirical_history",
+        "empirical_history",
+        "empirical_history",
+        "policy_prior",
+    ]
+    assert first.parameters[0].provenance.historical_periods == (2021, 2022, 2023)
+
+
+def test_default_policy_falls_back_to_explicit_prior_for_short_history():
+    request = make_valuation()
+    metrics = (
+        HistoricalMetricV1(
+            metric_id="revenue_growth",
+            fiscal_year=2025,
+            value=Decimal("0.05"),
+            unit="ratio",
+            formula="fixture",
+            fact_ids=("revenue-growth-2025",),
+            period_end="2025-12-31",
+        ),
+    )
+    spec = build_default_uncertainty(request, historical_metrics=metrics)
+
+    assert all(
+        item.provenance.source_kind == "policy_prior" for item in spec.parameters
+    )
+    assert all(item.provenance.policy_version for item in spec.parameters)
 
 
 def test_scenario_mode_rejects_missing_or_ignored_controls():

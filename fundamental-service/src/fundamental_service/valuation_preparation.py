@@ -29,6 +29,10 @@ from .contracts import (
     WaccAssumptionsV1,
 )
 from .serialization import sha256_digest
+from .uncertainty_policy import (
+    DEFAULT_UNCERTAINTY_POLICY_VERSION,
+    build_default_uncertainty,
+)
 from .valuation_requirements import (
     ValuationRequirementsProfileV1,
     select_released_facts,
@@ -1026,6 +1030,15 @@ def prepare_automatic_valuation(
         model_id=model_id,
         model_version=model_version,
         policy_id=policy_id,
+    ).with_digest()
+    request = request.model_copy(
+        update={
+            "uncertainty": build_default_uncertainty(
+                request,
+                historical_metrics=metrics.metrics,
+                policy_version=DEFAULT_UNCERTAINTY_POLICY_VERSION,
+            )
+        }
     ).with_digest()
     fact_by_id = {fact.fact_id: fact for fact in selected.facts}
 
