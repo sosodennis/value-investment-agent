@@ -13,6 +13,28 @@ This is a work-in-progress record. It does not mark #352 accepted or verified.
 - #353, #354, and #355 remain OPEN and are not part of this checkpoint.
 - #339 remains OPEN and owns SEC readiness/ingestion behavior. #352 must consume its pinned snapshot contract rather than duplicate acquisition. #350 remains an open blocker for an organization-owned full Agent pipeline; it does not make Search or LLM a dependency of this service path. #361 is the post-#352 replay follow-up.
 
+## Profile-driven SEC request checkpoint (2026-11-10)
+
+- This checkpoint is WIP and does not mark #352 accepted or verified.
+- The Agent Core SEC acquisition request now carries the complete released FCFF
+  evidence profile: all annual duration roles, annual period-end instant roles,
+  point-in-time capital-bridge roles, and `filed_operating_evidence` for
+  `transition_fcff_dcf`. The same complete role set is retained in the snapshot
+  selector so preparation cannot fall back to the former five-field request.
+- Standard and transition model payloads are covered separately; producer tests
+  assert the exact role ordering and the transition-only evidence addition.
+- `uv run --project finance-agent-core pytest
+  finance-agent-core/tests/agents/fundamental/test_service_request_producer.py -q`
+  — exit 0; 10 passed.
+- `uv run --project finance-agent-core ruff check
+  finance-agent-core/src/agents/fundamental/application/workflow_orchestrator/services/service_request_producer.py
+  finance-agent-core/tests/agents/fundamental/test_service_request_producer.py`
+  — exit 0.
+- Remaining: service-side transition evidence quality/use gate, supported manual
+  override provenance and digest replay, wired point-in-time market/policy
+  inputs, release coverage, service-backed success artifact, and full PR/CI,
+  merge, exact-commit verification, and issue closure.
+
 ## Baseline findings
 
 - Fundamental Service currently selects facts from one immutable snapshot and calculates a caller-complete `ValuationInputV1`. Its facts request selects one point-in-time fact per normalized field; the normal Agent producer requests a narrow set and does not read aligned annual series.

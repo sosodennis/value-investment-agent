@@ -34,14 +34,50 @@ _MODEL_VERSION = {
     "fcff_dcf": "fcff_dcf-v1",
     "transition_fcff_dcf": "transition_fcff_dcf-v1",
 }
-_BASE_REQUIRED_FIELDS = (
+_ANNUAL_DURATION_FIELDS = (
     "revenue",
+    "cost_of_revenue",
     "operating_income",
-    "cash",
-    "debt",
-    "diluted_shares",
+    "income_before_tax",
+    "income_tax_expense",
+    "net_income",
+    "depreciation_and_amortization",
+    "capital_expenditure",
+    "operating_lease_cost",
+    "finance_lease_cost",
+    "stock_based_compensation",
+    "basic_weighted_average_shares",
+    "diluted_weighted_average_shares",
 )
-_TRANSITION_REQUIRED_FIELDS = _BASE_REQUIRED_FIELDS + ("filed_operating_evidence",)
+_ANNUAL_INSTANT_FIELDS = (
+    "operating_current_receivables",
+    "inventory",
+    "contract_assets",
+    "operating_current_payables",
+    "accrued_operating_liabilities",
+    "deferred_revenue",
+)
+_POINT_IN_TIME_FACT_FIELDS = (
+    "cash_and_equivalents",
+    "current_interest_bearing_debt",
+    "long_term_interest_bearing_debt",
+    "current_operating_lease_liabilities",
+    "long_term_operating_lease_liabilities",
+    "current_finance_lease_liabilities",
+    "long_term_finance_lease_liabilities",
+    "preferred_claims",
+    "noncontrolling_interests",
+    "convertible_instruments",
+    "common_shares_outstanding",
+    "dilutive_instruments",
+    "other_share_classes",
+)
+_BASE_REQUIRED_FIELDS = (
+    *_ANNUAL_DURATION_FIELDS,
+    *_ANNUAL_INSTANT_FIELDS,
+    *_POINT_IN_TIME_FACT_FIELDS,
+)
+_TRANSITION_REQUIRED_FIELDS = (*_BASE_REQUIRED_FIELDS, "filed_operating_evidence")
 _INGESTION_POLICY = "sec-pit-v1"
 _SNAPSHOT_POLICY = "pit-v1"
 _DATA_RELEASE_PROFILE_ID = "sec-public-pit-v1"

@@ -283,10 +283,37 @@ async def test_producer_resolves_identity_then_ingests_and_pins_request() -> Non
     assert ingestion_payload["ticker"] == "AAPL"
     assert ingestion_payload["required_fields"] == [
         "revenue",
+        "cost_of_revenue",
         "operating_income",
-        "cash",
-        "debt",
-        "diluted_shares",
+        "income_before_tax",
+        "income_tax_expense",
+        "net_income",
+        "depreciation_and_amortization",
+        "capital_expenditure",
+        "operating_lease_cost",
+        "finance_lease_cost",
+        "stock_based_compensation",
+        "basic_weighted_average_shares",
+        "diluted_weighted_average_shares",
+        "operating_current_receivables",
+        "inventory",
+        "contract_assets",
+        "operating_current_payables",
+        "accrued_operating_liabilities",
+        "deferred_revenue",
+        "cash_and_equivalents",
+        "current_interest_bearing_debt",
+        "long_term_interest_bearing_debt",
+        "current_operating_lease_liabilities",
+        "long_term_operating_lease_liabilities",
+        "current_finance_lease_liabilities",
+        "long_term_finance_lease_liabilities",
+        "preferred_claims",
+        "noncontrolling_interests",
+        "convertible_instruments",
+        "common_shares_outstanding",
+        "dilutive_instruments",
+        "other_share_classes",
     ]
     assert prepared.snapshot_selector["identity"] == prepared.identity
     assert prepared.snapshot_selector["release_profile_id"] == "sec-public-pit-v1"
@@ -343,6 +370,23 @@ async def test_producer_enriches_compact_caller_request_without_inventing_inputs
         "resolve_snapshot",
         "prepare_valuation",
     ]
+
+
+@pytest.mark.asyncio
+async def test_transition_request_adds_filed_evidence_to_complete_profile() -> None:
+    client = _Client(ingestion=_ingestion())
+
+    await prepare_service_valuation_request(
+        _state(request=_compact_request(), model_type="dcf_growth"),
+        client=client,
+        principal=_principal(),
+        correlation_id="correlation-1",
+        deadline_at=datetime(2026, 11, 7, tzinfo=UTC),
+    )
+
+    ingestion_payload = client.calls[1][1]
+    assert ingestion_payload["required_fields"][-1] == "filed_operating_evidence"
+    assert len(ingestion_payload["required_fields"]) == 33
 
 
 @pytest.mark.asyncio
@@ -443,10 +487,37 @@ async def test_facts_only_projection_uses_base_evidence_for_growth_model() -> No
     assert prepared.valuation_request is None
     assert prepared.snapshot_selector["required_fields"] == [
         "revenue",
+        "cost_of_revenue",
         "operating_income",
-        "cash",
-        "debt",
-        "diluted_shares",
+        "income_before_tax",
+        "income_tax_expense",
+        "net_income",
+        "depreciation_and_amortization",
+        "capital_expenditure",
+        "operating_lease_cost",
+        "finance_lease_cost",
+        "stock_based_compensation",
+        "basic_weighted_average_shares",
+        "diluted_weighted_average_shares",
+        "operating_current_receivables",
+        "inventory",
+        "contract_assets",
+        "operating_current_payables",
+        "accrued_operating_liabilities",
+        "deferred_revenue",
+        "cash_and_equivalents",
+        "current_interest_bearing_debt",
+        "long_term_interest_bearing_debt",
+        "current_operating_lease_liabilities",
+        "long_term_operating_lease_liabilities",
+        "current_finance_lease_liabilities",
+        "long_term_finance_lease_liabilities",
+        "preferred_claims",
+        "noncontrolling_interests",
+        "convertible_instruments",
+        "common_shares_outstanding",
+        "dilutive_instruments",
+        "other_share_classes",
     ]
     assert [operation for operation, _ in client.calls] == ["resolve_identity"]
 
