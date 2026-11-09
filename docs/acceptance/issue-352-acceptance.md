@@ -7,6 +7,7 @@ This is a work-in-progress record. It does not mark #352 accepted or verified.
 - Issue: #352, the first incomplete issue in the requested sequence; OPEN.
 - Branch: `codex/issue-352-auto-valuation` in its dedicated worktree.
 - Baseline: `f250e4d3810feb7db342199874efe222500a79e0`, equal to `origin/main`.
+- Latest branch checkpoint before this record: `46806aa3c08cd1a36f20b59fac91dfc90bc4db48` (documentation WIP; not accepted).
 - Latest code checkpoint: `13ae21d178aad4650bc0e54e324c8662d85c71bb` (WIP; not accepted).
 - #351: CLOSED by merged PR #358 at the baseline commit. Its supported history threshold remains null; the three-of-five candidate can produce at most a provisional result.
 - #353, #354, and #355 remain OPEN and are not part of this checkpoint.
@@ -53,9 +54,32 @@ This is a work-in-progress record. It does not mark #352 accepted or verified.
 - `LLM_PROVIDER_ENCRYPTION_KEY=issue352-config-check docker compose -p value-investment-agent-352-auto-valuation config --quiet` — exit 0; Compose parsing only, with an unset `FRED_API_KEY` warning. No containers were started.
 - Remaining: connect multi-period SEC facts retrieval and release pinning; implement metric/formula provenance and service-owned assumption composition; wire all in-repository callers; exercise Docker health and the real service path. These tests use controlled fixtures and do not establish SEC/provider coverage.
 
+## Contract design adjudication (WIP)
+
+The cross-judge selected Candidate A as the contract base (23/25) and Candidate B as the source for exact fact-ID retrieval and incremental migration discipline (20/25). This is a design decision for #352, not an acceptance result or an API name/signature commitment.
+
+- Fundamental Service owns one valuation-evidence preparation operation. Agent Core supplies identity, valuation-time intent, released-model intent, and the pinned snapshot/release reference; it does not choose field lists, fiscal windows, mappings, or conflict outcomes.
+- A versioned requirements profile owns required fact roles, mappings, annual-period rules, unit/currency checks, criticality, and the current unvalidated threshold state. Its digest is included in the evidence/replay digest.
+- The service reads exact fact IDs declared by the pinned snapshot/release manifest and validates issuer, release binding, digest, source/fact availability, and as-of time. Annual derivations must include duration facts and the opening/closing instant roles needed to support reinvestment and capital-bridge calculations.
+- Return typed partial evidence with machine-readable missing, stale, conflict, structural-break, or unsupported reasons. Keep evidence quality separate from validation maturity; with `supported_history_threshold` null, a candidate three-of-five history can be no better than `provisional`.
+- The current `resolve_annual_history` function is an interim pure selector. Its caller-supplied field lists must not become a second public preparation path; make selection profile-driven behind the canonical service operation as the contract is implemented.
+- Reuse exact-ID reads internally, but migrate internal callers and tests together to the new pre-release contract. Do not add compatibility aliases, API upgrades, or a parallel legacy field-selection path. Keep any display-history branch out unless an existing facts-only caller needs it.
+- Verify active release coverage for each required annual duration and opening/closing instant fact. A missing release fact cannot be manufactured by the contract: return the defined degraded/abstained outcome and record a blocker in the owning layer if the shared release contract is inadequate.
+- Search, LLM, company guidance, analyst estimates, and current-period placeholders remain outside the default path.
+
+## Verification on contract adjudication checkpoint
+
+The checks below ran against code checkpoint `46806aa3c08cd1a36f20b59fac91dfc90bc4db48`; this record adds no executable code.
+
+- `uv run --extra dev --project fundamental-service pytest fundamental-service/tests/test_annual_history.py fundamental-service/tests/test_fiscal_periods.py -q` — exit 0; 9 passed.
+- `cd fundamental-service && uv run --with ruff ruff check src/fundamental_service/annual_history.py tests/test_annual_history.py` — exit 0.
+- `git diff HEAD^ --check` — exit 0 before this documentation update.
+- An initial Ruff invocation used the service's `dev` extra and exited 2 because Ruff is not declared there; the corrected `uv run --with ruff` invocation passed.
+- Docker and service-backed acceptance were not run for this design-record checkpoint. No #352 Compose containers were started.
+
 ## Next step
 
-Extend the canonical SEC read contract to return the required aligned multi-period facts from the pinned snapshot, without duplicating #339 acquisition. Add service boundary tests for fact IDs, source/available-at filtering, and period alignment. Recheck Compose ports immediately before any stack startup. Each later checkpoint must name its exact commit, commands and results, remaining criteria, and next step.
+Implement the release-bound requirements profile and exact-ID read path inside Fundamental Service, then prove active-release coverage for duration, opening, and closing facts before wiring metric derivation and automatic preparation. Extend the canonical SEC read contract without duplicating #339 acquisition, add service boundary tests for fact IDs/source availability/period alignment, and recheck Compose ports before startup. Keep selector tests as unit evidence only; service-backed acceptance and the remaining #352 criteria are pending. Each later checkpoint must name its exact commit, commands and results, remaining criteria, and next step.
 
 ## Canonical service boundary (WIP)
 
