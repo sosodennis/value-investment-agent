@@ -11,7 +11,10 @@ record.
   `6ed0031f38b05740ae2fb47b7fbfe607963d92fa` into the existing branch without
   rewriting checkpoints `c109ae88e22937c134267c5dcd002b65074e90dc` and
   `df406030c485274146035bb2e7d5668b2badb977`.
-- Pull request: none. No CI run covers the current branch.
+- Pull request: #358 is OPEN as a draft and references #351 and blocker #359.
+  Its current pre-checkpoint head is
+  `904a8783a528b4531a9195293429f36783077a5e`; CI passed on that head. The
+  draft no longer claims to close #351.
 - #356: closed by PR #357. The accepted report SHA-256 is
   `ce5f3f374071c63181dfa6fbd0b5a0501ebb6abd1ba3062ff7e73f0ba92fbc76`.
   It reports three primary issuer clusters, zero next-original-filing pairs,
@@ -24,14 +27,19 @@ record.
   Issues #352 through #355 are open and have not started. #352 depends on
   #351; #353 depends on #351 and #352; #354 depends on #352 and #353. #355 is
   optional and is not a core valuation dependency.
-- GitHub still lists #356 in #351's `blockedBy` relation, but #356 is CLOSED.
-  No open PR or active CI run exists for #351.
+- #356 is CLOSED and remains in #351's `blockedBy` relation. New blocker #359
+  is OPEN and linked as blocking #351. Its scope is representative,
+  survivorship-aware SEC cohort evidence and model-specific chronological OOS
+  thresholds. This is required because #351's numerical-threshold criterion
+  is stricter than #356's accepted underpowered-report alternative.
 - The root `.env` contains a contact-like SEC User-Agent value and is ignored
   by Git. `.env.example` now documents the required variable with a
   non-operational placeholder. The real contact value stays local and is not
   copied into the tracked example.
-- #351 remains WIP. The three-of-five history rule is not a verified
-  threshold, and this matrix does not claim otherwise.
+- #351 remains WIP and unverified. The three-of-five history rule is not a
+  verified threshold, and the matrix does not claim otherwise. The single
+  live SEC submissions request proves endpoint access only; it is not cohort
+  or service-ingestion evidence.
 
 ## Current acceptance progress
 
@@ -39,7 +47,7 @@ record.
 | --- | --- | --- |
 | Inventory each required input for both released models. | Section 24.4.4 classifies SEC facts, derived metrics, forecasts, market inputs, policy inputs, capital bridge fields, and optional forward references. | Draft matrix present; final review pending. |
 | Separate computability from evidence quality and define time, freshness, and quality gates. | The matrix keeps period and availability rules, immutable evidence references, versioned freshness policy, and typed degraded, provisional, unsupported, or abstained outcomes. | Draft matrix present; final review pending. |
-| Define a numerical history threshold from representative coverage and chronological OOS evidence. | #356 report SHA-256 `ce5f3f374071c63181dfa6fbd0b5a0501ebb6abd1ba3062ff7e73f0ba92fbc76` reports no supported threshold. The matrix keeps three-of-five unvalidated and forbids it from granting `verified`. | Conservative outcome documented; no validated threshold exists. |
+| Define a numerical history threshold from representative coverage and chronological OOS evidence. | #356 report SHA-256 `ce5f3f374071c63181dfa6fbd0b5a0501ebb6abd1ba3062ff7e73f0ba92fbc76` reports no supported threshold. The matrix keeps three-of-five unvalidated and forbids it from granting `verified`. Blocker #359 records the missing cohort/OOS work. | NOT MET; #351 remains OPEN and #352 must not start. |
 | Specify the multi-period data contract needed by #352. | The current producer requests point-in-time `revenue`, `operating_income`, `cash`, `debt`, and `diluted_shares`, plus transition filing evidence. The matrix names required annual duration and instant series with source and selection metadata. | Draft contract requirements documented. |
 | Define fallback, editability, and required confirmation. | Source facts and derived history are read-only. Policy-marked assumptions may be overridden with preserved automatic evidence, `ManualProvenance`, a new digest, and caller-owned approval. | Draft policy documented; final review pending. |
 | Keep guidance, analysts, Search, and LLM out of the default path. | The matrix assigns them to an optional reference path; #355 remains independent of the core sequence. | Draft policy documented; final review pending. |
@@ -63,6 +71,17 @@ submissions endpoint. It is one request, not a representative history cohort.
 The #356 threshold result remains underpowered. No Docker service stack or
 service-backed end-to-end request was run because this checkpoint changes
 documentation and the environment example only.
+
+## Current delivery gate
+
+- #358 is a draft PR. Branch protection requires zero approving reviews; no
+  review was requested or recorded. Required CI passed on
+  `904a8783a528b4531a9195293429f36783077a5e`, but that does not satisfy the
+  unresolved numerical-threshold acceptance criterion.
+- #359 is the linked `blocker` issue. #351 cannot be verified or merged and
+  #352 cannot start until representative point-in-time cohort evidence
+  supports the model-specific history decision.
+- No Docker Compose project was started for this documentation-only slice.
 
 ## Previous checkpoint before #356 merged
 
