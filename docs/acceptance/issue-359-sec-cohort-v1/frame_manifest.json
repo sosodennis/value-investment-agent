@@ -1,0 +1,53 @@
+{
+  "captured_at": "2026-11-09T07:02:12.713448Z",
+  "schema_version": "issue-359-sec-frame-snapshot-v1",
+  "sources": [
+    {
+      "http_status": 200,
+      "response_bytes": 27657710,
+      "response_sha256": "43ccb67ed90ad4229b02b99094846a291c6d1672eb25a1ee89dcb0636c2a264e",
+      "selection": "preserve SEC header and every original 10-K row from the 2016 Q1 master index",
+      "source_id": "sec-2016q1-master-index",
+      "stored_snapshot": {
+        "path": "docs/acceptance/issue-359-sec-cohort-v1/frame/master-10k-2016q1.idx.gz",
+        "stored_bytes": 129471,
+        "stored_sha256": "a0178098ef3582b6b94d56b7f356bc67e406121b0697b92e8f81fb837440deda",
+        "uncompressed_bytes": 505984,
+        "uncompressed_sha256": "96b146052dd02ea379b175e29851a5c42223df63918dfa81615e063071480744"
+      },
+      "url": "https://www.sec.gov/Archives/edgar/full-index/2016/QTR1/master.idx"
+    },
+    {
+      "http_status": 200,
+      "member": "sub.txt",
+      "member_bytes": 1918003,
+      "member_sha256": "1daa8c5589b4b7679ec9610e5e24dba0f582b2d186143186de91118dccbf9d9d",
+      "response_bytes": 95470843,
+      "response_sha256": "5c89a6badede1b47ab540913c7484795c7fc4c2a4672ac601b34b8c0afe5a698",
+      "selection": {
+        "columns": [
+          "adsh",
+          "cik",
+          "name",
+          "sic",
+          "countryinc",
+          "form",
+          "filed",
+          "period",
+          "accepted"
+        ],
+        "encoding": "normalized UTF-8 TSV from SEC Latin-1 member",
+        "rows": "form=10-K and filed in 2016 Q1"
+      },
+      "source_id": "sec-2016q1-submissions",
+      "stored_snapshot": {
+        "path": "docs/acceptance/issue-359-sec-cohort-v1/frame/sec-sub-10k-2016q1.tsv.gz",
+        "stored_bytes": 120531,
+        "stored_sha256": "f58863e41e1a0c75738c69fe9ca621e00ef15736d4984292e81a20203713a21b",
+        "uncompressed_bytes": 470999,
+        "uncompressed_sha256": "bd445839cdf35f7c8b21ae77b626808a8debcccf2f35e53ac79e76df12e4317b"
+      },
+      "url": "https://www.sec.gov/files/dera/data/financial-statement-data-sets/2016q1.zip"
+    }
+  ]
+}
