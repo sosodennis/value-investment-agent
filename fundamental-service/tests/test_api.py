@@ -98,7 +98,12 @@ class _SnapshotRepository:
             snapshot_id="snapshot-1",
             identity=valuation.identity,
             valuation_timestamp=valuation.valuation_context.valuation_timestamp,
-            source_records=(SimpleNamespace(content_hash="a" * 64),),
+            source_records=(
+                SimpleNamespace(
+                    content_hash="a" * 64,
+                    available_at=datetime(2025, 1, 1, tzinfo=UTC),
+                ),
+            ),
             manifest_digest="b" * 64,
             policy_version="source-policy-v1",
             coverage_status=QualityStatus.VERIFIED,
@@ -1652,6 +1657,113 @@ def test_facts_calculation_evidence_and_replay_keep_the_pinned_release(
     )
     assert replay.status == "match"
     assert replay.dependency_versions["data_release"] == manifest.manifest_digest
+
+
+def test_valuation_evidence_read_uses_profile_roles_and_abstains_on_missing_facts(
+    tmp_path: Path,
+):
+    snapshot = _SnapshotRepository().snapshot
+    fact = _canonical_fact("fact-revenue", "revenue")
+    manifest = _release_manifest_for(snapshot, (fact,))
+    metadata = SimpleNamespace(
+        get_data_release_manifest=lambda digest: (
+            manifest if digest == manifest.manifest_digest else None
+        )
+    )
+    app = create_app(
+        snapshot_repository=_SnapshotRepository(),
+        artifact_store=ArtifactStore(tmp_path / "artifacts"),
+        content_store=FilesystemContentStore(tmp_path / "content"),
+        fact_repository=_CanonicalFactRepository(),
+        metadata_store=metadata,
+        config=OperationsConfig(service_token=TEST_SERVICE_TOKEN),
+    )
+
+    response = TestClient(app).post(
+        "/v1/valuation/evidence/facts",
+        headers=auth_headers(),
+        json=make_internal_envelope(
+            {
+                "contract_version": "fundamental.v1",
+                "snapshot_id": snapshot.snapshot_id,
+                "data_release_manifest_digest": manifest.manifest_digest,
+                "model_id": "fcff_dcf",
+            }
+        ),
+    )
+
+    assert response.status_code == 200, response.text
+    result = response.json()["result"]
+    assert result["quality_status"] == "abstain"
+    assert result["facts"][0]["fact_id"] == fact.fact_id
+    assert "cash_and_equivalents" in result["missing_fields"]
+    assert "DATA_RELEASE_FIELDS_UNAVAILABLE" in result["issue_codes"]
+    assert result["profile_id"] == "fcff-valuation-requirements-v1"
+
+    preparation = TestClient(app).post(
+        "/v1/valuation/prepare",
+        headers=auth_headers(),
+        json=make_internal_envelope(
+            {
+                "contract_version": "fundamental.v1",
+                "snapshot_id": snapshot.snapshot_id,
+                "data_release_manifest_digest": manifest.manifest_digest,
+                "model_id": "fcff_dcf",
+            }
+        ),
+    )
+
+    assert preparation.status_code == 200, preparation.text
+    preparation_result = preparation.json()["result"]
+    assert preparation_result["status"] == "abstained"
+    assert preparation_result["quality_status"] == "abstain"
+    assert preparation_result["input"] is None
+    assert len(preparation_result["preparation_digest"]) == 64
+    operation = app.openapi()["paths"]["/v1/valuation/prepare"]["post"]
+    assert operation["requestBody"]["content"]["application/json"]["schema"][
+        "$ref"
+    ].endswith("/FundamentalValuationPreparationRequestEnvelopeV1")
+    assert "AutomaticValuationPreparationV1" in str(operation["responses"]["200"])
+
+
+def test_valuation_evidence_read_rejects_a_fact_digest_mismatch(tmp_path: Path):
+    snapshot = _SnapshotRepository().snapshot
+    fact = _canonical_fact("fact-revenue", "revenue")
+    manifest = _release_manifest_for(snapshot, (fact,))
+    metadata = SimpleNamespace(
+        get_data_release_manifest=lambda digest: (
+            manifest if digest == manifest.manifest_digest else None
+        )
+    )
+
+    class MismatchingFactRepository(_CanonicalFactRepository):
+        def get(self, fact_id: str):
+            return super().get(fact_id).model_copy(update={"value": Decimal("101")})
+
+    app = create_app(
+        snapshot_repository=_SnapshotRepository(),
+        artifact_store=ArtifactStore(tmp_path / "artifacts"),
+        content_store=FilesystemContentStore(tmp_path / "content"),
+        fact_repository=MismatchingFactRepository(),
+        metadata_store=metadata,
+        config=OperationsConfig(service_token=TEST_SERVICE_TOKEN),
+    )
+
+    response = TestClient(app).post(
+        "/v1/valuation/evidence/facts",
+        headers=auth_headers(),
+        json=make_internal_envelope(
+            {
+                "contract_version": "fundamental.v1",
+                "snapshot_id": snapshot.snapshot_id,
+                "data_release_manifest_digest": manifest.manifest_digest,
+                "model_id": "fcff_dcf",
+            }
+        ),
+    )
+
+    assert response.status_code == 409, response.text
+    assert response.json()["error"]["code"] == "DATA_RELEASE_FACT_MISMATCH"
 
 
 def test_snapshot_resolution_cache_isolated_by_active_release_dependencies():

@@ -24,6 +24,7 @@ from src.agents.fundamental.application.workflow_orchestrator.state_readers impo
 from src.agents.fundamental.interface.fundamental_service_contracts import (
     FundamentalFactsReadResultV1,
     FundamentalServiceResponseV1,
+    FundamentalValuationEvidenceReadResultV1,
 )
 from src.agents.fundamental.interface.request_contracts import (
     FundamentalRequestTimingV1,
@@ -577,6 +578,7 @@ def _approval_request(
     input_digest: str,
     quality_status: str,
     validation_result: Mapping[str, object],
+    automatic_preparation: Mapping[str, object] | None = None,
 ) -> JSONObject:
     issues = validation_result.get("issue_codes")
     issue_codes = (
@@ -592,7 +594,7 @@ def _approval_request(
     )
     assumptions = input_payload.get("assumptions")
     uncertainty = input_payload.get("uncertainty")
-    return {
+    request: JSONObject = {
         "type": "valuation_approval",
         "contract_version": "v1",
         "ticker": _ticker_from_input(input_payload),
@@ -612,6 +614,11 @@ def _approval_request(
         },
         "audit_messages": issue_codes + missing_evidence,
     }
+    if automatic_preparation is not None:
+        parameters = request["parameters"]
+        if isinstance(parameters, dict):
+            parameters["automatic_preparation"] = dict(automatic_preparation)
+    return request
 
 
 def _ticker_from_input(input_payload: Mapping[str, object]) -> str:
@@ -813,6 +820,67 @@ def _facts_projection(
         )
     projection = result.model_dump(mode="json")
     projection["fact_ids"] = list(actual_fact_ids)
+    return projection
+
+
+def _valuation_evidence_projection(
+    result: FundamentalValuationEvidenceReadResultV1,
+    *,
+    expected_snapshot_id: str,
+    expected_release_digest: str,
+    expected_identity: Mapping[str, object],
+    expected_model_id: str,
+    expected_fact_ids: tuple[str, ...],
+) -> JSONObject:
+    """Project release-bound evidence without selecting facts in Agent Core."""
+
+    actual_fact_ids = tuple(fact.fact_id for fact in result.facts)
+    if (
+        result.snapshot_id != expected_snapshot_id
+        or result.data_release_manifest_digest != expected_release_digest
+        or result.model_id != expected_model_id
+        or not _payload_equal(
+            result.identity.model_dump(mode="json"), expected_identity
+        )
+        or len(actual_fact_ids) != len(set(actual_fact_ids))
+        or not set(expected_fact_ids).issubset(actual_fact_ids)
+    ):
+        raise FundamentalServiceFailure(
+            "UPSTREAM_MALFORMED",
+            "Fundamental valuation evidence is not bound to the prepared input",
+            retryable=False,
+            status_code=502,
+        )
+    projection = result.model_dump(mode="json")
+    projection.update(
+        {
+            "projection_type": "valuation_evidence",
+            "snapshot_timestamp": result.valuation_timestamp.isoformat().replace(
+                "+00:00", "Z"
+            ),
+            "fact_ids": list(actual_fact_ids),
+            "provenance": {
+                "snapshot_id": result.snapshot_id,
+                "fact_ids": list(actual_fact_ids),
+                "profile_id": result.profile_id,
+                "profile_digest": result.profile_digest,
+            },
+            "quality": {
+                "facts_status": result.quality_status,
+                "issue_codes": list(result.issue_codes),
+                "missing_fields": list(result.missing_fields),
+                "rejected_fact_ids": list(result.rejected_fact_ids),
+            },
+            "hashes": {
+                "snapshot_manifest_digest": result.snapshot_manifest_digest,
+                "data_release_manifest_digest": result.data_release_manifest_digest,
+                "source_content_hashes": sorted(
+                    {fact.source.content_hash for fact in result.facts}
+                ),
+            },
+        }
+    )
+    projection["issue_codes"] = list(result.issue_codes)
     return projection
 
 
@@ -1033,6 +1101,7 @@ def _service_valuation_artifact_payload(
     input_digest: str,
     validation_quality_status: str,
     calculation_trace: Mapping[str, object],
+    automatic_preparation: Mapping[str, object] | None = None,
 ) -> JSONObject:
     facts = _as_mapping(projection.get("facts"), context="fundamental facts projection")
     provenance = _as_mapping(
@@ -1084,6 +1153,8 @@ def _service_valuation_artifact_payload(
             "valuation_input": dict(input_payload),
         }
     )
+    if automatic_preparation is not None:
+        artifact_projection["automatic_preparation"] = dict(automatic_preparation)
     return {
         "financial_reports": [],
         "fundamental_service": artifact_projection,
@@ -1352,6 +1423,53 @@ def _service_error_update(
     )
 
 
+def _preparation_gate_update(
+    *,
+    fundamental: Mapping[str, object],
+    preparation: Mapping[str, object],
+) -> FundamentalNodeResult:
+    """Publish a service-owned preparation gate as a domain outcome."""
+
+    status = preparation.get("status")
+    quality_status = preparation.get("quality_status")
+    if status not in {"requires_input", "abstained", "unsupported"}:
+        raise FundamentalServiceFailure(
+            "UPSTREAM_MALFORMED",
+            "Fundamental preparation gate has an invalid status",
+            retryable=False,
+            status_code=502,
+        )
+    if not isinstance(quality_status, str) or quality_status not in _QUALITY_STATUSES:
+        raise FundamentalServiceFailure(
+            "UPSTREAM_MALFORMED",
+            "Fundamental preparation gate has an invalid quality status",
+            retryable=False,
+            status_code=502,
+        )
+    updated: FundamentalAnalysisContext = dict(fundamental)
+    updated.pop("service_failure", None)
+    updated.update(
+        {
+            "valuation_status": status,
+            "quality_status": quality_status,
+            "automatic_preparation": dict(preparation),
+            "preparation_status": status,
+            "preparation_issue_codes": list(preparation.get("issue_codes", ())),
+            "missing_evidence": list(preparation.get("missing_evidence", ())),
+            "preparation_digest": preparation.get("preparation_digest"),
+        }
+    )
+    activity_status = "waiting" if status == "requires_input" else "done"
+    return FundamentalNodeResult(
+        update={
+            "fundamental_analysis": updated,
+            "active_activity_id": "calculation",
+            "workflow_activity_updates": {"calculation": activity_status},
+        },
+        goto="END",
+    )
+
+
 async def run_service_valuation_flow(
     runtime: ServiceValuationRuntime,
     state: Mapping[str, object],
@@ -1369,6 +1487,7 @@ async def run_service_valuation_flow(
         if raw_request is None:
             raw_request = fundamental.get(_SERVICE_INPUT_KEY)
         input_payload: JSONObject | None = None
+        automatic_preparation: JSONObject | None = None
         compact_request = False
         if raw_request is not None:
             input_payload = read_service_valuation_input(state)
@@ -1408,6 +1527,11 @@ async def run_service_valuation_flow(
                 request_timing=request_timing,
             )
             if prepared.valuation_request is None:
+                if prepared.preparation is not None:
+                    return _preparation_gate_update(
+                        fundamental=fundamental,
+                        preparation=prepared.preparation.model_dump(mode="json"),
+                    )
                 facts_projection = await _facts_only_projection(
                     prepared,
                     client=client,
@@ -1483,6 +1607,8 @@ async def run_service_valuation_flow(
                     goto="END",
                 )
             input_payload = prepared.valuation_request
+            if compact_request and prepared.preparation is not None:
+                automatic_preparation = prepared.preparation.model_dump(mode="json")
         assert input_payload is not None
         # Snapshot resolution replaces the selector with canonical fact IDs;
         # retain the service-owned normalized field selection for the later
@@ -1551,6 +1677,7 @@ async def run_service_valuation_flow(
         input_digest=input_digest,
         quality_status=quality_status,
         validation_result=validation_result,
+        automatic_preparation=automatic_preparation,
     )
     approval_response = request_approval_fn(approval_request)
     if not _approval_is_accepted(approval_response):
@@ -1668,19 +1795,6 @@ async def run_service_valuation_flow(
             validated_input["valuation_context"],
             context="validated_input.valuation_context",
         )
-        facts_result = await client.read_facts(
-            {
-                "contract_version": "fundamental.v1",
-                "snapshot_id": snapshot_id,
-                "data_release_manifest_digest": valuation_context.get(
-                    "data_release_manifest_digest"
-                ),
-                "required_fields": list(required_fact_fields),
-            },
-            principal=principal,
-            correlation_id=correlation_id,
-            deadline_at=deadline_at,
-        )
         snapshot_manifest_digest = calculation_trace.get("snapshot_manifest_digest")
         if not isinstance(
             snapshot_manifest_digest, str
@@ -1691,12 +1805,56 @@ async def run_service_valuation_flow(
                 retryable=False,
                 status_code=502,
             )
-        projection["facts"] = _facts_projection(
-            facts_result,
-            expected_snapshot_id=snapshot_id,
-            expected_snapshot_manifest_digest=snapshot_manifest_digest,
-            expected_fact_ids=tuple(fact_ids),
-        )
+        release_digest = valuation_context.get("data_release_manifest_digest")
+        if automatic_preparation is not None:
+            if not isinstance(release_digest, str) or not _DIGEST_PATTERN.fullmatch(
+                release_digest
+            ):
+                raise FundamentalServiceFailure(
+                    "UPSTREAM_MALFORMED",
+                    "automatic valuation input omitted its release digest",
+                    retryable=False,
+                    status_code=502,
+                )
+            evidence_result = await client.read_valuation_evidence(
+                {
+                    "contract_version": "fundamental.v1",
+                    "snapshot_id": snapshot_id,
+                    "data_release_manifest_digest": release_digest,
+                    "model_id": model_id,
+                },
+                principal=principal,
+                correlation_id=correlation_id,
+                deadline_at=deadline_at,
+            )
+            projection["facts"] = _valuation_evidence_projection(
+                evidence_result,
+                expected_snapshot_id=snapshot_id,
+                expected_release_digest=release_digest,
+                expected_identity=_as_mapping(
+                    validated_input["identity"], context="validated_input.identity"
+                ),
+                expected_model_id=model_id,
+                expected_fact_ids=tuple(fact_ids),
+            )
+        else:
+            facts_result = await client.read_facts(
+                {
+                    "contract_version": "fundamental.v1",
+                    "snapshot_id": snapshot_id,
+                    "data_release_manifest_digest": release_digest,
+                    "required_fields": list(required_fact_fields),
+                },
+                principal=principal,
+                correlation_id=correlation_id,
+                deadline_at=deadline_at,
+            )
+            projection["facts"] = _facts_projection(
+                facts_result,
+                expected_snapshot_id=snapshot_id,
+                expected_snapshot_manifest_digest=snapshot_manifest_digest,
+                expected_fact_ids=tuple(fact_ids),
+            )
         if expect_uncertainty_report:
             samples = uncertainty.get("samples")
             seed = uncertainty.get("seed")
@@ -1726,6 +1884,7 @@ async def run_service_valuation_flow(
             input_digest=input_digest,
             validation_quality_status=quality_status,
             calculation_trace=calculation_trace,
+            automatic_preparation=automatic_preparation,
         )
         try:
             artifact_id = await runtime.save_financial_reports(
@@ -1765,6 +1924,8 @@ async def run_service_valuation_flow(
             ),
         }
     )
+    if automatic_preparation is not None:
+        updated["automatic_preparation"] = dict(automatic_preparation)
     return FundamentalNodeResult(
         update={
             "fundamental_analysis": updated,

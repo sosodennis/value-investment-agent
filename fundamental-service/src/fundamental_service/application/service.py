@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 from dataclasses import field as dataclass_field
+from datetime import datetime
 from typing import Any
 
 from pydantic import model_validator
@@ -28,8 +29,11 @@ from ..contracts import (
     SnapshotResolutionRequestV1,
     SnapshotResolutionV1,
     SourceSnapshotV1,
+    TraceV1,
     UncertaintyV1,
     ValidationResponseV1,
+    ValuationEvidenceReadRequestV1,
+    ValuationEvidenceReadResponseV1,
     ValuationInputV1,
 )
 from ..data_releases import (
@@ -80,6 +84,17 @@ from ..uncertainty import (
     run_uncertainty,
     validate_uncertainty_controls,
 )
+from ..valuation_preparation import (
+    ApprovedMarketPolicyInputsV1,
+    AutomaticValuationPreparationV1,
+    ManualValuationOverrideRequestV1,
+    apply_manual_override,
+    prepare_automatic_valuation,
+)
+from ..valuation_requirements import (
+    select_released_facts,
+    valuation_requirements_profile,
+)
 
 
 class UncertaintyRequestV1(ValuationInputV1):
@@ -118,6 +133,66 @@ class UncertaintyRequestV1(ValuationInputV1):
     def with_digest(self) -> UncertaintyRequestV1:
         payload = self.model_dump(exclude={"input_digest", "caller_approval"})
         return self.model_copy(update={"input_digest": sha256_digest(payload)})
+
+
+def _approved_market_policy(
+    policy: PolicyRecordV1 | None,
+    *,
+    valuation_timestamp: datetime | None = None,
+) -> ApprovedMarketPolicyInputsV1 | None:
+    """Translate a complete released market policy into preparation evidence."""
+
+    if policy is None or policy.market_inputs is None:
+        return None
+    market_inputs = policy.market_inputs
+    if valuation_timestamp is not None and any(
+        item.available_at > valuation_timestamp for item in market_inputs.evidence
+    ):
+        return None
+
+    def trace_for(role: str) -> TraceV1:
+        evidence = next(
+            (item for item in market_inputs.evidence if item.role == role), None
+        )
+        if evidence is None:
+            raise ValueError(f"market policy evidence is missing {role}")
+        return TraceV1(
+            source_refs=(evidence.content_hash,),
+            source_ids=(evidence.source_id,),
+            source_uris=(evidence.source_uri,),
+            source_versions=(evidence.source_version,),
+            terms_references=(evidence.terms_reference,),
+            as_of=evidence.as_of,
+            available_at=evidence.available_at,
+            captured_at=evidence.captured_at,
+            description=evidence.rationale,
+        )
+
+    evidence = {
+        field: trace_for(field)
+        for field in (
+            "risk_free_rate",
+            "beta",
+            "equity_risk_premium",
+            "pre_tax_cost_of_debt",
+            "debt_weight",
+            "equity_weight",
+            "terminal_growth",
+        )
+    }
+    return ApprovedMarketPolicyInputsV1(
+        policy_version=policy.policy_version,
+        capital_weight_basis=market_inputs.capital_weight_basis,
+        risk_free_rate=market_inputs.risk_free_rate,
+        beta=market_inputs.beta,
+        equity_risk_premium=market_inputs.equity_risk_premium,
+        pre_tax_cost_of_debt=market_inputs.pre_tax_cost_of_debt,
+        debt_weight=market_inputs.debt_weight,
+        equity_weight=market_inputs.equity_weight,
+        terminal_growth=market_inputs.terminal_growth,
+        evidence=evidence,
+        evidence_methods={item.role: item.method for item in market_inputs.evidence},
+    )
 
 
 def normalize_uncertainty_payload(raw: Mapping[str, object]) -> dict[str, object]:
@@ -918,6 +993,171 @@ class FundamentalApplication:
             issue_codes=tuple(issue.code for issue in snapshot.issues),
             facts=facts,
         )
+
+    def read_valuation_evidence(
+        self, request: ValuationEvidenceReadRequestV1
+    ) -> ValuationEvidenceReadResponseV1:
+        """Load only the immutable fact IDs declared by a pinned data release."""
+
+        if self.fact_repository is None:
+            raise ServiceError(
+                "source_unavailable",
+                "canonical fact dependencies are unavailable",
+                status_code=503,
+                retryable=True,
+            )
+        snapshot = self.snapshot(request.snapshot_id)
+        manifest = self._data_release_manifest(request.data_release_manifest_digest)
+        profile = valuation_requirements_profile(request.model_id)
+        declared_snapshot = next(
+            (
+                reference
+                for reference in manifest.snapshot_refs
+                if reference.snapshot_id == snapshot.snapshot_id
+            ),
+            None,
+        )
+        if (
+            declared_snapshot is None
+            or declared_snapshot.manifest_digest != snapshot.manifest_digest
+        ):
+            raise ServiceError(
+                "DATA_RELEASE_SNAPSHOT_MISMATCH",
+                "the snapshot does not match the pinned data release",
+                status_code=409,
+                retryable=False,
+            )
+
+        facts = []
+        declared_digests = {
+            reference.fact_id: reference.fact_digest
+            for reference in declared_snapshot.facts
+        }
+        try:
+            for fact_id, expected_digest in declared_digests.items():
+                fact = self.fact_repository.get(fact_id)
+                if canonical_fact_digest(fact) != expected_digest:
+                    raise ServiceError(
+                        "DATA_RELEASE_FACT_MISMATCH",
+                        "a canonical fact does not match the pinned data release",
+                        status_code=409,
+                        retryable=False,
+                    )
+                facts.append(fact)
+        except ServiceError:
+            raise
+        except SnapshotError as error:
+            raise ServiceError(
+                "FACT_NOT_FOUND",
+                "a release-declared canonical fact is unavailable",
+                status_code=404,
+                retryable=False,
+            ) from error
+
+        selection = select_released_facts(
+            facts,
+            profile=profile,
+            snapshot=snapshot,
+            valuation_timestamp=snapshot.valuation_timestamp,
+        )
+        missing = set(selection.missing_fields)
+        issue_codes = list(selection.issue_codes)
+        if not set(profile.required_fact_fields).issubset(manifest.required_fields):
+            missing.update(
+                set(profile.required_fact_fields) - set(manifest.required_fields)
+            )
+            issue_codes.append("DATA_RELEASE_FIELDS_UNAVAILABLE")
+        if missing and "VALUATION_REQUIRED_FACTS_MISSING" not in issue_codes:
+            issue_codes.append("VALUATION_REQUIRED_FACTS_MISSING")
+        quality_status = (
+            QualityStatus.ABSTAIN
+            if missing
+            else QualityStatus.DEGRADED
+            if issue_codes
+            else QualityStatus.PROVISIONAL
+        )
+        return ValuationEvidenceReadResponseV1(
+            contract_version="fundamental.v1",
+            snapshot_id=snapshot.snapshot_id,
+            data_release_manifest_digest=manifest.manifest_digest,
+            snapshot_manifest_digest=snapshot.manifest_digest,
+            identity=snapshot.identity,
+            valuation_timestamp=snapshot.valuation_timestamp,
+            model_id=request.model_id,
+            profile_id=profile.profile_id,
+            profile_digest=profile.digest,
+            quality_status=quality_status,
+            issue_codes=tuple(dict.fromkeys(issue_codes)),
+            missing_fields=tuple(sorted(missing)),
+            rejected_fact_ids=selection.rejected_fact_ids,
+            facts=selection.facts,
+        )
+
+    def prepare_valuation(
+        self, request: ValuationEvidenceReadRequestV1
+    ) -> AutomaticValuationPreparationV1:
+        """Prepare one valuation from the pinned release and service policy."""
+
+        evidence = self.read_valuation_evidence(request)
+        snapshot = self.snapshot(request.snapshot_id)
+        model_version = f"{request.model_id}-v1"
+        policy = None
+        if self.policy_registry is not None:
+            try:
+                policy = self.policy_registry.select_policy(
+                    model_id=request.model_id,
+                    model_version=model_version,
+                    valuation_timestamp=snapshot.valuation_timestamp,
+                    policy_id=None,
+                )
+            except PolicyError as error:
+                raise ServiceError(
+                    error.code,
+                    "an effective service-owned valuation policy is unavailable",
+                    status_code=422,
+                    retryable=False,
+                ) from error
+
+        policy_id = (
+            policy.policy_id
+            if policy is not None
+            else (f"{request.model_id}-us-gaap-public-v1")
+        )
+        policy_version = policy.policy_version if policy is not None else "unresolved"
+        market_policy = _approved_market_policy(
+            policy,
+            valuation_timestamp=snapshot.valuation_timestamp,
+        )
+        return prepare_automatic_valuation(
+            evidence.facts,
+            snapshot=snapshot,
+            model_id=request.model_id,
+            model_version=(
+                policy.model_version if policy is not None else model_version
+            ),
+            policy_id=policy_id,
+            policy_version=policy_version,
+            data_release_manifest_digest=request.data_release_manifest_digest,
+            market_policy=market_policy,
+        )
+
+    def apply_manual_override(
+        self, request: ManualValuationOverrideRequestV1
+    ) -> AutomaticValuationPreparationV1:
+        try:
+            return apply_manual_override(
+                request.preparation,
+                path=request.path,
+                value=request.value,
+                provenance=request.provenance,
+            )
+        except ValueError as error:
+            raise ServiceError(
+                "MANUAL_OVERRIDE_INVALID",
+                str(error),
+                status_code=422,
+                retryable=False,
+            ) from error
 
     def policy(self, policy_id: str) -> PolicyRecordV1:
         if self.policy_registry is None:

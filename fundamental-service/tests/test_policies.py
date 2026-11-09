@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 from cryptography.hazmat.primitives import serialization as crypto_serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from fundamental_service.application.service import _approved_market_policy
 from fundamental_service.calibration import (
     CalibrationArtifactV1,
     ConfidenceIntervalV1,
@@ -15,7 +16,7 @@ from fundamental_service.calibration import (
     IntervalMetricsV1,
     MetricBundleV1,
 )
-from fundamental_service.contracts import QualityStatus
+from fundamental_service.contracts import MarketPolicyInputsV1, QualityStatus
 from fundamental_service.governance import (
     ModelEvidenceArtifactV1,
     ModelInventory,
@@ -32,6 +33,7 @@ from fundamental_service.policies import (
     evaluate_eligibility,
     expansion_model_specs,
     initial_model_specs,
+    initial_policy_records,
     resolve_policy,
 )
 from fundamental_service.public_source import PUBLIC_SOURCE_SPECS
@@ -65,6 +67,72 @@ def test_only_two_initial_models_and_no_legacy_fallback():
         "fcff_dcf",
         "transition_fcff_dcf",
     }
+
+
+def test_initial_fcff_policies_expose_dated_market_inputs_without_forecast_defaults():
+    policies = {item.model_id: item for item in initial_policy_records()}
+
+    assert policies["fcff_dcf"].assumptions is None
+    inputs = policies["fcff_dcf"].market_inputs
+    assert inputs is not None
+    assert inputs.policy_version == "fcff-market-policy-2025-v1"
+    assert inputs.capital_weight_basis == "approved_policy"
+    assert inputs.risk_free_rate == Decimal("0.046")
+    assert {item.role for item in inputs.evidence} == {
+        "risk_free_rate",
+        "beta",
+        "equity_risk_premium",
+        "pre_tax_cost_of_debt",
+        "debt_weight",
+        "equity_weight",
+        "terminal_growth",
+    }
+    assert all(
+        item.as_of.isoformat() == "2025-01-03T00:00:00+00:00"
+        for item in inputs.evidence
+    )
+    assert next(
+        item for item in inputs.evidence if item.role == "risk_free_rate"
+    ).source_id == ("fred-observations")
+    assert (
+        next(item for item in inputs.evidence if item.role == "risk_free_rate").method
+        == "observed_source"
+    )
+    assert {
+        item.method
+        for item in inputs.evidence
+        if item.role in {"debt_weight", "equity_weight"}
+    } == {"approved_policy"}
+    assert (
+        _approved_market_policy(
+            policies["fcff_dcf"],
+            valuation_timestamp=datetime(2024, 12, 31, tzinfo=timezone.utc),
+        )
+        is None
+    )
+    assert (
+        _approved_market_policy(
+            policies["fcff_dcf"],
+            valuation_timestamp=datetime(2025, 1, 2, tzinfo=timezone.utc),
+        )
+        is None
+    )
+    assert (
+        _approved_market_policy(
+            policies["fcff_dcf"],
+            valuation_timestamp=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        )
+        is not None
+    )
+
+
+def test_market_observed_weight_basis_rejects_policy_weight_evidence():
+    inputs = initial_policy_records()[0].market_inputs
+    assert inputs is not None
+    payload = inputs.model_dump(mode="python")
+    payload["capital_weight_basis"] = "market_observed"
+    with pytest.raises(ValueError, match="market-observed capital weights"):
+        MarketPolicyInputsV1(**payload)
 
 
 def test_expansion_inventory_is_ordered_with_complete_non_placeholder_specs():

@@ -21,6 +21,8 @@ from src.agents.fundamental.interface.fundamental_service_contracts import (
     FundamentalFactsReadResultV1,
     FundamentalIdentityResolutionV1,
     FundamentalServiceResponseV1,
+    FundamentalValuationEvidenceReadResultV1,
+    FundamentalValuationPreparationResultV1,
 )
 from src.shared.artifacts.artifact_data_models import FinancialReportsArtifactData
 from src.shared.cross_agent.domain.market_identity import CompanyProfile
@@ -29,6 +31,41 @@ from src.shared.internal_services import (
     reset_request_principal,
     set_request_principal,
 )
+
+_FCFF_REQUIRED_FIELDS = [
+    "revenue",
+    "cost_of_revenue",
+    "operating_income",
+    "income_before_tax",
+    "income_tax_expense",
+    "net_income",
+    "depreciation_and_amortization",
+    "capital_expenditure",
+    "operating_lease_cost",
+    "finance_lease_cost",
+    "stock_based_compensation",
+    "basic_weighted_average_shares",
+    "diluted_weighted_average_shares",
+    "operating_current_receivables",
+    "inventory",
+    "contract_assets",
+    "operating_current_payables",
+    "accrued_operating_liabilities",
+    "deferred_revenue",
+    "cash_and_equivalents",
+    "current_interest_bearing_debt",
+    "long_term_interest_bearing_debt",
+    "current_operating_lease_liabilities",
+    "long_term_operating_lease_liabilities",
+    "current_finance_lease_liabilities",
+    "long_term_finance_lease_liabilities",
+    "preferred_claims",
+    "noncontrolling_interests",
+    "convertible_instruments",
+    "common_shares_outstanding",
+    "dilutive_instruments",
+    "other_share_classes",
+]
 
 
 class _Runtime:
@@ -372,7 +409,9 @@ class _Client:
                 "identity": dict(self.facts_identity),
                 "valuation_timestamp": self.facts_valuation_timestamp,
                 "quality_status": "verified",
-                "data_release_manifest_digest": None,
+                "data_release_manifest_digest": input_payload.get(
+                    "data_release_manifest_digest"
+                ),
                 "facts": facts,
             }
         )
@@ -570,7 +609,7 @@ class _FactsOnlyClient(_Client):
                 "snapshot_timestamp": self.snapshot_timestamp,
                 "source_selection_policy": "pit-v1",
                 "coverage_profile": "us-gaap-public-v1",
-                "data_release_manifest_digest": None,
+                "data_release_manifest_digest": "c" * 64,
                 "quality": "verified",
                 "issue_codes": [],
                 "provenance": {
@@ -582,6 +621,68 @@ class _FactsOnlyClient(_Client):
                 },
             }
         return await super().execute(operation, input_payload, **kwargs)
+
+    async def prepare_valuation(self, input_payload, **kwargs):
+        self.calls.append(("prepare_valuation", dict(input_payload)))
+        prepared = _input()
+        prepared["identity"] = dict(self.identity)
+        prepared["historical_facts"] = list(self.resolved_fact_ids)
+        prepared["valuation_context"] = {
+            "valuation_timestamp": self.snapshot_timestamp,
+            "data_snapshot_id": input_payload["snapshot_id"],
+            "data_release_manifest_digest": input_payload[
+                "data_release_manifest_digest"
+            ],
+            "source_selection_policy": "pit-v1",
+            "coverage_profile": "fcff-valuation-requirements-v1",
+        }
+        prepared["provenance"] = {
+            **prepared["provenance"],
+            "snapshot_id": input_payload["snapshot_id"],
+            "fact_ids": list(self.resolved_fact_ids),
+        }
+        prepared["policy_id"] = "fcff_dcf-us-gaap-public-v1"
+        return FundamentalValuationPreparationResultV1.model_validate(
+            {
+                "contract_version": "fundamental.v1",
+                "status": "prepared",
+                "model_id": input_payload["model_id"],
+                "model_version": "fcff_dcf-v1",
+                "profile_id": "fcff-valuation-requirements-v1",
+                "profile_digest": "d" * 64,
+                "policy_id": "fcff_dcf-us-gaap-public-v1",
+                "policy_version": "fcff_dcf-v1-quality-v1",
+                "quality_status": "provisional",
+                "issue_codes": ["HISTORY_THRESHOLD_UNVALIDATED"],
+                "missing_evidence": [],
+                "historical_metrics": {},
+                "assumptions_evidence": [],
+                "input": prepared,
+                "preparation_digest": "e" * 64,
+            }
+        )
+
+    async def read_valuation_evidence(self, input_payload, **kwargs):
+        self.calls.append(("read_valuation_evidence", dict(input_payload)))
+        facts = await self.read_facts(input_payload)
+        return FundamentalValuationEvidenceReadResultV1.model_validate(
+            {
+                "contract_version": "fundamental.v1",
+                "snapshot_id": input_payload["snapshot_id"],
+                "data_release_manifest_digest": input_payload[
+                    "data_release_manifest_digest"
+                ],
+                "snapshot_manifest_digest": facts.snapshot_manifest_digest,
+                "identity": facts.identity.model_dump(mode="json"),
+                "valuation_timestamp": facts.valuation_timestamp,
+                "model_id": input_payload["model_id"],
+                "profile_id": "fcff-valuation-requirements-v1",
+                "profile_digest": "d" * 64,
+                "quality_status": "provisional",
+                "issue_codes": ["HISTORY_THRESHOLD_UNVALIDATED"],
+                "facts": tuple(facts.facts),
+            }
+        )
 
 
 @pytest.mark.asyncio
@@ -796,20 +897,36 @@ async def test_cutover_enriches_compact_caller_request_before_snapshot_resolutio
         "resolve_identity",
         "ingest_sec_data",
         "resolve_snapshot",
+        "prepare_valuation",
         "validate_with_policy",
         "calculate",
+        "read_valuation_evidence",
     ]
     assert client.calls[1][1]["identity"]["issuer_id"] == "0000320193"
-    assert client.calls[2][1]["required_fields"] == [
-        "revenue",
-        "operating_income",
-        "cash",
-        "debt",
-        "diluted_shares",
-    ]
-    assert client.calls[3][1]["historical_facts"] == _FactsOnlyClient._fact_ids
-    assert client.calls[3][1]["assumptions"] == compact["assumptions"]
+    assert client.calls[2][1]["required_fields"] == _FCFF_REQUIRED_FIELDS
+    assert client.calls[3][1]["snapshot_id"] == "snapshot-aapl-resolved"
+    assert client.calls[4][1]["historical_facts"] == _FactsOnlyClient._fact_ids
+    assert client.calls[4][1]["assumptions"] == _input()["assumptions"]
+    assert client.calls[3][1]["model_id"] == "fcff_dcf"
     assert result.update["fundamental_analysis"]["valuation_status"] == "completed"
+    assert (
+        result.update["fundamental_analysis"]["automatic_preparation"][
+            "preparation_digest"
+        ]
+        == "e" * 64
+    )
+    artifact = runtime.saved_calls[0]["data"]
+    assert isinstance(artifact, dict)
+    service_artifact = artifact["fundamental_service"]
+    assert isinstance(service_artifact, dict)
+    automatic_preparation = service_artifact["automatic_preparation"]
+    assert isinstance(automatic_preparation, dict)
+    assert automatic_preparation["profile_digest"] == "d" * 64
+    facts = service_artifact["facts"]
+    assert isinstance(facts, dict)
+    assert facts["data_release_manifest_digest"] == "c" * 64
+    assert facts["provenance"]["fact_ids"] == _FactsOnlyClient._fact_ids
+    assert facts["hashes"]["source_content_hashes"] == ["f" * 64]
 
 
 @pytest.mark.asyncio
@@ -843,14 +960,8 @@ async def test_cutover_publishes_snapshot_facts_without_fabricating_valuation() 
         {
             "contract_version": "fundamental.v1",
             "snapshot_id": "snapshot-aapl-resolved",
-            "data_release_manifest_digest": None,
-            "required_fields": [
-                "revenue",
-                "operating_income",
-                "cash",
-                "debt",
-                "diluted_shares",
-            ],
+            "data_release_manifest_digest": "c" * 64,
+            "required_fields": _FCFF_REQUIRED_FIELDS,
         }
     ]
     assert approval_calls == []

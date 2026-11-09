@@ -16,6 +16,7 @@ from src.agents.fundamental.application.workflow_orchestrator.state_readers impo
 )
 from src.agents.fundamental.interface.fundamental_service_contracts import (
     FundamentalIdentityResolutionRequestV1,
+    FundamentalValuationPreparationResultV1,
 )
 from src.agents.fundamental.interface.request_contracts import (
     FundamentalRequestTimingV1,
@@ -33,18 +34,50 @@ _MODEL_VERSION = {
     "fcff_dcf": "fcff_dcf-v1",
     "transition_fcff_dcf": "transition_fcff_dcf-v1",
 }
-_POLICY_ID = {
-    "fcff_dcf": "fcff_dcf-us-gaap-public-v1",
-    "transition_fcff_dcf": "transition_fcff_dcf-us-gaap-public-v1",
-}
-_BASE_REQUIRED_FIELDS = (
+_ANNUAL_DURATION_FIELDS = (
     "revenue",
+    "cost_of_revenue",
     "operating_income",
-    "cash",
-    "debt",
-    "diluted_shares",
+    "income_before_tax",
+    "income_tax_expense",
+    "net_income",
+    "depreciation_and_amortization",
+    "capital_expenditure",
+    "operating_lease_cost",
+    "finance_lease_cost",
+    "stock_based_compensation",
+    "basic_weighted_average_shares",
+    "diluted_weighted_average_shares",
 )
-_TRANSITION_REQUIRED_FIELDS = _BASE_REQUIRED_FIELDS + ("filed_operating_evidence",)
+_ANNUAL_INSTANT_FIELDS = (
+    "operating_current_receivables",
+    "inventory",
+    "contract_assets",
+    "operating_current_payables",
+    "accrued_operating_liabilities",
+    "deferred_revenue",
+)
+_POINT_IN_TIME_FACT_FIELDS = (
+    "cash_and_equivalents",
+    "current_interest_bearing_debt",
+    "long_term_interest_bearing_debt",
+    "current_operating_lease_liabilities",
+    "long_term_operating_lease_liabilities",
+    "current_finance_lease_liabilities",
+    "long_term_finance_lease_liabilities",
+    "preferred_claims",
+    "noncontrolling_interests",
+    "convertible_instruments",
+    "common_shares_outstanding",
+    "dilutive_instruments",
+    "other_share_classes",
+)
+_BASE_REQUIRED_FIELDS = (
+    *_ANNUAL_DURATION_FIELDS,
+    *_ANNUAL_INSTANT_FIELDS,
+    *_POINT_IN_TIME_FACT_FIELDS,
+)
+_TRANSITION_REQUIRED_FIELDS = (*_BASE_REQUIRED_FIELDS, "filed_operating_evidence")
 _INGESTION_POLICY = "sec-pit-v1"
 _SNAPSHOT_POLICY = "pit-v1"
 _DATA_RELEASE_PROFILE_ID = "sec-public-pit-v1"
@@ -56,18 +89,6 @@ _TAXONOMY_MANIFEST_ID = "sec-us-gaap-2023-2024-public-bundle"
 _TAXONOMY_VERSION = "us-gaap-2023-2024"
 _POLICY_VERSION = "sec-public-pit-v1"
 _MAPPING_VERSION = "sec-us-gaap-v1"
-_COMPACT_REQUEST_FIELDS = frozenset(
-    {
-        "contract_version",
-        "model_id",
-        "model_version",
-        "policy_id",
-        "assumptions",
-        "uncertainty",
-        "requested_as_of",
-        "fiscal_period_selector",
-    }
-)
 
 
 @dataclass(frozen=True)
@@ -78,6 +99,7 @@ class PreparedServiceValuation:
     identity: JSONObject
     ingestion: JSONObject
     snapshot_selector: JSONObject
+    preparation: FundamentalValuationPreparationResultV1 | None = None
     reason: str | None = None
 
 
@@ -152,64 +174,6 @@ def is_compact_valuation_request(value: Mapping[str, object]) -> bool:
         "quality",
         "provenance",
     }.intersection(value)
-
-
-def _normalize_compact_request(
-    request: Mapping[str, object],
-    *,
-    model_id: str,
-    valuation_context: Mapping[str, object],
-    valuation_timestamp: datetime,
-    fiscal_period_selector: JSONObject | None,
-) -> JSONObject:
-    unknown = sorted(set(request).difference(_COMPACT_REQUEST_FIELDS))
-    if unknown:
-        raise FundamentalServiceFailure(
-            "VALUATION_INPUT_INVALID",
-            "compact valuation request contains unsupported fields: "
-            + ", ".join(unknown),
-            retryable=False,
-            status_code=422,
-        )
-    assumptions = request.get("assumptions")
-    if not isinstance(assumptions, Mapping):
-        raise FundamentalServiceFailure(
-            "VALUATION_INPUT_INVALID",
-            "compact valuation request requires caller-owned assumptions",
-            retryable=False,
-            status_code=422,
-        )
-    normalized: JSONObject = dict(request)
-    normalized["contract_version"] = "fundamental.v1"
-    normalized["model_id"] = model_id
-    normalized["model_version"] = (
-        normalized.get("model_version") or _MODEL_VERSION[model_id]
-    )
-    normalized["policy_id"] = normalized.get("policy_id") or _POLICY_ID[model_id]
-    normalized["uncertainty"] = dict(normalized.get("uncertainty") or {"mode": "none"})
-    normalized["quality"] = {"status": "verified"}
-    normalized["provenance"] = {
-        "snapshot_id": "pending",
-        "fact_ids": [],
-        "mapping_version": _MAPPING_VERSION,
-        "parser_version": _PARSER_VERSION,
-        "taxonomy_version": _TAXONOMY_VERSION,
-        "policy_version": _POLICY_VERSION,
-    }
-    normalized["valuation_context"] = {
-        **valuation_context,
-        "valuation_timestamp": valuation_timestamp.isoformat().replace("+00:00", "Z"),
-        **(
-            {"fiscal_period_selector": fiscal_period_selector}
-            if fiscal_period_selector is not None
-            else {}
-        ),
-        "source_selection_policy": _SNAPSHOT_POLICY,
-        "coverage_profile": _COVERAGE_PROFILE,
-    }
-    normalized.pop("input_digest", None)
-    normalized.pop("caller_approval", None)
-    return normalized
 
 
 def _required_fields(model_id: str) -> tuple[str, ...]:
@@ -307,6 +271,98 @@ def _validate_ingestion_result(
             status_code=422,
         )
     return dict(payload)
+
+
+def _preparation_selection(
+    result: object,
+    *,
+    identity: JSONObject,
+    valuation_timestamp: datetime,
+) -> tuple[str, str]:
+    """Extract the immutable snapshot and active release for preparation."""
+
+    payload = _mapping(result, context="Fundamental snapshot resolution result")
+    snapshot_id = payload.get("snapshot_id")
+    release_digest = payload.get("data_release_manifest_digest")
+    resolved_identity = payload.get("identity")
+    resolved_timestamp = payload.get("valuation_timestamp")
+    if (
+        not isinstance(snapshot_id, str)
+        or not snapshot_id
+        or not isinstance(release_digest, str)
+        or not _DIGEST_PATTERN.fullmatch(release_digest)
+        or not isinstance(resolved_identity, Mapping)
+        or dict(resolved_identity) != identity
+        or not isinstance(resolved_timestamp, str)
+        or _timestamp(resolved_timestamp) != valuation_timestamp
+    ):
+        raise FundamentalServiceFailure(
+            "SNAPSHOT_PREPARATION_UNAVAILABLE",
+            "Fundamental snapshot resolution did not return a pinned release",
+            retryable=False,
+            status_code=422,
+        )
+    return snapshot_id, release_digest
+
+
+def _prepared_input(
+    result: FundamentalValuationPreparationResultV1,
+    *,
+    model_id: str,
+    snapshot_id: str,
+    release_digest: str,
+    identity: JSONObject,
+) -> JSONObject:
+    """Validate only boundary bindings; valuation semantics stay service-owned."""
+
+    if result.model_id != model_id:
+        raise FundamentalServiceFailure(
+            "PREPARATION_MODEL_MISMATCH",
+            "Fundamental preparation returned a different model",
+            retryable=False,
+            status_code=502,
+        )
+    if result.status != "prepared" or result.input is None:
+        raise FundamentalServiceFailure(
+            "UPSTREAM_MALFORMED",
+            "prepared Fundamental result omitted its input",
+            retryable=False,
+            status_code=502,
+        )
+    prepared = dict(result.input)
+    prepared_identity = prepared.get("identity")
+    context = prepared.get("valuation_context")
+    if (
+        not isinstance(prepared_identity, Mapping)
+        or dict(prepared_identity) != identity
+    ):
+        raise FundamentalServiceFailure(
+            "PREPARATION_IDENTITY_MISMATCH",
+            "Fundamental preparation changed the resolved identity",
+            retryable=False,
+            status_code=502,
+        )
+    if not isinstance(context, Mapping):
+        raise FundamentalServiceFailure(
+            "UPSTREAM_MALFORMED",
+            "Fundamental preparation omitted valuation context",
+            retryable=False,
+            status_code=502,
+        )
+    if (
+        context.get("data_snapshot_id") != snapshot_id
+        or context.get("data_release_manifest_digest") != release_digest
+        or prepared.get("model_id") != model_id
+        or prepared.get("model_version") != result.model_version
+        or prepared.get("policy_id") != result.policy_id
+    ):
+        raise FundamentalServiceFailure(
+            "PREPARATION_PROVENANCE_MISMATCH",
+            "Fundamental preparation input is not bound to its pinned snapshot",
+            retryable=False,
+            status_code=502,
+        )
+    return prepared
 
 
 async def prepare_service_valuation_request(
@@ -462,17 +518,55 @@ async def prepare_service_valuation_request(
         identity=identity,
         valuation_timestamp=valuation_timestamp,
     )
-    prepared = (
-        _normalize_compact_request(
-            request,
-            model_id=model_id,
-            valuation_context=valuation_context,
-            valuation_timestamp=valuation_timestamp,
-            fiscal_period_selector=fiscal_period_selector,
+    if compact_request:
+        snapshot_response = await client.execute(
+            "resolve_snapshot",
+            snapshot_selector,
+            principal=principal,
+            correlation_id=correlation_id,
+            deadline_at=deadline_at,
         )
-        if compact_request
-        else dict(request)
-    )
+        snapshot_id, release_digest = _preparation_selection(
+            snapshot_response.result,
+            identity=identity,
+            valuation_timestamp=valuation_timestamp,
+        )
+        preparation = await client.prepare_valuation(
+            {
+                "contract_version": "fundamental.v1",
+                "snapshot_id": snapshot_id,
+                "data_release_manifest_digest": release_digest,
+                "model_id": model_id,
+            },
+            principal=principal,
+            correlation_id=correlation_id,
+            deadline_at=deadline_at,
+        )
+        if preparation.status != "prepared":
+            return PreparedServiceValuation(
+                valuation_request=None,
+                identity=identity,
+                ingestion=ingestion,
+                snapshot_selector=snapshot_selector,
+                preparation=preparation,
+                reason=preparation.status,
+            )
+        prepared = _prepared_input(
+            preparation,
+            model_id=model_id,
+            snapshot_id=snapshot_id,
+            release_digest=release_digest,
+            identity=identity,
+        )
+        return PreparedServiceValuation(
+            valuation_request=prepared,
+            identity=identity,
+            ingestion=ingestion,
+            snapshot_selector=snapshot_selector,
+            preparation=preparation,
+        )
+
+    prepared = dict(request)
     prepared["contract_version"] = "fundamental.v1"
     prepared["identity"] = identity
     prepared["model_id"] = model_id

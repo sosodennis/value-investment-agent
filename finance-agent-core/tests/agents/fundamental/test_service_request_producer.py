@@ -16,6 +16,7 @@ from src.agents.fundamental.application.workflow_orchestrator.services.service_r
 from src.agents.fundamental.interface.fundamental_service_contracts import (
     FundamentalIdentityResolutionV1,
     FundamentalServiceResponseV1,
+    FundamentalValuationPreparationResultV1,
 )
 from src.agents.fundamental.interface.request_contracts import (
     FundamentalRequestTimingV1,
@@ -80,6 +81,31 @@ class _Client:
 
     async def execute(self, operation, input_payload, **_kwargs):
         self.calls.append((operation, dict(input_payload)))
+        if operation == "resolve_snapshot":
+            return FundamentalServiceResponseV1(
+                contract_version="internal.v1",
+                schema_version="fundamental.v1",
+                correlation_id="correlation-1",
+                result={
+                    "contract_version": "fundamental.v1",
+                    "snapshot_id": "snapshot-aapl-1",
+                    "data_release_manifest_digest": self.ingestion["manifest_digest"],
+                    "historical_facts": self.ingestion["canonical_fact_ids"],
+                    "identity": input_payload["identity"],
+                    "valuation_timestamp": input_payload["valuation_timestamp"],
+                    "snapshot_timestamp": input_payload["valuation_timestamp"],
+                    "source_selection_policy": input_payload["source_selection_policy"],
+                    "coverage_profile": input_payload["coverage_profile"],
+                    "quality": "verified",
+                    "issue_codes": [],
+                    "provenance": {
+                        "snapshot_id": "snapshot-aapl-1",
+                        "data_release_manifest_digest": self.ingestion[
+                            "manifest_digest"
+                        ],
+                    },
+                },
+            )
         result = {
             **self.ingestion,
             "valuation_timestamp": input_payload["valuation_timestamp"],
@@ -89,6 +115,68 @@ class _Client:
             schema_version="fundamental.v1",
             correlation_id="correlation-1",
             result=result,
+        )
+
+    async def prepare_valuation(self, input_payload, **_kwargs):
+        prepared = {
+            "contract_version": "fundamental.v1",
+            "identity": {
+                "issuer_id": "0000320193",
+                "issuer_name": "Apple Inc.",
+                "domicile": "US",
+                "reporting_basis": "us-gaap",
+                "security_id": "AAPL",
+                "share_class": "AAPL",
+                "currency": "USD",
+            },
+            "valuation_context": {
+                "valuation_timestamp": "2026-11-07T00:00:00Z",
+                "data_snapshot_id": input_payload["snapshot_id"],
+                "data_release_manifest_digest": input_payload[
+                    "data_release_manifest_digest"
+                ],
+                "source_selection_policy": "pit-v1",
+                "coverage_profile": "fcff-valuation-requirements-v1",
+            },
+            "historical_facts": list(self.ingestion["canonical_fact_ids"]),
+            "assumptions": {
+                "forecast": {"base_revenue": "100"},
+                "trace": {"description": "service-owned fixture assumptions"},
+            },
+            "uncertainty": {"mode": "none"},
+            "quality": {"status": "provisional"},
+            "provenance": {
+                "snapshot_id": input_payload["snapshot_id"],
+                "fact_ids": list(self.ingestion["canonical_fact_ids"]),
+                "mapping_version": "sec-us-gaap-v1",
+                "parser_version": "2.47.4",
+                "taxonomy_version": "us-gaap-2023-2024",
+                "policy_version": "sec-public-pit-v1",
+            },
+            "model_id": input_payload["model_id"],
+            "model_version": "fcff_dcf-v1",
+            "policy_id": "fcff_dcf-us-gaap-public-v1",
+            "input_digest": None,
+        }
+        self.calls.append(("prepare_valuation", dict(input_payload)))
+        return FundamentalValuationPreparationResultV1.model_validate(
+            {
+                "contract_version": "fundamental.v1",
+                "status": "prepared",
+                "model_id": input_payload["model_id"],
+                "model_version": "fcff_dcf-v1",
+                "profile_id": "fcff-valuation-requirements-v1",
+                "profile_digest": "d" * 64,
+                "policy_id": "fcff_dcf-us-gaap-public-v1",
+                "policy_version": "fcff_dcf-v1-quality-v1",
+                "quality_status": "provisional",
+                "issue_codes": ["HISTORY_THRESHOLD_UNVALIDATED"],
+                "missing_evidence": [],
+                "historical_metrics": {},
+                "assumptions_evidence": [],
+                "input": prepared,
+                "preparation_digest": "e" * 64,
+            }
         )
 
 
@@ -195,10 +283,37 @@ async def test_producer_resolves_identity_then_ingests_and_pins_request() -> Non
     assert ingestion_payload["ticker"] == "AAPL"
     assert ingestion_payload["required_fields"] == [
         "revenue",
+        "cost_of_revenue",
         "operating_income",
-        "cash",
-        "debt",
-        "diluted_shares",
+        "income_before_tax",
+        "income_tax_expense",
+        "net_income",
+        "depreciation_and_amortization",
+        "capital_expenditure",
+        "operating_lease_cost",
+        "finance_lease_cost",
+        "stock_based_compensation",
+        "basic_weighted_average_shares",
+        "diluted_weighted_average_shares",
+        "operating_current_receivables",
+        "inventory",
+        "contract_assets",
+        "operating_current_payables",
+        "accrued_operating_liabilities",
+        "deferred_revenue",
+        "cash_and_equivalents",
+        "current_interest_bearing_debt",
+        "long_term_interest_bearing_debt",
+        "current_operating_lease_liabilities",
+        "long_term_operating_lease_liabilities",
+        "current_finance_lease_liabilities",
+        "long_term_finance_lease_liabilities",
+        "preferred_claims",
+        "noncontrolling_interests",
+        "convertible_instruments",
+        "common_shares_outstanding",
+        "dilutive_instruments",
+        "other_share_classes",
     ]
     assert prepared.snapshot_selector["identity"] == prepared.identity
     assert prepared.snapshot_selector["release_profile_id"] == "sec-public-pit-v1"
@@ -226,16 +341,16 @@ async def test_producer_enriches_compact_caller_request_without_inventing_inputs
     )
 
     assert prepared.valuation_request is not None
-    assert (
-        prepared.valuation_request["assumptions"] == _compact_request()["assumptions"]
+    assert prepared.valuation_request["assumptions"]["trace"]["description"] == (
+        "service-owned fixture assumptions"
     )
     assert prepared.valuation_request["model_id"] == "fcff_dcf"
     assert prepared.valuation_request["model_version"] == "fcff_dcf-v1"
     assert prepared.valuation_request["policy_id"] == "fcff_dcf-us-gaap-public-v1"
-    assert prepared.valuation_request["quality"] == {"status": "verified"}
+    assert prepared.valuation_request["quality"] == {"status": "provisional"}
     assert prepared.valuation_request["provenance"] == {
-        "snapshot_id": "pending",
-        "fact_ids": [],
+        "snapshot_id": "snapshot-aapl-1",
+        "fact_ids": ["fact-revenue", "fact-operating-income"],
         "mapping_version": "sec-us-gaap-v1",
         "parser_version": "2.47.4",
         "taxonomy_version": "us-gaap-2023-2024",
@@ -244,13 +359,34 @@ async def test_producer_enriches_compact_caller_request_without_inventing_inputs
     assert "fiscal_period_selector" not in prepared.snapshot_selector
     assert prepared.valuation_request["valuation_context"] == {
         "valuation_timestamp": "2026-11-07T00:00:00Z",
+        "data_snapshot_id": "snapshot-aapl-1",
+        "data_release_manifest_digest": "b" * 64,
         "source_selection_policy": "pit-v1",
-        "coverage_profile": "us-gaap-public-v1",
+        "coverage_profile": "fcff-valuation-requirements-v1",
     }
     assert [operation for operation, _ in client.calls] == [
         "resolve_identity",
         "ingest_sec_data",
+        "resolve_snapshot",
+        "prepare_valuation",
     ]
+
+
+@pytest.mark.asyncio
+async def test_transition_request_adds_filed_evidence_to_complete_profile() -> None:
+    client = _Client(ingestion=_ingestion())
+
+    await prepare_service_valuation_request(
+        _state(request=_compact_request(), model_type="dcf_growth"),
+        client=client,
+        principal=_principal(),
+        correlation_id="correlation-1",
+        deadline_at=datetime(2026, 11, 7, tzinfo=UTC),
+    )
+
+    ingestion_payload = client.calls[1][1]
+    assert ingestion_payload["required_fields"][-1] == "filed_operating_evidence"
+    assert len(ingestion_payload["required_fields"]) == 33
 
 
 @pytest.mark.asyncio
@@ -351,10 +487,37 @@ async def test_facts_only_projection_uses_base_evidence_for_growth_model() -> No
     assert prepared.valuation_request is None
     assert prepared.snapshot_selector["required_fields"] == [
         "revenue",
+        "cost_of_revenue",
         "operating_income",
-        "cash",
-        "debt",
-        "diluted_shares",
+        "income_before_tax",
+        "income_tax_expense",
+        "net_income",
+        "depreciation_and_amortization",
+        "capital_expenditure",
+        "operating_lease_cost",
+        "finance_lease_cost",
+        "stock_based_compensation",
+        "basic_weighted_average_shares",
+        "diluted_weighted_average_shares",
+        "operating_current_receivables",
+        "inventory",
+        "contract_assets",
+        "operating_current_payables",
+        "accrued_operating_liabilities",
+        "deferred_revenue",
+        "cash_and_equivalents",
+        "current_interest_bearing_debt",
+        "long_term_interest_bearing_debt",
+        "current_operating_lease_liabilities",
+        "long_term_operating_lease_liabilities",
+        "current_finance_lease_liabilities",
+        "long_term_finance_lease_liabilities",
+        "preferred_claims",
+        "noncontrolling_interests",
+        "convertible_instruments",
+        "common_shares_outstanding",
+        "dilutive_instruments",
+        "other_share_classes",
     ]
     assert [operation for operation, _ in client.calls] == ["resolve_identity"]
 

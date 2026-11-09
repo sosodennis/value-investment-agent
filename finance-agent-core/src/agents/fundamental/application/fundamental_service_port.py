@@ -11,6 +11,8 @@ from src.agents.fundamental.interface.fundamental_service_contracts import (
     FundamentalIdentityResolutionRequestV1,
     FundamentalIdentityResolutionV1,
     FundamentalServiceResponseV1,
+    FundamentalValuationEvidenceReadResultV1,
+    FundamentalValuationPreparationResultV1,
 )
 from src.shared.internal_services import InternalPrincipal
 
@@ -19,6 +21,8 @@ FundamentalOperation = Literal[
     "resolve_identity",
     "resolve_snapshot",
     "read_facts",
+    "read_valuation_evidence",
+    "prepare_valuation",
     "validate",
     "validate_with_policy",
     "calculate",
@@ -72,6 +76,24 @@ class FundamentalServiceClient(Protocol):
         correlation_id: str,
         deadline_at: datetime,
     ) -> FundamentalFactsReadResultV1: ...
+
+    async def prepare_valuation(
+        self,
+        input_payload: Mapping[str, object],
+        *,
+        principal: InternalPrincipal,
+        correlation_id: str,
+        deadline_at: datetime,
+    ) -> FundamentalValuationPreparationResultV1: ...
+
+    async def read_valuation_evidence(
+        self,
+        input_payload: Mapping[str, object],
+        *,
+        principal: InternalPrincipal,
+        correlation_id: str,
+        deadline_at: datetime,
+    ) -> FundamentalValuationEvidenceReadResultV1: ...
 
     async def resolve_identity(
         self,
