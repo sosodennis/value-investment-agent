@@ -3,7 +3,35 @@
 This record tracks work in progress. It is not an acceptance or `VERIFIED`
 record.
 
-## Current state
+## Current state after #356 merge
+
+- Issue: #351, first incomplete issue in the requested sequence; state OPEN.
+- Branch: `codex/issue-351-valuation-evidence`.
+- Current base sync: merge commit `a3fb9826` brings `origin/main` at
+  `6ed0031f38b05740ae2fb47b7fbfe607963d92fa` into the existing branch without
+  rewriting checkpoints `c109ae88e22937c134267c5dcd002b65074e90dc` and
+  `df406030c485274146035bb2e7d5668b2badb977`.
+- Pull request: none. No CI run covers the current branch.
+- #356: closed by PR #357. The accepted report SHA-256 is
+  `ce5f3f374071c63181dfa6fbd0b5a0501ebb6abd1ba3062ff7e73f0ba92fbc76`.
+  It reports three primary issuer clusters, zero next-original-filing pairs,
+  and zero primary fact labels. Its one-issuer Apple diagnostic has eight
+  windows per model, seven first-subsequent filings, and zero complete labels.
+  The descriptive Wilson 95% interval is `[0.0, 0.35433]`. No history
+  threshold is supported; affected model results remain provisional or
+  abstained.
+- #339 and #350 remain open references; #350 retains the `blocker` label.
+  Issues #352 through #355 are open and have not started. #352 depends on
+  #351; #353 depends on #351 and #352; #354 depends on #352 and #353. #355 is
+  optional and is not a core valuation dependency.
+- The root `.env` contains a contact-like SEC User-Agent value and is ignored
+  by Git. `.env.example` now documents the required variable with a
+  non-operational placeholder. The live request and post-merge tests are
+  pending.
+- #351 remains WIP. The three-of-five history rule is not a verified
+  threshold, and this matrix does not claim otherwise.
+
+## Previous checkpoint before #356 merged
 
 - Issue: #351, "Define evidence and policy sources for every valuation input"
 - Blocker: #356 requires representative point-in-time cohorts and chronological
@@ -20,7 +48,7 @@ sequence. Issues #339 and #350 remain open dependencies. Issues #352 through
 The local branch is one commit ahead of `origin/main`. GitHub has no check-run
 record for the unpushed source matrix commit.
 
-## Acceptance progress
+## Acceptance progress at previous checkpoint
 
 | Criterion | Evidence at this checkpoint | Status |
 | --- | --- | --- |
@@ -40,7 +68,7 @@ replay evidence, not a calibration or sufficiency cohort. The legacy
 20-case backtest reports consensus-gap metrics and has no chronological split
 manifest for the released Fundamental service models.
 
-## Source and dependency findings
+## Source and dependency findings at previous checkpoint
 
 - SEC acquisition and filing snapshots exist in Fundamental Service. The
   Agent Core request producer still resolves a narrow point-in-time field set;
@@ -58,7 +86,7 @@ manifest for the released Fundamental service models.
 - No open PR or CI run covers the local branch. The source matrix commit has
   not been pushed, so GitHub returns no check runs for that SHA.
 
-## Checks
+## Checks at previous checkpoint
 
 Commands and results below were run while examining the source matrix at
 `c109ae88e22937c134267c5dcd002b65074e90dc`:
@@ -77,7 +105,7 @@ No Docker project or service-backed acceptance was run. This checkpoint changes
 documentation only and does not change a service or user workflow. No live SEC
 query was run; this environment has no configured `FUNDAMENTAL_SEC_USER_AGENT`.
 
-## Next steps
+## Next steps from the previous checkpoint
 
 1. Resolve #356 in its owning evidence and cohort path, or record a justified
    underpowered outcome that keeps the affected baseline provisional or
