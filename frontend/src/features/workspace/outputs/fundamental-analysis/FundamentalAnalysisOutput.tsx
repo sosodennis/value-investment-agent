@@ -661,7 +661,13 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
         );
     }
 
-    if (status !== 'done' && reports.length === 0 && !canShowValuationPreview && !serviceFacts) {
+    if (
+        status !== 'done' &&
+        reports.length === 0 &&
+        !canShowValuationPreview &&
+        !serviceFacts &&
+        !degradedProjection
+    ) {
         return (
             <AgentLoadingState
                 type="full"

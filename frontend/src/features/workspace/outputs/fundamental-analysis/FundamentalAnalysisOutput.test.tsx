@@ -116,6 +116,41 @@ describe('FundamentalAnalysisOutput', () => {
         expect(screen.queryByText('Intrinsic Value')).toBeNull();
     });
 
+    it('renders a completed degraded artifact instead of showing a loading state', () => {
+        mockUseArtifact.mockReturnValue({
+            data: {
+                fundamental_service: {
+                    projection_type: 'degraded',
+                    contract_version: 'fundamental.v1',
+                    valuation_status: 'service_unavailable',
+                    quality_status: 'degraded',
+                    issue_codes: ['REQUIRED_FACTS_UNAVAILABLE'],
+                    service_failure: {
+                        code: 'REQUIRED_FACTS_UNAVAILABLE',
+                        message: 'SEC filing did not provide every requested verified fact',
+                        retryable: false,
+                    },
+                },
+                financial_reports: [],
+            },
+            isLoading: false,
+        });
+
+        render(
+            <FundamentalAnalysisOutput
+                reference={null}
+                previewData={null}
+                resolvedTicker="MSFT"
+                status="idle"
+            />
+        );
+
+        screen.getByText('Automatic valuation degraded');
+        screen.getByText('REQUIRED_FACTS_UNAVAILABLE');
+        screen.getByText('Fundamental facts unavailable');
+        expect(screen.queryByText('Processing financials…')).toBeNull();
+    });
+
     it('renders valuation results and trace from the service artifact without live preview data', () => {
         const releaseDigest = 'd'.repeat(64);
         mockUseArtifact.mockReturnValue({
