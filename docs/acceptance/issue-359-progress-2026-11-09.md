@@ -130,8 +130,11 @@ selected CIK. The current capture code validates every historical payload only
 through its top-level `cik`, so it rejects these otherwise parseable archives.
 The diagnostic request did not write or replace a snapshot.
 
-Status: WIP, not acceptance. Next, validate an absent archive payload CIK
-against the SEC-provided archive filename, add a mismatch test, rerun the
-focused suite, and resume the same fixed sample. Then generate the offline
-report and record the measured threshold status without replacing failed
-issuers or promoting an unsupported threshold.
+Status: WIP, not acceptance. A regression test now checks both observable
+outcomes: a matching SEC archive filename accepts an archive without a payload
+`cik`, and a filename for another CIK remains invalid. On the pre-fix code,
+the test exits 1 with the matching-name case failing and the mismatched-name
+case passing. The next step is to implement filename-backed identity
+validation, rerun the focused suite, and resume the same fixed sample. Then
+generate the offline report and record the measured threshold status without
+replacing failed issuers or promoting an unsupported threshold.

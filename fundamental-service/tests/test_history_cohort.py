@@ -173,6 +173,96 @@ class _FakeAdapter:
         )
 
 
+@pytest.mark.parametrize(
+    ("archive_cik", "expected_status"),
+    (("0000000001", "captured"), ("0000000002", "snapshot_invalid")),
+)
+def test_capture_validates_archived_submission_identity_without_payload_cik(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    archive_cik: str,
+    expected_status: str,
+):
+    cik = "0000000001"
+
+    class ArchiveAdapter(_FakeAdapter):
+        def __init__(self):
+            super().__init__(failing_cik="")
+
+        def capture_submissions(self, requested_cik: str):
+            source = super().capture_submissions(requested_cik)
+            payload = json.loads(source.content)
+            payload["filings"]["files"] = [
+                {
+                    "name": f"CIK{archive_cik}-submissions-2015.json",
+                    "filingTo": "2015-12-31",
+                }
+            ]
+            return self._source(source.source_id, source.uri, payload)
+
+        def capture_json(self, source_id: str, uri: str):
+            return self._source(
+                source_id,
+                uri,
+                {
+                    "filings": {
+                        "recent": {
+                            "form": [],
+                            "accessionNumber": [],
+                            "filingDate": [],
+                            "reportDate": [],
+                            "acceptanceDateTime": [],
+                        }
+                    }
+                },
+            )
+
+    protocol_path = tmp_path / "protocol.json"
+    protocol_path.write_text(json.dumps({"scope": "fixture"}), encoding="utf-8")
+    frame_path = tmp_path / "frame.json"
+    frame_path.write_text("{}", encoding="utf-8")
+    capture_path = tmp_path / "cohort" / "capture_manifest.json"
+    selected = (
+        {
+            "cik": cik,
+            "issuer_id": f"CIK:{cik}",
+            "decision_accession": f"{cik}-16-000001",
+            "stratum": "manufacturing",
+            "sample_rank": 1,
+            "selection_digest": "fixture-selection",
+        },
+    )
+    frame = {
+        "sample_size": 1,
+        "sample_seed": "fixture-seed",
+        "protocol_sha256": "protocol-hash",
+        "frame_manifest_sha256": "frame-hash",
+        "eligible": [{"cik": cik}],
+        "excluded": [],
+        "frame_counts": {"fixture": 1},
+    }
+    sample = {
+        "selected": selected,
+        "population_by_stratum": {"manufacturing": 1},
+        "sample_by_stratum": {"manufacturing": 1},
+    }
+    monkeypatch.setattr(history_cohort, "load_frame", lambda *args, **kwargs: frame)
+    monkeypatch.setattr(history_cohort, "select_sample", lambda _frame: sample)
+
+    result = history_cohort.capture_cohort(
+        protocol_path=protocol_path,
+        frame_manifest_path=frame_path,
+        capture_manifest_path=capture_path,
+        adapter=ArchiveAdapter(),
+        root=tmp_path,
+    )
+
+    assert result["issuers"][0]["capture_status"] == expected_status
+    assert result["issuers"][0]["failure_code"] == (
+        None if expected_status == "captured" else "INVALID_SOURCE_SNAPSHOT"
+    )
+
+
 def test_capture_failure_keeps_the_preselected_issuer_in_report_denominator(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
