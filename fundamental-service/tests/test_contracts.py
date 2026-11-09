@@ -9,6 +9,9 @@ from fundamental_service.contracts import (
     ForecastAssumptionsV1,
     IdentityV1,
     QualityStatus,
+    SecFilingSelectorV1,
+    SecIngestionRequestV1,
+    SecMappingReferenceV1,
     TraceV1,
     UncertaintyV1,
     ValuationContextV1,
@@ -111,3 +114,43 @@ def test_valuation_context_rejects_naive_timestamp():
             source_selection_policy="pit-v1",
             coverage_profile="us-gaap-public-v1",
         )
+
+
+def test_sec_ingestion_accepts_transition_fcff_evidence_set():
+    required_fields = tuple(f"field-{index}" for index in range(33))
+    request = SecIngestionRequestV1(
+        contract_version="fundamental.v1",
+        identity=IdentityV1(
+            issuer_id="0000000001",
+            issuer_name="Example Corp",
+            domicile="US",
+            reporting_basis="us-gaap",
+            security_id="EXAMPLE",
+            share_class="common",
+            currency="USD",
+        ),
+        cik="0000000001",
+        ticker="EXAMPLE",
+        valuation_timestamp=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        required_fields=required_fields,
+        mappings=tuple(
+            SecMappingReferenceV1(
+                decision_id=f"mapping-{index}",
+                mapping_version="sec-us-gaap-v1",
+                normalized_field=field,
+            )
+            for index, field in enumerate(required_fields)
+        ),
+        source_selection_policy="sec-pit-v1",
+        coverage_profile="us-gaap-public-v1",
+        legal_use_profile="sec-public-us-v1",
+        filing=SecFilingSelectorV1(forms=("10-K", "10-Q")),
+        parser_version="2.47.4",
+        validation_profile_id="sec-efm-us-dqc-v31.0.3",
+        taxonomy_manifest_id="sec-us-gaap-2023-2024-public-bundle",
+        taxonomy_version="us-gaap-2023-2024",
+        policy_version="sec-public-pit-v1",
+    )
+
+    assert len(request.required_fields) == 33
+    assert len(request.mappings) == 33
