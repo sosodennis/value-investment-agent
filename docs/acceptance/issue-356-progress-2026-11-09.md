@@ -1,7 +1,6 @@
 # Issue 356 progress checkpoint
 
-This record tracks work in progress. It is not an acceptance or `VERIFIED`
-record.
+This is a work-in-progress record, not acceptance or `VERIFIED` evidence.
 
 ## Current state
 
@@ -9,70 +8,94 @@ record.
 - Blocks: #351 acceptance and #352 start
 - Branch: `codex/issue-356-history-sufficiency`
 - Base commit: `f613db164a2251637aaf14d2abbf9e1866c39df9`
+- Prior checkpoint before this report: `e82d029bf7beaca7035ffa50f2bd19911ee75991`
 - Pull request: none
 - Merge and issue closure: pending
 
-The only available production-source fixtures cover Apple and Tesla. They do
-not form a representative issuer cohort, and the existing 21-case verification
-cohort repeats those two issuers across cases and sector labels. The 20-case
-legacy backtest uses a consensus-gap target and synthetic/manual DCF inputs;
-it is not valid history-sufficiency or intrinsic-value evidence.
-
-No broader SEC cohort has been collected. `FUNDAMENTAL_SEC_USER_AGENT` is not
-configured in this worktree. No SEC network request or Docker stack was started.
-An approved public contact string is needed before this work can collect a
-larger point-in-time cohort from SEC endpoints.
+The latest evidence artifact is generated from checked-in SEC fixtures. The
+worktree does not have an approved `FUNDAMENTAL_SEC_USER_AGENT`; the repository
+Compose default is a placeholder, so no SEC network request was made. An
+approved User-Agent was requested on 2026-11-09. Do not treat the current
+three-issuer fixture inventory as representative or close #356 on this record.
 
 ## Available source evidence
 
-| Source | Stable reference | What it supports | Limitation |
-| --- | --- | --- | --- |
-| Apple Company Facts | Snapshot `apple-companyfacts.json`, SHA-256 `75a78f918313f3336823517d6c34908d23dd07f07e90e625c61e705e3bb6d27b`, captured 2026-11-03 | Accession-level annual facts with `filed`, form, period, and value fields; historical selection can be reconstructed by filtering on filing availability. | One issuer. The Company Facts capture itself postdates the historical decisions and is not a substitute for pinned filing snapshots. |
-| Apple FY2024 10-K | Accession `0000320193-24-000123`, filed 2024-11-01 10:01:36 UTC, SHA-256 `a14d584e9804a87e92ddbd2446ade975e926a494671292403c811c1f4fc4b846` | Original filing bytes and filing timestamp for one mature-issuer snapshot. | One issuer-period. |
-| Tesla FY2023 10-K | Accession `0001628280-24-002390`, filed 2024-01-29 01:34:42 UTC, SHA-256 `450428c73c70775ccc288b2ac48ac2d6b81a128357fe6e92f0cf3ab76a05322e` | Original filing bytes and filing timestamp for one high-growth/automotive issuer snapshot. | No corresponding subsequent original annual filing is present for a realized next-period label. |
-| Tesla 10-K/A | Accession `0001104659-25-042659`, filed 2025-04-30 21:08:56 UTC, SHA-256 `ac21201742aa3e815678e0f1dad7605b9f659423966981497b1e1e285233a432` | Amendment bytes and an amendment relation to accession `0001628280-25-003063`. | Amendment scope is `unknown`; the original referenced filing is absent, so this amendment cannot stand in as the first subsequent label. |
-| Microsoft FY2024 parser package | Test fixture `microsoft-2024-original-xbrl-test-package.zip`, SHA-256 `9315745e8b66735afd8be0f63a2d5876d350eb7ae7be80a7e0aff015df76acf0`. The official [SEC filing index for accession 0000950170-24-087843](https://www.sec.gov/Archives/edgar/data/789019/000095017024087843/0000950170-24-087843-index.htm) records a 2024-07-30 acceptance time of 16:06:22 UTC. | The SEC index confirms Microsoft CIK `0000789019`, a 2024-06-30 report period, and SIC 7372. | The fixture is listed under `test_fixtures`, not captured sources. Its filing member is 6,860,910 bytes; the SEC index lists 6,860,911 bytes. The byte mismatch means the fixture cannot prove an exact immutable SEC snapshot. Excluded from cohort counts. |
+The primary fixture inventory has three issuer clusters and no subsequent
+original annual filing snapshots for OOS fact labels:
 
-The existing engineering fixture has 21 cases: 10 positive, 9 abstention, and
-2 degraded. They reference three snapshot IDs, but those IDs resolve to only
-the Apple and Tesla filing fixtures. Sector labels in the engineering cases do
-not create additional issuer observations.
+| Issuer | Filing snapshot | Availability | Classification / limitation |
+| --- | --- | --- | --- |
+| Apple (`CIK:0000320193`) | FY2024 10-K, accession `0000320193-24-000123` | 2024-11-01 10:01:36 UTC | Original filing bytes are hash-verified. No pinned SIC or historical identity crosswalk is available in the filing snapshot. |
+| Tesla (`CIK:0001318605`) | FY2023 10-K, accession `0001628280-24-002390` | 2024-01-29 01:34:42 UTC | Original filing bytes are hash-verified. No pinned SIC or historical identity crosswalk is available in the filing snapshot. |
+| Microsoft (`CIK:0000789019`) | FY2024 10-K, accession `0000950170-24-087843` | 2024-07-30 16:06:22 UTC | Both canonical SEC archive member hashes match the local XBRL fixture. The HTML member is one byte smaller than the SEC index metadata; this remains a metadata warning, not a member-integrity failure. SEC SIC 7372 is available. |
+
+The Tesla 10-K/A accession `0001104659-25-042659` is excluded because its
+amendment scope is unknown and the referenced original filing is absent. The
+engineering verification fixtures and legacy consensus-relative backtest do
+not add independent issuer observations.
+
+The Apple Company Facts capture is a post-capture aggregate, dated
+2026-11-03. It is used only as a one-issuer diagnostic: the report filters
+original 10-K facts by accession, fiscal period, unit, and filing acceptance
+time, and does not use later amendment values as historical inputs. It is not a
+substitute for a representative cohort of immutable filing snapshots.
+
+## Report result
+
+Command:
+
+```sh
+uv run --extra dev --project fundamental-service python -m fundamental_service.history_sufficiency_report
+```
+
+Evidence artifact: `docs/acceptance/issue-356-history-sufficiency-v1.json`
+
+- Capture manifest SHA-256: `d7ca79f45f231ce118e7433a9773a24072eeae50b91fdd57c90461f1e903f5fc`
+- Report SHA-256: `232b310209fd7f2c18602e3a26c3183674a424c4231206d5991cdc04fe10a95f`
+- Primary cohort: 3 issuer clusters; 1 issuer has a filing-pinned SIC; 0 next-original-snapshot pairs; 0 primary-cohort fact labels.
+- Diagnostic pilot: 1 issuer, 8 five-period windows for each released model family; 0 windows pass the candidate rule of at least 3 complete periods in the latest 5 original annual filing periods.
+- The report keeps 398 unique source facts in one catalog; all historical-window fact IDs resolve to it.
+- OOS completeness: 0 eligible labels and no estimable interval; no historical Fundamental service forecasts exist, so forecast accuracy is not measured.
+- Threshold decision: `underpowered`; no threshold is supported; affected results remain provisional or abstained.
+- Two consecutive report runs returned the same SHA-256; the second reported `wrote: false`.
+
+The report names unmeasured negative or near-zero denominators, loss-making
+periods, volatility/cyclicality, structural breaks, conflicting mappings,
+reviewed normalized-tax policy, operating-working-capital comparability, and
+transition-model operating evidence. Search, LLM, analyst target, and consensus
+sources are not read.
 
 ## Acceptance progress
 
-| Criterion | Evidence at this checkpoint | Status |
+| Criterion | Evidence | Status |
 | --- | --- | --- |
-| Define a representative U.S. GAAP cohort with issuer identity history and exclusions. | Available source inventory contains two issuers and no historical filing-frame selection. | Not met. |
-| Build chronological point-in-time snapshots and first-subsequent-filing labels. | Existing service contracts and unit tests cover point-in-time facts, first subsequent publication, and restatement diagnostics. No issue-specific cohort manifest or issuer-period rows exist. | Existing primitives verified; cohort not built. |
-| Report model- and field-level coverage plus chronological OOS results and uncertainty intervals. | No issue-specific field-coverage report, OOS metrics, or precision report exists. | Not met. |
-| Decide whether the three-of-five rule is supported or evidence is underpowered. | The available data cannot establish representative coverage or an issuer-clustered precision interval. | Candidate rule remains unvalidated; affected results must remain provisional or abstain. |
-| Test temporal ordering, first subsequent labels, amendments, reproducibility, and exclusion of analyst/consensus/Search/LLM data. | Existing tests cover temporal ordering, first publication, and amendment behavior. Issue-specific cohort reproducibility and forbidden-source tests have not been added. | Partially covered by existing tests only. |
-| Record exact-commit checks and artifact hashes in the linked #351 acceptance record. | #351 has a WIP record at `docs/acceptance/issue-351-progress-2026-11-09.md`; this #356 checkpoint is not yet linked there. | Pending. |
+| Representative U.S. GAAP issuer cohort with identity history, industry coverage, and exclusions. | Three selectively checked-in issuer snapshots; only Microsoft has filing-pinned SIC; no historical identity/successor crosswalk or representative sampling frame. Tesla amendment exclusion is explicit. | Not met; requires broader approved source capture. |
+| Point-in-time snapshots and first subsequent eligible filing labels. | Stable CIK/accession rows carry period, availability, valuation timestamp, source hash, inclusion/exclusion reason, and next-original snapshot status. The primary fixtures contain no subsequent original filing snapshot. Apple diagnostic selects original facts only when available by the valuation timestamp. | Partially met; no primary fact labels. |
+| Model- and field-level coverage plus chronological OOS results and uncertainty. | Both model families report field coverage across eight Apple diagnostic windows, per-period source fact references, first-subsequent filing selection, and label completeness. Neither model has a passing candidate window or eligible label; the period-level Wilson interval is therefore null, and issuer-cluster intervals are not estimable. | Partial diagnostic only; underpowered. |
+| Decide the candidate history threshold without overstating evidence. | The 3-of-5 complete-period candidate is unvalidated; both model families and the shared decision mark results provisional or abstained. | Met for explicit underpowered status only; threshold not established. |
+| Test time ordering, labels, amendment handling, reproducibility, and forbidden sources. | New tests cover point-in-time selection, first-subsequent original filing, amendment exclusion, walk-forward windows, missing-period detection, report idempotence, and source exclusions. | Local tests pass; broader representative evidence remains unavailable. |
+| Record exact commit and verification evidence in the linked #351 acceptance record. | This checkpoint and report are prepared; the exact post-commit SHA and rerun commands must still be recorded in the #351 issue acceptance comment. | Pending. |
 
-## Baseline checks
+## Verification
 
-These commands ran against base commit
-`f613db164a2251637aaf14d2abbf9e1866c39df9`:
+These checks passed on the current candidate tree before its next checkpoint
+commit:
 
 | Command | Result |
 | --- | --- |
-| `uv run --extra dev --project fundamental-service pytest fundamental-service/tests/test_calibration.py -q` | Exit 0; 20 passed. |
-| `uv run --extra dev --project fundamental-service pytest fundamental-service/tests/test_facts.py -q` | Exit 0; 13 passed. |
-| `git diff origin/main...HEAD --check` | Exit 0; no changes at the clean base. |
+| `uv run --extra dev --project fundamental-service pytest fundamental-service/tests/test_history_sufficiency_report.py fundamental-service/tests/test_calibration.py fundamental-service/tests/test_facts.py -q` | Exit 0; 40 passed. |
+| `uvx --from ruff ruff check fundamental-service/src/fundamental_service/history_sufficiency_report.py fundamental-service/tests/test_history_sufficiency_report.py` | Exit 0; all checks passed. |
+| `python3 -m compileall -q fundamental-service/src/fundamental_service/history_sufficiency_report.py fundamental-service/tests/test_history_sufficiency_report.py` | Exit 0. |
+| `python3 scripts/architecture_guard.py` | Exit 0; no boundary violations. |
+| `git diff --check` | Exit 0. |
+| Report command, run twice | Both exit 0; same SHA-256; second run did not rewrite the file. |
 
-These baseline tests establish behavior in existing primitives only. They do
-not establish the requested cohort or OOS evidence.
+No Docker stack, service-backed end-to-end test, SEC network request, GitHub CI,
+PR, or review has run. The report is an offline diagnostic and does not change
+runtime service behavior; #356 remains open and blocks #351 acceptance.
 
 ## Next steps
 
-1. Use an approved identifiable SEC User-Agent and a historical filing frame
-   that does not start from today's ticker list, then capture immutable source
-   bytes and their hashes.
-2. Build the issuer-period manifest from point-in-time SEC facts. Keep missing,
-   amended, structurally broken, and out-of-profile rows with exclusion reasons.
-3. Evaluate the three-of-five rule by model and industry on chronological
-   outcomes. Report issuer-level uncertainty and retain provisional or
-   abstained status if the predeclared precision target is not met.
-4. Add reproducibility and temporal-leakage tests, run them against the exact
-   candidate commit, and link the result from #351 before resolving this
-   blocker.
+1. Use an approved identifiable SEC User-Agent to add immutable, historical filing snapshots and a predeclared issuer sampling frame.
+2. Extend point-in-time fact panels and labels by issuer and model, then evaluate industry coverage and issuer-cluster uncertainty; retain the underpowered outcome if the sample gate still fails.
+3. Re-run checks on the exact checkpoint/PR commit, record its SHA and artifact hash on #356 and the linked #351 acceptance record, then complete required review, CI, merge, and issue closure before starting #351.
