@@ -116,6 +116,21 @@ This is a work-in-progress record. It does not mark #352 accepted or verified.
   claimed because the isolated database has no active release fixture and #362
   still blocks automatic market/policy completion.
 
+## Draft PR CI checkpoint (2026-11-10)
+
+- Draft PR [#363](https://github.com/sosodennis/value-investment-agent/pull/363)
+  targets `main` from `codex/issue-352-auto-valuation`. It remains draft and
+  does not close #352.
+- On the PR head before this documentation-only checkpoint, all 11 required
+  checks passed: backend lint/test, frontend lint/type/test, contract policy,
+  codegen, Fundamental offline fixture contracts, notification Postgres
+  integration, production Compose secret contract, and the LLM/search/model
+  contract gates. `fundamental-release-gate` was skipped by workflow condition.
+- Merge status remains blocked because #352 acceptance is incomplete: #362 is
+  unresolved and no active release-backed issuer valuation artifact has been
+  produced. The PR body records the same exact commands, checkpoint SHA, and
+  remaining gates.
+
 ## Baseline findings
 
 - Fundamental Service currently selects facts from one immutable snapshot and calculates a caller-complete `ValuationInputV1`. Its facts request selects one point-in-time fact per normalized field; the normal Agent producer requests a narrow set and does not read aligned annual series.
