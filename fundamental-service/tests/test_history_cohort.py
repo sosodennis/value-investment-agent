@@ -193,7 +193,9 @@ def test_capture_failure_keeps_the_preselected_issuer_in_report_denominator(
         for position, cik in enumerate(("0000000001", "0000000002"), start=1)
     )
     frame = {
-        "protocol": {"scope": "fixture"},
+        "protocol_scope": "fixture",
+        "sample_size": 2,
+        "sample_seed": "fixture-seed",
         "protocol_sha256": "protocol-hash",
         "frame_manifest_sha256": "frame-hash",
         "eligible": [{"cik": cik} for cik in ("0000000001", "0000000002")],

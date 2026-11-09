@@ -15,7 +15,7 @@ import tempfile
 from collections import defaultdict
 from datetime import UTC, date, datetime
 from pathlib import Path, PurePosixPath
-from typing import Any
+from typing import TypedDict
 
 from .history_sufficiency_report import (
     FIELD_SPECS,
@@ -31,10 +31,13 @@ from .history_sufficiency_report import (
     _iso,
     _obj,
     _select_fact,
+    _list,
+    _str,
     _wilson,
     first_subsequent_original_filing,
 )
 from .sec_source import SecEdgarSourceAdapter, SecRequestPolicy, SecSourceError
+from .snapshots import CapturedSource
 
 ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_PROTOCOL = ROOT / "docs/acceptance/issue-359-cohort-protocol-v1.json"
@@ -70,18 +73,71 @@ _FRAME_COLUMNS = (
     "accepted",
 )
 
+JsonObject = dict[str, object]
+
+
+class FrameIssuer(TypedDict):
+    issuer_id: str
+    cik: str
+    decision_accession: str
+    decision_filed: str
+    report_period_end: str
+    frame_accepted: str
+    countryinc: str
+    sic: str | None
+    stratum: str
+
+
+class FrameExclusion(TypedDict):
+    issuer_id: str
+    decision_accession: str | None
+    countryinc: str | None
+    reason: str
+
+
+class FrameSnapshot(TypedDict):
+    protocol_scope: str
+    sample_size: int
+    sample_seed: str
+    protocol_sha256: str
+    frame_manifest_sha256: str
+    frame_counts: dict[str, int]
+    eligible: tuple[FrameIssuer, ...]
+    excluded: tuple[FrameExclusion, ...]
+
+
+class SampledIssuer(FrameIssuer):
+    sample_rank: int
+    selection_digest: str
+
+
+class SampleSelection(TypedDict):
+    selected: tuple[SampledIssuer, ...]
+    population_by_stratum: dict[str, int]
+    sample_by_stratum: dict[str, int]
+
 
 def _sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
-def _read_json(path: Path) -> dict[str, Any]:
+def _read_json(path: Path) -> JsonObject:
     try:
         value = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as error:
         raise ReportError(f"cannot read JSON artifact {path}: {error}") from error
-    if not isinstance(value, dict):
-        raise ReportError(f"JSON artifact must be an object: {path}")
+    return _obj(value, f"JSON artifact {path}")
+
+
+def _text(value: object, label: str) -> str:
+    if not isinstance(value, str):
+        raise ReportError(f"{label} must be text")
+    return value
+
+
+def _integer(value: object, label: str) -> int:
+    if not isinstance(value, int) or isinstance(value, bool):
+        raise ReportError(f"{label} must be an integer")
     return value
 
 
@@ -94,7 +150,7 @@ def _repo_path(root: Path, relative: object, label: str) -> Path:
     return resolved
 
 
-def _verified_snapshot(root: Path, record: dict[str, Any], label: str) -> bytes:
+def _verified_snapshot(root: Path, record: JsonObject, label: str) -> bytes:
     stored = _obj(record.get("stored_snapshot"), f"{label}.stored_snapshot")
     path = _repo_path(root, stored.get("path"), label)
     packed = path.read_bytes()
@@ -118,7 +174,7 @@ def _cik(value: object) -> str:
     return text.zfill(10)
 
 
-def _sic_stratum(value: object, definitions: dict[str, Any]) -> str:
+def _sic_stratum(value: object, definitions: JsonObject) -> str:
     text = str(value or "").strip()
     if not text.isdigit():
         return "unclassified"
@@ -137,7 +193,7 @@ def load_frame(
     frame_manifest_path: Path = DEFAULT_FRAME_MANIFEST,
     *,
     root: Path = ROOT,
-) -> dict[str, Any]:
+) -> FrameSnapshot:
     """Verify pinned SEC frame files and return the eligible issuer population."""
     protocol_path = protocol_path.resolve()
     frame_manifest_path = frame_manifest_path.resolve()
@@ -147,16 +203,24 @@ def load_frame(
         raise ReportError("unsupported issue-359 sampling protocol")
     if manifest.get("schema_version") != "issue-359-sec-frame-snapshot-v1":
         raise ReportError("unsupported issue-359 frame manifest")
-    sources = {
-        source.get("source_id"): source
-        for source in manifest.get("sources", [])
-        if isinstance(source, dict)
-    }
+    sources: dict[str, JsonObject] = {}
+    for source_index, source_value in enumerate(
+        _list(manifest.get("sources"), "frame sources")
+    ):
+        source = _obj(source_value, f"frame source {source_index}")
+        source_id = _str(source.get("source_id"), "frame source_id")
+        sources[source_id] = source
     index_source = sources.get("sec-2016q1-master-index")
     dataset_source = sources.get("sec-2016q1-submissions")
     if not isinstance(index_source, dict) or not isinstance(dataset_source, dict):
         raise ReportError("SEC frame sources are incomplete")
     frame_spec = _obj(protocol.get("sampling_frame"), "sampling_frame")
+    sample_spec = _obj(protocol.get("sample"), "sample")
+    sample_size = _integer(sample_spec.get("issuer_clusters"), "issuer_clusters")
+    sample_seed = _str(sample_spec.get("seed"), "sample.seed")
+    if sample_size < 1:
+        raise ReportError("issuer_clusters must be positive")
+    protocol_scope = _str(protocol.get("scope"), "scope")
     index_sha = frame_spec.get("master_index_sha256")
     dataset_sha = frame_spec.get("financial_statement_dataset_sha256")
     if index_source.get("response_sha256") != index_sha:
@@ -167,7 +231,8 @@ def load_frame(
     index_bytes = _verified_snapshot(root, index_source, "master index")
     dataset_bytes = _verified_snapshot(root, dataset_source, "SEC submissions table")
     master_pairs: set[tuple[str, str]] = set()
-    master_rows: list[dict[str, str]] = []
+    master_ciks: set[str] = set()
+    master_index_filing_count = 0
     for line in index_bytes.decode("latin-1").splitlines():
         parts = line.split("|")
         if len(parts) != 5 or parts[2] != "10-K":
@@ -177,9 +242,8 @@ def load_frame(
             raise ReportError("master index contains an invalid 10-K accession")
         cik = _cik(parts[0])
         master_pairs.add((cik, accession))
-        master_rows.append(
-            {"cik": cik, "accession": accession, "filed": parts[3], "path": parts[4]}
-        )
+        master_ciks.add(cik)
+        master_index_filing_count += 1
 
     try:
         reader = csv.DictReader(
@@ -187,7 +251,16 @@ def load_frame(
         )
         if tuple(reader.fieldnames or ()) != _FRAME_COLUMNS:
             raise ReportError("SEC frame table columns do not match the pinned schema")
-        dataset_rows = [dict(row) for row in reader]
+        dataset_rows: list[dict[str, str]] = []
+        for row_index, row in enumerate(reader, start=1):
+            if None in row:
+                raise ReportError("SEC frame table has an extra column value")
+            dataset_rows.append(
+                {
+                    column: _text(row.get(column), f"dataset row {row_index} {column}")
+                    for column in _FRAME_COLUMNS
+                }
+            )
     except (UnicodeDecodeError, csv.Error) as error:
         raise ReportError("SEC frame submissions table is invalid") from error
 
@@ -207,16 +280,20 @@ def load_frame(
         dataset_ciks.add(cik)
         candidates[cik].append(row)
 
-    master_ciks = {row["cik"] for row in master_rows}
     if not dataset_ciks <= master_ciks:
         raise ReportError("SEC dataset contains a CIK absent from the master index")
 
     definitions = _obj(frame_spec.get("sic_divisions"), "sic_divisions")
-    eligible: list[dict[str, Any]] = []
-    excluded: list[dict[str, Any]] = []
+    eligible: list[FrameIssuer] = []
+    excluded: list[FrameExclusion] = []
     for cik in sorted(master_ciks - dataset_ciks):
         excluded.append(
-            {"issuer_id": f"CIK:{cik}", "reason": "no_matching_sec_xbrl_dataset_row"}
+            FrameExclusion(
+                issuer_id=f"CIK:{cik}",
+                decision_accession=None,
+                countryinc=None,
+                reason="no_matching_sec_xbrl_dataset_row",
+            )
         )
     for cik in sorted(dataset_ciks):
         rows = candidates[cik]
@@ -230,34 +307,34 @@ def load_frame(
         country = str(decision.get("countryinc") or "").strip().upper()
         if country != "US":
             excluded.append(
-                {
-                    "issuer_id": f"CIK:{cik}",
-                    "decision_accession": decision["adsh"],
-                    "countryinc": country or None,
-                    "reason": "non_us_or_unknown_filing_time_incorporation_country",
-                }
+                FrameExclusion(
+                    issuer_id=f"CIK:{cik}",
+                    decision_accession=decision["adsh"],
+                    countryinc=country or None,
+                    reason="non_us_or_unknown_filing_time_incorporation_country",
+                )
             )
             continue
         sic = str(decision.get("sic") or "").strip() or None
         eligible.append(
-            {
-                "issuer_id": f"CIK:{cik}",
-                "cik": cik,
-                "decision_accession": decision["adsh"],
-                "decision_filed": _file_date(decision.get("filed"), "dataset filed"),
-                "report_period_end": _file_date(
+            FrameIssuer(
+                issuer_id=f"CIK:{cik}",
+                cik=cik,
+                decision_accession=decision["adsh"],
+                decision_filed=_file_date(decision.get("filed"), "dataset filed"),
+                report_period_end=_file_date(
                     decision.get("period"), "dataset report period"
                 ),
-                "frame_accepted": str(decision.get("accepted", "")),
-                "countryinc": country,
-                "sic": sic,
-                "stratum": _sic_stratum(sic, definitions),
-            }
+                frame_accepted=decision["accepted"],
+                countryinc=country,
+                sic=sic,
+                stratum=_sic_stratum(sic, definitions),
+            )
         )
 
     expected = _obj(frame_spec.get("frame_counts"), "frame_counts")
     actual = {
-        "master_index_original_10k_filings": len(master_rows),
+        "master_index_original_10k_filings": master_index_filing_count,
         "master_index_unique_ciks": len(master_ciks),
         "matching_dataset_unique_ciks": len(dataset_ciks),
         "us_incorporated_unique_ciks": len(eligible),
@@ -265,19 +342,21 @@ def load_frame(
         "matched_non_us_or_unknown_incorporation_ciks_excluded": len(excluded)
         - len(master_ciks - dataset_ciks),
     }
-    if actual != expected:
-        raise ReportError(f"SEC frame counts do not match protocol: {actual}")
-    return {
-        "protocol": protocol,
-        "protocol_sha256": _sha256(protocol_path.read_bytes()),
-        "frame_manifest": manifest,
-        "frame_manifest_sha256": _sha256(frame_manifest_path.read_bytes()),
-        "eligible": tuple(eligible),
-        "excluded": tuple(excluded),
-        "frame_counts": actual,
-        "master_index_rows": tuple(master_rows),
-        "dataset_ciks": frozenset(dataset_ciks),
+    expected_counts = {
+        name: _integer(expected.get(name), f"frame_counts.{name}") for name in actual
     }
+    if actual != expected_counts:
+        raise ReportError(f"SEC frame counts do not match protocol: {actual}")
+    return FrameSnapshot(
+        protocol_scope=protocol_scope,
+        sample_size=sample_size,
+        sample_seed=sample_seed,
+        protocol_sha256=_sha256(protocol_path.read_bytes()),
+        frame_manifest_sha256=_sha256(frame_manifest_path.read_bytes()),
+        eligible=tuple(eligible),
+        excluded=tuple(excluded),
+        frame_counts=actual,
+    )
 
 
 def _file_date(value: object, label: str) -> str:
@@ -327,20 +406,16 @@ def _stratum_allocation(
     return allocation
 
 
-def select_sample(frame: dict[str, Any]) -> dict[str, Any]:
+def select_sample(frame: FrameSnapshot) -> SampleSelection:
     """Select the protocol's deterministic, proportional SIC-stratified sample."""
-    protocol = frame["protocol"]
-    sample_spec = _obj(protocol.get("sample"), "sample")
-    size = sample_spec.get("issuer_clusters")
-    seed = sample_spec.get("seed")
-    if not isinstance(size, int) or size < 1 or not isinstance(seed, str) or not seed:
-        raise ReportError("sampling protocol has an invalid sample size or seed")
-    groups: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    size = frame["sample_size"]
+    seed = frame["sample_seed"]
+    groups: dict[str, list[FrameIssuer]] = defaultdict(list)
     for issuer in frame["eligible"]:
         groups[issuer["stratum"]].append(issuer)
     populations = {name: len(rows) for name, rows in groups.items()}
     allocation = _stratum_allocation(populations, size)
-    selected: list[dict[str, Any]] = []
+    selected: list[SampledIssuer] = []
     for stratum in sorted(allocation):
         ranked = sorted(
             groups[stratum],
@@ -360,15 +435,15 @@ def select_sample(frame: dict[str, Any]) -> dict[str, Any]:
                 }
             )
     selected.sort(key=lambda row: (row["stratum"], row["sample_rank"], row["cik"]))
-    return {
-        "selected": tuple(selected),
-        "population_by_stratum": dict(sorted(populations.items())),
-        "sample_by_stratum": dict(sorted(allocation.items())),
-    }
+    return SampleSelection(
+        selected=tuple(selected),
+        population_by_stratum=dict(sorted(populations.items())),
+        sample_by_stratum=dict(sorted(allocation.items())),
+    )
 
 
-def _source_metadata(source: Any) -> dict[str, Any]:
-    content = bytes(source.content)
+def _source_metadata(source: CapturedSource) -> JsonObject:
+    content = source.content
     return {
         "source_id": source.source_id,
         "uri": source.uri,
@@ -380,8 +455,8 @@ def _source_metadata(source: Any) -> dict[str, Any]:
     }
 
 
-def _filing_records(raw_sources: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    merged: dict[str, dict[str, Any]] = {}
+def _filing_records(raw_sources: list[JsonObject]) -> list[JsonObject]:
+    merged: dict[str, JsonObject] = {}
     for raw in raw_sources:
         filings = _obj(raw.get("filings"), "submissions.filings")
         recent = _obj(filings.get("recent"), "submissions.recent")
@@ -392,28 +467,35 @@ def _filing_records(raw_sources: list[dict[str, Any]]) -> list[dict[str, Any]]:
             "reportDate",
             "acceptanceDateTime",
         )
-        arrays = {key: recent.get(key) for key in keys}
-        if any(not isinstance(value, list) for value in arrays.values()):
-            raise ReportError(
-                "SEC submissions response is missing annual filing arrays"
-            )
-        lengths = {len(value) for value in arrays.values() if isinstance(value, list)}
+        arrays = {
+            key: _list(recent.get(key), f"submissions.recent.{key}") for key in keys
+        }
+        lengths = {len(value) for value in arrays.values()}
         if len(lengths) != 1:
             raise ReportError("SEC submissions arrays have inconsistent lengths")
         count = lengths.pop()
         for index in range(count):
             form = arrays["form"][index]
             accession = arrays["accessionNumber"][index]
-            if form not in _ANNUAL_FORMS or not isinstance(accession, str):
+            if not isinstance(form, str) or form not in _ANNUAL_FORMS:
                 continue
-            if not re.fullmatch(r"\d{10}-\d{2}-\d{6}", accession):
+            if not isinstance(accession, str) or not re.fullmatch(
+                r"\d{10}-\d{2}-\d{6}", accession
+            ):
                 continue
-            record = {
+            record: JsonObject = {
                 "accession_number": accession,
                 "form": form,
-                "filing_date": arrays["filingDate"][index],
-                "report_period_end": arrays["reportDate"][index],
-                "accepted_at": arrays["acceptanceDateTime"][index],
+                "filing_date": _text(
+                    arrays["filingDate"][index], "submissions filingDate"
+                ),
+                "report_period_end": _text(
+                    arrays["reportDate"][index], "submissions reportDate"
+                ),
+                "accepted_at": _text(
+                    arrays["acceptanceDateTime"][index],
+                    "submissions acceptanceDateTime",
+                ),
             }
             previous = merged.get(accession)
             if previous is not None and previous != record:
@@ -431,12 +513,12 @@ def _filing_records(raw_sources: list[dict[str, Any]]) -> list[dict[str, Any]]:
     )
 
 
-def _normalized_company_facts(raw: dict[str, Any]) -> dict[str, Any]:
+def _normalized_company_facts(raw: JsonObject) -> JsonObject:
     raw_facts = _obj(raw.get("facts"), "companyfacts.facts")
     us_gaap = raw_facts.get("us-gaap")
     if not isinstance(us_gaap, dict):
         raise ReportError("SEC Company Facts response has no us-gaap taxonomy")
-    kept: dict[str, Any] = {}
+    kept: dict[str, object] = {}
     for field, (concept_name, unit, _period_type) in FIELD_SPECS.items():
         concept = us_gaap.get(concept_name)
         if not isinstance(concept, dict):
@@ -444,9 +526,11 @@ def _normalized_company_facts(raw: dict[str, Any]) -> dict[str, Any]:
         units = concept.get("units")
         if not isinstance(units, dict) or not isinstance(units.get(unit), list):
             continue
-        records = []
-        for record in units[unit]:
-            if not isinstance(record, dict) or record.get("form") not in _ANNUAL_FORMS:
+        records: list[JsonObject] = []
+        for record_value in _list(units[unit], f"{concept_name}.{unit}"):
+            record = _obj(record_value, f"{concept_name} fact")
+            form = record.get("form")
+            if not isinstance(form, str) or form not in _ANNUAL_FORMS:
                 continue
             records.append(
                 {key: record[key] for key in _FACT_ROW_KEYS if key in record}
@@ -462,12 +546,11 @@ def _normalized_company_facts(raw: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _submission_file_uris(raw: dict[str, Any]) -> tuple[str, ...]:
+def _submission_file_uris(raw: JsonObject) -> tuple[str, ...]:
     files = _obj(raw.get("filings"), "submissions.filings").get("files", [])
-    if not isinstance(files, list):
-        raise ReportError("SEC submissions file history must be an array")
+    file_rows = _list(files, "submissions.filings.files")
     uris: list[str] = []
-    for item in files:
+    for item in file_rows:
         record = _obj(item, "submissions.file")
         name = record.get("name")
         if not isinstance(name, str) or not re.fullmatch(
@@ -483,27 +566,27 @@ def _submission_file_uris(raw: dict[str, Any]) -> tuple[str, ...]:
 
 def _capture_issuer(
     adapter: SecEdgarSourceAdapter,
-    issuer: dict[str, Any],
+    issuer: SampledIssuer,
     *,
     protocol_sha256: str,
     frame_manifest_sha256: str,
-) -> dict[str, Any]:
+) -> JsonObject:
     cik = issuer["cik"]
     base = adapter.capture_submissions(cik)
-    base_payload = json.loads(base.content)
+    base_payload = _obj(json.loads(base.content), "SEC submissions")
     if _cik(base_payload.get("cik")) != cik:
         raise ReportError("SEC submissions CIK differs from the selected issuer")
     sources = [base]
     submission_payloads = [base_payload]
     for uri in _submission_file_uris(base_payload):
         archived = adapter.capture_json(source_id="sec-submissions", uri=uri)
-        archived_payload = json.loads(archived.content)
+        archived_payload = _obj(json.loads(archived.content), "SEC submissions archive")
         if _cik(archived_payload.get("cik")) != cik:
             raise ReportError("SEC submissions history CIK differs from the issuer")
         sources.append(archived)
         submission_payloads.append(archived_payload)
     company_source = adapter.capture_company_facts(cik)
-    company_payload = json.loads(company_source.content)
+    company_payload = _obj(json.loads(company_source.content), "SEC Company Facts")
     if _cik(company_payload.get("cik")) != cik:
         raise ReportError("SEC Company Facts CIK differs from the selected issuer")
     filings = _filing_records(submission_payloads)
@@ -549,8 +632,26 @@ def _write_atomic(path: Path, content: bytes) -> None:
             os.unlink(temporary)
 
 
-def _write_capture_manifest(path: Path, manifest: dict[str, Any]) -> None:
+def _write_capture_manifest(path: Path, manifest: JsonObject) -> None:
     _write_atomic(path, _canonical_json(manifest))
+
+
+def _snapshot_source_hashes(snapshot: JsonObject) -> list[str]:
+    sources = _list(snapshot.get("source_responses"), "snapshot source_responses")
+    return [
+        _str(
+            _obj(source, "snapshot source").get("response_sha256"),
+            "source response sha256",
+        )
+        for source in sources
+    ]
+
+
+def _snapshot_decision_status(snapshot: JsonObject) -> str:
+    decision_present = snapshot.get("decision_filing_present")
+    if not isinstance(decision_present, bool):
+        raise ReportError("issuer snapshot decision_filing_present must be boolean")
+    return "captured" if decision_present else "decision_filing_missing"
 
 
 def capture_cohort(
@@ -560,7 +661,7 @@ def capture_cohort(
     capture_manifest_path: Path = DEFAULT_CAPTURE_MANIFEST,
     adapter: SecEdgarSourceAdapter | None = None,
     root: Path = ROOT,
-) -> dict[str, Any]:
+) -> JsonObject:
     frame = load_frame(protocol_path, frame_manifest_path, root=root)
     sample = select_sample(frame)
     if adapter is None:
@@ -584,22 +685,26 @@ def capture_cohort(
         or existing.get("frame_manifest_sha256") != frame_sha256
     ):
         raise ReportError("existing capture manifest belongs to a different protocol")
-    prior = {
-        row.get("cik"): row
-        for row in (existing or {}).get("issuers", [])
-        if isinstance(row, dict)
-    }
-    capture_started_at = (existing or {}).get("capture_started_at") or _iso(
-        datetime.now(UTC)
-    )
-    records: list[dict[str, Any]] = []
+    prior: dict[str, JsonObject] = {}
+    if existing is not None:
+        for row_index, row_value in enumerate(
+            _list(existing.get("issuers"), "capture manifest issuers")
+        ):
+            row = _obj(row_value, f"capture manifest issuer {row_index}")
+            prior[_str(row.get("cik"), "capture issuer cik")] = row
+        capture_started_at = _str(
+            existing.get("capture_started_at"), "capture_started_at"
+        )
+    else:
+        capture_started_at = _iso(datetime.now(UTC))
+    records: list[JsonObject] = []
     output_dir = capture_manifest_path.parent
     snapshot_dir = output_dir / "snapshots"
     for selected in sample["selected"]:
         cik = selected["cik"]
         path = snapshot_dir / f"{cik}.json.gz"
         previous = prior.get(cik, {})
-        row = {
+        row: JsonObject = {
             **selected,
             "capture_status": "pending",
             "snapshot_path": str(path.resolve().relative_to(root.resolve())),
@@ -611,7 +716,9 @@ def capture_cohort(
         if path.exists():
             packed = path.read_bytes()
             try:
-                snapshot = json.loads(gzip.decompress(packed))
+                snapshot = _obj(
+                    json.loads(gzip.decompress(packed)), "existing issuer snapshot"
+                )
             except (OSError, EOFError, json.JSONDecodeError) as error:
                 raise ReportError(
                     f"existing issuer snapshot is corrupt: {cik}"
@@ -627,15 +734,10 @@ def capture_cohort(
                 )
             row.update(
                 {
-                    "capture_status": "captured"
-                    if snapshot.get("decision_filing_present")
-                    else "decision_filing_missing",
+                    "capture_status": _snapshot_decision_status(snapshot),
                     "snapshot_sha256": _sha256(packed),
                     "snapshot_bytes": len(packed),
-                    "source_response_sha256s": [
-                        source["response_sha256"]
-                        for source in snapshot["source_responses"]
-                    ],
+                    "source_response_sha256s": _snapshot_source_hashes(snapshot),
                 }
             )
             if previous.get("capture_status") == "retrieval_failed":
@@ -654,15 +756,10 @@ def capture_cohort(
                 _write_atomic(path, packed)
                 row.update(
                     {
-                        "capture_status": "captured"
-                        if snapshot["decision_filing_present"]
-                        else "decision_filing_missing",
+                        "capture_status": _snapshot_decision_status(snapshot),
                         "snapshot_sha256": _sha256(packed),
                         "snapshot_bytes": len(packed),
-                        "source_response_sha256s": [
-                            source["response_sha256"]
-                            for source in snapshot["source_responses"]
-                        ],
+                        "source_response_sha256s": _snapshot_source_hashes(snapshot),
                     }
                 )
             except SecSourceError as error:
@@ -684,7 +781,7 @@ def capture_cohort(
                     }
                 )
         records.append(row)
-        manifest = {
+        manifest: JsonObject = {
             "schema_version": "issue-359-cohort-capture-v1",
             "cohort_id": "sec-2016q1-us-10k-sic-stratified-v1",
             "capture_started_at": capture_started_at,
@@ -725,10 +822,8 @@ def capture_cohort(
     return manifest
 
 
-def _filings_for_report(snapshot: dict[str, Any], issuer_id: str) -> tuple[Filing, ...]:
-    records = snapshot.get("filings")
-    if not isinstance(records, list):
-        raise ReportError("issuer snapshot filings must be an array")
+def _filings_for_report(snapshot: JsonObject, issuer_id: str) -> tuple[Filing, ...]:
+    records = _list(snapshot.get("filings"), "issuer snapshot filings")
     recent = {
         "form": [],
         "accessionNumber": [],
@@ -736,8 +831,7 @@ def _filings_for_report(snapshot: dict[str, Any], issuer_id: str) -> tuple[Filin
         "acceptanceDateTime": [],
     }
     for record in records:
-        if not isinstance(record, dict):
-            raise ReportError("issuer snapshot has an invalid filing record")
+        record = _obj(record, "issuer snapshot filing")
         recent["form"].append(record.get("form"))
         recent["accessionNumber"].append(record.get("accession_number"))
         recent["reportDate"].append(record.get("report_period_end"))
@@ -754,7 +848,7 @@ def _measure_decision(
     decision: Filing,
     filings: tuple[Filing, ...],
     facts: tuple[Fact, ...],
-) -> dict[str, Any]:
+) -> JsonObject:
     as_of = decision.accepted_at
     periods = sorted(
         {
@@ -766,7 +860,7 @@ def _measure_decision(
         }
     )
     window = periods[-WINDOW:]
-    coverage: list[dict[str, Any]] = []
+    coverage: list[JsonObject] = []
     fact_catalog: dict[str, dict[str, str]] = {}
     for period in window:
         present: list[str] = []
@@ -842,7 +936,7 @@ def _measure_decision(
     }
 
 
-def _binary_summary(successes: int, trials: int) -> dict[str, Any]:
+def _binary_summary(successes: int, trials: int) -> JsonObject:
     return {
         "successes": successes,
         "trials": trials,
@@ -855,7 +949,7 @@ def build_cohort_report(
     capture_manifest_path: Path = DEFAULT_CAPTURE_MANIFEST,
     *,
     root: Path = ROOT,
-) -> dict[str, Any]:
+) -> JsonObject:
     capture_manifest_path = capture_manifest_path.resolve()
     capture = _read_json(capture_manifest_path)
     protocol_path = _repo_path(root, capture.get("protocol_path"), "sampling protocol")
@@ -868,34 +962,47 @@ def build_cohort_report(
         raise ReportError("capture manifest protocol hash mismatch")
     if capture.get("frame_manifest_sha256") != frame["frame_manifest_sha256"]:
         raise ReportError("capture manifest frame hash mismatch")
-    source_rows = capture.get("issuers")
-    if not isinstance(source_rows, list) or len(source_rows) != len(sample["selected"]):
+    source_rows = _list(capture.get("issuers"), "capture manifest issuers")
+    if len(source_rows) != len(sample["selected"]):
         raise ReportError("capture manifest must retain all selected issuer clusters")
-    by_cik = {row.get("cik"): row for row in source_rows if isinstance(row, dict)}
+    by_cik: dict[str, JsonObject] = {}
+    for row_index, row_value in enumerate(source_rows):
+        row = _obj(row_value, f"capture issuer {row_index}")
+        cik = _str(row.get("cik"), "capture issuer cik")
+        if cik in by_cik:
+            raise ReportError("capture manifest contains a duplicate issuer CIK")
+        by_cik[cik] = row
     if set(by_cik) != {item["cik"] for item in sample["selected"]}:
         raise ReportError(
             "capture manifest issuer set differs from deterministic sample"
         )
 
-    issuer_reports: list[dict[str, Any]] = []
-    model_rows: dict[str, list[dict[str, Any]]] = {name: [] for name in MODEL_FIELDS}
+    issuer_reports: list[JsonObject] = []
+    model_rows: dict[str, list[JsonObject]] = {name: [] for name in MODEL_FIELDS}
     fact_catalog: dict[str, dict[str, str]] = {}
     for selected in sample["selected"]:
         captured = by_cik[selected["cik"]]
-        status = captured.get("capture_status")
-        base = {
+        status = _str(captured.get("capture_status"), "capture status")
+        source_hashes = [
+            _str(value, "source response sha256")
+            for value in _list(
+                captured.get("source_response_sha256s", []),
+                "capture source_response_sha256s",
+            )
+        ]
+        base: JsonObject = {
             **selected,
             "capture_status": status,
-            "source_response_sha256s": captured.get("source_response_sha256s", []),
+            "source_response_sha256s": source_hashes,
         }
-        snapshot: dict[str, Any] | None = None
+        snapshot: JsonObject | None = None
         if status in {"captured", "decision_filing_missing"}:
             path = _repo_path(root, captured.get("snapshot_path"), "issuer snapshot")
             packed = path.read_bytes()
             if _sha256(packed) != captured.get("snapshot_sha256"):
                 raise ReportError(f"issuer snapshot hash mismatch: {selected['cik']}")
             try:
-                snapshot = json.loads(gzip.decompress(packed))
+                snapshot = _obj(json.loads(gzip.decompress(packed)), "issuer snapshot")
             except (OSError, EOFError, json.JSONDecodeError) as error:
                 raise ReportError(
                     f"issuer snapshot is invalid: {selected['cik']}"
@@ -926,7 +1033,10 @@ def build_cohort_report(
                 if decision is None:
                     error_detail = "decision_accession_missing_from_submission_history"
                 else:
-                    facts = _company_facts(snapshot["companyfacts"], filings)
+                    facts = _company_facts(
+                        _obj(snapshot.get("companyfacts"), "issuer companyfacts"),
+                        filings,
+                    )
             except (KeyError, ReportError, ValueError) as error:
                 error_detail = f"invalid_or_incomplete_evidence:{type(error).__name__}"
         elif status == "decision_filing_missing":
@@ -934,10 +1044,10 @@ def build_cohort_report(
         else:
             error_detail = captured.get("failure_code") or status
 
-        model_statuses = {}
+        model_statuses: dict[str, str] = {}
         for model_id, fields in MODEL_FIELDS.items():
             if decision is None:
-                detail = {
+                detail: JsonObject = {
                     "model_id": model_id,
                     "status": "unmeasured_missing_decision_or_snapshot",
                     "issuer_id": selected["issuer_id"],
@@ -953,9 +1063,14 @@ def build_cohort_report(
             else:
                 detail = _measure_decision(model_id, fields, decision, filings, facts)
             model_rows[model_id].append(detail)
-            model_statuses[model_id] = detail["status"]
-            for fact in detail.get("fact_catalog", []):
-                fact_catalog[fact["fact_id"]] = fact
+            model_statuses[model_id] = _str(detail.get("status"), "model status")
+            for fact_value in _list(detail.get("fact_catalog", []), "fact_catalog"):
+                fact = _obj(fact_value, "fact catalog entry")
+                fact_id = _str(fact.get("fact_id"), "fact_id")
+                fact_catalog[fact_id] = {
+                    key: _str(value, f"fact_catalog.{key}")
+                    for key, value in fact.items()
+                }
         base["row_status"] = (
             "measured" if decision is not None else "excluded_from_measurement"
         )
@@ -963,11 +1078,11 @@ def build_cohort_report(
         base["model_statuses"] = model_statuses
         issuer_reports.append(base)
 
-    model_reports: dict[str, Any] = {}
+    model_reports: dict[str, object] = {}
     sample_count = len(sample["selected"])
     for model_id, fields in MODEL_FIELDS.items():
         rows = model_rows[model_id]
-        history_pass = [row["candidate_rule_passes"] for row in rows]
+        history_pass = [row.get("candidate_rule_passes") is True for row in rows]
         next_available = [
             bool(row.get("next_original_filing_accession")) for row in rows
         ]
@@ -982,7 +1097,13 @@ def build_cohort_report(
         label_field_coverage = {}
         for field in fields:
             count_by_issuer = [
-                int(row.get("field_period_counts", {}).get(field, 0)) for row in rows
+                _integer(
+                    _obj(row.get("field_period_counts"), "field_period_counts").get(
+                        field, 0
+                    ),
+                    f"field_period_counts.{field}",
+                )
+                for row in rows
             ]
             field_coverage[field] = {
                 "issuers_with_at_least_three_periods": _binary_summary(
@@ -993,7 +1114,12 @@ def build_cohort_report(
                 "possible_issuer_periods": sample_count * WINDOW,
             }
             label_field_count = sum(
-                field in row.get("next_label_fields_present", []) for row in rows
+                field
+                in _list(
+                    row.get("next_label_fields_present", []),
+                    "next_label_fields_present",
+                )
+                for row in rows
             )
             label_field_coverage[field] = _binary_summary(
                 label_field_count, sample_count
@@ -1064,7 +1190,7 @@ def build_cohort_report(
             "sha256": frame["frame_manifest_sha256"],
         },
         "sampling": {
-            "sampling_frame": frame["protocol"]["scope"],
+            "sampling_frame": frame["protocol_scope"],
             "frame_counts": frame["frame_counts"],
             "eligible_issuer_clusters": len(frame["eligible"]),
             "excluded_issuer_clusters": len(frame["excluded"]),
@@ -1092,7 +1218,7 @@ def build_cohort_report(
     }
 
 
-def write_report(report: dict[str, Any], output_path: Path = DEFAULT_REPORT) -> bool:
+def write_report(report: JsonObject, output_path: Path = DEFAULT_REPORT) -> bool:
     payload = _canonical_json(report)
     if output_path.exists() and output_path.read_bytes() == payload:
         return False
