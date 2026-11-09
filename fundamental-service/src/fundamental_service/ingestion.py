@@ -26,6 +26,7 @@ from .contracts import (
     SecCapturedSourceEvidenceV1,
     SecIngestionRejectionEvidenceV1,
     SecIntegrityEvidenceV1,
+    Severity,
     SourceRole,
 )
 from .facts import (
@@ -42,11 +43,11 @@ from .serialization import sha256_digest
 from .snapshots import (
     CapturedSource,
     ContentAddressedStore,
+    FiscalPeriodSelectorV1,
     SnapshotBuilder,
     SnapshotError,
     SnapshotRepository,
     SourceSnapshotV1,
-    FiscalPeriodSelectorV1,
 )
 
 _MAX_SEC_XBRL_ARCHIVE_BYTES = 24_000_000
@@ -553,7 +554,7 @@ class SecIngestionService:
                     issues.append(
                         IssueV1(
                             code="FACT_NOT_FOUND",
-                            severity="error",
+                            severity=Severity.ERROR,
                             message="no SEC filing fact matched the approved mapping",
                             field=mapping.normalized_field,
                         )
@@ -580,7 +581,7 @@ class SecIngestionService:
                 issues.append(
                     IssueV1(
                         code="FACT_MAPPING_UNVERIFIED",
-                        severity="warning",
+                        severity=Severity.WARNING,
                         message="mapping quality does not meet verified coverage",
                         field=mapping.normalized_field,
                     )
