@@ -203,3 +203,49 @@ does not establish that real issuers have all required market evidence.
   market/policy source resolution, automatic preparation and caller migration,
   Docker/service-backed checks, PR review/CI, merge, and issue closure. This
   checkpoint is WIP and does not verify #352.
+
+## Automatic preparation composer checkpoint (2026-11-09)
+
+- This checkpoint is WIP and does not mark #352 accepted or verified.
+- Added the service-owned `prepare_automatic_valuation` composer for the two
+  released FCFF profiles. It resolves aligned annual duration and period-end
+  facts from the requirements profile, derives revenue growth, operating margin,
+  normalized tax, and operating reinvestment metrics with exact fact IDs and
+  formulas, and produces a five-period model-derived forecast.
+- The composer keeps the latest-five/at-least-three history rule provisional
+  while `supported_history_threshold` is null. Missing or conflicting critical
+  facts, unstable history, invalid market policy inputs, and point-in-time
+  capital-bridge conflicts return explicit `abstained` results. Missing
+  released WACC/terminal policy inputs return `requires_input` without static
+  defaults.
+- Added `POST /v1/valuation/prepare`. The application boundary reads only
+  release-declared fact IDs, verifies snapshot and fact digests, resolves the
+  effective service policy, and returns a typed prepared input or a typed gate
+  outcome. The response digest binds the public outcome to snapshot and fact
+  evidence; a prepared input binds the release manifest digest in its valuation
+  context.
+- Transition filing evidence can be non-numeric but remains release-bound and
+  does not become a valuation input unless the transition profile accepts it.
+  The default path still has no Search, LLM, company-guidance, or
+  analyst-forecast dependency.
+- Checks against the working tree before the checkpoint commit:
+  `uv run --extra dev --project fundamental-service pytest
+  fundamental-service/tests/test_valuation_preparation.py
+  fundamental-service/tests/test_annual_history.py
+  fundamental-service/tests/test_valuation_requirements.py
+  fundamental-service/tests/test_api.py -q` — exit 0, 57 passed.
+  `uv run --extra dev --project fundamental-service pytest
+  fundamental-service/tests/test_api.py
+  fundamental-service/tests/test_valuation_preparation.py -q` — exit 0, 49
+  passed after the preparation endpoint assertion was added.
+  `uv run --with ruff ruff check --select E,F,I --ignore E501` over all touched
+  Fundamental files — exit 0. Ruff format check — exit 0.
+  `uv run --extra dev --project fundamental-service python -m compileall -q
+  fundamental-service/src fundamental-service/tests` — exit 0.
+  `git diff --check` — exit 0.
+- Remaining acceptance work is substantial: migrate the Agent Core caller to
+  invoke this preparation contract and preserve evidence through calculation,
+  add manual override provenance, complete transition preparation behavior,
+  establish wired point-in-time market/policy sources, run Docker/service-backed
+  end-to-end acceptance, open and pass the #352 PR checks, merge to `main`, and
+  verify the merged commit before closing #352. #353 must not start yet.

@@ -28,6 +28,7 @@ from ..contracts import (
     SnapshotResolutionRequestV1,
     SnapshotResolutionV1,
     SourceSnapshotV1,
+    TraceV1,
     UncertaintyV1,
     ValidationResponseV1,
     ValuationEvidenceReadRequestV1,
@@ -82,6 +83,11 @@ from ..uncertainty import (
     run_uncertainty,
     validate_uncertainty_controls,
 )
+from ..valuation_preparation import (
+    ApprovedMarketPolicyInputsV1,
+    AutomaticValuationPreparationV1,
+    prepare_automatic_valuation,
+)
 from ..valuation_requirements import (
     select_released_facts,
     valuation_requirements_profile,
@@ -124,6 +130,45 @@ class UncertaintyRequestV1(ValuationInputV1):
     def with_digest(self) -> UncertaintyRequestV1:
         payload = self.model_dump(exclude={"input_digest", "caller_approval"})
         return self.model_copy(update={"input_digest": sha256_digest(payload)})
+
+
+def _approved_market_policy(
+    policy: PolicyRecordV1 | None,
+) -> ApprovedMarketPolicyInputsV1 | None:
+    """Translate a complete released policy into the preparation contract."""
+
+    if policy is None or policy.assumptions is None:
+        return None
+    assumptions = policy.assumptions
+    if assumptions.wacc is None or assumptions.terminal_growth is None:
+        return None
+    wacc = assumptions.wacc
+    evidence = {
+        field: TraceV1(
+            source_refs=policy.source_refs,
+            description=f"released policy {policy.policy_id}",
+        )
+        for field in (
+            "risk_free_rate",
+            "beta",
+            "equity_risk_premium",
+            "pre_tax_cost_of_debt",
+            "debt_weight",
+            "equity_weight",
+            "terminal_growth",
+        )
+    }
+    return ApprovedMarketPolicyInputsV1(
+        policy_version=policy.policy_version,
+        risk_free_rate=wacc.risk_free_rate,
+        beta=wacc.beta,
+        equity_risk_premium=wacc.equity_risk_premium,
+        pre_tax_cost_of_debt=wacc.pre_tax_cost_of_debt,
+        debt_weight=wacc.debt_weight,
+        equity_weight=wacc.equity_weight,
+        terminal_growth=assumptions.terminal_growth,
+        evidence=evidence,
+    )
 
 
 def normalize_uncertainty_payload(raw: Mapping[str, object]) -> dict[str, object]:
@@ -1022,6 +1067,51 @@ class FundamentalApplication:
             missing_fields=tuple(sorted(missing)),
             rejected_fact_ids=selection.rejected_fact_ids,
             facts=selection.facts,
+        )
+
+    def prepare_valuation(
+        self, request: ValuationEvidenceReadRequestV1
+    ) -> AutomaticValuationPreparationV1:
+        """Prepare one valuation from the pinned release and service policy."""
+
+        evidence = self.read_valuation_evidence(request)
+        snapshot = self.snapshot(request.snapshot_id)
+        model_version = f"{request.model_id}-v1"
+        policy = None
+        if self.policy_registry is not None:
+            try:
+                policy = self.policy_registry.select_policy(
+                    model_id=request.model_id,
+                    model_version=model_version,
+                    valuation_timestamp=snapshot.valuation_timestamp,
+                    policy_id=None,
+                )
+            except PolicyError as error:
+                raise ServiceError(
+                    error.code,
+                    "an effective service-owned valuation policy is unavailable",
+                    status_code=422,
+                    retryable=False,
+                ) from error
+
+        policy_id = (
+            policy.policy_id
+            if policy is not None
+            else (f"{request.model_id}-us-gaap-public-v1")
+        )
+        policy_version = policy.policy_version if policy is not None else "unresolved"
+        market_policy = _approved_market_policy(policy)
+        return prepare_automatic_valuation(
+            evidence.facts,
+            snapshot=snapshot,
+            model_id=request.model_id,
+            model_version=(
+                policy.model_version if policy is not None else model_version
+            ),
+            policy_id=policy_id,
+            policy_version=policy_version,
+            data_release_manifest_digest=request.data_release_manifest_digest,
+            market_policy=market_policy,
         )
 
     def policy(self, policy_id: str) -> PolicyRecordV1:

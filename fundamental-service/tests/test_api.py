@@ -1700,6 +1700,31 @@ def test_valuation_evidence_read_uses_profile_roles_and_abstains_on_missing_fact
     assert "DATA_RELEASE_FIELDS_UNAVAILABLE" in result["issue_codes"]
     assert result["profile_id"] == "fcff-valuation-requirements-v1"
 
+    preparation = TestClient(app).post(
+        "/v1/valuation/prepare",
+        headers=auth_headers(),
+        json=make_internal_envelope(
+            {
+                "contract_version": "fundamental.v1",
+                "snapshot_id": snapshot.snapshot_id,
+                "data_release_manifest_digest": manifest.manifest_digest,
+                "model_id": "fcff_dcf",
+            }
+        ),
+    )
+
+    assert preparation.status_code == 200, preparation.text
+    preparation_result = preparation.json()["result"]
+    assert preparation_result["status"] == "abstained"
+    assert preparation_result["quality_status"] == "abstain"
+    assert preparation_result["input"] is None
+    assert len(preparation_result["preparation_digest"]) == 64
+    operation = app.openapi()["paths"]["/v1/valuation/prepare"]["post"]
+    assert operation["requestBody"]["content"]["application/json"]["schema"][
+        "$ref"
+    ].endswith("/FundamentalValuationPreparationRequestEnvelopeV1")
+    assert "AutomaticValuationPreparationV1" in str(operation["responses"]["200"])
+
 
 def test_valuation_evidence_read_rejects_a_fact_digest_mismatch(tmp_path: Path):
     snapshot = _SnapshotRepository().snapshot

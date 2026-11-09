@@ -12,6 +12,7 @@ from pydantic import Field, model_validator
 from .contracts import (
     CanonicalFactV1,
     InitialModelId,
+    MissingValueV1,
     QualityStatus,
     SourceSnapshotV1,
     StrictModel,
@@ -115,7 +116,13 @@ def select_released_facts(
                 False,
             )
             or fact.quality is not QualityStatus.VERIFIED
-            or not isinstance(fact.value, Decimal)
+            or (
+                not isinstance(fact.value, Decimal)
+                and not (
+                    fact.normalized_field == "filed_operating_evidence"
+                    and not isinstance(fact.value, MissingValueV1)
+                )
+            )
         ):
             rejected.append(fact.fact_id)
             continue
