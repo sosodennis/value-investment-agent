@@ -101,6 +101,21 @@ This is a work-in-progress record. It does not mark #352 accepted or verified.
   release-backed issuer artifact, then run exact-commit PR CI/review and merge
   verification. #352 remains open.
 
+## Compose health checkpoint (2026-11-10)
+
+- This checkpoint is WIP and does not mark #352 accepted or verified.
+- Exact commit: `9319eea86f7186fcd30b63d69fedd3c137525e6e`.
+- Compose configuration passed with project
+  `value-investment-agent-352-auto-valuation` and host ports `18652`
+  (Postgres) and `18653` (Fundamental Service).
+- `docker compose ... up -d --build` completed successfully; both services
+  reported healthy and `curl --fail http://127.0.0.1:18653/readyz` returned
+  `{"status":"ready","contract_version":"internal.v1"}`.
+- The issue-specific Compose project was stopped with `docker compose ... down`;
+  named volumes were retained. No successful issuer valuation artifact was
+  claimed because the isolated database has no active release fixture and #362
+  still blocks automatic market/policy completion.
+
 ## Baseline findings
 
 - Fundamental Service currently selects facts from one immutable snapshot and calculates a caller-complete `ValuationInputV1`. Its facts request selects one point-in-time fact per normalized field; the normal Agent producer requests a narrow set and does not read aligned annual series.
