@@ -923,8 +923,10 @@ class SecIngestionRequestV1(StrictModel):
     fiscal_period_selector: FiscalPeriodSelectorV1 = FiscalPeriodSelectorV1(
         mode="latest_complete", count=3
     )
-    required_fields: tuple[str, ...] = Field(min_length=1, max_length=32)
-    mappings: tuple[SecMappingReferenceV1, ...] = Field(min_length=1, max_length=32)
+    # Transition FCFF includes the base evidence set plus filed operating
+    # evidence, so the canonical request must accept more than 32 fields.
+    required_fields: tuple[str, ...] = Field(min_length=1, max_length=64)
+    mappings: tuple[SecMappingReferenceV1, ...] = Field(min_length=1, max_length=64)
     source_selection_policy: Literal["sec-pit-v1"]
     coverage_profile: str = Field(min_length=1, max_length=128)
     legal_use_profile: Literal["sec-public-us-v1"]
