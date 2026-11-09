@@ -1,17 +1,75 @@
 # Issue 352 acceptance record
 
-This is a work-in-progress record. It does not mark #352 accepted or verified.
+This record tracks the current #352 branch acceptance state. #352 remains open
+until the PR is merged, the merge commit is re-verified, and the issue is
+closed. Checkpoint sections below preserve the evidence that existed at their
+recorded commits; their remaining-work notes are historical.
 
 ## Current checkpoint
 
-- Issue: #352, the first incomplete issue in the requested sequence; OPEN.
+- Issue: #352, the first incomplete issue in the requested sequence; OPEN and
+  ready for final PR/merge gates.
 - Branch: `codex/issue-352-auto-valuation` in its dedicated worktree.
 - Baseline: `f250e4d3810feb7db342199874efe222500a79e0`, equal to `origin/main`.
-- Latest branch checkpoint before this record: `866a2a2c3f9f49e6441cb6e9cd14daaf99942176` (Agent Core automatic-preparation cutover; WIP, not accepted).
-- Latest code checkpoint: `866a2a2c3f9f49e6441cb6e9cd14daaf99942176` (WIP; not accepted).
+- Latest executable checkpoint: `40177705` (`checkpoint(#352): verify repeat
+  preparation determinism`). The current branch tip after this record contains
+  only acceptance documentation changes.
 - #351: CLOSED by merged PR #358 at the baseline commit. Its supported history threshold remains null; the three-of-five candidate can produce at most a provisional result.
 - #353, #354, and #355 remain OPEN and are not part of this checkpoint.
 - #339 remains OPEN and owns SEC readiness/ingestion behavior. #352 must consume its pinned snapshot contract rather than duplicate acquisition. #350 remains an open blocker for an organization-owned full Agent pipeline; it does not make Search or LLM a dependency of this service path. #361 is the post-#352 replay follow-up.
+
+### Acceptance decision on the branch
+
+The branch now satisfies the implementation and verification gates for #352,
+subject to final PR review, CI on the current tip, merge, and post-merge exact
+SHA verification:
+
+- Fundamental Service owns the canonical preparation path for `fcff_dcf` and
+  `transition_fcff_dcf`, including release-bound multi-period SEC facts,
+  annual derivations, forecast composition, market/policy evidence, transition
+  filing evidence, quality dispositions, and manual override provenance.
+- The latest-five/at-least-three history rule remains provisional because
+  `supported_history_threshold` is still `null`; no unvalidated result is
+  labelled `verified`. Missing, conflicting, structurally broken, stale, or
+  unsupported evidence returns an explicit degraded/abstained outcome.
+- Market/policy evidence is dated and versioned. The released package uses
+  `approved_policy` for capital weights where no lawful quote source is
+  registered, while `market_observed` rejects policy-only evidence. Missing or
+  future-dated policy input returns `requires_input`; no static/current market
+  default is substituted.
+- Search, LLM, company guidance, analyst forecasts, and caller-owned valuation
+  formulas remain outside the default path.
+- The HTTP integration fixture now covers both first and repeat requests for a
+  complete pinned release and asserts a stable preparation digest. The
+  isolated Compose stack was rebuilt on this branch, both services became
+  healthy, `/readyz` returned `{"status":"ready","contract_version":"internal.v1"}`,
+  and a signed prepare request against a missing snapshot returned
+  `SNAPSHOT_NOT_FOUND` with HTTP 404.
+
+### Exact checks for the executable checkpoint
+
+- `uv run --project fundamental-service pytest fundamental-service/tests -q` —
+  exit 0; 287 passed, 25 skipped, 1 existing Pydantic serializer warning.
+- `uv run --project finance-agent-core pytest
+  finance-agent-core/tests/agents/fundamental -q` — exit 0; 60 passed.
+- `python3 scripts/architecture_guard.py` — exit 0; no boundary violations.
+- `python3 -m compileall -q fundamental-service/src fundamental-service/tests
+  finance-agent-core/src/agents/fundamental` — exit 0.
+- Targeted Ruff over all changed Fundamental files and the changed Agent Core
+  files — exit 0. Whole-package Fundamental Ruff still reports unrelated
+  baseline import-order findings outside this issue's diff.
+- Verification gate — exit 0; 21 cases, 10 positive FCFF/transition cases,
+  11 expected abstain/degraded cases, report digest
+  `834108cc99333ea7c1d5471757838cc145e624a9043e269495cfcb224e9616a8`.
+- The focused HTTP preparation integration test — exit 0; repeat requests
+  return the same preparation digest.
+
+The offline cohort is engineering/replay evidence, not calibration evidence;
+the unvalidated history threshold remains provisional and is reserved for the
+#361 rolling-origin follow-up. The Compose database has no active production
+release fixture, so service-backed success is demonstrated by the canonical
+HTTP fixture plus Docker health and fail-closed boundary evidence; no live
+issuer valuation is claimed from the empty isolated database.
 
 ## Market-policy provenance and HTTP preparation checkpoint (2026-11-10)
 
@@ -213,14 +271,14 @@ This is a work-in-progress record. It does not mark #352 accepted or verified.
 
 | Criterion | Status | Evidence or remaining work |
 | --- | --- | --- |
-| Automatically prepare complete released-model inputs from pinned multi-period SEC facts and versioned policies. | Pending | Baseline path only selects latest facts and requires caller-supplied assumptions. |
-| Keep history threshold provisional-only; abstain or degrade on missing, conflicting, structurally broken, or unresolved critical evidence. | Partial | The new pure selector keeps the unvalidated threshold provisional, rejects mapping conflicts, and abstains if the latest contiguous history is shorter than three years. It is not yet wired into SEC read or preparation paths. |
-| Retrieve aligned annual facts and trace every derived metric to fact IDs and formulas. | Partial | The selector groups supplied duration and period-end instant facts; the canonical SEC facts read still needs a multi-period request/response and repository integration, and metric derivations are not implemented. |
-| Cover representative history, missingness, denominator, restatement, structural-break, and volatility cases. | Pending | Add behavior fixtures and tests at the service boundary. |
-| Resolve market/policy inputs with as-of/source/version provenance; never silently substitute defaults. | Pending | Confirm permitted, wired sources; require an explicit reviewer decision or abstain when unavailable. |
-| Keep Search/LLM and external forecasts out of the default path; handle transition evidence from the pinned filing only. | Pending | Update the service-owned request path and its callers. |
-| Preserve automatic evidence and record manual override provenance and a new digest. | Pending | Implement and verify through the canonical service contract. |
-| Run focused, architecture, Docker/service-backed, and exact-commit checks; merge a #352 PR and close the issue only after acceptance. | Partial | Focused selector tests and Ruff passed on `13ae21d1`; architecture, service-backed Docker, full acceptance, PR, and merge remain pending. |
+| Automatically prepare complete released-model inputs from pinned multi-period SEC facts and versioned policies. | Ready for merge | Release-bound requirements profiles, exact fact-ID reads, annual history, policy translation, and `POST /v1/valuation/prepare` are implemented and covered by the HTTP fixture. |
+| Keep history threshold provisional-only; abstain or degrade on missing, conflicting, structurally broken, or unresolved critical evidence. | Verified on branch | The service keeps the unset threshold provisional and returns explicit abstained/degraded/`requires_input` outcomes for missing, conflicting, stale, structurally invalid, and unsupported evidence. |
+| Retrieve aligned annual facts and trace every derived metric to fact IDs and formulas. | Verified on branch | The release manifest declares the complete role set; preparation returns annual evidence, formulas, fact IDs, manifest digest, and deterministic preparation digest. |
+| Cover representative history, missingness, denominator, restatement, structural-break, and volatility cases. | Verified on branch | Annual-history, preparation, transition, and 21-case verification-gate fixtures cover positive, missing, conflicting, amended/restated, unsupported, unstable, and abstain/degraded cases. |
+| Resolve market/policy inputs with as-of/source/version provenance; never silently substitute defaults. | Verified on branch | WACC evidence preserves source ID/URI, content hash, source version, terms reference, as-of/available-at/captured-at, and evidence method; missing/future policy fails closed. |
+| Keep Search/LLM and external forecasts out of the default path; handle transition evidence from the pinned filing only. | Verified on branch | Agent Core sends the service-owned evidence profile; transition evidence is filing-bound and Search/LLM/company guidance/analyst forecasts are not called. |
+| Preserve automatic evidence and record manual override provenance and a new digest. | Verified on branch | The override endpoint retains automatic evidence, adds typed manual provenance, and produces new input and preparation digests. |
+| Run focused, architecture, Docker/service-backed, and exact-commit checks; merge a #352 PR and close the issue only after acceptance. | Pending final delivery gates | Branch checks pass through the executable checkpoint; current work is final CI/review, merge, exact merge-SHA verification, and issue closure. |
 
 ## Checks at baseline
 
