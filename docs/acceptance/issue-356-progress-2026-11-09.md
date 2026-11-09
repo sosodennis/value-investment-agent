@@ -8,8 +8,8 @@ This is a work-in-progress record, not acceptance or `VERIFIED` evidence.
 - Blocks: #351 acceptance and #352 start
 - Branch: `codex/issue-356-history-sufficiency`
 - Base commit: `f613db164a2251637aaf14d2abbf9e1866c39df9`
-- Prior checkpoint before this follow-up: `c531573c5484dac4ac4bb757932bc8d8a590f022`
-- Pull request: none
+- Prior checkpoint before this status update: `71e088607b9e46f8ae59eed97e96289a145e3091`
+- Pull request: [#357](https://github.com/sosodennis/value-investment-agent/pull/357), targeting `main`
 - Merge and issue closure: pending
 
 The latest evidence artifact is generated from checked-in SEC fixtures. The
@@ -75,12 +75,13 @@ sources are not read.
 | Both model families have field coverage and chronological OOS results with uncertainty intervals and a justified sample-size policy. | Both models report eight Apple diagnostic windows, seven decisions with a first subsequent filing, zero complete measured label sets, and a descriptive period-level Wilson interval of `[0.0, 0.35433]`. The 100-independent-issuer policy keeps this one-issuer result underpowered; issuer-cluster intervals are not estimable. | Reported; underpowered, with no supported threshold. |
 | Decide the candidate history threshold without overstating evidence. | The 3-of-5 complete-period candidate is unvalidated; both model families and the shared decision mark results provisional or abstained. | Met for explicit underpowered status only; threshold not established. |
 | Test time ordering, labels, amendment handling, reproducibility, and forbidden sources. | Tests cover point-in-time selection, first-subsequent original filing, amendment exclusion, walk-forward windows, candidate-gate-independent label completeness, missing-period detection, report idempotence, and source exclusions. | Met locally; representative evidence remains unavailable. |
-| Record exact commit and verification evidence in the linked #351 acceptance record. | This checkpoint and report are prepared; the exact post-commit SHA and rerun commands must still be recorded in the #351 issue acceptance comment. | Pending. |
+| Record exact commit and verification evidence in the linked #351 acceptance record. | Commit `71e088607b9e46f8ae59eed97e96289a145e3091`, report hash, capture-manifest hash, and local commands are recorded in the #351 issue comment. PR #357 checks passed on this implementation commit. | Recorded; the status-document commit still needs its own checks. |
 
 ## Verification
 
-These checks passed on the current candidate tree before its next checkpoint
-commit:
+These checks passed on implementation commit
+`71e088607b9e46f8ae59eed97e96289a145e3091` before this status-document
+checkpoint:
 
 | Command | Result |
 | --- | --- |
@@ -90,15 +91,17 @@ commit:
 | `python3 scripts/architecture_guard.py` | Exit 0; no boundary violations. |
 | `git diff --check` | Exit 0. |
 | `uv run --extra dev --project fundamental-service python -m fundamental_service.history_sufficiency_report`, run twice | Both exit 0; SHA-256 `ce5f3f374071c63181dfa6fbd0b5a0501ebb6abd1ba3062ff7e73f0ba92fbc76`; the second run reported `wrote: false`. |
+| GitHub required checks on PR #357, run `42569286271` | All eight required checks passed on the implementation commit; branch protection requires zero approving reviews. |
 
 No Docker stack or service-backed end-to-end test was run because this change
 only builds an offline evidence report and does not change runtime behavior. No
-SEC network request was made. GitHub CI, a PR, and review have not run. The
-report keeps both valuation paths provisional or abstained while the evidence
-remains underpowered.
+SEC network request was made. PR #357 is open. Its eight required checks passed
+on implementation commit `71e088607b9e46f8ae59eed97e96289a145e3091`; this
+status-document checkpoint must pass checks before merge. No approving review
+is required. Both valuation paths remain provisional or abstained.
 
 ## Next steps
 
-1. Create the #356 checkpoint commit and rerun the recorded checks against that exact SHA.
-2. Open a PR that links #356 and states the underpowered outcome; merge only after required checks and review pass.
-3. Record the verified commit and report hash on #356 and the linked #351 acceptance record, confirm #356 is closed, then start #351.
+1. Commit this #356 status update and rerun local checks on its exact SHA.
+2. Wait for all required checks on the updated PR head, then merge PR #357 and confirm #356 closes.
+3. Record the final head and merge evidence on #356 and #351, then start #351 in its own issue worktree.
