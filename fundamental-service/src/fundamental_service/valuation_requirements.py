@@ -2,9 +2,20 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
+from dataclasses import dataclass
+from datetime import datetime
+from decimal import Decimal
+
 from pydantic import Field, model_validator
 
-from .contracts import InitialModelId, StrictModel
+from .contracts import (
+    CanonicalFactV1,
+    InitialModelId,
+    QualityStatus,
+    SourceSnapshotV1,
+    StrictModel,
+)
 from .serialization import sha256_digest
 
 
@@ -52,6 +63,69 @@ class ValuationRequirementsProfileV1(StrictModel):
     @property
     def digest(self) -> str:
         return sha256_digest(self.model_dump(mode="json"))
+
+    @property
+    def required_fact_fields(self) -> tuple[str, ...]:
+        fields = (
+            *self.annual_duration_fields,
+            *self.annual_instant_fields,
+            *self.point_in_time_fact_fields,
+        )
+        if self.transition_filing_evidence_required:
+            fields = (*fields, "filed_operating_evidence")
+        return fields
+
+
+@dataclass(frozen=True)
+class ReleasedFactSelectionV1:
+    """Profile roles selected from facts already bound to one release."""
+
+    facts: tuple[CanonicalFactV1, ...]
+    missing_fields: tuple[str, ...]
+    rejected_fact_ids: tuple[str, ...]
+    issue_codes: tuple[str, ...]
+
+
+def select_released_facts(
+    facts: Iterable[CanonicalFactV1],
+    *,
+    profile: ValuationRequirementsProfileV1,
+    snapshot: SourceSnapshotV1,
+    valuation_timestamp: datetime,
+) -> ReleasedFactSelectionV1:
+    """Select every eligible candidate for the profile without caller mappings."""
+
+    source_hashes = {record.content_hash for record in snapshot.source_records}
+    required_fields = profile.required_fact_fields
+    selected: list[CanonicalFactV1] = []
+    rejected: list[str] = []
+    for fact in facts:
+        if (
+            fact.normalized_field not in required_fields
+            or fact.issuer_id != snapshot.identity.issuer_id
+            or fact.security_id not in {None, snapshot.identity.security_id}
+            or fact.source.content_hash not in source_hashes
+            or fact.available_at > valuation_timestamp
+            or fact.quality is not QualityStatus.VERIFIED
+            or not isinstance(fact.value, Decimal)
+        ):
+            rejected.append(fact.fact_id)
+            continue
+        selected.append(fact)
+
+    selected_fields = {fact.normalized_field for fact in selected}
+    missing = tuple(sorted(set(required_fields) - selected_fields))
+    issue_codes = []
+    if missing:
+        issue_codes.append("VALUATION_REQUIRED_FACTS_MISSING")
+    if rejected:
+        issue_codes.append("VALUATION_FACT_CANDIDATES_REJECTED")
+    return ReleasedFactSelectionV1(
+        facts=tuple(sorted(selected, key=lambda fact: fact.fact_id)),
+        missing_fields=missing,
+        rejected_fact_ids=tuple(sorted(rejected)),
+        issue_codes=tuple(issue_codes),
+    )
 
 
 _ANNUAL_DURATION_FIELDS = (
@@ -144,7 +218,9 @@ def valuation_requirements_profile(
 
 
 __all__ = [
+    "ReleasedFactSelectionV1",
     "UnsupportedValuationModel",
     "ValuationRequirementsProfileV1",
+    "select_released_facts",
     "valuation_requirements_profile",
 ]
