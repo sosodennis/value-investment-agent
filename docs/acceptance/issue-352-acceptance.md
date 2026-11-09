@@ -158,6 +158,25 @@ does not establish that real issuers have all required market evidence.
   Compose file does not use the taxonomy cache. Before running the root stack,
   obtain and verify the cache digest from its canonical source instead of
   guessing it.
-- No source files or tests changed in this resumption. The live SEC request is
-  not valuation acceptance evidence. The next implementation unit is the
-  service-owned requirements profile and release-bound exact fact-ID read.
+- The live SEC request is not valuation acceptance evidence. The next
+  implementation unit remains the release-bound exact fact-ID read.
+
+## Requirements profile checkpoint (2026-11-09)
+
+- Exact code commit: `61063bcc1c9620f2e84cb1099127450be671e7cc`.
+- Added immutable `ValuationRequirementsProfileV1` definitions for the released
+  `fcff_dcf` and `transition_fcff_dcf` models. The profile owns annual duration
+  roles, annual period-end instant roles, point-in-time claims, market and
+  policy input roles, the latest-five candidate window, the at-least-three
+  candidate minimum, and the unset `supported_history_threshold`.
+- The profile digest is returned with annual history. `resolve_annual_history`
+  now receives the service-owned profile instead of caller-provided field
+  lists. A supported threshold remains `null`, so complete history remains
+  `provisional` and short contiguous history remains `abstain`.
+- `uv run --extra dev --project fundamental-service pytest fundamental-service/tests/test_annual_history.py fundamental-service/tests/test_valuation_requirements.py -q` — exit 0; 8 passed.
+- `uv run --with ruff ruff check fundamental-service/src/fundamental_service/valuation_requirements.py fundamental-service/src/fundamental_service/annual_history.py fundamental-service/tests/test_annual_history.py fundamental-service/tests/test_valuation_requirements.py` — exit 0.
+- Commit hooks (whitespace, EOF, Ruff, Ruff format) and `git diff --cached --check` — exit 0.
+- This checkpoint does not wire the profile to the HTTP preparation operation or
+  release manifest exact fact IDs. Metric derivation, policy/source resolution,
+  caller migration, Docker health, service-backed acceptance, PR review, and
+  merge remain pending. #352 is not accepted or verified.
