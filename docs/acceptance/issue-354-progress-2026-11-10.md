@@ -31,3 +31,32 @@ Branch: `codex/issue-354-workspace`
 - Full backend pytest was attempted but collection remains blocked by existing duplicate `test_sql_repository` module names and missing `LLM_PROVIDER_SERVICE_URL` for unrelated debate/news/intent tests.
 
 Status: WIP. Acceptance is not complete, the issue remains open, and no PR has been created.
+
+## Checkpoint: fix transition ingestion contract boundary
+
+The browser-backed run reached workflow completion but produced no
+`fundamental_analysis.output`. The backend log showed identity resolution
+returning HTTP 200 followed by `POST /v1/data/ingestions` returning HTTP 400.
+The failing request was the default `dcf_growth` transition FCFF path. Its
+canonical evidence set contains 33 fields (`_BASE_REQUIRED_FIELDS` plus
+`filed_operating_evidence`), while `SecIngestionRequestV1` capped both
+`required_fields` and `mappings` at 32. The request was rejected at the
+service schema boundary before SEC acquisition ran.
+
+Checkpoint commit: `649502491c10c5f81fe2b16714616611cc313942`
+
+The service-owned contract now accepts up to 64 required fields and mappings,
+with a regression test that validates a 33-field transition-sized request.
+The caller contract remains unchanged and no valuation formula or policy moved
+into Agent Core.
+
+Validation for this exact commit:
+
+- `uv run --extra dev pytest -q tests/test_contracts.py tests/test_source_acquisition.py` (Fundamental service, exit 0; 21 passed)
+- `uv run pytest -q tests/agents/fundamental/test_service_request_producer.py tests/agents/fundamental/test_fundamental_service_client.py tests/agents/fundamental/test_fundamental_service_cutover.py` (Agent Core, exit 0; 48 passed)
+- `python3 scripts/architecture_guard.py` (exit 0)
+- `git diff --check` (exit 0)
+
+Next step: rebuild the isolated #354 Fundamental service and rerun the
+browser acceptance to verify that ingestion, preparation review, evidence,
+quality, provenance, and approval are rendered in the Fundamental tab.
