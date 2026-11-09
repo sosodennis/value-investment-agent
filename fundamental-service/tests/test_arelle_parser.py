@@ -13,13 +13,13 @@ from fundamental_service.arelle_parser import (
     ArelleParseReportV1,
     ArelleParserError,
     ArelleValidationProfileV1,
+    ParserResourcePolicy,
     _directory_hash,
     _dqc_validation_completed,
     _parser_slot,
     _unlogged_model_error_findings,
     fact_semantic_digest,
     parse_filing_offline,
-    ParserResourcePolicy,
 )
 from fundamental_service.contracts import SourceRole
 from fundamental_service.sec_integrity import assess_filing_response
