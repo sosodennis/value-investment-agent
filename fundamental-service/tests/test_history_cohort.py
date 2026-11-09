@@ -174,13 +174,19 @@ class _FakeAdapter:
 
 
 @pytest.mark.parametrize(
-    ("archive_cik", "expected_status"),
-    (("0000000001", "captured"), ("0000000002", "snapshot_invalid")),
+    ("archive_cik", "archived_payload_cik", "expected_status"),
+    (
+        ("0000000001", None, "captured"),
+        ("0000000001", "0000000001", "captured"),
+        ("0000000002", None, "snapshot_invalid"),
+        ("0000000001", "0000000002", "snapshot_invalid"),
+    ),
 )
-def test_capture_validates_archived_submission_identity_without_payload_cik(
+def test_capture_validates_archived_submission_identity_from_filename_and_payload(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     archive_cik: str,
+    archived_payload_cik: str | None,
     expected_status: str,
 ):
     cik = "0000000001"
@@ -201,20 +207,23 @@ def test_capture_validates_archived_submission_identity_without_payload_cik(
             return self._source(source.source_id, source.uri, payload)
 
         def capture_json(self, source_id: str, uri: str):
+            payload = {
+                "filings": {
+                    "recent": {
+                        "form": [],
+                        "accessionNumber": [],
+                        "filingDate": [],
+                        "reportDate": [],
+                        "acceptanceDateTime": [],
+                    }
+                }
+            }
+            if archived_payload_cik is not None:
+                payload["cik"] = archived_payload_cik
             return self._source(
                 source_id,
                 uri,
-                {
-                    "filings": {
-                        "recent": {
-                            "form": [],
-                            "accessionNumber": [],
-                            "filingDate": [],
-                            "reportDate": [],
-                            "acceptanceDateTime": [],
-                        }
-                    }
-                },
+                payload,
             )
 
     protocol_path = tmp_path / "protocol.json"

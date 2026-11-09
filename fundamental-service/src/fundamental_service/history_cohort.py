@@ -579,9 +579,16 @@ def _capture_issuer(
     sources = [base]
     submission_payloads = [base_payload]
     for uri in _submission_file_uris(base_payload):
+        archive_name = PurePosixPath(uri).name
+        archive_identity = re.fullmatch(r"CIK(\d+)-submissions-\d+\.json", archive_name)
+        if archive_identity is None or _cik(archive_identity.group(1)) != cik:
+            raise ReportError(
+                "SEC submissions history filename CIK differs from the issuer"
+            )
         archived = adapter.capture_json(source_id="sec-submissions", uri=uri)
         archived_payload = _obj(json.loads(archived.content), "SEC submissions archive")
-        if _cik(archived_payload.get("cik")) != cik:
+        archived_cik = archived_payload.get("cik")
+        if archived_cik is not None and _cik(archived_cik) != cik:
             raise ReportError("SEC submissions history CIK differs from the issuer")
         sources.append(archived)
         submission_payloads.append(archived_payload)
