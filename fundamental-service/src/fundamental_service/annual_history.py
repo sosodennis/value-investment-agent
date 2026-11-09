@@ -12,11 +12,10 @@ from .contracts import (
     QualityStatus,
     SourceSnapshotV1,
 )
+from .valuation_requirements import ValuationRequirementsProfileV1
 
 _MIN_ANNUAL_DAYS = 300
 _MAX_ANNUAL_DAYS = 380
-_CANDIDATE_WINDOW_YEARS = 5
-_CANDIDATE_MINIMUM_YEARS = 3
 
 
 class AnnualHistoryError(ValueError):
@@ -46,6 +45,8 @@ class AnnualHistoryPeriodV1:
 
 @dataclass(frozen=True)
 class AnnualHistoryV1:
+    requirements_profile_id: str
+    requirements_profile_digest: str
     requested_fiscal_years: tuple[int, ...]
     periods: tuple[AnnualHistoryPeriodV1, ...]
     missing_fields: tuple[tuple[int, str], ...]
@@ -59,25 +60,19 @@ def resolve_annual_history(
     *,
     snapshot: SourceSnapshotV1,
     valuation_timestamp: datetime,
-    duration_fields: tuple[str, ...],
-    instant_fields: tuple[str, ...],
-    anchor_field: str = "revenue",
+    profile: ValuationRequirementsProfileV1,
 ) -> AnnualHistoryV1:
-    """Resolve the latest five annual periods without choosing conflicting facts.
+    """Resolve the profile's annual periods without choosing conflicting facts.
 
-    The three-of-five threshold is a candidate only. Until a supported threshold
-    is explicitly promoted, a usable history remains provisional.
+    The profile's history threshold is a candidate only. Until a supported
+    threshold is explicitly promoted, a usable history remains provisional.
     """
 
-    if not duration_fields or anchor_field not in duration_fields:
-        raise ValueError("anchor_field must be one of the duration fields")
-    if len(set(duration_fields + instant_fields)) != len(duration_fields) + len(
-        instant_fields
-    ):
-        raise ValueError("history fields must be unique")
     if valuation_timestamp.tzinfo is None or valuation_timestamp.utcoffset() is None:
         raise ValueError("valuation_timestamp must include a timezone")
 
+    duration_fields = profile.annual_duration_fields
+    instant_fields = profile.annual_instant_fields
     source_records = {record.content_hash: record for record in snapshot.source_records}
     requested_fields = set(duration_fields + instant_fields)
     eligible = tuple(
@@ -123,12 +118,12 @@ def resolve_annual_history(
             if selected is None:
                 continue
             duration_by_year.setdefault(fiscal_year, {})[field] = selected
-            if field == anchor_field:
+            if field == profile.anchor_field:
                 anchor_years.add(fiscal_year)
 
     latest_year = max(anchor_years, default=valuation_timestamp.year)
     requested_years = tuple(
-        range(latest_year, latest_year - _CANDIDATE_WINDOW_YEARS, -1)
+        range(latest_year, latest_year - profile.history_window_years, -1)
     )
 
     missing_fields: list[tuple[int, str]] = []
@@ -194,24 +189,30 @@ def resolve_annual_history(
     trailing_periods = tuple(
         complete_by_year[year] for year in reversed(trailing_years)
     )
-    if len(trailing_years) < _CANDIDATE_MINIMUM_YEARS:
+    if len(trailing_years) < profile.candidate_minimum_complete_years:
         return AnnualHistoryV1(
+            requirements_profile_id=profile.profile_id,
+            requirements_profile_digest=profile.digest,
             requested_fiscal_years=requested_years,
             periods=trailing_periods,
             missing_fields=tuple(sorted(set(missing_fields))),
             quality=QualityStatus.ABSTAIN,
             issue_codes=("HISTORY_MINIMUM_PERIODS_UNAVAILABLE",),
+            supported_history_threshold=profile.supported_history_threshold,
         )
 
     issue_codes = ["HISTORY_THRESHOLD_UNVALIDATED"]
     if missing_fields:
         issue_codes.append("HISTORY_WINDOW_PARTIALLY_UNAVAILABLE")
     return AnnualHistoryV1(
+        requirements_profile_id=profile.profile_id,
+        requirements_profile_digest=profile.digest,
         requested_fiscal_years=requested_years,
         periods=trailing_periods,
         missing_fields=tuple(sorted(set(missing_fields))),
         quality=QualityStatus.PROVISIONAL,
         issue_codes=tuple(issue_codes),
+        supported_history_threshold=profile.supported_history_threshold,
     )
 
 

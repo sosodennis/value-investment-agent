@@ -3,9 +3,6 @@ from datetime import UTC, datetime
 from decimal import Decimal
 
 import pytest
-from test_api import _canonical_fact
-from test_postgres_metadata import _snapshot as _make_snapshot
-
 from fundamental_service.annual_history import (
     AnnualHistoryError,
     AnnualHistoryV1,
@@ -18,6 +15,9 @@ from fundamental_service.contracts import (
     QualityStatus,
     SourceSnapshotV1,
 )
+from fundamental_service.valuation_requirements import ValuationRequirementsProfileV1
+from test_api import _canonical_fact
+from test_postgres_metadata import _snapshot as _make_snapshot
 
 VALUATION_TIME = datetime(2026, 3, 1, tzinfo=UTC)
 
@@ -119,8 +119,20 @@ def _resolve(facts: Iterable[CanonicalFactV1]) -> AnnualHistoryV1:
         facts,
         snapshot=_snapshot(),
         valuation_timestamp=VALUATION_TIME,
-        duration_fields=("revenue", "operating_income"),
-        instant_fields=("cash",),
+        profile=_test_profile(),
+    )
+
+
+def _test_profile() -> ValuationRequirementsProfileV1:
+    return ValuationRequirementsProfileV1(
+        profile_id="annual-history-test",
+        profile_version="annual-history-test-v1",
+        model_id="fcff_dcf",
+        annual_duration_fields=("revenue", "operating_income"),
+        annual_instant_fields=("cash",),
+        candidate_minimum_complete_years=3,
+        history_window_years=5,
+        supported_history_threshold=None,
     )
 
 
@@ -139,6 +151,8 @@ def test_resolves_aligned_duration_and_period_end_instant_facts_as_provisional()
     )
     assert history.periods[-1].fact("revenue").fact_id == "revenue-2025"
     assert history.periods[-1].fact("cash").instant.isoformat() == "2025-12-31"
+    assert history.requirements_profile_id == "annual-history-test"
+    assert len(history.requirements_profile_digest) == 64
     assert history.quality is QualityStatus.PROVISIONAL
     assert history.supported_history_threshold is None
     assert history.issue_codes == ("HISTORY_THRESHOLD_UNVALIDATED",)
@@ -181,8 +195,7 @@ def test_selects_an_applicable_restatement_only_after_its_available_time() -> No
         facts,
         snapshot=_snapshot(),
         valuation_timestamp=datetime(2026, 1, 3, tzinfo=UTC),
-        duration_fields=("revenue", "operating_income"),
-        instant_fields=("cash",),
+        profile=_test_profile(),
     )
     after = _resolve(facts)
 
