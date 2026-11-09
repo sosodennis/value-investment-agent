@@ -6,8 +6,9 @@ record.
 ## Current status (2026-11-09)
 
 - #351 remains the first incomplete issue in the fixed sequence. It is OPEN on
-  `codex/issue-351-valuation-evidence`; PR #358 is OPEN as a draft at
-  `68f305abaae1038eeeaa7b434cd45e1adadf9672`.
+  `codex/issue-351-valuation-evidence`; PR #358 is OPEN as a draft. The PR
+  still advertises the older head `68f305abaae1038eeeaa7b434cd45e1adadf9672`
+  until this policy checkpoint is pushed.
 - The user confirmed that #351 should deliver the source and quality matrix
   with a safe provisional or abstention policy. The three-of-five history
   rule remains an unvalidated candidate and cannot grant `verified` status.
@@ -29,17 +30,42 @@ record.
   in that worktree because `LLM_PROVIDER_ENCRYPTION_KEY` was unset. No Docker
   service or service-backed valuation test ran; this was an offline report
   slice.
-- The #351 matrix already marks three of five as provisional only and treats
-  `us-gaap:Revenues` as a candidate mapping, not a universal alias. This
-  checkpoint will make the acceptance and replay sequence explicit in the
-  issue, matrix, and draft PR.
+- The #351 matrix marks three of five as provisional only and treats
+  `us-gaap:Revenues` as a candidate mapping, not a universal alias. The
+  acceptance policy now explicitly separates computability from evidence:
+  #351 delivers the matrix, candidate-only threshold, and abstention rules;
+  #352 owns the canonical forecast composer; and the #361 replay follows #352
+  using that service logic. No numerical threshold is claimed as verified.
 - PR #358 had all 11 required checks pass on the exact head
   `68f305abaae1038eeeaa7b434cd45e1adadf9672`; the documentation-only
   Fundamental release gate was skipped. No review is recorded. Rerun checks
   after updating the branch.
-- GitHub still lists #361 as blocking #351 at this checkpoint. The issue and
-  dependency records must be updated to reflect that threshold replay is a
-  follow-up after #352. #352 through #355 remain OPEN and unstarted.
+- The GitHub dependency `#361 blocks #351` is being removed. #361 remains an
+  open follow-up after #352, and must not block #351's source-and-policy
+  delivery. #352 through #355 remain OPEN and unstarted; #352 still cannot
+  start until #351's PR is merged and its issue is closed.
+
+## Current sequencing decision
+
+- #351 acceptance is complete when the source/quality matrix, the
+  provisional-only history candidate, and explicit degraded/abstain behavior
+  are reviewed and merged. It does not require a verified numerical history
+  threshold, because the available #359 evidence is underpowered and contains
+  no service-owned historical forecasts.
+- The candidate rule remains latest five fiscal years with at least three
+  complete comparable annual periods. It can produce at most `provisional`
+  when all other gates pass. Missing, conflicting, structurally broken,
+  unreviewed, or unresolved mappings produce the matrix-defined degraded or
+  abstained outcome; they never become `verified` through a placeholder.
+- After #352, #361 will replay predeclared history lengths in chronological
+  walk-forward order with the canonical Fundamental Service composer. Each
+  decision date uses only facts available then, and each label is the first
+  subsequent qualifying original filing. The report must retain failed cases,
+  show forecast error, coverage, independent issuers, and uncertainty, and
+  leave the threshold null when evidence remains underpowered.
+- This decision preserves the fixed delivery order #351 -> #352 -> #353 ->
+  #354 -> #355. #355 remains an optional Search/LLM evidence path and is not a
+  core valuation dependency.
 
 ## Prior checkpoint after #356 merge
 
