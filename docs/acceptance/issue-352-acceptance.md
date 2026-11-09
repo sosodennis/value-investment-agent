@@ -7,8 +7,8 @@ This is a work-in-progress record. It does not mark #352 accepted or verified.
 - Issue: #352, the first incomplete issue in the requested sequence; OPEN.
 - Branch: `codex/issue-352-auto-valuation` in its dedicated worktree.
 - Baseline: `f250e4d3810feb7db342199874efe222500a79e0`, equal to `origin/main`.
-- Latest branch checkpoint before this record: `46806aa3c08cd1a36f20b59fac91dfc90bc4db48` (documentation WIP; not accepted).
-- Latest code checkpoint: `13ae21d178aad4650bc0e54e324c8662d85c71bb` (WIP; not accepted).
+- Latest branch checkpoint before this record: `0452a1c3` (release-bound evidence read; not accepted).
+- Latest code checkpoint: `0452a1c3` (WIP; not accepted).
 - #351: CLOSED by merged PR #358 at the baseline commit. Its supported history threshold remains null; the three-of-five candidate can produce at most a provisional result.
 - #353, #354, and #355 remain OPEN and are not part of this checkpoint.
 - #339 remains OPEN and owns SEC readiness/ingestion behavior. #352 must consume its pinned snapshot contract rather than duplicate acquisition. #350 remains an open blocker for an organization-owned full Agent pipeline; it does not make Search or LLM a dependency of this service path. #361 is the post-#352 replay follow-up.
@@ -180,3 +180,26 @@ does not establish that real issuers have all required market evidence.
   release manifest exact fact IDs. Metric derivation, policy/source resolution,
   caller migration, Docker health, service-backed acceptance, PR review, and
   merge remain pending. #352 is not accepted or verified.
+
+## Release-bound evidence read checkpoint (2026-11-09)
+
+- Exact code commit: `0452a1c3`.
+- Added `ValuationEvidenceReadRequestV1` and
+  `ValuationEvidenceReadResponseV1`. The request contains only the snapshot,
+  release-manifest digest, and released model; it does not accept caller fact
+  fields or mappings.
+- Added `POST /v1/valuation/evidence/facts`. The application loads every fact ID
+  declared by the matching release snapshot reference, verifies each canonical
+  fact digest, and then applies the service-owned requirements profile. Missing
+  profile roles are returned as explicit `abstain` evidence with issue codes;
+  the unvalidated history threshold still cannot produce `verified`.
+- `uv run --extra dev --project fundamental-service pytest fundamental-service/tests/test_api.py -q` — exit 0; 44 passed.
+- `uv run --with ruff ruff check --select E,F,I --ignore E501 fundamental-service/src/fundamental_service/contracts.py fundamental-service/src/fundamental_service/valuation_requirements.py fundamental-service/src/fundamental_service/application/service.py fundamental-service/src/fundamental_service/app.py fundamental-service/tests/test_api.py` — exit 0.
+- `python -m compileall -q fundamental-service/src/fundamental_service` — exit 0.
+- Commit hooks (whitespace, EOF, large-file, Ruff, Ruff format) and
+  `git diff --cached --check` — exit 0. The branch was pushed to
+  `origin/codex/issue-352-auto-valuation`.
+- Remaining: multi-period release fixtures, annual metric/formula provenance,
+  market/policy source resolution, automatic preparation and caller migration,
+  Docker/service-backed checks, PR review/CI, merge, and issue closure. This
+  checkpoint is WIP and does not verify #352.
