@@ -211,3 +211,44 @@ ignored `.env`.
 Status: WIP, not VERIFIED. The measured evidence supports no threshold, so #359
 remains open and #351 remains blocked until the source mapping and abstention
 policy can use this result. Do not start #352.
+
+## Threshold decision and source-mapping audit
+
+The cohort report now marks the threshold result `underpowered` when the sample
+has no historical Fundamental Service forecast accuracy or complete
+first-subsequent labels. It keeps `supported_history_threshold` null and states
+that affected results remain provisional or abstained. Field coverage counts
+only the XBRL concepts listed for each model; it does not treat unlisted aliases
+as evidence that SEC lacks a field.
+
+A read-only SEC Company Facts request used the configured User-Agent for sample
+CIK `0001539778`. The response SHA-256 is
+`6bfb258021d1976a47e06b42f3bebacbcef28d5b30fb54085a102cd839acd1c1`. For
+decision accession `0001477932-16-007985`, available at
+`2016-01-12T19:35:54Z`, the report's listed revenue concept
+`RevenueFromContractWithCustomerExcludingAssessedTax` has no qualifying facts
+in the measured periods. The unlisted `Revenues` concept has seven qualifying
+facts for periods ending 2012-09-30 through 2015-09-30. This shows that the
+report's zero revenue coverage is limited to its listed concept mapping. It
+does not establish that SEC has no historical revenue facts. The request did
+not print or store the User-Agent value.
+
+The regenerated compressed report has SHA-256
+`eaea254f5ce47e090a252162a5c5fbbfda4da719ca94e3a1d740355c5788336e`; its
+uncompressed JSON has SHA-256
+`1a3995af98d3fda2166873c25f0ba981d89016ae6f6f98dc4515a077eac41b9f`. The
+capture manifest remains
+`afad3f92f2597383d16afec2cc85850fbf5919106d3cb827a6e8112022836242`.
+
+Checks on the current WIP changes: the focused Fundamental Service suite passed
+50 tests, `python3 scripts/architecture_guard.py` passed, and `git diff
+--check` passed. The fixed cohort remains at 100 selected and captured issuer
+clusters. Both models have 0/100 candidate-eligible issuers, 0/100 complete
+first-subsequent labels, and no historical Fundamental Service forecast
+accuracy. The supported threshold remains null. Docker and service-backed
+end-to-end checks are not applicable to this SEC snapshot and offline-report
+slice.
+
+Status: WIP, not VERIFIED. Review and settle the point-in-time XBRL concept
+mapping before treating field coverage as source availability. #359 remains
+open, #351 remains blocked, and #352 has not started.

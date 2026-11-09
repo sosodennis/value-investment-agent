@@ -342,3 +342,23 @@ def test_capture_failure_keeps_the_preselected_issuer_in_report_denominator(
     first_bytes = report_path.read_bytes()
     assert history_cohort.write_report(report, report_path) is False
     assert report_path.read_bytes() == first_bytes
+
+
+def test_fixed_100_issuer_cohort_keeps_unvalidated_threshold_underpowered():
+    report = history_cohort.build_cohort_report()
+
+    assert report["capture_manifest"]["status"] == "complete"
+    assert report["sampling"]["selected_issuer_clusters"] == 100
+    for model in report["models"].values():
+        assert model["complete_first_subsequent_labels"]["successes"] == 0
+        assert (
+            model["forecast_accuracy"]
+            == "not_measured_no_historical_fundamental_service_forecasts"
+        )
+
+    decision = report["threshold_decision"]
+    assert decision["status"] == "underpowered"
+    assert decision["supported_history_threshold"] is None
+    assert "no historical Fundamental Service forecast accuracy" in decision["reason"]
+    assert "no issuers eligible under the candidate rule" in decision["reason"]
+    assert "unlisted aliases are not evidence" in decision["reason"]

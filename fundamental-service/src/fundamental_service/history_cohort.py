@@ -20,6 +20,7 @@ from typing import TypedDict
 from .history_sufficiency_report import (
     FIELD_SPECS,
     MODEL_FIELDS,
+    MINIMUM_ISSUER_CLUSTERS,
     MINIMUM_PERIODS,
     WINDOW,
     Fact,
@@ -1188,11 +1189,76 @@ def build_cohort_report(
         }
 
     captured_count = sum(row["row_status"] == "measured" for row in issuer_reports)
+    underpowered_reasons: list[str] = []
+    if sample_count < MINIMUM_ISSUER_CLUSTERS:
+        underpowered_reasons.append(
+            f"only {sample_count} issuer clusters were selected; "
+            f"{MINIMUM_ISSUER_CLUSTERS} are required"
+        )
+    if captured_count < MINIMUM_ISSUER_CLUSTERS:
+        underpowered_reasons.append(
+            f"only {captured_count} issuer rows were measured; "
+            f"{MINIMUM_ISSUER_CLUSTERS} are required"
+        )
+    for model_id, model_report in model_reports.items():
+        model_detail = _obj(model_report, f"{model_id} model report")
+        if (
+            model_detail["forecast_accuracy"]
+            == "not_measured_no_historical_fundamental_service_forecasts"
+        ):
+            underpowered_reasons.append(
+                f"{model_id} has no historical Fundamental Service forecast accuracy"
+            )
+        candidate_rule = _obj(
+            model_detail["candidate_rule"], f"{model_id}.candidate_rule"
+        )
+        candidate_eligibility = _obj(
+            candidate_rule["eligibility"], f"{model_id}.candidate_rule.eligibility"
+        )
+        eligible_count = _integer(
+            candidate_eligibility["successes"],
+            f"{model_id}.candidate_rule.eligibility.successes",
+        )
+        if eligible_count == 0:
+            underpowered_reasons.append(
+                f"{model_id} has no issuers eligible under the candidate rule"
+            )
+        complete_labels = _obj(
+            model_detail["complete_first_subsequent_labels"],
+            f"{model_id}.complete_first_subsequent_labels",
+        )
+        label_count = _integer(
+            complete_labels["successes"],
+            f"{model_id}.complete_first_subsequent_labels.successes",
+        )
+        if label_count == 0:
+            underpowered_reasons.append(
+                f"{model_id} has no complete first-subsequent filing labels"
+            )
     threshold_status = (
         "underpowered"
-        if sample_count < 100 or captured_count < 100
+        if underpowered_reasons
         else "history_evidence_measured_threshold_review_required"
     )
+    mapping_scope = (
+        "Field coverage counts only the XBRL concepts listed for each model; "
+        "unlisted aliases are not evidence that the SEC source lacks the field."
+    )
+    if underpowered_reasons:
+        threshold_reason = (
+            "Threshold evidence is underpowered: "
+            + "; ".join(underpowered_reasons)
+            + ". "
+            + mapping_scope
+            + " Keep affected results provisional or abstained."
+        )
+    else:
+        threshold_reason = (
+            "Threshold evidence is measured, but no history threshold has been "
+            "approved. "
+            + mapping_scope
+            + " Keep affected results provisional or abstained pending review."
+        )
     return {
         "schema_version": "issue-359-history-threshold-report-v1",
         "cohort_id": capture.get("cohort_id"),
@@ -1232,7 +1298,7 @@ def build_cohort_report(
             "supported_history_threshold": None,
             "candidate_rule": "three complete annual periods in the latest five",
             "forecast_error": "not measured; no valuation-accuracy or calibration claim",
-            "reason": "coverage and first-subsequent filing evidence are reported separately; a history threshold remains a candidate until the declared evidence is reviewed for both released models",
+            "reason": threshold_reason,
             "affected_results": "provisional_or_abstained_until_threshold_review",
         },
         "source_fact_catalog": [fact_catalog[key] for key in sorted(fact_catalog)],
