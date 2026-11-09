@@ -21,6 +21,12 @@ import type { WorkspaceRouteIntent } from './workspace-route-intent';
 import { ResizableGroup, ResizableHandle, ResizablePanel } from '@/components/ui/resizable';
 import { EvidenceInspector, EvidenceInspectorTrigger, buildEvidenceItems, type EvidenceSelection } from './workspace-evidence-inspector';
 import { adaptAgentOutput } from '@/types/agents/output-adapter';
+import {
+    researchForwardEvidence as requestForwardEvidence,
+    type ForwardEvidenceManualOverride,
+    type ForwardEvidenceResearchRequest,
+    type ForwardEvidenceReview,
+} from './outputs/fundamental-analysis/forward-evidence-api';
 
 type WorkspacePageProps = { assistantId?: string; initialTicker?: string | null; initialPrompt?: string | null; autoStart?: boolean; routeIntent?: WorkspaceRouteIntent };
 const NEW_ANALYSIS_INTENT: WorkspaceRouteIntent = { kind: 'new-analysis' };
@@ -51,6 +57,9 @@ export function WorkspacePage({ assistantId = 'agent', initialTicker = null, ini
     const [activeTab, setActiveTab] = useState<ReportTab>('activity');
     const [selectedEvidence, setSelectedEvidence] = useState<EvidenceSelection | null>(null);
     const [mobileEvidenceOpen, setMobileEvidenceOpen] = useState(false);
+    const [forwardEvidenceState, setForwardEvidenceState] = useState<{ runId: string | null; value: ForwardEvidenceReview | null }>({ runId: null, value: null });
+    const [isResearchingForwardEvidence, setIsResearchingForwardEvidence] = useState(false);
+    const [researchErrorState, setResearchErrorState] = useState<{ runId: string | null; value: string | null }>({ runId: null, value: null });
     const mobileEvidenceReturnFocus = useRef<HTMLElement | null>(null);
     const autoStarted = useRef(false);
     const agents: AgentInfo[] = useMemo(() => AGENT_CONFIGS.map((config) => ({
@@ -88,6 +97,10 @@ export function WorkspacePage({ assistantId = 'agent', initialTicker = null, ini
         [agent.workflow?.interactions]
     );
 
+    const currentRunId = agent.runId ?? null;
+    const forwardEvidence = forwardEvidenceState.runId === currentRunId ? forwardEvidenceState.value : null;
+    const researchError = researchErrorState.runId === currentRunId ? researchErrorState.value : null;
+
     function handleSelectEvidence(item: EvidenceSelection) {
         setSelectedEvidence(item);
         if (typeof window !== 'undefined' && window.innerWidth < 1440) {
@@ -124,16 +137,38 @@ export function WorkspacePage({ assistantId = 'agent', initialTicker = null, ini
         const symbol = ticker.trim().toUpperCase();
         if (routeIntent.kind !== 'new-analysis' || !symbol || agent.isLoading) return;
         setTicker(symbol);
+        setForwardEvidenceState({ runId: null, value: null });
+        setResearchErrorState({ runId: null, value: null });
         void agent.sendMessage(`Valuate ${symbol}`, true, AUTOMATIC_VALUATION_REQUEST);
     }
 
     function recalculateFromFundamental(manualOverride: Record<string, unknown>) {
         const symbol = ticker.trim().toUpperCase();
         if (routeIntent.kind !== 'new-analysis' || !symbol || agent.isLoading) return;
+        setForwardEvidenceState({ runId: currentRunId, value: null });
+        setResearchErrorState({ runId: currentRunId, value: null });
         void agent.sendMessage(`Valuate ${symbol}`, true, {
             ...AUTOMATIC_VALUATION_REQUEST,
             manual_override: manualOverride,
         });
+    }
+
+    async function researchForwardEvidence(request: ForwardEvidenceResearchRequest) {
+        if (isResearchingForwardEvidence) return;
+        setIsResearchingForwardEvidence(true);
+        setResearchErrorState({ runId: currentRunId, value: null });
+        try {
+            setForwardEvidenceState({ runId: currentRunId, value: await requestForwardEvidence(request) });
+        } catch (error) {
+            setForwardEvidenceState({ runId: currentRunId, value: null });
+            setResearchErrorState({ runId: currentRunId, value: error instanceof Error ? error.message : 'Forward evidence research failed.' });
+        } finally {
+            setIsResearchingForwardEvidence(false);
+        }
+    }
+
+    function applyForwardEvidence(override: ForwardEvidenceManualOverride) {
+        recalculateFromFundamental(override);
     }
 
     const roster = <AgentRoster agents={agents} selected={selectedAgentId ?? preferredAgentId} onSelect={(id) => {
@@ -181,7 +216,7 @@ export function WorkspacePage({ assistantId = 'agent', initialTicker = null, ini
                             {reportTabs.map((tab) => <TabsTrigger key={tab.id} value={tab.id} className="min-h-10 shrink-0 rounded-none border-b-2 border-transparent px-3 data-[state=active]:border-primary data-[state=active]:bg-transparent">{tab.label}</TabsTrigger>)}
                         </TabsList>
                         <TabsContent value="activity"><ActivityPanel workflow={agent.workflow} connectionState={agent.connectionState} onResumeInteraction={agent.submitCommand} isSubmitting={agent.isSubmittingInteraction} onRetry={agent.retryRun} isRetrying={isLoading} /></TabsContent>
-                        {reportTabs.filter((item): item is { id: Exclude<ReportTab, 'activity'>; label: string } => item.id !== 'activity').map((item) => <TabsContent key={item.id} value={item.id}><ReportPanel tab={item.id} outputs={agent.agentOutputs} statuses={agent.agentStatuses} ticker={ticker} onSelectEvidence={handleSelectEvidence} selectedEvidenceId={selectedEvidence?.id} pendingApproval={pendingValuationApproval} onResumeInteraction={agent.submitCommand} isSubmitting={agent.isSubmittingInteraction} onRecalculate={recalculateFromFundamental} /></TabsContent>)}
+                        {reportTabs.filter((item): item is { id: Exclude<ReportTab, 'activity'>; label: string } => item.id !== 'activity').map((item) => <TabsContent key={item.id} value={item.id}><ReportPanel tab={item.id} outputs={agent.agentOutputs} statuses={agent.agentStatuses} ticker={ticker} onSelectEvidence={handleSelectEvidence} selectedEvidenceId={selectedEvidence?.id} pendingApproval={pendingValuationApproval} onResumeInteraction={agent.submitCommand} isSubmitting={agent.isSubmittingInteraction} onRecalculate={recalculateFromFundamental} forwardEvidence={forwardEvidence} isResearchingForwardEvidence={isResearchingForwardEvidence} researchError={researchError} onResearchForwardEvidence={researchForwardEvidence} onApplyForwardEvidence={applyForwardEvidence} /></TabsContent>)}
                     </Tabs>
                         </section>
                     </ResizablePanel>
@@ -318,7 +353,7 @@ function TickerSelectionPrompt({ interaction, disabled, onSubmit }: {
     </Card>;
 }
 
-export function ReportPanel({ tab, outputs, statuses, ticker, onSelectEvidence, selectedEvidenceId, pendingApproval, onResumeInteraction, isSubmitting, onRecalculate }: { tab: Exclude<ReportTab, 'activity'>; outputs: Record<string, StandardAgentOutput | null>; statuses: Record<string, AgentStatus>; ticker: string; onSelectEvidence?: (item: EvidenceSelection) => void; selectedEvidenceId?: string | null; pendingApproval?: Extract<WorkflowInteraction, { kind: 'valuation_approval' }> | null; onResumeInteraction?: (interaction: WorkflowInteraction, response: InteractionResponse) => Promise<void>; isSubmitting?: boolean; onRecalculate?: (manualOverride: Record<string, unknown>) => void }) {
+export function ReportPanel({ tab, outputs, statuses, ticker, onSelectEvidence, selectedEvidenceId, pendingApproval, onResumeInteraction, isSubmitting, onRecalculate, forwardEvidence, isResearchingForwardEvidence, researchError, onResearchForwardEvidence, onApplyForwardEvidence }: { tab: Exclude<ReportTab, 'activity'>; outputs: Record<string, StandardAgentOutput | null>; statuses: Record<string, AgentStatus>; ticker: string; onSelectEvidence?: (item: EvidenceSelection) => void; selectedEvidenceId?: string | null; pendingApproval?: Extract<WorkflowInteraction, { kind: 'valuation_approval' }> | null; onResumeInteraction?: (interaction: WorkflowInteraction, response: InteractionResponse) => Promise<void>; isSubmitting?: boolean; onRecalculate?: (manualOverride: Record<string, unknown>) => void; forwardEvidence?: ForwardEvidenceReview | null; isResearchingForwardEvidence?: boolean; researchError?: string | null; onResearchForwardEvidence?: (request: ForwardEvidenceResearchRequest) => Promise<void>; onApplyForwardEvidence?: (override: ForwardEvidenceManualOverride) => void }) {
     const output = outputs[tab] ?? null;
     const config = AGENT_CONFIGS.find((item) => item.id === tab);
     const status = statuses[tab] ?? 'idle';
@@ -333,5 +368,5 @@ export function ReportPanel({ tab, outputs, statuses, ticker, onSelectEvidence, 
         role: config.role,
         status,
     };
-    return <WorkspaceOutputPanel agent={agent} output={output} resolvedTicker={ticker || null} status={status} onSelectEvidence={onSelectEvidence} selectedEvidenceId={selectedEvidenceId} pendingApproval={pendingApproval} onResumeInteraction={onResumeInteraction} isSubmitting={isSubmitting} onRecalculate={onRecalculate} />;
+    return <WorkspaceOutputPanel agent={agent} output={output} resolvedTicker={ticker || null} status={status} onSelectEvidence={onSelectEvidence} selectedEvidenceId={selectedEvidenceId} pendingApproval={pendingApproval} onResumeInteraction={onResumeInteraction} isSubmitting={isSubmitting} onRecalculate={onRecalculate} forwardEvidence={forwardEvidence} isResearchingForwardEvidence={isResearchingForwardEvidence} researchError={researchError} onResearchForwardEvidence={onResearchForwardEvidence} onApplyForwardEvidence={onApplyForwardEvidence} />;
 }

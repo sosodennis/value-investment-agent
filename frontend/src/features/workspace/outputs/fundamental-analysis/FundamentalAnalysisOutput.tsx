@@ -15,6 +15,11 @@ import { Card } from '@/components/ui/card';
 import type { EvidenceSelection } from '../../workspace-evidence-inspector';
 import type { InteractionResponse, WorkflowInteraction } from '@/features/workflow';
 import { FundamentalReviewPanel } from './FundamentalReviewPanel';
+import type {
+    ForwardEvidenceManualOverride,
+    ForwardEvidenceResearchRequest,
+    ForwardEvidenceReview,
+} from './forward-evidence-api';
 
 const MODEL_LABEL_BY_TYPE: Record<string, string> = {
     dcf_standard: 'DCF (Standard)',
@@ -41,17 +46,28 @@ export interface FundamentalAnalysisOutputProps {
     onResumeInteraction?: (interaction: WorkflowInteraction, response: InteractionResponse) => Promise<void>;
     isSubmitting?: boolean;
     onRecalculate?: (manualOverride: Record<string, unknown>) => void;
+    forwardEvidence?: ForwardEvidenceReview | null;
+    isResearchingForwardEvidence?: boolean;
+    researchError?: string | null;
+    onResearchForwardEvidence?: (request: ForwardEvidenceResearchRequest) => Promise<void>;
+    onApplyForwardEvidence?: (override: ForwardEvidenceManualOverride) => void;
 }
 
 const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProps> = ({
     reference,
     previewData,
+    resolvedTicker,
     status,
     onSelectEvidence,
     pendingApproval = null,
     onResumeInteraction,
     isSubmitting = false,
     onRecalculate,
+    forwardEvidence = null,
+    isResearchingForwardEvidence = false,
+    researchError = null,
+    onResearchForwardEvidence,
+    onApplyForwardEvidence,
 }) => {
     const {
         data: artifactData,
@@ -81,6 +97,28 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
     const degradedProjection =
         serviceProjection?.projection_type === 'degraded' ? serviceProjection : null;
     const automaticPreparation = valuationProjection?.automatic_preparation;
+    const forwardEvidenceForPreparation =
+        automaticPreparation &&
+        forwardEvidence?.automatic_preparation_digest === automaticPreparation.preparation_digest
+            ? forwardEvidence
+            : null;
+    const requestTicker = resolvedTicker ?? artifactData?.ticker ?? null;
+    const modelId = automaticPreparation?.model_id === 'fcff_dcf' || automaticPreparation?.model_id === 'transition_fcff_dcf'
+        ? automaticPreparation.model_id
+        : null;
+    const researchForwardEvidence = async (question: string, assumptionPath: string) => {
+        if (!onResearchForwardEvidence || !automaticPreparation || !modelId || !requestTicker || !serviceFacts?.identity.issuer_id) return;
+        await onResearchForwardEvidence({
+            opt_in: true,
+            ticker: requestTicker,
+            issuer_id: serviceFacts.identity.issuer_id,
+            model_id: modelId,
+            assumption_path: assumptionPath,
+            question,
+            valuation_timestamp: serviceFacts.valuation_timestamp,
+            automatic_preparation_digest: automaticPreparation.preparation_digest,
+        });
+    };
     const hasValuationServiceProjection = Boolean(valuationProjection?.facts);
     const isFactsOnlyProjection = serviceProjection?.projection_type === 'facts_only';
     const canShowValuationPreview = hasValuationServiceProjection;
@@ -707,6 +745,12 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
                     onResumeInteraction={onResumeInteraction}
                     isSubmitting={isSubmitting}
                     onRecalculate={onRecalculate}
+                    ticker={requestTicker}
+                    forwardEvidence={forwardEvidenceForPreparation}
+                    isResearchingForwardEvidence={isResearchingForwardEvidence}
+                    researchError={researchError}
+                    onResearchForwardEvidence={onResearchForwardEvidence ? researchForwardEvidence : undefined}
+                    onApplyForwardEvidence={onApplyForwardEvidence}
                 />
             )}
             <div className="flex items-center justify-between mb-6 px-2">

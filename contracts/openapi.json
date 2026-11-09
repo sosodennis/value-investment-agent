@@ -2781,6 +2781,84 @@
         "title": "FinancialServicesExtensionModel",
         "type": "object"
       },
+      "ForwardEvidenceResearchRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "assumption_path": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Assumption Path",
+            "type": "string"
+          },
+          "automatic_preparation_digest": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Automatic Preparation Digest",
+            "type": "string"
+          },
+          "issuer_id": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Issuer Id",
+            "type": "string"
+          },
+          "model_id": {
+            "enum": [
+              "fcff_dcf",
+              "transition_fcff_dcf"
+            ],
+            "title": "Model Id",
+            "type": "string"
+          },
+          "opt_in": {
+            "const": true,
+            "title": "Opt In",
+            "type": "boolean"
+          },
+          "question": {
+            "maxLength": 512,
+            "minLength": 8,
+            "title": "Question",
+            "type": "string"
+          },
+          "ticker": {
+            "maxLength": 32,
+            "minLength": 1,
+            "pattern": "^[A-Z0-9.-]+$",
+            "title": "Ticker",
+            "type": "string"
+          },
+          "valuation_timestamp": {
+            "format": "date-time",
+            "title": "Valuation Timestamp",
+            "type": "string"
+          }
+        },
+        "required": [
+          "opt_in",
+          "ticker",
+          "issuer_id",
+          "model_id",
+          "assumption_path",
+          "question",
+          "valuation_timestamp",
+          "automatic_preparation_digest"
+        ],
+        "title": "ForwardEvidenceResearchRequest",
+        "type": "object"
+      },
+      "ForwardEvidenceResearchResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "result": {
+            "$ref": "#/components/schemas/FundamentalForwardEvidenceReviewResultV1"
+          }
+        },
+        "required": [
+          "result"
+        ],
+        "title": "ForwardEvidenceResearchResponse",
+        "type": "object"
+      },
       "FundamentalBaseModel": {
         "additionalProperties": true,
         "properties": {
@@ -2966,6 +3044,424 @@
           }
         },
         "title": "FundamentalBaseModel",
+        "type": "object"
+      },
+      "FundamentalForwardEvidenceBudgetPolicyV1": {
+        "additionalProperties": false,
+        "properties": {
+          "max_duration_ms": {
+            "default": 15000,
+            "maximum": 120000.0,
+            "minimum": 500.0,
+            "title": "Max Duration Ms",
+            "type": "integer"
+          },
+          "max_llm_claims": {
+            "default": 8,
+            "maximum": 32.0,
+            "minimum": 1.0,
+            "title": "Max Llm Claims",
+            "type": "integer"
+          },
+          "max_results_per_query": {
+            "default": 5,
+            "maximum": 20.0,
+            "minimum": 1.0,
+            "title": "Max Results Per Query",
+            "type": "integer"
+          },
+          "max_search_queries": {
+            "default": 2,
+            "maximum": 5.0,
+            "minimum": 1.0,
+            "title": "Max Search Queries",
+            "type": "integer"
+          },
+          "max_source_bytes": {
+            "default": 120000,
+            "maximum": 1000000.0,
+            "minimum": 1000.0,
+            "title": "Max Source Bytes",
+            "type": "integer"
+          },
+          "policy_version": {
+            "default": "forward-evidence-policy-v1",
+            "title": "Policy Version",
+            "type": "string"
+          }
+        },
+        "title": "FundamentalForwardEvidenceBudgetPolicyV1",
+        "type": "object"
+      },
+      "FundamentalForwardEvidenceClaimV1": {
+        "additionalProperties": false,
+        "properties": {
+          "assumption_path": {
+            "anyOf": [
+              {
+                "maxLength": 256,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assumption Path"
+          },
+          "claim_id": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Claim Id",
+            "type": "string"
+          },
+          "exclusion_reasons": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Exclusion Reasons",
+            "type": "array"
+          },
+          "extraction_method": {
+            "enum": [
+              "structured_provider",
+              "llm_from_source_passage"
+            ],
+            "title": "Extraction Method",
+            "type": "string"
+          },
+          "fiscal_period": {
+            "maxLength": 32,
+            "minLength": 2,
+            "title": "Fiscal Period",
+            "type": "string"
+          },
+          "issue_codes": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Issue Codes",
+            "type": "array"
+          },
+          "issuer_id": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Issuer Id",
+            "type": "string"
+          },
+          "metric": {
+            "enum": [
+              "revenue_growth",
+              "operating_margin",
+              "reinvestment_rate",
+              "debt_term"
+            ],
+            "title": "Metric",
+            "type": "string"
+          },
+          "model_id": {
+            "enum": [
+              "fcff_dcf",
+              "transition_fcff_dcf"
+            ],
+            "title": "Model Id",
+            "type": "string"
+          },
+          "period_end": {
+            "format": "date",
+            "title": "Period End",
+            "type": "string"
+          },
+          "period_type": {
+            "enum": [
+              "annual",
+              "quarterly"
+            ],
+            "title": "Period Type",
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/components/schemas/FundamentalForwardEvidenceSourceV1"
+          },
+          "status": {
+            "enum": [
+              "accepted",
+              "excluded"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "ticker": {
+            "maxLength": 32,
+            "minLength": 1,
+            "pattern": "^[A-Z0-9.-]+$",
+            "title": "Ticker",
+            "type": "string"
+          },
+          "unit": {
+            "enum": [
+              "ratio",
+              "currency",
+              "days",
+              "text"
+            ],
+            "title": "Unit",
+            "type": "string"
+          },
+          "value": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "claim_id",
+          "issuer_id",
+          "ticker",
+          "model_id",
+          "metric",
+          "value",
+          "unit",
+          "fiscal_period",
+          "period_type",
+          "period_end",
+          "extraction_method",
+          "source",
+          "status"
+        ],
+        "title": "FundamentalForwardEvidenceClaimV1",
+        "type": "object"
+      },
+      "FundamentalForwardEvidenceReviewResultV1": {
+        "additionalProperties": false,
+        "properties": {
+          "accepted_claim_ids": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Accepted Claim Ids",
+            "type": "array"
+          },
+          "automatic_preparation_digest": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Automatic Preparation Digest",
+            "type": "string"
+          },
+          "budget": {
+            "$ref": "#/components/schemas/FundamentalForwardEvidenceBudgetPolicyV1"
+          },
+          "claims": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/FundamentalForwardEvidenceClaimV1"
+            },
+            "title": "Claims",
+            "type": "array"
+          },
+          "contract_version": {
+            "const": "fundamental.v1",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "excluded_claim_ids": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Excluded Claim Ids",
+            "type": "array"
+          },
+          "issue_codes": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Issue Codes",
+            "type": "array"
+          },
+          "label": {
+            "const": "forward-looking external evidence",
+            "title": "Label",
+            "type": "string"
+          },
+          "policy_version": {
+            "title": "Policy Version",
+            "type": "string"
+          },
+          "reference_digest": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Reference Digest",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "prepared",
+              "unsupported",
+              "unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "usage": {
+            "$ref": "#/components/schemas/FundamentalForwardEvidenceUsageV1"
+          }
+        },
+        "required": [
+          "contract_version",
+          "status",
+          "label",
+          "policy_version",
+          "automatic_preparation_digest",
+          "budget",
+          "usage",
+          "reference_digest"
+        ],
+        "title": "FundamentalForwardEvidenceReviewResultV1",
+        "type": "object"
+      },
+      "FundamentalForwardEvidenceSourceV1": {
+        "additionalProperties": false,
+        "properties": {
+          "content_hash": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Content Hash",
+            "type": "string"
+          },
+          "license_reference": {
+            "anyOf": [
+              {
+                "maxLength": 2048,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "License Reference"
+          },
+          "license_status": {
+            "enum": [
+              "approved",
+              "unknown",
+              "rejected"
+            ],
+            "title": "License Status",
+            "type": "string"
+          },
+          "published_at": {
+            "format": "date-time",
+            "title": "Published At",
+            "type": "string"
+          },
+          "publisher": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Publisher",
+            "type": "string"
+          },
+          "retained_passage": {
+            "maxLength": 8192,
+            "minLength": 20,
+            "title": "Retained Passage",
+            "type": "string"
+          },
+          "retrieved_at": {
+            "format": "date-time",
+            "title": "Retrieved At",
+            "type": "string"
+          },
+          "source_id": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Source Id",
+            "type": "string"
+          },
+          "source_type": {
+            "enum": [
+              "issuer_guidance",
+              "analyst_estimate",
+              "debt_terms",
+              "search_discovery"
+            ],
+            "title": "Source Type",
+            "type": "string"
+          },
+          "source_url": {
+            "maxLength": 2048,
+            "minLength": 1,
+            "title": "Source Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_id",
+          "source_url",
+          "publisher",
+          "source_type",
+          "retained_passage",
+          "content_hash",
+          "published_at",
+          "retrieved_at",
+          "license_status"
+        ],
+        "title": "FundamentalForwardEvidenceSourceV1",
+        "type": "object"
+      },
+      "FundamentalForwardEvidenceUsageV1": {
+        "additionalProperties": false,
+        "properties": {
+          "elapsed_ms": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Elapsed Ms",
+            "type": "integer"
+          },
+          "llm_calls": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Llm Calls",
+            "type": "integer"
+          },
+          "llm_input_bytes": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Llm Input Bytes",
+            "type": "integer"
+          },
+          "llm_output_tokens": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Llm Output Tokens"
+          },
+          "search_queries": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Search Queries",
+            "type": "integer"
+          },
+          "search_results": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Search Results",
+            "type": "integer"
+          },
+          "source_fetches": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Source Fetches",
+            "type": "integer"
+          }
+        },
+        "title": "FundamentalForwardEvidenceUsageV1",
         "type": "object"
       },
       "HTTPValidationError": {
@@ -12170,6 +12666,47 @@
         "summary": "List the authenticated account's recent analysis runs",
         "tags": [
           "Dashboard"
+        ]
+      }
+    },
+    "/api/v1/fundamental/forward-evidence/research": {
+      "post": {
+        "operationId": "research_forward_evidence_api_v1_fundamental_forward_evidence_research_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ForwardEvidenceResearchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForwardEvidenceResearchResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Research Forward Evidence",
+        "tags": [
+          "Fundamental forward evidence"
         ]
       }
     },

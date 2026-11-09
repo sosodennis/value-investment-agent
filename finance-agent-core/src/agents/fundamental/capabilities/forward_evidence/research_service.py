@@ -24,11 +24,6 @@ from src.agents.fundamental.interface.fundamental_service_contracts import (
     FundamentalForwardEvidenceSourceV1,
     FundamentalForwardEvidenceUsageV1,
 )
-from src.llm_provider.application.context import (
-    reset_provider_principal,
-    set_provider_principal,
-)
-from src.llm_provider.domain.contracts import ProviderPrincipal
 from src.llm_provider.entrypoint import (
     ChatMessage,
     ChatRole,
@@ -36,7 +31,10 @@ from src.llm_provider.entrypoint import (
     LLMProviderPort,
     LLMRequestClass,
     ModelRoute,
+    ProviderPrincipal,
     StructuredRequest,
+    reset_provider_principal,
+    set_provider_principal,
 )
 from src.search.contracts import WebSearchRequest
 from src.shared.internal_services import (
@@ -54,6 +52,12 @@ class ForwardEvidenceResearchService:
     llm_route: ModelRoute
     search_result_limit: int = 5
     request_timeout_seconds: float = 15.0
+
+    def __post_init__(self) -> None:
+        if self.search_result_limit < 1 or self.search_result_limit > 5:
+            raise ValueError("search_result_limit must be between 1 and 5")
+        if self.request_timeout_seconds < 0.5 or self.request_timeout_seconds > 120:
+            raise ValueError("request_timeout_seconds must be between 0.5 and 120")
 
     async def research(
         self,
@@ -78,15 +82,35 @@ class ForwardEvidenceResearchService:
         )
         try:
             query = f"{request.ticker} {request.question} {request.assumption_path}"
-            try:
-                raw_search = await asyncio.to_thread(
-                    self.search_fn,
-                    WebSearchRequest(
-                        query=query,
-                        result_limit=self.search_result_limit,
-                    ),
+            remaining = max(
+                0.0,
+                (deadline_at.astimezone(UTC) - datetime.now(UTC)).total_seconds(),
+            )
+            if remaining <= 0:
+                return self._unavailable(
+                    request,
+                    budget=budget,
+                    code="DEADLINE_EXCEEDED",
+                    elapsed_ms=int((monotonic() - started) * 1000),
                 )
-                results = tuple(getattr(raw_search, "results", ()))
+            try:
+                raw_search = await asyncio.wait_for(
+                    asyncio.to_thread(
+                        self.search_fn,
+                        WebSearchRequest(
+                            query=query,
+                            result_limit=self.search_result_limit,
+                        ),
+                    ),
+                    timeout=min(self.request_timeout_seconds, remaining),
+                )
+            except asyncio.TimeoutError:
+                return self._unavailable(
+                    request,
+                    budget=budget,
+                    code="DEADLINE_EXCEEDED",
+                    elapsed_ms=int((monotonic() - started) * 1000),
+                )
             except Exception:
                 return self._unavailable(
                     request,
@@ -94,9 +118,15 @@ class ForwardEvidenceResearchService:
                     code="SEARCH_PROVIDER_FAILURE",
                     elapsed_ms=int((monotonic() - started) * 1000),
                 )
+            try:
+                results = tuple(getattr(raw_search, "results", ()))
+            except Exception:
+                results = ()
 
-            source_payloads = [
-                {
+            source_payloads: list[dict[str, object]] = []
+            source_bytes = 0
+            for item in results[: self.search_result_limit]:
+                candidate = {
                     "title": item.title,
                     "source_url": item.canonical_url,
                     "publisher": item.source or item.provider,
@@ -106,13 +136,20 @@ class ForwardEvidenceResearchService:
                     "snippet": item.snippet,
                     "provider": item.provider,
                 }
-                for item in results[: self.search_result_limit]
-            ]
+                candidate_bytes = len(
+                    json.dumps(
+                        candidate, ensure_ascii=False, separators=(",", ":")
+                    ).encode("utf-8")
+                )
+                if source_bytes + candidate_bytes > budget.max_source_bytes:
+                    continue
+                source_payloads.append(candidate)
+                source_bytes += candidate_bytes
             if not source_payloads:
                 return self._unavailable(
                     request,
                     budget=budget,
-                    code="SEARCH_NO_RESULTS",
+                    code="SOURCE_BUDGET_EXCEEDED" if results else "SEARCH_NO_RESULTS",
                     elapsed_ms=int((monotonic() - started) * 1000),
                 )
 
@@ -145,7 +182,23 @@ class ForwardEvidenceResearchService:
                 response_schema=ForwardEvidenceExtraction,
             )
             try:
-                extraction = await self.llm_provider.acomplete_structured(llm_request)
+                remaining = max(
+                    0.0,
+                    (deadline_at.astimezone(UTC) - datetime.now(UTC)).total_seconds(),
+                )
+                extraction = await asyncio.wait_for(
+                    self.llm_provider.acomplete_structured(llm_request),
+                    timeout=min(self.request_timeout_seconds, remaining),
+                )
+            except asyncio.TimeoutError:
+                return self._unavailable(
+                    request,
+                    budget=budget,
+                    code="DEADLINE_EXCEEDED",
+                    elapsed_ms=int((monotonic() - started) * 1000),
+                    search_results=len(source_payloads),
+                    llm_input_bytes=len(prompt.encode("utf-8")),
+                )
             except Exception:
                 return self._unavailable(
                     request,
@@ -156,7 +209,12 @@ class ForwardEvidenceResearchService:
                     llm_input_bytes=len(prompt.encode("utf-8")),
                 )
 
-            claims = self._build_claims(request, extraction, source_payloads)
+            claims = self._build_claims(
+                request,
+                extraction,
+                source_payloads,
+                max_claims=budget.max_llm_claims,
+            )
             service_request = {
                 "contract_version": "fundamental.v1",
                 "opt_in": True,
@@ -171,7 +229,7 @@ class ForwardEvidenceResearchService:
                 "usage": FundamentalForwardEvidenceUsageV1(
                     search_queries=1,
                     search_results=len(source_payloads),
-                    source_fetches=len(source_payloads),
+                    source_fetches=0,
                     llm_calls=1,
                     llm_input_bytes=len(prompt.encode("utf-8")),
                     elapsed_ms=int((monotonic() - started) * 1000),
@@ -202,10 +260,12 @@ class ForwardEvidenceResearchService:
         request: ForwardEvidenceResearchRequest,
         extraction: ForwardEvidenceExtraction,
         source_payloads: Sequence[dict[str, object]],
+        *,
+        max_claims: int,
     ) -> tuple[FundamentalForwardEvidenceClaimV1, ...]:
         by_url = {str(item["source_url"]): item for item in source_payloads}
         claims: list[FundamentalForwardEvidenceClaimV1] = []
-        for index, draft in enumerate(extraction.claims):
+        for index, draft in enumerate(extraction.claims[:max_claims]):
             source = by_url.get(draft.source_url)
             published_at = (
                 datetime.fromisoformat(str(source["published_at"]))

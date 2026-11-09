@@ -208,6 +208,15 @@ export interface FundamentalManualProvenance {
     modified_at: string;
     reason: string;
     automatic_preparation_digest: string;
+    forward_reference?: FundamentalForwardReferenceProvenance;
+}
+
+export interface FundamentalForwardReferenceProvenance {
+    claim_id: string;
+    source_url: string;
+    source_content_hash: string;
+    citation: string;
+    license_reference: string;
 }
 
 export interface FundamentalAssumptionEvidence {
@@ -381,7 +390,39 @@ const parseManualProvenance = (
     context: string
 ): FundamentalManualProvenance => {
     const record = parseRecord(value, context);
-    return {
+    const forwardReferenceValue = record.forward_reference;
+    const forwardReference =
+        forwardReferenceValue === undefined || forwardReferenceValue === null
+            ? undefined
+            : (() => {
+                  const reference = parseRecord(
+                      forwardReferenceValue,
+                      `${context}.forward_reference`
+                  );
+                  return {
+                      claim_id: parseString(
+                          reference.claim_id,
+                          `${context}.forward_reference.claim_id`
+                      ),
+                      source_url: parseString(
+                          reference.source_url,
+                          `${context}.forward_reference.source_url`
+                      ),
+                      source_content_hash: parseDigest(
+                          reference.source_content_hash,
+                          `${context}.forward_reference.source_content_hash`
+                      ),
+                      citation: parseString(
+                          reference.citation,
+                          `${context}.forward_reference.citation`
+                      ),
+                      license_reference: parseString(
+                          reference.license_reference,
+                          `${context}.forward_reference.license_reference`
+                      ),
+                  } satisfies FundamentalForwardReferenceProvenance;
+              })();
+    const parsed: FundamentalManualProvenance = {
         author: parseString(record.author, `${context}.author`),
         modified_at: parseTimestamp(record.modified_at, `${context}.modified_at`),
         reason: parseString(record.reason, `${context}.reason`),
@@ -390,6 +431,8 @@ const parseManualProvenance = (
             `${context}.automatic_preparation_digest`
         ),
     };
+    if (forwardReference !== undefined) parsed.forward_reference = forwardReference;
+    return parsed;
 };
 
 const parseAssumptionEvidence = (

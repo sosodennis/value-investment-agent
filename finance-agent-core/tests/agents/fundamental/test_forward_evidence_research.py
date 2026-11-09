@@ -34,14 +34,16 @@ def _request() -> ForwardEvidenceResearchRequest:
     )
 
 
-def _search_result() -> SearchOperationResult:
+def _search_result(
+    *, snippet: str = "Management expects revenue growth of 12 percent in fiscal 2027."
+) -> SearchOperationResult:
     return SearchOperationResult(
         operation="web",
         results=(
             SearchResult(
                 title="AAPL guidance",
                 canonical_url="https://issuer.example/guidance",
-                snippet="Management expects revenue growth of 12 percent in fiscal 2027.",
+                snippet=snippet,
                 provider="fake-search",
                 source="Issuer IR",
                 published_at=datetime(2026, 10, 1, tzinfo=UTC),
@@ -122,7 +124,7 @@ async def test_research_calls_search_llm_and_service_only_after_opt_in() -> None
             subject_id="user-1", organization_id="org-1", membership_id="member-1"
         ),
         correlation_id="corr-1",
-        deadline_at=datetime(2026, 11, 1, 0, 1, tzinfo=UTC),
+        deadline_at=datetime(2026, 11, 11, 0, 1, tzinfo=UTC),
     )
 
     assert result.status == "prepared"
@@ -130,6 +132,9 @@ async def test_research_calls_search_llm_and_service_only_after_opt_in() -> None
     assert len(fundamental.calls) == 1
     assert fundamental.calls[0]["opt_in"] is True
     assert fundamental.calls[0]["claims"]
+    assert fundamental.calls[0]["usage"]["search_queries"] == 1
+    assert fundamental.calls[0]["usage"]["source_fetches"] == 0
+    assert fundamental.calls[0]["budget"]["max_duration_ms"] == 15000
 
 
 @pytest.mark.anyio
@@ -146,7 +151,7 @@ async def test_search_failure_does_not_call_llm_or_fundamental_service() -> None
             subject_id="user-1", organization_id="org-1", membership_id="member-1"
         ),
         correlation_id="corr-1",
-        deadline_at=datetime(2026, 11, 1, 0, 1, tzinfo=UTC),
+        deadline_at=datetime(2026, 11, 11, 0, 1, tzinfo=UTC),
     )
 
     assert result.status == "unavailable"
@@ -167,9 +172,57 @@ async def test_llm_failure_is_optional_and_does_not_degrade_baseline() -> None:
             subject_id="user-1", organization_id="org-1", membership_id="member-1"
         ),
         correlation_id="corr-1",
-        deadline_at=datetime(2026, 11, 1, 0, 1, tzinfo=UTC),
+        deadline_at=datetime(2026, 11, 11, 0, 1, tzinfo=UTC),
     )
 
     assert result.status == "unavailable"
     assert result.issue_codes == ("LLM_PROVIDER_FAILURE",)
+    assert fundamental.calls == []
+
+
+@pytest.mark.anyio
+async def test_source_budget_blocks_oversized_discovery_payload_before_llm() -> None:
+    llm = FakeLLM(_extraction())
+    fundamental = FakeFundamentalService()
+    result = await _service(
+        lambda _request: _search_result(snippet="x" * 200_000), llm, fundamental
+    ).research(
+        _request(),
+        principal=InternalPrincipal(
+            subject_id="user-1", organization_id="org-1", membership_id="member-1"
+        ),
+        correlation_id="corr-1",
+        deadline_at=datetime(2026, 11, 11, 0, 1, tzinfo=UTC),
+    )
+
+    assert result.status == "unavailable"
+    assert result.issue_codes == ("SOURCE_BUDGET_EXCEEDED",)
+    assert llm.calls == 0
+    assert fundamental.calls == []
+
+
+@pytest.mark.anyio
+async def test_expired_deadline_skips_optional_providers() -> None:
+    llm = FakeLLM(_extraction())
+    fundamental = FakeFundamentalService()
+    search_calls = 0
+
+    def search(_request):
+        nonlocal search_calls
+        search_calls += 1
+        return _search_result()
+
+    result = await _service(search, llm, fundamental).research(
+        _request(),
+        principal=InternalPrincipal(
+            subject_id="user-1", organization_id="org-1", membership_id="member-1"
+        ),
+        correlation_id="corr-1",
+        deadline_at=datetime(2026, 10, 31, 23, 59, tzinfo=UTC),
+    )
+
+    assert result.status == "unavailable"
+    assert result.issue_codes == ("DEADLINE_EXCEEDED",)
+    assert search_calls == 0
+    assert llm.calls == 0
     assert fundamental.calls == []

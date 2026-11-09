@@ -5,7 +5,7 @@ from src.agents.fundamental.application.workflow_orchestrator.factory import (
     build_fundamental_orchestrator,
     build_fundamental_workflow_runner,
 )
-from src.agents.fundamental.capabilities.forward_evidence.research_service import (
+from src.agents.fundamental.capabilities.forward_evidence import (
     ForwardEvidenceResearchService,
 )
 from src.agents.fundamental.infrastructure import HttpFundamentalServiceClient

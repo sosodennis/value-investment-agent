@@ -200,6 +200,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/fundamental/forward-evidence/research": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Research Forward Evidence */
+        post: operations["research_forward_evidence_api_v1_fundamental_forward_evidence_research_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/llm/provider-keys": {
         parameters: {
             query?: never;
@@ -1785,6 +1802,38 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /** ForwardEvidenceResearchRequest */
+        ForwardEvidenceResearchRequest: {
+            /** Assumption Path */
+            assumption_path: string;
+            /** Automatic Preparation Digest */
+            automatic_preparation_digest: string;
+            /** Issuer Id */
+            issuer_id: string;
+            /**
+             * Model Id
+             * @enum {string}
+             */
+            model_id: "fcff_dcf" | "transition_fcff_dcf";
+            /**
+             * Opt In
+             * @constant
+             */
+            opt_in: true;
+            /** Question */
+            question: string;
+            /** Ticker */
+            ticker: string;
+            /**
+             * Valuation Timestamp
+             * Format: date-time
+             */
+            valuation_timestamp: string;
+        };
+        /** ForwardEvidenceResearchResponse */
+        ForwardEvidenceResearchResponse: {
+            result: components["schemas"]["FundamentalForwardEvidenceReviewResultV1"];
+        };
         /** FundamentalBaseModel */
         FundamentalBaseModel: {
             cash_and_equivalents?: components["schemas"]["TraceableFieldModel"] | null;
@@ -1807,6 +1856,216 @@ export interface components {
             weighted_average_shares_diluted?: components["schemas"]["TraceableFieldModel"] | null;
         } & {
             [key: string]: unknown;
+        };
+        /** FundamentalForwardEvidenceBudgetPolicyV1 */
+        FundamentalForwardEvidenceBudgetPolicyV1: {
+            /**
+             * Max Duration Ms
+             * @default 15000
+             */
+            max_duration_ms: number;
+            /**
+             * Max Llm Claims
+             * @default 8
+             */
+            max_llm_claims: number;
+            /**
+             * Max Results Per Query
+             * @default 5
+             */
+            max_results_per_query: number;
+            /**
+             * Max Search Queries
+             * @default 2
+             */
+            max_search_queries: number;
+            /**
+             * Max Source Bytes
+             * @default 120000
+             */
+            max_source_bytes: number;
+            /**
+             * Policy Version
+             * @default forward-evidence-policy-v1
+             */
+            policy_version: string;
+        };
+        /** FundamentalForwardEvidenceClaimV1 */
+        FundamentalForwardEvidenceClaimV1: {
+            /** Assumption Path */
+            assumption_path?: string | null;
+            /** Claim Id */
+            claim_id: string;
+            /**
+             * Exclusion Reasons
+             * @default []
+             */
+            exclusion_reasons: string[];
+            /**
+             * Extraction Method
+             * @enum {string}
+             */
+            extraction_method: "structured_provider" | "llm_from_source_passage";
+            /** Fiscal Period */
+            fiscal_period: string;
+            /**
+             * Issue Codes
+             * @default []
+             */
+            issue_codes: string[];
+            /** Issuer Id */
+            issuer_id: string;
+            /**
+             * Metric
+             * @enum {string}
+             */
+            metric: "revenue_growth" | "operating_margin" | "reinvestment_rate" | "debt_term";
+            /**
+             * Model Id
+             * @enum {string}
+             */
+            model_id: "fcff_dcf" | "transition_fcff_dcf";
+            /**
+             * Period End
+             * Format: date
+             */
+            period_end: string;
+            /**
+             * Period Type
+             * @enum {string}
+             */
+            period_type: "annual" | "quarterly";
+            source: components["schemas"]["FundamentalForwardEvidenceSourceV1"];
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "accepted" | "excluded";
+            /** Ticker */
+            ticker: string;
+            /**
+             * Unit
+             * @enum {string}
+             */
+            unit: "ratio" | "currency" | "days" | "text";
+            /** Value */
+            value: string;
+        };
+        /** FundamentalForwardEvidenceReviewResultV1 */
+        FundamentalForwardEvidenceReviewResultV1: {
+            /**
+             * Accepted Claim Ids
+             * @default []
+             */
+            accepted_claim_ids: string[];
+            /** Automatic Preparation Digest */
+            automatic_preparation_digest: string;
+            budget: components["schemas"]["FundamentalForwardEvidenceBudgetPolicyV1"];
+            /**
+             * Claims
+             * @default []
+             */
+            claims: components["schemas"]["FundamentalForwardEvidenceClaimV1"][];
+            /**
+             * Contract Version
+             * @constant
+             */
+            contract_version: "fundamental.v1";
+            /**
+             * Excluded Claim Ids
+             * @default []
+             */
+            excluded_claim_ids: string[];
+            /**
+             * Issue Codes
+             * @default []
+             */
+            issue_codes: string[];
+            /**
+             * Label
+             * @constant
+             */
+            label: "forward-looking external evidence";
+            /** Policy Version */
+            policy_version: string;
+            /** Reference Digest */
+            reference_digest: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "prepared" | "unsupported" | "unavailable";
+            usage: components["schemas"]["FundamentalForwardEvidenceUsageV1"];
+        };
+        /** FundamentalForwardEvidenceSourceV1 */
+        FundamentalForwardEvidenceSourceV1: {
+            /** Content Hash */
+            content_hash: string;
+            /** License Reference */
+            license_reference?: string | null;
+            /**
+             * License Status
+             * @enum {string}
+             */
+            license_status: "approved" | "unknown" | "rejected";
+            /**
+             * Published At
+             * Format: date-time
+             */
+            published_at: string;
+            /** Publisher */
+            publisher: string;
+            /** Retained Passage */
+            retained_passage: string;
+            /**
+             * Retrieved At
+             * Format: date-time
+             */
+            retrieved_at: string;
+            /** Source Id */
+            source_id: string;
+            /**
+             * Source Type
+             * @enum {string}
+             */
+            source_type: "issuer_guidance" | "analyst_estimate" | "debt_terms" | "search_discovery";
+            /** Source Url */
+            source_url: string;
+        };
+        /** FundamentalForwardEvidenceUsageV1 */
+        FundamentalForwardEvidenceUsageV1: {
+            /**
+             * Elapsed Ms
+             * @default 0
+             */
+            elapsed_ms: number;
+            /**
+             * Llm Calls
+             * @default 0
+             */
+            llm_calls: number;
+            /**
+             * Llm Input Bytes
+             * @default 0
+             */
+            llm_input_bytes: number;
+            /** Llm Output Tokens */
+            llm_output_tokens?: number | null;
+            /**
+             * Search Queries
+             * @default 0
+             */
+            search_queries: number;
+            /**
+             * Search Results
+             * @default 0
+             */
+            search_results: number;
+            /**
+             * Source Fetches
+             * @default 0
+             */
+            source_fetches: number;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -4840,6 +5099,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RecentAnalysesResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    research_forward_evidence_api_v1_fundamental_forward_evidence_research_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ForwardEvidenceResearchRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ForwardEvidenceResearchResponse"];
                 };
             };
             /** @description Validation Error */

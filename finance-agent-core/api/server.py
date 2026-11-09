@@ -12,8 +12,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import JSONResponse
 
-from src.agents.fundamental.interface.forward_evidence_routes import (
-    router as fundamental_forward_evidence_router,
+from src.agents.fundamental.entrypoint import (
+    fundamental_forward_evidence_router,
 )
 from src.analysis_runtime.application.ports import OwnerPort
 from src.analysis_runtime.application.runtime_service import AnalysisRuntimeService
