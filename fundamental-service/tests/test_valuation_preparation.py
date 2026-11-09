@@ -1,6 +1,7 @@
 from datetime import UTC, datetime
 from decimal import Decimal
 
+import pytest
 from fundamental_service.contracts import (
     IdentityV1,
     PeriodType,
@@ -10,6 +11,9 @@ from fundamental_service.contracts import (
 )
 from fundamental_service.valuation_preparation import (
     ApprovedMarketPolicyInputsV1,
+    ManualProvenanceV1,
+    PreparationError,
+    apply_manual_override,
     prepare_automatic_valuation,
 )
 from fundamental_service.valuation_requirements import (
@@ -317,3 +321,65 @@ def test_transition_preparation_abstains_on_unbound_filing_evidence() -> None:
     assert result.status == "abstained"
     assert result.quality_status is QualityStatus.ABSTAIN
     assert "TRANSITION_EVIDENCE_INVALID" in result.issue_codes
+
+
+def test_manual_override_preserves_automatic_evidence_and_changes_digests() -> None:
+    automatic = _prepare(_facts(), market_policy=_market_policy())
+    path = "assumptions.forecast.operating_margin[0]"
+    provenance = ManualProvenanceV1(
+        author="reviewer-1",
+        modified_at=datetime(2026, 3, 2, tzinfo=UTC),
+        reason="approved normalization adjustment",
+        automatic_preparation_digest=automatic.preparation_digest,
+    )
+
+    overridden = apply_manual_override(
+        automatic,
+        path=path,
+        value=Decimal("0.24"),
+        provenance=provenance,
+    )
+
+    assert overridden.input is not None
+    assert overridden.input.assumptions.forecast.operating_margin[0] == Decimal("0.24")
+    assert overridden.input.input_digest != automatic.input.input_digest
+    assert overridden.preparation_digest != automatic.preparation_digest
+    assert any(
+        item.path == path and item.method == "derived"
+        for item in overridden.assumptions_evidence
+    )
+    manual = tuple(
+        item for item in overridden.assumptions_evidence if item.method == "manual"
+    )
+    assert len(manual) == 1
+    assert manual[0].manual_provenance == provenance
+    assert "MANUAL_OVERRIDE_APPLIED" in overridden.issue_codes
+
+
+def test_manual_override_rejects_wrong_automatic_digest_or_unsupported_path() -> None:
+    automatic = _prepare(_facts(), market_policy=_market_policy())
+    provenance = ManualProvenanceV1(
+        author="reviewer-1",
+        modified_at=datetime(2026, 3, 2, tzinfo=UTC),
+        reason="approved adjustment",
+        automatic_preparation_digest="f" * 64,
+    )
+
+    with pytest.raises(PreparationError, match="different automatic preparation"):
+        apply_manual_override(
+            automatic,
+            path="assumptions.terminal_growth",
+            value=Decimal("0.02"),
+            provenance=provenance,
+        )
+
+    valid_provenance = provenance.model_copy(
+        update={"automatic_preparation_digest": automatic.preparation_digest}
+    )
+    with pytest.raises(PreparationError, match="no unique automatic evidence"):
+        apply_manual_override(
+            automatic,
+            path="assumptions.trace.description",
+            value=Decimal("1"),
+            provenance=valid_provenance,
+        )

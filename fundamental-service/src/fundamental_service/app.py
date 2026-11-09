@@ -95,7 +95,10 @@ from .source_acquisition import (
     parse_supported_filing_years,
 )
 from .uncertainty import UncertaintyReportV1
-from .valuation_preparation import AutomaticValuationPreparationV1
+from .valuation_preparation import (
+    AutomaticValuationPreparationV1,
+    ManualValuationOverrideRequestV1,
+)
 
 LOGGER = logging.getLogger("fundamental_service")
 
@@ -428,6 +431,16 @@ def create_app(
     async def prepare_valuation(request: Request) -> JSONResponse:
         value = decode_input(request, ValuationEvidenceReadRequestV1)
         return success_response(request, application.prepare_valuation(value))
+
+    @app.post(
+        "/v1/valuation/prepare/override",
+        response_model=TypedFundamentalResponseEnvelopeV1[
+            AutomaticValuationPreparationV1
+        ],
+    )
+    async def override_prepared_valuation(request: Request) -> JSONResponse:
+        value = decode_input(request, ManualValuationOverrideRequestV1)
+        return success_response(request, application.apply_manual_override(value))
 
     @app.get(
         "/v1/policies/{policy_id}",
@@ -810,6 +823,10 @@ def create_app(
             (
                 "FundamentalValuationPreparationRequestEnvelopeV1",
                 TypedFundamentalRequestEnvelopeV1[ValuationEvidenceReadRequestV1],
+            ),
+            (
+                "FundamentalManualValuationOverrideRequestEnvelopeV1",
+                TypedFundamentalRequestEnvelopeV1[ManualValuationOverrideRequestV1],
             ),
             (
                 "FundamentalPolicyLookupRequestEnvelopeV1",

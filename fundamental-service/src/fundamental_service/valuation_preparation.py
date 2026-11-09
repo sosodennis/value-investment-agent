@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Iterable
 from datetime import datetime
 from decimal import Decimal
@@ -129,19 +130,48 @@ class AssumptionEvidenceV1(StrictModel):
 
     path: str = Field(min_length=1)
     value: Decimal
-    method: Literal["derived", "approved_source", "approved_policy"]
+    method: Literal["derived", "approved_source", "approved_policy", "manual"]
     formula: str = Field(min_length=1)
     fact_ids: tuple[str, ...] = ()
     source_refs: tuple[str, ...] = ()
     policy_version: str = Field(min_length=1)
     as_of: datetime
     editable: bool = True
+    manual_provenance: "ManualProvenanceV1 | None" = None
 
     @model_validator(mode="after")
     def timestamp_has_timezone(self) -> AssumptionEvidenceV1:
         if self.as_of.tzinfo is None or self.as_of.utcoffset() is None:
             raise ValueError("assumption evidence as_of must include a timezone")
         return self
+
+    @model_validator(mode="after")
+    def manual_method_has_provenance(self) -> AssumptionEvidenceV1:
+        if self.method == "manual" and self.manual_provenance is None:
+            raise ValueError("manual assumption evidence requires provenance")
+        if self.method != "manual" and self.manual_provenance is not None:
+            raise ValueError(
+                "automatic assumption evidence cannot include manual provenance"
+            )
+        return self
+
+
+class ManualProvenanceV1(StrictModel):
+    """Human attribution for one supported assumption override."""
+
+    author: str = Field(min_length=1)
+    modified_at: datetime
+    reason: str = Field(min_length=1)
+    automatic_preparation_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+    @model_validator(mode="after")
+    def timestamp_has_timezone(self) -> ManualProvenanceV1:
+        if self.modified_at.tzinfo is None or self.modified_at.utcoffset() is None:
+            raise ValueError("manual provenance modified_at must include a timezone")
+        return self
+
+
+AssumptionEvidenceV1.model_rebuild()
 
 
 class AutomaticValuationPreparationV1(StrictModel):
@@ -173,6 +203,16 @@ class AutomaticValuationPreparationV1(StrictModel):
         ):
             raise ValueError("unvalidated history cannot be marked verified")
         return self
+
+
+class ManualValuationOverrideRequestV1(StrictModel):
+    """Request to edit one generated assumption while retaining its evidence."""
+
+    contract_version: Literal["fundamental.v1"] = "fundamental.v1"
+    preparation: AutomaticValuationPreparationV1
+    path: str = Field(min_length=1)
+    value: Decimal
+    provenance: ManualProvenanceV1
 
 
 def _metric(
@@ -444,6 +484,167 @@ def _assumption_evidence(
         ),
         policy_version=policy_version,
         as_of=as_of,
+    )
+
+
+_FORECAST_OVERRIDE = re.compile(
+    r"^assumptions\.forecast\.(revenue_growth|operating_margin|reinvestment_rate)\[(\d+)\]$"
+)
+
+
+def _override_assumptions(
+    assumptions: AssumptionsV1,
+    *,
+    path: str,
+    value: Decimal,
+) -> AssumptionsV1:
+    forecast_match = _FORECAST_OVERRIDE.fullmatch(path)
+    if forecast_match:
+        if assumptions.forecast is None:
+            raise PreparationError(
+                "MANUAL_OVERRIDE_UNSUPPORTED", "forecast assumptions are unavailable"
+            )
+        field, index_text = forecast_match.groups()
+        values = list(getattr(assumptions.forecast, field))
+        index = int(index_text)
+        if index >= len(values):
+            raise PreparationError(
+                "MANUAL_OVERRIDE_UNSUPPORTED", "forecast override index is out of range"
+            )
+        values[index] = value
+        forecast = assumptions.forecast.model_copy(update={field: tuple(values)})
+        return assumptions.model_copy(update={"forecast": forecast})
+
+    if path == "assumptions.forecast.base_revenue":
+        if assumptions.forecast is None:
+            raise PreparationError(
+                "MANUAL_OVERRIDE_UNSUPPORTED", "forecast assumptions are unavailable"
+            )
+        return assumptions.model_copy(
+            update={
+                "forecast": assumptions.forecast.model_copy(
+                    update={"base_revenue": value}
+                )
+            }
+        )
+
+    if path == "assumptions.terminal_growth":
+        return assumptions.model_copy(update={"terminal_growth": value})
+
+    if path.startswith("assumptions.wacc."):
+        if assumptions.wacc is None:
+            raise PreparationError(
+                "MANUAL_OVERRIDE_UNSUPPORTED", "WACC assumptions are unavailable"
+            )
+        field = path.removeprefix("assumptions.wacc.")
+        if field not in assumptions.wacc.model_fields:
+            raise PreparationError(
+                "MANUAL_OVERRIDE_UNSUPPORTED", "WACC override field is unsupported"
+            )
+        return assumptions.model_copy(
+            update={"wacc": assumptions.wacc.model_copy(update={field: value})}
+        )
+
+    if path.startswith("assumptions.capital_bridge."):
+        if assumptions.capital_bridge is None:
+            raise PreparationError(
+                "MANUAL_OVERRIDE_UNSUPPORTED",
+                "capital bridge assumptions are unavailable",
+            )
+        field = path.removeprefix("assumptions.capital_bridge.")
+        if field not in assumptions.capital_bridge.model_fields:
+            raise PreparationError(
+                "MANUAL_OVERRIDE_UNSUPPORTED",
+                "capital bridge override field is unsupported",
+            )
+        return assumptions.model_copy(
+            update={
+                "capital_bridge": assumptions.capital_bridge.model_copy(
+                    update={field: value}
+                )
+            }
+        )
+
+    raise PreparationError(
+        "MANUAL_OVERRIDE_UNSUPPORTED", "assumption path is not editable"
+    )
+
+
+def apply_manual_override(
+    preparation: AutomaticValuationPreparationV1,
+    *,
+    path: str,
+    value: Decimal,
+    provenance: ManualProvenanceV1,
+) -> AutomaticValuationPreparationV1:
+    """Apply one supported override and bind it to the automatic preparation."""
+
+    if preparation.status != "prepared" or preparation.input is None:
+        raise PreparationError(
+            "MANUAL_OVERRIDE_UNAVAILABLE",
+            "manual overrides require a prepared valuation input",
+        )
+    if provenance.automatic_preparation_digest != preparation.preparation_digest:
+        raise PreparationError(
+            "MANUAL_OVERRIDE_DIGEST_MISMATCH",
+            "manual provenance is bound to a different automatic preparation",
+        )
+    automatic = tuple(
+        evidence
+        for evidence in preparation.assumptions_evidence
+        if evidence.path == path
+    )
+    if (
+        len(automatic) != 1
+        or automatic[0].method == "manual"
+        or not automatic[0].editable
+    ):
+        raise PreparationError(
+            "MANUAL_OVERRIDE_UNSUPPORTED",
+            "assumption path has no unique automatic evidence",
+        )
+    assumptions = _override_assumptions(
+        preparation.input.assumptions, path=path, value=value
+    )
+    updated_input = preparation.input.model_copy(
+        update={"assumptions": assumptions}
+    ).with_digest()
+    manual_evidence = automatic[0].model_copy(
+        update={
+            "value": value,
+            "method": "manual",
+            "formula": f"manual override of {path}",
+            "manual_provenance": provenance,
+        }
+    )
+    updated_evidence = tuple((*preparation.assumptions_evidence, manual_evidence))
+    issue_codes = tuple(
+        dict.fromkeys((*preparation.issue_codes, "MANUAL_OVERRIDE_APPLIED"))
+    )
+    payload = {
+        "status": preparation.status,
+        "model_id": preparation.model_id,
+        "model_version": preparation.model_version,
+        "profile_id": preparation.profile_id,
+        "profile_digest": preparation.profile_digest,
+        "policy_id": preparation.policy_id,
+        "policy_version": preparation.policy_version,
+        "quality_status": preparation.quality_status,
+        "issue_codes": issue_codes,
+        "missing_evidence": preparation.missing_evidence,
+        "historical_metrics": preparation.historical_metrics,
+        "assumptions_evidence": updated_evidence,
+        "input": updated_input,
+    }
+    return AutomaticValuationPreparationV1(
+        **payload,
+        preparation_digest=sha256_digest(
+            {
+                **payload,
+                "automatic_preparation_digest": preparation.preparation_digest,
+                "manual_provenance": provenance,
+            }
+        ),
     )
 
 
@@ -1153,7 +1354,10 @@ __all__ = [
     "AutomaticValuationPreparationV1",
     "HistoricalMetricV1",
     "HistoricalMetricsV1",
+    "ManualProvenanceV1",
+    "ManualValuationOverrideRequestV1",
     "PreparationError",
+    "apply_manual_override",
     "derive_historical_metrics",
     "prepare_automatic_valuation",
 ]

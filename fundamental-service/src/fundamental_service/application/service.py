@@ -86,6 +86,8 @@ from ..uncertainty import (
 from ..valuation_preparation import (
     ApprovedMarketPolicyInputsV1,
     AutomaticValuationPreparationV1,
+    ManualValuationOverrideRequestV1,
+    apply_manual_override,
     prepare_automatic_valuation,
 )
 from ..valuation_requirements import (
@@ -1113,6 +1115,24 @@ class FundamentalApplication:
             data_release_manifest_digest=request.data_release_manifest_digest,
             market_policy=market_policy,
         )
+
+    def apply_manual_override(
+        self, request: ManualValuationOverrideRequestV1
+    ) -> AutomaticValuationPreparationV1:
+        try:
+            return apply_manual_override(
+                request.preparation,
+                path=request.path,
+                value=request.value,
+                provenance=request.provenance,
+            )
+        except ValueError as error:
+            raise ServiceError(
+                "MANUAL_OVERRIDE_INVALID",
+                str(error),
+                status_code=422,
+                retryable=False,
+            ) from error
 
     def policy(self, policy_id: str) -> PolicyRecordV1:
         if self.policy_registry is None:

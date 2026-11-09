@@ -57,6 +57,31 @@ This is a work-in-progress record. It does not mark #352 accepted or verified.
   point-in-time market/policy inputs, release coverage, service-backed success
   artifact, and full PR/CI, merge, exact-commit verification, and issue closure.
 
+## Manual override provenance checkpoint (2026-11-10)
+
+- This checkpoint is WIP and does not mark #352 accepted or verified.
+- Fundamental Service now exposes a typed manual override request and
+  `POST /v1/valuation/prepare/override`. It accepts one supported assumption
+  path, a decimal value, and `ManualProvenanceV1` containing author,
+  timezone-aware modified time, reason, and the original automatic preparation
+  digest.
+- The service rejects overrides against another preparation or a missing,
+  duplicate, already-manual, or non-editable evidence path. It retains the
+  original automatic evidence, appends a manual evidence record, changes the
+  `input_digest`, and creates a new `preparation_digest` bound to the automatic
+  digest and manual provenance.
+- `uv run --project fundamental-service pytest
+  fundamental-service/tests/test_api.py
+  fundamental-service/tests/test_valuation_preparation.py -q` — exit 0; 53
+  passed.
+- `uv run --with ruff ruff check --select E,F,I --ignore E501` over the touched
+  Fundamental files — exit 0.
+- Blocker #362 records the missing owning-layer resolution for dated market and
+  policy inputs. Source registration/capture exists, but the active FCFF path
+  still has no verified risk-free, beta/ERP, quote, debt-cost, weight, or
+  terminal-growth resolution. #352 remains open and unverified until #362 is
+  resolved or the acceptance is explicitly changed.
+
 ## Baseline findings
 
 - Fundamental Service currently selects facts from one immutable snapshot and calculates a caller-complete `ValuationInputV1`. Its facts request selects one point-in-time fact per normalized field; the normal Agent producer requests a narrow set and does not read aligned annual series.
