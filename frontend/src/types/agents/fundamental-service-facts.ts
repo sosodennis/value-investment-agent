@@ -197,6 +197,50 @@ export interface FundamentalArtifactHashes {
     source_content_hashes: string[];
 }
 
+export type FundamentalAssumptionMethod =
+    | 'derived'
+    | 'approved_source'
+    | 'approved_policy'
+    | 'manual';
+
+export interface FundamentalManualProvenance {
+    author: string;
+    modified_at: string;
+    reason: string;
+    automatic_preparation_digest: string;
+}
+
+export interface FundamentalAssumptionEvidence {
+    path: string;
+    value: string | number;
+    method: FundamentalAssumptionMethod;
+    formula: string;
+    fact_ids: string[];
+    source_refs: string[];
+    policy_version: string;
+    as_of: string;
+    editable: boolean;
+    manual_provenance?: FundamentalManualProvenance;
+}
+
+export interface FundamentalAutomaticPreparation {
+    contract_version: 'fundamental.v1';
+    status: 'prepared' | 'requires_input' | 'abstained' | 'unsupported';
+    model_id: string;
+    model_version: string;
+    profile_id: string;
+    profile_digest: string;
+    policy_id: string;
+    policy_version: string;
+    quality_status: FundamentalQualityStatus;
+    issue_codes: string[];
+    missing_evidence: string[];
+    historical_metrics: Record<string, unknown>;
+    assumptions_evidence: FundamentalAssumptionEvidence[];
+    input: Record<string, unknown> | null;
+    preparation_digest: string;
+}
+
 export interface FundamentalServiceValuationArtifact {
     projection_type: 'valuation';
     contract_version: 'fundamental.v1';
@@ -220,6 +264,8 @@ export interface FundamentalServiceValuationArtifact {
     evaluated_at?: string;
     issue_codes: string[];
     missing_evidence: string[];
+    automatic_preparation?: FundamentalAutomaticPreparation;
+    valuation_input?: Record<string, unknown>;
 }
 
 export interface FundamentalFactsOnlyArtifactQuality {
@@ -247,9 +293,23 @@ export interface FundamentalServiceFactsOnlyArtifact {
     issue_codes: string[];
 }
 
+export interface FundamentalServiceDegradedArtifact {
+    projection_type: 'degraded';
+    contract_version: 'fundamental.v1';
+    valuation_status: 'service_unavailable';
+    quality_status: 'degraded';
+    issue_codes: string[];
+    service_failure: {
+        code: string;
+        message: string;
+        retryable: boolean;
+    };
+}
+
 export type FundamentalServiceArtifact =
     | FundamentalServiceValuationArtifact
-    | FundamentalServiceFactsOnlyArtifact;
+    | FundamentalServiceFactsOnlyArtifact
+    | FundamentalServiceDegradedArtifact;
 
 const DIGEST_PATTERN = /^[0-9a-f]{64}$/;
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
@@ -268,10 +328,142 @@ const parseString = (value: unknown, context: string): string => {
     return value;
 };
 
+const parseBoolean = (value: unknown, context: string): boolean => {
+    if (typeof value !== 'boolean') {
+        throw new TypeError(`${context} must be a boolean.`);
+    }
+    return value;
+};
+
 const parseOptionalString = (value: unknown, context: string): string | undefined => {
     if (value === undefined || value === null) return undefined;
     return parseString(value, context);
 };
+
+const parseValue = (value: unknown, context: string): string | number => {
+    if (typeof value === 'string' && value.length > 0) return value;
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+    throw new TypeError(`${context} must be a finite number or non-empty string.`);
+};
+
+const parseAssumptionMethod = (
+    value: unknown,
+    context: string
+): FundamentalAssumptionMethod => {
+    if (
+        value !== 'derived' &&
+        value !== 'approved_source' &&
+        value !== 'approved_policy' &&
+        value !== 'manual'
+    ) {
+        throw new TypeError(`${context} must be a supported assumption method.`);
+    }
+    return value;
+};
+
+const parseAutomaticPreparationStatus = (
+    value: unknown,
+    context: string
+): FundamentalAutomaticPreparation['status'] => {
+    if (
+        value !== 'prepared' &&
+        value !== 'requires_input' &&
+        value !== 'abstained' &&
+        value !== 'unsupported'
+    ) {
+        throw new TypeError(`${context} must be a supported preparation status.`);
+    }
+    return value;
+};
+
+const parseManualProvenance = (
+    value: unknown,
+    context: string
+): FundamentalManualProvenance => {
+    const record = parseRecord(value, context);
+    return {
+        author: parseString(record.author, `${context}.author`),
+        modified_at: parseTimestamp(record.modified_at, `${context}.modified_at`),
+        reason: parseString(record.reason, `${context}.reason`),
+        automatic_preparation_digest: parseDigest(
+            record.automatic_preparation_digest,
+            `${context}.automatic_preparation_digest`
+        ),
+    };
+};
+
+const parseAssumptionEvidence = (
+    value: unknown,
+    context: string
+): FundamentalAssumptionEvidence => {
+    const record = parseRecord(value, context);
+    const method = parseAssumptionMethod(record.method, `${context}.method`);
+    const manualProvenance =
+        record.manual_provenance === undefined || record.manual_provenance === null
+            ? undefined
+            : parseManualProvenance(record.manual_provenance, `${context}.manual_provenance`);
+    if (method === 'manual' && manualProvenance === undefined) {
+        throw new TypeError(`${context}.manual_provenance is required for manual evidence.`);
+    }
+    if (method !== 'manual' && manualProvenance !== undefined) {
+        throw new TypeError(`${context}.manual_provenance is only valid for manual evidence.`);
+    }
+    const parsed: FundamentalAssumptionEvidence = {
+        path: parseString(record.path, `${context}.path`),
+        value: parseValue(record.value, `${context}.value`),
+        method,
+        formula: parseString(record.formula, `${context}.formula`),
+        fact_ids: parseStringArray(record.fact_ids ?? [], `${context}.fact_ids`),
+        source_refs: parseStringArray(record.source_refs ?? [], `${context}.source_refs`),
+        policy_version: parseString(record.policy_version, `${context}.policy_version`),
+        as_of: parseTimestamp(record.as_of, `${context}.as_of`),
+        editable: record.editable === undefined ? true : parseBoolean(record.editable, `${context}.editable`),
+    };
+    if (manualProvenance !== undefined) parsed.manual_provenance = manualProvenance;
+    return parsed;
+};
+
+const parseAutomaticPreparation = (
+    value: unknown,
+    context: string
+): FundamentalAutomaticPreparation => {
+    const record = parseRecord(value, context);
+    const input =
+        record.input === undefined || record.input === null
+            ? null
+            : parseRecord(record.input, `${context}.input`);
+    const evidenceRaw = record.assumptions_evidence;
+    if (!Array.isArray(evidenceRaw)) {
+        throw new TypeError(`${context}.assumptions_evidence must be an array.`);
+    }
+    return {
+        contract_version: 'fundamental.v1',
+        status: parseAutomaticPreparationStatus(record.status, `${context}.status`),
+        model_id: parseString(record.model_id, `${context}.model_id`),
+        model_version: parseString(record.model_version, `${context}.model_version`),
+        profile_id: parseString(record.profile_id, `${context}.profile_id`),
+        profile_digest: parseDigest(record.profile_digest, `${context}.profile_digest`),
+        policy_id: parseString(record.policy_id, `${context}.policy_id`),
+        policy_version: parseString(record.policy_version, `${context}.policy_version`),
+        quality_status: parseQuality(
+            parseString(record.quality_status, `${context}.quality_status`),
+            `${context}.quality_status`
+        ),
+        issue_codes: parseStringArray(record.issue_codes ?? [], `${context}.issue_codes`),
+        missing_evidence: parseStringArray(record.missing_evidence ?? [], `${context}.missing_evidence`),
+        historical_metrics: parseRecord(record.historical_metrics, `${context}.historical_metrics`),
+        assumptions_evidence: evidenceRaw.map((item, index) =>
+            parseAssumptionEvidence(item, `${context}.assumptions_evidence[${index}]`)
+        ),
+        input,
+        preparation_digest: parseDigest(record.preparation_digest, `${context}.preparation_digest`),
+    };
+};
+
+export const parseFundamentalAutomaticPreparation = (
+    value: unknown,
+    context = 'fundamental.automatic_preparation'
+): FundamentalAutomaticPreparation => parseAutomaticPreparation(value, context);
 
 const parseDate = (value: unknown, context: string): string => {
     const parsed = parseString(value, context);
@@ -915,6 +1107,37 @@ const parseFactsOnlyArtifact = (
     };
 };
 
+const parseDegradedArtifact = (
+    record: Record<string, unknown>,
+    context: string
+): FundamentalServiceDegradedArtifact => {
+    if (record.contract_version !== 'fundamental.v1') {
+        throw new TypeError(`${context}.contract_version must be fundamental.v1.`);
+    }
+    if (record.projection_type !== 'degraded') {
+        throw new TypeError(`${context}.projection_type must be degraded.`);
+    }
+    if (record.valuation_status !== 'service_unavailable') {
+        throw new TypeError(`${context}.valuation_status must be service_unavailable.`);
+    }
+    if (record.quality_status !== 'degraded') {
+        throw new TypeError(`${context}.quality_status must be degraded.`);
+    }
+    const failure = parseRecord(record.service_failure, `${context}.service_failure`);
+    return {
+        projection_type: 'degraded',
+        contract_version: 'fundamental.v1',
+        valuation_status: 'service_unavailable',
+        quality_status: 'degraded',
+        issue_codes: parseStringArray(record.issue_codes, `${context}.issue_codes`),
+        service_failure: {
+            code: parseString(failure.code, `${context}.service_failure.code`),
+            message: parseString(failure.message, `${context}.service_failure.message`),
+            retryable: parseBoolean(failure.retryable, `${context}.service_failure.retryable`),
+        },
+    };
+};
+
 const parseValuationArtifact = (
     record: Record<string, unknown>,
     context: string
@@ -981,6 +1204,14 @@ const parseValuationArtifact = (
         issue_codes: parseStringArray(record.issue_codes, `${context}.issue_codes`),
         missing_evidence: parseStringArray(record.missing_evidence, `${context}.missing_evidence`),
     };
+    const automaticPreparation =
+        record.automatic_preparation === undefined || record.automatic_preparation === null
+            ? undefined
+            : parseAutomaticPreparation(record.automatic_preparation, `${context}.automatic_preparation`);
+    if (automaticPreparation !== undefined) parsed.automatic_preparation = automaticPreparation;
+    if (record.valuation_input !== undefined && record.valuation_input !== null) {
+        parsed.valuation_input = parseRecord(record.valuation_input, `${context}.valuation_input`);
+    }
     const modelId = parseOptionalProjectionString('model_id');
     if (modelId !== undefined) parsed.model_id = modelId;
     const modelVersion = parseOptionalProjectionString('model_version');
@@ -1020,8 +1251,11 @@ export const parseFundamentalServiceArtifact = (
     if (record.projection_type === 'facts_only') {
         return parseFactsOnlyArtifact(record, context);
     }
+    if (record.projection_type === 'degraded') {
+        return parseDegradedArtifact(record, context);
+    }
     if (record.projection_type !== undefined && record.projection_type !== 'valuation') {
-        throw new TypeError(`${context}.projection_type must be valuation | facts_only.`);
+        throw new TypeError(`${context}.projection_type must be valuation | facts_only | degraded.`);
     }
     return parseValuationArtifact(record, context);
 };

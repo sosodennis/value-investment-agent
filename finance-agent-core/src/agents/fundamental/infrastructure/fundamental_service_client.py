@@ -51,6 +51,7 @@ _OPERATION_PATHS: dict[FundamentalOperation, str] = {
     "read_facts": "/v1/data/facts",
     "read_valuation_evidence": "/v1/valuation/evidence/facts",
     "prepare_valuation": "/v1/valuation/prepare",
+    "override_prepared_valuation": "/v1/valuation/prepare/override",
     "validate": "/v1/valuation/validate",
     "validate_with_policy": "/v1/valuation/validate-with-policy",
     "calculate": "/v1/valuation/calculate",

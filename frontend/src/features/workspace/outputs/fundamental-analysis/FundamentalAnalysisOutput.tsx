@@ -13,6 +13,8 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import type { EvidenceSelection } from '../../workspace-evidence-inspector';
+import type { InteractionResponse, WorkflowInteraction } from '@/features/workflow';
+import { FundamentalReviewPanel } from './FundamentalReviewPanel';
 
 const MODEL_LABEL_BY_TYPE: Record<string, string> = {
     dcf_standard: 'DCF (Standard)',
@@ -35,6 +37,10 @@ export interface FundamentalAnalysisOutputProps {
     resolvedTicker: string | null | undefined;
     status: AgentStatus;
     onSelectEvidence?: (item: EvidenceSelection) => void;
+    pendingApproval?: Extract<WorkflowInteraction, { kind: 'valuation_approval' }> | null;
+    onResumeInteraction?: (interaction: WorkflowInteraction, response: InteractionResponse) => Promise<void>;
+    isSubmitting?: boolean;
+    onRecalculate?: (manualOverride: Record<string, unknown>) => void;
 }
 
 const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProps> = ({
@@ -42,6 +48,10 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
     previewData,
     status,
     onSelectEvidence,
+    pendingApproval = null,
+    onResumeInteraction,
+    isSubmitting = false,
+    onRecalculate,
 }) => {
     const {
         data: artifactData,
@@ -62,9 +72,15 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
     );
     const reports = artifactData?.financial_reports ?? [];
     const serviceProjection = artifactData?.fundamental_service;
-    const serviceFacts = serviceProjection?.facts;
+    const serviceFacts =
+        serviceProjection?.projection_type === 'degraded'
+            ? undefined
+            : serviceProjection?.facts;
     const valuationProjection =
         serviceProjection?.projection_type === 'valuation' ? serviceProjection : null;
+    const degradedProjection =
+        serviceProjection?.projection_type === 'degraded' ? serviceProjection : null;
+    const automaticPreparation = valuationProjection?.automatic_preparation;
     const hasValuationServiceProjection = Boolean(valuationProjection?.facts);
     const isFactsOnlyProjection = serviceProjection?.projection_type === 'facts_only';
     const canShowValuationPreview = hasValuationServiceProjection;
@@ -661,6 +677,32 @@ const FundamentalAnalysisOutputComponent: React.FC<FundamentalAnalysisOutputProp
 
     return (
         <div className="space-y-6 ">
+            {degradedProjection && (
+                <Alert variant="warning" role="status">
+                    <AlertTitle>Automatic valuation degraded</AlertTitle>
+                    <AlertDescription>
+                        <p>{degradedProjection.service_failure.message}</p>
+                        <p className="mt-2 text-xs">
+                            Service code: <code>{degradedProjection.service_failure.code}</code>
+                            {degradedProjection.service_failure.retryable ? ' · Retryable' : ' · Review required'}
+                        </p>
+                        {degradedProjection.issue_codes.length > 0 && (
+                            <p className="mt-1 text-xs">
+                                Quality issue: {degradedProjection.issue_codes.join(', ')}
+                            </p>
+                        )}
+                    </AlertDescription>
+                </Alert>
+            )}
+            {(automaticPreparation || pendingApproval) && (
+                <FundamentalReviewPanel
+                    preparation={automaticPreparation}
+                    pendingApproval={pendingApproval}
+                    onResumeInteraction={onResumeInteraction}
+                    isSubmitting={isSubmitting}
+                    onRecalculate={onRecalculate}
+                />
+            )}
             <div className="flex items-center justify-between mb-6 px-2">
                 <div className="flex items-center gap-3">
                     <LayoutPanelTop size={18} className="text-secondary" />
