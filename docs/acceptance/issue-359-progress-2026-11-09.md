@@ -9,6 +9,7 @@ This is a work-in-progress record, not acceptance or `VERIFIED` evidence.
 - Branch: `codex/issue-359-sec-history-cohort`.
 - Worktree: `/Users/denniswong/.codex/worktrees/value-investment-agent-issue-359-sec-history-cohort`.
 - Base: `origin/main` at `6ed0031f38b05740ae2fb47b7fbfe607963d92fa`.
+- Latest WIP checkpoint: `ce604587`; report fixture correction is in progress.
 - Pull request: none yet.
 - The local `.env` in the main checkout has an identifiable SEC User-Agent. Its
   value is not stored in this repository or printed in request logs.
@@ -58,7 +59,9 @@ and stored/unpacked artifact hashes are recorded; the manifest SHA-256 is
 | `git diff --check` | Exit 0. |
 | `uv run --extra dev --project fundamental-service pytest fundamental-service/tests/test_history_cohort.py -q` before report-scope fix | Exit 1; 3 passed and 1 failed because report assembly referenced undefined `protocol`. |
 | `uv run --extra dev --project fundamental-service pytest fundamental-service/tests/test_history_cohort.py -q` after report-scope fix | Exit 1; 3 passed and 1 failed because the test frame fixture lacks `eligible` and `excluded` lists. |
+| `uv run --extra dev --project fundamental-service pytest fundamental-service/tests/test_history_cohort.py -q` after fixture correction | Exit 0; 4 passed. |
 | `python3 scripts/architecture_guard.py` | Exit 0; no boundary violations. |
+| `pre-commit run ruff --files fundamental-service/src/fundamental_service/history_cohort.py fundamental-service/tests/test_history_cohort.py` | Exit 127; standalone `pre-commit` command is not on `PATH`. Git commit hooks ran Ruff and Ruff format successfully on checkpoint `ce604587`. |
 | `uv run --extra dev --project fundamental-service ruff check fundamental-service/src/fundamental_service/history_cohort.py fundamental-service/tests/test_history_cohort.py` | Exit 2; Ruff is not installed in the Fundamental Service environment. The repository pre-commit Ruff hook is available. |
 | `uv run --extra dev --project fundamental-service ruff format --check fundamental-service/src/fundamental_service/history_cohort.py fundamental-service/tests/test_history_cohort.py` | Exit 2; Ruff is not installed in the Fundamental Service environment. The repository pre-commit Ruff hook is available. |
 | Repository large-file pre-commit gate | Initial full-source gzip files exceeded the 500 KB per-file limit. The retained, hash-verified SEC row subsets are 129,471 and 120,531 bytes. |
@@ -82,12 +85,10 @@ No Docker Compose project is needed for this data-acquisition and report slice.
 ## Latest implementation status
 
 The deterministic sample selector returns 100 unique CIK clusters across the
-declared filing-time SIC strata. The report now reads its sampling scope from
-the verified frame protocol. The capture-resume test then reached report
-assembly and found that its mocked frame omits the `eligible` and `excluded`
-population lists. No live issuer Company Facts capture was run. The attempted
-commit was stopped by Ruff on the undefined scope; the scope was fixed and the
-repository hook reformatted two files, but no commit was created. This remains
-a WIP state, not acceptance evidence. The next step is to align the fixture
-with the loaded frame shape, rerun the focused tests, and inspect artifact sizes
-before starting live cohort capture.
+declared filing-time SIC strata. The report reads its sampling scope from the
+verified frame protocol, and the capture-resume fixture now includes the
+population lists returned by `load_frame()`. The focused suite passes all four
+tests. No live issuer Company Facts capture was run. Checkpoint `ce604587`
+preserves the WIP implementation and its earlier failure evidence. This is not
+acceptance evidence. The next step is to complete the backend boundary review
+and verify one issuer's live snapshot size before starting cohort capture.

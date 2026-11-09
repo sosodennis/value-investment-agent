@@ -196,6 +196,8 @@ def test_capture_failure_keeps_the_preselected_issuer_in_report_denominator(
         "protocol": {"scope": "fixture"},
         "protocol_sha256": "protocol-hash",
         "frame_manifest_sha256": "frame-hash",
+        "eligible": [{"cik": cik} for cik in ("0000000001", "0000000002")],
+        "excluded": [],
         "frame_counts": {"fixture": 2},
     }
     sample = {
@@ -225,6 +227,8 @@ def test_capture_failure_keeps_the_preselected_issuer_in_report_denominator(
         "retrieval_failed",
     ]
     assert report["sampling"]["selected_issuer_clusters"] == 2
+    assert report["sampling"]["eligible_issuer_clusters"] == 2
+    assert report["sampling"]["excluded_issuer_clusters"] == 0
     assert report["models"]["fcff_dcf"]["issuer_clusters_in_denominator"] == 2
     assert report["issuer_rows"][1]["row_status"] == "excluded_from_measurement"
     assert report["threshold_decision"]["status"] == "underpowered"
