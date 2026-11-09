@@ -106,6 +106,14 @@ def select_released_facts(
             or fact.security_id not in {None, snapshot.identity.security_id}
             or fact.source.content_hash not in source_hashes
             or fact.available_at > valuation_timestamp
+            or next(
+                (
+                    source.available_at > valuation_timestamp
+                    for source in snapshot.source_records
+                    if source.content_hash == fact.source.content_hash
+                ),
+                False,
+            )
             or fact.quality is not QualityStatus.VERIFIED
             or not isinstance(fact.value, Decimal)
         ):

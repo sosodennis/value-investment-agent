@@ -31,6 +31,8 @@ from .contracts import (
     SecIngestionRequestV1,
     SecIngestionResponseV1,
     SnapshotResolutionRequestV1,
+    ValuationEvidenceReadRequestV1,
+    ValuationEvidenceReadResponseV1,
     ValuationInputV1,
 )
 from .data_releases import (
@@ -375,6 +377,31 @@ def create_app(
     async def get_facts(request: Request) -> JSONResponse:
         value = decode_input(request, FactsReadRequestV1)
         return success_response(request, application.read_facts(value))
+
+    @app.post(
+        "/v1/valuation/evidence/facts",
+        response_model=TypedFundamentalResponseEnvelopeV1[
+            ValuationEvidenceReadResponseV1
+        ],
+        openapi_extra={
+            "requestBody": {
+                "required": True,
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "$ref": (
+                                "#/components/schemas/"
+                                "FundamentalValuationEvidenceRequestEnvelopeV1"
+                            )
+                        }
+                    }
+                },
+            }
+        },
+    )
+    async def read_valuation_evidence(request: Request) -> JSONResponse:
+        value = decode_input(request, ValuationEvidenceReadRequestV1)
+        return success_response(request, application.read_valuation_evidence(value))
 
     @app.get(
         "/v1/policies/{policy_id}",
@@ -749,6 +776,10 @@ def create_app(
             (
                 "FundamentalFactsRequestEnvelopeV1",
                 TypedFundamentalRequestEnvelopeV1[FactsReadRequestV1],
+            ),
+            (
+                "FundamentalValuationEvidenceRequestEnvelopeV1",
+                TypedFundamentalRequestEnvelopeV1[ValuationEvidenceReadRequestV1],
             ),
             (
                 "FundamentalPolicyLookupRequestEnvelopeV1",

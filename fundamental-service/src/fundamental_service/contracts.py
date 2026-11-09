@@ -718,6 +718,41 @@ class FactsReadResponseV1(StrictModel):
         return value
 
 
+class ValuationEvidenceReadRequestV1(StrictModel):
+    """Read exact release-bound facts for one service-owned valuation profile."""
+
+    contract_version: Literal["fundamental.v1"]
+    snapshot_id: str = Field(min_length=1)
+    data_release_manifest_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    model_id: InitialModelId
+
+
+class ValuationEvidenceReadResponseV1(StrictModel):
+    """Profile-bound fact evidence, including explicit missing/rejected roles."""
+
+    contract_version: Literal["fundamental.v1"]
+    snapshot_id: str = Field(min_length=1)
+    data_release_manifest_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    snapshot_manifest_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    identity: IdentityV1
+    valuation_timestamp: datetime
+    model_id: InitialModelId
+    profile_id: str = Field(min_length=1)
+    profile_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    quality_status: QualityStatus
+    issue_codes: tuple[str, ...] = ()
+    missing_fields: tuple[str, ...] = ()
+    rejected_fact_ids: tuple[str, ...] = ()
+    facts: tuple[CanonicalFactV1, ...] = ()
+
+    @field_validator("valuation_timestamp")
+    @classmethod
+    def timestamp_has_timezone(cls, value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("valuation_timestamp must include a timezone")
+        return value
+
+
 class SecFilingSelectorV1(StrictModel):
     """Bounded SEC filing selection; callers never supply provider URLs."""
 
