@@ -82,6 +82,25 @@ This is a work-in-progress record. It does not mark #352 accepted or verified.
   terminal-growth resolution. #352 remains open and unverified until #362 is
   resolved or the acceptance is explicitly changed.
 
+## Full regression checkpoint (2026-11-10)
+
+- This checkpoint is WIP and does not mark #352 accepted or verified.
+- The profile-driven request change required two existing Agent Core cutover
+  assertions to be updated from the obsolete five-field request to the complete
+  FCFF role set. No runtime behavior was changed in that test-only update.
+- Exact commit checks before this checkpoint: `uv run --project
+  fundamental-service pytest fundamental-service/tests -q` — exit 0; 283
+  passed, 25 skipped, 1 existing Pydantic serializer warning; `uv run
+  --project finance-agent-core pytest
+  finance-agent-core/tests/agents/fundamental -q` — exit 0; 60 passed;
+  `python3 scripts/architecture_guard.py` — exit 0; no boundary violations;
+  `python3 -m compileall -q fundamental-service/src fundamental-service/tests
+  finance-agent-core/src/agents/fundamental` — exit 0.
+- Remaining: rerun the service-backed Compose checks against the latest
+  checkpoint, resolve #362's market/policy source gap, obtain a successful
+  release-backed issuer artifact, then run exact-commit PR CI/review and merge
+  verification. #352 remains open.
+
 ## Baseline findings
 
 - Fundamental Service currently selects facts from one immutable snapshot and calculates a caller-complete `ValuationInputV1`. Its facts request selects one point-in-time fact per normalized field; the normal Agent producer requests a narrow set and does not read aligned annual series.

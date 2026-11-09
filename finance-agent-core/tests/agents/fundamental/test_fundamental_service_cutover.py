@@ -32,6 +32,41 @@ from src.shared.internal_services import (
     set_request_principal,
 )
 
+_FCFF_REQUIRED_FIELDS = [
+    "revenue",
+    "cost_of_revenue",
+    "operating_income",
+    "income_before_tax",
+    "income_tax_expense",
+    "net_income",
+    "depreciation_and_amortization",
+    "capital_expenditure",
+    "operating_lease_cost",
+    "finance_lease_cost",
+    "stock_based_compensation",
+    "basic_weighted_average_shares",
+    "diluted_weighted_average_shares",
+    "operating_current_receivables",
+    "inventory",
+    "contract_assets",
+    "operating_current_payables",
+    "accrued_operating_liabilities",
+    "deferred_revenue",
+    "cash_and_equivalents",
+    "current_interest_bearing_debt",
+    "long_term_interest_bearing_debt",
+    "current_operating_lease_liabilities",
+    "long_term_operating_lease_liabilities",
+    "current_finance_lease_liabilities",
+    "long_term_finance_lease_liabilities",
+    "preferred_claims",
+    "noncontrolling_interests",
+    "convertible_instruments",
+    "common_shares_outstanding",
+    "dilutive_instruments",
+    "other_share_classes",
+]
+
 
 class _Runtime:
     def __init__(self) -> None:
@@ -868,13 +903,7 @@ async def test_cutover_enriches_compact_caller_request_before_snapshot_resolutio
         "read_valuation_evidence",
     ]
     assert client.calls[1][1]["identity"]["issuer_id"] == "0000320193"
-    assert client.calls[2][1]["required_fields"] == [
-        "revenue",
-        "operating_income",
-        "cash",
-        "debt",
-        "diluted_shares",
-    ]
+    assert client.calls[2][1]["required_fields"] == _FCFF_REQUIRED_FIELDS
     assert client.calls[3][1]["snapshot_id"] == "snapshot-aapl-resolved"
     assert client.calls[4][1]["historical_facts"] == _FactsOnlyClient._fact_ids
     assert client.calls[4][1]["assumptions"] == _input()["assumptions"]
@@ -932,13 +961,7 @@ async def test_cutover_publishes_snapshot_facts_without_fabricating_valuation() 
             "contract_version": "fundamental.v1",
             "snapshot_id": "snapshot-aapl-resolved",
             "data_release_manifest_digest": "c" * 64,
-            "required_fields": [
-                "revenue",
-                "operating_income",
-                "cash",
-                "debt",
-                "diluted_shares",
-            ],
+            "required_fields": _FCFF_REQUIRED_FIELDS,
         }
     ]
     assert approval_calls == []
