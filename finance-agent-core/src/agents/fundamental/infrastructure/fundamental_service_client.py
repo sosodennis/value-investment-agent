@@ -30,6 +30,8 @@ from src.agents.fundamental.interface.fundamental_service_contracts import (
     FundamentalIdentityResolutionV1,
     FundamentalServiceErrorV1,
     FundamentalServiceResponseV1,
+    FundamentalValuationEvidenceReadResultV1,
+    FundamentalValuationPreparationResultV1,
 )
 from src.shared.internal_services import (
     InternalPrincipal,
@@ -47,6 +49,8 @@ _OPERATION_PATHS: dict[FundamentalOperation, str] = {
     "resolve_identity": "/v1/identity/resolve",
     "resolve_snapshot": "/v1/data/snapshots/resolve",
     "read_facts": "/v1/data/facts",
+    "read_valuation_evidence": "/v1/valuation/evidence/facts",
+    "prepare_valuation": "/v1/valuation/prepare",
     "validate": "/v1/valuation/validate",
     "validate_with_policy": "/v1/valuation/validate-with-policy",
     "calculate": "/v1/valuation/calculate",
@@ -315,6 +319,64 @@ class HttpFundamentalServiceClient:
             raise FundamentalServiceFailure(
                 "UPSTREAM_MALFORMED",
                 "Fundamental service returned an invalid facts projection",
+                retryable=False,
+                status_code=502,
+            ) from exc
+
+    async def prepare_valuation(
+        self,
+        input_payload: Mapping[str, object],
+        *,
+        principal: InternalPrincipal,
+        correlation_id: str,
+        deadline_at: datetime,
+    ) -> FundamentalValuationPreparationResultV1:
+        """Ask Fundamental Service to compose the canonical valuation input."""
+
+        response = await self.execute(
+            "prepare_valuation",
+            input_payload,
+            principal=principal,
+            correlation_id=correlation_id,
+            deadline_at=deadline_at,
+        )
+        try:
+            return FundamentalValuationPreparationResultV1.model_validate(
+                response.result
+            )
+        except ValidationError as exc:
+            raise FundamentalServiceFailure(
+                "UPSTREAM_MALFORMED",
+                "Fundamental service returned an invalid valuation preparation",
+                retryable=False,
+                status_code=502,
+            ) from exc
+
+    async def read_valuation_evidence(
+        self,
+        input_payload: Mapping[str, object],
+        *,
+        principal: InternalPrincipal,
+        correlation_id: str,
+        deadline_at: datetime,
+    ) -> FundamentalValuationEvidenceReadResultV1:
+        """Read the exact release-bound evidence for an automatic valuation."""
+
+        response = await self.execute(
+            "read_valuation_evidence",
+            input_payload,
+            principal=principal,
+            correlation_id=correlation_id,
+            deadline_at=deadline_at,
+        )
+        try:
+            return FundamentalValuationEvidenceReadResultV1.model_validate(
+                response.result
+            )
+        except ValidationError as exc:
+            raise FundamentalServiceFailure(
+                "UPSTREAM_MALFORMED",
+                "Fundamental service returned invalid valuation evidence",
                 retryable=False,
                 status_code=502,
             ) from exc

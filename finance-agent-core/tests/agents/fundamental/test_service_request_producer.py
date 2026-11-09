@@ -16,6 +16,7 @@ from src.agents.fundamental.application.workflow_orchestrator.services.service_r
 from src.agents.fundamental.interface.fundamental_service_contracts import (
     FundamentalIdentityResolutionV1,
     FundamentalServiceResponseV1,
+    FundamentalValuationPreparationResultV1,
 )
 from src.agents.fundamental.interface.request_contracts import (
     FundamentalRequestTimingV1,
@@ -80,6 +81,31 @@ class _Client:
 
     async def execute(self, operation, input_payload, **_kwargs):
         self.calls.append((operation, dict(input_payload)))
+        if operation == "resolve_snapshot":
+            return FundamentalServiceResponseV1(
+                contract_version="internal.v1",
+                schema_version="fundamental.v1",
+                correlation_id="correlation-1",
+                result={
+                    "contract_version": "fundamental.v1",
+                    "snapshot_id": "snapshot-aapl-1",
+                    "data_release_manifest_digest": self.ingestion["manifest_digest"],
+                    "historical_facts": self.ingestion["canonical_fact_ids"],
+                    "identity": input_payload["identity"],
+                    "valuation_timestamp": input_payload["valuation_timestamp"],
+                    "snapshot_timestamp": input_payload["valuation_timestamp"],
+                    "source_selection_policy": input_payload["source_selection_policy"],
+                    "coverage_profile": input_payload["coverage_profile"],
+                    "quality": "verified",
+                    "issue_codes": [],
+                    "provenance": {
+                        "snapshot_id": "snapshot-aapl-1",
+                        "data_release_manifest_digest": self.ingestion[
+                            "manifest_digest"
+                        ],
+                    },
+                },
+            )
         result = {
             **self.ingestion,
             "valuation_timestamp": input_payload["valuation_timestamp"],
@@ -89,6 +115,68 @@ class _Client:
             schema_version="fundamental.v1",
             correlation_id="correlation-1",
             result=result,
+        )
+
+    async def prepare_valuation(self, input_payload, **_kwargs):
+        prepared = {
+            "contract_version": "fundamental.v1",
+            "identity": {
+                "issuer_id": "0000320193",
+                "issuer_name": "Apple Inc.",
+                "domicile": "US",
+                "reporting_basis": "us-gaap",
+                "security_id": "AAPL",
+                "share_class": "AAPL",
+                "currency": "USD",
+            },
+            "valuation_context": {
+                "valuation_timestamp": "2026-11-07T00:00:00Z",
+                "data_snapshot_id": input_payload["snapshot_id"],
+                "data_release_manifest_digest": input_payload[
+                    "data_release_manifest_digest"
+                ],
+                "source_selection_policy": "pit-v1",
+                "coverage_profile": "fcff-valuation-requirements-v1",
+            },
+            "historical_facts": list(self.ingestion["canonical_fact_ids"]),
+            "assumptions": {
+                "forecast": {"base_revenue": "100"},
+                "trace": {"description": "service-owned fixture assumptions"},
+            },
+            "uncertainty": {"mode": "none"},
+            "quality": {"status": "provisional"},
+            "provenance": {
+                "snapshot_id": input_payload["snapshot_id"],
+                "fact_ids": list(self.ingestion["canonical_fact_ids"]),
+                "mapping_version": "sec-us-gaap-v1",
+                "parser_version": "2.47.4",
+                "taxonomy_version": "us-gaap-2023-2024",
+                "policy_version": "sec-public-pit-v1",
+            },
+            "model_id": input_payload["model_id"],
+            "model_version": "fcff_dcf-v1",
+            "policy_id": "fcff_dcf-us-gaap-public-v1",
+            "input_digest": None,
+        }
+        self.calls.append(("prepare_valuation", dict(input_payload)))
+        return FundamentalValuationPreparationResultV1.model_validate(
+            {
+                "contract_version": "fundamental.v1",
+                "status": "prepared",
+                "model_id": input_payload["model_id"],
+                "model_version": "fcff_dcf-v1",
+                "profile_id": "fcff-valuation-requirements-v1",
+                "profile_digest": "d" * 64,
+                "policy_id": "fcff_dcf-us-gaap-public-v1",
+                "policy_version": "fcff_dcf-v1-quality-v1",
+                "quality_status": "provisional",
+                "issue_codes": ["HISTORY_THRESHOLD_UNVALIDATED"],
+                "missing_evidence": [],
+                "historical_metrics": {},
+                "assumptions_evidence": [],
+                "input": prepared,
+                "preparation_digest": "e" * 64,
+            }
         )
 
 
@@ -226,16 +314,16 @@ async def test_producer_enriches_compact_caller_request_without_inventing_inputs
     )
 
     assert prepared.valuation_request is not None
-    assert (
-        prepared.valuation_request["assumptions"] == _compact_request()["assumptions"]
+    assert prepared.valuation_request["assumptions"]["trace"]["description"] == (
+        "service-owned fixture assumptions"
     )
     assert prepared.valuation_request["model_id"] == "fcff_dcf"
     assert prepared.valuation_request["model_version"] == "fcff_dcf-v1"
     assert prepared.valuation_request["policy_id"] == "fcff_dcf-us-gaap-public-v1"
-    assert prepared.valuation_request["quality"] == {"status": "verified"}
+    assert prepared.valuation_request["quality"] == {"status": "provisional"}
     assert prepared.valuation_request["provenance"] == {
-        "snapshot_id": "pending",
-        "fact_ids": [],
+        "snapshot_id": "snapshot-aapl-1",
+        "fact_ids": ["fact-revenue", "fact-operating-income"],
         "mapping_version": "sec-us-gaap-v1",
         "parser_version": "2.47.4",
         "taxonomy_version": "us-gaap-2023-2024",
@@ -244,12 +332,16 @@ async def test_producer_enriches_compact_caller_request_without_inventing_inputs
     assert "fiscal_period_selector" not in prepared.snapshot_selector
     assert prepared.valuation_request["valuation_context"] == {
         "valuation_timestamp": "2026-11-07T00:00:00Z",
+        "data_snapshot_id": "snapshot-aapl-1",
+        "data_release_manifest_digest": "b" * 64,
         "source_selection_policy": "pit-v1",
-        "coverage_profile": "us-gaap-public-v1",
+        "coverage_profile": "fcff-valuation-requirements-v1",
     }
     assert [operation for operation, _ in client.calls] == [
         "resolve_identity",
         "ingest_sec_data",
+        "resolve_snapshot",
+        "prepare_valuation",
     ]
 
 
