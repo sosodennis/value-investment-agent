@@ -44,9 +44,10 @@ class UncertaintyReportV1(BaseModel):
 
     status: QualityStatus
     input_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    result_hash: str = Field(default="0" * 64, pattern=r"^[0-9a-f]{64}$")
     base: CalculationArtifactV1
     scenario_results: tuple[CalculationArtifactV1, ...] = ()
-    sensitivity: dict[str, tuple[object, ...]] = {}
+    sensitivity: dict[str, tuple[object, ...]] = Field(default_factory=dict)
     requested_samples: int = 0
     valid_samples: int = 0
     invalid_samples: int = 0
@@ -54,8 +55,11 @@ class UncertaintyReportV1(BaseModel):
     invalid_draw_policy: str | None = None
     seed: int | None = None
     sampler_version: str | None = None
-    quantiles: dict[str, object] = {}
-    convergence_diagnostics: dict[str, object] = {}
+    quantiles: dict[str, object] = Field(default_factory=dict)
+    quantile_contract: dict[str, str] = Field(
+        default_factory=lambda: {"bear": "p05", "base": "p50", "bull": "p95"}
+    )
+    convergence_diagnostics: dict[str, object] = Field(default_factory=dict)
     dominant_drivers: tuple[str, ...] = ()
     artifact_references: tuple[ArtifactReferenceV1, ...] = ()
 
@@ -163,6 +167,45 @@ def _draws(spec: UncertaintyV1, rng: random.Random) -> tuple[object, ...]:
     )
 
 
+def _report_result_hash(report: UncertaintyReportV1) -> str:
+    return sha256_digest(
+        {
+            "status": report.status,
+            "input_digest": report.input_digest,
+            "base_result_hash": report.base.result_hash,
+            "scenario_result_hashes": tuple(
+                item.result_hash for item in report.scenario_results
+            ),
+            "sensitivity": report.sensitivity,
+            "requested_samples": report.requested_samples,
+            "valid_samples": report.valid_samples,
+            "invalid_samples": report.invalid_samples,
+            "invalid_reasons": report.invalid_reasons,
+            "invalid_draw_policy": report.invalid_draw_policy,
+            "seed": report.seed,
+            "sampler_version": report.sampler_version,
+            "quantiles": report.quantiles,
+            "quantile_contract": report.quantile_contract,
+            "convergence_diagnostics": report.convergence_diagnostics,
+            "dominant_drivers": report.dominant_drivers,
+        }
+    )
+
+
+def _with_report_result_hash(report: UncertaintyReportV1) -> UncertaintyReportV1:
+    return report.model_copy(update={"result_hash": _report_result_hash(report)})
+
+
+def is_service_owned_monte_carlo(request: ValuationInputV1) -> bool:
+    return request.uncertainty.mode == "monte_carlo" and (
+        request.uncertainty.policy_version is not None
+        and all(
+            parameter.provenance is not None
+            for parameter in request.uncertainty.parameters
+        )
+    )
+
+
 def validate_uncertainty_controls(
     request: ValuationInputV1,
     *,
@@ -190,6 +233,7 @@ def run_uncertainty(
     sensitivity: tuple[SensitivityRequestV1, ...] = (),
     base_result: CalculationArtifactV1 | None = None,
     input_digest: str | None = None,
+    allow_provisional: bool = False,
 ) -> UncertaintyReportV1:
     validate_uncertainty_controls(
         request,
@@ -215,7 +259,10 @@ def run_uncertainty(
             "input_digest": None,
         }
     ).with_digest()
-    base = base_result or calculate(deterministic_request)
+    base = base_result or calculate(
+        deterministic_request,
+        allow_provisional=allow_provisional,
+    )
     scenario_results: list[CalculationArtifactV1] = []
     if scenarios:
         if {scenario.name for scenario in scenarios} != {"base", "downside", "upside"}:
@@ -226,13 +273,16 @@ def run_uncertainty(
             scenario_request = deterministic_request
             for path, value in scenario.assumptions.items():
                 scenario_request = _with_path(scenario_request, path, value)
-            scenario_results.append(calculate(scenario_request))
+            scenario_results.append(
+                calculate(scenario_request, allow_provisional=allow_provisional)
+            )
     sensitivity_results: dict[str, tuple[object, ...]] = {}
     spreads: list[tuple[str, object]] = []
     for item in sensitivity:
         values = tuple(
             calculate(
-                _with_path(deterministic_request, item.path, value)
+                _with_path(deterministic_request, item.path, value),
+                allow_provisional=allow_provisional,
             ).per_share_value
             for value in item.values
         )
@@ -242,15 +292,17 @@ def run_uncertainty(
         path for path, _ in sorted(spreads, key=lambda pair: pair[1], reverse=True)
     )
     if monte_carlo is None:
-        return UncertaintyReportV1(
-            status=QualityStatus.VERIFIED,
-            input_digest=input_digest
-            or request.input_digest
-            or request.with_digest().input_digest,
-            base=base,
-            scenario_results=tuple(scenario_results),
-            sensitivity=sensitivity_results,
-            dominant_drivers=dominant,
+        return _with_report_result_hash(
+            UncertaintyReportV1(
+                status=QualityStatus.VERIFIED,
+                input_digest=input_digest
+                or request.input_digest
+                or request.with_digest().input_digest,
+                base=base,
+                scenario_results=tuple(scenario_results),
+                sensitivity=sensitivity_results,
+                dominant_drivers=dominant,
+            )
         )
     spec = monte_carlo.uncertainty
     rng = random.Random(spec.seed)
@@ -268,49 +320,63 @@ def run_uncertainty(
             sampled = deterministic_request
             for parameter, value in zip(spec.parameters, draw, strict=True):
                 sampled = _with_path(sampled, parameter.path, value)
-            values.append(calculate(sampled).per_share_value)
+            values.append(
+                calculate(
+                    sampled,
+                    allow_provisional=allow_provisional,
+                ).per_share_value
+            )
         except (CalculationRefusal, ValueError):
             invalid["CALCULATION_REFUSAL"] = invalid.get("CALCULATION_REFUSAL", 0) + 1
-            if spec.invalid_draw_policy == "abstain":
-                break
     minimum = max(2, min(spec.samples or 2, 10))
+    requested_samples = spec.samples or 0
+    invalid_samples = sum(invalid.values())
+    invalid_ratio = invalid_samples / max(1, requested_samples)
     sorted_values = sorted(values)
-    status = (
-        QualityStatus.VERIFIED
-        if len(values) >= minimum
-        and not (invalid and spec.invalid_draw_policy == "reject")
-        else QualityStatus.ABSTAIN
-    )
+    if len(values) < minimum or (
+        spec.invalid_draw_policy in {"abstain", "reject"} and invalid
+    ):
+        status = QualityStatus.ABSTAIN
+    elif invalid and spec.invalid_draw_policy == "skip":
+        status = QualityStatus.DEGRADED
+    else:
+        status = request.quality.status
     quantiles: dict[str, object] = {}
     if sorted_values:
+        lower = sorted_values[max(0, math.ceil(len(sorted_values) * 0.05) - 1)]
+        median = sorted_values[max(0, math.ceil(len(sorted_values) * 0.50) - 1)]
+        upper = sorted_values[max(0, math.ceil(len(sorted_values) * 0.95) - 1)]
         quantiles = {
-            "p05": sorted_values[max(0, int(len(sorted_values) * 0.05) - 1)],
-            "p50": sorted_values[len(sorted_values) // 2],
-            "p95": sorted_values[
-                min(len(sorted_values) - 1, int(len(sorted_values) * 0.95))
-            ],
+            "p05": lower,
+            "p50": median,
+            "p95": upper,
+            "lower": lower,
+            "median": median,
+            "upper": upper,
         }
     diagnostics = {
         "minimum_valid_samples": minimum,
-        "invalid_ratio": str(sum(invalid.values()) / max(1, spec.samples or 1)),
+        "invalid_ratio": str(invalid_ratio),
         "converged": len(values) >= minimum,
     }
-    return UncertaintyReportV1(
-        status=status,
-        input_digest=input_digest
-        or request.input_digest
-        or request.with_digest().input_digest,
-        base=base,
-        scenario_results=tuple(scenario_results),
-        sensitivity=sensitivity_results,
-        requested_samples=spec.samples or 0,
-        valid_samples=len(values),
-        invalid_samples=sum(invalid.values()),
-        invalid_reasons=invalid,
-        invalid_draw_policy=spec.invalid_draw_policy,
-        seed=spec.seed,
-        sampler_version=monte_carlo.sampler_version,
-        quantiles=quantiles,
-        convergence_diagnostics=diagnostics,
-        dominant_drivers=dominant,
+    return _with_report_result_hash(
+        UncertaintyReportV1(
+            status=status,
+            input_digest=input_digest
+            or request.input_digest
+            or request.with_digest().input_digest,
+            base=base,
+            scenario_results=tuple(scenario_results),
+            sensitivity=sensitivity_results,
+            requested_samples=requested_samples,
+            valid_samples=len(values),
+            invalid_samples=invalid_samples,
+            invalid_reasons=invalid,
+            invalid_draw_policy=spec.invalid_draw_policy,
+            seed=spec.seed,
+            sampler_version=monte_carlo.sampler_version,
+            quantiles=quantiles,
+            convergence_diagnostics=diagnostics,
+            dominant_drivers=dominant,
+        )
     )

@@ -18,6 +18,7 @@ from fundamental_service.valuation_preparation import (
     apply_manual_override,
     prepare_automatic_valuation,
 )
+from fundamental_service.uncertainty import run_uncertainty
 from fundamental_service.valuation_requirements import (
     select_released_facts,
     valuation_requirements_profile,
@@ -214,6 +215,38 @@ def test_complete_history_prepares_provisional_input_with_lineage_and_digest() -
     )
 
 
+def test_prepared_input_runs_service_owned_monte_carlo_as_provisional():
+    result = _prepare(_facts(), market_policy=_market_policy())
+
+    assert result.input is not None
+    assert result.input.uncertainty.mode == "monte_carlo"
+    report = run_uncertainty(result.input, allow_provisional=True)
+    repeat = run_uncertainty(result.input, allow_provisional=True)
+
+    assert report.status is QualityStatus.PROVISIONAL
+    assert report.requested_samples == 256
+    assert report.valid_samples == 256
+    assert report.invalid_samples == 0
+    assert report.result_hash == repeat.result_hash
+    assert report.quantile_contract == {"bear": "p05", "base": "p50", "bull": "p95"}
+    assert set(("p05", "p50", "p95", "lower", "median", "upper")) <= set(
+        report.quantiles
+    )
+
+    filing = _fact("filed_operating_evidence", 2025, "1").model_copy(
+        update={"value": "filed evidence"}
+    )
+    transition = _prepare(
+        (*_facts(), filing),
+        market_policy=_market_policy(),
+        model_id="transition_fcff_dcf",
+    )
+    assert transition.input is not None
+    transition_report = run_uncertainty(transition.input, allow_provisional=True)
+    assert transition_report.valid_samples == 256
+    assert transition_report.quantile_contract["bear"] == "p05"
+
+
 def test_released_market_policy_prepares_without_caller_assumptions() -> None:
     policy = initial_policy_records()[0]
     market_policy = _approved_market_policy(
@@ -376,6 +409,7 @@ def test_manual_override_preserves_automatic_evidence_and_changes_digests() -> N
     assert overridden.input is not None
     assert overridden.input.assumptions.forecast.operating_margin[0] == Decimal("0.24")
     assert overridden.input.input_digest != automatic.input.input_digest
+    assert overridden.input.uncertainty.seed != automatic.input.uncertainty.seed
     assert overridden.preparation_digest != automatic.preparation_digest
     assert any(
         item.path == path and item.method == "derived"
