@@ -627,11 +627,16 @@ class SecAcquisitionUseCase:
                     source_hashes=(),
                     outcome=error.code,
                 )
+                resource_failure = error.code in {
+                    "PARSER_CONCURRENCY_EXHAUSTED",
+                    "PARSER_RESOURCE_EXHAUSTED",
+                }
                 raise ServiceError(
                     error.code,
                     str(error),
-                    status_code=422,
-                    retryable=False,
+                    status_code=503 if resource_failure else 422,
+                    retryable=resource_failure,
+                    retry_after_ms=1000 if resource_failure else None,
                 ) from error
             except SnapshotError as error:
                 self.metadata.publish_source_audit(

@@ -68,13 +68,13 @@ signed deadline. There is no background queue; callers own retry after a
 retryable `INGESTION_IN_PROGRESS` or deadline response.
 
 The pinned Arelle/EFM/DQC worker runs in a child process and shares the
-Fundamental service cgroup with the API process. The verification Compose
-stack therefore gives the service a default 1 GiB memory limit, configurable
-through `FUNDAMENTAL_SERVICE_MEMORY_LIMIT`. A complete Microsoft 2024 10-K
-replay measured a 761.5 MiB cgroup peak; lowering the limit below that observed
-budget can kill the parser worker before it returns a result. When a worker
-does exit without a result, the service includes its process exit code in the
-`XBRL_PARSE_FAILED` diagnostic and publishes no snapshot or facts.
+Fundamental service cgroup with the API process. The parser applies a child
+virtual-memory budget through `FUNDAMENTAL_SEC_PARSER_MAX_MEMORY_BYTES` and
+limits concurrent workers through `FUNDAMENTAL_SEC_PARSER_MAX_CONCURRENCY`.
+The defaults are 768 MiB and one worker. A resource or concurrency refusal
+returns a retryable typed error and publishes no snapshot or facts. The
+verification Compose stack still needs enough cgroup memory for the API,
+PostgreSQL client, and the selected parser budget.
 
 The deployment must mount a reviewed, immutable offline Arelle taxonomy cache
 and set `FUNDAMENTAL_SEC_TAXONOMY_CACHE_DIR`,

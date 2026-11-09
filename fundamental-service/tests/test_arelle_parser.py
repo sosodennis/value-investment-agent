@@ -15,9 +15,11 @@ from fundamental_service.arelle_parser import (
     ArelleValidationProfileV1,
     _directory_hash,
     _dqc_validation_completed,
+    _parser_slot,
     _unlogged_model_error_findings,
     fact_semantic_digest,
     parse_filing_offline,
+    ParserResourcePolicy,
 )
 from fundamental_service.contracts import SourceRole
 from fundamental_service.sec_integrity import assess_filing_response
@@ -71,7 +73,7 @@ def test_parser_uses_deadline_worker_for_isolated_replay():
     assert any(fact.concept.endswith("Revenue") for fact in report.facts)
 
 
-def test_parser_reports_worker_exit_code_when_no_result(
+def test_parser_maps_resource_worker_exit_to_typed_failure(
     monkeypatch: pytest.MonkeyPatch,
 ):
     class _EmptyQueue:
@@ -105,12 +107,27 @@ def test_parser_reports_worker_exit_code_when_no_result(
         lambda name: _Context(),
     )
 
-    with pytest.raises(ArelleParserError, match="worker exit code -9"):
+    with pytest.raises(ArelleParserError) as failure:
         parse_filing_offline(
             Path(__file__).parent / "fixtures" / "simple.xbrl",
             profile=ArelleValidationProfileV1(profile_id="sec-efm-us-gaap-v1"),
             taxonomy_version="fixture-taxonomy-v1",
         )
+    assert failure.value.code == "PARSER_RESOURCE_EXHAUSTED"
+
+
+def test_parser_resource_policy_rejects_invalid_limits():
+    with pytest.raises(ArelleParserError) as failure:
+        ParserResourcePolicy(max_memory_bytes=1).validate()
+    assert failure.value.code == "PARSER_RESOURCE_POLICY_INVALID"
+
+
+def test_parser_concurrency_budget_fails_closed():
+    with _parser_slot(1):
+        with pytest.raises(ArelleParserError) as failure:
+            with _parser_slot(1):
+                pass
+    assert failure.value.code == "PARSER_CONCURRENCY_EXHAUSTED"
 
 
 def test_apple_sec_efm_dqc_replay_with_pinned_runtime(

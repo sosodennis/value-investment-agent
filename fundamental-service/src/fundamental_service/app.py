@@ -103,7 +103,26 @@ from .valuation_preparation import (
 LOGGER = logging.getLogger("fundamental_service")
 
 
-def _validation_error(request: Request) -> JSONResponse:
+def _validation_error(
+    request: Request, error: ValidationError | RequestValidationError | None = None
+) -> JSONResponse:
+    if error is not None:
+        diagnostics = tuple(
+            {
+                "field_path": ".".join(str(part) for part in item.get("loc", ())),
+                "error_type": str(item.get("type", "validation_error")),
+                "message": str(item.get("msg", "request validation failed"))[:256],
+            }
+            for item in error.errors()
+        )
+        LOGGER.warning(
+            "fundamental_validation_error",
+            extra={
+                "correlation_id": getattr(request.state, "correlation_id", "unknown"),
+                "path": request.url.path,
+                "diagnostics": diagnostics,
+            },
+        )
     return error_response(
         request,
         ServiceError(
@@ -334,15 +353,13 @@ def create_app(
     async def pydantic_validation_error_handler(
         request: Request, error: ValidationError
     ):
-        _ = error
-        return _validation_error(request)
+        return _validation_error(request, error)
 
     @app.exception_handler(RequestValidationError)
     async def request_validation_error_handler(
         request: Request, error: RequestValidationError
     ):
-        _ = error
-        return _validation_error(request)
+        return _validation_error(request, error)
 
     @app.get("/livez")
     async def livez() -> dict[str, str]:

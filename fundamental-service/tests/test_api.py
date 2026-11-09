@@ -1011,6 +1011,30 @@ def test_new_internal_routes_reject_missing_or_invalid_signed_context():
     assert response.json()["error"]["code"] == "internal_context_signature_invalid"
 
 
+def test_validation_error_logs_a_sanitized_field_path(caplog):
+    caplog.set_level("WARNING", logger="fundamental_service")
+    client = TestClient(create_app())
+    malformed = make_valuation().model_dump(mode="json")
+    malformed.pop("model_id")
+
+    response = client.post(
+        "/v1/valuation/validate",
+        headers=auth_headers(),
+        json=make_internal_envelope(malformed),
+    )
+
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "invalid_request"
+    records = [
+        record
+        for record in caplog.records
+        if record.getMessage() == "fundamental_validation_error"
+    ]
+    assert len(records) == 1
+    assert records[0].diagnostics[0]["field_path"] == "model_id"
+    assert "input" not in records[0].diagnostics[0]
+
+
 def test_sec_ingestion_route_requires_a_valid_signed_context():
     client = TestClient(create_app())
     missing_context = client.post(
