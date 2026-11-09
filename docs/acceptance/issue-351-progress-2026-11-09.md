@@ -6,9 +6,9 @@ record.
 ## Current status (2026-11-09)
 
 - #351 remains the first incomplete issue in the fixed sequence. It is OPEN on
-  `codex/issue-351-valuation-evidence`; PR #358 is OPEN as a draft. The PR
-  now points to policy checkpoint
-  `c6055d5f8449d540ee13ddd072f6ef2db54f5f8f`.
+  `codex/issue-351-valuation-evidence`; PR #358 is OPEN and ready for review,
+  targets `main`, and has a clean merge state. The PR body records the exact
+  head and check-run evidence.
 - The user confirmed that #351 should deliver the source and quality matrix
   with a safe provisional or abstention policy. The three-of-five history
   rule remains an unvalidated candidate and cannot grant `verified` status.
@@ -85,6 +85,25 @@ No service-backed end-to-end or Docker runtime check ran because this
 checkpoint changes the acceptance record only. The source matrix and policy
 remain unverified until PR review and merge; no numerical history threshold is
 claimed.
+
+## Verification on exact PR head `201884d7`
+
+The evidence-record checkpoint was verified on its exact SHA
+`201884d7f13fc4f89d8d428d5cb1f5dcc8563ad3` before this progress update.
+
+| Command or check | Result |
+| --- | --- |
+| Focused SEC/history/valuation suite listed above | Exit 0; 77 passed. |
+| `python3 scripts/architecture_guard.py` | Exit 0; no boundary violations. |
+| `docker compose --env-file .env.example config --quiet` | Exit 0. No Docker services were started. |
+| `git show --check HEAD` and `git diff origin/main...HEAD --check` | Exit 0. |
+| GitHub Actions run `42605837554` on PR #358 | All 8 required branch-protection checks passed. `fundamental-release-gate` was skipped because no Fundamental service code changed. |
+
+The full PR diff was reviewed against the revised #351 acceptance criteria.
+Main requires zero approving reviews. No Docker runtime or service-backed
+end-to-end check ran because this issue-scoped update changes documentation
+and acceptance policy only. #351 remains OPEN until PR #358 merges; #352 must
+not start before that merge and issue closure.
 
 ## Prior checkpoint after #356 merge
 
