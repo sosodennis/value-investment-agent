@@ -1,3 +1,4 @@
+import gzip
 import hashlib
 import json
 from datetime import UTC, date, datetime, timedelta
@@ -208,15 +209,11 @@ def test_capture_validates_archived_submission_identity_from_filename_and_payloa
 
         def capture_json(self, source_id: str, uri: str):
             payload = {
-                "filings": {
-                    "recent": {
-                        "form": [],
-                        "accessionNumber": [],
-                        "filingDate": [],
-                        "reportDate": [],
-                        "acceptanceDateTime": [],
-                    }
-                }
+                "form": ["10-K"],
+                "accessionNumber": [f"{cik}-15-000001"],
+                "filingDate": ["2015-03-01"],
+                "reportDate": ["2014-12-31"],
+                "acceptanceDateTime": ["2015-03-01T10:00:00Z"],
             }
             if archived_payload_cik is not None:
                 payload["cik"] = archived_payload_cik
@@ -270,6 +267,13 @@ def test_capture_validates_archived_submission_identity_from_filename_and_payloa
     assert result["issuers"][0]["failure_code"] == (
         None if expected_status == "captured" else "INVALID_SOURCE_SNAPSHOT"
     )
+    if expected_status == "captured":
+        snapshot_path = tmp_path / result["issuers"][0]["snapshot_path"]
+        snapshot = json.loads(gzip.decompress(snapshot_path.read_bytes()))
+        assert any(
+            filing["accession_number"] == f"{cik}-15-000001"
+            for filing in snapshot["filings"]
+        )
 
 
 def test_capture_failure_keeps_the_preselected_issuer_in_report_denominator(

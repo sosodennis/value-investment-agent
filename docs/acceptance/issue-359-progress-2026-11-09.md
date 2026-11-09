@@ -136,7 +136,28 @@ the boundary also verifies that value. The targeted regression command passed
 four cases: matching and mismatched filenames, each with the payload `cik`
 absent or present.
 
-Status: WIP, not acceptance. The next step is to run the focused suite on the
-fix commit, resume the same fixed sample, and generate the offline report.
-Record the measured threshold status without replacing failed issuers or
-promoting an unsupported threshold.
+Status: WIP, not acceptance. The identity fix passed its tests, but the live
+capture exposed a second SEC archive shape difference recorded below.
+
+## SEC archive row-shape follow-up
+
+The capture retry on exact code commit `10b69b013f12182b171544b93e6510b173e91e6f`
+again exited 2 with 68 of 100 issuer snapshots captured and 32 marked
+`INVALID_SOURCE_SNAPSHOT`. No issuer was replaced; the manifest SHA-256
+remained `4497c7842177347d60ef08fab732d81af05d44733fe681ef7606c112aba6fa59`.
+
+A read-only SEC request for CIK `0001361538` returned archive
+`CIK0001361538-submissions-001.json`. The archive has 326 entries in each of
+the top-level `form`, `accessionNumber`, `filingDate`, `reportDate`, and
+`acceptanceDateTime` arrays. It has neither a top-level `cik` nor a nested
+`filings` object. The current filing parser expects `filings.recent`, so the
+archive fails with `submissions.filings must be an object` after identity
+validation succeeds.
+
+The regression fixture now uses the observed flat array shape and checks that
+its historical accession is retained in the stored snapshot. On the current
+pre-fix code, the targeted test exits 1 with the two matching-identity cases
+failing and both mismatched-identity cases passing. Next, normalize flat SEC
+archive arrays at the source boundary, rerun the focused suite, and resume the
+same fixed sample. Report the actual threshold status without replacing
+issuers or promoting an unsupported threshold.
