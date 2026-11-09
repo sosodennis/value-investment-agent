@@ -1,7 +1,10 @@
 from decimal import Decimal
 
 import pytest
-from fundamental_service.contracts import UncertaintyV1
+from fundamental_service.contracts import (
+    DistributionProvenanceV1,
+    UncertaintyV1,
+)
 from fundamental_service.testsupport import make_valuation
 from fundamental_service.uncertainty import (
     MonteCarloRequestV1,
@@ -48,6 +51,40 @@ def test_seeded_monte_carlo_reproduces_and_sensitivity_is_explicit():
 def test_monte_carlo_requires_complete_specification():
     with pytest.raises(ValueError):
         MonteCarloRequestV1(uncertainty={"mode": "scenarios"})
+
+
+def test_distribution_provenance_requires_source_specific_evidence():
+    with pytest.raises(ValueError, match="historical periods and source facts"):
+        DistributionProvenanceV1(
+            source_kind="empirical_history",
+            estimation_method="mean",
+            rationale="history",
+        )
+    with pytest.raises(ValueError, match="policy version"):
+        DistributionProvenanceV1(
+            source_kind="policy_prior",
+            estimation_method="bounded_prior",
+            rationale="approved prior",
+        )
+
+
+def test_versioned_monte_carlo_requires_parameter_provenance():
+    with pytest.raises(ValueError, match="distribution provenance"):
+        UncertaintyV1(
+            mode="monte_carlo",
+            policy_version="uncertainty-policy-v1",
+            samples=4,
+            seed=1,
+            invalid_draw_policy="skip",
+            parameters=(
+                {
+                    "path": "assumptions.terminal_growth",
+                    "distribution": "uniform",
+                    "lower": Decimal("0"),
+                    "upper": Decimal("0.03"),
+                },
+            ),
+        )
 
 
 def test_scenario_mode_rejects_missing_or_ignored_controls():

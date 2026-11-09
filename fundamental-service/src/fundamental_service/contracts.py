@@ -1183,6 +1183,28 @@ def _valuation_input_json_schema(schema: dict[str, Any]) -> None:
     )
 
 
+class DistributionProvenanceV1(StrictModel):
+    """Source evidence for one service-owned uncertainty distribution."""
+
+    source_kind: Literal["empirical_history", "policy_prior"]
+    historical_periods: tuple[int, ...] = ()
+    source_fact_ids: tuple[str, ...] = ()
+    estimation_method: str = Field(min_length=1)
+    policy_version: str | None = Field(default=None, min_length=1)
+    rationale: str = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def source_requirements(self) -> DistributionProvenanceV1:
+        if self.source_kind == "empirical_history":
+            if not self.historical_periods or not self.source_fact_ids:
+                raise ValueError(
+                    "empirical distributions require historical periods and source facts"
+                )
+        if self.source_kind == "policy_prior" and self.policy_version is None:
+            raise ValueError("policy priors require a policy version")
+        return self
+
+
 class DistributionParameterV1(StrictModel):
     path: str = Field(min_length=1)
     distribution: Literal["normal", "lognormal", "uniform", "triangular"]
@@ -1190,6 +1212,7 @@ class DistributionParameterV1(StrictModel):
     upper: Decimal
     mode: Decimal | None = None
     mean: Decimal | None = None
+    provenance: DistributionProvenanceV1 | None = None
 
     @model_validator(mode="after")
     def bounds(self) -> DistributionParameterV1:
@@ -1225,6 +1248,7 @@ class UncertaintyV1(StrictModel):
     parameters: tuple[DistributionParameterV1, ...] = ()
     samples: int | None = Field(default=None, ge=1, le=1_000_000)
     seed: int | None = None
+    policy_version: str | None = Field(default=None, min_length=1)
     correlations: tuple[tuple[str, str, Decimal], ...] = ()
     invalid_draw_policy: Literal["reject", "skip", "abstain"] | None = None
     scenarios: tuple[ScenarioInputV1, ...] = ()
@@ -1242,6 +1266,11 @@ class UncertaintyV1(StrictModel):
                 "monte_carlo requires parameters, samples, seed, "
                 "and invalid_draw_policy"
             )
+        if self.mode == "monte_carlo" and self.policy_version is not None:
+            if any(parameter.provenance is None for parameter in self.parameters):
+                raise ValueError(
+                    "versioned Monte Carlo policies require distribution provenance"
+                )
         paths = {parameter.path for parameter in self.parameters}
         if len(paths) != len(self.parameters):
             raise ValueError("uncertainty parameter paths must be unique")
@@ -1257,6 +1286,7 @@ class UncertaintyV1(StrictModel):
             self.parameters
             or self.samples is not None
             or self.seed is not None
+            or self.policy_version is not None
             or self.correlations
             or self.invalid_draw_policy is not None
             or self.scenarios
@@ -1267,6 +1297,7 @@ class UncertaintyV1(StrictModel):
             self.parameters
             or self.samples is not None
             or self.seed is not None
+            or self.policy_version is not None
             or self.correlations
             or self.invalid_draw_policy is not None
         ):
