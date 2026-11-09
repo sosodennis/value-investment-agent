@@ -12,9 +12,10 @@ record.
   rewriting checkpoints `c109ae88e22937c134267c5dcd002b65074e90dc` and
   `df406030c485274146035bb2e7d5668b2badb977`.
 - Pull request: #358 is OPEN as a draft and references #351 and blocker #359.
-  Its current head is `4af4520a934c0945db9bd2856a891f683fe6d9fe`. GitHub run
-  `42573746641` passed the required checks on that head. The draft does not
-  claim to close #351.
+  The last verified head before this status update is
+  `e720005fd8e5a51009a535b6c00a29af27665410`. GitHub run `42574487467`
+  passed the required checks on that head. The draft does not claim to close
+  #351.
 - #356: closed by PR #357. The accepted report SHA-256 is
   `ce5f3f374071c63181dfa6fbd0b5a0501ebb6abd1ba3062ff7e73f0ba92fbc76`.
   It reports three primary issuer clusters, zero next-original-filing pairs,
@@ -76,16 +77,16 @@ documentation and the environment example only.
 
 - #358 is a draft PR. Branch protection requires zero approving reviews; no
   review was requested or recorded. Required CI passed on
-  `4af4520a934c0945db9bd2856a891f683fe6d9fe`, but that does not satisfy the
+  `e720005fd8e5a51009a535b6c00a29af27665410`, but that does not satisfy the
   unresolved numerical-threshold acceptance criterion.
 - #359 is the linked `blocker` issue. #351 cannot be verified or merged and
   #352 cannot start until representative point-in-time cohort evidence
   supports the model-specific history decision.
 - No Docker Compose project was started for this documentation-only slice.
 
-## Verification on blocker checkpoint
+## Verification on latest code checkpoint
 
-Checkpoint `4af4520a934c0945db9bd2856a891f683fe6d9fe` records the WIP
+Checkpoint `e720005fd8e5a51009a535b6c00a29af27665410` records the WIP
 acceptance state. These checks ran against that exact commit:
 
 | Command or check | Result |
@@ -94,7 +95,7 @@ acceptance state. These checks ran against that exact commit:
 | `python3 scripts/architecture_guard.py` | Exit 0; no boundary violations. |
 | `docker compose --env-file .env.example config --quiet` | Exit 0. |
 | `git diff origin/main...HEAD --check` | Exit 0. |
-| GitHub Actions run `42573746641` on PR #358 | All 11 required checks passed. The documentation-only `fundamental-release-gate` was skipped. |
+| GitHub Actions run `42574487467` on PR #358 | All 11 required checks passed. The documentation-only `fundamental-release-gate` was skipped. |
 
 The SEC submissions GET is recorded above as a separate read-only smoke test.
 It returned Apple filing metadata and did not expand the cohort. No Docker
