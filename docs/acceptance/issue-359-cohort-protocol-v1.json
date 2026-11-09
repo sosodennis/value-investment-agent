@@ -1,0 +1,62 @@
+{
+  "schema_version": "issue-359-cohort-protocol-v1",
+  "status": "predeclared_before_cohort_outcome_measurement",
+  "predeclared_on": "2026-11-09",
+  "scope": "US-incorporated SEC registrants with an original 10-K in 2016 Q1 and a matching SEC Financial Statement Data Set row",
+  "sampling_frame": {
+    "master_index_url": "https://www.sec.gov/Archives/edgar/full-index/2016/QTR1/master.idx",
+    "master_index_sha256": "43ccb67ed90ad4229b02b99094846a291c6d1672eb25a1ee89dcb0636c2a264e",
+    "master_index_bytes": 27657710,
+    "financial_statement_dataset_url": "https://www.sec.gov/files/dera/data/financial-statement-data-sets/2016q1.zip",
+    "financial_statement_dataset_sha256": "5c89a6badede1b47ab540913c7484795c7fc4c2a4672ac601b34b8c0afe5a698",
+    "financial_statement_dataset_bytes": 95470843,
+    "frame_counts": {
+      "master_index_original_10k_filings": 5462,
+      "master_index_unique_ciks": 5338,
+      "matching_dataset_unique_ciks": 4494,
+      "us_incorporated_unique_ciks": 3999,
+      "unmatched_dataset_ciks_excluded": 844,
+      "matched_non_us_or_unknown_incorporation_ciks_excluded": 495
+    },
+    "decision_filing": "earliest accepted original 10-K in 2016 Q1 per CIK; 10-K/A is not an original filing",
+    "issuer_identity": "zero-padded SEC CIK; one sampled decision per CIK",
+    "country_rule": "use countryinc from the contemporaneous 2016 Q1 SEC dataset; include US only",
+    "industry_rule": "use SIC from the contemporaneous dataset and map to the listed broad SIC divisions; blank or invalid SIC is its own unclassified stratum",
+    "sic_divisions": {
+      "agriculture": "0100-0999",
+      "mining": "1000-1499",
+      "construction": "1500-1799",
+      "manufacturing": "2000-3999",
+      "transport_utilities": "4000-4999",
+      "wholesale": "5000-5199",
+      "retail": "5200-5999",
+      "finance_real_estate": "6000-6799",
+      "services": "7000-8999",
+      "public_administration": "9100-9999",
+      "unclassified": "missing or invalid SIC"
+    }
+  },
+  "sample": {
+    "issuer_clusters": 100,
+    "allocation": "one issuer minimum per non-empty SIC stratum, then proportional allocation of remaining places by stratum population using largest remainder",
+    "within_stratum_order": "ascending SHA-256 of UTF-8(seed + NUL + zero-padded CIK)",
+    "seed": "issue-359-2016q1-proportional-sic-v1",
+    "nonresponse": "do not replace selected issuers; retain each in the denominator with an explicit retrieval or data exclusion reason"
+  },
+  "measurement": {
+    "valuation_timestamp": "exact SEC acceptanceDateTime of the sampled decision filing",
+    "history_window": "latest five distinct annual report periods available at the valuation timestamp",
+    "input_filing_rule": "original 10-K only, accepted no later than the valuation timestamp; retain amendments separately and never substitute amendment facts for original facts",
+    "annual_duration_rule": "FY duration facts with 350-380 day spans; instant facts must have no start date",
+    "model_fields": {
+      "fcff_dcf": ["revenue", "operating_income", "pretax_income", "tax_expense", "depreciation_amortization", "capital_expenditures", "accounts_receivable", "inventory", "accounts_payable", "contract_liabilities", "other_current_assets", "accrued_liabilities"],
+      "transition_fcff_dcf": ["revenue", "operating_income", "pretax_income", "tax_expense", "depreciation_amortization", "capital_expenditures", "accounts_receivable", "inventory", "accounts_payable", "contract_liabilities", "other_current_assets", "accrued_liabilities", "cost_of_revenue", "share_based_compensation", "diluted_weighted_average_shares"]
+    },
+    "candidate_history_rule": "at least three complete periods in the latest five; measurement only, not a pre-approved or verified threshold",
+    "oos_label_rule": "the first subsequently accepted original 10-K with a later report period; select label facts only from that accession and retain later amendments separately",
+    "metrics": ["per-field and per-period coverage", "complete periods per issuer", "candidate-rule eligibility", "first-subsequent-original filing availability", "model-field label completeness"],
+    "uncertainty": "report two-sided 95% Wilson intervals with issuer as the independent cluster; n=100 targets at most 0.10 worst-case absolute margin for cohort-wide binary proportions; industry results are descriptive unless a stratum independently meets n=100",
+    "forecast_error": "not measurable without historical Fundamental Service forecasts; no forecast-performance claim or threshold promotion without a separate predeclared variance and OOS error gate",
+    "source_exclusions": ["current ticker lists or current survival status", "analyst estimates or targets", "Search results", "LLM-extracted values"]
+  }
+}
