@@ -44,3 +44,45 @@ This is a work-in-progress record. It does not mark #352 accepted or verified.
 ## Next step
 
 Ground the service and caller boundary, then record the canonical preparation contract and its acceptance tests before implementing valuation behavior. Recheck Compose ports immediately before startup. Each later checkpoint must name its exact commit, commands and results, remaining criteria, and next step.
+
+## Canonical service boundary (WIP)
+
+The automatic request path is service-owned. Agent Core remains responsible for
+identity, #339 data readiness and snapshot pinning, model intent, configured
+approval, and result projection. Once it has a pinned snapshot, it sends the
+snapshot ID, release-manifest digest, and selected released model to the
+Fundamental Service. It does not send caller-composed forecast/WACC
+assumptions or a caller-selected fact list.
+
+The service preparation operation loads the immutable snapshot and canonical
+facts itself, selects aligned annual duration facts and period-end instant
+facts, resolves the versioned model and policy, derives metrics and forecasts,
+and returns either a typed prepared valuation or an explicit
+requires-input/unsupported/abstained result with machine-readable reasons.
+Each derived value retains its formula, periods, exact fact IDs, source
+references, and policy version. The latest-five/at-least-three candidate stays
+provisional while `supported_history_threshold` is null.
+
+The calculation boundary must reconstruct preparation from the same pinned
+snapshot and policy before calculating. Its canonical digest binds that
+reconstruction; a caller-supplied digest alone is not evidence. Approval binds
+to the reconstructed digest. Any supported manual adjustment is a separate
+typed override with author, time, reason, and source evidence; the response
+retains the original automatic assumption and computes a new digest.
+
+Current source limitation: Treasury observations can be captured generically,
+but the normal FCFF path does not resolve them. Damodaran rights and wiring,
+lawful free point-in-time market capitalization, and a defensible marginal
+debt-cost source are not established. The service must not fill these fields
+with static defaults or current observations during replay. Until a permitted,
+dated source or cited reviewer package is available, preparation must ask for
+the required evidence or abstain. This limitation is part of acceptance; it
+does not authorize Search/LLM, analyst estimates, or company guidance in the
+default path.
+
+The focused contract tests will cover snapshot/release binding, annual and
+instant alignment, fact and formula provenance, deterministic reconstruction,
+candidate-threshold status, explicit missing/conflict outcomes, and override
+digest/provenance. Service-backed acceptance will exercise this same operation
+through the isolated #352 Compose project; a successful fixture test alone
+does not establish that real issuers have all required market evidence.
