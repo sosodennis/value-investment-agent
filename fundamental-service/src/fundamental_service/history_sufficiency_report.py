@@ -575,7 +575,9 @@ def _pilot_model(
     decisions: list[dict[str, object]] = []
     coverage = {field: [] for field in fields}
     source_fact_catalog: dict[str, dict[str, str]] = {}
-    pass_count = eligible_labels = complete_labels = 0
+    pass_count = 0
+    oos_labels = oos_complete_labels = 0
+    gate_labels = gate_complete_labels = 0
     original_filings = tuple(item for item in filings if item.form == "10-K")
     original_periods = sorted({item.period_end for item in original_filings})
     for filing in original_filings:
@@ -620,11 +622,13 @@ def _pilot_model(
                 coverage[field].append(counts[field])
         if rule_passes:
             pass_count += 1
+        if len(window) != WINDOW:
+            continue
         next_filing = first_subsequent_original_filing(filing, filings)
         label_fields: list[str] = []
         label_fact_ids: list[str] = []
-        if rule_passes and next_filing is not None:
-            eligible_labels += 1
+        if next_filing is not None:
+            oos_labels += 1
             for field in fields:
                 fact = _select_fact(
                     facts,
@@ -638,9 +642,10 @@ def _pilot_model(
                     reference = _fact_reference(fact)
                     source_fact_catalog[reference["fact_id"]] = reference
                     label_fact_ids.append(reference["fact_id"])
-            complete_labels += len(label_fields) == len(fields)
-        if len(window) != WINDOW:
-            continue
+            oos_complete_labels += len(label_fields) == len(fields)
+            if rule_passes:
+                gate_labels += 1
+                gate_complete_labels += len(label_fields) == len(fields)
         decisions.append(
             {
                 "decision_accession": filing.accession,
@@ -653,6 +658,7 @@ def _pilot_model(
                 "field_period_counts": counts,
                 "complete_history_periods": complete_periods,
                 "three_of_five_proxy_rule_passes": rule_passes,
+                "candidate_gate_eligible": rule_passes and next_filing is not None,
                 "next_original_filing_accession": next_filing.accession
                 if next_filing
                 else None,
@@ -702,7 +708,7 @@ def _pilot_model(
                     [
                         "no next-period fact labels are available after the candidate rule"
                     ]
-                    if eligible_labels == 0
+                    if gate_labels == 0
                     else []
                 ),
                 "forecast error is not measured because historical service forecasts do not exist",
@@ -712,11 +718,19 @@ def _pilot_model(
         "oos_label_completeness": {
             "target": "next_original_annual_filing_contains_all_measured_tag_proxies",
             "split_policy": "walk_forward_each_decision_labels_only_from_its_first_subsequent_original_10-K",
-            "eligible_decisions_after_proxy_rule": eligible_labels,
-            "complete_labels": complete_labels,
-            "period_level_wilson_95": _wilson(complete_labels, eligible_labels),
+            "walk_forward_decisions": len(decisions),
+            "decisions_with_next_original_filing": oos_labels,
+            "complete_next_filing_labels": oos_complete_labels,
+            "period_level_wilson_95": _wilson(oos_complete_labels, oos_labels),
             "period_interval_use": "descriptive_only_periods_are_clustered_by_one_issuer",
             "issuer_cluster_interval_95": None,
+            "candidate_gate": {
+                "rule_pass_decisions": pass_count,
+                "eligible_decisions_with_next_original_filing": gate_labels,
+                "complete_labels": gate_complete_labels,
+                "period_level_wilson_95": _wilson(gate_complete_labels, gate_labels),
+                "issuer_cluster_interval_95": None,
+            },
             "forecast_accuracy": "not_measured_no_historical_service_forecasts_exist",
         },
     }

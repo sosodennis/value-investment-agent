@@ -146,8 +146,61 @@ def test_walk_forward_window_uses_original_filings_and_traces_next_filing_facts(
     assert label_fact["source_accession"] == "2023"
     assert label_fact["unit"] == "USD"
     assert label_fact["period_start"] == "2023-01-01"
-    assert result["oos_label_completeness"]["eligible_decisions_after_proxy_rule"] == 1
-    assert result["oos_label_completeness"]["complete_labels"] == 1
+    oos = result["oos_label_completeness"]
+    assert oos["walk_forward_decisions"] == 2
+    assert oos["decisions_with_next_original_filing"] == 1
+    assert oos["complete_next_filing_labels"] == 1
+    assert oos["candidate_gate"]["eligible_decisions_with_next_original_filing"] == 1
+    assert oos["candidate_gate"]["complete_labels"] == 1
+
+
+def test_oos_labels_include_decisions_that_fail_candidate_history_gate():
+    filings = []
+    facts = []
+    for year in range(2018, 2025):
+        period_end = date(year, 12, 31)
+        accepted_at = datetime(year + 1, 2, 1, tzinfo=UTC)
+        accession = str(year)
+        filings.append(
+            Filing("CIK:0000000001", accession, "10-K", period_end, accepted_at)
+        )
+        facts.append(
+            Fact(
+                "revenue",
+                accession,
+                period_end,
+                accepted_at,
+                str(year * 100),
+                date(year, 1, 1),
+            )
+        )
+        if year >= 2021:
+            facts.append(
+                Fact(
+                    "operating_income",
+                    accession,
+                    period_end,
+                    accepted_at,
+                    str(year * 10),
+                    date(year, 1, 1),
+                )
+            )
+
+    result = _pilot_model("fcff_dcf", ("revenue", "operating_income"), filings, facts)
+    decision = next(
+        row
+        for row in result["diagnostic_decision_rows"]
+        if row["decision_accession"] == "2022"
+    )
+    oos = result["oos_label_completeness"]
+
+    assert decision["three_of_five_proxy_rule_passes"] is False
+    assert decision["next_label_fields_present"] == ["revenue", "operating_income"]
+    assert oos["walk_forward_decisions"] == 3
+    assert oos["decisions_with_next_original_filing"] == 2
+    assert oos["complete_next_filing_labels"] == 2
+    assert oos["candidate_gate"]["eligible_decisions_with_next_original_filing"] == 1
+    assert oos["candidate_gate"]["complete_labels"] == 1
 
 
 def test_report_json_is_reproducible_and_idempotent(tmp_path: Path):

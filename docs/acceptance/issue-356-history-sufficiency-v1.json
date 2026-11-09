@@ -24,6 +24,7 @@
         "diagnostic_decision_rows": [
           {
             "available_at": "2019-10-30T22:12:36Z",
+            "candidate_gate_eligible": false,
             "complete_history_periods": 0,
             "decision_accession": "0000320193-19-000119",
             "field_period_counts": {
@@ -48,8 +49,32 @@
               "2018-09-29",
               "2019-09-28"
             ],
-            "next_label_fields_present": [],
-            "next_label_source_fact_ids": [],
+            "next_label_fields_present": [
+              "revenue",
+              "operating_income",
+              "pretax_income",
+              "tax_expense",
+              "depreciation_amortization",
+              "capital_expenditures",
+              "accounts_receivable",
+              "inventory",
+              "accounts_payable",
+              "contract_liabilities",
+              "other_current_assets"
+            ],
+            "next_label_source_fact_ids": [
+              "0000320193-20-000096:RevenueFromContractWithCustomerExcludingAssessedTax:USD:2019-09-29:2020-09-26",
+              "0000320193-20-000096:OperatingIncomeLoss:USD:2019-09-29:2020-09-26",
+              "0000320193-20-000096:IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest:USD:2019-09-29:2020-09-26",
+              "0000320193-20-000096:IncomeTaxExpenseBenefit:USD:2019-09-29:2020-09-26",
+              "0000320193-20-000096:DepreciationDepletionAndAmortization:USD:2019-09-29:2020-09-26",
+              "0000320193-20-000096:PaymentsToAcquirePropertyPlantAndEquipment:USD:2019-09-29:2020-09-26",
+              "0000320193-20-000096:AccountsReceivableNetCurrent:USD:instant:2020-09-26",
+              "0000320193-20-000096:InventoryNet:USD:instant:2020-09-26",
+              "0000320193-20-000096:AccountsPayableCurrent:USD:instant:2020-09-26",
+              "0000320193-20-000096:ContractWithCustomerLiabilityCurrent:USD:instant:2020-09-26",
+              "0000320193-20-000096:OtherAssetsCurrent:USD:instant:2020-09-26"
+            ],
             "next_original_available_at": "2020-10-29T22:06:25Z",
             "next_original_filing_accession": "0000320193-20-000096",
             "next_original_report_period_end": "2020-09-26",
@@ -219,6 +244,7 @@
           },
           {
             "available_at": "2020-10-29T22:06:25Z",
+            "candidate_gate_eligible": false,
             "complete_history_periods": 0,
             "decision_accession": "0000320193-20-000096",
             "field_period_counts": {
@@ -243,8 +269,32 @@
               "2019-09-28",
               "2020-09-26"
             ],
-            "next_label_fields_present": [],
-            "next_label_source_fact_ids": [],
+            "next_label_fields_present": [
+              "revenue",
+              "operating_income",
+              "pretax_income",
+              "tax_expense",
+              "depreciation_amortization",
+              "capital_expenditures",
+              "accounts_receivable",
+              "inventory",
+              "accounts_payable",
+              "contract_liabilities",
+              "other_current_assets"
+            ],
+            "next_label_source_fact_ids": [
+              "0000320193-21-000105:RevenueFromContractWithCustomerExcludingAssessedTax:USD:2020-09-27:2021-09-25",
+              "0000320193-21-000105:OperatingIncomeLoss:USD:2020-09-27:2021-09-25",
+              "0000320193-21-000105:IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest:USD:2020-09-27:2021-09-25",
+              "0000320193-21-000105:IncomeTaxExpenseBenefit:USD:2020-09-27:2021-09-25",
+              "0000320193-21-000105:DepreciationDepletionAndAmortization:USD:2020-09-27:2021-09-25",
+              "0000320193-21-000105:PaymentsToAcquirePropertyPlantAndEquipment:USD:2020-09-27:2021-09-25",
+              "0000320193-21-000105:AccountsReceivableNetCurrent:USD:instant:2021-09-25",
+              "0000320193-21-000105:InventoryNet:USD:instant:2021-09-25",
+              "0000320193-21-000105:AccountsPayableCurrent:USD:instant:2021-09-25",
+              "0000320193-21-000105:ContractWithCustomerLiabilityCurrent:USD:instant:2021-09-25",
+              "0000320193-21-000105:OtherAssetsCurrent:USD:instant:2021-09-25"
+            ],
             "next_original_available_at": "2021-10-28T22:04:28Z",
             "next_original_filing_accession": "0000320193-21-000105",
             "next_original_report_period_end": "2021-09-25",
@@ -415,6 +465,7 @@
           },
           {
             "available_at": "2021-10-28T22:04:28Z",
+            "candidate_gate_eligible": false,
             "complete_history_periods": 0,
             "decision_accession": "0000320193-21-000105",
             "field_period_counts": {
@@ -439,8 +490,32 @@
               "2020-09-26",
               "2021-09-25"
             ],
-            "next_label_fields_present": [],
-            "next_label_source_fact_ids": [],
+            "next_label_fields_present": [
+              "revenue",
+              "operating_income",
+              "pretax_income",
+              "tax_expense",
+              "depreciation_amortization",
+              "capital_expenditures",
+              "accounts_receivable",
+              "inventory",
+              "accounts_payable",
+              "contract_liabilities",
+              "other_current_assets"
+            ],
+            "next_label_source_fact_ids": [
+              "0000320193-22-000108:RevenueFromContractWithCustomerExcludingAssessedTax:USD:2021-09-26:2022-09-24",
+              "0000320193-22-000108:OperatingIncomeLoss:USD:2021-09-26:2022-09-24",
+              "0000320193-22-000108:IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest:USD:2021-09-26:2022-09-24",
+              "0000320193-22-000108:IncomeTaxExpenseBenefit:USD:2021-09-26:2022-09-24",
+              "0000320193-22-000108:DepreciationDepletionAndAmortization:USD:2021-09-26:2022-09-24",
+              "0000320193-22-000108:PaymentsToAcquirePropertyPlantAndEquipment:USD:2021-09-26:2022-09-24",
+              "0000320193-22-000108:AccountsReceivableNetCurrent:USD:instant:2022-09-24",
+              "0000320193-22-000108:InventoryNet:USD:instant:2022-09-24",
+              "0000320193-22-000108:AccountsPayableCurrent:USD:instant:2022-09-24",
+              "0000320193-22-000108:ContractWithCustomerLiabilityCurrent:USD:instant:2022-09-24",
+              "0000320193-22-000108:OtherAssetsCurrent:USD:instant:2022-09-24"
+            ],
             "next_original_available_at": "2022-10-27T22:01:14Z",
             "next_original_filing_accession": "0000320193-22-000108",
             "next_original_report_period_end": "2022-09-24",
@@ -612,6 +687,7 @@
           },
           {
             "available_at": "2022-10-27T22:01:14Z",
+            "candidate_gate_eligible": false,
             "complete_history_periods": 0,
             "decision_accession": "0000320193-22-000108",
             "field_period_counts": {
@@ -636,8 +712,32 @@
               "2021-09-25",
               "2022-09-24"
             ],
-            "next_label_fields_present": [],
-            "next_label_source_fact_ids": [],
+            "next_label_fields_present": [
+              "revenue",
+              "operating_income",
+              "pretax_income",
+              "tax_expense",
+              "depreciation_amortization",
+              "capital_expenditures",
+              "accounts_receivable",
+              "inventory",
+              "accounts_payable",
+              "contract_liabilities",
+              "other_current_assets"
+            ],
+            "next_label_source_fact_ids": [
+              "0000320193-23-000106:RevenueFromContractWithCustomerExcludingAssessedTax:USD:2022-09-25:2023-09-30",
+              "0000320193-23-000106:OperatingIncomeLoss:USD:2022-09-25:2023-09-30",
+              "0000320193-23-000106:IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest:USD:2022-09-25:2023-09-30",
+              "0000320193-23-000106:IncomeTaxExpenseBenefit:USD:2022-09-25:2023-09-30",
+              "0000320193-23-000106:DepreciationDepletionAndAmortization:USD:2022-09-25:2023-09-30",
+              "0000320193-23-000106:PaymentsToAcquirePropertyPlantAndEquipment:USD:2022-09-25:2023-09-30",
+              "0000320193-23-000106:AccountsReceivableNetCurrent:USD:instant:2023-09-30",
+              "0000320193-23-000106:InventoryNet:USD:instant:2023-09-30",
+              "0000320193-23-000106:AccountsPayableCurrent:USD:instant:2023-09-30",
+              "0000320193-23-000106:ContractWithCustomerLiabilityCurrent:USD:instant:2023-09-30",
+              "0000320193-23-000106:OtherAssetsCurrent:USD:instant:2023-09-30"
+            ],
             "next_original_available_at": "2023-11-02T22:08:27Z",
             "next_original_filing_accession": "0000320193-23-000106",
             "next_original_report_period_end": "2023-09-30",
@@ -809,6 +909,7 @@
           },
           {
             "available_at": "2023-11-02T22:08:27Z",
+            "candidate_gate_eligible": false,
             "complete_history_periods": 0,
             "decision_accession": "0000320193-23-000106",
             "field_period_counts": {
@@ -833,8 +934,32 @@
               "2022-09-24",
               "2023-09-30"
             ],
-            "next_label_fields_present": [],
-            "next_label_source_fact_ids": [],
+            "next_label_fields_present": [
+              "revenue",
+              "operating_income",
+              "pretax_income",
+              "tax_expense",
+              "depreciation_amortization",
+              "capital_expenditures",
+              "accounts_receivable",
+              "inventory",
+              "accounts_payable",
+              "contract_liabilities",
+              "other_current_assets"
+            ],
+            "next_label_source_fact_ids": [
+              "0000320193-24-000123:RevenueFromContractWithCustomerExcludingAssessedTax:USD:2023-10-01:2024-09-28",
+              "0000320193-24-000123:OperatingIncomeLoss:USD:2023-10-01:2024-09-28",
+              "0000320193-24-000123:IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest:USD:2023-10-01:2024-09-28",
+              "0000320193-24-000123:IncomeTaxExpenseBenefit:USD:2023-10-01:2024-09-28",
+              "0000320193-24-000123:DepreciationDepletionAndAmortization:USD:2023-10-01:2024-09-28",
+              "0000320193-24-000123:PaymentsToAcquirePropertyPlantAndEquipment:USD:2023-10-01:2024-09-28",
+              "0000320193-24-000123:AccountsReceivableNetCurrent:USD:instant:2024-09-28",
+              "0000320193-24-000123:InventoryNet:USD:instant:2024-09-28",
+              "0000320193-24-000123:AccountsPayableCurrent:USD:instant:2024-09-28",
+              "0000320193-24-000123:ContractWithCustomerLiabilityCurrent:USD:instant:2024-09-28",
+              "0000320193-24-000123:OtherAssetsCurrent:USD:instant:2024-09-28"
+            ],
             "next_original_available_at": "2024-11-01T10:01:36Z",
             "next_original_filing_accession": "0000320193-24-000123",
             "next_original_report_period_end": "2024-09-28",
@@ -1006,6 +1131,7 @@
           },
           {
             "available_at": "2024-11-01T10:01:36Z",
+            "candidate_gate_eligible": false,
             "complete_history_periods": 0,
             "decision_accession": "0000320193-24-000123",
             "field_period_counts": {
@@ -1030,8 +1156,32 @@
               "2023-09-30",
               "2024-09-28"
             ],
-            "next_label_fields_present": [],
-            "next_label_source_fact_ids": [],
+            "next_label_fields_present": [
+              "revenue",
+              "operating_income",
+              "pretax_income",
+              "tax_expense",
+              "depreciation_amortization",
+              "capital_expenditures",
+              "accounts_receivable",
+              "inventory",
+              "accounts_payable",
+              "contract_liabilities",
+              "other_current_assets"
+            ],
+            "next_label_source_fact_ids": [
+              "0000320193-25-000079:RevenueFromContractWithCustomerExcludingAssessedTax:USD:2024-09-29:2025-09-27",
+              "0000320193-25-000079:OperatingIncomeLoss:USD:2024-09-29:2025-09-27",
+              "0000320193-25-000079:IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest:USD:2024-09-29:2025-09-27",
+              "0000320193-25-000079:IncomeTaxExpenseBenefit:USD:2024-09-29:2025-09-27",
+              "0000320193-25-000079:DepreciationDepletionAndAmortization:USD:2024-09-29:2025-09-27",
+              "0000320193-25-000079:PaymentsToAcquirePropertyPlantAndEquipment:USD:2024-09-29:2025-09-27",
+              "0000320193-25-000079:AccountsReceivableNetCurrent:USD:instant:2025-09-27",
+              "0000320193-25-000079:InventoryNet:USD:instant:2025-09-27",
+              "0000320193-25-000079:AccountsPayableCurrent:USD:instant:2025-09-27",
+              "0000320193-25-000079:ContractWithCustomerLiabilityCurrent:USD:instant:2025-09-27",
+              "0000320193-25-000079:OtherAssetsCurrent:USD:instant:2025-09-27"
+            ],
             "next_original_available_at": "2025-10-31T10:01:26Z",
             "next_original_filing_accession": "0000320193-25-000079",
             "next_original_report_period_end": "2025-09-27",
@@ -1203,6 +1353,7 @@
           },
           {
             "available_at": "2025-10-31T10:01:26Z",
+            "candidate_gate_eligible": false,
             "complete_history_periods": 0,
             "decision_accession": "0000320193-25-000079",
             "field_period_counts": {
@@ -1227,8 +1378,32 @@
               "2024-09-28",
               "2025-09-27"
             ],
-            "next_label_fields_present": [],
-            "next_label_source_fact_ids": [],
+            "next_label_fields_present": [
+              "revenue",
+              "operating_income",
+              "pretax_income",
+              "tax_expense",
+              "depreciation_amortization",
+              "capital_expenditures",
+              "accounts_receivable",
+              "inventory",
+              "accounts_payable",
+              "contract_liabilities",
+              "other_current_assets"
+            ],
+            "next_label_source_fact_ids": [
+              "0000320193-26-000026:RevenueFromContractWithCustomerExcludingAssessedTax:USD:2025-09-28:2026-09-26",
+              "0000320193-26-000026:OperatingIncomeLoss:USD:2025-09-28:2026-09-26",
+              "0000320193-26-000026:IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest:USD:2025-09-28:2026-09-26",
+              "0000320193-26-000026:IncomeTaxExpenseBenefit:USD:2025-09-28:2026-09-26",
+              "0000320193-26-000026:DepreciationDepletionAndAmortization:USD:2025-09-28:2026-09-26",
+              "0000320193-26-000026:PaymentsToAcquirePropertyPlantAndEquipment:USD:2025-09-28:2026-09-26",
+              "0000320193-26-000026:AccountsReceivableNetCurrent:USD:instant:2026-09-26",
+              "0000320193-26-000026:InventoryNet:USD:instant:2026-09-26",
+              "0000320193-26-000026:AccountsPayableCurrent:USD:instant:2026-09-26",
+              "0000320193-26-000026:ContractWithCustomerLiabilityCurrent:USD:instant:2026-09-26",
+              "0000320193-26-000026:OtherAssetsCurrent:USD:instant:2026-09-26"
+            ],
             "next_original_available_at": "2026-11-03T13:05:15Z",
             "next_original_filing_accession": "0000320193-26-000026",
             "next_original_report_period_end": "2026-09-26",
@@ -1400,6 +1575,7 @@
           },
           {
             "available_at": "2026-11-03T13:05:15Z",
+            "candidate_gate_eligible": false,
             "complete_history_periods": 0,
             "decision_accession": "0000320193-26-000026",
             "field_period_counts": {
@@ -1830,14 +2006,25 @@
         ],
         "model_id": "fcff_dcf",
         "oos_label_completeness": {
-          "complete_labels": 0,
-          "eligible_decisions_after_proxy_rule": 0,
+          "candidate_gate": {
+            "complete_labels": 0,
+            "eligible_decisions_with_next_original_filing": 0,
+            "issuer_cluster_interval_95": null,
+            "period_level_wilson_95": null,
+            "rule_pass_decisions": 0
+          },
+          "complete_next_filing_labels": 0,
+          "decisions_with_next_original_filing": 7,
           "forecast_accuracy": "not_measured_no_historical_service_forecasts_exist",
           "issuer_cluster_interval_95": null,
           "period_interval_use": "descriptive_only_periods_are_clustered_by_one_issuer",
-          "period_level_wilson_95": null,
+          "period_level_wilson_95": {
+            "lower": 0.0,
+            "upper": 0.35433
+          },
           "split_policy": "walk_forward_each_decision_labels_only_from_its_first_subsequent_original_10-K",
-          "target": "next_original_annual_filing_contains_all_measured_tag_proxies"
+          "target": "next_original_annual_filing_contains_all_measured_tag_proxies",
+          "walk_forward_decisions": 8
         },
         "three_of_five_proxy_rule_pass_count": 0,
         "threshold_decision": {
@@ -1866,6 +2053,7 @@
         "diagnostic_decision_rows": [
           {
             "available_at": "2019-10-30T22:12:36Z",
+            "candidate_gate_eligible": false,
             "complete_history_periods": 0,
             "decision_accession": "0000320193-19-000119",
             "field_period_counts": {
@@ -1893,8 +2081,38 @@
               "2018-09-29",
               "2019-09-28"
             ],
-            "next_label_fields_present": [],
-            "next_label_source_fact_ids": [],
+            "next_label_fields_present": [
+              "revenue",
+              "operating_income",
+              "pretax_income",
+              "tax_expense",
+              "depreciation_amortization",
+              "capital_expenditures",
+              "accounts_receivable",
+              "inventory",
+              "accounts_payable",
+              "contract_liabilities",
+              "other_current_assets",
+              "cost_of_revenue",
+              "share_based_compensation",
+              "diluted_weighted_average_shares"
+            ],
+            "next_label_source_fact_ids": [
+              "0000320193-20-000096:RevenueFromContractWithCustomerExcludingAssessedTax:USD:2019-09-29:2020-09-26",
+              "0000320193-20-000096:OperatingIncomeLoss:USD:2019-09-29:2020-09-26",
+              "0000320193-20-000096:IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest:USD:2019-09-29:2020-09-26",
+              "0000320193-20-000096:IncomeTaxExpenseBenefit:USD:2019-09-29:2020-09-26",
+              "0000320193-20-000096:DepreciationDepletionAndAmortization:USD:2019-09-29:2020-09-26",
+              "0000320193-20-000096:PaymentsToAcquirePropertyPlantAndEquipment:USD:2019-09-29:2020-09-26",
+              "0000320193-20-000096:AccountsReceivableNetCurrent:USD:instant:2020-09-26",
+              "0000320193-20-000096:InventoryNet:USD:instant:2020-09-26",
+              "0000320193-20-000096:AccountsPayableCurrent:USD:instant:2020-09-26",
+              "0000320193-20-000096:ContractWithCustomerLiabilityCurrent:USD:instant:2020-09-26",
+              "0000320193-20-000096:OtherAssetsCurrent:USD:instant:2020-09-26",
+              "0000320193-20-000096:CostOfGoodsAndServicesSold:USD:2019-09-29:2020-09-26",
+              "0000320193-20-000096:ShareBasedCompensation:USD:2019-09-29:2020-09-26",
+              "0000320193-20-000096:WeightedAverageNumberOfDilutedSharesOutstanding:shares:2019-09-29:2020-09-26"
+            ],
             "next_original_available_at": "2020-10-29T22:06:25Z",
             "next_original_filing_accession": "0000320193-20-000096",
             "next_original_report_period_end": "2020-09-26",
@@ -2094,6 +2312,7 @@
           },
           {
             "available_at": "2020-10-29T22:06:25Z",
+            "candidate_gate_eligible": false,
             "complete_history_periods": 0,
             "decision_accession": "0000320193-20-000096",
             "field_period_counts": {
@@ -2121,8 +2340,38 @@
               "2019-09-28",
               "2020-09-26"
             ],
-            "next_label_fields_present": [],
-            "next_label_source_fact_ids": [],
+            "next_label_fields_present": [
+              "revenue",
+              "operating_income",
+              "pretax_income",
+              "tax_expense",
+              "depreciation_amortization",
+              "capital_expenditures",
+              "accounts_receivable",
+              "inventory",
+              "accounts_payable",
+              "contract_liabilities",
+              "other_current_assets",
+              "cost_of_revenue",
+              "share_based_compensation",
+              "diluted_weighted_average_shares"
+            ],
+            "next_label_source_fact_ids": [
+              "0000320193-21-000105:RevenueFromContractWithCustomerExcludingAssessedTax:USD:2020-09-27:2021-09-25",
+              "0000320193-21-000105:OperatingIncomeLoss:USD:2020-09-27:2021-09-25",
+              "0000320193-21-000105:IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest:USD:2020-09-27:2021-09-25",
+              "0000320193-21-000105:IncomeTaxExpenseBenefit:USD:2020-09-27:2021-09-25",
+              "0000320193-21-000105:DepreciationDepletionAndAmortization:USD:2020-09-27:2021-09-25",
+              "0000320193-21-000105:PaymentsToAcquirePropertyPlantAndEquipment:USD:2020-09-27:2021-09-25",
+              "0000320193-21-000105:AccountsReceivableNetCurrent:USD:instant:2021-09-25",
+              "0000320193-21-000105:InventoryNet:USD:instant:2021-09-25",
+              "0000320193-21-000105:AccountsPayableCurrent:USD:instant:2021-09-25",
+              "0000320193-21-000105:ContractWithCustomerLiabilityCurrent:USD:instant:2021-09-25",
+              "0000320193-21-000105:OtherAssetsCurrent:USD:instant:2021-09-25",
+              "0000320193-21-000105:CostOfGoodsAndServicesSold:USD:2020-09-27:2021-09-25",
+              "0000320193-21-000105:ShareBasedCompensation:USD:2020-09-27:2021-09-25",
+              "0000320193-21-000105:WeightedAverageNumberOfDilutedSharesOutstanding:shares:2020-09-27:2021-09-25"
+            ],
             "next_original_available_at": "2021-10-28T22:04:28Z",
             "next_original_filing_accession": "0000320193-21-000105",
             "next_original_report_period_end": "2021-09-25",
@@ -2323,6 +2572,7 @@
           },
           {
             "available_at": "2021-10-28T22:04:28Z",
+            "candidate_gate_eligible": false,
             "complete_history_periods": 0,
             "decision_accession": "0000320193-21-000105",
             "field_period_counts": {
@@ -2350,8 +2600,38 @@
               "2020-09-26",
               "2021-09-25"
             ],
-            "next_label_fields_present": [],
-            "next_label_source_fact_ids": [],
+            "next_label_fields_present": [
+              "revenue",
+              "operating_income",
+              "pretax_income",
+              "tax_expense",
+              "depreciation_amortization",
+              "capital_expenditures",
+              "accounts_receivable",
+              "inventory",
+              "accounts_payable",
+              "contract_liabilities",
+              "other_current_assets",
+              "cost_of_revenue",
+              "share_based_compensation",
+              "diluted_weighted_average_shares"
+            ],
+            "next_label_source_fact_ids": [
+              "0000320193-22-000108:RevenueFromContractWithCustomerExcludingAssessedTax:USD:2021-09-26:2022-09-24",
+              "0000320193-22-000108:OperatingIncomeLoss:USD:2021-09-26:2022-09-24",
+              "0000320193-22-000108:IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest:USD:2021-09-26:2022-09-24",
+              "0000320193-22-000108:IncomeTaxExpenseBenefit:USD:2021-09-26:2022-09-24",
+              "0000320193-22-000108:DepreciationDepletionAndAmortization:USD:2021-09-26:2022-09-24",
+              "0000320193-22-000108:PaymentsToAcquirePropertyPlantAndEquipment:USD:2021-09-26:2022-09-24",
+              "0000320193-22-000108:AccountsReceivableNetCurrent:USD:instant:2022-09-24",
+              "0000320193-22-000108:InventoryNet:USD:instant:2022-09-24",
+              "0000320193-22-000108:AccountsPayableCurrent:USD:instant:2022-09-24",
+              "0000320193-22-000108:ContractWithCustomerLiabilityCurrent:USD:instant:2022-09-24",
+              "0000320193-22-000108:OtherAssetsCurrent:USD:instant:2022-09-24",
+              "0000320193-22-000108:CostOfGoodsAndServicesSold:USD:2021-09-26:2022-09-24",
+              "0000320193-22-000108:ShareBasedCompensation:USD:2021-09-26:2022-09-24",
+              "0000320193-22-000108:WeightedAverageNumberOfDilutedSharesOutstanding:shares:2021-09-26:2022-09-24"
+            ],
             "next_original_available_at": "2022-10-27T22:01:14Z",
             "next_original_filing_accession": "0000320193-22-000108",
             "next_original_report_period_end": "2022-09-24",
@@ -2553,6 +2833,7 @@
           },
           {
             "available_at": "2022-10-27T22:01:14Z",
+            "candidate_gate_eligible": false,
             "complete_history_periods": 0,
             "decision_accession": "0000320193-22-000108",
             "field_period_counts": {
@@ -2580,8 +2861,38 @@
               "2021-09-25",
               "2022-09-24"
             ],
-            "next_label_fields_present": [],
-            "next_label_source_fact_ids": [],
+            "next_label_fields_present": [
+              "revenue",
+              "operating_income",
+              "pretax_income",
+              "tax_expense",
+              "depreciation_amortization",
+              "capital_expenditures",
+              "accounts_receivable",
+              "inventory",
+              "accounts_payable",
+              "contract_liabilities",
+              "other_current_assets",
+              "cost_of_revenue",
+              "share_based_compensation",
+              "diluted_weighted_average_shares"
+            ],
+            "next_label_source_fact_ids": [
+              "0000320193-23-000106:RevenueFromContractWithCustomerExcludingAssessedTax:USD:2022-09-25:2023-09-30",
+              "0000320193-23-000106:OperatingIncomeLoss:USD:2022-09-25:2023-09-30",
+              "0000320193-23-000106:IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest:USD:2022-09-25:2023-09-30",
+              "0000320193-23-000106:IncomeTaxExpenseBenefit:USD:2022-09-25:2023-09-30",
+              "0000320193-23-000106:DepreciationDepletionAndAmortization:USD:2022-09-25:2023-09-30",
+              "0000320193-23-000106:PaymentsToAcquirePropertyPlantAndEquipment:USD:2022-09-25:2023-09-30",
+              "0000320193-23-000106:AccountsReceivableNetCurrent:USD:instant:2023-09-30",
+              "0000320193-23-000106:InventoryNet:USD:instant:2023-09-30",
+              "0000320193-23-000106:AccountsPayableCurrent:USD:instant:2023-09-30",
+              "0000320193-23-000106:ContractWithCustomerLiabilityCurrent:USD:instant:2023-09-30",
+              "0000320193-23-000106:OtherAssetsCurrent:USD:instant:2023-09-30",
+              "0000320193-23-000106:CostOfGoodsAndServicesSold:USD:2022-09-25:2023-09-30",
+              "0000320193-23-000106:ShareBasedCompensation:USD:2022-09-25:2023-09-30",
+              "0000320193-23-000106:WeightedAverageNumberOfDilutedSharesOutstanding:shares:2022-09-25:2023-09-30"
+            ],
             "next_original_available_at": "2023-11-02T22:08:27Z",
             "next_original_filing_accession": "0000320193-23-000106",
             "next_original_report_period_end": "2023-09-30",
@@ -2783,6 +3094,7 @@
           },
           {
             "available_at": "2023-11-02T22:08:27Z",
+            "candidate_gate_eligible": false,
             "complete_history_periods": 0,
             "decision_accession": "0000320193-23-000106",
             "field_period_counts": {
@@ -2810,8 +3122,38 @@
               "2022-09-24",
               "2023-09-30"
             ],
-            "next_label_fields_present": [],
-            "next_label_source_fact_ids": [],
+            "next_label_fields_present": [
+              "revenue",
+              "operating_income",
+              "pretax_income",
+              "tax_expense",
+              "depreciation_amortization",
+              "capital_expenditures",
+              "accounts_receivable",
+              "inventory",
+              "accounts_payable",
+              "contract_liabilities",
+              "other_current_assets",
+              "cost_of_revenue",
+              "share_based_compensation",
+              "diluted_weighted_average_shares"
+            ],
+            "next_label_source_fact_ids": [
+              "0000320193-24-000123:RevenueFromContractWithCustomerExcludingAssessedTax:USD:2023-10-01:2024-09-28",
+              "0000320193-24-000123:OperatingIncomeLoss:USD:2023-10-01:2024-09-28",
+              "0000320193-24-000123:IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest:USD:2023-10-01:2024-09-28",
+              "0000320193-24-000123:IncomeTaxExpenseBenefit:USD:2023-10-01:2024-09-28",
+              "0000320193-24-000123:DepreciationDepletionAndAmortization:USD:2023-10-01:2024-09-28",
+              "0000320193-24-000123:PaymentsToAcquirePropertyPlantAndEquipment:USD:2023-10-01:2024-09-28",
+              "0000320193-24-000123:AccountsReceivableNetCurrent:USD:instant:2024-09-28",
+              "0000320193-24-000123:InventoryNet:USD:instant:2024-09-28",
+              "0000320193-24-000123:AccountsPayableCurrent:USD:instant:2024-09-28",
+              "0000320193-24-000123:ContractWithCustomerLiabilityCurrent:USD:instant:2024-09-28",
+              "0000320193-24-000123:OtherAssetsCurrent:USD:instant:2024-09-28",
+              "0000320193-24-000123:CostOfGoodsAndServicesSold:USD:2023-10-01:2024-09-28",
+              "0000320193-24-000123:ShareBasedCompensation:USD:2023-10-01:2024-09-28",
+              "0000320193-24-000123:WeightedAverageNumberOfDilutedSharesOutstanding:shares:2023-10-01:2024-09-28"
+            ],
             "next_original_available_at": "2024-11-01T10:01:36Z",
             "next_original_filing_accession": "0000320193-24-000123",
             "next_original_report_period_end": "2024-09-28",
@@ -3013,6 +3355,7 @@
           },
           {
             "available_at": "2024-11-01T10:01:36Z",
+            "candidate_gate_eligible": false,
             "complete_history_periods": 0,
             "decision_accession": "0000320193-24-000123",
             "field_period_counts": {
@@ -3040,8 +3383,38 @@
               "2023-09-30",
               "2024-09-28"
             ],
-            "next_label_fields_present": [],
-            "next_label_source_fact_ids": [],
+            "next_label_fields_present": [
+              "revenue",
+              "operating_income",
+              "pretax_income",
+              "tax_expense",
+              "depreciation_amortization",
+              "capital_expenditures",
+              "accounts_receivable",
+              "inventory",
+              "accounts_payable",
+              "contract_liabilities",
+              "other_current_assets",
+              "cost_of_revenue",
+              "share_based_compensation",
+              "diluted_weighted_average_shares"
+            ],
+            "next_label_source_fact_ids": [
+              "0000320193-25-000079:RevenueFromContractWithCustomerExcludingAssessedTax:USD:2024-09-29:2025-09-27",
+              "0000320193-25-000079:OperatingIncomeLoss:USD:2024-09-29:2025-09-27",
+              "0000320193-25-000079:IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest:USD:2024-09-29:2025-09-27",
+              "0000320193-25-000079:IncomeTaxExpenseBenefit:USD:2024-09-29:2025-09-27",
+              "0000320193-25-000079:DepreciationDepletionAndAmortization:USD:2024-09-29:2025-09-27",
+              "0000320193-25-000079:PaymentsToAcquirePropertyPlantAndEquipment:USD:2024-09-29:2025-09-27",
+              "0000320193-25-000079:AccountsReceivableNetCurrent:USD:instant:2025-09-27",
+              "0000320193-25-000079:InventoryNet:USD:instant:2025-09-27",
+              "0000320193-25-000079:AccountsPayableCurrent:USD:instant:2025-09-27",
+              "0000320193-25-000079:ContractWithCustomerLiabilityCurrent:USD:instant:2025-09-27",
+              "0000320193-25-000079:OtherAssetsCurrent:USD:instant:2025-09-27",
+              "0000320193-25-000079:CostOfGoodsAndServicesSold:USD:2024-09-29:2025-09-27",
+              "0000320193-25-000079:ShareBasedCompensation:USD:2024-09-29:2025-09-27",
+              "0000320193-25-000079:WeightedAverageNumberOfDilutedSharesOutstanding:shares:2024-09-29:2025-09-27"
+            ],
             "next_original_available_at": "2025-10-31T10:01:26Z",
             "next_original_filing_accession": "0000320193-25-000079",
             "next_original_report_period_end": "2025-09-27",
@@ -3243,6 +3616,7 @@
           },
           {
             "available_at": "2025-10-31T10:01:26Z",
+            "candidate_gate_eligible": false,
             "complete_history_periods": 0,
             "decision_accession": "0000320193-25-000079",
             "field_period_counts": {
@@ -3270,8 +3644,38 @@
               "2024-09-28",
               "2025-09-27"
             ],
-            "next_label_fields_present": [],
-            "next_label_source_fact_ids": [],
+            "next_label_fields_present": [
+              "revenue",
+              "operating_income",
+              "pretax_income",
+              "tax_expense",
+              "depreciation_amortization",
+              "capital_expenditures",
+              "accounts_receivable",
+              "inventory",
+              "accounts_payable",
+              "contract_liabilities",
+              "other_current_assets",
+              "cost_of_revenue",
+              "share_based_compensation",
+              "diluted_weighted_average_shares"
+            ],
+            "next_label_source_fact_ids": [
+              "0000320193-26-000026:RevenueFromContractWithCustomerExcludingAssessedTax:USD:2025-09-28:2026-09-26",
+              "0000320193-26-000026:OperatingIncomeLoss:USD:2025-09-28:2026-09-26",
+              "0000320193-26-000026:IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest:USD:2025-09-28:2026-09-26",
+              "0000320193-26-000026:IncomeTaxExpenseBenefit:USD:2025-09-28:2026-09-26",
+              "0000320193-26-000026:DepreciationDepletionAndAmortization:USD:2025-09-28:2026-09-26",
+              "0000320193-26-000026:PaymentsToAcquirePropertyPlantAndEquipment:USD:2025-09-28:2026-09-26",
+              "0000320193-26-000026:AccountsReceivableNetCurrent:USD:instant:2026-09-26",
+              "0000320193-26-000026:InventoryNet:USD:instant:2026-09-26",
+              "0000320193-26-000026:AccountsPayableCurrent:USD:instant:2026-09-26",
+              "0000320193-26-000026:ContractWithCustomerLiabilityCurrent:USD:instant:2026-09-26",
+              "0000320193-26-000026:OtherAssetsCurrent:USD:instant:2026-09-26",
+              "0000320193-26-000026:CostOfGoodsAndServicesSold:USD:2025-09-28:2026-09-26",
+              "0000320193-26-000026:ShareBasedCompensation:USD:2025-09-28:2026-09-26",
+              "0000320193-26-000026:WeightedAverageNumberOfDilutedSharesOutstanding:shares:2025-09-28:2026-09-26"
+            ],
             "next_original_available_at": "2026-11-03T13:05:15Z",
             "next_original_filing_accession": "0000320193-26-000026",
             "next_original_report_period_end": "2026-09-26",
@@ -3473,6 +3877,7 @@
           },
           {
             "available_at": "2026-11-03T13:05:15Z",
+            "candidate_gate_eligible": false,
             "complete_history_periods": 0,
             "decision_accession": "0000320193-26-000026",
             "field_period_counts": {
@@ -3993,14 +4398,25 @@
         ],
         "model_id": "transition_fcff_dcf",
         "oos_label_completeness": {
-          "complete_labels": 0,
-          "eligible_decisions_after_proxy_rule": 0,
+          "candidate_gate": {
+            "complete_labels": 0,
+            "eligible_decisions_with_next_original_filing": 0,
+            "issuer_cluster_interval_95": null,
+            "period_level_wilson_95": null,
+            "rule_pass_decisions": 0
+          },
+          "complete_next_filing_labels": 0,
+          "decisions_with_next_original_filing": 7,
           "forecast_accuracy": "not_measured_no_historical_service_forecasts_exist",
           "issuer_cluster_interval_95": null,
           "period_interval_use": "descriptive_only_periods_are_clustered_by_one_issuer",
-          "period_level_wilson_95": null,
+          "period_level_wilson_95": {
+            "lower": 0.0,
+            "upper": 0.35433
+          },
           "split_policy": "walk_forward_each_decision_labels_only_from_its_first_subsequent_original_10-K",
-          "target": "next_original_annual_filing_contains_all_measured_tag_proxies"
+          "target": "next_original_annual_filing_contains_all_measured_tag_proxies",
+          "walk_forward_decisions": 8
         },
         "three_of_five_proxy_rule_pass_count": 0,
         "threshold_decision": {
