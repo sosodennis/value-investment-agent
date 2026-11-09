@@ -50,6 +50,13 @@ DEFAULT_CAPTURE_MANIFEST = (
 DEFAULT_REPORT = ROOT / "docs/acceptance/issue-359-sec-cohort-v1/report.json"
 SNAPSHOT_DIRECTORY = DEFAULT_CAPTURE_MANIFEST.parent / "snapshots"
 _ANNUAL_FORMS = frozenset({"10-K", "10-K/A"})
+_SUBMISSION_ARRAY_KEYS = (
+    "form",
+    "accessionNumber",
+    "filingDate",
+    "reportDate",
+    "acceptanceDateTime",
+)
 _FACT_ROW_KEYS = (
     "accn",
     "end",
@@ -460,15 +467,9 @@ def _filing_records(raw_sources: list[JsonObject]) -> list[JsonObject]:
     for raw in raw_sources:
         filings = _obj(raw.get("filings"), "submissions.filings")
         recent = _obj(filings.get("recent"), "submissions.recent")
-        keys = (
-            "form",
-            "accessionNumber",
-            "filingDate",
-            "reportDate",
-            "acceptanceDateTime",
-        )
         arrays = {
-            key: _list(recent.get(key), f"submissions.recent.{key}") for key in keys
+            key: _list(recent.get(key), f"submissions.recent.{key}")
+            for key in _SUBMISSION_ARRAY_KEYS
         }
         lengths = {len(value) for value in arrays.values()}
         if len(lengths) != 1:
@@ -590,6 +591,19 @@ def _capture_issuer(
         archived_cik = archived_payload.get("cik")
         if archived_cik is not None and _cik(archived_cik) != cik:
             raise ReportError("SEC submissions history CIK differs from the issuer")
+        if "filings" not in archived_payload:
+            archived_payload = {
+                **archived_payload,
+                "filings": {
+                    "recent": {
+                        key: _list(
+                            archived_payload.get(key),
+                            f"SEC submissions archive {key}",
+                        )
+                        for key in _SUBMISSION_ARRAY_KEYS
+                    }
+                },
+            }
         sources.append(archived)
         submission_payloads.append(archived_payload)
     company_source = adapter.capture_company_facts(cik)

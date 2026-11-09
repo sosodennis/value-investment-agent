@@ -154,10 +154,11 @@ the top-level `form`, `accessionNumber`, `filingDate`, `reportDate`, and
 archive fails with `submissions.filings must be an object` after identity
 validation succeeds.
 
-The regression fixture now uses the observed flat array shape and checks that
-its historical accession is retained in the stored snapshot. On the current
-pre-fix code, the targeted test exits 1 with the two matching-identity cases
-failing and both mismatched-identity cases passing. Next, normalize flat SEC
-archive arrays at the source boundary, rerun the focused suite, and resume the
-same fixed sample. Report the actual threshold status without replacing
-issuers or promoting an unsupported threshold.
+The regression fixture uses the observed flat array shape and checks that its
+historical accession is retained in the stored snapshot. The capture boundary
+maps those five SEC columns into the existing `filings.recent` shape for
+measurement. It keeps the response hash and metadata from the original SEC
+bytes. The targeted regression command passed all four cases. Next, run the
+full focused suite on the fix commit, resume the same fixed sample, and report
+the measured threshold status without replacing issuers or promoting an
+unsupported threshold.
