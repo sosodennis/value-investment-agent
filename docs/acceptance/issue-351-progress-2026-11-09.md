@@ -24,12 +24,45 @@ record.
   Issues #352 through #355 are open and have not started. #352 depends on
   #351; #353 depends on #351 and #352; #354 depends on #352 and #353. #355 is
   optional and is not a core valuation dependency.
+- GitHub still lists #356 in #351's `blockedBy` relation, but #356 is CLOSED.
+  No open PR or active CI run exists for #351.
 - The root `.env` contains a contact-like SEC User-Agent value and is ignored
   by Git. `.env.example` now documents the required variable with a
-  non-operational placeholder. The live request and post-merge tests are
-  pending.
+  non-operational placeholder. The real contact value stays local and is not
+  copied into the tracked example.
 - #351 remains WIP. The three-of-five history rule is not a verified
   threshold, and this matrix does not claim otherwise.
+
+## Current acceptance progress
+
+| Criterion | Evidence | Status |
+| --- | --- | --- |
+| Inventory each required input for both released models. | Section 24.4.4 classifies SEC facts, derived metrics, forecasts, market inputs, policy inputs, capital bridge fields, and optional forward references. | Draft matrix present; final review pending. |
+| Separate computability from evidence quality and define time, freshness, and quality gates. | The matrix keeps period and availability rules, immutable evidence references, versioned freshness policy, and typed degraded, provisional, unsupported, or abstained outcomes. | Draft matrix present; final review pending. |
+| Define a numerical history threshold from representative coverage and chronological OOS evidence. | #356 report SHA-256 `ce5f3f374071c63181dfa6fbd0b5a0501ebb6abd1ba3062ff7e73f0ba92fbc76` reports no supported threshold. The matrix keeps three-of-five unvalidated and forbids it from granting `verified`. | Conservative outcome documented; no validated threshold exists. |
+| Specify the multi-period data contract needed by #352. | The current producer requests point-in-time `revenue`, `operating_income`, `cash`, `debt`, and `diluted_shares`, plus transition filing evidence. The matrix names required annual duration and instant series with source and selection metadata. | Draft contract requirements documented. |
+| Define fallback, editability, and required confirmation. | Source facts and derived history are read-only. Policy-marked assumptions may be overridden with preserved automatic evidence, `ManualProvenance`, a new digest, and caller-owned approval. | Draft policy documented; final review pending. |
+| Keep guidance, analysts, Search, and LLM out of the default path. | The matrix assigns them to an optional reference path; #355 remains independent of the core sequence. | Draft policy documented; final review pending. |
+
+## Verification on matrix checkpoint
+
+The following checks ran on checkpoint `11c842b906b10693448d830e7018a6aa6b6f78d3`.
+They do not yet cover later edits to this progress record.
+
+| Command or request | Result |
+| --- | --- |
+| One SEC GET to `data.sec.gov/submissions/CIK0000320193.json` using the local `FUNDAMENTAL_SEC_USER_AGENT` | Exit 0. SEC returned CIK `0000320193`, Apple Inc., and 1,006 recent filing entries. The contact value was not logged. |
+| `uv run --extra dev --project fundamental-service pytest fundamental-service/tests/test_sec_source.py fundamental-service/tests/test_source_acquisition.py fundamental-service/tests/test_history_sufficiency_report.py fundamental-service/tests/test_calibration.py fundamental-service/tests/test_facts.py fundamental-service/tests/test_verification.py -q` | Exit 0; 77 passed. |
+| `python3 scripts/architecture_guard.py` | Exit 0; no boundary violations. |
+| `docker compose --env-file .env.example config --quiet` | Exit 0. |
+| `sha256sum docs/acceptance/issue-356-history-sufficiency-v1.json` | Exit 0; matched `ce5f3f374071c63181dfa6fbd0b5a0501ebb6abd1ba3062ff7e73f0ba92fbc76`. |
+| `git diff origin/main...HEAD --check` | Exit 0. |
+
+The live request proves the configured contact header can reach the SEC
+submissions endpoint. It is one request, not a representative history cohort.
+The #356 threshold result remains underpowered. No Docker service stack or
+service-backed end-to-end request was run because this checkpoint changes
+documentation and the environment example only.
 
 ## Previous checkpoint before #356 merged
 
