@@ -71,6 +71,13 @@ This is a work-in-progress record. It does not mark #352 accepted or verified.
   `fundamental-release-gate` remains skipped by its workflow condition; the
   local service release fixture and HTTP preparation test are the current
   release evidence.
+- `uv run --project fundamental-service python -m
+  fundamental_service.verification_gate --cohort
+  fundamental-service/tests/fixtures/verification/golden_cohort.json
+  --report /tmp/issue352-fundamental-verification-report.json` — exit 0;
+  release decision `pass`, 21 cases, 10 positive FCFF/transition cases, and
+  11 expected abstain/degraded cases. The report digest is
+  `834108cc99333ea7c1d5471757838cc145e624a9043e269495cfcb224e9616a8`.
 - Remaining: decide whether the explicit reviewed policy-weight fallback is
   sufficient to resolve #362 or whether a lawful quote provider must be added;
   then produce the final service-backed result artifact and complete review,
