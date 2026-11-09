@@ -89,12 +89,49 @@ No Docker Compose project is needed for this data-acquisition and report slice.
 The deterministic sample selector returns 100 unique CIK clusters across the
 declared filing-time SIC strata. The report reads its sampling scope from the
 verified frame protocol, and the capture-resume fixture now includes the
-population lists returned by `load_frame()`. The focused suite passes all four
-tests. The frame loader now returns typed frame and sample records and parses
-the pinned CSV fields at its boundary. It retains the original filing count,
-the predeclared sample digest, and all exclusion counts. The report module no
-longer uses `Any`. No live issuer Company Facts capture was run. Checkpoint
-`7c7be424` preserves the fixture correction. The typed boundary cleanup builds
-on that checkpoint and passes the listed focused checks. This is not acceptance
-evidence. The next step is to finish typed parsing for capture/report artifacts
-and verify one issuer's live snapshot size before starting cohort capture.
+population lists returned by `load_frame()`. The frame loader returns typed
+frame and sample records and parses the pinned CSV fields at its boundary. It
+retains the original filing count, the predeclared sample digest, and all
+exclusion counts. The report module no longer uses `Any`. Checkpoint `7c7be424`
+preserves the fixture correction. The typed boundary cleanup passes the listed
+focused checks. The first live cohort capture is recorded below; it is not
+acceptance evidence.
+
+## Live cohort capture WIP
+
+Capture ran from exact code commit `9b4abf9f73229f8eea3a29fc72df4c7c2911b400`
+on 2026-11-09 with the main checkout's ignored `.env`. The environment example
+already contains a quoted, non-operational `FUNDAMENTAL_SEC_USER_AGENT`
+placeholder. The local contact value was not copied, printed, or staged.
+
+Command:
+
+```sh
+uv run --env-file /Users/denniswong/Desktop/Project/value-investment-agent/.env --project fundamental-service python -m fundamental_service.history_cohort capture
+```
+
+The command exited 2 and reported `partial`. The preselected sample retained
+all 100 issuer clusters. It wrote 68 valid snapshots, marked 32 as
+`INVALID_SOURCE_SNAPSHOT`, and marked none pending or as transport failures.
+The capture manifest SHA-256 is
+`4497c7842177347d60ef08fab732d81af05d44733fe681ef7606c112aba6fa59`. All
+captured snapshot files are below the repository's 500 KB per-file limit.
+
+The focused test command on the same code commit passed 45 tests:
+
+```sh
+uv run --extra dev --project fundamental-service pytest fundamental-service/tests/test_history_cohort.py fundamental-service/tests/test_history_sufficiency_report.py fundamental-service/tests/test_calibration.py fundamental-service/tests/test_facts.py -q
+```
+
+A read-only retry of the first invalid CIK reproduced `ReportError: SEC CIK
+must be numeric and at most ten digits`. The SEC historical submissions
+response had no top-level `cik`; its SEC-provided archive filename included the
+selected CIK. The current capture code validates every historical payload only
+through its top-level `cik`, so it rejects these otherwise parseable archives.
+The diagnostic request did not write or replace a snapshot.
+
+Status: WIP, not acceptance. Next, validate an absent archive payload CIK
+against the SEC-provided archive filename, add a mismatch test, rerun the
+focused suite, and resume the same fixed sample. Then generate the offline
+report and record the measured threshold status without replacing failed
+issuers or promoting an unsupported threshold.
