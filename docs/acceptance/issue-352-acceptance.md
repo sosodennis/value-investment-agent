@@ -13,6 +13,41 @@ This is a work-in-progress record. It does not mark #352 accepted or verified.
 - #353, #354, and #355 remain OPEN and are not part of this checkpoint.
 - #339 remains OPEN and owns SEC readiness/ingestion behavior. #352 must consume its pinned snapshot contract rather than duplicate acquisition. #350 remains an open blocker for an organization-owned full Agent pipeline; it does not make Search or LLM a dependency of this service path. #361 is the post-#352 replay follow-up.
 
+## Market-policy provenance and HTTP preparation checkpoint (2026-11-10)
+
+- Exact checkpoint: `79dba13bece58ef02d2662a28c1cc07594548dc9`.
+- This checkpoint is WIP and does not mark #352 accepted or verified.
+- `MarketPolicyInputsV1` now declares whether capital weights are
+  `approved_policy` or `market_observed`; the contract rejects a market-observed
+  claim backed only by policy evidence. The released package explicitly uses
+  the reviewed policy basis for weights and never presents those weights as a
+  quote-derived market capitalization.
+- Preparation carries the evidence method through to each generated WACC
+  assumption. The pinned FRED DGS10 observation is `approved_source`; beta,
+  ERP, marginal debt cost, capital weights, and terminal growth remain
+  `approved_policy`. Future-dated evidence is unavailable for replay and
+  missing policy inputs return `requires_input` rather than a default.
+- A real HTTP `POST /v1/valuation/prepare` test now binds a complete five-year
+  SEC fact fixture to a release manifest, reads release-declared fact IDs, and
+  returns a provisional prepared input with the manifest digest, WACC evidence,
+  and a deterministic preparation digest.
+- Checks against this exact commit:
+  - `uv run --project fundamental-service pytest fundamental-service/tests -q`
+    — exit 0; 287 passed, 25 skipped, 1 existing Pydantic serializer warning.
+  - `uv run --extra dev --project fundamental-service pytest
+    fundamental-service/tests/test_policies.py
+    fundamental-service/tests/test_valuation_preparation.py
+    fundamental-service/tests/test_valuation_preparation_integration.py -q`
+    — exit 0; 30 passed.
+  - `uv run --with ruff ruff check --select E,F,I` over the touched
+    Fundamental files — exit 0.
+  - `python3 -m compileall -q fundamental-service/src fundamental-service/tests`
+    — exit 0.
+- Remaining before acceptance: explicit reviewer-package/quote policy decision
+  for #362, Docker/service-backed success artifact on this commit, Agent Core
+  and architecture checks after the final code state, release/CI evidence, PR
+  merge, exact merge-SHA verification, and issue closure.
+
 ## Profile-driven SEC request checkpoint (2026-11-10)
 
 - This checkpoint is WIP and does not mark #352 accepted or verified.
