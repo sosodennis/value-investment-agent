@@ -56,6 +56,11 @@ and stored/unpacked artifact hashes are recorded; the manifest SHA-256 is
 | Reconcile SEC source hashes and master-index/data-set frame counts | Exit 0; 5,462 original 10-K rows, 5,338 index CIKs, 4,494 matched data-set CIKs, 3,999 US-incorporated CIKs, 844 unmatched exclusions, and 495 non-US/unknown exclusions matched the protocol. |
 | Verify retained gzip snapshots by stored and uncompressed hashes | Exit 0; both snapshots match `frame_manifest.json`, with 5,462 index 10-K rows and 4,498 data-set 10-K rows. |
 | `git diff --check` | Exit 0. |
+| `uv run --extra dev --project fundamental-service pytest fundamental-service/tests/test_history_cohort.py -q` before report-scope fix | Exit 1; 3 passed and 1 failed because report assembly referenced undefined `protocol`. |
+| `uv run --extra dev --project fundamental-service pytest fundamental-service/tests/test_history_cohort.py -q` after report-scope fix | Exit 1; 3 passed and 1 failed because the test frame fixture lacks `eligible` and `excluded` lists. |
+| `python3 scripts/architecture_guard.py` | Exit 0; no boundary violations. |
+| `uv run --extra dev --project fundamental-service ruff check fundamental-service/src/fundamental_service/history_cohort.py fundamental-service/tests/test_history_cohort.py` | Exit 2; Ruff is not installed in the Fundamental Service environment. The repository pre-commit Ruff hook is available. |
+| `uv run --extra dev --project fundamental-service ruff format --check fundamental-service/src/fundamental_service/history_cohort.py fundamental-service/tests/test_history_cohort.py` | Exit 2; Ruff is not installed in the Fundamental Service environment. The repository pre-commit Ruff hook is available. |
 | Repository large-file pre-commit gate | Initial full-source gzip files exceeded the 500 KB per-file limit. The retained, hash-verified SEC row subsets are 129,471 and 120,531 bytes. |
 | Company Facts and submissions cohort capture | Not run |
 | Model-field coverage and first-subsequent labels | Not run |
@@ -64,12 +69,25 @@ No Docker Compose project is needed for this data-acquisition and report slice.
 
 ## Next steps
 
-1. Commit the immutable frame snapshot checkpoint.
-2. Implement deterministic frame selection, SEC snapshot capture, and an
-   offline report with explicit exclusions and immutable evidence hashes.
+1. Fix report assembly to read the scope from the verified frame protocol, then
+   rerun the cohort tests.
+2. Inspect capture and report artifact sizes before starting the live cohort.
 3. Capture the selected cohort using the local User-Agent without exposing its
    value; retain retrieval failures in the denominator.
 4. Run temporal-ordering, original-versus-amendment, sample reproducibility,
    forbidden-source, and report-idempotence tests against the exact candidate
    commit; report any underpowered result without promoting a threshold.
 5. Update #351 only after #359's data and acceptance state are explicit.
+
+## Latest implementation status
+
+The deterministic sample selector returns 100 unique CIK clusters across the
+declared filing-time SIC strata. The report now reads its sampling scope from
+the verified frame protocol. The capture-resume test then reached report
+assembly and found that its mocked frame omits the `eligible` and `excluded`
+population lists. No live issuer Company Facts capture was run. The attempted
+commit was stopped by Ruff on the undefined scope; the scope was fixed and the
+repository hook reformatted two files, but no commit was created. This remains
+a WIP state, not acceptance evidence. The next step is to align the fixture
+with the loaded frame shape, rerun the focused tests, and inspect artifact sizes
+before starting live cohort capture.
