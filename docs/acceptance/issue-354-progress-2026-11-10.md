@@ -98,3 +98,27 @@ This exposes a new owning-layer blocker: [#365](https://github.com/sosodennis/va
 tracks bounded SEC parser memory/concurrency and a stable typed resource
 failure. #354 remains WIP and open until #365 is resolved, the exact-head
 service-backed replay passes, and the workspace acceptance is rerun.
+
+## Checkpoint: isolated D&A validation failure under raised memory
+
+The resource symptom is not the complete failure boundary. After the service
+was restarted with a runtime-only 2 GiB memory limit, a single sequential
+request containing only `revenue` and
+`depreciation_and_amortization` still returned the same redacted HTTP 400
+`invalid_request` response. The isolated `depreciation_and_amortization`
+mapping is the approved high-confidence service mapping
+`sec-us-gaap-v1-depreciation_and_amortization` to
+`us-gaap:DepreciationDepletionAndAmortization`.
+
+This means the blocker has two independently observable parts: bounded parser
+resource handling under the producer-shaped request, and a deterministic
+mapping-specific validation failure that remains after the runtime memory is
+raised. The public response does not expose the internal Pydantic or service
+failure path, so the owning service must emit a stable structured diagnostic
+with field path, failure code, correlation, and acquisition evidence while
+continuing to fail closed without publishing partial snapshots or canonical
+facts.
+
+The 2 GiB memory update was applied only to the running verification container
+and is not a repository fix. It must not be counted as acceptance evidence for
+the delivered commit.
