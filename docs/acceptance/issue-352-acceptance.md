@@ -7,8 +7,8 @@ This is a work-in-progress record. It does not mark #352 accepted or verified.
 - Issue: #352, the first incomplete issue in the requested sequence; OPEN.
 - Branch: `codex/issue-352-auto-valuation` in its dedicated worktree.
 - Baseline: `f250e4d3810feb7db342199874efe222500a79e0`, equal to `origin/main`.
-- Latest branch checkpoint before this record: `0452a1c3` (release-bound evidence read; not accepted).
-- Latest code checkpoint: `0452a1c3` (WIP; not accepted).
+- Latest branch checkpoint before this record: `866a2a2c3f9f49e6441cb6e9cd14daaf99942176` (Agent Core automatic-preparation cutover; WIP, not accepted).
+- Latest code checkpoint: `866a2a2c3f9f49e6441cb6e9cd14daaf99942176` (WIP; not accepted).
 - #351: CLOSED by merged PR #358 at the baseline commit. Its supported history threshold remains null; the three-of-five candidate can produce at most a provisional result.
 - #353, #354, and #355 remain OPEN and are not part of this checkpoint.
 - #339 remains OPEN and owns SEC readiness/ingestion behavior. #352 must consume its pinned snapshot contract rather than duplicate acquisition. #350 remains an open blocker for an organization-owned full Agent pipeline; it does not make Search or LLM a dependency of this service path. #361 is the post-#352 replay follow-up.
@@ -249,3 +249,42 @@ does not establish that real issuers have all required market evidence.
   establish wired point-in-time market/policy sources, run Docker/service-backed
   end-to-end acceptance, open and pass the #352 PR checks, merge to `main`, and
   verify the merged commit before closing #352. #353 must not start yet.
+
+## Agent Core automatic-preparation cutover checkpoint (2026-11-10)
+
+- Exact code commit: `866a2a2c3f9f49e6441cb6e9cd14daaf99942176`.
+- Compact requests now use the canonical service-owned path:
+  `resolve_identity -> ingest_sec_data -> resolve_snapshot -> prepare_valuation -> validate_with_policy -> calculate -> read_valuation_evidence`.
+  Agent Core no longer assembles compact forecast or WACC assumptions and only
+  validates identity, model, snapshot, release, and evidence bindings.
+- Added typed Agent Core projections for automatic preparation and release-bound
+  evidence. The final artifact retains the preparation digest, profile/policy
+  metadata, release digest, fact IDs, and source content hashes.
+- Updated fake clients and assertions to exercise the new pre-release contract;
+  no compatibility alias or parallel caller-owned preparation path was added.
+- `uv run --project finance-agent-core pytest finance-agent-core/tests/agents/fundamental -q` — exit 0; 59 passed.
+- `uv run --project finance-agent-core ruff check` over the 7 changed Agent Core files — exit 0.
+- `python -m compileall -q finance-agent-core/src/agents/fundamental` — exit 0.
+- `uv run --project fundamental-service pytest fundamental-service/tests -q` — exit 0; 279 passed, 25 skipped, 1 existing Pydantic serializer warning.
+- Focused Fundamental Service tests for preparation, annual history, requirements,
+  API, and verification — exit 0; 64 passed.
+- `python3 scripts/architecture_guard.py` — exit 0; no boundary violations.
+- Focused Ruff `E,F,I` checks over all Fundamental files changed since the
+  #352 baseline — exit 0. Whole-package Ruff remains red on 294 pre-existing
+  findings outside this change; the changed test file also contains one
+  baseline-only format finding outside the diff.
+- `python -m compileall -q fundamental-service/src fundamental-service/tests finance-agent-core/src/agents/fundamental` — exit 0.
+- Docker Compose was validated and started with project
+  `value-investment-agent-352-auto-valuation` and host ports `18652` (Postgres)
+  and `18653` (service). Both containers became healthy and `/readyz` returned
+  `{"status":"ready","contract_version":"internal.v1"}`. A signed live
+  `/v1/valuation/prepare` request against an absent snapshot returned the typed
+  fail-closed `SNAPSHOT_NOT_FOUND` response with HTTP 404. The isolated empty
+  database has no release fixture, so this is boundary/health evidence only,
+  not a successful issuer valuation.
+- Remaining before acceptance: prove an active release with complete multi-period
+  facts through the real service and Agent Core path; wire approved, dated
+  market/policy sources rather than returning `requires_input`; implement and
+  verify transition filing behavior and supported manual override provenance;
+  run successful service-backed artifact/evidence checks; then run exact-commit
+  PR CI/review, merge to `main`, verify the merge, and close #352.
