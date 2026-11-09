@@ -1076,7 +1076,12 @@ async def test_cutover_rejects_facts_outside_the_resolved_snapshot(
     assert result.update["fundamental_analysis"]["service_failure"]["code"] == (
         "UPSTREAM_MALFORMED"
     )
-    assert runtime.saved_calls == []
+    assert len(runtime.saved_calls) == 1
+    degraded_artifact = runtime.saved_calls[0]["data"]
+    assert degraded_artifact["fundamental_service"]["projection_type"] == "degraded"
+    assert degraded_artifact["fundamental_service"]["service_failure"]["code"] == (
+        "UPSTREAM_MALFORMED"
+    )
     assert (
         result.update["fundamental_analysis"]["request_timing"]["valuation_timestamp"]
         == "2026-11-04T00:00:00Z"

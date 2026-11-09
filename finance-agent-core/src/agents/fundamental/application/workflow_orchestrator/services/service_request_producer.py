@@ -551,6 +551,38 @@ async def prepare_service_valuation_request(
                 preparation=preparation,
                 reason=preparation.status,
             )
+        manual_override = request.get("manual_override")
+        if manual_override is not None:
+            override_payload = _mapping(
+                manual_override, context="valuation_request.manual_override"
+            )
+            try:
+                override_response = await client.execute(
+                    "override_prepared_valuation",
+                    override_payload,
+                    principal=principal,
+                    correlation_id=correlation_id,
+                    deadline_at=deadline_at,
+                )
+                preparation = FundamentalValuationPreparationResultV1.model_validate(
+                    override_response.result
+                )
+            except (TypeError, ValueError) as error:
+                raise FundamentalServiceFailure(
+                    "UPSTREAM_MALFORMED",
+                    "Fundamental service returned an invalid manual override preparation",
+                    retryable=False,
+                    status_code=502,
+                ) from error
+            if preparation.status != "prepared":
+                return PreparedServiceValuation(
+                    valuation_request=None,
+                    identity=identity,
+                    ingestion=ingestion,
+                    snapshot_selector=snapshot_selector,
+                    preparation=preparation,
+                    reason=preparation.status,
+                )
         prepared = _prepared_input(
             preparation,
             model_id=model_id,

@@ -6,7 +6,7 @@ import { useAgent } from '@/hooks/useAgent';
 import { AGENT_CONFIGS } from '@/config/agents';
 import type { AgentInfo, AgentStatus, StandardAgentOutput } from '@/types/agents';
 import { WorkspaceOutputPanel } from './workspace-output-panel';
-import type { ConnectionState, InteractionResponse, ValuationApprovalResponse, WorkflowActivity, WorkflowInteraction } from '@/features/workflow';
+import type { ConnectionState, InteractionResponse, WorkflowActivity, WorkflowInteraction } from '@/features/workflow';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -21,7 +21,6 @@ import type { WorkspaceRouteIntent } from './workspace-route-intent';
 import { ResizableGroup, ResizableHandle, ResizablePanel } from '@/components/ui/resizable';
 import { EvidenceInspector, EvidenceInspectorTrigger, buildEvidenceItems, type EvidenceSelection } from './workspace-evidence-inspector';
 import { adaptAgentOutput } from '@/types/agents/output-adapter';
-import { ValuationAssumptionsEditor, type CompactFundamentalValuationRequest } from './valuation-assumptions';
 
 type WorkspacePageProps = { assistantId?: string; initialTicker?: string | null; initialPrompt?: string | null; autoStart?: boolean; routeIntent?: WorkspaceRouteIntent };
 const NEW_ANALYSIS_INTENT: WorkspaceRouteIntent = { kind: 'new-analysis' };
@@ -38,6 +37,11 @@ const isReportTab = (value: string): value is ReportTab =>
 const statusLabel: Record<AgentStatus, string> = { idle: 'Idle', running: 'Running', done: 'Complete', attention: 'Waiting', error: 'Failed', degraded: 'Degraded' };
 const statusVariant: Record<AgentStatus, 'outline' | 'default' | 'success' | 'warning' | 'destructive'> = { idle: 'outline', running: 'default', done: 'success', attention: 'warning', error: 'destructive', degraded: 'warning' };
 const connectionLabels: Record<ConnectionState, string> = { disconnected: 'Disconnected', connecting: 'Connecting', connected: 'Live', reconnecting: 'Reconnecting', closed: 'Connection closed' };
+const AUTOMATIC_VALUATION_REQUEST = {
+    contract_version: 'fundamental.v1',
+    assumptions: {},
+    uncertainty: { mode: 'monte_carlo' },
+} satisfies Record<string, unknown>;
 
 export function WorkspacePage({ assistantId = 'agent', initialTicker = null, initialPrompt = null, autoStart = false, routeIntent = NEW_ANALYSIS_INTENT }: WorkspacePageProps) {
     const agent = useAgent(assistantId);
@@ -47,7 +51,6 @@ export function WorkspacePage({ assistantId = 'agent', initialTicker = null, ini
     const [activeTab, setActiveTab] = useState<ReportTab>('activity');
     const [selectedEvidence, setSelectedEvidence] = useState<EvidenceSelection | null>(null);
     const [mobileEvidenceOpen, setMobileEvidenceOpen] = useState(false);
-    const [valuationRequest, setValuationRequest] = useState<CompactFundamentalValuationRequest | null>(null);
     const mobileEvidenceReturnFocus = useRef<HTMLElement | null>(null);
     const autoStarted = useRef(false);
     const agents: AgentInfo[] = useMemo(() => AGENT_CONFIGS.map((config) => ({
@@ -77,6 +80,13 @@ export function WorkspacePage({ assistantId = 'agent', initialTicker = null, ini
             adaptAgentOutput(evidenceAgent.id, output, `workspace_evidence.${evidenceAgent.id}`),
         );
     }, [agent.agentOutputs, evidenceAgent]);
+    const pendingValuationApproval = useMemo(
+        () => [...(agent.workflow?.interactions.values() ?? [])].find(
+            (interaction): interaction is Extract<WorkflowInteraction, { kind: 'valuation_approval' }> =>
+                interaction.kind === 'valuation_approval' && interaction.status === 'pending'
+        ) ?? null,
+        [agent.workflow?.interactions]
+    );
 
     function handleSelectEvidence(item: EvidenceSelection) {
         setSelectedEvidence(item);
@@ -114,14 +124,16 @@ export function WorkspacePage({ assistantId = 'agent', initialTicker = null, ini
         const symbol = ticker.trim().toUpperCase();
         if (routeIntent.kind !== 'new-analysis' || !symbol || agent.isLoading) return;
         setTicker(symbol);
-        void agent.sendMessage(`Valuate ${symbol}`, true);
+        void agent.sendMessage(`Valuate ${symbol}`, true, AUTOMATIC_VALUATION_REQUEST);
     }
 
-    function startValuation() {
+    function recalculateFromFundamental(manualOverride: Record<string, unknown>) {
         const symbol = ticker.trim().toUpperCase();
-        if (routeIntent.kind !== 'new-analysis' || !symbol || !valuationRequest || agent.isLoading) return;
-        setTicker(symbol);
-        void agent.sendMessage(`Valuate ${symbol}`, true, valuationRequest);
+        if (routeIntent.kind !== 'new-analysis' || !symbol || agent.isLoading) return;
+        void agent.sendMessage(`Valuate ${symbol}`, true, {
+            ...AUTOMATIC_VALUATION_REQUEST,
+            manual_override: manualOverride,
+        });
     }
 
     const roster = <AgentRoster agents={agents} selected={selectedAgentId ?? preferredAgentId} onSelect={(id) => {
@@ -148,10 +160,8 @@ export function WorkspacePage({ assistantId = 'agent', initialTicker = null, ini
                 <div className="flex flex-wrap items-end gap-3">
                     <Field label="Company ticker" htmlFor="workspace-ticker" className="w-full max-w-sm"><Input id="workspace-ticker" autoComplete="off" value={ticker} onChange={(event) => setTicker(event.target.value.toUpperCase())} placeholder="AAPL" maxLength={16} /></Field>
                     <Button type="submit" disabled={!ticker.trim() || agent.isLoading}>{agent.isLoading ? <Loader2 className="animate-spin" /> : <Play />}{agent.isLoading ? 'Starting…' : 'Start analysis'}</Button>
-                    <Button type="button" variant="secondary" onClick={startValuation} disabled={!ticker.trim() || !valuationRequest || agent.isLoading}>{agent.isLoading ? <Loader2 className="animate-spin" /> : <Play />}{agent.isLoading ? 'Starting…' : 'Start valuation'}</Button>
                     {agent.threadId && <p className="ml-auto max-w-full truncate font-mono text-xs text-muted-foreground" title={agent.threadId}>Thread {agent.threadId}</p>}
                 </div>
-                <ValuationAssumptionsEditor disabled={agent.isLoading} onRequestChange={setValuationRequest} />
             </form>}
 
             <div className="min-h-0 min-w-0">
@@ -171,7 +181,7 @@ export function WorkspacePage({ assistantId = 'agent', initialTicker = null, ini
                             {reportTabs.map((tab) => <TabsTrigger key={tab.id} value={tab.id} className="min-h-10 shrink-0 rounded-none border-b-2 border-transparent px-3 data-[state=active]:border-primary data-[state=active]:bg-transparent">{tab.label}</TabsTrigger>)}
                         </TabsList>
                         <TabsContent value="activity"><ActivityPanel workflow={agent.workflow} connectionState={agent.connectionState} onResumeInteraction={agent.submitCommand} isSubmitting={agent.isSubmittingInteraction} onRetry={agent.retryRun} isRetrying={isLoading} /></TabsContent>
-                        {reportTabs.filter((item): item is { id: Exclude<ReportTab, 'activity'>; label: string } => item.id !== 'activity').map((item) => <TabsContent key={item.id} value={item.id}><ReportPanel tab={item.id} outputs={agent.agentOutputs} statuses={agent.agentStatuses} ticker={ticker} onSelectEvidence={handleSelectEvidence} selectedEvidenceId={selectedEvidence?.id} /></TabsContent>)}
+                        {reportTabs.filter((item): item is { id: Exclude<ReportTab, 'activity'>; label: string } => item.id !== 'activity').map((item) => <TabsContent key={item.id} value={item.id}><ReportPanel tab={item.id} outputs={agent.agentOutputs} statuses={agent.agentStatuses} ticker={ticker} onSelectEvidence={handleSelectEvidence} selectedEvidenceId={selectedEvidence?.id} pendingApproval={pendingValuationApproval} onResumeInteraction={agent.submitCommand} isSubmitting={agent.isSubmittingInteraction} onRecalculate={recalculateFromFundamental} /></TabsContent>)}
                     </Tabs>
                         </section>
                     </ResizablePanel>
@@ -208,9 +218,14 @@ function ActivityPanel({ workflow, connectionState, onResumeInteraction, isSubmi
 }) {
     if (!workflow) return <div className="grid min-h-48 place-items-center border-y text-sm text-muted-foreground"><p>No workflow activity is available yet.</p></div>;
     const activities = activityRowsForDisplay(workflow.recent);
-    const pendingInteractions = [...workflow.interactions.values()].filter((item) => item.status === 'pending');
+    const pendingInteractions = [...workflow.interactions.values()].filter(
+        (item): item is Extract<WorkflowInteraction, { kind: 'ticker_selection' }> =>
+            item.status === 'pending' && item.kind === 'ticker_selection'
+    );
+    const valuationApprovalPending = [...workflow.interactions.values()].some((item) => item.status === 'pending' && item.kind === 'valuation_approval');
     return <div className="grid gap-4">
         {workflow.runStatus === 'waiting' && pendingInteractions.length === 0 && <Alert variant="warning"><CircleAlert className="size-4" /><AlertTitle>Workflow is waiting</AlertTitle><AlertDescription>The workflow is waiting for an interaction request that is not available in this activity snapshot.</AlertDescription></Alert>}
+        {valuationApprovalPending && <Alert variant="warning"><CircleAlert className="size-4" /><AlertTitle>Fundamental review required</AlertTitle><AlertDescription>Open the Fundamental tab to review the prepared valuation evidence and confirm or reject calculation.</AlertDescription></Alert>}
         {workflow.runStatus === 'failed' && <Alert variant="destructive" role="alert"><CircleAlert className="size-4" /><AlertTitle>Run failed</AlertTitle><AlertDescription><span className="block">{workflow.failure?.message ?? activities.find((item) => item.status === 'failed')?.label ?? 'The workflow ended with a failure.'}</span>{workflow.failure && <span className="mt-1 block text-xs">Code: {workflow.failure.code} · {workflow.failure.retryable ? 'Retry may succeed' : 'Retry is not expected to change the result'}</span>}{workflow.failure?.retryable && workflow.failure.checkpoint && <Button type="button" size="sm" variant="outline" className="mt-3" disabled={isRetrying} onClick={() => void onRetry()}><RotateCcw className={isRetrying ? 'animate-spin' : undefined} />{isRetrying ? 'Retrying…' : 'Retry from checkpoint'}</Button>}</AlertDescription></Alert>}
         {workflow.runStatus === 'cancelled' && <Alert variant="warning"><AlertTitle>Run cancelled</AlertTitle><AlertDescription>The workflow was cancelled and its current run has ended.</AlertDescription></Alert>}
         {workflow.runStatus === 'completed' && <Alert variant="success"><AlertTitle>Run completed</AlertTitle><AlertDescription>Agent activity has finished. Select a report tab to inspect available results.</AlertDescription></Alert>}
@@ -259,14 +274,11 @@ function activityRowsForDisplay(recent: WorkflowActivity[]): WorkflowActivity[] 
 }
 
 function PendingInteractionPrompt({ interaction, disabled, onSubmit }: {
-    interaction: WorkflowInteraction;
+    interaction: Extract<WorkflowInteraction, { kind: 'ticker_selection' }>;
     disabled: boolean;
     onSubmit: (interaction: WorkflowInteraction, response: InteractionResponse) => Promise<void>;
 }) {
-    if (interaction.kind === 'ticker_selection') {
-        return <TickerSelectionPrompt interaction={interaction} disabled={disabled} onSubmit={onSubmit} />;
-    }
-    return <ValuationApprovalPrompt interaction={interaction} disabled={disabled} onSubmit={onSubmit} />;
+    return <TickerSelectionPrompt interaction={interaction} disabled={disabled} onSubmit={onSubmit} />;
 }
 
 function TickerSelectionPrompt({ interaction, disabled, onSubmit }: {
@@ -306,49 +318,12 @@ function TickerSelectionPrompt({ interaction, disabled, onSubmit }: {
     </Card>;
 }
 
-function ValuationApprovalPrompt({ interaction, disabled, onSubmit }: {
-    interaction: Extract<WorkflowInteraction, { kind: 'valuation_approval' }>;
-    disabled: boolean;
-    onSubmit: (interaction: WorkflowInteraction, response: InteractionResponse) => Promise<void>;
-}) {
-    const { request } = interaction;
-    const respond = (decision: ValuationApprovalResponse['decision']) => {
-        void onSubmit(interaction, {
-            type: 'valuation_approval',
-            contract_version: request.contract_version,
-            decision,
-        });
-    };
-    return <Alert variant="warning" role="alert" className="mt-3">
-        <CircleAlert className="size-4" />
-        <AlertTitle>{request.title}</AlertTitle>
-        <div className="col-start-2 grid gap-3 text-sm opacity-90">
-            <p>{request.description}</p>
-            <p className="font-medium text-foreground">{request.ticker} · {request.model_type}</p>
-            <details className="text-sm">
-                <summary className="cursor-pointer font-medium">Validated parameters ({Object.keys(request.parameters).length})</summary>
-                <dl className="mt-2 grid gap-x-4 gap-y-1 border-l pl-3 sm:grid-cols-[minmax(9rem,auto)_minmax(0,1fr)]">
-                    {Object.entries(request.parameters).map(([name, value]) => <div key={name} className="contents">
-                        <dt className="break-words text-muted-foreground">{name}</dt>
-                        <dd className="break-all tabular-nums">{typeof value === 'string' ? value : JSON.stringify(value)}</dd>
-                    </div>)}
-                </dl>
-            </details>
-            {request.audit_messages.length > 0 && <div><p className="text-sm font-medium text-foreground">Audit</p><ul className="mt-1 grid gap-1">{request.audit_messages.map((message, index) => <li key={`${index}:${message}`} className="break-words text-sm">{message}</li>)}</ul></div>}
-            <div className="flex flex-wrap gap-2">
-                <Button type="button" disabled={disabled} onClick={() => respond('approve')}>Approve valuation</Button>
-                <Button type="button" variant="outline" disabled={disabled} onClick={() => respond('reject')}>Reject calculation</Button>
-            </div>
-        </div>
-    </Alert>;
-}
-
-export function ReportPanel({ tab, outputs, statuses, ticker, onSelectEvidence, selectedEvidenceId }: { tab: Exclude<ReportTab, 'activity'>; outputs: Record<string, StandardAgentOutput | null>; statuses: Record<string, AgentStatus>; ticker: string; onSelectEvidence?: (item: EvidenceSelection) => void; selectedEvidenceId?: string | null }) {
+export function ReportPanel({ tab, outputs, statuses, ticker, onSelectEvidence, selectedEvidenceId, pendingApproval, onResumeInteraction, isSubmitting, onRecalculate }: { tab: Exclude<ReportTab, 'activity'>; outputs: Record<string, StandardAgentOutput | null>; statuses: Record<string, AgentStatus>; ticker: string; onSelectEvidence?: (item: EvidenceSelection) => void; selectedEvidenceId?: string | null; pendingApproval?: Extract<WorkflowInteraction, { kind: 'valuation_approval' }> | null; onResumeInteraction?: (interaction: WorkflowInteraction, response: InteractionResponse) => Promise<void>; isSubmitting?: boolean; onRecalculate?: (manualOverride: Record<string, unknown>) => void }) {
     const output = outputs[tab] ?? null;
     const config = AGENT_CONFIGS.find((item) => item.id === tab);
     const status = statuses[tab] ?? 'idle';
     if (!config) return null;
-    if (!output) return <div className="grid min-h-48 place-items-center border-y px-4 text-center"><div><p className="text-sm font-medium">Report unavailable</p><p className="mt-1 max-w-lg text-sm text-muted-foreground">This run has not supplied an output preview or artifact reference for this agent.</p><Badge className="mt-3" variant={statusVariant[status]}>{statusLabel[status]}</Badge></div></div>;
+    if (!output && tab !== 'fundamental_analysis') return <div className="grid min-h-48 place-items-center border-y px-4 text-center"><div><p className="text-sm font-medium">Report unavailable</p><p className="mt-1 max-w-lg text-sm text-muted-foreground">This run has not supplied an output preview or artifact reference for this agent.</p><Badge className="mt-3" variant={statusVariant[status]}>{statusLabel[status]}</Badge></div></div>;
 
     const agent: AgentInfo = {
         id: config.id,
@@ -358,5 +333,5 @@ export function ReportPanel({ tab, outputs, statuses, ticker, onSelectEvidence, 
         role: config.role,
         status,
     };
-    return <WorkspaceOutputPanel agent={agent} output={output} resolvedTicker={ticker || null} status={status} onSelectEvidence={onSelectEvidence} selectedEvidenceId={selectedEvidenceId} />;
+    return <WorkspaceOutputPanel agent={agent} output={output} resolvedTicker={ticker || null} status={status} onSelectEvidence={onSelectEvidence} selectedEvidenceId={selectedEvidenceId} pendingApproval={pendingApproval} onResumeInteraction={onResumeInteraction} isSubmitting={isSubmitting} onRecalculate={onRecalculate} />;
 }

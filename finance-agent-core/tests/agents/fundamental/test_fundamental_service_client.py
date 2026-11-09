@@ -233,6 +233,35 @@ async def test_client_routes_policy_validation_to_its_versioned_endpoint() -> No
 
 
 @pytest.mark.asyncio
+async def test_client_routes_prepared_valuation_override_to_service_endpoint() -> None:
+    captured: list[httpx.Request] = []
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        captured.append(request)
+        body = json.loads(request.content)
+        return httpx.Response(200, json=_success(body["context"]["correlation_id"]))
+
+    client = HttpFundamentalServiceClient(
+        _settings(), client=httpx.AsyncClient(transport=httpx.MockTransport(respond))
+    )
+    await client.execute(
+        "override_prepared_valuation",
+        {
+            "contract_version": "fundamental.v1",
+            "path": "assumptions.terminal_growth",
+            "value": "0.03",
+        },
+        principal=_principal(),
+        correlation_id="correlation-override",
+        deadline_at=datetime.now(UTC) + timedelta(seconds=5),
+    )
+
+    assert captured[0].url.path == "/v1/valuation/prepare/override"
+    assert captured[0].method == "POST"
+    await client.aclose()
+
+
+@pytest.mark.asyncio
 async def test_client_calls_sec_ingestion_with_its_bounded_service_timeout() -> None:
     captured: list[httpx.Request] = []
 

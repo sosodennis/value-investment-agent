@@ -319,6 +319,16 @@ def create_app(
             return response
         except ServiceError as error:
             status_code = error.status_code
+            context = getattr(request.state, "context", None)
+            LOGGER.warning(
+                "fundamental_request_failed path=%s status_code=%s error_code=%s "
+                "error_message=%s organization_id=%s",
+                request.url.path,
+                error.status_code,
+                error.code,
+                error.message,
+                getattr(getattr(context, "principal", None), "organization_id", None),
+            )
             if (
                 error.code.startswith("internal_auth")
                 or error.code == "invalid_context"

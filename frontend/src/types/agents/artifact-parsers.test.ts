@@ -149,6 +149,34 @@ describe('artifact parsers', () => {
         ).toThrowError('fundamental artifact.status must be done.');
     });
 
+    it('parses a service-owned degraded Fundamental projection', () => {
+        const parsed = parseFundamentalArtifact({
+            ticker: 'AAPL',
+            model_type: 'fcff_dcf',
+            status: 'done',
+            financial_reports: [],
+            fundamental_service: {
+                projection_type: 'degraded',
+                contract_version: 'fundamental.v1',
+                valuation_status: 'service_unavailable',
+                quality_status: 'degraded',
+                issue_codes: ['FACT_MAPPING_UNRESOLVED'],
+                service_failure: {
+                    code: 'FACT_MAPPING_UNRESOLVED',
+                    message: 'requested mapping release is unavailable',
+                    retryable: false,
+                },
+            },
+        });
+
+        expect(parsed.fundamental_service?.projection_type).toBe('degraded');
+        if (parsed.fundamental_service?.projection_type === 'degraded') {
+            expect(parsed.fundamental_service.service_failure.code).toBe(
+                'FACT_MAPPING_UNRESOLVED'
+            );
+        }
+    });
+
     it('rejects invalid forward signals shape in fundamental artifact', () => {
         expect(() =>
             parseFundamentalArtifact({

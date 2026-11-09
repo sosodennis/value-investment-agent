@@ -23,6 +23,7 @@ FundamentalOperation = Literal[
     "read_facts",
     "read_valuation_evidence",
     "prepare_valuation",
+    "override_prepared_valuation",
     "validate",
     "validate_with_policy",
     "calculate",

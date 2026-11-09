@@ -29,6 +29,7 @@ class _Client:
     def __init__(self, *, ingestion: Mapping[str, object]) -> None:
         self.calls: list[tuple[str, dict[str, object]]] = []
         self.ingestion = dict(ingestion)
+        self.last_preparation: FundamentalValuationPreparationResultV1 | None = None
 
     async def resolve_identity(self, request, **_kwargs):
         self.calls.append(("resolve_identity", request.model_dump(mode="json")))
@@ -106,6 +107,15 @@ class _Client:
                     },
                 },
             )
+        if operation == "override_prepared_valuation":
+            if self.last_preparation is None:
+                raise AssertionError("override called before preparation")
+            return FundamentalServiceResponseV1(
+                contract_version="internal.v1",
+                schema_version="fundamental.v1",
+                correlation_id="correlation-1",
+                result=self.last_preparation.model_dump(mode="json"),
+            )
         result = {
             **self.ingestion,
             "valuation_timestamp": input_payload["valuation_timestamp"],
@@ -159,7 +169,7 @@ class _Client:
             "input_digest": None,
         }
         self.calls.append(("prepare_valuation", dict(input_payload)))
-        return FundamentalValuationPreparationResultV1.model_validate(
+        self.last_preparation = FundamentalValuationPreparationResultV1.model_validate(
             {
                 "contract_version": "fundamental.v1",
                 "status": "prepared",
@@ -178,6 +188,7 @@ class _Client:
                 "preparation_digest": "e" * 64,
             }
         )
+        return self.last_preparation
 
 
 def _principal() -> InternalPrincipal:
@@ -370,6 +381,45 @@ async def test_producer_enriches_compact_caller_request_without_inventing_inputs
         "resolve_snapshot",
         "prepare_valuation",
     ]
+
+
+@pytest.mark.asyncio
+async def test_producer_routes_manual_override_back_through_fundamental_service() -> (
+    None
+):
+    client = _Client(ingestion=_ingestion())
+    request = _compact_request()
+    request["manual_override"] = {
+        "contract_version": "fundamental.v1",
+        "path": "assumptions.forecast.base_revenue",
+        "value": "110",
+        "provenance": {
+            "author": "workspace-user",
+            "modified_at": "2026-11-07T00:00:00Z",
+            "reason": "Updated the base year after reviewing the filing.",
+            "automatic_preparation_digest": "e" * 64,
+        },
+    }
+
+    prepared = await prepare_service_valuation_request(
+        _state(request=request),
+        client=client,
+        principal=_principal(),
+        correlation_id="correlation-1",
+        deadline_at=datetime(2026, 11, 7, tzinfo=UTC),
+    )
+
+    assert prepared.valuation_request is not None
+    assert [operation for operation, _ in client.calls] == [
+        "resolve_identity",
+        "ingest_sec_data",
+        "resolve_snapshot",
+        "prepare_valuation",
+        "override_prepared_valuation",
+    ]
+    override_payload = client.calls[-1][1]
+    assert override_payload["path"] == "assumptions.forecast.base_revenue"
+    assert override_payload["value"] == "110"
 
 
 @pytest.mark.asyncio

@@ -320,9 +320,11 @@ describe('parseFundamentalServiceArtifact', () => {
 
         expect(parsed).toHaveProperty('projection_type', 'facts_only');
         expect(parsed).toHaveProperty('valuation_status', 'not_requested');
-        expect(parsed.snapshot_id).toBe(parsed.facts.snapshot_id);
-        expect(parsed.fact_ids).toEqual(['fact-revenue']);
-        expect('valuation_trace' in parsed).toBe(false);
+        if (parsed.projection_type === 'facts_only') {
+            expect(parsed.snapshot_id).toBe(parsed.facts.snapshot_id);
+            expect(parsed.fact_ids).toEqual(['fact-revenue']);
+            expect('valuation_trace' in parsed).toBe(false);
+        }
     });
 
     it('rejects valuation fields on a facts-only projection', () => {

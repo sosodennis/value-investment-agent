@@ -267,6 +267,7 @@ def _validate_compact_service_input(
         "uncertainty",
         "requested_as_of",
         "fiscal_period_selector",
+        "manual_override",
     }
     unknown = sorted(set(input_mapping).difference(supported))
     if unknown:
@@ -287,6 +288,9 @@ def _validate_compact_service_input(
         raise ValueError(
             "scenario payloads are not part of the frozen valuation contract"
         )
+    manual_override = input_mapping.get("manual_override")
+    if manual_override is not None and not isinstance(manual_override, Mapping):
+        raise ValueError(f"{context}.manual_override must be an object")
     for field in ("model_id", "model_version", "policy_id"):
         value = input_mapping.get(field)
         if value is not None and (not isinstance(value, str) or not value.strip()):
@@ -1396,25 +1400,81 @@ def _calculation_projection(
     }
 
 
-def _service_error_update(
+async def _service_error_update(
     *,
+    runtime: ServiceValuationRuntime,
     fundamental: Mapping[str, object],
     error: Exception,
+    resolved_ticker: str | None,
 ) -> FundamentalNodeResult:
     code = getattr(error, "code", "fundamental_service_unavailable")
     retryable = bool(getattr(error, "retryable", False))
     message = str(error)
+    ticker = resolved_ticker or "UNKNOWN"
+    model_type = fundamental.get("model_type")
+    model_type = (
+        model_type if isinstance(model_type, str) and model_type else "fundamental"
+    )
+    degraded_projection: JSONObject = {
+        "projection_type": "degraded",
+        "contract_version": "fundamental.v1",
+        "valuation_status": "service_unavailable",
+        "quality_status": "degraded",
+        "issue_codes": [code],
+        "service_failure": {
+            "code": code,
+            "message": message,
+            "retryable": retryable,
+        },
+    }
     updated: FundamentalAnalysisContext = dict(fundamental)
     updated.update(
         {
             "valuation_status": "service_unavailable",
             "quality_status": "degraded",
             "service_failure": {"code": code, "retryable": retryable},
+            "fundamental_service": degraded_projection,
         }
     )
+    artifact_id: str | None = None
+    try:
+        artifact_id = await runtime.save_financial_reports(
+            data={
+                "financial_reports": [],
+                "fundamental_service": degraded_projection,
+                "status": "done",
+                "ticker": ticker,
+                "model_type": model_type,
+                "reasoning": message,
+            },
+            produced_by="fundamental_analysis.service_degraded",
+            key_prefix="fundamental_service_degraded",
+        )
+    except Exception:
+        artifact_id = None
+    if artifact_id is not None:
+        updated["artifact"] = _build_fundamental_output_artifact(
+            summary=f"Fundamental valuation degraded for {ticker}",
+            artifact_id=artifact_id,
+        )
     return FundamentalNodeResult(
         update={
             "fundamental_analysis": updated,
+            **(
+                {
+                    "artifact_references": {
+                        "financial_reports": to_artifact_reference_payload(
+                            ArtifactReference(
+                                artifact_id=artifact_id,
+                                download_url=f"/api/v1/artifacts/{artifact_id}",
+                                type=ARTIFACT_KIND_FINANCIAL_REPORTS,
+                            )
+                        )
+                    }
+                }
+                if artifact_id is not None
+                else {}
+            ),
             "active_activity_id": "calculation",
             "workflow_activity_updates": {"calculation": "error"},
             "error_logs": [
@@ -1672,7 +1732,12 @@ async def run_service_valuation_flow(
                 status_code=502,
             )
     except (FundamentalServiceFailure, ValueError, TypeError) as error:
-        return _service_error_update(fundamental=fundamental, error=error)
+        return await _service_error_update(
+            runtime=runtime,
+            fundamental=fundamental,
+            error=error,
+            resolved_ticker=resolved_ticker,
+        )
 
     approval_request = _approval_request(
         input_payload=validated_input,
@@ -1683,9 +1748,11 @@ async def run_service_valuation_flow(
     )
     approval_response = request_approval_fn(approval_request)
     if not _approval_is_accepted(approval_response):
-        return _service_error_update(
+        return await _service_error_update(
+            runtime=runtime,
             fundamental=fundamental,
             error=ValueError("valuation approval response has an invalid contract"),
+            resolved_ticker=resolved_ticker,
         )
     if approval_response["decision"] == "reject":
         updated = dict(fundamental)
@@ -1902,7 +1969,12 @@ async def run_service_valuation_flow(
                 status_code=503,
             ) from exc
     except (FundamentalServiceFailure, ValueError, TypeError) as error:
-        return _service_error_update(fundamental=fundamental, error=error)
+        return await _service_error_update(
+            runtime=runtime,
+            fundamental=fundamental,
+            error=error,
+            resolved_ticker=resolved_ticker,
+        )
 
     updated = dict(fundamental)
     updated.update(

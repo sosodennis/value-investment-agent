@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from collections.abc import Mapping
 from typing import Generic, Literal, TypeVar
 
@@ -83,6 +84,7 @@ class FundamentalResponseEnvelopeV1(BaseModel):
 
 
 _JSON_OBJECT = TypeAdapter(dict[str, object])
+LOGGER = logging.getLogger("fundamental_service.transport")
 
 
 def _correlation_from_raw(raw: object, request: Request) -> str:
@@ -179,6 +181,15 @@ async def authorize_operation(
 
 def error_response(request: Request, error: ServiceError) -> JSONResponse:
     correlation = getattr(request.state, "correlation_id", "unknown")
+    LOGGER.warning(
+        "fundamental_error_response path=%s status_code=%s error_code=%s "
+        "error_message=%s correlation_id=%s",
+        request.url.path,
+        error.status_code,
+        error.code,
+        error.message,
+        correlation,
+    )
     body = InternalErrorResponse(
         correlation_id=correlation,
         contract_version=INTERNAL_CONTRACT_VERSION,

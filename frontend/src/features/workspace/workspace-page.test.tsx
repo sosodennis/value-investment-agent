@@ -143,57 +143,33 @@ describe('WorkspacePage', () => {
         render(<WorkspacePage />);
         fireEvent.change(screen.getByLabelText('Company ticker'), { target: { value: 'msft' } });
         fireEvent.click(screen.getByRole('button', { name: 'Start analysis' }));
-        expect(hook.sendMessage).toHaveBeenCalledWith('Valuate MSFT', true);
+        expect(hook.sendMessage).toHaveBeenCalledWith('Valuate MSFT', true, {
+            contract_version: 'fundamental.v1',
+            assumptions: {},
+            uncertainty: { mode: 'monte_carlo' },
+        });
         expect(screen.getByText('Loading financial reports')).toBeTruthy();
         expect(screen.getByText('Reconnecting')).toBeTruthy();
         expect(screen.getByText('Running')).toBeTruthy();
     });
 
-    it('starts a valuation only after complete caller-owned assumptions are entered', async () => {
+    it('exposes one automatic analysis action without a caller-owned assumptions form', () => {
         hook.value = defaultHook();
         render(<WorkspacePage />);
         fireEvent.change(screen.getByLabelText('Company ticker'), { target: { value: 'aapl' } });
-
-        const values: Record<string, string> = {
-            'Base revenue': '100',
-            'Revenue growth': '0.05, 0.05, 0.04',
-            'Operating margin': '0.15, 0.16, 0.17',
-            'Reinvestment rate': '0.20, 0.18, 0.16',
-            'Risk-free rate': '0.04',
-            Beta: '1.1',
-            'Equity risk premium': '0.05',
-            'Pre-tax cost of debt': '0.05',
-            'Tax rate': '0.21',
-            'Debt weight': '0.2',
-            'Equity weight': '0.8',
-            'Terminal growth': '0.02',
-            Cash: '10',
-            Debt: '5',
-            'Preferred stock': '0',
-            'Lease liabilities': '0',
-            'Non-controlling interest': '0',
-            'Diluted shares': '100',
-            'Assumption trace': 'Fixture caller assumptions',
-        };
-        for (const [label, value] of Object.entries(values)) {
-            fireEvent.change(screen.getByLabelText(label), { target: { value } });
-        }
-
-        await waitFor(() => expect(screen.getByRole('button', { name: 'Start valuation' }).hasAttribute('disabled')).toBe(false));
-        fireEvent.click(screen.getByRole('button', { name: 'Start valuation' }));
+        expect(screen.getAllByRole('button', { name: 'Start analysis' })).toHaveLength(1);
+        expect(screen.queryByRole('button', { name: 'Start valuation' })).toBeNull();
+        expect(screen.queryByLabelText('Base revenue')).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: 'Start analysis' }));
 
         expect(hook.sendMessage).toHaveBeenCalledWith(
             'Valuate AAPL',
             true,
-            expect.objectContaining({
+            {
                 contract_version: 'fundamental.v1',
-                model_id: 'fcff_dcf',
-                assumptions: expect.objectContaining({
-                    forecast: expect.objectContaining({ base_revenue: '100' }),
-                    wacc: expect.objectContaining({ debt_weight: '0.2', equity_weight: '0.8' }),
-                    terminal_growth: '0.02',
-                }),
-            }),
+                assumptions: {},
+                uncertainty: { mode: 'monte_carlo' },
+            },
         );
     });
 
@@ -306,7 +282,7 @@ describe('WorkspacePage', () => {
         screen.getByText('Run cancelled');
     });
 
-    it('shows versioned approval inline in the waiting activity and preserves it across report navigation', () => {
+    it('summarizes valuation approval in Activity and renders controls in Fundamental', () => {
         hook.value = defaultHook({
             workflow: approvalWorkflow,
             threadId: 'thread-1',
@@ -314,20 +290,23 @@ describe('WorkspacePage', () => {
         });
         render(<WorkspacePage />);
 
-        const activityItems = within(screen.getByRole('list', { name: 'Workflow activity' })).getAllByRole('listitem');
-        const activityItem = activityItems[0];
-        if (!activityItem) throw new Error('Waiting activity row was not rendered.');
-        expect(within(activityItem).getAllByText('Review valuation assumptions').length).toBeGreaterThanOrEqual(2);
-        expect(within(activityItem).getByText('AAPL · dcf_growth')).toBeTruthy();
-        expect(within(activityItem).getByText('PASS: assumptions are consistent')).toBeTruthy();
-        expect(within(activityItem).getByText('Validated parameters (2)')).toBeTruthy();
-        expect(within(activityItem).getByRole('button', { name: 'Approve valuation' })).toBeTruthy();
-        expect(screen.queryByRole('dialog')).toBeNull();
-
-        fireEvent.click(screen.getByRole('tab', { name: 'Fundamental' }));
-        fireEvent.click(screen.getByRole('tab', { name: 'Activity' }));
-        expect(screen.getByRole('button', { name: 'Approve valuation' })).toBeTruthy();
-        fireEvent.click(screen.getByRole('button', { name: 'Approve valuation' }));
+        expect(screen.getByText('Fundamental review required')).toBeTruthy();
+        const activity = within(screen.getByRole('list', { name: 'Workflow activity' }));
+        expect(activity.queryByRole('button', { name: 'Approve valuation' })).toBeNull();
+        cleanup();
+        const approval = [...approvalWorkflow.interactions.values()].find((item) => item.kind === 'valuation_approval');
+        if (!approval || approval.kind !== 'valuation_approval') throw new Error('Approval fixture failed to parse.');
+        render(<ReportPanel
+            tab="fundamental_analysis"
+            outputs={{}}
+            statuses={{ fundamental_analysis: 'attention' }}
+            ticker="AAPL"
+            pendingApproval={approval}
+            onResumeInteraction={hook.submitCommand}
+        />);
+        expect(screen.getByRole('button', { name: 'Confirm and calculate' })).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Reject calculation' })).toBeTruthy();
+        fireEvent.click(screen.getByRole('button', { name: 'Confirm and calculate' }));
         expect(hook.submitCommand).toHaveBeenCalledWith(
             expect.objectContaining({ kind: 'valuation_approval' }),
             { type: 'valuation_approval', contract_version: 'v1', decision: 'approve' },

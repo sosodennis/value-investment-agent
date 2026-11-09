@@ -20,6 +20,8 @@ import type { AgentInfo, AgentStatus, StandardAgentOutput } from '@/types/agents
 import { buildEvidenceItems, type EvidenceSelection } from './workspace-evidence-inspector';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/cn';
+import type { InteractionResponse, WorkflowInteraction } from '@/features/workflow';
+import { FundamentalReviewPanel } from './outputs/fundamental-analysis/FundamentalReviewPanel';
 
 type WorkspaceOutputPanelProps = {
     agent: AgentInfo;
@@ -28,6 +30,10 @@ type WorkspaceOutputPanelProps = {
     status: AgentStatus;
     onSelectEvidence?: (item: EvidenceSelection) => void;
     selectedEvidenceId?: string | null;
+    pendingApproval?: Extract<WorkflowInteraction, { kind: 'valuation_approval' }> | null;
+    onResumeInteraction?: (interaction: WorkflowInteraction, response: InteractionResponse) => Promise<void>;
+    isSubmitting?: boolean;
+    onRecalculate?: (manualOverride: Record<string, unknown>) => void;
 };
 
 export function WorkspaceOutputPanel({
@@ -37,6 +43,10 @@ export function WorkspaceOutputPanel({
     status,
     onSelectEvidence,
     selectedEvidenceId,
+    pendingApproval = null,
+    onResumeInteraction,
+    isSubmitting = false,
+    onRecalculate,
 }: WorkspaceOutputPanelProps) {
     const viewModel = adaptAgentOutput(
         agent.id,
@@ -45,6 +55,16 @@ export function WorkspaceOutputPanel({
     );
 
     let report: ReactNode;
+    if (agent.id === 'fundamental_analysis' && pendingApproval && !output) {
+        return (
+            <FundamentalReviewPanel
+                pendingApproval={pendingApproval}
+                onResumeInteraction={onResumeInteraction}
+                isSubmitting={isSubmitting}
+                onRecalculate={onRecalculate}
+            />
+        );
+    }
     switch (viewModel.kind) {
         case 'fundamental_analysis':
             report = (
@@ -54,6 +74,10 @@ export function WorkspaceOutputPanel({
                     resolvedTicker={resolvedTicker}
                     status={status}
                 onSelectEvidence={onSelectEvidence}
+                pendingApproval={pendingApproval}
+                onResumeInteraction={onResumeInteraction}
+                isSubmitting={isSubmitting}
+                onRecalculate={onRecalculate}
                 />
             );
             break;
