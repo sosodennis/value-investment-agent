@@ -48,6 +48,34 @@ This is a work-in-progress record. It does not mark #352 accepted or verified.
   and architecture checks after the final code state, release/CI evidence, PR
   merge, exact merge-SHA verification, and issue closure.
 
+## Cross-service and Compose checkpoint (2026-11-10)
+
+- Exact checkpoint: `4bb090d74c1eb2898eda3da9f6583f72d1b4b3a5`.
+- This checkpoint is WIP and does not mark #352 accepted or verified.
+- `uv run --project finance-agent-core pytest
+  finance-agent-core/tests/agents/fundamental -q` — exit 0; 60 passed.
+- `uv run --project finance-agent-core ruff check
+  finance-agent-core/src/agents/fundamental
+  finance-agent-core/tests/agents/fundamental` — exit 0.
+- `python3 scripts/architecture_guard.py` — exit 0; no boundary violations.
+- `python3 -m compileall -q fundamental-service/src fundamental-service/tests
+  finance-agent-core/src/agents/fundamental` — exit 0.
+- Compose config passed with the dedicated project
+  `value-investment-agent-352-auto-valuation` and host ports `18652`
+  (Postgres) and `18653` (Fundamental Service). The image built from this
+  worktree, both containers became healthy, and
+  `curl --fail http://127.0.0.1:18653/readyz` returned
+  `{"status":"ready","contract_version":"internal.v1"}`. The project was
+  stopped with `docker compose ... down`; named volumes were retained.
+- PR #363 required checks are green on this exact head. The
+  `fundamental-release-gate` remains skipped by its workflow condition; the
+  local service release fixture and HTTP preparation test are the current
+  release evidence.
+- Remaining: decide whether the explicit reviewed policy-weight fallback is
+  sufficient to resolve #362 or whether a lawful quote provider must be added;
+  then produce the final service-backed result artifact and complete review,
+  merge, exact-merge verification, and issue closure.
+
 ## Profile-driven SEC request checkpoint (2026-11-10)
 
 - This checkpoint is WIP and does not mark #352 accepted or verified.
