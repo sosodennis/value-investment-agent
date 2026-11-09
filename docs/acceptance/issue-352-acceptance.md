@@ -122,3 +122,42 @@ candidate-threshold status, explicit missing/conflict outcomes, and override
 digest/provenance. Service-backed acceptance will exercise this same operation
 through the isolated #352 Compose project; a successful fixture test alone
 does not establish that real issuers have all required market evidence.
+
+## Resumption evidence (2026-11-09)
+
+- Reconfirmed the sequence: #351 is CLOSED by PR #358; #352 is OPEN and is the
+  first incomplete issue; #353 through #355 remain OPEN. The #352 branch is
+  clean at `5252f67170fa381b8151c87c6737e8c6fb5a67e2`, equal to its remote tip.
+  There is no #352 PR or branch workflow run.
+- Sent a live SEC Company Facts request for MSFT using
+  `FUNDAMENTAL_SEC_USER_AGENT` from the primary worktree's untracked `.env`.
+  The request returned HTTP success and parsed as `MICROSOFT CORP` with 562
+  `us-gaap` tags. The response includes several revenue-related concepts. This
+  proves SEC connectivity and the configured User-Agent only. It does not
+  approve a revenue mapping or establish coverage in an active Fundamental
+  data release.
+
+  ```sh
+  SEC_USER_AGENT=$(sed -n 's/^FUNDAMENTAL_SEC_USER_AGENT=//p' /Users/denniswong/Desktop/Project/value-investment-agent/.env | sed -E 's/^"//; s/"$//'); test -n "$SEC_USER_AGENT" && curl --silent --show-error --fail --user-agent "$SEC_USER_AGENT" https://data.sec.gov/api/xbrl/companyfacts/CIK0000789019.json | jq -c '{entityName, usGaapTagCount: (.facts["us-gaap"] | length), revenueConcepts: ((.facts["us-gaap"] | keys) | map(select(test("Revenue"; "i"))) | .[0:12])}'
+  ```
+- The tracked `.env.example` already declares `FUNDAMENTAL_SEC_USER_AGENT` with
+  a contact placeholder and instructions to replace it. The actual contact
+  stays in the untracked `.env` and is not recorded in Git.
+- The #352 verification Compose file passed configuration validation with the
+  dedicated project name `value-investment-agent-352-auto-valuation` and host
+  ports 18652 and 18653. `docker compose ... ps --all` showed no containers.
+  No service was started and no Docker health or service-backed test ran in
+  this checkpoint.
+
+  ```sh
+  FUNDAMENTAL_SERVICE_HOST_PORT=18653 FUNDAMENTAL_POSTGRES_HOST_PORT=18652 docker compose --env-file /Users/denniswong/Desktop/Project/value-investment-agent/.env -p value-investment-agent-352-auto-valuation -f compose/verification/docker-compose.issue280-operations.yml config --quiet
+  docker compose -p value-investment-agent-352-auto-valuation -f compose/verification/docker-compose.issue280-operations.yml ps --all
+  ```
+- A prior root Compose validation failed because
+  `FUNDAMENTAL_SEC_TAXONOMY_CACHE_SHA256` was missing. The #352 verification
+  Compose file does not use the taxonomy cache. Before running the root stack,
+  obtain and verify the cache digest from its canonical source instead of
+  guessing it.
+- No source files or tests changed in this resumption. The live SEC request is
+  not valuation acceptance evidence. The next implementation unit is the
+  service-owned requirements profile and release-bound exact fact-ID read.
