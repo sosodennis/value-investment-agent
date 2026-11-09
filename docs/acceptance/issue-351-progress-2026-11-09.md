@@ -7,8 +7,8 @@ record.
 
 - #351 remains the first incomplete issue in the fixed sequence. It is OPEN on
   `codex/issue-351-valuation-evidence`; PR #358 is OPEN as a draft. The PR
-  still advertises the older head `68f305abaae1038eeeaa7b434cd45e1adadf9672`
-  until this policy checkpoint is pushed.
+  now points to policy checkpoint
+  `c6055d5f8449d540ee13ddd072f6ef2db54f5f8f`.
 - The user confirmed that #351 should deliver the source and quality matrix
   with a safe provisional or abstention policy. The three-of-five history
   rule remains an unvalidated candidate and cannot grant `verified` status.
@@ -36,10 +36,10 @@ record.
   #351 delivers the matrix, candidate-only threshold, and abstention rules;
   #352 owns the canonical forecast composer; and the #361 replay follows #352
   using that service logic. No numerical threshold is claimed as verified.
-- PR #358 had all 11 required checks pass on the exact head
-  `68f305abaae1038eeeaa7b434cd45e1adadf9672`; the documentation-only
-  Fundamental release gate was skipped. No review is recorded. Rerun checks
-  after updating the branch.
+- PR #358's required checks pass on the exact head
+  `c6055d5f8449d540ee13ddd072f6ef2db54f5f8f` in GitHub run `42605276320`.
+  The documentation-only Fundamental release gate was skipped. No review is
+  recorded; the PR remains draft until the final review/merge gate.
 - The GitHub dependency `#361 blocks #351` is being removed. #361 remains an
   open follow-up after #352, and must not block #351's source-and-policy
   delivery. #352 through #355 remain OPEN and unstarted; #352 still cannot
@@ -66,6 +66,25 @@ record.
 - This decision preserves the fixed delivery order #351 -> #352 -> #353 ->
   #354 -> #355. #355 remains an optional Search/LLM evidence path and is not a
   core valuation dependency.
+
+## Verification on policy checkpoint `c6055d5f`
+
+The checkpoint changes the #351 acceptance record only. The staged diff was
+reviewed before commit and commit hooks passed.
+
+| Command or check | Result |
+| --- | --- |
+| `uv run --extra dev --project fundamental-service pytest fundamental-service/tests/test_sec_source.py fundamental-service/tests/test_source_acquisition.py fundamental-service/tests/test_history_sufficiency_report.py fundamental-service/tests/test_calibration.py fundamental-service/tests/test_facts.py fundamental-service/tests/test_verification.py -q` | Exit 0; 77 passed. |
+| `python3 scripts/architecture_guard.py` | Exit 0; no boundary violations. |
+| `docker compose --env-file .env.example config --quiet` | Exit 0. No Compose services were started; this is a documentation and acceptance-policy change. |
+| `git show --check HEAD` and `git diff origin/main...HEAD --check` | Exit 0. |
+| GitHub Actions run `42605276320` on PR #358 | All 8 required branch-protection checks passed. `fundamental-release-gate` was skipped because no Fundamental service code changed. |
+| GitHub dependency inspection | #351 blocks #352; #352 blocks #361; #361 no longer blocks #351 and has no `blocker` label. |
+
+No service-backed end-to-end or Docker runtime check ran because this
+checkpoint changes the acceptance record only. The source matrix and policy
+remain unverified until PR review and merge; no numerical history threshold is
+claimed.
 
 ## Prior checkpoint after #356 merge
 
