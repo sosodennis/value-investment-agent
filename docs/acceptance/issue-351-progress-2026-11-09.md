@@ -3,6 +3,44 @@
 This record tracks work in progress. It is not an acceptance or `VERIFIED`
 record.
 
+## Current status (2026-11-09)
+
+- #351 remains the first incomplete issue in the fixed sequence. It is OPEN on
+  `codex/issue-351-valuation-evidence`; PR #358 is OPEN as a draft at
+  `68f305abaae1038eeeaa7b434cd45e1adadf9672`.
+- The user confirmed that #351 should deliver the source and quality matrix
+  with a safe provisional or abstention policy. The three-of-five history
+  rule remains an unvalidated candidate and cannot grant `verified` status.
+  Do not replace it with a five-year rule based on intuition.
+- The merged #359 cohort report remains underpowered. It has 100 selected
+  issuer clusters, 0/100 eligible cases and 0/100 complete first-subsequent
+  labels under its listed mapping. It records no historical Fundamental
+  Service forecasts and keeps `supported_history_threshold` null.
+- The separate #361 worktree has local checkpoint
+  `157604cad183c6c5609252c5502fd059569afc99`. Its candidate-tag report finds
+  56/100 clusters with a listed tag in three of five periods. That is an
+  unreviewed tag screen, not canonical coverage or a threshold. The same
+  allowlist now filters live captures and saved evidence.
+- Checks on #361 commit `157604cad183c6c5609252c5502fd059569afc99` passed:
+  54 focused tests, `python3 scripts/architecture_guard.py`, report
+  regeneration with SHA-256
+  `508e721bfaa564eeb08a2f17a37e33405a346b78a11f7b870f4c4f9d855bb0ed`, and
+  `git show --check HEAD`. Docker Compose configuration could not be resolved
+  in that worktree because `LLM_PROVIDER_ENCRYPTION_KEY` was unset. No Docker
+  service or service-backed valuation test ran; this was an offline report
+  slice.
+- The #351 matrix already marks three of five as provisional only and treats
+  `us-gaap:Revenues` as a candidate mapping, not a universal alias. This
+  checkpoint will make the acceptance and replay sequence explicit in the
+  issue, matrix, and draft PR.
+- PR #358 had all 11 required checks pass on the exact head
+  `68f305abaae1038eeeaa7b434cd45e1adadf9672`; the documentation-only
+  Fundamental release gate was skipped. No review is recorded. Rerun checks
+  after updating the branch.
+- GitHub still lists #361 as blocking #351 at this checkpoint. The issue and
+  dependency records must be updated to reflect that threshold replay is a
+  follow-up after #352. #352 through #355 remain OPEN and unstarted.
+
 ## Prior checkpoint after #356 merge
 
 - Issue: #351, first incomplete issue in the requested sequence; state OPEN.
@@ -42,7 +80,7 @@ record.
   live SEC submissions request proves endpoint access only; it is not cohort
   or service-ingestion evidence.
 
-## Current state after #359 merge
+## Historical checkpoint after #359 merge
 
 - Issue #351 remains OPEN and is the first incomplete issue in the requested
   sequence. Branch: `codex/issue-351-valuation-evidence`.
@@ -81,14 +119,14 @@ record.
 - #351 remains WIP and unverified. The three-of-five rule remains an
   unvalidated candidate and cannot grant `verified` status. Do not start #352.
 
-## Current acceptance progress
+## Historical acceptance status before the revised decision
 
 | Criterion | Evidence | Status |
 | --- | --- | --- |
 | Inventory each required input for both released models. | Section 24.4.4 classifies SEC facts, derived metrics, forecasts, market inputs, policy inputs, capital bridge fields, and optional forward references. | Draft matrix present; final review pending. |
 | Separate computability from evidence quality and define time, freshness, and quality gates. | The matrix keeps period and availability rules, immutable evidence references, versioned freshness policy, and typed degraded, provisional, unsupported, or abstained outcomes. | Draft matrix present; final review pending. |
-| Define a numerical history threshold from representative coverage and chronological OOS evidence. | The merged #359 report covers 100 issuer clusters but records 0/100 eligible issuers, 0/100 complete first-subsequent labels, and no historical Fundamental Service forecast accuracy for either model. It returns `underpowered` and keeps `supported_history_threshold` null. The three-of-five rule remains unvalidated. Blocker #361 records the remaining replay dependency. | NOT MET; #351 remains OPEN and #352 must not start. |
-| Resolve how SEC revenue concept coverage maps to the canonical field. | The #359 report counts only `RevenueFromContractWithCustomerExcludingAssessedTax`; its point-in-time audit found `us-gaap:Revenues` facts for the sample decision accession. The matrix now treats this as candidate mapping evidence, not a universal alias. | Source gap identified; reviewed mapping evidence remains outstanding. |
+| Define the candidate history rule and the gate for verified eligibility. | The #359 report is underpowered and keeps `supported_history_threshold` null. The latest-five, at-least-three-complete-years rule remains a provisional candidate only. A post-#352 replay will use the canonical Fundamental Service forecast logic and chronological first-subsequent labels. | Safe provisional or abstention policy documented; validated threshold deferred. |
+| Define how unresolved SEC revenue mappings affect eligibility. | The #359 report and the #361 candidate screen do not approve a canonical mapping. `us-gaap:Revenues` remains a candidate only. The matrix requires issuer, period, unit, currency, and scope review before a mapping can support verified eligibility. | Unresolved mappings remain unsupported or abstained; no universal alias. |
 | Specify the multi-period data contract needed by #352. | The current producer requests point-in-time `revenue`, `operating_income`, `cash`, `debt`, and `diluted_shares`, plus transition filing evidence. The matrix names required annual duration and instant series with source and selection metadata. | Draft contract requirements documented. |
 | Define fallback, editability, and required confirmation. | Source facts and derived history are read-only. Policy-marked assumptions may be overridden with preserved automatic evidence, `ManualProvenance`, a new digest, and caller-owned approval. | Draft policy documented; final review pending. |
 | Keep guidance, analysts, Search, and LLM out of the default path. | The matrix assigns them to an optional reference path; #355 remains independent of the core sequence. | Draft policy documented; final review pending. |
@@ -113,7 +151,7 @@ The #356 threshold result remains underpowered. No Docker service stack or
 service-backed end-to-end request was run because this checkpoint changes
 documentation and the environment example only.
 
-## Current delivery gate
+## Historical delivery gate before the revised decision
 
 - #358 remains a draft PR. Merge checkpoint `7e441d98` is pushed. Its required
   checks were still running when this checkpoint was recorded. No review has
