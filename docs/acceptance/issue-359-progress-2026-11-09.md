@@ -41,13 +41,22 @@ estimates remain descriptive without 100 issuers in a stratum. Forecast error
 is not measurable without historical Fundamental Service forecasts; no
 forecast-performance claim is authorized by this protocol.
 
+The full SEC response and archive-member hashes are recorded in
+`frame_manifest.json`. Compressed offline snapshots preserve the SEC header
+and every original 10-K index row, plus the 2016 Q1 10-K metadata columns used
+for SIC and incorporation-country stratification. Both source-response hashes
+and stored/unpacked artifact hashes are recorded; the manifest SHA-256 is
+`a0c1bc6bfccbf91b75b8082ed416ed993a0beb919d9a3186cfcdf538a34c203d`.
+
 ## Verification on this checkpoint
 
 | Check | Result |
 | --- | --- |
 | Parse `issue-359-cohort-protocol-v1.json` with Python's JSON parser | Exit 0; protocol schema and predeclared sample size validated. |
 | Reconcile SEC source hashes and master-index/data-set frame counts | Exit 0; 5,462 original 10-K rows, 5,338 index CIKs, 4,494 matched data-set CIKs, 3,999 US-incorporated CIKs, 844 unmatched exclusions, and 495 non-US/unknown exclusions matched the protocol. |
+| Verify retained gzip snapshots by stored and uncompressed hashes | Exit 0; both snapshots match `frame_manifest.json`, with 5,462 index 10-K rows and 4,498 data-set 10-K rows. |
 | `git diff --check` | Exit 0. |
+| Repository large-file pre-commit gate | Initial full-source gzip files exceeded the 500 KB per-file limit. The retained, hash-verified SEC row subsets are 129,471 and 120,531 bytes. |
 | Company Facts and submissions cohort capture | Not run |
 | Model-field coverage and first-subsequent labels | Not run |
 
@@ -55,7 +64,7 @@ No Docker Compose project is needed for this data-acquisition and report slice.
 
 ## Next steps
 
-1. Verify and commit the predeclared protocol checkpoint.
+1. Commit the immutable frame snapshot checkpoint.
 2. Implement deterministic frame selection, SEC snapshot capture, and an
    offline report with explicit exclusions and immutable evidence hashes.
 3. Capture the selected cohort using the local User-Agent without exposing its
