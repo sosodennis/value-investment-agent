@@ -2,6 +2,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 
 import pytest
+from fundamental_service.application.service import _approved_market_policy
 from fundamental_service.contracts import (
     IdentityV1,
     PeriodType,
@@ -9,6 +10,7 @@ from fundamental_service.contracts import (
     SourceRole,
     TraceV1,
 )
+from fundamental_service.policies import initial_policy_records
 from fundamental_service.valuation_preparation import (
     ApprovedMarketPolicyInputsV1,
     ManualProvenanceV1,
@@ -210,6 +212,28 @@ def test_complete_history_prepares_provisional_input_with_lineage_and_digest() -
         result.preparation_digest
         == _prepare(_facts(), market_policy=_market_policy()).preparation_digest
     )
+
+
+def test_released_market_policy_prepares_without_caller_assumptions() -> None:
+    policy = initial_policy_records()[0]
+    market_policy = _approved_market_policy(
+        policy,
+        valuation_timestamp=VALUATION_TIME,
+    )
+
+    result = _prepare(_facts(), market_policy=market_policy)
+
+    assert result.status == "prepared"
+    assert result.input is not None
+    risk_free = next(
+        item
+        for item in result.assumptions_evidence
+        if item.path == "assumptions.wacc.risk_free_rate"
+    )
+    assert risk_free.source_refs == (
+        "1cf8c2d38f773142b58b772bde5028d12f00dfd72bf37b40c2327e15d418ea28",
+    )
+    assert risk_free.as_of == datetime(2025, 1, 3, tzinfo=UTC)
 
 
 def test_missing_market_policy_requires_input_without_default_values() -> None:
