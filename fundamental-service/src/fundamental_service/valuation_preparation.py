@@ -937,7 +937,10 @@ def prepare_automatic_valuation(
             "approved market/policy input",
             trace=market_policy.evidence["terminal_growth"],
             policy_version=market_policy.policy_version,
-            as_of=snapshot.valuation_timestamp,
+            as_of=(
+                market_policy.evidence["terminal_growth"].as_of
+                or snapshot.valuation_timestamp
+            ),
         ),
     )
     assumptions = AssumptionsV1(
@@ -1069,7 +1072,9 @@ def prepare_automatic_valuation(
                 "released market policy input",
                 trace=market_policy.evidence[field],
                 policy_version=market_policy.policy_version,
-                as_of=snapshot.valuation_timestamp,
+                as_of=(
+                    market_policy.evidence[field].as_of or snapshot.valuation_timestamp
+                ),
             )
             for field in (
                 "risk_free_rate",

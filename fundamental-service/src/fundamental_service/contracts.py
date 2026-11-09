@@ -117,6 +117,13 @@ class IssueV1(StrictModel):
 
 class TraceV1(StrictModel):
     source_refs: tuple[str, ...] = ()
+    source_ids: tuple[str, ...] = ()
+    source_uris: tuple[str, ...] = ()
+    source_versions: tuple[str, ...] = ()
+    terms_references: tuple[str, ...] = ()
+    as_of: datetime | None = None
+    available_at: datetime | None = None
+    captured_at: datetime | None = None
     expression: str | None = None
     inputs: tuple[str, ...] = ()
     description: str | None = None
@@ -125,6 +132,116 @@ class TraceV1(StrictModel):
     def require_trace(self) -> TraceV1:
         if not self.source_refs and not self.expression and not self.description:
             raise ValueError("a trace requires source_refs, expression, or description")
+        for name, value in (
+            ("as_of", self.as_of),
+            ("available_at", self.available_at),
+            ("captured_at", self.captured_at),
+        ):
+            if value is not None and (
+                value.tzinfo is None or value.utcoffset() is None
+            ):
+                raise ValueError(f"{name} must include a timezone")
+        if (
+            self.as_of is not None
+            and self.available_at is not None
+            and self.as_of > self.available_at
+        ):
+            raise ValueError("trace cannot be available before its as_of time")
+        if (
+            self.available_at is not None
+            and self.captured_at is not None
+            and self.available_at > self.captured_at
+        ):
+            raise ValueError("trace cannot be captured before availability")
+        return self
+
+
+class MarketPolicyEvidenceV1(StrictModel):
+    """One dated, replayable source or policy reference for a market input."""
+
+    role: str = Field(min_length=1)
+    method: Literal["observed_source", "approved_policy"]
+    value: Decimal | None = None
+    source_id: str = Field(min_length=1)
+    source_uri: str = Field(min_length=1)
+    content_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    source_version: str = Field(min_length=1)
+    terms_reference: str = Field(min_length=1)
+    as_of: datetime
+    available_at: datetime
+    captured_at: datetime
+    rationale: str = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def timestamps_and_order(self) -> MarketPolicyEvidenceV1:
+        for name, value in (
+            ("as_of", self.as_of),
+            ("available_at", self.available_at),
+            ("captured_at", self.captured_at),
+        ):
+            if value.tzinfo is None or value.utcoffset() is None:
+                raise ValueError(f"{name} must include a timezone")
+        if self.as_of > self.available_at:
+            raise ValueError(
+                "market evidence cannot be available before its as_of time"
+            )
+        if self.available_at > self.captured_at:
+            raise ValueError("market evidence cannot be captured before availability")
+        return self
+
+
+class MarketPolicyInputsV1(StrictModel):
+    """Versioned service-owned WACC inputs with per-role evidence."""
+
+    policy_version: str = Field(min_length=1)
+    risk_free_rate: Decimal
+    beta: Decimal
+    equity_risk_premium: Decimal
+    pre_tax_cost_of_debt: Decimal
+    debt_weight: Decimal
+    equity_weight: Decimal
+    terminal_growth: Decimal
+    evidence: tuple[MarketPolicyEvidenceV1, ...] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def evidence_matches_policy(self) -> MarketPolicyInputsV1:
+        evidence_by_role = {item.role: item for item in self.evidence}
+        if len(evidence_by_role) != len(self.evidence):
+            raise ValueError("market policy evidence roles must be unique")
+        required = {
+            "risk_free_rate": self.risk_free_rate,
+            "beta": self.beta,
+            "equity_risk_premium": self.equity_risk_premium,
+            "pre_tax_cost_of_debt": self.pre_tax_cost_of_debt,
+            "debt_weight": self.debt_weight,
+            "equity_weight": self.equity_weight,
+            "terminal_growth": self.terminal_growth,
+        }
+        missing = tuple(role for role in required if role not in evidence_by_role)
+        if missing:
+            raise ValueError(
+                "market policy evidence is missing required roles: "
+                + ", ".join(missing)
+            )
+        mismatched = tuple(
+            role
+            for role, value in required.items()
+            if evidence_by_role[role].value != value
+        )
+        if mismatched:
+            raise ValueError(
+                "market policy evidence values do not match policy: "
+                + ", ".join(mismatched)
+            )
+        if self.debt_weight + self.equity_weight != Decimal("1"):
+            raise ValueError("market policy weights must sum to one")
+        if not all(
+            Decimal("0") <= value <= Decimal("1")
+            for value in (self.debt_weight, self.equity_weight)
+        ):
+            raise ValueError("market policy weights must be between zero and one")
+        if self.terminal_growth >= Decimal("1"):
+            raise ValueError("terminal growth must be below 100 percent")
         return self
 
 
