@@ -6,10 +6,13 @@ import hashlib
 import multiprocessing
 import os
 import queue
+import signal
 import sys
 import tempfile
 import threading
 import time
+from contextlib import contextmanager
+from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
@@ -27,12 +30,114 @@ _NON_BLOCKING_ARELLE_CODES = frozenset(
 )
 _PLUGIN_ROOT_LOCK = threading.Lock()
 _PLUGIN_ROOTS: dict[str, tuple[tempfile.TemporaryDirectory[str], Path]] = {}
+_PARSER_GATE = threading.Condition()
+_ACTIVE_PARSER_WORKERS = 0
+
+
+@dataclass(frozen=True)
+class ParserResourcePolicy:
+    """Bound the memory and concurrency of one SEC parser process."""
+
+    max_memory_bytes: int = 768 * 1024 * 1024
+    max_concurrency: int = 1
+
+    @classmethod
+    def from_env(cls) -> "ParserResourcePolicy":
+        def integer(name: str, default: int, minimum: int) -> int:
+            raw = os.getenv(name)
+            if raw is None:
+                return default
+            try:
+                value = int(raw)
+            except ValueError as error:
+                raise ArelleParserError(
+                    "PARSER_RESOURCE_POLICY_INVALID",
+                    f"{name} must be an integer",
+                ) from error
+            if value < minimum:
+                raise ArelleParserError(
+                    "PARSER_RESOURCE_POLICY_INVALID",
+                    f"{name} must be at least {minimum}",
+                )
+            return value
+
+        return cls(
+            max_memory_bytes=integer(
+                "FUNDAMENTAL_SEC_PARSER_MAX_MEMORY_BYTES",
+                768 * 1024 * 1024,
+                64 * 1024 * 1024,
+            ),
+            max_concurrency=integer(
+                "FUNDAMENTAL_SEC_PARSER_MAX_CONCURRENCY",
+                1,
+                1,
+            ),
+        )
+
+    def validate(self) -> "ParserResourcePolicy":
+        if self.max_memory_bytes < 64 * 1024 * 1024:
+            raise ArelleParserError(
+                "PARSER_RESOURCE_POLICY_INVALID",
+                "parser memory budget is below the supported minimum",
+            )
+        if self.max_concurrency < 1:
+            raise ArelleParserError(
+                "PARSER_RESOURCE_POLICY_INVALID",
+                "parser concurrency must be at least one",
+            )
+        return self
 
 
 class ArelleParserError(RuntimeError):
     def __init__(self, code: str, message: str) -> None:
         super().__init__(message)
         self.code = code
+
+
+@contextmanager
+def _parser_slot(max_concurrency: int):
+    """Fail closed when the process already owns the parser budget."""
+
+    global _ACTIVE_PARSER_WORKERS
+    with _PARSER_GATE:
+        if _ACTIVE_PARSER_WORKERS >= max_concurrency:
+            raise ArelleParserError(
+                "PARSER_CONCURRENCY_EXHAUSTED",
+                "the SEC parser concurrency budget is exhausted",
+            )
+        _ACTIVE_PARSER_WORKERS += 1
+    try:
+        yield
+    finally:
+        with _PARSER_GATE:
+            _ACTIVE_PARSER_WORKERS -= 1
+            _PARSER_GATE.notify_all()
+
+
+def _apply_worker_memory_limit(max_memory_bytes: int) -> None:
+    """Apply a child-only virtual memory ceiling before importing Arelle."""
+
+    try:
+        import resource
+    except ImportError:
+        return
+    try:
+        current_soft, current_hard = resource.getrlimit(resource.RLIMIT_AS)
+        hard_limit = min(current_hard, max_memory_bytes)
+        soft_limit = min(current_soft, max_memory_bytes)
+        if soft_limit != current_soft:
+            resource.setrlimit(resource.RLIMIT_AS, (soft_limit, current_hard))
+        if hard_limit != current_hard:
+            resource.setrlimit(resource.RLIMIT_AS, (soft_limit, hard_limit))
+    except (OSError, ValueError) as error:
+        if sys.platform == "darwin":
+            # macOS does not allow this sandbox to lower RLIMIT_AS. The worker
+            # still runs in a separate process and the concurrency gate applies.
+            return
+        raise ArelleParserError(
+            "PARSER_RESOURCE_POLICY_INVALID",
+            "the SEC parser memory budget could not be applied",
+        ) from error
 
 
 class ArelleValidationProfileV1(BaseModel):
@@ -294,10 +399,12 @@ def _parse_worker(
     taxonomy_version: str,
     taxonomy_cache_dir: str | None,
     expected_source_hash: str | None,
+    max_memory_bytes: int,
 ) -> None:
     attempted_network = 0
     bytecode_cache: tempfile.TemporaryDirectory[str] | None = None
     try:
+        _apply_worker_memory_limit(max_memory_bytes)
         bytecode_cache = tempfile.TemporaryDirectory(
             prefix="fundamental-arelle-pycache-"
         )
@@ -322,6 +429,22 @@ def _parse_worker(
             report.model_copy(
                 update={"network_attempt_count": attempted_network}
             ).model_dump(mode="json")
+        )
+    except MemoryError:
+        result_queue.put(
+            {
+                "error": "PARSER_RESOURCE_EXHAUSTED",
+                "message": "offline SEC parser exceeded its child memory budget",
+                "network_attempt_count": attempted_network,
+            }
+        )
+    except ArelleParserError as error:
+        result_queue.put(
+            {
+                "error": error.code,
+                "message": str(error),
+                "network_attempt_count": attempted_network,
+            }
         )
     except Exception as error:
         result_queue.put(
@@ -637,8 +760,10 @@ def parse_filing_offline(
     taxonomy_cache_dir: Path | None = None,
     source_content_hash: str | None = None,
     deadline_at: datetime | None = None,
+    resource_policy: ParserResourcePolicy | None = None,
 ) -> ArelleParseReportV1:
     """Parse and validate captured bytes offline under a hard worker deadline."""
+    policy = (resource_policy or ParserResourcePolicy.from_env()).validate()
     if not filing_path.is_file():
         raise ArelleParserError("FILING_BYTES_UNAVAILABLE", str(filing_path))
     if source_content_hash is not None:
@@ -655,59 +780,71 @@ def parse_filing_offline(
             "REQUEST_DEADLINE_EXCEEDED",
             "SEC acquisition deadline expired before parsing",
         )
-    ctx = multiprocessing.get_context("spawn")
-    result_queue = ctx.Queue(maxsize=1)
-    process = ctx.Process(
-        target=_parse_worker,
-        args=(
-            result_queue,
-            str(filing_path),
-            profile.model_dump(mode="json"),
-            taxonomy_version,
-            str(taxonomy_cache_dir) if taxonomy_cache_dir else None,
-            source_content_hash,
-        ),
-        daemon=True,
-    )
-    process.start()
-    monotonic_deadline = time.monotonic() + remaining
-    try:
-        result = None
-        while result is None:
-            remaining = monotonic_deadline - time.monotonic()
-            if remaining <= 0:
+    with _parser_slot(policy.max_concurrency):
+        ctx = multiprocessing.get_context("spawn")
+        result_queue = ctx.Queue(maxsize=1)
+        process = ctx.Process(
+            target=_parse_worker,
+            args=(
+                result_queue,
+                str(filing_path),
+                profile.model_dump(mode="json"),
+                taxonomy_version,
+                str(taxonomy_cache_dir) if taxonomy_cache_dir else None,
+                source_content_hash,
+                policy.max_memory_bytes,
+            ),
+            daemon=True,
+        )
+        try:
+            process.start()
+        except OSError as error:
+            raise ArelleParserError(
+                "PARSER_PROCESS_START_FAILED",
+                "offline SEC parser worker could not start",
+            ) from error
+        monotonic_deadline = time.monotonic() + remaining
+        try:
+            result = None
+            while result is None:
+                remaining = monotonic_deadline - time.monotonic()
+                if remaining <= 0:
+                    raise ArelleParserError(
+                        "REQUEST_DEADLINE_EXCEEDED",
+                        "offline SEC parser exceeded the acquisition deadline",
+                    )
+                try:
+                    result = result_queue.get(timeout=min(0.1, remaining))
+                except queue.Empty:
+                    if not process.is_alive():
+                        exit_code = process.exitcode
+                        if exit_code in {
+                            -signal.SIGKILL,
+                            -signal.SIGSEGV,
+                            -signal.SIGXCPU,
+                        }:
+                            raise ArelleParserError(
+                                "PARSER_RESOURCE_EXHAUSTED",
+                                "offline SEC parser exceeded its child resource budget",
+                            )
+                        raise ArelleParserError(
+                            "XBRL_PARSE_FAILED",
+                            "offline SEC parser exited without a result",
+                        )
+            process.join(timeout=max(0, monotonic_deadline - time.monotonic()))
+            if process.is_alive():
                 raise ArelleParserError(
                     "REQUEST_DEADLINE_EXCEEDED",
                     "offline SEC parser exceeded the acquisition deadline",
                 )
-            try:
-                result = result_queue.get(timeout=min(0.1, remaining))
-            except queue.Empty:
-                if not process.is_alive():
-                    exit_code = process.exitcode
-                    exit_detail = (
-                        f" (worker exit code {exit_code})"
-                        if exit_code is not None
-                        else ""
-                    )
-                    raise ArelleParserError(
-                        "XBRL_PARSE_FAILED",
-                        "offline SEC parser exited without a result" + exit_detail,
-                    )
-        process.join(timeout=max(0, monotonic_deadline - time.monotonic()))
-        if process.is_alive():
-            raise ArelleParserError(
-                "REQUEST_DEADLINE_EXCEEDED",
-                "offline SEC parser exceeded the acquisition deadline",
-            )
-    finally:
-        if process.is_alive():
-            process.terminate()
-            process.join(timeout=0.2)
-            if process.is_alive() and hasattr(process, "kill"):
-                process.kill()
+        finally:
+            if process.is_alive():
+                process.terminate()
                 process.join(timeout=0.2)
-        result_queue.close()
+                if process.is_alive() and hasattr(process, "kill"):
+                    process.kill()
+                    process.join(timeout=0.2)
+            result_queue.close()
     if result.get("network_attempt_count", 0) != 0:
         raise ArelleParserError(
             "OFFLINE_NETWORK_ATTEMPT",

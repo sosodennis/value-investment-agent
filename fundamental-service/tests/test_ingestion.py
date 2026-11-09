@@ -15,7 +15,7 @@ from fundamental_service.arelle_parser import (
     ParsedXbrlFactV1,
     _directory_hash,
 )
-from fundamental_service.contracts import IdentityV1
+from fundamental_service.contracts import IdentityV1, Severity
 from fundamental_service.facts import (
     CanonicalMappingV1,
     FilesystemCanonicalFactRepository,
@@ -138,7 +138,13 @@ def test_sec_ingestion_connects_adapter_snapshot_parser_and_fact_selection(
     parser_state = {"semantic_mismatch": False, "blocking": False}
 
     def fake_parser(
-        path, *, profile, taxonomy_version, taxonomy_cache_dir, source_content_hash
+        path,
+        *,
+        profile,
+        taxonomy_version,
+        taxonomy_cache_dir,
+        source_content_hash,
+        deadline_at=None,
     ):
         value = (
             "391035000001"
@@ -331,6 +337,33 @@ def test_sec_ingestion_connects_adapter_snapshot_parser_and_fact_selection(
     )
     raw_hash = hashlib.sha256(filing_bytes).hexdigest()
     assert content_store.get(raw_hash, media_type="text/html") == filing_bytes
+
+    parser_state["blocking"] = False
+    missing_field_mapping = ingestion_args["mapping"].model_copy(
+        update={
+            "decision_id": "map-missing-field-v1",
+            "normalized_field": "cash_and_equivalents",
+            "source_concept": "us-gaap:CashAndCashEquivalentsAtCarryingValue",
+        }
+    )
+    prepare_args = {
+        key: value
+        for key, value in ingestion_args.items()
+        if key not in {"normalized_field", "mapping"}
+    }
+    prepare_args.update(
+        {
+            "acquisition_key": "b" * 64,
+            "policy_version": "source-policy-missing-field-v1",
+            "mappings": (ingestion_args["mapping"], missing_field_mapping),
+        }
+    )
+    missing_field_result = service.prepare_filing(**prepare_args)
+    missing_field_issue = next(
+        issue for issue in missing_field_result.issues if issue.code == "FACT_NOT_FOUND"
+    )
+    assert missing_field_result.missing_fields == ("cash_and_equivalents",)
+    assert missing_field_issue.severity is Severity.ERROR
 
 
 def test_sec_ingestion_publishes_aapl_with_archived_graphics_staged_offline(
