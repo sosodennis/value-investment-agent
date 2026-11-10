@@ -309,7 +309,16 @@ class AnalysisRuntimeService:
                 )
                 for event in claimed.events:
                     await self.hub.publish(event)
+            history = await self.repository.get_run_history(
+                principal_id=principal_id,
+                organization_id=claimed.organization_id,
+                thread_id=identity.thread_id,
+                run_id=identity.run_id,
+            )
+            if history is None:
+                raise RunNotFoundError("run was not found")
             resume_input = {
+                **(history.input_data or {}),
                 "interrupt_response": response.model_dump(mode="json"),
                 "resuming_activity_id": identity.activity_id,
                 "resuming_scope_path": list(claimed.scope_path),
@@ -335,7 +344,20 @@ class AnalysisRuntimeService:
             thread_id = item.identity.thread_id
             if thread_id in self._tasks and not self._tasks[thread_id].done():
                 continue
+            history = await self.repository.get_run_history(
+                principal_id=item.principal_id,
+                organization_id=item.organization_id,
+                thread_id=thread_id,
+                run_id=item.identity.run_id,
+            )
+            if history is None:
+                logger.warning(
+                    "pending resume has no owned run history",
+                    extra={"thread_id": thread_id, "run_id": item.identity.run_id},
+                )
+                continue
             resume_input = {
+                **(history.input_data or {}),
                 "interrupt_response": item.response.model_dump(mode="json"),
                 "resuming_activity_id": item.identity.activity_id,
                 "resuming_scope_path": list(item.scope_path),

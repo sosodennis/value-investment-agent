@@ -208,6 +208,15 @@ export interface FundamentalManualProvenance {
     modified_at: string;
     reason: string;
     automatic_preparation_digest: string;
+    forward_reference?: FundamentalForwardReferenceProvenance;
+}
+
+export interface FundamentalForwardReferenceProvenance {
+    claim_id: string;
+    source_url: string;
+    source_content_hash: string;
+    citation: string;
+    license_reference: string;
 }
 
 export interface FundamentalAssumptionEvidence {
@@ -237,6 +246,7 @@ export interface FundamentalAutomaticPreparation {
     missing_evidence: string[];
     historical_metrics: Record<string, unknown>;
     assumptions_evidence: FundamentalAssumptionEvidence[];
+    assumptions_evidence_truncated?: number;
     input: Record<string, unknown> | null;
     preparation_digest: string;
 }
@@ -381,7 +391,39 @@ const parseManualProvenance = (
     context: string
 ): FundamentalManualProvenance => {
     const record = parseRecord(value, context);
-    return {
+    const forwardReferenceValue = record.forward_reference;
+    const forwardReference =
+        forwardReferenceValue === undefined || forwardReferenceValue === null
+            ? undefined
+            : (() => {
+                  const reference = parseRecord(
+                      forwardReferenceValue,
+                      `${context}.forward_reference`
+                  );
+                  return {
+                      claim_id: parseString(
+                          reference.claim_id,
+                          `${context}.forward_reference.claim_id`
+                      ),
+                      source_url: parseString(
+                          reference.source_url,
+                          `${context}.forward_reference.source_url`
+                      ),
+                      source_content_hash: parseDigest(
+                          reference.source_content_hash,
+                          `${context}.forward_reference.source_content_hash`
+                      ),
+                      citation: parseString(
+                          reference.citation,
+                          `${context}.forward_reference.citation`
+                      ),
+                      license_reference: parseString(
+                          reference.license_reference,
+                          `${context}.forward_reference.license_reference`
+                      ),
+                  } satisfies FundamentalForwardReferenceProvenance;
+              })();
+    const parsed: FundamentalManualProvenance = {
         author: parseString(record.author, `${context}.author`),
         modified_at: parseTimestamp(record.modified_at, `${context}.modified_at`),
         reason: parseString(record.reason, `${context}.reason`),
@@ -390,6 +432,8 @@ const parseManualProvenance = (
             `${context}.automatic_preparation_digest`
         ),
     };
+    if (forwardReference !== undefined) parsed.forward_reference = forwardReference;
+    return parsed;
 };
 
 const parseAssumptionEvidence = (
@@ -423,6 +467,14 @@ const parseAssumptionEvidence = (
     return parsed;
 };
 
+const isAssumptionsEvidenceTruncationMarker = (
+    value: unknown,
+): value is { truncated_count: number } => {
+    if (!isRecord(value) || Object.keys(value).length !== 1) return false;
+    const count = value.truncated_count;
+    return typeof count === 'number' && Number.isInteger(count) && count >= 0;
+};
+
 const parseAutomaticPreparation = (
     value: unknown,
     context: string
@@ -436,7 +488,10 @@ const parseAutomaticPreparation = (
     if (!Array.isArray(evidenceRaw)) {
         throw new TypeError(`${context}.assumptions_evidence must be an array.`);
     }
-    return {
+    const truncationMarker = evidenceRaw.find(isAssumptionsEvidenceTruncationMarker);
+    const assumptionsEvidence = evidenceRaw.filter((item) => item !== truncationMarker);
+    const assumptionsEvidenceTruncated = truncationMarker?.truncated_count;
+    const parsed: FundamentalAutomaticPreparation = {
         contract_version: 'fundamental.v1',
         status: parseAutomaticPreparationStatus(record.status, `${context}.status`),
         model_id: parseString(record.model_id, `${context}.model_id`),
@@ -452,12 +507,16 @@ const parseAutomaticPreparation = (
         issue_codes: parseStringArray(record.issue_codes ?? [], `${context}.issue_codes`),
         missing_evidence: parseStringArray(record.missing_evidence ?? [], `${context}.missing_evidence`),
         historical_metrics: parseRecord(record.historical_metrics, `${context}.historical_metrics`),
-        assumptions_evidence: evidenceRaw.map((item, index) =>
+        assumptions_evidence: assumptionsEvidence.map((item, index) =>
             parseAssumptionEvidence(item, `${context}.assumptions_evidence[${index}]`)
         ),
         input,
         preparation_digest: parseDigest(record.preparation_digest, `${context}.preparation_digest`),
     };
+    if (assumptionsEvidenceTruncated !== undefined && assumptionsEvidenceTruncated > 0) {
+        parsed.assumptions_evidence_truncated = assumptionsEvidenceTruncated;
+    }
+    return parsed;
 };
 
 export const parseFundamentalAutomaticPreparation = (

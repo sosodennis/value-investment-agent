@@ -22,6 +22,11 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/cn';
 import type { InteractionResponse, WorkflowInteraction } from '@/features/workflow';
 import { FundamentalReviewPanel } from './outputs/fundamental-analysis/FundamentalReviewPanel';
+import type {
+    ForwardEvidenceManualOverride,
+    ForwardEvidenceResearchRequest,
+    ForwardEvidenceReview,
+} from './outputs/fundamental-analysis/forward-evidence-api';
 
 type WorkspaceOutputPanelProps = {
     agent: AgentInfo;
@@ -34,6 +39,11 @@ type WorkspaceOutputPanelProps = {
     onResumeInteraction?: (interaction: WorkflowInteraction, response: InteractionResponse) => Promise<void>;
     isSubmitting?: boolean;
     onRecalculate?: (manualOverride: Record<string, unknown>) => void;
+    forwardEvidence?: ForwardEvidenceReview | null;
+    isResearchingForwardEvidence?: boolean;
+    researchError?: string | null;
+    onResearchForwardEvidence?: (request: ForwardEvidenceResearchRequest) => Promise<void>;
+    onApplyForwardEvidence?: (override: ForwardEvidenceManualOverride) => void;
 };
 
 export function WorkspaceOutputPanel({
@@ -47,6 +57,11 @@ export function WorkspaceOutputPanel({
     onResumeInteraction,
     isSubmitting = false,
     onRecalculate,
+    forwardEvidence = null,
+    isResearchingForwardEvidence = false,
+    researchError = null,
+    onResearchForwardEvidence,
+    onApplyForwardEvidence,
 }: WorkspaceOutputPanelProps) {
     const viewModel = adaptAgentOutput(
         agent.id,
@@ -78,6 +93,11 @@ export function WorkspaceOutputPanel({
                 onResumeInteraction={onResumeInteraction}
                 isSubmitting={isSubmitting}
                 onRecalculate={onRecalculate}
+                    forwardEvidence={forwardEvidence}
+                    isResearchingForwardEvidence={isResearchingForwardEvidence}
+                    researchError={researchError}
+                    onResearchForwardEvidence={onResearchForwardEvidence}
+                    onApplyForwardEvidence={onApplyForwardEvidence}
                 />
             );
             break;

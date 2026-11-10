@@ -13,6 +13,7 @@ from fundamental_service.contracts import (
 from fundamental_service.policies import initial_policy_records
 from fundamental_service.valuation_preparation import (
     ApprovedMarketPolicyInputsV1,
+    ForwardReferenceProvenanceV1,
     ManualProvenanceV1,
     PreparationError,
     apply_manual_override,
@@ -421,6 +422,39 @@ def test_manual_override_preserves_automatic_evidence_and_changes_digests() -> N
     assert len(manual) == 1
     assert manual[0].manual_provenance == provenance
     assert "MANUAL_OVERRIDE_APPLIED" in overridden.issue_codes
+
+
+def test_manual_override_retains_selected_forward_reference_provenance() -> None:
+    automatic = _prepare(_facts(), market_policy=_market_policy())
+    path = "assumptions.forecast.operating_margin[0]"
+    provenance = ManualProvenanceV1(
+        author="reviewer-1",
+        modified_at=datetime(2026, 3, 2, tzinfo=UTC),
+        reason="applied issuer guidance after review",
+        automatic_preparation_digest=automatic.preparation_digest,
+        forward_reference=ForwardReferenceProvenanceV1(
+            claim_id="claim-1",
+            source_url="https://issuer.example/guidance",
+            source_content_hash="a" * 64,
+            citation="Management expects operating margin to improve in fiscal 2027.",
+            license_reference="issuer-terms-v1",
+        ),
+    )
+
+    overridden = apply_manual_override(
+        automatic,
+        path=path,
+        value=Decimal("0.24"),
+        provenance=provenance,
+    )
+
+    manual = tuple(
+        item for item in overridden.assumptions_evidence if item.method == "manual"
+    )
+    assert len(manual) == 1
+    assert manual[0].manual_provenance is not None
+    assert manual[0].manual_provenance.forward_reference == provenance.forward_reference
+    assert manual[0].source_refs == ("a" * 64,)
 
 
 def test_manual_override_rejects_wrong_automatic_digest_or_unsupported_path() -> None:

@@ -230,14 +230,19 @@ def success_response(
     )
 
 
-def readiness_response(*, ready: bool) -> JSONResponse:
+def readiness_response(
+    *, ready: bool, capabilities: Mapping[str, bool] | None = None
+) -> JSONResponse:
     body = InternalReadiness(
         status=ReadinessStatus.READY if ready else ReadinessStatus.NOT_READY,
         contract_version=INTERNAL_CONTRACT_VERSION,
     )
+    payload = body.model_dump(mode="json")
+    if capabilities is not None:
+        payload["capabilities"] = dict(capabilities)
     return JSONResponse(
         status_code=200 if ready else 503,
-        content=body.model_dump(mode="json"),
+        content=payload,
     )
 
 

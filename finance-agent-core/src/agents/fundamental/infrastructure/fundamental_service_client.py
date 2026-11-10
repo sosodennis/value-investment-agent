@@ -26,6 +26,7 @@ from src.agents.fundamental.application.fundamental_service_port import (
 )
 from src.agents.fundamental.interface.fundamental_service_contracts import (
     FundamentalFactsReadResultV1,
+    FundamentalForwardEvidenceReviewResultV1,
     FundamentalIdentityResolutionRequestV1,
     FundamentalIdentityResolutionV1,
     FundamentalServiceErrorV1,
@@ -52,6 +53,7 @@ _OPERATION_PATHS: dict[FundamentalOperation, str] = {
     "read_valuation_evidence": "/v1/valuation/evidence/facts",
     "prepare_valuation": "/v1/valuation/prepare",
     "override_prepared_valuation": "/v1/valuation/prepare/override",
+    "review_forward_evidence": "/v1/valuation/forward-evidence/review",
     "validate": "/v1/valuation/validate",
     "validate_with_policy": "/v1/valuation/validate-with-policy",
     "calculate": "/v1/valuation/calculate",
@@ -378,6 +380,35 @@ class HttpFundamentalServiceClient:
             raise FundamentalServiceFailure(
                 "UPSTREAM_MALFORMED",
                 "Fundamental service returned invalid valuation evidence",
+                retryable=False,
+                status_code=502,
+            ) from exc
+
+    async def review_forward_evidence(
+        self,
+        input_payload: Mapping[str, object],
+        *,
+        principal: InternalPrincipal,
+        correlation_id: str,
+        deadline_at: datetime,
+    ) -> FundamentalForwardEvidenceReviewResultV1:
+        """Ask Fundamental Service to review an explicitly selected reference."""
+
+        response = await self.execute(
+            "review_forward_evidence",
+            input_payload,
+            principal=principal,
+            correlation_id=correlation_id,
+            deadline_at=deadline_at,
+        )
+        try:
+            return FundamentalForwardEvidenceReviewResultV1.model_validate(
+                response.result
+            )
+        except ValidationError as exc:
+            raise FundamentalServiceFailure(
+                "UPSTREAM_MALFORMED",
+                "Fundamental service returned invalid forward evidence",
                 retryable=False,
                 status_code=502,
             ) from exc

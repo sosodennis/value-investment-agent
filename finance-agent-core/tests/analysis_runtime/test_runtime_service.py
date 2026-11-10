@@ -688,7 +688,13 @@ async def test_claimed_resume_recovers_after_runtime_restart() -> None:
     run_id = await service.start(
         principal_id="user",
         thread_id="thread",
-        input_data={"message": "Apple"},
+        input_data={
+            "message": "Apple",
+            "valuation_request": {
+                "model_id": "fcff_dcf",
+                "requested_as_of": "2026-11-10T00:55:00Z",
+            },
+        },
     )
     await asyncio.sleep(0)
     await asyncio.sleep(0)
@@ -718,6 +724,10 @@ async def test_claimed_resume_recovers_after_runtime_restart() -> None:
     assert recovery_runner.calls[0]["input_data"]["interrupt_response"] == {
         "type": "ticker_selection",
         "selected_symbol": "AAPL",
+    }
+    assert recovery_runner.calls[0]["input_data"]["valuation_request"] == {
+        "model_id": "fcff_dcf",
+        "requested_as_of": "2026-11-10T00:55:00Z",
     }
     assert (await repository.get_run(thread_id="thread")).status == "completed"
     assert await repository.pending_resumes() == ()
@@ -773,6 +783,48 @@ async def test_versioned_approval_resumes_once_and_rejects_stale_duplicate() -> 
             principal_id="user", identity=interaction.identity, response=response
         )
     assert len(runner.calls) == 2
+
+
+@pytest.mark.asyncio
+async def test_ticker_resume_preserves_original_valuation_request() -> None:
+    repository = InMemoryActivityRepository()
+    runner = InterruptingRunner()
+    service = AnalysisRuntimeService(
+        repository=repository,
+        owner=Owner(),
+        runner=runner,
+    )
+    valuation_request = {
+        "model_id": "fcff_dcf",
+        "requested_as_of": "2026-11-10T00:55:00Z",
+    }
+    run_id = await service.start(
+        principal_id="user",
+        thread_id="thread",
+        input_data={"message": "Apple", "valuation_request": valuation_request},
+    )
+    await service._tasks["thread"]
+    waiting = await service.snapshot(
+        principal_id="user", thread_id="thread", run_id=run_id
+    )
+    interaction = waiting.pending_interactions[0]
+
+    await service.resume(
+        principal_id="user",
+        identity=interaction.identity,
+        response=TickerSelectionResponse(
+            type="ticker_selection", selected_symbol="AAPL"
+        ),
+    )
+    await service._tasks["thread"]
+
+    resumed_input = runner.calls[1]["input_data"]
+    assert resumed_input["message"] == "Apple"
+    assert resumed_input["valuation_request"] == valuation_request
+    assert resumed_input["interrupt_response"] == {
+        "type": "ticker_selection",
+        "selected_symbol": "AAPL",
+    }
 
 
 @pytest.mark.asyncio

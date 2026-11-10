@@ -1,0 +1,110 @@
+{
+  "schema_version": 1,
+  "issue": 355,
+  "status": "VERIFIED",
+  "branch": "codex/issue-355-forward-reference",
+  "commit": "4ba8a27462242cd609016a8ebd26bc9eeaeaeade",
+  "sec_identity_required": true,
+  "runtime": {
+    "worktree": "/Users/denniswong/.codex/worktrees/issue-355-forward-reference/value-investment-agent",
+    "browser_session": "issue355-20261109235229-4ca4df",
+    "allowed_untracked_paths": [],
+    "app": {
+      "compose_project": "value-investment-agent-355-forward-reference",
+      "compose_files": [
+        "docker-compose.yml",
+        "docker-compose.override.yml",
+        "compose/verification/docker-compose.issue325-app-fundamental.yml"
+      ],
+      "env_file": "/Users/denniswong/Desktop/Project/value-investment-agent/.env",
+      "env_file_sha256": "109d06ea7c283f84f03e947699271a5d7d976ab01b2e8d480b036659924b29ec",
+      "service": "backend",
+      "container_port": 8000,
+      "published_port": 18880,
+      "url": "http://127.0.0.1:18880"
+    },
+    "fundamental": {
+      "compose_project": "value-investment-agent-355-forward-reference-fundamental",
+      "compose_files": [
+        "compose/verification/docker-compose.issue280-operations.yml",
+        "compose/verification/docker-compose.issue312-sec-ingestion.yml"
+      ],
+      "env_file": "/Users/denniswong/Desktop/Project/value-investment-agent/.env",
+      "env_file_sha256": "109d06ea7c283f84f03e947699271a5d7d976ab01b2e8d480b036659924b29ec",
+      "service": "fundamental-service",
+      "container_port": 8080,
+      "published_port": 18890,
+      "url": "http://127.0.0.1:18890"
+    }
+  },
+  "readiness": {
+    "status": "ready",
+    "capabilities": {
+      "identity_resolution_configured": true
+    }
+  },
+  "checks": [
+    {
+      "name": "application_health",
+      "status": "pass",
+      "command": "curl --fail http://127.0.0.1:18880/health"
+    },
+    {
+      "name": "fundamental_readiness",
+      "status": "pass",
+      "command": "curl --fail http://127.0.0.1:18890/readyz"
+    },
+    {
+      "name": "acceptance_preflight",
+      "status": "pass",
+      "command": "ACCEPTANCE_MANIFEST=docs/acceptance/issue-355-runtime.json scripts/acceptance_preflight.sh (exit 0; exact implementation commit is 6dfa627bfca9e066a528a0fb1e0f05b2df2a8dcf)"
+    },
+    {
+      "name": "browser_acceptance",
+      "status": "pass",
+      "command": "Browser tab 8, run 578f54e1-a079-4d61-8038-4eb2457c3d1a: explicit Research evidence action returned 200 with typed LLM_PROVIDER_FAILURE and no baseline mutation"
+    },
+    {
+      "name": "agent_core_forward_evidence_tests",
+      "status": "pass",
+      "command": "uv run --project finance-agent-core pytest finance-agent-core/tests/agents/fundamental/test_forward_evidence_research.py -q (7 passed)"
+    },
+    {
+      "name": "fundamental_service_forward_evidence_tests",
+      "status": "pass",
+      "command": "uv run --project fundamental-service pytest fundamental-service/tests/test_forward_evidence.py -q (6 passed)"
+    },
+    {
+      "name": "frontend_forward_evidence_tests",
+      "status": "pass",
+      "command": "npm run test -- --run src/features/workspace/outputs/fundamental-analysis/forward-evidence-api.test.ts (39 passed)"
+    },
+    {
+      "name": "frontend_typecheck",
+      "status": "pass",
+      "command": "npm run typecheck"
+    },
+    {
+      "name": "ruff_changed_python",
+      "status": "pass",
+      "command": "uv run --project finance-agent-core ruff check finance-agent-core/src/agents/fundamental/capabilities/forward_evidence/contracts.py finance-agent-core/tests/agents/fundamental/test_forward_evidence_research.py"
+    },
+    {
+      "name": "architecture_guard",
+      "status": "pass",
+      "command": "python3 scripts/architecture_guard.py"
+    },
+    {
+      "name": "contract_generation",
+      "status": "pass",
+      "command": "bash scripts/generate-contracts.sh; generated artifacts unchanged"
+    },
+    {
+      "name": "github_required_ci",
+      "status": "pass",
+      "command": "PR #368 required checks: 11 passed on head 4ba8a27462242cd609016a8ebd26bc9eeaeaeade"
+    }
+  ],
+  "blockers": [],
+  "next_step": "Rerun exact preflight, restore PR #368 to ready, complete any required review, merge to main, verify the merge commit, close #355, and clean up resources."
+}

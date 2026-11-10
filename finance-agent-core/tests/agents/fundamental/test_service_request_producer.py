@@ -267,8 +267,7 @@ def _request() -> dict[str, object]:
 
 def _compact_request() -> dict[str, object]:
     return {
-        "assumptions": {"trace": {"description": "caller-owned"}},
-        "uncertainty": {"mode": "none"},
+        "model_id": "fcff_dcf",
         "requested_as_of": "2026-11-07T00:00:00Z",
     }
 

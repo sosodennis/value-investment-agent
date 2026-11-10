@@ -60,6 +60,7 @@ from fundamental_service.policies import (
 from fundamental_service.replay import ArtifactStore, replay_calculation
 from fundamental_service.serialization import sha256_digest
 from fundamental_service.snapshots import FilesystemContentStore
+from fundamental_service.source_acquisition import SecIdentityResolutionUseCase
 from fundamental_service.testsupport import (
     TEST_SERVICE_TOKEN,
     auth_headers,
@@ -399,6 +400,35 @@ def test_readiness_distinguishes_missing_snapshot_dependency():
     assert client.get("/readyz").json() == {
         "contract_version": "internal.v1",
         "status": "not_ready",
+        "capabilities": {"identity_resolution_configured": False},
+    }
+
+
+def test_readiness_reports_configured_identity_resolution(tmp_path: Path):
+    identity_resolution = SecIdentityResolutionUseCase(
+        adapter=object(),
+        metadata=object(),
+        content_store=object(),
+        authorized_organizations=frozenset(),
+    )
+    client = TestClient(
+        create_app(
+            _SnapshotRepository(),
+            ArtifactStore(tmp_path / "artifacts"),
+            FilesystemContentStore(tmp_path / "content"),
+            fact_repository=_FactRepository(),
+            config=OperationsConfig(service_token=TEST_SERVICE_TOKEN),
+            identity_resolution=identity_resolution,
+        )
+    )
+
+    response = client.get("/readyz")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "contract_version": "internal.v1",
+        "status": "ready",
+        "capabilities": {"identity_resolution_configured": True},
     }
 
 
@@ -1366,7 +1396,11 @@ def test_liveness_is_public_and_readiness_requires_all_runtime_dependencies(
     assert client.get("/livez").status_code == 200
     ready = client.get("/readyz")
     assert ready.status_code == 200
-    assert ready.json() == {"contract_version": "internal.v1", "status": "ready"}
+    assert ready.json() == {
+        "contract_version": "internal.v1",
+        "status": "ready",
+        "capabilities": {"identity_resolution_configured": False},
+    }
 
 
 def test_production_readiness_requires_deployment_model_trust_roots(tmp_path: Path):

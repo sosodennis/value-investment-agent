@@ -305,6 +305,8 @@ class LangGraphRunner(GraphRunner):
             resuming_attempt = 0
         if checkpoint is not None:
             graph_input: Command[object] | dict[str, object] | None = None
+        elif isinstance(interrupt_response, Mapping):
+            graph_input = Command(resume=dict(interrupt_response))
         elif isinstance(message, str) and message:
             graph_input: Command[object] | dict[str, object] = {
                 "messages": [HumanMessage(content=message)],
@@ -317,8 +319,6 @@ class LangGraphRunner(GraphRunner):
                 "workflow_activity_updates": None,
                 "error_logs": None,
             }
-        elif isinstance(interrupt_response, Mapping):
-            graph_input = Command(resume=dict(interrupt_response))
         else:
             graph_input = {}
 

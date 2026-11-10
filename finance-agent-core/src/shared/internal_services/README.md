@@ -100,7 +100,7 @@ for service-owned overload, and 5xx for unavailable or internal failures.
 ## Readiness
 
 Each service exposes unauthenticated `GET /readyz` on its private service
-network. It returns HTTP 200 and this body only after the service can accept its
+network. It returns HTTP 200 and this base body only after the service can accept its
 documented operations:
 
 ```json
@@ -109,9 +109,11 @@ documented operations:
 
 Before then it returns HTTP 503 with `status: "not_ready"`. Services own the
 readiness conditions: for example, model load and warmup belong to inference;
-provider control-plane dependencies belong to the LLM service. Keep liveness
-separate from readiness and do not expose credentials, provider state, or
-deployment internals in either response.
+provider control-plane dependencies belong to the LLM service. A service may add
+non-secret, service-owned capability fields when callers need to distinguish
+configured functionality from process health. Keep liveness separate from
+readiness and do not expose credentials, provider state, or deployment internals
+in either response.
 
 ## Backend call pattern
 

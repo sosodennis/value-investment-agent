@@ -68,6 +68,79 @@ Run tests that exercise behavior at the layer that owns it. Run type checks, lin
 
 Verify the exact commit that will merge. If the pull request changes after a check, rerun affected checks. Do not reuse evidence from an older commit. If a required acceptance criterion needs deployment, track deployment as a separate release or rollout issue unless deployment is explicitly part of the issue's outcome.
 
+## Record one canonical runtime tuple
+
+Every issue acceptance run must record one canonical runtime tuple and re-read it before every resume and before acceptance. The tuple is the join key between the GitHub issue, the exact commit, the Compose stacks, and the browser session. Do not infer any field from memory or from a stale browser tab.
+
+Record these fields without secrets:
+
+| Field | Required value |
+| --- | --- |
+| Worktree path | Absolute path used by the acceptance commands |
+| Branch | Exact issue branch name |
+| Verified implementation commit SHA | Exact implementation commit checked by the run; later commits may contain acceptance metadata only |
+| Application Compose project | Explicit `docker compose -p` project name |
+| Fundamental Compose project | Explicit project name, even when the app stack is separate |
+| Compose files and overlays | Ordered `-f` list for each project |
+| Env-file paths and SHA-256 | Exact `--env-file` paths plus a SHA-256 of each file, never their contents |
+| Published host ports | Values reported by `docker compose ... port` |
+| Application base URL | Derived from the current backend binding |
+| Fundamental service URL | Derived from the current Fundamental binding |
+| Browser session/tab identity | Fresh tab/session identifier for this runtime tuple |
+| Preflight command and result | Command, exit code, and the exact commit it checked |
+| Runtime-only overrides | Explicit relative paths allowed by `ALLOWED_UNTRACKED_PATHS`, never commit evidence |
+
+For a typical two-stack acceptance, validate both configurations before starting services:
+
+```sh
+docker compose --env-file "$APP_ENV_FILE" -p "$APP_COMPOSE_PROJECT" \
+  -f docker-compose.yml -f docker-compose.override.yml config --quiet
+docker compose --env-file "$FUNDAMENTAL_ENV_FILE" -p "$FUNDAMENTAL_COMPOSE_PROJECT" \
+  -f compose/verification/docker-compose.issue280-operations.yml \
+  -f compose/verification/docker-compose.issue312-sec-ingestion.yml config --quiet
+docker compose --env-file "$APP_ENV_FILE" -p "$APP_COMPOSE_PROJECT" \
+  -f docker-compose.yml -f docker-compose.override.yml port backend 8000
+docker compose --env-file "$FUNDAMENTAL_ENV_FILE" -p "$FUNDAMENTAL_COMPOSE_PROJECT" \
+  -f compose/verification/docker-compose.issue280-operations.yml \
+  -f compose/verification/docker-compose.issue312-sec-ingestion.yml port fundamental-service 8080
+```
+
+Use `scripts/acceptance_preflight.sh` with the recorded tuple. It checks the worktree, branch, tested implementation commit, clean status when required, env-file SHA-256, required Compose variables, shell overrides, required SEC asset paths, Compose configuration, running services, published ports, application `/health`, and Fundamental `/readyz`. For SEC-backed acceptance set `REQUIRE_SEC_IDENTITY_RESOLUTION=1`; the preflight then requires the SEC ingestion overlay, a non-placeholder SEC contact, and the `identity_resolution_configured` readiness capability. A healthy container alone is not feature acceptance.
+
+Store the tuple in `docs/acceptance/issue-<issue>-runtime.json` and run the preflight from that manifest:
+
+```sh
+ACCEPTANCE_MANIFEST=docs/acceptance/issue-355-runtime.json \
+  scripts/acceptance_preflight.sh
+```
+
+When the isolated stack is not already running, use the same gate to start it
+from the recorded tuple and then verify it:
+
+```sh
+ACCEPTANCE_MANIFEST=docs/acceptance/issue-355-runtime.json \
+START_ACCEPTANCE_STACK=1 ACCEPTANCE_BUILD=1 \
+  scripts/acceptance_preflight.sh
+```
+
+This command is the preferred entrypoint for a resumed acceptance run. It
+validates Git and Compose configuration before starting anything, uses the
+recorded projects, files, env paths, and ports, then checks service health and
+feature readiness against those same values.
+
+The manifest validator rejects missing fields, stale URL/port pairs, changed
+env-file digests, sensitive values, missing SEC overlays, and a `VERIFIED`
+status without passing checks. The required `contract-policy` workflow runs the
+same policy on issue branches; a WIP or `BLOCKED` PR must remain draft. A
+`VERIFIED` manifest records the exact implementation commit that was tested;
+the PR head must descend from that commit and any later commits must change
+acceptance metadata only. A PR cannot use a closing keyword until that policy
+passes.
+
+Exact-commit mode rejects tracked changes and every untracked path by default. If a runtime-only override is required, list its exact relative path in `ALLOWED_UNTRACKED_PATHS` and record that path in the tuple. The override remains runtime input and is never evidence that the commit contains the configuration.
+
+Treat a changed Compose project, port, env-file, overlay, or browser session as a new runtime tuple. Open a fresh browser tab after that change and update the recorded URL; never reload a tab that still points at the old port.
+
 ## Protect `main` and keep CI usable
 
 Configure a GitHub ruleset for `main` that requires pull requests and the repository's passing contract checks. Block force pushes and deletion. Apply the rules to administrators where the repository plan supports it. Protect the default branch before relying on this document as a merge gate.

@@ -190,6 +190,7 @@ class ManualProvenanceV1(StrictModel):
     modified_at: datetime
     reason: str = Field(min_length=1)
     automatic_preparation_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    forward_reference: "ForwardReferenceProvenanceV1 | None" = None
 
     @model_validator(mode="after")
     def timestamp_has_timezone(self) -> ManualProvenanceV1:
@@ -198,7 +199,18 @@ class ManualProvenanceV1(StrictModel):
         return self
 
 
+class ForwardReferenceProvenanceV1(StrictModel):
+    """Citation retained when a user applies optional forward evidence."""
+
+    claim_id: str = Field(min_length=1)
+    source_url: str = Field(min_length=1, max_length=2048)
+    source_content_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    citation: str = Field(min_length=20, max_length=8192)
+    license_reference: str = Field(min_length=1, max_length=2048)
+
+
 AssumptionEvidenceV1.model_rebuild()
+ManualProvenanceV1.model_rebuild()
 
 
 class AutomaticValuationPreparationV1(StrictModel):
@@ -662,6 +674,11 @@ def apply_manual_override(
             "value": value,
             "method": "manual",
             "formula": f"manual override of {path}",
+            "source_refs": (
+                (provenance.forward_reference.source_content_hash,)
+                if provenance.forward_reference is not None
+                else automatic[0].source_refs
+            ),
             "manual_provenance": provenance,
         }
     )
@@ -1430,6 +1447,7 @@ __all__ = [
     "ApprovedMarketPolicyInputsV1",
     "AssumptionEvidenceV1",
     "AutomaticValuationPreparationV1",
+    "ForwardReferenceProvenanceV1",
     "HistoricalMetricV1",
     "HistoricalMetricsV1",
     "ManualProvenanceV1",

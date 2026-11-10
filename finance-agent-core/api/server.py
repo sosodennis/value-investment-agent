@@ -12,6 +12,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import JSONResponse
 
+from src.agents.fundamental.entrypoint import (
+    fundamental_forward_evidence_router,
+)
 from src.analysis_runtime.application.ports import OwnerPort
 from src.analysis_runtime.application.runtime_service import AnalysisRuntimeService
 from src.analysis_runtime.application.wiring import build_analysis_runtime_service
@@ -161,6 +164,7 @@ app.include_router(provider_keys_router)
 app.include_router(llm_settings_router)
 app.include_router(search_settings_router)
 app.include_router(analysis_runtime_router)
+app.include_router(fundamental_forward_evidence_router)
 app.include_router(dashboard_router)
 app.include_router(observability_router)
 app.include_router(client_debug_router)

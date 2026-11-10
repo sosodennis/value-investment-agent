@@ -8,6 +8,7 @@ from typing import Literal, Protocol
 
 from src.agents.fundamental.interface.fundamental_service_contracts import (
     FundamentalFactsReadResultV1,
+    FundamentalForwardEvidenceReviewResultV1,
     FundamentalIdentityResolutionRequestV1,
     FundamentalIdentityResolutionV1,
     FundamentalServiceResponseV1,
@@ -24,6 +25,7 @@ FundamentalOperation = Literal[
     "read_valuation_evidence",
     "prepare_valuation",
     "override_prepared_valuation",
+    "review_forward_evidence",
     "validate",
     "validate_with_policy",
     "calculate",
@@ -95,6 +97,15 @@ class FundamentalServiceClient(Protocol):
         correlation_id: str,
         deadline_at: datetime,
     ) -> FundamentalValuationEvidenceReadResultV1: ...
+
+    async def review_forward_evidence(
+        self,
+        input_payload: Mapping[str, object],
+        *,
+        principal: InternalPrincipal,
+        correlation_id: str,
+        deadline_at: datetime,
+    ) -> FundamentalForwardEvidenceReviewResultV1: ...
 
     async def resolve_identity(
         self,
