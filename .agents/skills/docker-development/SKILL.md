@@ -46,6 +46,16 @@ Share a stateful service only when the team has defined its namespace, ownership
 
 Do not set a fixed `container_name` for a service that must run in multiple worktrees. Do not reuse a fixed custom volume, network, or image tag across worktrees unless sharing is intentional. Compose's default built image tag includes the project and service names. An explicit `image` value can override that isolation.
 
+## Make acceptance runtime identity explicit
+
+Before starting or resuming an acceptance run, record and re-read one runtime tuple containing the absolute worktree path, branch, exact commit SHA, application and Fundamental Compose project names, ordered Compose files and overlays, env-file paths, published host ports, service URLs, and browser session/tab identity. Keep credentials and the contents of env files out of the record. The tuple is invalid as soon as any project, port, env-file, overlay, or browser session changes.
+
+Run `docker compose ... config --quiet` with the exact `--env-file` and ordered `-f` arguments recorded for each project. Do not validate one file set and start another. Derive browser URLs from `docker compose ... port <service> <container-port>` after the project is running. Open a fresh browser tab whenever the project or port changes; an old tab can continue to point at a previous runtime even after a reload.
+
+SEC-backed Fundamental acceptance has an explicit dependency boundary. It must include `compose/verification/docker-compose.issue312-sec-ingestion.yml` together with the base operations file and the pinned taxonomy, EDGAR, XULE, and DQC artifact variables. `compose/verification/docker-compose.issue280-operations.yml` alone starts a service process but does not configure SEC identity resolution. Set `REQUIRE_SEC_IDENTITY_RESOLUTION=1` when running `scripts/acceptance_preflight.sh` so `/readyz` must report `capabilities.identity_resolution_configured=true`.
+
+Treat process health and feature readiness as different checks. A container marked `healthy` only proves that its configured healthcheck succeeded. For acceptance, call the service contract endpoints and verify the required capability, data, or user workflow. For Fundamental, distinguish `identity_resolution_configured`, successful issuer `resolved`, snapshot readiness, and valuation readiness; one state must not be reported as another.
+
 ## Build with shared resources in mind
 
 Compose project isolation separates runtime resources. Builds still use the selected BuildKit builder and the host's shared CPU, memory, and disk. BuildKit cache can be reused across worktrees, which avoids downloading or storing duplicate layers when inputs match.

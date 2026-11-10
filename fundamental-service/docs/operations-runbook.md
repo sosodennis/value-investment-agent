@@ -25,7 +25,12 @@ content-addressed bytes. Set `FUNDAMENTAL_SERVICE_DATABASE_URL` and run with
 process liveness and stays free of dependency details. `/readyz` is dependency
 readiness and requires the compatible Fundamental schema, content volume, and
 service token. It also requires a non-empty model-release trust-root inventory.
-Both endpoints return only the `internal.v1` status shape.
+The response keeps the shared `internal.v1` status fields and adds a
+non-secret Fundamental capability map. In particular,
+`capabilities.identity_resolution_configured` means the deployment has a
+configured SEC identity-resolution use case and can attempt issuer resolution;
+it does not mean that a ticker has already resolved or that a valuation snapshot
+is ready.
 
 Set `FUNDAMENTAL_MODEL_TRUST_ROOTS_FILE` to a read-only deployment-owned JSON
 file. Its `verifiers` map pins each verifier ID to a workflow identity, a

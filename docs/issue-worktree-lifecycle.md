@@ -68,6 +68,46 @@ Run tests that exercise behavior at the layer that owns it. Run type checks, lin
 
 Verify the exact commit that will merge. If the pull request changes after a check, rerun affected checks. Do not reuse evidence from an older commit. If a required acceptance criterion needs deployment, track deployment as a separate release or rollout issue unless deployment is explicitly part of the issue's outcome.
 
+## Record one canonical runtime tuple
+
+Every issue acceptance run must record one canonical runtime tuple and re-read it before every resume and before acceptance. The tuple is the join key between the GitHub issue, the exact commit, the Compose stacks, and the browser session. Do not infer any field from memory or from a stale browser tab.
+
+Record these fields without secrets:
+
+| Field | Required value |
+| --- | --- |
+| Worktree path | Absolute path used by the acceptance commands |
+| Branch | Exact issue branch name |
+| Verified commit SHA | Exact `git rev-parse HEAD` checked by the run |
+| Application Compose project | Explicit `docker compose -p` project name |
+| Fundamental Compose project | Explicit project name, even when the app stack is separate |
+| Compose files and overlays | Ordered `-f` list for each project |
+| Env-file paths | Exact `--env-file` paths, never their contents |
+| Published host ports | Values reported by `docker compose ... port` |
+| Application base URL | Derived from the current backend binding |
+| Fundamental service URL | Derived from the current Fundamental binding |
+| Browser session/tab identity | Fresh tab/session identifier for this runtime tuple |
+| Preflight command and result | Command, exit code, and the exact commit it checked |
+
+For a typical two-stack acceptance, validate both configurations before starting services:
+
+```sh
+docker compose --env-file "$APP_ENV_FILE" -p "$APP_COMPOSE_PROJECT" \
+  -f docker-compose.yml -f docker-compose.override.yml config --quiet
+docker compose --env-file "$FUNDAMENTAL_ENV_FILE" -p "$FUNDAMENTAL_COMPOSE_PROJECT" \
+  -f compose/verification/docker-compose.issue280-operations.yml \
+  -f compose/verification/docker-compose.issue312-sec-ingestion.yml config --quiet
+docker compose --env-file "$APP_ENV_FILE" -p "$APP_COMPOSE_PROJECT" \
+  -f docker-compose.yml -f docker-compose.override.yml port backend 8000
+docker compose --env-file "$FUNDAMENTAL_ENV_FILE" -p "$FUNDAMENTAL_COMPOSE_PROJECT" \
+  -f compose/verification/docker-compose.issue280-operations.yml \
+  -f compose/verification/docker-compose.issue312-sec-ingestion.yml port fundamental-service 8080
+```
+
+Use `scripts/acceptance_preflight.sh` with the recorded tuple. It checks the worktree, branch, exact commit, clean status when required, Compose configuration, running services, published ports, application `/health`, and Fundamental `/readyz`. For SEC-backed acceptance set `REQUIRE_SEC_IDENTITY_RESOLUTION=1`; the preflight then requires the SEC ingestion overlay and the `identity_resolution_configured` readiness capability. A healthy container alone is not feature acceptance.
+
+Treat a changed Compose project, port, env-file, overlay, or browser session as a new runtime tuple. Open a fresh browser tab after that change and update the recorded URL; never reload a tab that still points at the old port.
+
 ## Protect `main` and keep CI usable
 
 Configure a GitHub ruleset for `main` that requires pull requests and the repository's passing contract checks. Block force pushes and deletion. Apply the rules to administrators where the repository plan supports it. Protect the default branch before relying on this document as a merge gate.

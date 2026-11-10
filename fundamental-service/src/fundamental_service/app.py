@@ -392,7 +392,14 @@ def create_app(
 
     @app.get("/readyz")
     async def readyz() -> JSONResponse:
-        return readiness_response(ready=application.ready)
+        return readiness_response(
+            ready=application.ready,
+            capabilities={
+                "identity_resolution_configured": isinstance(
+                    app.state.identity_resolution, SecIdentityResolutionUseCase
+                )
+            },
+        )
 
     @app.get("/metrics")
     async def metrics_endpoint() -> PlainTextResponse:
