@@ -1732,6 +1732,14 @@ def test_service_input_accepts_root_caller_request() -> None:
     assert read_service_valuation_input({"valuation_request": request}) == request
 
 
+def test_service_input_accepts_minimal_compact_request() -> None:
+    request = {
+        "model_id": "fcff_dcf",
+        "requested_as_of": "2026-11-10T00:55:00Z",
+    }
+    assert read_service_valuation_input({"valuation_request": request}) == request
+
+
 def test_service_input_rejects_extensions_outside_the_frozen_contract() -> None:
     with pytest.raises(ValueError, match="outside the frozen ValuationInputV1"):
         read_service_valuation_input(

@@ -279,7 +279,7 @@ def _validate_compact_service_input(
     if contract_version != "fundamental.v1":
         raise ValueError(f"{context}.contract_version must be fundamental.v1")
     assumptions = input_mapping.get("assumptions")
-    if not isinstance(assumptions, Mapping):
+    if assumptions is not None and not isinstance(assumptions, Mapping):
         raise ValueError(f"{context}.assumptions must be an object")
     uncertainty = input_mapping.get("uncertainty", {"mode": "none"})
     if not isinstance(uncertainty, Mapping):
