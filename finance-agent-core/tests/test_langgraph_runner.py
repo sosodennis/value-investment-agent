@@ -1177,6 +1177,11 @@ async def test_runner_uses_pinned_langgraph_stream_for_wait_and_resume() -> None
             thread_id="real-interrupt-thread",
             run_id="runtime-run-1",
             input_data={
+                "message": "Apple",
+                "valuation_request": {
+                    "model_id": "fcff_dcf",
+                    "requested_as_of": "2026-11-10T00:55:00Z",
+                },
                 "interrupt_response": {
                     "type": "ticker_selection",
                     "selected_symbol": "AAPL",
