@@ -1,7 +1,8 @@
-import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { FundamentalReviewPanel } from './FundamentalReviewPanel';
 import type { FundamentalAutomaticPreparation } from '@/types/agents/fundamental-service-facts';
+import { parseWorkflowActivitySnapshot } from '@/features/workflow';
 import type { ForwardEvidenceReview } from './forward-evidence-api';
 
 const preparation: FundamentalAutomaticPreparation = {
@@ -52,6 +53,65 @@ const preparation: FundamentalAutomaticPreparation = {
 };
 
 describe('FundamentalReviewPanel', () => {
+    afterEach(() => cleanup());
+
+    it('renders compact approval preparation with retained evidence and digest', () => {
+        const snapshot = parseWorkflowActivitySnapshot({
+            thread_id: 'thread-1',
+            run_id: 'run-1',
+            run_status: 'waiting',
+            cursor: 0,
+            active_activities: [],
+            recent_activities: [],
+            completed_outputs: [],
+            failure: null,
+            retry_operation: null,
+            pending_interactions: [{
+                identity: {
+                    thread_id: 'thread-1',
+                    run_id: 'run-1',
+                    activity_id: 'fundamental.calculation',
+                    interaction_id: 'approval-1',
+                },
+                kind: 'valuation_approval',
+                status: 'pending',
+                request: {
+                    type: 'valuation_approval',
+                    contract_version: 'v1',
+                    ticker: 'AAPL',
+                    model_type: 'fcff_dcf',
+                    title: 'Review Fundamental service assumptions',
+                    description: 'Approve before deterministic calculation.',
+                    parameters: {
+                        quality_status: 'provisional',
+                        automatic_preparation: {
+                            ...preparation,
+                            input: null,
+                            assumptions_evidence: [
+                                preparation.assumptions_evidence[0],
+                                { truncated_count: 2 },
+                            ],
+                        },
+                    },
+                    audit_messages: ['HISTORY_THRESHOLD_UNVALIDATED'],
+                },
+            }],
+        });
+        const pendingApproval = snapshot.pending_interactions[0];
+        if (!pendingApproval || pendingApproval.kind !== 'valuation_approval') {
+            throw new Error('Approval fixture failed to parse.');
+        }
+
+        render(<FundamentalReviewPanel pendingApproval={pendingApproval} />);
+
+        expect(screen.getByText('Automatic valuation preparation')).toBeTruthy();
+        expect(screen.getAllByText('HISTORY_THRESHOLD_UNVALIDATED')).toHaveLength(2);
+        expect(screen.getByText(/terminal_growth_policy_default/)).toBeTruthy();
+        expect(screen.getByText(/macro:gdp-growth/)).toBeTruthy();
+        expect(screen.getByText(`${preparation.preparation_digest}`)).toBeTruthy();
+        expect(screen.getByText('2 additional evidence entries are omitted from this compact review.')).toBeTruthy();
+    });
+
     it('renders service-owned evidence and sends a reasoned manual override', () => {
         const onRecalculate = vi.fn();
         render(<FundamentalReviewPanel preparation={preparation} onRecalculate={onRecalculate} />);

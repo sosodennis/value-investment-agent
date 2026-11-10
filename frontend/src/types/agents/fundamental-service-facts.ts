@@ -246,6 +246,7 @@ export interface FundamentalAutomaticPreparation {
     missing_evidence: string[];
     historical_metrics: Record<string, unknown>;
     assumptions_evidence: FundamentalAssumptionEvidence[];
+    assumptions_evidence_truncated?: number;
     input: Record<string, unknown> | null;
     preparation_digest: string;
 }
@@ -466,6 +467,14 @@ const parseAssumptionEvidence = (
     return parsed;
 };
 
+const isAssumptionsEvidenceTruncationMarker = (
+    value: unknown,
+): value is { truncated_count: number } => {
+    if (!isRecord(value) || Object.keys(value).length !== 1) return false;
+    const count = value.truncated_count;
+    return typeof count === 'number' && Number.isInteger(count) && count >= 0;
+};
+
 const parseAutomaticPreparation = (
     value: unknown,
     context: string
@@ -479,7 +488,10 @@ const parseAutomaticPreparation = (
     if (!Array.isArray(evidenceRaw)) {
         throw new TypeError(`${context}.assumptions_evidence must be an array.`);
     }
-    return {
+    const truncationMarker = evidenceRaw.find(isAssumptionsEvidenceTruncationMarker);
+    const assumptionsEvidence = evidenceRaw.filter((item) => item !== truncationMarker);
+    const assumptionsEvidenceTruncated = truncationMarker?.truncated_count;
+    const parsed: FundamentalAutomaticPreparation = {
         contract_version: 'fundamental.v1',
         status: parseAutomaticPreparationStatus(record.status, `${context}.status`),
         model_id: parseString(record.model_id, `${context}.model_id`),
@@ -495,12 +507,16 @@ const parseAutomaticPreparation = (
         issue_codes: parseStringArray(record.issue_codes ?? [], `${context}.issue_codes`),
         missing_evidence: parseStringArray(record.missing_evidence ?? [], `${context}.missing_evidence`),
         historical_metrics: parseRecord(record.historical_metrics, `${context}.historical_metrics`),
-        assumptions_evidence: evidenceRaw.map((item, index) =>
+        assumptions_evidence: assumptionsEvidence.map((item, index) =>
             parseAssumptionEvidence(item, `${context}.assumptions_evidence[${index}]`)
         ),
         input,
         preparation_digest: parseDigest(record.preparation_digest, `${context}.preparation_digest`),
     };
+    if (assumptionsEvidenceTruncated !== undefined && assumptionsEvidenceTruncated > 0) {
+        parsed.assumptions_evidence_truncated = assumptionsEvidenceTruncated;
+    }
+    return parsed;
 };
 
 export const parseFundamentalAutomaticPreparation = (

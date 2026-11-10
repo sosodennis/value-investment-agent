@@ -314,6 +314,11 @@ export function FundamentalReviewPanel({
                                     <p className="text-xs text-muted-foreground">
                                         Values come from Fundamental Service. Overrides retain the automatic evidence and create a new input digest.
                                     </p>
+                                    {effectivePreparation.assumptions_evidence_truncated !== undefined && (
+                                        <p className="mt-1 text-xs text-muted-foreground">
+                                            {effectivePreparation.assumptions_evidence_truncated} additional evidence entries are omitted from this compact review.
+                                        </p>
+                                    )}
                                 </div>
                                 <div className="grid gap-3">
                                     {effectivePreparation.assumptions_evidence.map((evidence) => {
