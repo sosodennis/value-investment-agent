@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "issue": 355,
-  "status": "VERIFIED",
+  "status": "WIP",
   "branch": "codex/issue-355-forward-reference",
   "commit": "6dfa627bfca9e066a528a0fb1e0f05b2df2a8dcf",
   "sec_identity_required": true,
@@ -105,6 +105,9 @@
       "command": "PR #368 required checks: 11 passed on head 89bcde47491104a674078dd6ee8e307e8e81b094"
     }
   ],
-  "blockers": [],
-  "next_step": "Mark PR #368 ready, complete any required review, merge to main, verify the merge commit, close #355, and clean up the issue-scoped resources."
+  "blockers": [
+    "The contract-policy workflow used a shallow synthetic merge checkout and could not prove the verified implementation commit ancestry; the workflow fetch-depth fix is included in this WIP checkpoint.",
+    "PR #368 must remain draft while the acceptance manifest is WIP; after the workflow fix passes, restore VERIFIED status on the exact checkpoint and rerun all required CI."
+  ],
+  "next_step": "Run CI on the fetch-depth fix, then bind VERIFIED status to that exact checkpoint, rerun exact preflight, and restore PR #368 to ready."
 }

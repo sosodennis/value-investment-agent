@@ -152,11 +152,14 @@ acceptance runtime has no usable provider credential. That limitation does not
 block the required provider-failure behavior, but it remains an explicit
 unverified path until a separately authorized provider runtime is available.
 
-The feature acceptance criteria are verified against evidence commit
-`6dfa627bfca9e066a528a0fb1e0f05b2df2a8dcf`. The runtime manifest records the
-verified status, and the manifest-backed exact-head preflight passed with the
-recorded Compose projects, env-file digests, ports, health checks, and SEC
-identity readiness. PR #368 has all 11 required CI checks passing on head
-`89bcde47491104a674078dd6ee8e307e8e81b094` and has no review comments. The
-issue remains OPEN until the PR is reviewed and merged to `main`, the merge
-commit is verified, and the issue is closed; cleanup follows that verification.
+The feature acceptance criteria remain satisfied against evidence commit
+`6dfa627bfca9e066a528a0fb1e0f05b2df2a8dcf`, and the manifest-backed exact-head
+preflight passed with the recorded Compose projects, env-file digests, ports,
+health checks, and SEC identity readiness. When PR #368 was changed to ready,
+the required `contract-policy` job exposed a gate defect: its shallow checkout
+could not prove that the verified implementation commit was an ancestor of
+GitHub's synthetic merge commit. The PR is temporarily draft and the runtime
+manifest is temporarily WIP while the workflow changes its policy checkout to
+`fetch-depth: 0`. After that fix passes, the manifest will be rebound to the
+exact checkpoint and the PR will return to ready for review. The issue remains
+OPEN until merge, merge-commit verification, issue closure, and cleanup.
