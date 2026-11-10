@@ -1,21 +1,25 @@
-FROM python:3.11-slim
-
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends curl \
+ARG PYTHON_IMAGE=python:3.11-slim@sha256:673719e071ecf27434fd2635bbd8d00f49f4fdd81f243143438a42ced8bedf60
+FROM ${PYTHON_IMAGE} AS base
+RUN apt-get update && apt-get install -y --no-install-recommends curl \
     && rm -rf /var/lib/apt/lists/*
-
 WORKDIR /app
 ENV PYTHONUNBUFFERED=1 \
+    UV_PYTHON_DOWNLOADS=0 \
+    UV_LINK_MODE=copy \
     PATH="/app/.venv/bin:${PATH}" \
     HF_BAKED_CACHE=/opt/hf-cache-baked \
-    HF_HOME=/opt/hf-cache \
-    HF_HUB_CACHE=/opt/hf-cache/hub \
-    TRANSFORMERS_CACHE=/opt/hf-cache/hub
+    HF_HOME=/opt/hf-cache-baked \
+    HF_HUB_CACHE=/opt/hf-cache-baked/hub \
+    TRANSFORMERS_CACHE=/opt/hf-cache-baked/hub
 
+FROM base AS dependencies
+ARG UV_VERSION=0.11.28
+RUN python -m pip install --no-cache-dir "uv==${UV_VERSION}"
 COPY pyproject.toml uv.lock ./
-RUN python -m pip install --no-cache-dir uv==0.11.28 \
-    && uv sync --frozen --no-dev --extra models --no-install-project
+RUN --mount=type=cache,id=via-uv-py311,target=/root/.cache/uv,sharing=locked \
+    uv sync --frozen --no-dev --extra models --no-install-project
 
+FROM dependencies AS model-artifacts
 ARG BAKE_HF_MODELS=1
 ARG INFERENCE_OPERATIONS=news.sentiment,sec.fls
 ARG NEWS_FINBERT_MODEL=project-aps/finbert-finetune
@@ -32,18 +36,16 @@ RUN mkdir -p "${HF_BAKED_CACHE}" \
       python /tmp/bake_models.py; \
     fi
 
+FROM base AS runtime
+COPY --from=dependencies /usr/local/bin/uv /usr/local/bin/uvx /usr/local/bin/
+COPY --from=dependencies /app/.venv /app/.venv
+COPY --from=model-artifacts /opt/hf-cache-baked /opt/hf-cache-baked
+COPY pyproject.toml uv.lock ./
 COPY src ./src
 COPY --from=internal-contracts . /app/src/shared
-RUN uv sync --frozen --no-dev --extra models
-
+RUN --mount=type=cache,id=via-uv-py311,target=/root/.cache/uv,sharing=locked \
+    uv sync --frozen --no-dev --extra models
 COPY entrypoint.sh /usr/local/bin/model-inference-entrypoint.sh
 RUN chmod +x /usr/local/bin/model-inference-entrypoint.sh
-
-# The default runtime reads the immutable model artifact baked into the image.
-# A separate Compose override can opt into a writable runtime cache.
-ENV HF_HOME=/opt/hf-cache-baked \
-    HF_HUB_CACHE=/opt/hf-cache-baked/hub \
-    TRANSFORMERS_CACHE=/opt/hf-cache-baked/hub
-
 EXPOSE 8001
 ENTRYPOINT ["/usr/local/bin/model-inference-entrypoint.sh"]

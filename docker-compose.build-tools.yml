@@ -1,0 +1,15 @@
+# Optional compiler tools for in-container dependency development.
+# Keep the normal runtime image lean and select this overlay explicitly.
+services:
+  backend:
+    build:
+      target: development
+  backend-migrations:
+    build:
+      target: development
+  technical-labeling-scheduler:
+    build:
+      target: development
+  collaboration-retention-scheduler:
+    build:
+      target: development

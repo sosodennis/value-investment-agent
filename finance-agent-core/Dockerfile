@@ -1,64 +1,33 @@
-# Use Python 3.11 slim as base
-FROM python:3.11-slim
+ARG PYTHON_IMAGE=python:3.11-slim@sha256:673719e071ecf27434fd2635bbd8d00f49f4fdd81f243143438a42ced8bedf60
+FROM ${PYTHON_IMAGE} AS base
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    curl \
-    build-essential \
-    libpq-dev \
-    tzdata \
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl libpq5 libgomp1 libstdc++6 tzdata \
     && rm -rf /var/lib/apt/lists/*
 
-# Install uv for faster dependency installation
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
-
-# Set working directory
 WORKDIR /app
+ENV UV_PROJECT_ENVIRONMENT=/opt/venv \
+    UV_PYTHON_DOWNLOADS=0 \
+    UV_LINK_MODE=copy \
+    PATH="/opt/venv/bin:$PATH" \
+    HF_BAKED_CACHE=/opt/hf-cache-baked \
+    HF_HOME=/opt/hf-cache-baked \
+    HF_HUB_CACHE=/opt/hf-cache-baked/hub \
+    SENTENCE_TRANSFORMERS_HOME=/opt/hf-cache-baked/hub \
+    FASTEMBED_CACHE_PATH=/opt/hf-cache-baked/hub
 
-# Enable venv in a separate location to avoid bind-mount interference
-ENV UV_PROJECT_ENVIRONMENT=/opt/venv
-ENV PATH="/opt/venv/bin:$PATH"
-ENV HF_BAKED_CACHE=/opt/hf-cache-baked
-ENV HF_HOME=/opt/hf-cache
-ENV HF_HUB_CACHE=/opt/hf-cache/hub
-ENV SENTENCE_TRANSFORMERS_HOME=/opt/hf-cache/hub
-ENV FASTEMBED_CACHE_PATH=/opt/hf-cache/hub
-
-# Development/CI builds can skip the large model layer and rely on a mounted
-# cache. Production builds keep the baked-cache default.
-ARG BAKE_HF_MODELS=1
-
-# Copy dependency files
+FROM base AS dependencies
+ARG UV_VERSION=0.13.6
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential libpq-dev \
+    && rm -rf /var/lib/apt/lists/* \
+    && python -m pip install --no-cache-dir "uv==${UV_VERSION}"
 COPY pyproject.toml uv.lock ./
-
-# Install dependencies using uv
-RUN uv sync --frozen --no-dev --no-install-project
-
-# Install spaCy dependency model used by the dependency matcher layer.
-# Use uv pip directly to avoid relying on pip being bundled in the venv.
-RUN uv pip install --python /opt/venv/bin/python \
+RUN --mount=type=cache,id=via-uv-py311,target=/root/.cache/uv,sharing=locked \
+    uv sync --frozen --no-dev --no-install-project
+RUN --mount=type=cache,id=via-uv-py311,target=/root/.cache/uv,sharing=locked \
+    uv pip install --python /opt/venv/bin/python \
     https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl
-
-# Pre-bake Hugging Face models into image layer.
-# Runtime cache may be bind-mounted; entrypoint will seed from this baked cache.
-RUN mkdir -p "${HF_BAKED_CACHE}" "${HF_HOME}"
-RUN HF_HOME="${HF_BAKED_CACHE}" \
-    HF_HUB_CACHE="${HF_BAKED_CACHE}/hub" \
-    SENTENCE_TRANSFORMERS_HOME="${HF_BAKED_CACHE}/hub" \
-    BAKE_HF_MODELS="${BAKE_HF_MODELS}" python - <<'PY'
-import os
-from huggingface_hub import snapshot_download
-
-model_repos = [
-    "sentence-transformers/all-MiniLM-L6-v2",
-    "qdrant/all-MiniLM-L6-v2-onnx",
-]
-
-if os.environ.get("BAKE_HF_MODELS", "1") == "1":
-    for repo_id in model_repos:
-        print(f"Pre-downloading Hugging Face repo: {repo_id}", flush=True)
-        snapshot_download(repo_id=repo_id)
-PY
 
 RUN set -eux; \
     arch="$(dpkg --print-architecture)"; \
@@ -74,22 +43,26 @@ RUN set -eux; \
     mv "/tmp/${supercronic}" "/usr/local/bin/${supercronic}"; \
     ln -sf "/usr/local/bin/${supercronic}" /usr/local/bin/supercronic
 
-# Copy entrypoint separately to avoid being overwritten by bind mount
+FROM dependencies AS model-artifacts
+ARG BAKE_HF_MODELS=1
+COPY scripts/bake_models.py /tmp/bake_models.py
+RUN BAKE_HF_MODELS="${BAKE_HF_MODELS}" python /tmp/bake_models.py
+
+FROM base AS runtime
+COPY --from=dependencies /usr/local/bin/uv /usr/local/bin/uvx /usr/local/bin/
+COPY --from=dependencies /usr/local/bin/supercronic /usr/local/bin/supercronic
+COPY --from=dependencies /opt/venv /opt/venv
+COPY --from=model-artifacts /opt/hf-cache-baked /opt/hf-cache-baked
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh && sed -i 's/\r$//' /usr/local/bin/entrypoint.sh
-
-# The default runtime reads the immutable model artifact baked into the image.
-# A separate Compose override can opt into a writable runtime cache.
-ENV HF_HOME=/opt/hf-cache-baked \
-    HF_HUB_CACHE=/opt/hf-cache-baked/hub \
-    SENTENCE_TRANSFORMERS_HOME=/opt/hf-cache-baked/hub \
-    FASTEMBED_CACHE_PATH=/opt/hf-cache-baked/hub
-
-# Copy the rest of the application code
 COPY . .
-
-# Expose the API port
 EXPOSE 8000
-
-# Use entrypoint script
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+
+# Select explicitly when an in-container development task compiles extensions.
+FROM runtime AS development
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+FROM runtime AS default

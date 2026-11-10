@@ -8,3 +8,8 @@ build/
 dist/
 venv/
 env/
+.venv/
+.uv-cache/
+__pycache__/
+*.py[cod]
+.mypy_cache/

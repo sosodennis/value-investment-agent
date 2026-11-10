@@ -1,11 +1,27 @@
 from __future__ import annotations
 
 import os
+from fnmatch import fnmatch
 
-from huggingface_hub import snapshot_download
+
+def select_artifacts(files: list[str]) -> list[str]:
+    """Keep loader metadata and one supported set of PyTorch weights."""
+    safe = "model.safetensors" in files or "model.safetensors.index.json" in files
+    weights = "model*.safetensors" if safe else "pytorch_model*.bin"
+    selected = sorted(
+        name
+        for name in files
+        if "/" not in name
+        and (name.endswith((".json", ".txt", ".model")) or fnmatch(name, weights))
+    )
+    if not any(fnmatch(name, weights) for name in selected):
+        raise ValueError("model revision has no supported PyTorch weights")
+    return selected
 
 
 def main() -> None:
+    from huggingface_hub import list_repo_files, snapshot_download
+
     configured = {
         "news.sentiment": (
             os.environ["NEWS_FINBERT_MODEL"],
@@ -33,7 +49,12 @@ def main() -> None:
 
     for operation in sorted(requested):
         repo_id, revision = configured[operation]
-        snapshot_download(repo_id=repo_id, revision=revision)
+        files = list_repo_files(repo_id=repo_id, revision=revision)
+        snapshot_download(
+            repo_id=repo_id,
+            revision=revision,
+            allow_patterns=select_artifacts(files),
+        )
 
 
 if __name__ == "__main__":
