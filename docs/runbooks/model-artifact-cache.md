@@ -6,6 +6,11 @@ without Hugging Face registry access. A writable runtime cache is an explicit
 opt-in for workflows that download additional artifacts or need cache contents
 to survive image replacement.
 
+Image build stages, model file filtering, compiler-enabled development and
+bounded cache cleanup are documented in [Docker storage](docker-storage.md).
+Storage optimizations must preserve real offline model loading and inference,
+including both backend embedding engines.
+
 ## Ownership
 
 | Mode | Artifact source | Runtime path | Persistent model volumes | Intended use |

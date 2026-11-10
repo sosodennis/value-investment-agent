@@ -7,6 +7,40 @@ description: Use this project guidance when configuring or running Docker Compos
 
 Use this skill before changing Compose configuration, starting or building a stack, running containerized tests, or cleaning Docker resources for this project.
 
+## Storage changes without interrupting development
+
+Use [the Docker storage runbook](../../../docs/runbooks/docker-storage.md) for
+image slimming, model file selection, cache retention and rollout checks.
+Validate candidate images under new tags and a new Compose project; preserve
+existing projects' images, containers, networks, ports and data. Record existing
+container IDs/image IDs/start times before and after validation. Serialize large
+builds and cap disposable verification containers' CPU/memory.
+
+- The backend's default runtime keeps installed packages and runtime libraries;
+  compiler tools live in its explicit `development` target. Select
+  `docker-compose.build-tools.yml` when an in-container task compiles extensions.
+  Use the same overlay for backend and migrations so they share the selected image.
+- Keep dependency/model installation before source copying. uv download caches
+  use BuildKit cache mounts with `UV_LINK_MODE=copy`; do not copy those caches into
+  final images. Fundamental uses `COPY --chown` rather than recursively chowning
+  a dependency tree in another layer.
+- Bake only files required by existing loaders at immutable revisions. Preserve
+  SentenceTransformer and FastEmbed support, tokenizer/pooling metadata, offline
+  refs and classifier shard indexes. Keep actual model-output regression checks;
+  readiness alone cannot prove that filtering retained the needed artifacts.
+- Pin Python base digests and uv versions deliberately. Base pins help layer reuse
+  and input traceability, but unpinned OS package repositories still prevent a
+  blanket claim of bit-for-bit reproducible image builds.
+- Distinguish logical image sizes, shared layers, BuildKit cache, volumes and
+  actual VM free space. Byte-identical layers are already deduplicated. Similar
+  images built from different base layers can still consume separate storage.
+- Keep useful shared build cache and inspect age/size before reclaiming it. Do
+  not change daemon GC settings or restart Docker Desktop during other work.
+- `scripts/cleanup-docker-images.sh` requires `DOCKER_CLEANUP_PROJECT` and filters
+  by that exact Compose project label plus dangling status and age. Inspect all
+  container references, including stopped containers, before deleting other tags
+  or volumes. Back up retained volume data outside the Docker VM and verify it.
+
 ## Inspect the current stack
 
 - Read the root `docker-compose.yml` and any Compose override files used by the task. The service and profile list can change, so derive it from the current files instead of relying on a remembered list.
