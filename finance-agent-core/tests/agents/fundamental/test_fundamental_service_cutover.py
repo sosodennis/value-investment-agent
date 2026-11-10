@@ -1297,6 +1297,99 @@ async def test_cutover_bounds_automatic_preparation_in_approval_request() -> Non
 
 
 @pytest.mark.asyncio
+async def test_cutover_compacts_nested_automatic_preparation_evidence() -> None:
+    client = _FactsOnlyClient()
+    runtime = _Runtime()
+    approval_calls: list[dict[str, object]] = []
+    token = set_request_principal(
+        InternalPrincipal(
+            subject_id="caller-1", organization_id="org-1", membership_id="membership-1"
+        )
+    )
+    preparation_metrics = {
+        "profile_id": "fcff-valuation-requirements-v1",
+        "profile_digest": "d" * 64,
+        "quality_status": "provisional",
+        "issue_codes": ["HISTORY_THRESHOLD_UNVALIDATED"] * 64,
+        "missing_evidence": ["forecast_history"] * 64,
+        "metrics": [
+            {
+                "metric_id": f"metric-{index}",
+                "fiscal_year": 2000 + index,
+                "value": "0.123456",
+                "unit": "ratio",
+                "formula": "formula " + ("x" * 2000),
+                "fact_ids": [f"fact-{index}-{item}" for item in range(20)],
+                "source_refs": ["a" * 64 for _ in range(20)],
+                "period_end": f"20{index:02d}-12-31",
+            }
+            for index in range(64)
+        ],
+    }
+    assumptions_evidence = [
+        {
+            "path": f"assumptions.forecast.revenue_growth[{index}]",
+            "value": "0.123456",
+            "method": "derived",
+            "formula": "formula " + ("y" * 2000),
+            "fact_ids": [f"fact-{index}-{item}" for item in range(20)],
+            "source_refs": ["b" * 64 for _ in range(20)],
+            "policy_version": "fcff_dcf-v1-quality-v1",
+            "as_of": "2026-11-01T00:00:00Z",
+            "editable": True,
+        }
+        for index in range(64)
+    ]
+    client.preparation_padding = ""
+    original_prepare = client.prepare_valuation
+
+    async def prepare_with_large_evidence(input_payload, **kwargs):
+        result = await original_prepare(input_payload, **kwargs)
+        return result.model_copy(
+            update={
+                "historical_metrics": preparation_metrics,
+                "assumptions_evidence": tuple(assumptions_evidence),
+            }
+        )
+
+    client.prepare_valuation = prepare_with_large_evidence
+    try:
+        result = await run_service_valuation_flow(
+            runtime,
+            {
+                "valuation_request": {
+                    "model_id": "fcff_dcf",
+                    "requested_as_of": "2026-11-04T00:00:00Z",
+                },
+                "company_profile": CompanyProfile(ticker="AAPL", name="Apple Inc."),
+                "fundamental_analysis": {"model_type": "dcf_standard"},
+            },
+            client=client,
+            request_approval_fn=lambda request: approval_calls.append(request)
+            or {
+                "type": "valuation_approval",
+                "contract_version": "v1",
+                "decision": "reject",
+            },
+            clock=lambda: datetime(2026, 11, 4, tzinfo=UTC),
+        )
+    finally:
+        reset_request_principal(token)
+
+    assert result.update["fundamental_analysis"]["valuation_status"] == (
+        "approval_rejected"
+    )
+    request = ValuationApprovalRequest.model_validate(approval_calls[0])
+    preparation = request.parameters["automatic_preparation"]
+    assert isinstance(preparation, dict)
+    assert preparation["historical_metrics"]["issue_codes_truncated"] > 0
+    assert preparation["historical_metrics"]["metrics_truncated"] > 0
+    assert preparation["assumptions_evidence"][-1] == {"truncated_count": 56}
+    assert preparation["historical_metrics"]["metrics"][0]["formula"].endswith("...")
+    assert len(json.dumps(request.parameters, separators=(",", ":"))) < 16 * 1024
+
+
+@pytest.mark.asyncio
 async def test_cutover_accepts_canonical_defaults_without_changing_caller_values() -> (
     None
 ):
