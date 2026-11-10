@@ -643,6 +643,9 @@ jobs:
           GITHUB_SHA: ${{ github.sha }}
         run: python3 scripts/validate_issue_acceptance_policy.py
 
+      - name: Validate configuration reference
+        run: python3 scripts/validate_configuration_reference.py
+
       - name: Architecture dependency guard (module-sharded legacy edges)
         run: python3 scripts/architecture_guard.py --exceptions-dir scripts/architecture_guard_exceptions
 

@@ -100,6 +100,11 @@ Create a local `.env` from the checked-in template:
 cp .env.example .env
 ```
 
+Use the [environment configuration reference](docs/configuration/environment-reference.md)
+to classify each key before editing it. The reference states which values you
+can generate, which values come from an external provider, and which values
+must match pinned SEC assets.
+
 The template gives the backend and each internal service matching local
 authentication tokens. In particular, `INFERENCE_SERVICE_TOKEN` is passed to
 both inference containers and mapped to the backend's `MODEL_INFERENCE_TOKEN`.
