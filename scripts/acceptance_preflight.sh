@@ -40,6 +40,7 @@ done
 
 REQUIRE_EXACT_COMMIT="${REQUIRE_EXACT_COMMIT:-1}"
 REQUIRE_SEC_IDENTITY_RESOLUTION="${REQUIRE_SEC_IDENTITY_RESOLUTION:-0}"
+ALLOWED_UNTRACKED_PATHS="${ALLOWED_UNTRACKED_PATHS:-}"
 APP_SERVICE="${APP_SERVICE:-backend}"
 APP_CONTAINER_PORT="${APP_CONTAINER_PORT:-8000}"
 FUNDAMENTAL_SERVICE="${FUNDAMENTAL_SERVICE:-fundamental-service}"
@@ -71,8 +72,27 @@ branch="$(git symbolic-ref --quiet --short HEAD 2>/dev/null)" || fail "worktree 
 head="$(git rev-parse HEAD 2>/dev/null)" || fail "cannot resolve HEAD"
 if [[ "$REQUIRE_EXACT_COMMIT" == 1 ]]; then
   [[ "$head" == "$EXPECTED_COMMIT" ]] || fail "HEAD is ${head}, expected ${EXPECTED_COMMIT}"
-  git diff --quiet || fail "worktree has unstaged changes"
-  git diff --cached --quiet || fail "worktree has staged changes"
+  git diff --quiet || fail "worktree has unstaged tracked changes"
+  git diff --cached --quiet || fail "worktree has staged tracked changes"
+  status_lines="$(git status --porcelain=v1 --untracked-files=all)"
+  if [[ -n "$status_lines" ]]; then
+    while IFS= read -r status_line; do
+      [[ -n "$status_line" ]] || continue
+      if [[ "$status_line" != "?? "* ]]; then
+        fail "worktree has tracked status changes: ${status_line}"
+      fi
+      path="${status_line#?? }"
+      allowed=false
+      IFS=':' read -r -a allowed_paths <<< "$ALLOWED_UNTRACKED_PATHS"
+      for allowed_path in "${allowed_paths[@]}"; do
+        if [[ -n "$allowed_path" && "$path" == "$allowed_path" ]]; then
+          allowed=true
+          break
+        fi
+      done
+      [[ "$allowed" == true ]] || fail "untracked path is not explicitly allowed: ${path}"
+    done <<< "$status_lines"
+  fi
 fi
 
 require_file APP_ENV_FILE
@@ -194,4 +214,4 @@ printf 'branch=%s\n' "$branch"
 printf 'commit=%s\n' "$head"
 printf 'app_project=%s service=%s binding=%s url=%s\n' "$APP_COMPOSE_PROJECT" "$APP_SERVICE" "$app_binding" "$APP_URL"
 printf 'fundamental_project=%s service=%s binding=%s url=%s\n' "$FUNDAMENTAL_COMPOSE_PROJECT" "$FUNDAMENTAL_SERVICE" "$fundamental_binding" "$FUNDAMENTAL_URL"
-printf 'exact_commit=%s sec_identity_required=%s\n' "$REQUIRE_EXACT_COMMIT" "$REQUIRE_SEC_IDENTITY_RESOLUTION"
+printf 'exact_commit=%s sec_identity_required=%s allowed_untracked=%s\n' "$REQUIRE_EXACT_COMMIT" "$REQUIRE_SEC_IDENTITY_RESOLUTION" "${ALLOWED_UNTRACKED_PATHS:-none}"

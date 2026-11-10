@@ -88,6 +88,7 @@ Record these fields without secrets:
 | Fundamental service URL | Derived from the current Fundamental binding |
 | Browser session/tab identity | Fresh tab/session identifier for this runtime tuple |
 | Preflight command and result | Command, exit code, and the exact commit it checked |
+| Runtime-only overrides | Explicit relative paths allowed by `ALLOWED_UNTRACKED_PATHS`, never commit evidence |
 
 For a typical two-stack acceptance, validate both configurations before starting services:
 
@@ -105,6 +106,8 @@ docker compose --env-file "$FUNDAMENTAL_ENV_FILE" -p "$FUNDAMENTAL_COMPOSE_PROJE
 ```
 
 Use `scripts/acceptance_preflight.sh` with the recorded tuple. It checks the worktree, branch, exact commit, clean status when required, Compose configuration, running services, published ports, application `/health`, and Fundamental `/readyz`. For SEC-backed acceptance set `REQUIRE_SEC_IDENTITY_RESOLUTION=1`; the preflight then requires the SEC ingestion overlay and the `identity_resolution_configured` readiness capability. A healthy container alone is not feature acceptance.
+
+Exact-commit mode rejects tracked changes and every untracked path by default. If a runtime-only override is required, list its exact relative path in `ALLOWED_UNTRACKED_PATHS` and record that path in the tuple. The override remains runtime input and is never evidence that the commit contains the configuration.
 
 Treat a changed Compose project, port, env-file, overlay, or browser session as a new runtime tuple. Open a fresh browser tab after that change and update the recorded URL; never reload a tab that still points at the old port.
 
