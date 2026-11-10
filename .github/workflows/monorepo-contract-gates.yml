@@ -634,6 +634,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Validate issue-scoped acceptance policy
+        env:
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          GITHUB_EVENT_PATH: ${{ github.event_path }}
+          GITHUB_HEAD_REF: ${{ github.head_ref }}
+          GITHUB_REF_NAME: ${{ github.ref_name }}
+          GITHUB_SHA: ${{ github.sha }}
+        run: python3 scripts/validate_issue_acceptance_policy.py
+
       - name: Architecture dependency guard (module-sharded legacy edges)
         run: python3 scripts/architecture_guard.py --exceptions-dir scripts/architecture_guard_exceptions
 

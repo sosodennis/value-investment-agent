@@ -21,6 +21,27 @@ require_file() {
   [[ "$value" == "none" || -f "$value" ]] || fail "${name} does not name a file: ${value}"
 }
 
+ACCEPTANCE_MANIFEST="${ACCEPTANCE_MANIFEST:-}"
+if [[ -n "$ACCEPTANCE_MANIFEST" ]]; then
+  command -v python3 >/dev/null 2>&1 || fail "python3 is unavailable for ACCEPTANCE_MANIFEST"
+  manifest_validator="${ACCEPTANCE_MANIFEST_VALIDATOR:-scripts/validate_acceptance_manifest.py}"
+  [[ -f "$manifest_validator" ]] || fail "manifest validator does not exist: ${manifest_validator}"
+  if ! manifest_env="$(python3 "$manifest_validator" --path "$ACCEPTANCE_MANIFEST" --emit-preflight-env)"; then
+    fail "acceptance manifest validation failed: ${ACCEPTANCE_MANIFEST}"
+  fi
+  while IFS=$'\t' read -r key value; do
+    [[ -n "$key" ]] || continue
+    case "$key" in
+      EXPECTED_WORKTREE|EXPECTED_BRANCH|EXPECTED_COMMIT|APP_COMPOSE_PROJECT|APP_COMPOSE_FILES|APP_ENV_FILE|APP_URL|APP_EXPECTED_PORT|APP_SERVICE|APP_CONTAINER_PORT|FUNDAMENTAL_COMPOSE_PROJECT|FUNDAMENTAL_COMPOSE_FILES|FUNDAMENTAL_ENV_FILE|FUNDAMENTAL_URL|FUNDAMENTAL_EXPECTED_PORT|FUNDAMENTAL_SERVICE|FUNDAMENTAL_CONTAINER_PORT|REQUIRE_SEC_IDENTITY_RESOLUTION|ALLOWED_UNTRACKED_PATHS)
+        printf -v "$key" '%s' "$value"
+        ;;
+      *)
+        fail "manifest emitted an unsupported preflight variable: ${key}"
+        ;;
+    esac
+  done <<< "$manifest_env"
+fi
+
 for required in \
   EXPECTED_WORKTREE \
   EXPECTED_BRANCH \
@@ -41,6 +62,8 @@ done
 REQUIRE_EXACT_COMMIT="${REQUIRE_EXACT_COMMIT:-1}"
 REQUIRE_SEC_IDENTITY_RESOLUTION="${REQUIRE_SEC_IDENTITY_RESOLUTION:-0}"
 ALLOWED_UNTRACKED_PATHS="${ALLOWED_UNTRACKED_PATHS:-}"
+START_ACCEPTANCE_STACK="${START_ACCEPTANCE_STACK:-0}"
+ACCEPTANCE_BUILD="${ACCEPTANCE_BUILD:-0}"
 APP_SERVICE="${APP_SERVICE:-backend}"
 APP_CONTAINER_PORT="${APP_CONTAINER_PORT:-8000}"
 FUNDAMENTAL_SERVICE="${FUNDAMENTAL_SERVICE:-fundamental-service}"
@@ -53,6 +76,14 @@ esac
 case "$REQUIRE_SEC_IDENTITY_RESOLUTION" in
   0|1) ;;
   *) fail "REQUIRE_SEC_IDENTITY_RESOLUTION must be 0 or 1" ;;
+esac
+case "$START_ACCEPTANCE_STACK" in
+  0|1) ;;
+  *) fail "START_ACCEPTANCE_STACK must be 0 or 1" ;;
+esac
+case "$ACCEPTANCE_BUILD" in
+  0|1) ;;
+  *) fail "ACCEPTANCE_BUILD must be 0 or 1" ;;
 esac
 
 command -v git >/dev/null 2>&1 || fail "git is unavailable"
@@ -131,6 +162,16 @@ fi
 if [[ "$REQUIRE_SEC_IDENTITY_RESOLUTION" == 1 ]]; then
   [[ "$FUNDAMENTAL_COMPOSE_FILES" == *"docker-compose.issue312-sec-ingestion.yml"* ]] || \
     fail "SEC-backed acceptance must include docker-compose.issue312-sec-ingestion.yml"
+fi
+
+if [[ "$START_ACCEPTANCE_STACK" == 1 ]]; then
+  if [[ "$ACCEPTANCE_BUILD" == 1 ]]; then
+    compose "$APP_COMPOSE_PROJECT" "$APP_ENV_FILE" "$APP_COMPOSE_FILES" up -d --build
+    compose "$FUNDAMENTAL_COMPOSE_PROJECT" "$FUNDAMENTAL_ENV_FILE" "$FUNDAMENTAL_COMPOSE_FILES" up -d --build
+  else
+    compose "$APP_COMPOSE_PROJECT" "$APP_ENV_FILE" "$APP_COMPOSE_FILES" up -d
+    compose "$FUNDAMENTAL_COMPOSE_PROJECT" "$FUNDAMENTAL_ENV_FILE" "$FUNDAMENTAL_COMPOSE_FILES" up -d
+  fi
 fi
 
 require_running_service() {
@@ -214,4 +255,4 @@ printf 'branch=%s\n' "$branch"
 printf 'commit=%s\n' "$head"
 printf 'app_project=%s service=%s binding=%s url=%s\n' "$APP_COMPOSE_PROJECT" "$APP_SERVICE" "$app_binding" "$APP_URL"
 printf 'fundamental_project=%s service=%s binding=%s url=%s\n' "$FUNDAMENTAL_COMPOSE_PROJECT" "$FUNDAMENTAL_SERVICE" "$fundamental_binding" "$FUNDAMENTAL_URL"
-printf 'exact_commit=%s sec_identity_required=%s allowed_untracked=%s\n' "$REQUIRE_EXACT_COMMIT" "$REQUIRE_SEC_IDENTITY_RESOLUTION" "${ALLOWED_UNTRACKED_PATHS:-none}"
+printf 'exact_commit=%s sec_identity_required=%s start_stack=%s build=%s allowed_untracked=%s\n' "$REQUIRE_EXACT_COMMIT" "$REQUIRE_SEC_IDENTITY_RESOLUTION" "$START_ACCEPTANCE_STACK" "$ACCEPTANCE_BUILD" "${ALLOWED_UNTRACKED_PATHS:-none}"

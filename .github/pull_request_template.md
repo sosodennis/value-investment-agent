@@ -1,6 +1,10 @@
 ## Summary
 - [ ] Explain what changed.
 - [ ] Explain why this change is needed.
+- Acceptance manifest: `docs/acceptance/issue-<issue>-runtime.json`
+- Acceptance status: `WIP`, `BLOCKED`, or `VERIFIED`
+- Verified commit SHA: `<required only for VERIFIED>`
+- [ ] This PR remains draft while acceptance status is `WIP` or `BLOCKED`.
 
 ## Scope
 - [ ] This PR follows the backend guideline: `docs/backend-guideline.md`.
