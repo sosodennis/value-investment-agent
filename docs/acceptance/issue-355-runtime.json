@@ -17,6 +17,7 @@
         "compose/verification/docker-compose.issue325-app-fundamental.yml"
       ],
       "env_file": "/Users/denniswong/Desktop/Project/value-investment-agent/.env",
+      "env_file_sha256": "0349507efc5ac6d665626f4ff0dd7f17c5216f44b4ca56312f23850923d0cb7b",
       "service": "backend",
       "container_port": 8000,
       "published_port": 18880,
@@ -29,6 +30,7 @@
         "compose/verification/docker-compose.issue312-sec-ingestion.yml"
       ],
       "env_file": "/Users/denniswong/Desktop/Project/value-investment-agent/.env",
+      "env_file_sha256": "0349507efc5ac6d665626f4ff0dd7f17c5216f44b4ca56312f23850923d0cb7b",
       "service": "fundamental-service",
       "container_port": 8080,
       "published_port": 18890,

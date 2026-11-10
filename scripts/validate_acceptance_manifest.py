@@ -12,6 +12,7 @@ from typing import Any
 from urllib.parse import urlsplit
 
 COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")
+SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 SENSITIVE_KEY_RE = re.compile(
     r"(?:secret|token|password|api[_-]?key|private[_-]?key)", re.IGNORECASE
 )
@@ -72,6 +73,15 @@ def _validate_service(
         f"runtime.{name}.env_file",
         errors,
     )
+    env_file_sha256 = _string(
+        _required(service, "env_file_sha256", f"runtime.{name}", errors),
+        f"runtime.{name}.env_file_sha256",
+        errors,
+    )
+    if env_file_sha256 is not None and not SHA256_RE.fullmatch(env_file_sha256):
+        errors.append(
+            f"runtime.{name}.env_file_sha256 must be a 64-character lowercase SHA-256"
+        )
     service_name = _string(
         _required(service, "service", f"runtime.{name}", errors),
         f"runtime.{name}.service",
@@ -113,6 +123,7 @@ def _validate_service(
     return {
         "compose_project": compose_project,
         "env_file": env_file,
+        "env_file_sha256": env_file_sha256,
         "service": service_name,
         "url": url,
         "container_port": container_port,
@@ -225,8 +236,6 @@ def validate_manifest(
             errors.append("VERIFIED manifest requires every check to have status=pass")
         if readiness_status != "ready":
             errors.append("VERIFIED manifest requires readiness.status=ready")
-        if expected_commit is None:
-            errors.append("VERIFIED validation requires --expected-commit")
 
     for path in _sensitive_keys(manifest):
         errors.append(f"sensitive field is not allowed in acceptance manifest: {path}")
@@ -250,11 +259,13 @@ def emit_preflight_env(manifest: dict[str, Any]) -> None:
     fundamental = runtime["fundamental"]
     values = {
         "EXPECTED_WORKTREE": runtime["worktree"],
+        "EXPECTED_ISSUE": str(manifest["issue"]),
         "EXPECTED_BRANCH": manifest["branch"],
         "EXPECTED_COMMIT": manifest["commit"],
         "APP_COMPOSE_PROJECT": app["compose_project"],
         "APP_COMPOSE_FILES": ":".join(app["compose_files"]),
         "APP_ENV_FILE": app["env_file"],
+        "APP_ENV_FILE_SHA256": app["env_file_sha256"],
         "APP_URL": app["url"],
         "APP_EXPECTED_PORT": str(app["published_port"]),
         "APP_SERVICE": app["service"],
@@ -262,6 +273,7 @@ def emit_preflight_env(manifest: dict[str, Any]) -> None:
         "FUNDAMENTAL_COMPOSE_PROJECT": fundamental["compose_project"],
         "FUNDAMENTAL_COMPOSE_FILES": ":".join(fundamental["compose_files"]),
         "FUNDAMENTAL_ENV_FILE": fundamental["env_file"],
+        "FUNDAMENTAL_ENV_FILE_SHA256": fundamental["env_file_sha256"],
         "FUNDAMENTAL_URL": fundamental["url"],
         "FUNDAMENTAL_EXPECTED_PORT": str(fundamental["published_port"]),
         "FUNDAMENTAL_SERVICE": fundamental["service"],

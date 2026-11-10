@@ -32,7 +32,7 @@ if [[ -n "$ACCEPTANCE_MANIFEST" ]]; then
   while IFS=$'\t' read -r key value; do
     [[ -n "$key" ]] || continue
     case "$key" in
-      EXPECTED_WORKTREE|EXPECTED_BRANCH|EXPECTED_COMMIT|APP_COMPOSE_PROJECT|APP_COMPOSE_FILES|APP_ENV_FILE|APP_URL|APP_EXPECTED_PORT|APP_SERVICE|APP_CONTAINER_PORT|FUNDAMENTAL_COMPOSE_PROJECT|FUNDAMENTAL_COMPOSE_FILES|FUNDAMENTAL_ENV_FILE|FUNDAMENTAL_URL|FUNDAMENTAL_EXPECTED_PORT|FUNDAMENTAL_SERVICE|FUNDAMENTAL_CONTAINER_PORT|REQUIRE_SEC_IDENTITY_RESOLUTION|ALLOWED_UNTRACKED_PATHS)
+      EXPECTED_WORKTREE|EXPECTED_ISSUE|EXPECTED_BRANCH|EXPECTED_COMMIT|APP_COMPOSE_PROJECT|APP_COMPOSE_FILES|APP_ENV_FILE|APP_ENV_FILE_SHA256|APP_URL|APP_EXPECTED_PORT|APP_SERVICE|APP_CONTAINER_PORT|FUNDAMENTAL_COMPOSE_PROJECT|FUNDAMENTAL_COMPOSE_FILES|FUNDAMENTAL_ENV_FILE|FUNDAMENTAL_ENV_FILE_SHA256|FUNDAMENTAL_URL|FUNDAMENTAL_EXPECTED_PORT|FUNDAMENTAL_SERVICE|FUNDAMENTAL_CONTAINER_PORT|REQUIRE_SEC_IDENTITY_RESOLUTION|ALLOWED_UNTRACKED_PATHS)
         printf -v "$key" '%s' "$value"
         ;;
       *)
@@ -44,16 +44,19 @@ fi
 
 for required in \
   EXPECTED_WORKTREE \
+  EXPECTED_ISSUE \
   EXPECTED_BRANCH \
   EXPECTED_COMMIT \
   APP_COMPOSE_PROJECT \
   APP_COMPOSE_FILES \
   APP_ENV_FILE \
+  APP_ENV_FILE_SHA256 \
   APP_URL \
   APP_EXPECTED_PORT \
   FUNDAMENTAL_COMPOSE_PROJECT \
   FUNDAMENTAL_COMPOSE_FILES \
   FUNDAMENTAL_ENV_FILE \
+  FUNDAMENTAL_ENV_FILE_SHA256 \
   FUNDAMENTAL_URL \
   FUNDAMENTAL_EXPECTED_PORT; do
   require_value "$required"
@@ -102,7 +105,18 @@ branch="$(git symbolic-ref --quiet --short HEAD 2>/dev/null)" || fail "worktree 
 
 head="$(git rev-parse HEAD 2>/dev/null)" || fail "cannot resolve HEAD"
 if [[ "$REQUIRE_EXACT_COMMIT" == 1 ]]; then
-  [[ "$head" == "$EXPECTED_COMMIT" ]] || fail "HEAD is ${head}, expected ${EXPECTED_COMMIT}"
+  if [[ "$head" != "$EXPECTED_COMMIT" ]]; then
+    git merge-base --is-ancestor "$EXPECTED_COMMIT" "$head" || \
+      fail "HEAD is ${head}, expected tested implementation commit ${EXPECTED_COMMIT}"
+    evidence_paths="$(git diff --name-only "${EXPECTED_COMMIT}..${head}")"
+    while IFS= read -r evidence_path; do
+      [[ -n "$evidence_path" ]] || continue
+      case "$evidence_path" in
+        "docs/acceptance/issue-${EXPECTED_ISSUE}-runtime.json"|"docs/acceptance/issue-${EXPECTED_ISSUE}-progress-"*.md|"docs/acceptance/issue-${EXPECTED_ISSUE}-acceptance.md") ;;
+        *) fail "post-verification commit changes non-acceptance path: ${evidence_path}" ;;
+      esac
+    done <<< "$evidence_paths"
+  fi
   git diff --quiet || fail "worktree has unstaged tracked changes"
   git diff --cached --quiet || fail "worktree has staged tracked changes"
   status_lines="$(git status --porcelain=v1 --untracked-files=all)"
@@ -129,6 +143,18 @@ fi
 require_file APP_ENV_FILE
 require_file FUNDAMENTAL_ENV_FILE
 
+check_env_digest() {
+  local name="$1"
+  local expected="$2"
+  local path="$3"
+  local actual
+  actual="$(sha256sum "$path" | awk '{print $1}')" || fail "cannot hash ${name}"
+  [[ "$actual" == "$expected" ]] || fail "${name} changed since the runtime tuple was recorded"
+}
+
+check_env_digest APP_ENV_FILE "$APP_ENV_FILE_SHA256" "$APP_ENV_FILE"
+check_env_digest FUNDAMENTAL_ENV_FILE "$FUNDAMENTAL_ENV_FILE_SHA256" "$FUNDAMENTAL_ENV_FILE"
+
 compose() {
   local project="$1"
   local env_file="$2"
@@ -152,11 +178,34 @@ compose() {
   "${command[@]}" "$@"
 }
 
-if ! compose "$APP_COMPOSE_PROJECT" "$APP_ENV_FILE" "$APP_COMPOSE_FILES" config --quiet >/dev/null 2>&1; then
-  fail "application Compose configuration is invalid"
+validate_inputs() {
+  local label="$1"
+  local env_file="$2"
+  local files="$3"
+  local require_sec="$4"
+  local -a command=(python3 scripts/validate_compose_inputs.py --label "$label" --env-file "$env_file")
+  local -a file_list=()
+  IFS=':' read -r -a file_list <<< "$files"
+  local compose_file
+  for compose_file in "${file_list[@]}"; do
+    command+=(--compose-file "$compose_file")
+  done
+  if [[ "$require_sec" == 1 ]]; then
+    command+=(--require-paths --require-sec-user-agent)
+  fi
+  "${command[@]}"
+}
+
+input_errors=0
+validate_inputs application "$APP_ENV_FILE" "$APP_COMPOSE_FILES" 0 || input_errors=1
+validate_inputs fundamental "$FUNDAMENTAL_ENV_FILE" "$FUNDAMENTAL_COMPOSE_FILES" "$REQUIRE_SEC_IDENTITY_RESOLUTION" || input_errors=1
+(( input_errors == 0 )) || fail "Compose inputs are not reproducible from the recorded env files"
+
+if ! app_config_error="$(compose "$APP_COMPOSE_PROJECT" "$APP_ENV_FILE" "$APP_COMPOSE_FILES" config --quiet 2>&1)"; then
+  fail "application Compose configuration is invalid: ${app_config_error}"
 fi
-if ! compose "$FUNDAMENTAL_COMPOSE_PROJECT" "$FUNDAMENTAL_ENV_FILE" "$FUNDAMENTAL_COMPOSE_FILES" config --quiet >/dev/null 2>&1; then
-  fail "Fundamental Compose configuration is invalid"
+if ! fundamental_config_error="$(compose "$FUNDAMENTAL_COMPOSE_PROJECT" "$FUNDAMENTAL_ENV_FILE" "$FUNDAMENTAL_COMPOSE_FILES" config --quiet 2>&1)"; then
+  fail "Fundamental Compose configuration is invalid: ${fundamental_config_error}"
 fi
 
 if [[ "$REQUIRE_SEC_IDENTITY_RESOLUTION" == 1 ]]; then
