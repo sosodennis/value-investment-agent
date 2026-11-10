@@ -630,6 +630,23 @@ def _approval_request(
     )
     assumptions = input_payload.get("assumptions")
     uncertainty = input_payload.get("uncertainty")
+    parameters: JSONObject = {
+        "model_id": input_payload["model_id"],
+        "model_version": input_payload["model_version"],
+        "input_digest": input_digest,
+        "quality_status": quality_status,
+    }
+    if automatic_preparation is None:
+        parameters.update(
+            {
+                "assumptions": assumptions,
+                "uncertainty": uncertainty,
+            }
+        )
+    else:
+        parameters["automatic_preparation"] = _approval_preparation_projection(
+            automatic_preparation
+        )
     request: JSONObject = {
         "type": "valuation_approval",
         "contract_version": "v1",
@@ -640,22 +657,9 @@ def _approval_request(
             "The Fundamental service validated the explicit valuation input. "
             "Approve to run the stateless calculation, or reject to stop."
         ),
-        "parameters": {
-            "assumptions": assumptions,
-            "uncertainty": uncertainty,
-            "model_id": input_payload["model_id"],
-            "model_version": input_payload["model_version"],
-            "input_digest": input_digest,
-            "quality_status": quality_status,
-        },
+        "parameters": parameters,
         "audit_messages": issue_codes + missing_evidence,
     }
-    if automatic_preparation is not None:
-        parameters = request["parameters"]
-        if isinstance(parameters, dict):
-            parameters["automatic_preparation"] = _approval_preparation_projection(
-                automatic_preparation
-            )
     return request
 
 

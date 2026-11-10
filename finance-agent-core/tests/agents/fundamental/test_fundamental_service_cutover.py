@@ -1282,6 +1282,8 @@ async def test_cutover_bounds_automatic_preparation_in_approval_request() -> Non
     preparation = request.parameters["automatic_preparation"]
     assert isinstance(preparation, dict)
     assert "input" not in preparation
+    assert "assumptions" not in request.parameters
+    assert "uncertainty" not in request.parameters
     assert preparation["preparation_digest"] == "e" * 64
     assert len(client.calls[4][1]["provenance"]["source_evidence"]) == 20_000
     assert (
