@@ -100,6 +100,25 @@ cache exception.
    free space separately. Preserve the previous exact image for rollback until
    acceptance succeeds, then retire only owned candidate resources.
 
+`scripts/verify_docker_models.py` probes `embeddings`, `news` or `fls`, including
+fixed inputs, outputs, package versions and file hashes. Run it in disposable
+containers for both the previous and candidate exact image IDs, with
+`--network none --cpus 1 --memory 2g`, all three `HF_HUB_OFFLINE`,
+`TRANSFORMERS_OFFLINE`, `HF_LOCAL_FILES_ONLY` variables set to `1`, and the script
+mounted read-only. Override the backend entrypoint with `/opt/venv/bin/python`
+or the inference entrypoint with `/app/.venv/bin/python`, and set
+`PYTHONPATH=/app/src:/app`. Pass `--output /evidence/result.json` with a separate
+host evidence directory mounted at `/evidence`. Compare vectors/scores with an
+explicit tolerance and require identical labels, rankings and model revisions.
+
+For service checks, `compose/verification/docker-compose.issue373-storage.yml`
+uses candidate tags, an internal-only network, no published ports, disposable
+project-scoped volumes and resource limits. Pass an explicit unique `-p` name.
+Start Fundamental/Postgres, then verify News and FLS one at a time on a host with
+limited memory. Call actual authenticated endpoints from within the matching
+container; no browser or SEC-ingestion acceptance is implied by this storage
+check. Remove only this verification project's volumes after recording results.
+
 ## Retain useful cache and retire owned resources
 
 Build cache is shared by the selected builder. First run `docker buildx ls` and
