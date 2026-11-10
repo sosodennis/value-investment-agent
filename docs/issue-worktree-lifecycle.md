@@ -78,11 +78,11 @@ Record these fields without secrets:
 | --- | --- |
 | Worktree path | Absolute path used by the acceptance commands |
 | Branch | Exact issue branch name |
-| Verified commit SHA | Exact `git rev-parse HEAD` checked by the run |
+| Verified implementation commit SHA | Exact implementation commit checked by the run; later commits may contain acceptance metadata only |
 | Application Compose project | Explicit `docker compose -p` project name |
 | Fundamental Compose project | Explicit project name, even when the app stack is separate |
 | Compose files and overlays | Ordered `-f` list for each project |
-| Env-file paths | Exact `--env-file` paths, never their contents |
+| Env-file paths and SHA-256 | Exact `--env-file` paths plus a SHA-256 of each file, never their contents |
 | Published host ports | Values reported by `docker compose ... port` |
 | Application base URL | Derived from the current backend binding |
 | Fundamental service URL | Derived from the current Fundamental binding |
@@ -105,7 +105,7 @@ docker compose --env-file "$FUNDAMENTAL_ENV_FILE" -p "$FUNDAMENTAL_COMPOSE_PROJE
   -f compose/verification/docker-compose.issue312-sec-ingestion.yml port fundamental-service 8080
 ```
 
-Use `scripts/acceptance_preflight.sh` with the recorded tuple. It checks the worktree, branch, exact commit, clean status when required, Compose configuration, running services, published ports, application `/health`, and Fundamental `/readyz`. For SEC-backed acceptance set `REQUIRE_SEC_IDENTITY_RESOLUTION=1`; the preflight then requires the SEC ingestion overlay and the `identity_resolution_configured` readiness capability. A healthy container alone is not feature acceptance.
+Use `scripts/acceptance_preflight.sh` with the recorded tuple. It checks the worktree, branch, tested implementation commit, clean status when required, env-file SHA-256, required Compose variables, shell overrides, required SEC asset paths, Compose configuration, running services, published ports, application `/health`, and Fundamental `/readyz`. For SEC-backed acceptance set `REQUIRE_SEC_IDENTITY_RESOLUTION=1`; the preflight then requires the SEC ingestion overlay, a non-placeholder SEC contact, and the `identity_resolution_configured` readiness capability. A healthy container alone is not feature acceptance.
 
 Store the tuple in `docs/acceptance/issue-<issue>-runtime.json` and run the preflight from that manifest:
 
@@ -128,11 +128,14 @@ validates Git and Compose configuration before starting anything, uses the
 recorded projects, files, env paths, and ports, then checks service health and
 feature readiness against those same values.
 
-The manifest validator rejects missing fields, stale URL/port pairs, sensitive
-values, missing SEC overlays, and a `VERIFIED` status without passing checks.
-The required `contract-policy` workflow runs the same policy on issue branches;
-a WIP or `BLOCKED` PR must remain draft, and a PR cannot use a closing keyword
-until its manifest is `VERIFIED` against the PR head SHA.
+The manifest validator rejects missing fields, stale URL/port pairs, changed
+env-file digests, sensitive values, missing SEC overlays, and a `VERIFIED`
+status without passing checks. The required `contract-policy` workflow runs the
+same policy on issue branches; a WIP or `BLOCKED` PR must remain draft. A
+`VERIFIED` manifest records the exact implementation commit that was tested;
+the PR head must descend from that commit and any later commits must change
+acceptance metadata only. A PR cannot use a closing keyword until that policy
+passes.
 
 Exact-commit mode rejects tracked changes and every untracked path by default. If a runtime-only override is required, list its exact relative path in `ALLOWED_UNTRACKED_PATHS` and record that path in the tuple. The override remains runtime input and is never evidence that the commit contains the configuration.
 

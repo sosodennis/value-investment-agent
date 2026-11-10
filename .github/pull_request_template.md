@@ -3,7 +3,7 @@
 - [ ] Explain why this change is needed.
 - Acceptance manifest: `docs/acceptance/issue-<issue>-runtime.json`
 - Acceptance status: `WIP`, `BLOCKED`, or `VERIFIED`
-- Verified commit SHA: `<required only for VERIFIED>`
+- Verified implementation commit SHA: `<required only for VERIFIED; later commits may change acceptance metadata only>`
 - [ ] This PR remains draft while acceptance status is `WIP` or `BLOCKED`.
 
 ## Scope

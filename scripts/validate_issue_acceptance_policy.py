@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -16,6 +17,49 @@ from validate_acceptance_manifest import load_manifest, validate_manifest
 ISSUE_BRANCH_RE = re.compile(r"^codex/issue-(\d+)-")
 GATED_ISSUES = {351, 352, 353, 354, 355}
 CLOSING_RE_TEMPLATE = r"\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s+#{}\b"
+
+
+def _verified_commit_errors(
+    manifest_commit: str, current_sha: str, issue: int
+) -> list[str]:
+    errors: list[str] = []
+    ancestor = subprocess.run(
+        ["git", "merge-base", "--is-ancestor", manifest_commit, current_sha],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if ancestor.returncode != 0:
+        return [
+            f"verified manifest commit {manifest_commit} is not an ancestor of PR head {current_sha}"
+        ]
+
+    changed = subprocess.run(
+        ["git", "diff", "--name-only", f"{manifest_commit}..{current_sha}"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if changed.returncode != 0:
+        return ["cannot inspect files changed after the verified implementation commit"]
+
+    allowed = {
+        f"docs/acceptance/issue-{issue}-runtime.json",
+        f"docs/acceptance/issue-{issue}-acceptance.md",
+    }
+    invalid = []
+    for path in changed.stdout.splitlines():
+        if path in allowed or re.fullmatch(
+            rf"docs/acceptance/issue-{issue}-progress-.+\.md", path
+        ):
+            continue
+        invalid.append(path)
+    if invalid:
+        errors.append(
+            "files changed after the verified implementation commit must be acceptance "
+            f"metadata only: {', '.join(invalid)}"
+        )
+    return errors
 
 
 def _event_body() -> str:
@@ -79,15 +123,17 @@ def main() -> int:
     errors = validate_manifest(
         manifest,
         expected_issue=issue,
-        expected_commit=current_sha if manifest.get("status") == "VERIFIED" else None,
         require_sec_identity=issue == 355,
     )
+    if manifest.get("status") == "VERIFIED":
+        if not current_sha:
+            errors.append("VERIFIED acceptance policy requires GITHUB_SHA")
+        else:
+            errors.extend(
+                _verified_commit_errors(manifest["commit"], current_sha, issue)
+            )
     if closing_keyword and manifest.get("status") != "VERIFIED":
         errors.append("PR closing keyword requires acceptance manifest status=VERIFIED")
-    if closing_keyword and current_sha and manifest.get("commit") != current_sha:
-        errors.append(
-            "PR closing keyword requires manifest commit to equal PR head SHA"
-        )
     if draft is False and manifest.get("status") != "VERIFIED":
         errors.append(
             "a ready-for-review PR requires acceptance manifest status=VERIFIED"
