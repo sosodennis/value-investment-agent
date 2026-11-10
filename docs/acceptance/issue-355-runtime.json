@@ -3,7 +3,7 @@
   "issue": 355,
   "status": "WIP",
   "branch": "codex/issue-355-forward-reference",
-  "commit": "f80e73abb1ce851c11d6fbd7f679543dc7011c61",
+  "commit": "fc88fc1844a3136aac66195f5d6d9272477e40d8",
   "sec_identity_required": true,
   "runtime": {
     "worktree": "/Users/denniswong/.codex/worktrees/issue-355-forward-reference/value-investment-agent",
@@ -17,7 +17,7 @@
         "compose/verification/docker-compose.issue325-app-fundamental.yml"
       ],
       "env_file": "/Users/denniswong/Desktop/Project/value-investment-agent/.env",
-      "env_file_sha256": "0349507efc5ac6d665626f4ff0dd7f17c5216f44b4ca56312f23850923d0cb7b",
+      "env_file_sha256": "109d06ea7c283f84f03e947699271a5d7d976ab01b2e8d480b036659924b29ec",
       "service": "backend",
       "container_port": 8000,
       "published_port": 18880,
@@ -30,7 +30,7 @@
         "compose/verification/docker-compose.issue312-sec-ingestion.yml"
       ],
       "env_file": "/Users/denniswong/Desktop/Project/value-investment-agent/.env",
-      "env_file_sha256": "0349507efc5ac6d665626f4ff0dd7f17c5216f44b4ca56312f23850923d0cb7b",
+      "env_file_sha256": "109d06ea7c283f84f03e947699271a5d7d976ab01b2e8d480b036659924b29ec",
       "service": "fundamental-service",
       "container_port": 8080,
       "published_port": 18890,
