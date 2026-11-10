@@ -98,10 +98,11 @@ The issue-scoped browser session used the disposable account
   `166b258e-3137-4f78-91a4-f9a064de676b`.
 - The same real Workspace baseline showed `Search news`, `Select relevant
   articles`, `Fetch article content`, and downstream news/LLM activity before
-  any explicit forward-evidence action. This fails the issue acceptance wording
-  that the default valuation path makes no Search/LLM calls. The default root
-  workflow must be changed or the acceptance scope must be explicitly narrowed;
-  this record keeps the issue unverified until the boundary is resolved.
+  any explicit forward-evidence action. GitHub issue #355 was subsequently
+  revised at `2026-11-10T00:06:31Z` to state that broader Workspace News/Debate
+  provider calls are outside this criterion. The remaining browser check is
+  therefore scoped to the Fundamental preparation path and must prove that it
+  does not call the optional forward-evidence route before explicit opt-in.
 
 These runs are diagnostic evidence only. No browser acceptance criterion is
 marked passed, and no PR or issue closure is authorized from this checkpoint.
