@@ -152,11 +152,11 @@ acceptance runtime has no usable provider credential. That limitation does not
 block the required provider-failure behavior, but it remains an explicit
 unverified path until a separately authorized provider runtime is available.
 
-The feature acceptance criteria are verified against checkpoint
-`f9c77ae06bfbbd41bbafeef2e090bf096d64d351`. The acceptance-policy workflow now
-checks out full history (`fetch-depth: 0`), so the verified implementation
-commit ancestry is testable on GitHub's synthetic merge commit. The WIP gate
-fix passed all 11 required PR checks on the exact checkpoint, including
-`contract-policy`; the manifest is now rebound to that checkpoint and will be
-rechecked locally before PR #368 returns to ready. The issue remains OPEN
-until merge, merge-commit verification, issue closure, and cleanup.
+The feature acceptance criteria remain satisfied against checkpoint
+`6dfa627bfca9e066a528a0fb1e0f05b2df2a8dcf`. The first fetch-depth fix was
+applied to an unrelated checkout job, so this WIP checkpoint moves the full
+history checkout (`fetch-depth: 0`) specifically into `contract-policy` and
+restores the other jobs. After the corrected workflow passes all required
+checks, the manifest will be rebound to that exact checkpoint before PR #368
+returns to ready. The issue remains OPEN until merge, merge-commit
+verification, issue closure, and cleanup.

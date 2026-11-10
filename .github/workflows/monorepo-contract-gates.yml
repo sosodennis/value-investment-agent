@@ -17,10 +17,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          # The acceptance policy checks ancestry from the verified implementation commit.
-          # A shallow synthetic merge checkout cannot prove that relationship.
-          fetch-depth: 0
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -637,6 +633,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # The acceptance policy checks ancestry from the verified implementation commit.
+          # A shallow synthetic merge checkout cannot prove that relationship.
+          fetch-depth: 0
 
       - name: Validate issue-scoped acceptance policy
         env:
