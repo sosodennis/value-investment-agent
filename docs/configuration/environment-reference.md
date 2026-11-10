@@ -156,7 +156,9 @@ to a normal application `.env` unless you are running the matching harness.
 
 The index below is checked by `scripts/validate_configuration_reference.py`.
 When a Compose interpolation or env-example assignment adds a key, add the key
-to a classification table and this index in the same change.
+to a classification table and this index in the same change. The validator
+also requires every indexed key to have an active Compose, script, or service
+consumer. A key that exists only in an example is not a supported setting.
 
 <!-- begin-config-key-index -->
 - `APP_ENV`

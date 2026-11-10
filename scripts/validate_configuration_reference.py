@@ -22,6 +22,20 @@ SOURCE_FILES = (
     Path("docker-compose.production.yml"),
 )
 
+CONSUMER_PATHS = (
+    Path("docker-compose.yml"),
+    Path("docker-compose.override.yml"),
+    Path("docker-compose.production.yml"),
+    Path("compose"),
+    Path("scripts"),
+    Path("finance-agent-core/src"),
+    Path("fundamental-service/src"),
+    Path("search-service/src"),
+    Path("llm-provider-service/src"),
+    Path("model-inference-service/src"),
+    Path("frontend/src"),
+)
+
 
 def configuration_keys(root: Path) -> set[str]:
     keys: set[str] = set()
@@ -40,6 +54,33 @@ def configuration_keys(root: Path) -> set[str]:
     return {key for key in keys if KEY_RE.fullmatch(key)}
 
 
+def active_consumer_keys(root: Path) -> set[str]:
+    keys: set[str] = set()
+    for relative_path in CONSUMER_PATHS:
+        path = root / relative_path
+        paths = [path] if path.is_file() else path.rglob("*")
+        for file_path in paths:
+            if not file_path.is_file() or "__pycache__" in file_path.parts:
+                continue
+            text = file_path.read_text(encoding="utf-8", errors="ignore")
+            keys.update(
+                key
+                for key in configuration_keys_from_text(text)
+                if KEY_RE.fullmatch(key)
+            )
+    return keys
+
+
+def configuration_keys_from_text(text: str) -> set[str]:
+    keys = set(INTERPOLATION_RE.findall(text))
+    keys.update(
+        match.group(1)
+        for line in text.splitlines()
+        if (match := ASSIGNMENT_RE.match(line))
+    )
+    return keys
+
+
 def reference_index(text: str) -> list[str]:
     try:
         start = text.index(START_MARKER) + len(START_MARKER)
@@ -53,6 +94,7 @@ def reference_index(text: str) -> list[str]:
 
 def validate(root: Path, reference_path: Path) -> list[str]:
     expected = configuration_keys(root)
+    active = active_consumer_keys(root)
     try:
         actual_list = reference_index(reference_path.read_text(encoding="utf-8"))
     except (OSError, ValueError) as error:
@@ -68,6 +110,12 @@ def validate(root: Path, reference_path: Path) -> list[str]:
     extra = sorted(actual - expected)
     if extra:
         errors.append(f"configuration reference lists unknown keys: {', '.join(extra)}")
+    orphaned = sorted(expected - active)
+    if orphaned:
+        errors.append(
+            "configuration keys have no active Compose, script, or service consumer: "
+            + ", ".join(orphaned)
+        )
     return errors
 
 
