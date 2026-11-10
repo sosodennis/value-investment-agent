@@ -578,6 +578,36 @@ def _caller_values_preserved(
     return _payload_equal(supplied, returned)
 
 
+_APPROVAL_PREPARATION_FIELDS = (
+    "contract_version",
+    "status",
+    "model_id",
+    "model_version",
+    "profile_id",
+    "profile_digest",
+    "policy_id",
+    "policy_version",
+    "quality_status",
+    "issue_codes",
+    "missing_evidence",
+    "historical_metrics",
+    "assumptions_evidence",
+    "preparation_digest",
+)
+
+
+def _approval_preparation_projection(
+    preparation: Mapping[str, object],
+) -> JSONObject:
+    """Keep approval interaction bounded while retaining service-owned evidence."""
+
+    return {
+        field: preparation[field]
+        for field in _APPROVAL_PREPARATION_FIELDS
+        if field in preparation
+    }
+
+
 def _approval_request(
     *,
     input_payload: Mapping[str, object],
@@ -623,7 +653,9 @@ def _approval_request(
     if automatic_preparation is not None:
         parameters = request["parameters"]
         if isinstance(parameters, dict):
-            parameters["automatic_preparation"] = dict(automatic_preparation)
+            parameters["automatic_preparation"] = _approval_preparation_projection(
+                automatic_preparation
+            )
     return request
 
 

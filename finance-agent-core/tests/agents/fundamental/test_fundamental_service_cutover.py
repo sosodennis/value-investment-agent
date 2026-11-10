@@ -24,6 +24,7 @@ from src.agents.fundamental.interface.fundamental_service_contracts import (
     FundamentalValuationEvidenceReadResultV1,
     FundamentalValuationPreparationResultV1,
 )
+from src.analysis_runtime.domain.contracts import ValuationApprovalRequest
 from src.shared.artifacts.artifact_data_models import FinancialReportsArtifactData
 from src.shared.cross_agent.domain.market_identity import CompanyProfile
 from src.shared.internal_services import (
@@ -562,6 +563,7 @@ class _FactsOnlyClient(_Client):
         facts_ids: list[str] | None = None,
         resolved_fact_ids: list[str] | None = None,
         snapshot_timestamp: str = "2026-11-01T00:00:00Z",
+        preparation_padding: str = "",
     ) -> None:
         identity = _resolved_identity().identity.model_dump(mode="json")
         self.resolved_fact_ids = list(resolved_fact_ids or self._fact_ids)
@@ -573,6 +575,7 @@ class _FactsOnlyClient(_Client):
         )
         self.identity = identity
         self.snapshot_timestamp = snapshot_timestamp
+        self.preparation_padding = preparation_padding
 
     async def resolve_identity(self, request, **_kwargs):
         self.calls.append(("resolve_identity", request.model_dump(mode="json")))
@@ -642,6 +645,10 @@ class _FactsOnlyClient(_Client):
             "fact_ids": list(self.resolved_fact_ids),
         }
         prepared["policy_id"] = "fcff_dcf-us-gaap-public-v1"
+        if self.preparation_padding:
+            provenance = prepared["provenance"]
+            assert isinstance(provenance, dict)
+            provenance["source_evidence"] = self.preparation_padding
         return FundamentalValuationPreparationResultV1.model_validate(
             {
                 "contract_version": "fundamental.v1",
@@ -1232,6 +1239,58 @@ async def test_cutover_preserves_input_and_binds_caller_approval() -> None:
     assert (
         result.update["fundamental_analysis"]["valuation_request"]
         == state["fundamental_analysis"]["valuation_request"]
+    )
+
+
+@pytest.mark.asyncio
+async def test_cutover_bounds_automatic_preparation_in_approval_request() -> None:
+    client = _FactsOnlyClient(preparation_padding="x" * 20_000)
+    runtime = _Runtime()
+    approval_calls: list[dict[str, object]] = []
+    token = set_request_principal(
+        InternalPrincipal(
+            subject_id="caller-1", organization_id="org-1", membership_id="membership-1"
+        )
+    )
+    try:
+        result = await run_service_valuation_flow(
+            runtime,
+            {
+                "valuation_request": {
+                    "model_id": "fcff_dcf",
+                    "requested_as_of": "2026-11-04T00:00:00Z",
+                },
+                "company_profile": CompanyProfile(ticker="AAPL", name="Apple Inc."),
+                "fundamental_analysis": {"model_type": "dcf_standard"},
+            },
+            client=client,
+            request_approval_fn=lambda request: approval_calls.append(request)
+            or {
+                "type": "valuation_approval",
+                "contract_version": "v1",
+                "decision": "reject",
+            },
+            clock=lambda: datetime(2026, 11, 4, tzinfo=UTC),
+        )
+    finally:
+        reset_request_principal(token)
+
+    assert result.update["fundamental_analysis"]["valuation_status"] == (
+        "approval_rejected"
+    )
+    request = ValuationApprovalRequest.model_validate(approval_calls[0])
+    preparation = request.parameters["automatic_preparation"]
+    assert isinstance(preparation, dict)
+    assert "input" not in preparation
+    assert preparation["preparation_digest"] == "e" * 64
+    assert len(client.calls[4][1]["provenance"]["source_evidence"]) == 20_000
+    assert (
+        len(
+            json.dumps(
+                request.parameters, ensure_ascii=False, separators=(",", ":")
+            ).encode("utf-8")
+        )
+        < 16 * 1024
     )
 
 
