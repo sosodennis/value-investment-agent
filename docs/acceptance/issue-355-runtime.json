@@ -1,9 +1,9 @@
 {
   "schema_version": 1,
   "issue": 355,
-  "status": "WIP",
+  "status": "VERIFIED",
   "branch": "codex/issue-355-forward-reference",
-  "commit": "f9c77ae06bfbbd41bbafeef2e090bf096d64d351",
+  "commit": "4ba8a27462242cd609016a8ebd26bc9eeaeaeade",
   "sec_identity_required": true,
   "runtime": {
     "worktree": "/Users/denniswong/.codex/worktrees/issue-355-forward-reference/value-investment-agent",
@@ -102,12 +102,9 @@
     {
       "name": "github_required_ci",
       "status": "pass",
-      "command": "PR #368 required checks: 11 passed on head f9c77ae06bfbbd41bbafeef2e090bf096d64d351"
+      "command": "PR #368 required checks: 11 passed on head 4ba8a27462242cd609016a8ebd26bc9eeaeaeade"
     }
   ],
-  "blockers": [
-    "The prior fetch-depth patch was applied to a different checkout job; this checkpoint moves it to contract-policy and keeps unrelated jobs unchanged.",
-    "PR #368 must remain draft while the corrected workflow checkpoint is verified; then rebind VERIFIED status to that exact checkpoint and rerun CI."
-  ],
-  "next_step": "Run CI on the corrected contract-policy checkout, then bind VERIFIED status to the exact checkpoint, rerun preflight, restore PR #368 to ready, and complete merge gates."
+  "blockers": [],
+  "next_step": "Rerun exact preflight, restore PR #368 to ready, complete any required review, merge to main, verify the merge commit, close #355, and clean up resources."
 }
