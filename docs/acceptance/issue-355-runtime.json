@@ -56,8 +56,8 @@
     },
     {
       "name": "acceptance_preflight",
-      "status": "not_run",
-      "command": "ACCEPTANCE_MANIFEST=docs/acceptance/issue-355-runtime.json scripts/acceptance_preflight.sh (rerun after documentation checkpoint)"
+      "status": "pass",
+      "command": "ACCEPTANCE_MANIFEST=docs/acceptance/issue-355-runtime.json scripts/acceptance_preflight.sh (exit 0; exact implementation commit is 6dfa627bfca9e066a528a0fb1e0f05b2df2a8dcf)"
     },
     {
       "name": "browser_acceptance",
@@ -101,7 +101,6 @@
     }
   ],
   "blockers": [
-    "The manifest-backed exact-head preflight must be rerun after the acceptance-metadata checkpoint.",
     "Provider-backed successful claim application is covered by unit and service tests but is not live-browser verified because the acceptance runtime has no usable provider credential.",
     "PR review, required CI, merge to main, exact merge verification, issue closure, and resource cleanup remain outstanding."
   ],

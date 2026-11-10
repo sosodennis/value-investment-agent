@@ -152,7 +152,8 @@ acceptance runtime has no usable provider credential. That limitation does not
 block the required provider-failure behavior, but it remains an explicit
 unverified path until a separately authorized provider runtime is available.
 
-The issue remains WIP. The runtime manifest must be advanced to the
-documentation checkpoint and its exact-head preflight rerun. PR review,
-required CI, merge to `main`, exact merge verification, issue closure, and
-cleanup remain outstanding.
+The issue remains WIP. The runtime manifest points to the evidence checkpoint,
+and the manifest-backed exact-head preflight passed with the recorded Compose
+projects, env-file digests, ports, health checks, and SEC identity readiness.
+PR review, required CI, merge to `main`, exact merge verification, issue
+closure, and cleanup remain outstanding.
