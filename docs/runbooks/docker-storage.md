@@ -58,6 +58,14 @@ also selects the development target for optional backend schedulers. Existing
 running projects are changed only when their own operator explicitly recreates
 them using the new images.
 
+Before rolling out to a development stack, record its exact current image IDs
+and keep their tags. Build the changed services for that stack's own project,
+then recreate only those services during the owner's chosen window. To roll
+back, assign the previous exact image ID a project-specific rollback tag and
+select it in that project's image override; recreate with `--no-build` using
+the same env files, ports and volumes. Image rollback must not delete or reset
+database volumes. Keep the previous image until the new runtime checks pass.
+
 ## Bake the files the existing loaders use
 
 `finance-agent-core/scripts/bake_models.py` pins both embedding snapshots and
