@@ -100,9 +100,59 @@ The issue-scoped browser session used the disposable account
   articles`, `Fetch article content`, and downstream news/LLM activity before
   any explicit forward-evidence action. GitHub issue #355 was subsequently
   revised at `2026-11-10T00:06:31Z` to state that broader Workspace News/Debate
-  provider calls are outside this criterion. The remaining browser check is
-  therefore scoped to the Fundamental preparation path and must prove that it
-  does not call the optional forward-evidence route before explicit opt-in.
+  provider calls are outside this criterion. The browser check was therefore
+  scoped to the Fundamental preparation path and proved that the optional
+  forward-evidence route is only exercised after the explicit action.
 
-These runs are diagnostic evidence only. No browser acceptance criterion is
-marked passed, and no PR or issue closure is authorized from this checkpoint.
+These runs are historical diagnostic evidence. The latest implementation
+checkpoint below records the passing browser result; no PR or issue closure is
+authorized until the exact commit, review, CI, and merge gates are complete.
+
+## Latest implementation checkpoint `79c3e774`
+
+The browser acceptance run exposed a request-boundary defect: the frontend sent
+the canonical JSON value `2026-11-10T00:55:00Z`, while the strict
+`ForwardEvidenceResearchRequest` model rejected the string before the route
+handler ran. The boundary validator now accepts ISO-8601/RFC3339 JSON strings,
+requires timezone information, and normalizes accepted values to UTC. The
+strictness of the remaining request contract is unchanged.
+
+Checks run against `79c3e774`:
+
+| Check | Result |
+| --- | --- |
+| Agent Core forward-evidence tests | exit 0; 7 passed |
+| Fundamental Service forward-evidence tests | exit 0; 6 passed |
+| Frontend focused tests | exit 0; 39 passed |
+| Frontend `npm run typecheck` | exit 0 |
+| Ruff on changed Python files | exit 0 |
+| `python3 scripts/architecture_guard.py` | exit 0 |
+| `bash scripts/generate-contracts.sh` | exit 0; no generated contract diff |
+| `git diff --check` and commit hooks | exit 0 |
+
+The issue-scoped Compose stacks were rebuilt from this fix. Application
+`http://127.0.0.1:18880/health` and Fundamental Service
+`http://127.0.0.1:18890/readyz` both returned successfully. The application
+project is `value-investment-agent-355-forward-reference`; the Fundamental
+project is `value-investment-agent-355-forward-reference-fundamental`.
+
+The real Workspace run used browser tab `8`, run
+`578f54e1-a079-4d61-8038-4eb2457c3d1a`, and artifact
+`9346d290-ce03-48bc-ad4b-21348bc401a`. The explicit **Research evidence**
+action changed from HTTP `422` to HTTP `200 OK`. The typed result was
+`unavailable` with reason `LLM_PROVIDER_FAILURE`; it stated that no claim was
+eligible to change the baseline and reported one search query, five results,
+and one LLM call. Backend logs show the search request succeeded and the LLM
+provider returned `502`, which the optional route converted into the typed
+non-blocking result. The default valuation remained unchanged.
+
+Provider-backed successful claim extraction and application are covered by the
+unit and service tests. They were not live-browser verified because this
+acceptance runtime has no usable provider credential. That limitation does not
+block the required provider-failure behavior, but it remains an explicit
+unverified path until a separately authorized provider runtime is available.
+
+The issue remains WIP. The runtime manifest must be advanced to the
+documentation checkpoint and its exact-head preflight rerun. PR review,
+required CI, merge to `main`, exact merge verification, issue closure, and
+cleanup remain outstanding.

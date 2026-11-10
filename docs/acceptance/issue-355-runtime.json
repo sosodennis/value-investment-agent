@@ -3,7 +3,7 @@
   "issue": 355,
   "status": "WIP",
   "branch": "codex/issue-355-forward-reference",
-  "commit": "c794af48963fc8eb1f5f4fbf6c8d40efdbd54d32",
+  "commit": "79c3e774b442537ffa79069a9623e114bf3943ca",
   "sec_identity_required": true,
   "runtime": {
     "worktree": "/Users/denniswong/.codex/worktrees/issue-355-forward-reference/value-investment-agent",
@@ -57,17 +57,53 @@
     {
       "name": "acceptance_preflight",
       "status": "not_run",
-      "command": "ACCEPTANCE_MANIFEST=docs/acceptance/issue-355-runtime.json scripts/acceptance_preflight.sh"
+      "command": "ACCEPTANCE_MANIFEST=docs/acceptance/issue-355-runtime.json scripts/acceptance_preflight.sh (rerun after documentation checkpoint)"
     },
     {
       "name": "browser_acceptance",
-      "status": "not_run",
-      "command": "Run the explicit Fundamental browser path in a fresh session"
+      "status": "pass",
+      "command": "Browser tab 8, run 578f54e1-a079-4d61-8038-4eb2457c3d1a: explicit Research evidence action returned 200 with typed LLM_PROVIDER_FAILURE and no baseline mutation"
+    },
+    {
+      "name": "agent_core_forward_evidence_tests",
+      "status": "pass",
+      "command": "uv run --project finance-agent-core pytest finance-agent-core/tests/agents/fundamental/test_forward_evidence_research.py -q (7 passed)"
+    },
+    {
+      "name": "fundamental_service_forward_evidence_tests",
+      "status": "pass",
+      "command": "uv run --project fundamental-service pytest fundamental-service/tests/test_forward_evidence.py -q (6 passed)"
+    },
+    {
+      "name": "frontend_forward_evidence_tests",
+      "status": "pass",
+      "command": "npm run test -- --run src/features/workspace/outputs/fundamental-analysis/forward-evidence-api.test.ts (39 passed)"
+    },
+    {
+      "name": "frontend_typecheck",
+      "status": "pass",
+      "command": "npm run typecheck"
+    },
+    {
+      "name": "ruff_changed_python",
+      "status": "pass",
+      "command": "uv run --project finance-agent-core ruff check finance-agent-core/src/agents/fundamental/capabilities/forward_evidence/contracts.py finance-agent-core/tests/agents/fundamental/test_forward_evidence_research.py"
+    },
+    {
+      "name": "architecture_guard",
+      "status": "pass",
+      "command": "python3 scripts/architecture_guard.py"
+    },
+    {
+      "name": "contract_generation",
+      "status": "pass",
+      "command": "bash scripts/generate-contracts.sh; generated artifacts unchanged"
     }
   ],
   "blockers": [
-    "Exact preflight has not been rerun for this checkpoint.",
-    "The disposable organization authorization path still needs a signed live verification."
+    "The manifest-backed exact-head preflight must be rerun after the acceptance-metadata checkpoint.",
+    "Provider-backed successful claim application is covered by unit and service tests but is not live-browser verified because the acceptance runtime has no usable provider credential.",
+    "PR review, required CI, merge to main, exact merge verification, issue closure, and resource cleanup remain outstanding."
   ],
-  "next_step": "Run the manifest-backed preflight and signed organization authorization check before any VERIFIED or closing claim."
+  "next_step": "Create the acceptance-metadata checkpoint, rerun exact-head preflight, then push and open the #355 PR for required review and CI."
 }
