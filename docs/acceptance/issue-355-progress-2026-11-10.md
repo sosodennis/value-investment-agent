@@ -81,3 +81,27 @@ must not be marked verified or closed.
 
 No production provider calls are enabled by default. Resource budgets remain a
 measured acceptance item; this checkpoint does not claim #355 is verified.
+
+## Browser acceptance checkpoint
+
+The issue-scoped browser session used the disposable account
+`issue355-20261109235229-4ca4df@staging.invalid` against the stack on
+`http://127.0.0.1:18881`.
+
+- Run `2f8dd84d-2076-4ef3-b776-89c14cd1f487` completed, but Fundamental Service
+  returned `IDENTITY_RESOLUTION_UNAVAILABLE` because the first runtime omitted
+  `FUNDAMENTAL_SEC_USER_AGENT`.
+- After injecting the existing local SEC contact into the issue-scoped
+  Fundamental container, run `48fb7db2-7282-4a33-bddd-201c37b56db0` returned
+  `IDENTITY_RESOLUTION_NOT_AUTHORIZED`; the service was still authorizing only
+  `local-development`, while the disposable account used organization
+  `166b258e-3137-4f78-91a4-f9a064de676b`.
+- The same real Workspace baseline showed `Search news`, `Select relevant
+  articles`, `Fetch article content`, and downstream news/LLM activity before
+  any explicit forward-evidence action. This fails the issue acceptance wording
+  that the default valuation path makes no Search/LLM calls. The default root
+  workflow must be changed or the acceptance scope must be explicitly narrowed;
+  this record keeps the issue unverified until the boundary is resolved.
+
+These runs are diagnostic evidence only. No browser acceptance criterion is
+marked passed, and no PR or issue closure is authorized from this checkpoint.
