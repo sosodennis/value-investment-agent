@@ -21,6 +21,39 @@ from src.search.contracts import SearchOperationResult, SearchResult
 from src.shared.internal_services import InternalPrincipal
 
 
+def test_research_request_accepts_json_timestamp_and_normalizes_to_utc() -> None:
+    request = ForwardEvidenceResearchRequest.model_validate(
+        {
+            "opt_in": True,
+            "ticker": "AAPL",
+            "issuer_id": "issuer-aapl",
+            "model_id": "fcff_dcf",
+            "assumption_path": "assumptions.forecast.revenue_growth[0]",
+            "question": "What is the next annual revenue growth guidance?",
+            "valuation_timestamp": "2026-11-10T00:55:00Z",
+            "automatic_preparation_digest": "a" * 64,
+        }
+    )
+
+    assert request.valuation_timestamp == datetime(2026, 11, 10, 0, 55, tzinfo=UTC)
+
+
+def test_research_request_rejects_naive_json_timestamp() -> None:
+    with pytest.raises(ValueError, match="must include a timezone"):
+        ForwardEvidenceResearchRequest.model_validate(
+            {
+                "opt_in": True,
+                "ticker": "AAPL",
+                "issuer_id": "issuer-aapl",
+                "model_id": "fcff_dcf",
+                "assumption_path": "assumptions.forecast.revenue_growth[0]",
+                "question": "What is the next annual revenue growth guidance?",
+                "valuation_timestamp": "2026-11-10T00:55:00",
+                "automatic_preparation_digest": "a" * 64,
+            }
+        )
+
+
 def _request() -> ForwardEvidenceResearchRequest:
     return ForwardEvidenceResearchRequest(
         opt_in=True,

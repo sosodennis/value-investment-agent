@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { parseForwardEvidenceReview } from './forward-evidence-api';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { parseForwardEvidenceReview, researchForwardEvidence } from './forward-evidence-api';
 
 const validResponse = {
     result: {
@@ -83,5 +83,47 @@ describe('parseForwardEvidenceReview', () => {
                 }],
             },
         })).toThrow(/http or https URL/);
+    });
+});
+
+describe('researchForwardEvidence', () => {
+    afterEach(() => vi.unstubAllGlobals());
+
+    it('serializes the canonical JSON request contract', async () => {
+        const fetchMock = vi.fn().mockResolvedValue(
+            new Response(JSON.stringify(validResponse), {
+                status: 200,
+                headers: { 'Content-Type': 'application/json' },
+            }),
+        );
+        vi.stubGlobal('fetch', fetchMock);
+
+        await researchForwardEvidence({
+            opt_in: true,
+            ticker: 'AAPL',
+            issuer_id: '0000320193',
+            model_id: 'fcff_dcf',
+            assumption_path: 'assumptions.forecast.base_revenue',
+            question: 'What is the next annual revenue growth guidance?',
+            valuation_timestamp: '2026-11-10T00:55:00Z',
+            automatic_preparation_digest: 'a'.repeat(64),
+        });
+
+        expect(fetchMock).toHaveBeenCalledWith(
+            '/api/v1/fundamental/forward-evidence/research',
+            expect.objectContaining({
+                method: 'POST',
+                body: JSON.stringify({
+                    opt_in: true,
+                    ticker: 'AAPL',
+                    issuer_id: '0000320193',
+                    model_id: 'fcff_dcf',
+                    assumption_path: 'assumptions.forecast.base_revenue',
+                    question: 'What is the next annual revenue growth guidance?',
+                    valuation_timestamp: '2026-11-10T00:55:00Z',
+                    automatic_preparation_digest: 'a'.repeat(64),
+                }),
+            }),
+        );
     });
 });

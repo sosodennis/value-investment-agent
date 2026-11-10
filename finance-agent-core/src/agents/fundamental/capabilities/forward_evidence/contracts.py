@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Literal
 
@@ -18,6 +18,22 @@ class ForwardEvidenceResearchRequest(BaseModel):
     question: str = Field(min_length=8, max_length=512)
     valuation_timestamp: datetime
     automatic_preparation_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+    @field_validator("valuation_timestamp", mode="before")
+    @classmethod
+    def parse_valuation_timestamp(cls, value: object) -> object:
+        if isinstance(value, str):
+            try:
+                value = datetime.fromisoformat(value.replace("Z", "+00:00"))
+            except ValueError as exc:
+                raise ValueError(
+                    "valuation_timestamp must be an ISO-8601 datetime"
+                ) from exc
+        if not isinstance(value, datetime):
+            return value
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("valuation_timestamp must include a timezone")
+        return value.astimezone(UTC)
 
     @field_validator("ticker", mode="before")
     @classmethod
