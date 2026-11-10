@@ -148,7 +148,13 @@ check_env_digest() {
   local expected="$2"
   local path="$3"
   local actual
-  actual="$(sha256sum "$path" | awk '{print $1}')" || fail "cannot hash ${name}"
+  if command -v sha256sum >/dev/null 2>&1; then
+    actual="$(sha256sum "$path" | awk '{print $1}')" || fail "cannot hash ${name}"
+  elif command -v shasum >/dev/null 2>&1; then
+    actual="$(shasum -a 256 "$path" | awk '{print $1}')" || fail "cannot hash ${name}"
+  else
+    fail "neither sha256sum nor shasum is available for ${name}"
+  fi
   [[ "$actual" == "$expected" ]] || fail "${name} changed since the runtime tuple was recorded"
 }
 
