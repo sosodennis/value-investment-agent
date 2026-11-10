@@ -152,8 +152,11 @@ acceptance runtime has no usable provider credential. That limitation does not
 block the required provider-failure behavior, but it remains an explicit
 unverified path until a separately authorized provider runtime is available.
 
-The issue remains WIP. The runtime manifest points to the evidence checkpoint,
-and the manifest-backed exact-head preflight passed with the recorded Compose
-projects, env-file digests, ports, health checks, and SEC identity readiness.
-PR review, required CI, merge to `main`, exact merge verification, issue
-closure, and cleanup remain outstanding.
+The feature acceptance criteria are verified against evidence commit
+`6dfa627bfca9e066a528a0fb1e0f05b2df2a8dcf`. The runtime manifest records the
+verified status, and the manifest-backed exact-head preflight passed with the
+recorded Compose projects, env-file digests, ports, health checks, and SEC
+identity readiness. PR #368 has all 11 required CI checks passing on head
+`89bcde47491104a674078dd6ee8e307e8e81b094` and has no review comments. The
+issue remains OPEN until the PR is reviewed and merged to `main`, the merge
+commit is verified, and the issue is closed; cleanup follows that verification.

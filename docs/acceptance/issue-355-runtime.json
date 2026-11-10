@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "issue": 355,
-  "status": "WIP",
+  "status": "VERIFIED",
   "branch": "codex/issue-355-forward-reference",
   "commit": "6dfa627bfca9e066a528a0fb1e0f05b2df2a8dcf",
   "sec_identity_required": true,
@@ -98,11 +98,13 @@
       "name": "contract_generation",
       "status": "pass",
       "command": "bash scripts/generate-contracts.sh; generated artifacts unchanged"
+    },
+    {
+      "name": "github_required_ci",
+      "status": "pass",
+      "command": "PR #368 required checks: 11 passed on head 89bcde47491104a674078dd6ee8e307e8e81b094"
     }
   ],
-  "blockers": [
-    "Provider-backed successful claim application is covered by unit and service tests but is not live-browser verified because the acceptance runtime has no usable provider credential.",
-    "PR review, required CI, merge to main, exact merge verification, issue closure, and resource cleanup remain outstanding."
-  ],
-  "next_step": "Create the acceptance-metadata checkpoint, rerun exact-head preflight, then push and open the #355 PR for required review and CI."
+  "blockers": [],
+  "next_step": "Mark PR #368 ready, complete any required review, merge to main, verify the merge commit, close #355, and clean up the issue-scoped resources."
 }
