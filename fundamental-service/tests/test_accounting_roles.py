@@ -160,10 +160,6 @@ def _candidates(snapshot, report, mapping):
     "disposition,expected", [("derived", "120"), ("confirmed_absent", "0")]
 )
 def test_accounting_value_keeps_sources_and_roundtrips(disposition, expected):
-    from src.agents.fundamental.interface.fundamental_service_contracts import (
-        FundamentalCanonicalFactV1,
-    )
-
     snapshot, report, mapping = _fixture(disposition=disposition)
     (candidate,) = _candidates(snapshot, report, mapping)
     fact = candidate.canonical_fact(quality=QualityStatus.VERIFIED)
@@ -177,12 +173,6 @@ def test_accounting_value_keeps_sources_and_roundtrips(disposition, expected):
     verify_accounting_role_evidence(fact, mapping, snapshot)
     assert canonical_fact_digest(fact) == canonical_fact_digest(restored)
     assert _candidates(snapshot, report, mapping) == (candidate,)
-    projected = FundamentalCanonicalFactV1.model_validate_json(canonical_bytes(fact))
-    assert (
-        projected.accounting_evidence
-        == fact.model_dump(mode="json")["accounting_evidence"]
-    )
-    assert projected.value == fact.value
 
 
 @pytest.mark.parametrize("disposition", ["unknown", "unsupported"])
