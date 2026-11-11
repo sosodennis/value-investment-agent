@@ -29,3 +29,16 @@ range and its hash. Existing exact, terminal-script and XML relations retain
 their policies and digests. Regulatory validation and original-versus-parser
 fact/finding comparison still apply; this relation grants no mapping approval,
 trusted release, numerical valuation or history threshold.
+
+## Inline taxonomy references
+
+Automatic acquisition resolves an inline original's taxonomy through its single
+namespace-bound `schemaRef`, rather than assuming the HTML and schema filenames
+share a stem. The original is read through the existing retained capture adapter.
+The reference must be a safe root `.xsd` filename occurring exactly once, with
+matching case, in the same accession index. Its existing bounded linkbase
+selection then supplies the offline parser. Missing, ambiguous, external, unsafe
+or unbound references refuse acquisition; standalone XML selection is unchanged.
+Original bytes, accession integrity, offline regulatory validation, mapping
+review and release/caller approval remain required. This resolves the source
+selection gap tracked by #402 and does not establish financial completeness.

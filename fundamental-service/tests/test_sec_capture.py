@@ -203,6 +203,7 @@ def test_acquisition_retries_after_parser_failure_reuse_all_original_responses(
 
     from fundamental_service.source_acquisition import SecAcquisitionUseCase
     from test_source_acquisition import (
+        _inline_original,
         _runtime_settings,
         _sec_request,
         _validation_profile,
@@ -248,6 +249,8 @@ def test_acquisition_retries_after_parser_failure_reuse_all_original_responses(
                     }
                 ).encode()
                 if uri.endswith("index.json")
+                else _inline_original("msft-20240630.xsd")
+                if uri.endswith("/" + primary)
                 else b"original-filing-fixture"
             )
             return replace(self.response, content=payload, declared_size=len(payload))

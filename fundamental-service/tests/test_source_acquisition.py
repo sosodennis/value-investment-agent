@@ -148,6 +148,8 @@ def test_entrypoint_selection_distinguishes_original_xml_from_inline_html(
         (("../acug.xml", "acug.xsd"), False),
         (("acug.xml", "acug.xsd"), True),
         (("acug.xml", "acug.xsd"), None),
+        (("acug_10k.htm", "acug_10k.htm", "acug.xsd"), True),
+        (("../acug_10k.htm", "acug.xsd"), True),
     ),
 )
 def test_entrypoint_selection_retains_missing_ambiguous_and_unsafe_failures(
@@ -159,6 +161,117 @@ def test_entrypoint_selection_retains_missing_ambiguous_and_unsafe_failures(
             _entrypoint_index(*names), "acug_10k.htm", is_inline_xbrl=inline
         )
     assert error.value.code == "XBRL_ENTRYPOINT_UNRESOLVED"
+
+
+def _inline_original(schema: str) -> bytes:
+    return (
+        '<html xmlns:link="http://www.xbrl.org/2003/linkbase" '
+        'xmlns:xlink="http://www.w3.org/1999/xlink"><head>'
+        f'<link:schemaRef xlink:type="simple" xlink:href="{schema}"/>'
+        "</head><body>Retained original</body></html>"
+    ).encode()
+
+
+def test_inline_schema_selection_uses_original_reference_and_exact_index_name():
+    use_case = object.__new__(SecAcquisitionUseCase)
+    primary = "ef20039035_10k.htm"
+    schema = "tlfa-20241231.xsd"
+    payload = _entrypoint_index(
+        primary, schema, "tlfa-20241231_cal.xml", "unrelated.xsd"
+    )
+    assert (
+        use_case._select_xbrl_entrypoint(payload, primary, is_inline_xbrl=True)
+        == primary
+    )
+    selected = use_case._inline_schema_filename(_inline_original(schema))
+    assert selected == schema
+    assert use_case._select_dts_filenames(
+        payload, primary, schema_filename=selected
+    ) == (schema, "tlfa-20241231_cal.xml")
+
+
+@pytest.mark.parametrize(
+    "schema",
+    (
+        "../tlfa.xsd",
+        "./tlfa.xsd",
+        "/tlfa.xsd",
+        "sub/tlfa.xsd",
+        "https://example.com/tlfa.xsd",
+        "//example.com/tlfa.xsd",
+        "tlfa.xsd?query",
+        "tlfa.xsd#fragment",
+        "tlfa%2exsd",
+        "tlfa\\x.xsd",
+        "tlfa.xml",
+        "",
+        " tlfa.xsd",
+        "tlfa.xsd ",
+    ),
+)
+def test_inline_schema_selection_refuses_nonlocal_or_unsafe_references(schema):
+    with pytest.raises(ServiceError) as error:
+        SecAcquisitionUseCase._inline_schema_filename(_inline_original(schema))
+    assert error.value.code == "XBRL_SCHEMA_UNRESOLVED"
+
+
+@pytest.mark.parametrize(
+    "content",
+    (
+        b"",
+        b"<html><body>No schema reference</body></html>",
+        _inline_original("tlfa.xsd").replace(b"/2003/linkbase", b"/other"),
+        _inline_original("tlfa.xsd").replace(b"/1999/xlink", b"/other"),
+        _inline_original("tlfa.xsd").replace(b"xlink:href", b"href"),
+        _inline_original("tlfa.xsd").replace(
+            b"<link:schemaRef", b'<link:schemaRef xmlns:link="spoof"'
+        ),
+        _inline_original("tlfa.xsd").replace(
+            b"<html ", b'<html xml:base="https://example.com/" '
+        ),
+        _inline_original("tlfa.xsd").replace(
+            b"<link:schemaRef", b'<link:schemaRef xml:base="other/"'
+        ),
+        _inline_original("tlfa.xsd").replace(
+            b"</head>", b'<link:schemaRef xlink:href="other.xsd"/></head>'
+        ),
+        _inline_original("tlfa.xsd").replace(
+            b"</head>", b'<link:schemaRef xlink:href="tlfa.xsd"/></head>'
+        ),
+    ),
+)
+def test_inline_schema_selection_retains_missing_ambiguous_and_misbound_failures(
+    content,
+):
+    with pytest.raises(ServiceError) as error:
+        SecAcquisitionUseCase._inline_schema_filename(content)
+    assert error.value.code == "XBRL_SCHEMA_UNRESOLVED"
+
+
+@pytest.mark.parametrize(
+    "names",
+    (
+        ("different_10k.htm",),
+        ("different_10k.htm", "tlfa.xsd", "tlfa.xsd"),
+        ("different_10k.htm", "TLFA.xsd"),
+    ),
+)
+def test_inline_schema_must_occur_once_with_exact_case_in_accession_index(names):
+    use_case = object.__new__(SecAcquisitionUseCase)
+    with pytest.raises(ServiceError) as error:
+        use_case._select_dts_filenames(
+            _entrypoint_index(*names), "different_10k.htm", schema_filename="tlfa.xsd"
+        )
+    assert error.value.code == "SOURCE_PAYLOAD_INVALID"
+
+
+def test_inline_schema_selection_accepts_bound_namespace_aliases():
+    content = (
+        b'<html xmlns:l="http://www.xbrl.org/2003/linkbase" '
+        b'xmlns:x="http://www.w3.org/1999/xlink"><head>'
+        b'<l:schemaRef x:href="tlfa.xsd"/></head><body/></html>'
+    )
+    assert SecAcquisitionUseCase._inline_schema_filename(content) == "tlfa.xsd"
 
 
 @pytest.mark.parametrize(
@@ -393,7 +506,7 @@ def _validation_profile(dqc_ruleset_sha256: str = "d" * 64):
     )
 
 
-def _partial_acquisition_fixture(tmp_path, *, empty=False):
+def _partial_acquisition_fixture(tmp_path, *, empty=False, schema="msft-20240630.xsd"):
     from fundamental_service.facts import CanonicalMappingV1
     from fundamental_service.sec_source import (
         SecEdgarSourceAdapter,
@@ -461,7 +574,7 @@ def _partial_acquisition_fixture(tmp_path, *, empty=False):
             validation_profile_digest=profile.digest(),
         ),
     )
-    state = SimpleNamespace(provider_calls=0, parser_calls=0)
+    state = SimpleNamespace(provider_calls=0, parser_calls=0, parser_kwargs=None)
     primary = "msft-20240630.htm"
     accession = request.filing.accession_number
     submissions = {
@@ -486,9 +599,9 @@ def _partial_acquisition_fixture(tmp_path, *, empty=False):
             raw = (
                 json.dumps(submissions).encode()
                 if "/submissions/" in uri
-                else _entrypoint_index(
-                    primary, "msft-20240630.xsd", f"{accession}-xbrl.zip"
-                )
+                else _inline_original(schema)
+                if uri.endswith("/" + primary)
+                else _entrypoint_index(primary, schema, f"{accession}-xbrl.zip")
             )
             return _SecResponse(
                 raw, 200, "application/json", snapshot.captured_at, (), len(raw)
@@ -496,6 +609,7 @@ def _partial_acquisition_fixture(tmp_path, *, empty=False):
 
     def prepare_filing(**kwargs):
         state.parser_calls += 1
+        state.parser_kwargs = kwargs
         return prepared
 
     provider = Provider(SecRequestPolicy(user_agent="test test@example.com"))
@@ -513,8 +627,11 @@ def _partial_acquisition_fixture(tmp_path, *, empty=False):
 
 
 @pytest.mark.parametrize("empty", [False, True])
-def test_incomplete_parsed_acquisition_retains_partial_evidence(tmp_path, empty):
-    fixture = _partial_acquisition_fixture(tmp_path, empty=empty)
+@pytest.mark.parametrize("schema", ["msft-20240630.xsd", "different-schema-2024.xsd"])
+def test_incomplete_parsed_acquisition_retains_partial_evidence(
+    tmp_path, empty, schema
+):
+    fixture = _partial_acquisition_fixture(tmp_path, empty=empty, schema=schema)
     published = []
 
     def publish(**kwargs):
@@ -560,6 +677,8 @@ def test_incomplete_parsed_acquisition_retains_partial_evidence(tmp_path, empty)
     assert published[0]["snapshot"] == fixture.snapshot
     assert published[0]["facts"] == fixture.facts
     assert fixture.state.parser_calls == 1
+    assert fixture.state.parser_kwargs["dts_filenames"] == (schema,)
+    assert fixture.state.parser_kwargs["primary_document"] == "msft-20240630.htm"
 
 
 def test_canonical_acquisition_key_distinguishes_identity_cutoff_and_coverage():

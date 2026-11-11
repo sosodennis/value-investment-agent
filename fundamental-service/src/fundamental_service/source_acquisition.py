@@ -13,6 +13,7 @@ from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Literal
 
+from lxml import etree, html
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from .arelle_parser import ArelleParserError, ArelleValidationProfileV1, _directory_hash
@@ -795,8 +796,22 @@ class SecAcquisitionUseCase:
             filing.primary_document,
             is_inline_xbrl=filing.is_inline_xbrl,
         )
+        schema_filename = None
+        if Path(xbrl_entrypoint).suffix.lower() in {".htm", ".html", ".xhtml"}:
+            primary_source = adapter.capture_filing(
+                cik=request.cik,
+                accession_number=filing.accession_number,
+                primary_document=xbrl_entrypoint,
+                filed_at=filing.accepted_at,
+                accepted_at=filing.accepted_at,
+                form=filing.form,
+                is_amendment=filing.is_amendment,
+                amendment_scope="unknown" if filing.is_amendment else None,
+                deadline_at=deadline_at,
+            )
+            schema_filename = self._inline_schema_filename(primary_source.content)
         dts_filenames = self._select_dts_filenames(
-            index_source.content, xbrl_entrypoint
+            index_source.content, xbrl_entrypoint, schema_filename=schema_filename
         )
         filing_archive_filename = self._select_filing_archive_filename(
             index_source.content, filing.accession_number
@@ -1156,7 +1171,10 @@ class SecAcquisitionUseCase:
             len(candidates) != 1
             or not re.fullmatch(r"[A-Za-z0-9_.-]{1,200}", candidates[0])
             or names.count(candidates[0]) != 1
-            or names.count(f"{Path(candidates[0]).stem}.xsd") != 1
+            or (
+                is_inline_xbrl is False
+                and names.count(f"{Path(candidates[0]).stem}.xsd") != 1
+            )
             or (
                 is_inline_xbrl is True
                 and Path(candidates[0]).suffix.lower()
@@ -1165,14 +1183,68 @@ class SecAcquisitionUseCase:
         ):
             raise ServiceError(
                 "XBRL_ENTRYPOINT_UNRESOLVED",
-                "SEC filing does not identify one schema-bound XBRL entrypoint",
+                "SEC filing does not identify one indexed XBRL entrypoint",
                 status_code=422,
                 retryable=False,
             )
         return candidates[0]
 
+    @staticmethod
+    def _inline_schema_filename(content: bytes) -> str:
+        def namespace(element: etree._Element, prefix: str) -> str | None:
+            for ancestor in (element, *element.iterancestors()):
+                value = ancestor.get(f"xmlns:{prefix}")
+                if value is not None:
+                    return value
+            return None
+
+        references = []
+        try:
+            document = html.fromstring(content, parser=html.HTMLParser(no_network=True))
+            for element in document.iter():
+                if not isinstance(element.tag, str):
+                    continue
+                prefix, separator, local_name = element.tag.partition(":")
+                if (
+                    not separator
+                    or local_name != "schemaref"
+                    or namespace(element, prefix) != "http://www.xbrl.org/2003/linkbase"
+                ):
+                    continue
+                if any(
+                    ancestor.get("xml:base") is not None
+                    for ancestor in (element, *element.iterancestors())
+                ):
+                    raise ValueError("schemaRef must use the accession base URI")
+                hrefs = [
+                    value
+                    for name, value in element.attrib.items()
+                    if name.endswith(":href")
+                    and namespace(element, name.partition(":")[0])
+                    == "http://www.w3.org/1999/xlink"
+                ]
+                if len(hrefs) != 1:
+                    raise ValueError("schemaRef requires one bound href")
+                references.append(hrefs[0])
+        except (etree.ParserError, ValueError):
+            references = []
+        if len(references) != 1 or not re.fullmatch(
+            r"[A-Za-z0-9_][A-Za-z0-9_.-]{0,195}\.xsd", references[0]
+        ):
+            raise ServiceError(
+                "XBRL_SCHEMA_UNRESOLVED",
+                "inline SEC original must reference one local taxonomy schema",
+                status_code=422,
+                retryable=False,
+            )
+        return references[0]
+
     def _select_dts_filenames(
-        self, payload: bytes, primary_document: str
+        self,
+        payload: bytes,
+        primary_document: str,
+        *,
+        schema_filename: str | None = None,
     ) -> tuple[str, ...]:
         try:
             filing_index = _FilingIndex.model_validate_json(payload)
@@ -1183,14 +1255,24 @@ class SecAcquisitionUseCase:
                 status_code=502,
                 retryable=False,
             ) from error
-        filing_stem = Path(primary_document).stem.lower()
+        schema_filename = schema_filename or f"{Path(primary_document).stem}.xsd"
+        if [item.name for item in filing_index.directory.item].count(
+            schema_filename
+        ) != 1:
+            raise ServiceError(
+                "SOURCE_PAYLOAD_INVALID",
+                "SEC filing index must contain the primary taxonomy schema exactly once",
+                status_code=502,
+                retryable=False,
+            )
+        filing_stem = Path(schema_filename).stem
         expected_names = {
             f"{filing_stem}.xsd",
             *(f"{filing_stem}{suffix}" for suffix in self._DTS_LINKBASE_SUFFIXES),
         }
         selected_sizes: dict[str, int] = {}
         for item in filing_index.directory.item:
-            filename = item.name.lower()
+            filename = item.name
             if filename not in expected_names:
                 continue
             try:
@@ -1218,13 +1300,6 @@ class SecAcquisitionUseCase:
                     retryable=False,
                 )
             selected_sizes[filename] = size
-        if f"{filing_stem}.xsd" not in selected_sizes:
-            raise ServiceError(
-                "SOURCE_PAYLOAD_INVALID",
-                "SEC filing index does not contain the primary taxonomy schema",
-                status_code=502,
-                retryable=False,
-            )
         selected = sorted(selected_sizes)
         total_bytes = sum(selected_sizes.values())
         if (
