@@ -544,3 +544,63 @@ review, numerical service acceptance, merge and main verification;
 `supported_history_threshold` remains null.
 Those remain the next work. #361/#385/#386 remain open until accepted delivery
 and merge/main verification; PR #370 remains draft and the history threshold null.
+
+
+## #391 dated disclosures and #392 canonical PostgreSQL fact persistence
+
+Exact implementation `dea88ad41d006244f63b762f268618a2e5203ede` retains all prior WIP commits. `ac34044b`
+adds typed dated comparative narrative components to the existing accounting
+normalizer; `dea88ad4` fixes a real-source backup rejection by using the same
+canonical fact digest for direct and transactional PostgreSQL publication.
+The first complete payload and source/PIT annotations remain retained. Different
+selection views reuse source identity; changed source/value still rejects.
+Forecast/calculator equations and composer v3 remain unchanged.
+
+Exact regression: **740 service tests passed / 11 optional skips**, 10 Agent
+client tests and 17 acceptance-tool tests passed. Ruff/format, 17-source mypy,
+architecture and diff checks pass. Regression input `c7a47972bcc4c473518c5637a0c79c500e4920c4d1b06ab52089d2f39597ca90`;
+output `4e69f752728a73f8ae50096d6a1ac4bf4fe33ce04f5d9183544b1d02315aeec7`. [CI 43020075601](https://github.com/sosodennis/value-investment-agent/actions/runs/43020075601) passes all 12
+executed jobs; `fundamental-release-gate` is skipped.
+
+The two Microsoft originals again pass strict EFM/DQC and original identity,
+with 1,839 / 1,856 facts and zero provider requests. The new proposal preserves
+exact original HTML, date/amount/unit/scale spans and reported precision. It
+combines numeric trade receivables with separately disclosed server-component
+receivables while excluding adjacent financing balances: 2022 USD50.361bn,
+2023 USD57.888bn and 2024 USD67.424bn. The comparative 2023 amount agrees across
+both originals. All four resulting observations remain **provisional** and
+require actual semantic review for date association, completeness and overlap.
+
+Real-source persistence boundary acceptance stores four provisional facts,
+two mappings, two original snapshots and 12 content objects. After closing and
+reopening the store, every exact source/fact payload is retrieved. A digest-checked
+backup restores to a separate empty store; repeated publication, export and
+restore add no rows or artifacts. This is metadata/source boundary evidence;
+there is no active release, prepared valuation or numerical calculator artifact.
+The valid selected-view regression reproduces the original canonical-digest
+backup failure against archived `ac34044b` code before the owning fix.
+
+Both strict parser executions, accounting conversions, full role packet and
+persistence sequence are repeated at the same commit/runtime. All input/output
+digests match, `wrote=false`, no provider downloads occur, and all **190** retained
+evidence files keep their hashes and mtimes. The dedicated tmpfs test project
+`value-investment-agent-361-flow-tests` on `127.0.0.1:18665` is removed; all 62
+baseline containers retain their ID/image/start time. Only this project's
+disposable fixture databases are removed; retained originals, proposal packets
+and verified backup remain outside Docker and Git.
+
+The full packet now has **126 provisional period facts / 25 candidate roles**.
+Seven roles remain unknown: depreciation/amortization, contract assets, preferred
+claims, NCI, convertibles, point-in-time dilution and other economic share classes.
+Neither mappings nor policy have actual independent approval; no trusted release,
+caller approval, real numerical valuation, complete 19-gate service acceptance or
+history-threshold sufficiency is claimed. `supported_history_threshold=null`.
+#361 / #370 / #391 / #392 and dependencies stay open. Continue with source-bound
+role/policy evidence, then review, full-flow validation, merge and main verification.
+
+Compact command receipts, digests and retained failure evidence are in
+`issue-361-accounting-checkpoint.json` under
+`dated_disclosure_persistence_increment` (checkpoint
+`a5a8ba070ba5b38f44e36d229dbdade7e6de017a704d0966032e3a5ed7f8ff9e`). Generated source/mapping/backup corpus stays
+outside this PR. The separate #390/#393 checkpoint is a research integration
+reference pinned to its own earlier baseline; it is not silently merged here.
