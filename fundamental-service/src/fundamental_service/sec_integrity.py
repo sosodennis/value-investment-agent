@@ -559,7 +559,7 @@ def assess_filing_response(
     policy_id = _NORMALIZATION_POLICY_ID
     rule = _NORMALIZATION_RULE
     normalized = without_script
-    removed_ranges = (
+    removed_ranges: tuple[RemovedByteRangeV1, ...] = (
         RemovedByteRangeV1(
             start=script_start,
             end=script_end,
