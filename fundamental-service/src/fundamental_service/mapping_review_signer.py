@@ -3,14 +3,10 @@
 from __future__ import annotations
 
 import argparse
-from collections.abc import Iterator
-from contextlib import contextmanager
 import json
-import os
 import re
 import sys
 from pathlib import Path
-from typing import Literal, Protocol
 
 from cryptography.exceptions import UnsupportedAlgorithm
 from cryptography.hazmat.primitives import serialization
@@ -27,8 +23,8 @@ from .data_releases import (
     verify_mapping_review_evidence,
 )
 from .facts import CanonicalMappingV1
-from .metadata import PostgresArtifactStore, PostgresContentStore, PostgresMetadataStore
-from .replay import ArtifactPublicationV1, ArtifactRecordV1, ArtifactStore
+from .command_artifacts import EvidenceArtifactStore, command_artifacts
+from .replay import ArtifactPublicationV1
 from .serialization import canonical_bytes, sha256_digest
 from .snapshots import SnapshotError
 
@@ -40,52 +36,12 @@ class MappingReviewSigningReceiptV1(ReleaseModel):
     publication: ArtifactPublicationV1
 
 
-class MappingReviewArtifactStore(Protocol):
-    def get(self, artifact_id: str) -> ArtifactRecordV1: ...
-
-    def read(self, artifact_id: str) -> bytes: ...
-
-    def put_with_receipt(
-        self,
-        artifact_id: str,
-        value: object,
-        dependency_hashes: tuple[str, ...] = (),
-        *,
-        media_type: str = "application/json",
-        retention: Literal["evidence", "operational_cache"] = "evidence",
-    ) -> ArtifactPublicationV1: ...
-
-
-@contextmanager
-def _command_artifacts(
-    offline_root: Path | None,
-) -> Iterator[MappingReviewArtifactStore]:
-    if offline_root is not None:
-        yield ArtifactStore(offline_root)
-        return
-    database_url = os.getenv("FUNDAMENTAL_SERVICE_DATABASE_URL")
-    data_root = os.getenv("FUNDAMENTAL_SERVICE_DATA_ROOT")
-    if not database_url or not data_root:
-        raise DataReleaseError(
-            "MAPPING_REVIEW_STORAGE_UNCONFIGURED",
-            "service database and content root must be configured",
-        )
-    metadata = PostgresMetadataStore(database_url, auto_migrate=False)
-    try:
-        metadata.start()
-        yield PostgresArtifactStore(
-            metadata, PostgresContentStore(Path(data_root) / "content", metadata)
-        )
-    finally:
-        metadata.close()
-
-
 def sign_review(
     *,
     statement_path: Path,
     mapping_path: Path,
     fixture_path: Path,
-    artifacts: MappingReviewArtifactStore,
+    artifacts: EvidenceArtifactStore,
     trust_roots_path: Path,
     private_key_path: Path,
     source_revision: str,
@@ -185,7 +141,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--source-revision", required=True)
     args = parser.parse_args(argv)
     try:
-        with _command_artifacts(args.artifacts_root) as artifacts:
+        with command_artifacts(
+            args.artifacts_root,
+            storage_error_code="MAPPING_REVIEW_STORAGE_UNCONFIGURED",
+        ) as artifacts:
             receipt = sign_review(
                 statement_path=args.statement,
                 mapping_path=args.mapping,

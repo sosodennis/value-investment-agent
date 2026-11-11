@@ -9,6 +9,7 @@ calculator or the existing repository protocols.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 from concurrent.futures import Future
 from dataclasses import dataclass
@@ -1705,8 +1706,24 @@ class PostgresArtifactStore:
         media_type: str = "application/json",
         retention: Literal["evidence", "operational_cache"] = "evidence",
     ) -> ArtifactPublicationV1:
-        payload = canonical_bytes(value)
-        content_hash = sha256_digest(value)
+        return self.put_bytes_with_receipt(
+            artifact_id,
+            canonical_bytes(value),
+            dependency_hashes,
+            media_type=media_type,
+            retention=retention,
+        )
+
+    def put_bytes_with_receipt(
+        self,
+        artifact_id: str,
+        payload: bytes,
+        dependency_hashes: tuple[str, ...] = (),
+        *,
+        media_type: str = "application/octet-stream",
+        retention: Literal["evidence", "operational_cache"] = "evidence",
+    ) -> ArtifactPublicationV1:
+        content_hash = hashlib.sha256(payload).hexdigest()
         record = ArtifactRecordV1(
             artifact_id=artifact_id,
             content_hash=content_hash,

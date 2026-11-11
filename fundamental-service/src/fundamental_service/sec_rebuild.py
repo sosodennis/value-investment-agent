@@ -135,6 +135,20 @@ def parsed_facts_to_candidates(
             "MAPPING_FIELD_MISMATCH",
             "canonical mapping does not target the requested normalized field",
         )
+    observation_scope = mapping.observation_scope if mapping is not None else None
+    if observation_scope is not None:
+        if (
+            observation_scope.issuer_id != issuer_id
+            or observation_scope.accession_number != source.accession_number
+            or observation_scope.raw_content_hash != source.content_hash
+            or observation_scope.parser_input_hash != expected_parser_hash
+        ):
+            return ()
+        if observation_scope.parser_replay_digest != report.replay_digest():
+            raise SnapshotError(
+                "MAPPING_REPORT_MISMATCH",
+                "scoped mapping requires its exact approved parser report",
+            )
     normalized_issuer = issuer_id.lstrip("0") or "0"
     candidates: list[FactCandidateV1] = []
     provenance = SourceProvenanceV1(
@@ -159,6 +173,11 @@ def parsed_facts_to_candidates(
             security_id=security_id,
         )
     for fact in report.facts:
+        if (
+            observation_scope is not None
+            and sha256_digest(fact) not in observation_scope.observation_digests
+        ):
+            continue
         if mapping is not None and fact.concept != mapping.source_concept:
             continue
         if (

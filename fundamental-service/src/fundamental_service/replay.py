@@ -278,9 +278,25 @@ class ArtifactStore:
         media_type: str = "application/json",
         retention: Literal["evidence", "operational_cache"] = "evidence",
     ) -> ArtifactPublicationV1:
+        return self.put_bytes_with_receipt(
+            artifact_id,
+            canonical_bytes(value),
+            dependency_hashes,
+            media_type=media_type,
+            retention=retention,
+        )
+
+    def put_bytes_with_receipt(
+        self,
+        artifact_id: str,
+        payload: bytes,
+        dependency_hashes: tuple[str, ...] = (),
+        *,
+        media_type: str = "application/octet-stream",
+        retention: Literal["evidence", "operational_cache"] = "evidence",
+    ) -> ArtifactPublicationV1:
         if not artifact_id:
             raise SnapshotError("ARTIFACT_ID_INVALID", "artifact_id is required")
-        payload = canonical_bytes(value)
         content_hash = hashlib.sha256(payload).hexdigest()
         path = self._artifact_path(content_hash, media_type)
         with self._lock:

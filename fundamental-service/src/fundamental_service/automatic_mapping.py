@@ -1,0 +1,385 @@
+"""Deterministic approval of narrowly defined, source-bound US GAAP mappings."""
+
+from __future__ import annotations
+
+import hashlib
+import re
+from dataclasses import asdict, dataclass
+from decimal import Decimal, InvalidOperation
+from pathlib import Path
+from typing import Literal, Protocol
+
+from pydantic import Field, model_validator
+
+from .arelle_parser import ParsedXbrlFactV1
+from .contracts import SecIntegrityEvidenceV1
+from .data_releases import (
+    ArtifactRefV1,
+    AutomaticMappingApprovalV1,
+    DataReleaseError,
+    ReleaseModel,
+)
+from .facts import CanonicalMappingV1, MappingObservationScopeV1
+from .issuer_release_evidence import verify_original_bytes, verify_original_integrity
+from .original_issuer import OriginalIssuerEvidenceV1
+from .serialization import sha256_digest
+
+AUTOMATIC_MAPPING_INPUT_ROLE = "automatic-mapping-input-v1"
+AUTOMATIC_MAPPING_POLICY: Literal["consolidated-direct-us-gaap-v1"] = (
+    "consolidated-direct-us-gaap-v1"
+)
+_GAAP_NAMESPACE = re.compile(
+    r"http://(?:fasb\.org|xbrl\.us)/us-gaap/\d{4}(?:-\d{2}-\d{2})?"
+)
+
+
+@dataclass(frozen=True)
+class DirectMappingRule:
+    concept: str
+    period: Literal["annual", "instant"]
+    unit: Literal["iso4217:USD", "shares"] = "iso4217:USD"
+
+
+# Partial revenue tags, aggregate D&A, absence claims, computed partitions and
+# awards deliberately have no direct rule. Adding one changes the policy digest.
+_RULES = {
+    "revenue": DirectMappingRule("us-gaap:Revenues", "annual"),
+    "cost_of_revenue": DirectMappingRule("us-gaap:CostOfRevenue", "annual"),
+    "operating_income": DirectMappingRule("us-gaap:OperatingIncomeLoss", "annual"),
+    "income_before_tax": DirectMappingRule(
+        "us-gaap:IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest",
+        "annual",
+    ),
+    "income_tax_expense": DirectMappingRule(
+        "us-gaap:IncomeTaxExpenseBenefit", "annual"
+    ),
+    "net_income": DirectMappingRule("us-gaap:NetIncomeLoss", "annual"),
+    "capital_expenditure": DirectMappingRule(
+        "us-gaap:PaymentsToAcquirePropertyPlantAndEquipment", "annual"
+    ),
+    "operating_lease_cost": DirectMappingRule("us-gaap:OperatingLeaseCost", "annual"),
+    "basic_weighted_average_shares": DirectMappingRule(
+        "us-gaap:WeightedAverageNumberOfSharesOutstandingBasic", "annual", "shares"
+    ),
+    "diluted_weighted_average_shares": DirectMappingRule(
+        "us-gaap:WeightedAverageNumberOfDilutedSharesOutstanding", "annual", "shares"
+    ),
+    "operating_current_receivables": DirectMappingRule(
+        "us-gaap:AccountsReceivableNetCurrent", "instant"
+    ),
+    "inventory": DirectMappingRule("us-gaap:InventoryNet", "instant"),
+    "operating_current_payables": DirectMappingRule(
+        "us-gaap:AccountsPayableCurrent", "instant"
+    ),
+    "cash_and_equivalents": DirectMappingRule(
+        "us-gaap:CashAndCashEquivalentsAtCarryingValue", "instant"
+    ),
+    "current_operating_lease_liabilities": DirectMappingRule(
+        "us-gaap:OperatingLeaseLiabilityCurrent", "instant"
+    ),
+    "long_term_operating_lease_liabilities": DirectMappingRule(
+        "us-gaap:OperatingLeaseLiabilityNoncurrent", "instant"
+    ),
+    "common_shares_outstanding": DirectMappingRule(
+        "us-gaap:CommonStockSharesOutstanding", "instant", "shares"
+    ),
+}
+
+
+def automatic_mapping_policy_digest() -> str:
+    """Pin executable policy dependencies as well as the explicit rule table."""
+    root = Path(__file__).parent
+    return sha256_digest(
+        {
+            "policy_version": AUTOMATIC_MAPPING_POLICY,
+            "rules": {key: asdict(rule) for key, rule in sorted(_RULES.items())},
+            "sources": {
+                name: hashlib.sha256((root / name).read_bytes()).hexdigest()
+                for name in (
+                    "automatic_mapping.py",
+                    "arelle_parser.py",
+                    "facts.py",
+                    "sec_rebuild.py",
+                    "issuer_release_evidence.py",
+                    "original_issuer.py",
+                    "regulatory_validation.py",
+                    "sec_integrity.py",
+                    "serialization.py",
+                )
+            },
+        }
+    )
+
+
+class AutomaticMappingRequestV1(ReleaseModel):
+    protocol: Literal["fundamental.automatic-mapping-input.v1"] = (
+        "fundamental.automatic-mapping-input.v1"
+    )
+    source_revision: str = Field(pattern=r"^[0-9a-f]{40}$")
+    evaluator_id: str = Field(min_length=1)
+    original: OriginalIssuerEvidenceV1
+    integrity: SecIntegrityEvidenceV1
+    proposal: CanonicalMappingV1
+    evidence_refs: tuple[ArtifactRefV1, ...] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def evidence_is_canonical(self) -> AutomaticMappingRequestV1:
+        ids = tuple(ref.artifact_id for ref in self.evidence_refs)
+        if ids != tuple(sorted(set(ids))):
+            raise ValueError("automatic mapping evidence must be ordered and unique")
+        return self
+
+
+class MappingObservationRejectionV1(ReleaseModel):
+    observation_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    reason_code: str = Field(min_length=1)
+
+
+class AutomaticMappingDecisionV1(ReleaseModel):
+    protocol: Literal["fundamental.automatic-mapping-decision.v1"] = (
+        "fundamental.automatic-mapping-decision.v1"
+    )
+    input_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    source_revision: str = Field(pattern=r"^[0-9a-f]{40}$")
+    evaluator_id: str = Field(min_length=1)
+    policy_version: Literal["consolidated-direct-us-gaap-v1"] = AUTOMATIC_MAPPING_POLICY
+    policy_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    status: Literal["approved", "abstain"]
+    reason_codes: tuple[str, ...]
+    eligible_observation_digests: tuple[str, ...]
+    rejected_observations: tuple[MappingObservationRejectionV1, ...]
+    mapping: CanonicalMappingV1 | None
+
+    @model_validator(mode="after")
+    def decision_is_coherent(self) -> AutomaticMappingDecisionV1:
+        if self.status == "approved":
+            if (
+                self.mapping is None
+                or self.mapping.status != "approved"
+                or self.mapping.observation_scope is None
+                or self.reason_codes
+            ):
+                raise ValueError("approved decisions require an exact scoped mapping")
+        elif self.mapping is not None or not self.reason_codes:
+            raise ValueError(
+                "abstained decisions require reasons and no approved mapping"
+            )
+        return self
+
+
+def _observation_rejection(
+    fact: ParsedXbrlFactV1, request: AutomaticMappingRequestV1, rule: DirectMappingRule
+) -> str | None:
+    original = request.original
+    if not _GAAP_NAMESPACE.fullmatch(fact.namespace_uri or ""):
+        return "MAPPING_NAMESPACE_UNSUPPORTED"
+    if (
+        fact.entity_scheme != "http://www.sec.gov/CIK"
+        or not re.fullmatch(r"[0-9]{1,10}", fact.entity_identifier or "")
+        or int(fact.entity_identifier or "0") != int(original.source.cik)
+    ):
+        return "MAPPING_ISSUER_MISMATCH"
+    if (
+        fact.dimensions
+        or fact.consolidation_scope != "consolidated"
+        or fact.security_scope not in {"unspecified", "issuer"}
+    ):
+        return "MAPPING_SCOPE_UNSUPPORTED"
+    if not fact.is_numeric or fact.unit != rule.unit:
+        return "MAPPING_UNIT_UNSUPPORTED"
+    try:
+        if not Decimal(fact.value).is_finite():
+            return "MAPPING_VALUE_INVALID"
+    except InvalidOperation:
+        return "MAPPING_VALUE_INVALID"
+    if (
+        fact.decimals != "INF"
+        and re.fullmatch(r"-?[0-9]+", fact.decimals or "") is None
+    ):
+        return "MAPPING_PRECISION_UNAVAILABLE"
+    if rule.period == "annual":
+        if (
+            fact.instant is not None
+            or fact.period_start is None
+            or fact.period_end is None
+            or not 300 <= (fact.period_end - fact.period_start).days <= 380
+        ):
+            return "MAPPING_PERIOD_UNSUPPORTED"
+        end = fact.period_end
+    else:
+        if (
+            fact.instant is None
+            or fact.period_start is not None
+            or fact.period_end is not None
+        ):
+            return "MAPPING_PERIOD_UNSUPPORTED"
+        end = fact.instant
+    if original.report_period_end is None or end > original.report_period_end:
+        return "MAPPING_PERIOD_AFTER_ORIGINAL"
+    return None
+
+
+def evaluate_automatic_mapping(
+    request: AutomaticMappingRequestV1, *, contents: dict[str, bytes]
+) -> AutomaticMappingDecisionV1:
+    """Approve or retain abstention without providers, publication or signatures."""
+    policy_digest = automatic_mapping_policy_digest()
+    reasons: set[str] = set()
+    original, proposal = request.original, request.proposal
+    if original.status != "matched":
+        reasons.update(original.issue_codes)
+    try:
+        for ref in request.evidence_refs:
+            if (
+                ref.content_hash not in contents
+                or hashlib.sha256(contents[ref.content_hash]).hexdigest()
+                != ref.content_hash
+            ):
+                raise DataReleaseError(
+                    "MAPPING_SOURCE_ARTIFACT_UNAVAILABLE",
+                    "automatic mapping requires its retained evidence bytes",
+                )
+        if original.report.taxonomy_cache_hash not in {
+            ref.content_hash for ref in request.evidence_refs
+        }:
+            raise DataReleaseError(
+                "MAPPING_TAXONOMY_UNAVAILABLE", "retain the pinned taxonomy manifest"
+            )
+        verify_original_integrity(
+            original, request.integrity, parser_version=original.report.parser_version
+        )
+        verify_original_bytes(request.integrity, contents)
+    except DataReleaseError as error:
+        reasons.add(error.code)
+    rule = _RULES.get(proposal.normalized_field)
+    if (
+        rule is None
+        or proposal.source_concept != rule.concept
+        or proposal.accounting_rules is not None
+        or proposal.observation_scope is not None
+        or proposal.status != "provisional"
+    ):
+        reasons.add("MAPPING_AUTOMATIC_RULE_UNSUPPORTED")
+    selected: list[ParsedXbrlFactV1] = []
+    rejected = []
+    for fact in sorted(original.report.facts, key=sha256_digest):
+        if fact.concept != proposal.source_concept:
+            continue
+        reason = (
+            "MAPPING_AUTOMATIC_RULE_UNSUPPORTED"
+            if rule is None or proposal.source_concept != rule.concept
+            else _observation_rejection(fact, request, rule)
+        )
+        if reason:
+            rejected.append(
+                MappingObservationRejectionV1(
+                    observation_digest=sha256_digest(fact), reason_code=reason
+                )
+            )
+        else:
+            selected.append(fact)
+    if not selected:
+        reasons.add("MAPPING_NO_ELIGIBLE_OBSERVATIONS")
+    periods: dict[tuple[object, ...], set[Decimal]] = {}
+    for fact in selected:
+        key = (fact.period_start, fact.period_end, fact.instant)
+        periods.setdefault(key, set()).add(Decimal(fact.value))
+    if any(len(values) != 1 for values in periods.values()):
+        reasons.add("MAPPING_OBSERVATION_CONFLICT")
+    mapping = None
+    if not reasons:
+        scope = MappingObservationScopeV1(
+            issuer_id=original.source.cik,
+            accession_number=original.source.accession_number,
+            raw_content_hash=original.source.content_hash,
+            parser_input_hash=original.source.parser_input_hash,
+            parser_replay_digest=original.report.replay_digest(),
+            observation_digests=tuple(sorted({sha256_digest(f) for f in selected})),
+        )
+        payload = {
+            "contract_version": "fundamental.v1",
+            "source_concept": proposal.source_concept,
+            "normalized_field": proposal.normalized_field,
+            "mapping_version": proposal.mapping_version,
+            "confidence": "high",
+            "status": "approved",
+            "reviewer": f"automatic:{request.evaluator_id}",
+            "evidence_refs": (
+                original.source.content_hash,
+                original.report.replay_digest(),
+                policy_digest,
+            ),
+            "observation_scope": scope,
+        }
+        mapping = CanonicalMappingV1.model_validate(
+            {**payload, "decision_id": "automatic-mapping-" + sha256_digest(payload)}
+        )
+    return AutomaticMappingDecisionV1(
+        input_digest=sha256_digest(request),
+        source_revision=request.source_revision,
+        evaluator_id=request.evaluator_id,
+        policy_digest=policy_digest,
+        status="abstain" if reasons else "approved",
+        reason_codes=tuple(sorted(reasons)),
+        eligible_observation_digests=tuple(
+            sorted({sha256_digest(f) for f in selected})
+        ),
+        rejected_observations=tuple(rejected),
+        mapping=mapping,
+    )
+
+
+class MappingEvidenceReader(Protocol):
+    def read(self, artifact_id: str) -> bytes: ...
+
+
+def verify_automatic_mapping_replay(
+    approval: AutomaticMappingApprovalV1,
+    mapping: CanonicalMappingV1,
+    *,
+    artifacts: MappingEvidenceReader,
+) -> AutomaticMappingRequestV1:
+    """Re-evaluate retained inputs; a trusted signature alone is insufficient."""
+    refs = tuple(
+        ref
+        for ref in approval.evidence_refs
+        if ref.role == AUTOMATIC_MAPPING_INPUT_ROLE
+    )
+    if len(refs) != 1:
+        raise DataReleaseError(
+            "DATA_RELEASE_MAPPING_INPUT_UNAVAILABLE",
+            "retain one automatic mapping input",
+        )
+    raw = artifacts.read(refs[0].artifact_id)
+    if hashlib.sha256(raw).hexdigest() != refs[0].content_hash:
+        raise DataReleaseError(
+            "DATA_RELEASE_MAPPING_INPUT_HASH_MISMATCH",
+            "automatic mapping input changed",
+        )
+    request = AutomaticMappingRequestV1.model_validate_json(raw)
+    if approval.evidence_refs != (refs[0], *request.evidence_refs):
+        raise DataReleaseError(
+            "DATA_RELEASE_MAPPING_EVIDENCE_MISMATCH",
+            "automatic source references differ",
+        )
+    contents = {
+        ref.content_hash: artifacts.read(ref.artifact_id)
+        for ref in request.evidence_refs
+    }
+    decision = evaluate_automatic_mapping(request, contents=contents)
+    if (
+        request.evaluator_id != approval.evaluator_id
+        or request.source_revision != approval.source_revision
+        or sha256_digest(request) != approval.input_digest
+        or sha256_digest(decision) != approval.output_digest
+        or decision.policy_digest != approval.policy_digest
+        or decision.mapping != mapping
+        or mapping.decision_id != approval.mapping_id
+        or sha256_digest(mapping) != approval.mapping_digest
+        or decision.status != "approved"
+    ):
+        raise DataReleaseError(
+            "DATA_RELEASE_MAPPING_REPLAY_MISMATCH",
+            "automatic approval differs from its retained policy evaluation",
+        )
+    return request

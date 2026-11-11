@@ -111,7 +111,71 @@ it still requires dated original coverage, snapshot/release bindings, a quote
 and the quote policy. It cannot hide any released award observations. Missing
 inventory remains missing evidence; do not manufacture zero-valued award facts.
 
+## Automatic mapping approval
+
+Mapping approval uses Fundamental Service's `consolidated-direct-us-gaap-v1`
+policy. It handles a narrow table of direct role/QName combinations. Missing
+balances, computed partitions, awards, aggregate D&A conflicts and financial
+assumptions require other supported evidence. AI verification is future scope.
+Human reviews remain readable historical records; they are no longer required
+for new automatic mappings.
+
+Create an `AutomaticMappingRequestV1` from retained original issuer evidence,
+its matching SEC integrity record, a provisional mapping proposal and ordered
+source artifact references. Retain the raw filing, parser input, SEC index,
+archive and taxonomy bytes in the evidence store. Binary artifacts use
+`put_bytes_with_receipt`, which hashes exact bytes without JSON encoding.
+Existing canonical JSON publication is unchanged. Original 10-K identity,
+amendment status, available-at cutoff, strict offline validation and byte
+integrity must pass before approval.
+
+Provision a separate Ed25519 machine key in PKCS8 PEM format and configure its
+public key under `automatic_mapping_evaluators` in deployment trust roots. Each
+entry pins `public_key_ed25519_base64` and `policy_digest`. Keep the private key
+outside Git. Obtain the current digest with:
+
+```sh
+fundamental-approve-mapping --print-policy-digest
+```
+
+The digest covers the rules and executable policy dependencies. A policy/code
+change requires an explicit deployment trust update. The machine identity must
+not claim to be Dennis or an independent human reviewer.
+
+```sh
+fundamental-approve-mapping \
+  --request /preparation/automatic-mapping-input.json \
+  --trust-roots /run/config/data-release-trust-roots.json \
+  --private-key /run/secrets/automatic-mapping.pem
+```
+
+The command uses configured service PostgreSQL/content storage without
+migrating it. `--artifacts-root` selects an explicit offline evidence store.
+It retains canonical inputs and decisions for both approvals and abstentions.
+Only approved decisions receive `AutomaticMappingApprovalV1` certificates.
+Receipts record exact `source_revision`, input/output digests and separate
+publication results. Identical inputs and retained evidence return `wrote=false`
+after repeat, restart or empty-store restore. Writes use the existing atomic
+immutable stores. Missing source evidence retains abstention; invalid keys,
+trust configuration or command input return a redacted error and exit 2.
+
+Approved mappings identify `automatic:<evaluator_id>`; no human review time is
+invented. The observation scope pins CIK, accession, raw/parser hashes, parser
+report digest and eligible observation digests. The ingestion mapper enforces
+that scope. Dimensional, wrong-issuer, invalid and conflicting observations
+remain in the retained input/audit.
+
+The decision artifact contains the approved mapping. Existing ingestion/release
+assembly consumes it and its certificate. The release canary checks the trusted
+signature/policy, re-evaluates retained inputs and verifies that released facts
+reproduce approved observations. A signature alone cannot admit a fabricated
+mapping. This command does not activate releases, provide security authority or
+exact-input caller approval, or run a valuation. History thresholds remain null.
+
 ## Sign an independent mapping review
+
+This optional path retains existing human review evidence. Automatic mapping
+approval above is the current default.
 
 After an authorized independent reviewer has completed the semantic review, use
 the service's operator command to sign their existing statement. The statement

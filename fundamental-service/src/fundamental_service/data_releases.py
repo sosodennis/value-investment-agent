@@ -151,6 +151,26 @@ class MappingReviewEvidenceV1(MappingReviewStatementV1):
         return canonical_bytes(self.model_dump(mode="python", exclude={"signature"}))
 
 
+class AutomaticMappingApprovalV1(ReleaseModel):
+    """Machine approval, distinct from an independent person's review."""
+
+    protocol: Literal["fundamental.automatic-mapping-approval.v1"] = (
+        "fundamental.automatic-mapping-approval.v1"
+    )
+    mapping_id: str = Field(min_length=1)
+    mapping_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    evaluator_id: str = Field(min_length=1)
+    policy_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    source_revision: str = Field(pattern=r"^[0-9a-f]{40}$")
+    input_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    output_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    evidence_refs: tuple[ArtifactRefV1, ...] = Field(min_length=1)
+    signature: str = Field(pattern=r"^[0-9a-f]{128}$")
+
+    def signing_bytes(self) -> bytes:
+        return canonical_bytes(self.model_dump(mode="python", exclude={"signature"}))
+
+
 class DataReleaseVerificationV1(ReleaseModel):
     manifest_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
     verification_suite_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
@@ -160,7 +180,9 @@ class DataReleaseVerificationV1(ReleaseModel):
     verifier_id: str = Field(min_length=1)
     passed_gate_ids: tuple[str, ...] = Field(min_length=1)
     evidence_refs: tuple[ArtifactRefV1, ...] = Field(min_length=1)
-    mapping_reviews: tuple[MappingReviewEvidenceV1, ...] = ()
+    mapping_reviews: tuple[
+        MappingReviewEvidenceV1 | AutomaticMappingApprovalV1, ...
+    ] = ()
     verification_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
     signature: str = Field(pattern=r"^[0-9a-f]{128}$")
 
@@ -203,9 +225,30 @@ class DataReleaseVerifierV1(ReleaseModel):
         return base64.b64decode(self.public_key_ed25519_base64, validate=True)
 
 
+class AutomaticMappingEvaluatorV1(ReleaseModel):
+    public_key_ed25519_base64: str = Field(min_length=1)
+    policy_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+    @field_validator("public_key_ed25519_base64")
+    @classmethod
+    def public_key_is_ed25519(cls, value: str) -> str:
+        return DataReleaseVerifierV1.public_key_is_ed25519(value)
+
+
 class DataReleaseTrustRootsV1(ReleaseModel):
     verifiers: dict[str, DataReleaseVerifierV1] = Field(min_length=1)
-    mapping_reviewers: dict[str, str] = Field(min_length=1)
+    mapping_reviewers: dict[str, str] = Field(default_factory=dict)
+    automatic_mapping_evaluators: dict[str, AutomaticMappingEvaluatorV1] = Field(
+        default_factory=dict, exclude_if=lambda value: not value
+    )
+
+    @model_validator(mode="after")
+    def mapping_authority_is_configured(self) -> DataReleaseTrustRootsV1:
+        if not self.mapping_reviewers and not self.automatic_mapping_evaluators:
+            raise ValueError("a mapping approval authority must be configured")
+        if any(not key.strip() for key in self.automatic_mapping_evaluators):
+            raise ValueError("automatic evaluator IDs cannot be empty")
+        return self
 
     @field_validator("verifiers")
     @classmethod
@@ -251,6 +294,17 @@ def sign_mapping_review_evidence(
     )
     signature = private_key.sign(unsigned.signing_bytes()).hex()
     return unsigned.model_copy(update={"signature": signature})
+
+
+def sign_automatic_mapping_approval(
+    payload: Mapping[str, object], private_key: Ed25519PrivateKey
+) -> AutomaticMappingApprovalV1:
+    unsigned = AutomaticMappingApprovalV1.model_validate(
+        {**payload, "signature": "0" * 128}
+    )
+    return unsigned.model_copy(
+        update={"signature": private_key.sign(unsigned.signing_bytes()).hex()}
+    )
 
 
 def sign_data_release_verification(
@@ -304,10 +358,22 @@ def verify_data_release_verification(
 
 
 def verify_mapping_review_evidence(
-    review: MappingReviewEvidenceV1,
+    review: MappingReviewEvidenceV1 | AutomaticMappingApprovalV1,
     trust_roots: DataReleaseTrustRootsV1,
 ) -> None:
-    public_key = trust_roots.mapping_reviewer_public_key(review.reviewer_id)
+    public_key: bytes | None
+    if isinstance(review, AutomaticMappingApprovalV1):
+        evaluator = trust_roots.automatic_mapping_evaluators.get(review.evaluator_id)
+        if evaluator is None or evaluator.policy_digest != review.policy_digest:
+            raise DataReleaseError(
+                "DATA_RELEASE_MAPPING_POLICY_UNTRUSTED",
+                "automatic mapping evaluator or policy is not trusted",
+            )
+        public_key = base64.b64decode(
+            evaluator.public_key_ed25519_base64, validate=True
+        )
+    else:
+        public_key = trust_roots.mapping_reviewer_public_key(review.reviewer_id)
     if public_key is None:
         raise DataReleaseError(
             "DATA_RELEASE_MAPPING_REVIEWER_UNTRUSTED",
@@ -351,7 +417,7 @@ def verify_data_release_candidate(
     if actual_reviews != expected_reviews:
         raise DataReleaseError(
             "DATA_RELEASE_MAPPING_REVIEW_MISMATCH",
-            "candidate mapping references require matching independent reviews",
+            "candidate mappings require matching human or automatic approval evidence",
         )
 
 

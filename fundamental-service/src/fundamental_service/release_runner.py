@@ -16,9 +16,17 @@ from typing import Protocol
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from .contracts import CanonicalFactV1, SecIntegrityEvidenceV1, SourceSnapshotV1
+from .contracts import (
+    CanonicalFactV1,
+    SecIntegrityEvidenceV1,
+    SecHistoryIntegrityEvidenceV1,
+    SourceSnapshotV1,
+    SourceRecordV1,
+)
+from .automatic_mapping import verify_automatic_mapping_replay
 from .data_releases import (
     DataReleaseError,
+    AutomaticMappingApprovalV1,
     DataReleaseManifestV1,
     DataReleaseTrustRootsV1,
     DataReleaseVerificationV1,
@@ -34,6 +42,7 @@ from .facts import (
     canonical_fact_digest,
     resolve_canonical_facts,
     verify_accounting_role_evidence,
+    select_fact_groups,
 )
 from .equity_award_evidence import (
     AWARD_FACT_FIELDS,
@@ -45,7 +54,8 @@ from .replay import ArtifactStore
 from .history_composition import verify_history_components
 from .serialization import canonical_bytes, sha256_digest
 from .snapshots import FilesystemSnapshotRepository, SnapshotError
-from .original_issuer import IssuerOperatingSourceV1
+from .sec_rebuild import parsed_facts_to_candidates
+from .original_issuer import IssuerOperatingSourceV1, OriginalOperatingSourceV1
 from .issuer_release_evidence import (
     require_issuer_release_profile,
     require_original_fact_membership,
@@ -135,6 +145,7 @@ class DataReleaseCanaryRunner:
             require_issuer_release_profile(manifest)
         self._verify_artifacts(manifest, verification)
         mappings = self._verify_mappings(manifest.mapping_refs)
+        self._verify_automatic_mappings(manifest, verification, mappings)
         checked_snapshots, checked_facts = self._verify_snapshots_and_facts(
             manifest, mappings
         )
@@ -158,6 +169,105 @@ class DataReleaseCanaryRunner:
             "canary_digest": canary_digest,
         }
         return DataReleaseCanaryReportV1.model_validate(report_payload)
+
+    def _verify_automatic_mappings(
+        self,
+        manifest: DataReleaseManifestV1,
+        verification: DataReleaseVerificationV1,
+        mappings: dict[str, CanonicalMappingV1],
+    ) -> None:
+        for review in verification.mapping_reviews:
+            mapping = mappings[review.mapping_id]
+            if not isinstance(review, AutomaticMappingApprovalV1):
+                if mapping.observation_scope is not None:
+                    raise DataReleaseError(
+                        "DATA_RELEASE_MAPPING_METHOD_MISMATCH",
+                        "machine scoped mappings require automatic approval evidence",
+                    )
+                continue
+            request = verify_automatic_mapping_replay(
+                review, mapping, artifacts=self._artifacts
+            )
+            used = False
+            for ref in manifest.snapshot_refs:
+                declared = tuple(
+                    self._facts.get(item.fact_id)
+                    for item in ref.facts
+                    if self._facts.get(item.fact_id).mapping_decision_id
+                    == mapping.decision_id
+                )
+                if not declared:
+                    continue
+                used = True
+                snapshot = self._snapshots.get(ref.snapshot_id)
+                sources: tuple[OriginalOperatingSourceV1 | SourceRecordV1, ...]
+                if isinstance(snapshot, IssuerOperatingSourceV1):
+                    sources = tuple(
+                        item.source
+                        for item in snapshot.originals
+                        if item.source == request.original.source
+                        and item.report.replay_digest()
+                        == request.original.report.replay_digest()
+                    )
+                    security_id = None
+                else:
+                    evidence = snapshot.sec_integrity_evidence
+                    integrities = (
+                        tuple(item.integrity for item in evidence.components)
+                        if isinstance(evidence, SecHistoryIntegrityEvidenceV1)
+                        else (evidence,)
+                    )
+                    sources = tuple(
+                        source
+                        for source in snapshot.source_records
+                        if source.accession_number
+                        == request.original.source.accession_number
+                        and source.uri == request.original.source.uri
+                        and source.content_hash == request.original.source.content_hash
+                        and source.parser_input_hash
+                        == request.original.source.parser_input_hash
+                        and source.available_at == request.original.source.available_at
+                        and not source.is_amendment
+                        and source.form == "10-K"
+                        and request.integrity in integrities
+                    )
+                    security_id = snapshot.identity.security_id
+                if (
+                    len(sources) != 1
+                    or snapshot.identity.issuer_id != request.original.source.cik
+                    or request.original.decision_at > snapshot.valuation_timestamp
+                ):
+                    raise DataReleaseError(
+                        "DATA_RELEASE_MAPPING_SOURCE_MISMATCH",
+                        "automatic mapping cannot authorize another original or cutoff",
+                    )
+                candidates = parsed_facts_to_candidates(
+                    request.original.report,
+                    source=sources[0],
+                    issuer_id=snapshot.identity.issuer_id,
+                    security_id=security_id,
+                    normalized_field=mapping.normalized_field,
+                    mapping=mapping,
+                )
+                expected = {
+                    canonical_fact_digest(selection.fact)
+                    for selection in select_fact_groups(
+                        candidates, snapshot.valuation_timestamp
+                    )
+                    if selection.fact is not None
+                }
+                if any(
+                    canonical_fact_digest(fact) not in expected for fact in declared
+                ):
+                    raise DataReleaseError(
+                        "DATA_RELEASE_MAPPING_OBSERVATION_MISMATCH",
+                        "released facts must reproduce the approved observations",
+                    )
+            if not used:
+                raise DataReleaseError(
+                    "DATA_RELEASE_MAPPING_UNUSED",
+                    "automatic mapping has no released facts",
+                )
 
     def _verify_equity_dilution(self, manifest: DataReleaseManifestV1) -> None:
         references = tuple(

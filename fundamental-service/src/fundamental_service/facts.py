@@ -199,6 +199,30 @@ class ValidationFindingV1(BaseModel):
     blocks_verified: bool
 
 
+class MappingObservationScopeV1(BaseModel):
+    """Exact original and observations authorized by a machine mapping decision."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    issuer_id: str = Field(pattern=r"^[0-9]{10}$")
+    accession_number: str = Field(pattern=r"^[0-9]{10}-[0-9]{2}-[0-9]{6}$")
+    raw_content_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    parser_input_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    parser_replay_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    observation_digests: tuple[str, ...] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def observations_are_canonical(self) -> MappingObservationScopeV1:
+        if self.observation_digests != tuple(sorted(set(self.observation_digests))):
+            raise ValueError("mapping observations must be ordered and unique")
+        if any(
+            len(value) != 64 or any(c not in "0123456789abcdef" for c in value)
+            for value in self.observation_digests
+        ):
+            raise ValueError("mapping observations require SHA-256 digests")
+        return self
+
+
 class CanonicalMappingV1(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -216,9 +240,14 @@ class CanonicalMappingV1(BaseModel):
     accounting_rules: AccountingRoleRules | None = Field(
         default=None, exclude_if=lambda value: value is None
     )
+    observation_scope: MappingObservationScopeV1 | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
 
     @model_validator(mode="after")
     def extension_review(self) -> "CanonicalMappingV1":
+        if self.observation_scope is not None and self.accounting_rules is not None:
+            raise ValueError("direct observation scope cannot authorize computed roles")
         if (
             self.source_concept.startswith("computed:")
             and self.accounting_rules is None

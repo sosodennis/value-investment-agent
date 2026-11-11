@@ -19,6 +19,30 @@ Eligible candidate-history valuations can be provisional. Missing, conflicting,
 unreviewed, future, or unsupported evidence must retain reasons and abstain.
 No completed #351 through #355 acceptance is changed. #350 is outside scope.
 
+## Automatic mapping approval increment (2026-11-12)
+
+The owner replaced the pending manual mapping gate with automatic policy
+approval. The new machine evidence is distinct from `MappingReviewEvidenceV1`.
+It binds a trusted evaluator and executable policy digest to exact retained
+inputs and decisions. The read-only release canary repeats evaluation and
+reconstructs the declared facts; a valid signature with a forged decision fails.
+Approved mappings are limited to issuer/accession/raw/parser/report/observation
+scope. They cannot authorize a dimensional context or another original.
+
+The service command `fundamental-approve-mapping` uses existing PostgreSQL and
+immutable content persistence. Source bytes are retained without JSON encoding.
+Inputs, approved decisions and abstentions are content-addressed. Identical
+repeats return `wrote=false`; synthetic service tests cover process restart and
+backup/empty-store restore. Existing human review signatures and canonical JSON
+publication remain unchanged. The three agent architecture skills were checked;
+no agent topology, workflow contract or guidance changed.
+
+This increment does not resolve missing accounting/capital/award roles, admitted
+market policy, the real numerical flow or final service/review/CI gates. The
+complete goal remains open and draft. AI verification is future scope and the
+history threshold remains null. Exact commit checks and real original results
+are recorded in the appended checkpoint when available.
+
 ## Current implementation and verification
 
 The latest implementation commit is `e30d2e5068f49709c68e794dbb0be1d2c1d11a96`.
@@ -225,7 +249,7 @@ This verifies source-review reuse, not the complete valuation flow.
 All of the following remain required before #361 is complete:
 
 1. One supported real original-filing case completes acquisition and reuse,
-   facts/snapshot persistence, actual independent semantic review, trusted
+   facts/snapshot persistence, deterministic automatic mapping approval, trusted
    release, formal #352 prepare, authentic exact-input caller approval,
    numerical calculation, and API artifact retrieval.
 2. The complete flow repeats without new downloads, snapshots, artifacts, or
@@ -234,7 +258,7 @@ All of the following remain required before #361 is complete:
 3. The same store survives restart. Export and restore into a separate empty
    store preserve evidence, results, provenance, and repeat digests.
 4. Failure retention covers missing/conflicting/future facts, unknown amendments,
-   invalid mappings/sources, corruption, missing review, and invalid approval.
+   invalid mappings/sources, corruption, missing or invalid machine evidence, and invalid caller approval.
 5. Exact-commit mapping, forecast, label/history where applicable, preparation,
    calculation, persistence, deterministic replay, and refusal tests pass with
    architecture, Ruff, type checks, contracts, and `git diff --check`.
@@ -244,11 +268,15 @@ All of the following remain required before #361 is complete:
    commit on main, close #361 and completed dependencies, then clean only
    issue-owned resources with retained backups.
 
-The reviewer must differ from the mapping author under the
-[canonical review contract](../../fundamental-service/docs/fundamental-enterprise-grade-target-state.md#259-assumptions-and-open-decisions).
-The [project signer](../../fundamental-service/docs/operations-runbook.md) signs an
-actual supplied review using an existing trusted key. It cannot supply semantic
-review, missing facts, financial policy, or caller approval.
+The owner replaced mandatory human mapping review with automatic approval on
+2026-11-12. Fundamental Service owns the versioned direct-US-GAAP policy, trusted
+machine identity, source/observation scope, retained decisions and abstentions.
+The release canary re-evaluates the exact retained input and rejects a signed
+certificate that does not reproduce the mapping or released facts. Existing
+human review records are preserved. AI verification is future scope. This does
+not supply missing facts, computed accounting partitions, financial policy,
+threshold evidence or exact-input caller approval. The old pending Dennis
+packet is proposal history and is no longer an outstanding human gate.
 
 ## Evidence, runtime, and preserved history
 
