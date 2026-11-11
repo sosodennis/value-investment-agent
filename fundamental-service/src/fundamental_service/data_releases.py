@@ -114,7 +114,7 @@ class DataReleaseManifestV1(ReleaseModel):
         return self
 
 
-class MappingReviewEvidenceV1(ReleaseModel):
+class MappingReviewStatementV1(ReleaseModel):
     mapping_id: str = Field(min_length=1)
     mapping_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
     author_id: str = Field(min_length=1)
@@ -122,15 +122,18 @@ class MappingReviewEvidenceV1(ReleaseModel):
     reviewed_at: datetime
     evidence_refs: tuple[ArtifactRefV1, ...] = Field(min_length=1)
     fixture_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
-    signature: str = Field(pattern=r"^[0-9a-f]{128}$")
 
     @model_validator(mode="after")
-    def review_is_independent(self) -> MappingReviewEvidenceV1:
+    def review_is_independent(self) -> MappingReviewStatementV1:
         if self.author_id == self.reviewer_id:
             raise ValueError("mapping author cannot review their own mapping")
         if self.reviewed_at.tzinfo is None or self.reviewed_at.utcoffset() is None:
             raise ValueError("reviewed_at must include a timezone")
         return self
+
+
+class MappingReviewEvidenceV1(MappingReviewStatementV1):
+    signature: str = Field(pattern=r"^[0-9a-f]{128}$")
 
     def signing_bytes(self) -> bytes:
         return canonical_bytes(self.model_dump(mode="python", exclude={"signature"}))
