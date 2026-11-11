@@ -18,6 +18,7 @@ from .contracts import (
     InitialModelId,
     QualityStatus,
     SecIngestionRequestV1,
+    SecMappingReferenceV1,
     SnapshotResolutionRequestV1,
     SnapshotResolutionV1,
     SourceRole,
@@ -29,8 +30,10 @@ from .data_releases import (
     DataReleaseActivationRequestV1,
     DataReleaseCandidatePublishRequestV1,
     DataReleaseError,
+    DataReleaseManifestV1,
     DataReleaseTrustRootsV1,
 )
+from .facts import CanonicalMappingV1, canonical_fact_digest
 from .operations import ServiceError
 from .history_composition import compose_original_history
 from .release_runner import DataReleaseCanaryRunner
@@ -83,6 +86,12 @@ class SourcePreparationPlanV2(StrictModel):
                 raise ValueError(
                     "source plan components must share issuer, date and runtime profile"
                 )
+        references: dict[str, SecMappingReferenceV1] = {}
+        for request in self.ingestions:
+            for reference in request.mappings:
+                previous = references.setdefault(reference.decision_id, reference)
+                if previous != reference:
+                    raise ValueError("source plan mapping references must be coherent")
         if len(self.ingestions) > 1:
             accessions = tuple(
                 request.filing.accession_number for request in self.ingestions
@@ -167,6 +176,14 @@ class PreparationArtifactWriter(Protocol):
     ) -> ArtifactPublicationV1: ...
 
 
+class PreparationMetadataReader(Protocol):
+    def get_mapping(self, mapping_id: str) -> CanonicalMappingV1: ...
+
+    def get_data_release_manifest(
+        self, manifest_digest: str
+    ) -> DataReleaseManifestV1 | None: ...
+
+
 _EVIDENCE_MISS_CODES = frozenset(
     {
         "DATA_RELEASE_NOT_ACTIVE",
@@ -181,11 +198,13 @@ class SourcePreparationRunner:
         self,
         *,
         application: FundamentalApplication,
+        metadata: PreparationMetadataReader,
         acquisition: SecAcquisitionUseCase | None,
         artifacts: PreparationArtifactWriter,
         canary: DataReleaseCanaryRunner | None,
     ) -> None:
         self._application = application
+        self._metadata = metadata
         self._acquisition = acquisition
         self._artifacts = artifacts
         self._canary = canary
@@ -198,7 +217,100 @@ class SourcePreparationRunner:
                 raise
             return None
         snapshot = self._application.snapshot(resolution.snapshot_id)
-        return resolution if self._matches_plan(plan, snapshot) else None
+        if not self._matches_plan(plan, snapshot):
+            return None
+        if resolution.data_release_manifest_digest is None:
+            raise ValueError("preparation requires an immutable data release")
+        manifest = self._metadata.get_data_release_manifest(
+            resolution.data_release_manifest_digest
+        )
+        if manifest is None or manifest.manifest_digest != (
+            resolution.data_release_manifest_digest
+        ):
+            raise ServiceError(
+                "DATA_RELEASE_MANIFEST_MISMATCH",
+                "resolved release manifest is unavailable or changed",
+                status_code=409,
+                retryable=False,
+            )
+        return resolution if self._matches_release(plan, snapshot, manifest) else None
+
+    def _matches_release_mappings(
+        self, plan: SourcePreparationPlanV2, manifest: DataReleaseManifestV1
+    ) -> bool:
+        released = {
+            item.mapping_id: item.mapping_digest for item in manifest.mapping_refs
+        }
+        references = {
+            item.decision_id: item
+            for request in plan.ingestions
+            for item in request.mappings
+        }
+        if not references.keys() <= released.keys():
+            return False
+        for key, reference in sorted(references.items()):
+            mapping = self._metadata.get_mapping(key)
+            if mapping.decision_id != key or sha256_digest(mapping) != released[key]:
+                raise ServiceError(
+                    "DATA_RELEASE_MAPPING_MISMATCH",
+                    "plan mapping differs from the immutable release",
+                    status_code=409,
+                    retryable=False,
+                )
+            if (
+                mapping.mapping_version != reference.mapping_version
+                or mapping.normalized_field != reference.normalized_field
+            ):
+                return False
+        return True
+
+    def _matches_release(
+        self,
+        plan: SourcePreparationPlanV2,
+        snapshot: SourceSnapshotV1,
+        manifest: DataReleaseManifestV1,
+    ) -> bool:
+        if not self._matches_release_mappings(plan, manifest):
+            return False
+        declared = next(
+            (
+                item
+                for item in manifest.snapshot_refs
+                if item.snapshot_id == snapshot.snapshot_id
+            ),
+            None,
+        )
+        facts = self._application.fact_repository
+        if declared is None or facts is None:
+            return False
+        expected = {
+            (request.filing.accession_number, item.normalized_field): item.decision_id
+            for request in plan.ingestions
+            for item in request.mappings
+        }
+        sources = {
+            source.content_hash: source.accession_number
+            for source in snapshot.source_records
+            if source.role is SourceRole.FILING
+        }
+        for reference in declared.facts:
+            fact = facts.get(reference.fact_id)
+            if canonical_fact_digest(fact) != reference.fact_digest:
+                raise ServiceError(
+                    "DATA_RELEASE_FACT_MISMATCH",
+                    "source preparation fact differs from the immutable release",
+                    status_code=409,
+                    retryable=False,
+                )
+            if fact.source.content_hash not in sources:
+                return False
+            accession = sources.get(fact.source.content_hash)
+            key = (accession, fact.normalized_field)
+            if key not in expected:
+                key = (None, fact.normalized_field)
+            if key not in expected or fact.mapping_decision_id != expected[key]:
+                return False
+        return True
 
     def _candidate_snapshot_available(
         self,
@@ -212,7 +324,9 @@ class SourcePreparationRunner:
                 if error.code != "SNAPSHOT_NOT_FOUND":
                     raise
                 continue
-            if self._matches_plan(plan, snapshot):
+            if self._matches_plan(plan, snapshot) and self._matches_release(
+                plan, snapshot, candidate.manifest
+            ):
                 return True
         return False
 
@@ -280,11 +394,10 @@ class SourcePreparationRunner:
                 raise
             active = None
         self._canary.validate(manifest, candidate.verification)
-        if not any(
-            self._matches_plan(plan, self._application.snapshot(reference.snapshot_id))
-            for reference in manifest.snapshot_refs
-        ):
-            raise ValueError("candidate does not contain the requested source and date")
+        if not self._candidate_snapshot_available(plan, candidate):
+            raise ValueError(
+                "candidate does not match the requested source, date and fact mappings"
+            )
         self._application.publish_data_release_candidate(
             manifest, candidate.verification
         )
@@ -362,8 +475,11 @@ class SourcePreparationRunner:
             or not set(plan.resolution_request().required_fields).issubset(
                 candidate.manifest.required_fields
             )
+            or not self._matches_release_mappings(plan, candidate.manifest)
         ):
-            raise ValueError("candidate does not match the plan profile and revision")
+            raise ValueError(
+                "candidate does not match the plan profile, revision and mappings"
+            )
         resolution = self._resolve(plan)
         if resolution is None and not (
             candidate is not None
@@ -602,6 +718,7 @@ async def _run_command(args: argparse.Namespace) -> ArtifactPublicationV1:
             )
         return SourcePreparationRunner(
             application=application,
+            metadata=app.state.metadata_store,
             acquisition=app.state.sec_acquisition,
             artifacts=application.artifact_store,
             canary=canary,

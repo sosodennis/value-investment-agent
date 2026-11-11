@@ -43,6 +43,12 @@ Candidate publication and activation require the configured organizations, relea
 verification and independent mapping review signatures. This command does not
 create review signatures or approve new mappings.
 
+Reuse also checks the plan's mapping decision IDs, versions and financial roles
+against the immutable release, and each declared fact against the mapping pinned
+for its original accession and role. A release containing another reviewed mapping
+does not authorize substituting it. Changed mapping or fact bytes fail as corrupt
+evidence before any new acquisition or calculation.
+
 For several originals, the service publishes a deterministic history snapshot
 that references each immutable component and its own integrity evidence. It does
 not copy or change facts. Release validation, serving and backup verification

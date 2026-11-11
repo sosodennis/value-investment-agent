@@ -224,6 +224,7 @@ def _reader(fixture, receipt):
 def _runner(fixture, *, acquisition=None, canary=None):
     return SourcePreparationRunner(
         application=fixture.application,
+        metadata=fixture.metadata,
         acquisition=acquisition,
         artifacts=fixture.artifacts,
         canary=canary,
@@ -342,6 +343,7 @@ def test_released_source_uses_formal_composer_and_reuses_artifact_after_restart(
     repeated = _run(runner, fixture.plan, correlation="second")
     restarted = SourcePreparationRunner(
         application=fixture.application,
+        metadata=fixture.metadata,
         acquisition=None,
         artifacts=ArtifactStore(tmp_path / "artifacts"),
         canary=None,
@@ -375,6 +377,134 @@ def test_source_miss_retains_unreleased_snapshot_without_self_approval(tmp_path)
     assert repeated.wrote is False
     assert len(acquisition.calls) == 2
     assert fixture.state.active is None
+
+
+@pytest.mark.parametrize("changed_pin", ["version", "decision", "role"])
+def test_active_release_cannot_satisfy_different_plan_mapping(tmp_path, changed_pin):
+    fixture = _fixture(tmp_path)
+    request = fixture.plan.ingestions[0]
+    references = list(request.mappings)
+    if changed_pin == "version":
+        references[0] = references[0].model_copy(
+            update={"mapping_version": "mapping-v2"}
+        )
+    elif changed_pin == "decision":
+        references[0] = references[0].model_copy(
+            update={"decision_id": "other-mapping"}
+        )
+    else:
+        first, second = references[:2]
+        references[:2] = (
+            first.model_copy(update={"normalized_field": second.normalized_field}),
+            second.model_copy(update={"normalized_field": first.normalized_field}),
+        )
+    request = request.model_copy(update={"mappings": tuple(references)})
+    plan = SourcePreparationPlanV2.model_validate(
+        {**fixture.plan.model_dump(), "ingestions": (request,)}
+    )
+    acquisition = _acquisition(fixture)
+    runner = _runner(fixture, acquisition=acquisition)
+
+    first = _run(runner, plan)
+    repeated = _run(runner, plan)
+
+    assert _reader(fixture, first).status == "release_required"
+    assert _reader(fixture, first).preparation is None
+    assert repeated.wrote is False
+    assert fixture.state.publications == 0
+
+
+def test_candidate_mapping_mismatch_refuses_before_acquisition_or_publication(tmp_path):
+    fixture = _fixture(tmp_path, released=False)
+    candidate, canary = _reviewed_candidate(fixture)
+    request = fixture.plan.ingestions[0]
+    reference = request.mappings[0].model_copy(update={"mapping_version": "mapping-v2"})
+    plan = fixture.plan.model_copy(
+        update={
+            "ingestions": (
+                request.model_copy(
+                    update={"mappings": (reference, *request.mappings[1:])}
+                ),
+            )
+        }
+    )
+    acquisition = _acquisition(fixture)
+
+    with pytest.raises(ValueError, match="mappings"):
+        _run(
+            _runner(fixture, acquisition=acquisition, canary=canary),
+            plan,
+            candidate=candidate,
+        )
+
+    assert acquisition.calls == []
+    assert fixture.state.publications == 0
+    assert fixture.state.active is None
+
+
+def test_release_cannot_substitute_another_reviewed_mapping_for_source_facts(tmp_path):
+    fixture = _fixture(tmp_path)
+    request = fixture.plan.ingestions[0]
+    reference = request.mappings[0]
+    mapping = fixture.mappings[reference.decision_id].model_copy(
+        update={"decision_id": "alternate-reviewed-mapping"}
+    )
+    fixture.mappings[mapping.decision_id] = mapping
+    payload = fixture.manifest.model_dump(exclude={"manifest_digest"})
+    payload["mapping_refs"] = (
+        *fixture.manifest.mapping_refs,
+        MappingRefV1(
+            mapping_id=mapping.decision_id, mapping_digest=sha256_digest(mapping)
+        ),
+    )
+    manifest = DataReleaseManifestV1(**payload, manifest_digest=sha256_digest(payload))
+    fixture.state.active = fixture.active.model_copy(
+        update={
+            "manifest": manifest,
+            "active": fixture.active.active.model_copy(
+                update={"manifest_digest": manifest.manifest_digest}
+            ),
+        }
+    )
+    fixture.metadata.get_data_release_manifest = lambda digest: (
+        manifest if digest == manifest.manifest_digest else None
+    )
+    plan = fixture.plan.model_copy(
+        update={
+            "ingestions": (
+                request.model_copy(
+                    update={
+                        "mappings": (
+                            reference.model_copy(
+                                update={"decision_id": mapping.decision_id}
+                            ),
+                            *request.mappings[1:],
+                        )
+                    }
+                ),
+            )
+        }
+    )
+
+    receipt = _run(_runner(fixture, acquisition=_acquisition(fixture)), plan)
+
+    assert _reader(fixture, receipt).status == "release_required"
+    assert _reader(fixture, receipt).calculation is None
+
+
+def test_changed_mapping_content_is_corruption_and_never_triggers_acquisition(tmp_path):
+    fixture = _fixture(tmp_path)
+    reference = fixture.plan.ingestions[0].mappings[0]
+    fixture.mappings[reference.decision_id] = fixture.mappings[
+        reference.decision_id
+    ].model_copy(update={"source_concept": "us-gaap:WrongRole"})
+    acquisition = _acquisition(fixture)
+
+    with pytest.raises(ServiceError) as error:
+        _run(_runner(fixture, acquisition=acquisition), fixture.plan)
+
+    assert error.value.code == "DATA_RELEASE_MAPPING_MISMATCH"
+    assert acquisition.calls == []
 
 
 def test_reviewed_candidate_resumes_acquisition_into_formal_preparation(tmp_path):
@@ -590,6 +720,7 @@ def test_preparation_and_calculation_reuse_postgres_artifacts_after_restart_and_
         ).state.application
         runner = SourcePreparationRunner(
             application=application,
+            metadata=metadata,
             acquisition=None,
             artifacts=artifacts,
             canary=DataReleaseCanaryRunner(
@@ -739,7 +870,15 @@ def test_plan_rejects_partial_model_requirements(tmp_path):
 
 
 @pytest.mark.parametrize(
-    "mismatch", ["order", "duplicate", "taxonomy_version", "ticker"]
+    "mismatch",
+    [
+        "order",
+        "duplicate",
+        "taxonomy_version",
+        "ticker",
+        "mapping_version",
+        "mapping_role",
+    ],
 )
 def test_multi_original_plan_requires_sorted_distinct_accessions_and_shared_pins(
     tmp_path, mismatch
@@ -765,6 +904,19 @@ def test_multi_original_plan_requires_sorted_distinct_accessions_and_shared_pins
         requests = requests[::-1]
     elif mismatch == "duplicate":
         requests = (first, first)
+    elif mismatch in {"mapping_version", "mapping_role"}:
+        references = list(second.mappings)
+        if mismatch == "mapping_version":
+            references[0] = references[0].model_copy(
+                update={"mapping_version": "different-version"}
+            )
+        else:
+            left, right = references[:2]
+            references[:2] = (
+                left.model_copy(update={"normalized_field": right.normalized_field}),
+                right.model_copy(update={"normalized_field": left.normalized_field}),
+            )
+        requests = (first, second.model_copy(update={"mappings": tuple(references)}))
     else:
         requests = (first, second.model_copy(update={mismatch: "OTHER"}))
     with pytest.raises(ValueError):
