@@ -407,7 +407,7 @@ def test_current_lease_classification_cannot_add_a_total_and_its_current_portion
     )
     with pytest.raises(SnapshotError) as error:
         _candidates(snapshot, report, mapping)
-    assert error.value.code == "ACCOUNTING_COMPONENT_OVERLAP"
+    assert error.value.code == "ACCOUNTING_ROLE_SCOPE_MISMATCH"
 
 
 def test_operating_accrual_classification_subtracts_current_lease_amount():
@@ -440,6 +440,36 @@ def test_operating_accrual_classification_subtracts_current_lease_amount():
         }
     )
     assert _candidates(snapshot, report, mapping)[0].value == Decimal("80")
+
+
+def test_noncurrent_classification_requires_the_corresponding_lease_total():
+    snapshot, report, mapping = _classified_lease_fixture(noncurrent=True)
+    total, current = report.facts
+    total = total.model_copy(update={"concept": "us-gaap:OtherLiabilitiesCurrent"})
+    report = report.model_copy(update={"facts": (total, current)})
+    rules = mapping.accounting_rules
+    rule = rules.periods[0]
+    rule = rule.model_copy(
+        update={
+            "components": (
+                AccountingComponentV1(parsed_fact_digest=sha256_digest(total)),
+                rule.components[1],
+            )
+        }
+    )
+    mapping = mapping.model_copy(
+        update={
+            "accounting_rules": rules.model_copy(
+                update={
+                    "parser_fact_digest": fact_semantic_digest(report),
+                    "periods": (rule,),
+                }
+            )
+        }
+    )
+    with pytest.raises(SnapshotError) as error:
+        _candidates(snapshot, report, mapping)
+    assert error.value.code == "ACCOUNTING_ROLE_SCOPE_MISMATCH"
 
 
 def test_classified_mapping_stays_provisional_without_review():

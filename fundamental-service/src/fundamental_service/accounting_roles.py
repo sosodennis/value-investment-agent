@@ -270,6 +270,20 @@ def evaluate_period_rule(
         if classified_location:
             assert component is not None
             _validate_current_lease_classification(rules, rule, component, fact)
+            if rules.normalized_field.startswith("long_term_") and (
+                len(rule.components) != 2
+                or not any(
+                    other.concept == fact.concept
+                    and not other.dimensions
+                    and components[sha256_digest(other)].sign == 1
+                    and components[sha256_digest(other)].balance_sheet_location is None
+                    for other in source_facts
+                )
+            ):
+                raise AccountingRoleError(
+                    "ACCOUNTING_ROLE_SCOPE_MISMATCH",
+                    "noncurrent lease classification requires the same lease total minus current",
+                )
         if (
             fact.entity_identifier is None
             or fact.entity_identifier.lstrip("0") != rules.issuer_id.lstrip("0")
@@ -417,6 +431,10 @@ def _validate_current_lease_classification(
     if (
         component.balance_sheet_location != "other_current_liabilities"
         or (fact.concept, component.sign) not in allowed.get(rules.normalized_field, ())
+        or (
+            rules.normalized_field.startswith("current_")
+            and rule.disposition != "classified"
+        )
         or not rule.period.instant
         or fact.dimensions
         != (
