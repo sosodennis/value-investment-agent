@@ -1036,3 +1036,37 @@ runtime pins and verified backups; digest
 Complete accounting/award/market evidence, actual semantic review/release/input
 approval, numerical acceptance and independent PR review remain outstanding.
 Threshold stays null; #361/#404 and PR #370 remain open/draft.
+
+## Engineering checkpoint: explicit empty award inventory
+
+Exact implementation `01b091f82096711cb6c07a6f59fe9f8e847082e1` allows an
+explicitly empty, complete award inventory under the existing dated original,
+quote and release gates. Missing/null/incomplete inventories still reject, and
+an empty inventory cannot discard released award observations. No zero-valued
+award fact, formula, financial policy or approval is introduced. The active
+threshold-study reference now points to #376; #361 owns persistent valuation.
+
+Exact checks pass **1,118 service/PostgreSQL tests**, 52 Agent boundary tests,
+17 acceptance-tool tests, Ruff/format, mypy, architecture and diff; 11 optional
+runtime tests skip. All 12 executed [CI jobs](https://github.com/sosodennis/value-investment-agent/actions/runs/43088113783)
+pass; release is skipped. Synthetic empty/populated inventories pass formal
+prepare, exact-input approval, calculation, unchanged repeat, PostgreSQL
+reconnection and backup/empty-store restore. This is engineering evidence.
+
+Seven retained Tandy contract/securities originals have exact SEC acceptance
+metadata. The 2013 stock forms confer shareholder rights before restrictions
+lapse; the 2021 RSU form issues shares on vesting. The annual employee-form
+description cites 2014 but links to that 2021 document; both originals are
+retained. Neither the combined award quantity nor the old securities description
+establishes complete period-end economic claims. Two complete supplemental
+repeats preserve 86 files' hashes/mtimes with zero provider/parser calls and no
+new artifacts. All generated evidence stays outside Git.
+
+`explicit_empty_award_inventory_increment` preserves all 36 prior checkpoint
+entries; checkpoint digest `10aaec2ff9f0f1ee570bfd151529cd83c114206d957cf75dfda89468cd076040`.
+Check input `b22a166a8a342c65620d0adee2bfdac76d770ef9382f7c361b75c9f76e89bef8`;
+output `c957cbc7cf2fe4015c0d49954403de19180ae2391b6ede3b4f579ec960c0069f`.
+Real complete scalar/award evidence, dated market policy, independent semantic
+review/trusted release and exact-input caller approval still precede numerical
+19-gate service acceptance, PR review, merge and main verification. No real
+award absence is asserted; threshold stays null and #361/#394/PR #370 stay open.
