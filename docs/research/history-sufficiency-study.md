@@ -95,8 +95,8 @@ without comments; 132 differ. The
 normalizes XML representation while retaining character content and whitespace.
 The probe rejects DTDs, non-XML-1.0 documents and non-XBRL roots. It does not
 approve differing documents, regulatory validation, mappings or releases.
-An archive-first source profile is a design candidate requiring its own
-provenance and validation contract; this audit does not implement or authorize it.
+The later accession archive selection boundary below implements a separate
+research input contract. This comparison audit does not approve it for publication.
 
 ## Historical DQC conformance assertion repair
 
@@ -201,3 +201,68 @@ trusted release creation still precede the formal forecast/label replay.
 Project signatures prove document integrity; they do not supply semantic review.
 Do not approve a threshold, label a valuation verified, close #376 or present
 zero executed forecasts as a completed history-sufficiency study.
+
+## Accession archive selection boundary
+
+`fundamental_service.historical_source.select_historical_archive` now provides
+an explicit internal research selection contract,
+`historical-archive-selection.v1`, under policy
+`sec-original-xbrl-archive-v1`. It selects unchanged ZIP members, binds the frozen
+CIK/accession/acceptance/origin and exact SEC URLs, checks each direct/ZIP
+object's own indexed size, and retains both hashes and every byte discrepancy.
+The shared bounded reader owns ZIP CRC, duplicate/member/size/path/encryption and
+regular-file checks. Ingestion uses the same reader; its existing exact/Akamai
+integrity and publication policy still applies.
+
+Selection does not assert equivalence. Even changed numeric content remains an
+explicit unapproved discrepancy pending independent validation. Original 10-K/A
+history inputs remain refused by this original-only selection version; retain
+those targets for amendment-scope adjudication. Archived descriptors lack HTTP
+receipts: their status stays null with `CAPTURE_HTTP_RECEIPTS_UNAVAILABLE`, rather
+than inventing a successful response. The selector binds supplied filing metadata;
+it does not independently certify its acceptance or original/amendment history.
+
+```sh
+uv run --frozen --project fundamental-service python scripts/audit_history_archive_selection.py \
+  --source-report "$STUDY_SOURCE_REPORT" \
+  --source-report-sha256 "$STUDY_SOURCE_REPORT_DIGEST" \
+  --content-root "$STUDY_SOURCE_CONTENT" \
+  --output-directory "$STUDY_ARCHIVE_SELECTION_OUTPUT"
+```
+
+Use the complete preceding 187-row source comparison report. The audit preserves
+all original targets, comparisons and result digests, selects indexed local
+schema/linkbase candidates, and reports every refusal. Complete DTS discovery,
+independent representation parsing, applicable EFM/DQC and financial review
+remain required. Output identity binds commit, code, lockfile, runtime, policy
+and source report; a repeat reuses the canonical atomic report.
+
+The pinned official
+[Arelle FileSource](https://github.com/Arelle/Arelle/blob/2f1170826a791bb61ff055254234063c9d5c3e3a/arelle/FileSource.py)
+implements ZIP member inputs. Its retained SHA-256 is
+`55a8697ebc346b69a4cb27d1c8ffef0ea2ac9ea3cbbb80fbe2327a6875d95dd3`.
+This establishes a supported parser mechanism, not SEC byte equivalence or
+financial approval. No general whitespace transformation is introduced.
+
+## Accounting-era mapping evidence
+
+The original [FASB ASU 2016-02 Section A](https://storage.fasb.org/ASU%202016-02_Section%20A.pdf)
+explains on printed pages 1–3 (PDF pages 7–9) that previous GAAP did not generally
+recognize operating-lease assets/liabilities on a lessee's balance sheet. Printed
+page 7 (PDF page 13) sets the public-entity effective date to fiscal years beginning
+after December 15, 2018 and permits early application. Retained PDF SHA-256:
+`a62baf6fdc5243fe79cbb582f7e61a359421524c27e3d47ae6eba78c6d5659fe`.
+
+This exposes an accounting-era requirement mismatch in treating missing modern
+operating-lease-liability tags as universally failed 2016 inputs. It does not
+establish that liabilities or lease commitments were zero. Each issuer/period
+needs original accounting-policy/adoption and lease disclosures, with distinct
+recognized amounts, commitments, not-applicable and unresolved states. Any
+required transformations belong to the reviewed Fundamental mapping/input policy;
+never substitute off-balance commitments into recognized-liability fields, infer
+zeros from a missing tag or rewrite #352 valuation formulas in research tools.
+These references guide compatibility diagnosis; they are not threshold ground
+truth or automatically backdated valuation inputs.
+
+[Blocker #380](https://github.com/sosodennis/value-investment-agent/issues/380)
+tracks the canonical lease-role applicability gap and its real-disclosure tests.

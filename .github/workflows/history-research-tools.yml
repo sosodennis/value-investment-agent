@@ -10,7 +10,12 @@ on:
       - ".github/workflows/history-research-tools.yml"
       - "fundamental-service/src/fundamental_service/arelle_parser.py"
       - "fundamental-service/src/fundamental_service/historical_dqc*.py"
+      - "fundamental-service/src/fundamental_service/historical_source.py"
+      - "fundamental-service/src/fundamental_service/sec_archive.py"
+      - "fundamental-service/src/fundamental_service/ingestion.py"
       - "fundamental-service/tests/test_historical_dqc.py"
+      - "fundamental-service/tests/test_historical_source.py"
+      - "fundamental-service/tests/test_ingestion.py"
   push:
     branches: [main]
     paths:
@@ -21,7 +26,12 @@ on:
       - ".github/workflows/history-research-tools.yml"
       - "fundamental-service/src/fundamental_service/arelle_parser.py"
       - "fundamental-service/src/fundamental_service/historical_dqc*.py"
+      - "fundamental-service/src/fundamental_service/historical_source.py"
+      - "fundamental-service/src/fundamental_service/sec_archive.py"
+      - "fundamental-service/src/fundamental_service/ingestion.py"
       - "fundamental-service/tests/test_historical_dqc.py"
+      - "fundamental-service/tests/test_historical_source.py"
+      - "fundamental-service/tests/test_ingestion.py"
 
 jobs:
   offline-research-contracts:
@@ -46,4 +56,7 @@ jobs:
           uvx --from ruff==0.14.14 ruff check fundamental-service/src/fundamental_service/arelle_parser.py fundamental-service/src/fundamental_service/historical_dqc*.py fundamental-service/tests/test_historical_dqc.py
           uvx --from ruff==0.14.14 ruff format --check fundamental-service/src/fundamental_service/arelle_parser.py fundamental-service/src/fundamental_service/historical_dqc*.py fundamental-service/tests/test_historical_dqc.py
           uvx --from mypy==1.15.0 mypy --follow-imports=skip --ignore-missing-imports fundamental-service/src/fundamental_service/arelle_parser.py fundamental-service/src/fundamental_service/historical_dqc*.py
+          uvx --from ruff==0.14.14 ruff check fundamental-service/src/fundamental_service/historical_source.py fundamental-service/src/fundamental_service/sec_archive.py fundamental-service/src/fundamental_service/ingestion.py fundamental-service/tests/test_historical_source.py fundamental-service/tests/test_ingestion.py
+          uvx --from ruff==0.14.14 ruff format --check fundamental-service/src/fundamental_service/historical_source.py fundamental-service/src/fundamental_service/sec_archive.py fundamental-service/src/fundamental_service/ingestion.py fundamental-service/tests/test_historical_source.py fundamental-service/tests/test_ingestion.py
+          uvx --from mypy==1.15.0 mypy --follow-imports=skip --ignore-missing-imports fundamental-service/src/fundamental_service/historical_source.py fundamental-service/src/fundamental_service/sec_archive.py
           uv run --frozen --project fundamental-service pytest fundamental-service/tests -q
