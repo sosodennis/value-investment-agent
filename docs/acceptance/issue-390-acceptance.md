@@ -145,7 +145,7 @@ observations (22 per original), 139 segment observations and 24 other periods.
 The latter 163 are not additional eligible study observations.
 
 A bounded new acquisition attempted the nine frozen direct XML, index and ZIP
-URIs once each, with the configured SEC contact. All returned actual HTTP403.
+URIs once each, with the then-selected SEC user-agent. All returned actual HTTP403.
 Each status/body/hash/URI/accession receipt is retained under a stable
 CIK/accession/valuation-time/source-profile key, without replacing old inputs.
 The repeated capture executor made zero requests and reused the same report.
@@ -158,3 +158,92 @@ mapping review, the four unresolved accounting roles, real forecast/first-label/
 error/repeat, #377 protocol, all fixed-100 outcomes and main acceptance remain.
 The cohort is still 100 issuers / 589 targets; formal forecasts are 0/100 and
 `supported_history_threshold=null`. #390, #383 and #376 remain open.
+
+## Current canonical-history and declared-source checkpoint
+
+Current verified implementation SHA for this bounded library increment:
+`743beac78c4d5e4ce65c8c6f2f04bdb38050289d`. Earlier checkpoints above remain
+historical evidence. This SHA includes the selected-history correction from
+`8fef037c` and its explicit type annotations; later commits change acceptance
+metadata only. It does not represent full #390/#376 acceptance or main delivery.
+
+Real-source inspection exposed a gap in `2bedaad5`: all converter observations
+cannot be required release members when the release correctly rejects segment
+contexts and superseded original versions. The blocker was immediately recorded
+at <https://github.com/sosodennis/value-investment-agent/issues/390#issuecomment-6797195300>.
+The corrected implementation uses the existing consolidated predicate and
+canonical resolver separately per role/period. Complete original reports retain
+excluded contexts and original versions; the complete eligible selected set is
+required, and omitted older periods still fail. Tests exercise segment-only
+periods, mixed contexts, unchanged publication and overlapping originals.
+
+At clean `743beac7`: **792 service tests passed / 48 explicit skips**, 48
+research/archive tests passed, Ruff check/format, mypy on all 12 changed source
+files, both architecture guards and diff check passed. Seven cases exactly match
+the pinned owning `071169f9`; later #394 work remains outside that comparison.
+The preceding `8fef037c` mypy failure is retained in its checkpoint logs; the
+subsequent commit corrects the accumulator type and variable name. The complete
+checks reran against the current exact SHA. No failure was promoted to passing.
+
+Canonical checkpoint and all command logs live outside Git under
+`checkpoint-743beac7/` in the retained research evidence root.
+
+| Current artifact | SHA-256 |
+| --- | --- |
+| Contract/checks checkpoint | `9fc5d207dfef4c76ab8830d2679615f6fbb77eab022de17dbbcc7d842dfb5d22` |
+| Checkpoint input | `4642187be1e46fa65763d113c65ce4f0f73eff8b28d28fd454f4b7bf0c0d89dd` |
+| Checkpoint output | `ac622cb786b216043af78a7c2c1504ceb5068b0f9a516407c2a50107894a6665` |
+| Trusted/provisional replay | `7bc117304e8204cafde32742bec13c3e0f423c0191e6dea7d0d60813614e1f23` |
+| Replay input | `6d33c26f47732c5dc042a14fea011d5986872770c9500752136204d0f40eeb61` |
+| Replay output | `ffe1b7fad138b873b47d09221b159df08739e88985de8144cdec89227bf68b1a` |
+| Synthetic forecast | `7e4bd2e6f60909c56002e63bae5a6e8dceb4d167e89b29e5db5fcd7745817ac7` |
+| Original issuer replay | `30c50b108486059bff065fd6d6446c6fa5413235254bd9ea52cb01588976459c` |
+| Declared-source checkpoint | `e9008dce18fb8581dc84e88ed3c8dafe17b055d86f32ee7c62ed761146257c4f` |
+| Declared-source checkpoint input | `9e3dbced8ab9ddeec71d7eddfa3cc8bed58db253e58752d8dea63aa0a345ef7c` |
+| Declared-source checkpoint output | `457165d9250a2bc0ce3dae49ff667d999646695cc3db9a85113a6a7d2c2dd8b3` |
+| Real declared HTTP200 receipts | `2d3bce073b67901f28d416237bed84fca1bfab2a5b773efa1afae806a37e3117` |
+| Real original integrity report | `66a80897f7d40158d8bedf34c16ea18fa54d11d17c5242b57e878e1f4a660418` |
+
+The old external availability helper selected the first nonempty user-agent
+from the main checkout `.env`, which lacked an email contact. All nine failed
+responses explicitly said `Your Request Originates from an Undeclared Automated
+Tool`. The corrected research capture uses the existing complete contact in the
+#361 worktree configuration, verifies a nonplaceholder email before acquisition
+and pins its digest in a distinct source profile and acquisition key. No shared
+`.env` was changed, no contact was invented or disclosed, and old missing/403
+receipts remain intact. This is an acquisition configuration correction, not a
+relaxation of source, numeric or review gates.
+
+With the declared contact, **9/9 frozen direct XML/index/ZIP requests returned
+actual HTTP200 and exactly matched all nine original retained hashes**. All
+three originals pass the existing ingestion byte-integrity/normalization policy
+and release original-evidence checks, including retained completed strict
+EFM/DQC evidence. Identical normalized bytes permit reuse of the existing pinned
+parser reports; this is explicitly not a new Arelle execution or independent
+accounting review. New captured-at metadata records the actual current receipt,
+while historical availability remains bound to the official SEC acceptance
+audit. The future original remains excluded at the 2016 origin.
+
+Both the corrected capture and original-integrity executor ran twice after
+initial creation: zero requests, zero new artifacts, identical input/output
+digests and bytes/sizes/mtimes, with `wrote=false`. The contract/original and
+trusted/provisional replays also completed two unchanged repetitions. Both
+checkpoint reports reused unchanged bytes on repeated writes.
+
+Exact commands (each `--commit` is the full SHA above):
+
+```sh
+uv run --frozen --project fundamental-service python \
+  /Users/denniswong/Desktop/Project/value-investment-agent-issue-376-research-evidence/references/issue390-canonical-release-checkpoint.py \
+  --commit 743beac78c4d5e4ce65c8c6f2f04bdb38050289d
+uv run --frozen --project fundamental-service python \
+  /Users/denniswong/Desktop/Project/value-investment-agent-issue-376-research-evidence/references/issue390-declared-source-checkpoint.py \
+  --commit 743beac78c4d5e4ce65c8c6f2f04bdb38050289d
+```
+
+Each checkpoint pins the executor sources, lock/runtime, commands and digests.
+No Docker resources were used; no service acceptance, independent review or
+real release was asserted. Remaining: independent semantic mapping review, four
+accounting roles, real release/forecast/first-original label/error/repeat,
+prospective #377 rules, fixed-100 empirical outcomes and main/service acceptance.
+Formal forecasts remain 0/100 and the supported history threshold remains null.
