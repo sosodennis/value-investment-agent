@@ -750,6 +750,179 @@ def test_concurrent_preparations_publish_one_artifact(tmp_path):
 
 
 @pytest.mark.skipif(not DATABASE_URL, reason="isolated PostgreSQL is required")
+def test_incomplete_acquisition_stays_blocked_and_reuses_evidence_after_restore(
+    tmp_path, recovery_databases
+):
+    from fundamental_service.source_acquisition import SecAcquisitionUseCase
+    from test_source_acquisition import _partial_acquisition_fixture
+
+    source_database, target_database = recovery_databases
+    fixture = _partial_acquisition_fixture(tmp_path)
+    fields = valuation_requirements_profile("fcff_dcf").required_fact_fields
+    mappings = tuple(
+        CanonicalMappingV1(
+            contract_version="fundamental.v1",
+            decision_id=f"partial-{field}",
+            source_concept=f"us-gaap:{field}",
+            normalized_field=field,
+            mapping_version="partial-v1",
+            status="provisional",
+            confidence="unresolved",
+        )
+        for field in fields
+    )
+    request = fixture.request.model_copy(
+        update={
+            "required_fields": fields,
+            "mappings": tuple(
+                SecMappingReferenceV1(
+                    decision_id=mapping.decision_id,
+                    mapping_version=mapping.mapping_version,
+                    normalized_field=mapping.normalized_field,
+                )
+                for mapping in mappings
+            ),
+        }
+    )
+    plan = SourcePreparationPlanV2(
+        source_revision=REVISION,
+        release_profile_id="incomplete-source-test-v1",
+        model_id="fcff_dcf",
+        ingestions=(request,),
+    )
+
+    def wire(metadata, content_root):
+        content = PostgresContentStore(content_root, metadata)
+        artifacts = PostgresArtifactStore(metadata, content)
+        application = create_app(
+            snapshot_repository=PostgresSnapshotRepository(metadata),
+            fact_repository=PostgresCanonicalFactRepository(metadata),
+            content_store=content,
+            artifact_store=artifacts,
+            metadata_store=metadata,
+            config=OperationsConfig.testing(),
+        ).state.application
+        acquisition = SecAcquisitionUseCase(
+            adapter=fixture.provider,
+            ingestion=fixture.ingestion,
+            metadata=metadata,
+            content_store=content,
+            settings=fixture.settings,
+            authorized_organizations=frozenset({"operators"}),
+            capture_store=artifacts,
+        )
+        return (
+            SourcePreparationRunner(
+                application=application,
+                metadata=metadata,
+                acquisition=acquisition,
+                artifacts=artifacts,
+                canary=None,
+            ),
+            content,
+            artifacts,
+        )
+
+    def invoke(runner):
+        return runner.run(
+            plan,
+            actor_id="operator",
+            organization_id="operators",
+            correlation_id="incomplete-source",
+            deadline_at=datetime.now(UTC) + timedelta(minutes=1),
+        )
+
+    content_root = tmp_path / "durable-content"
+    store = PostgresMetadataStore(source_database, auto_migrate=True)
+    store.start()
+    try:
+        for mapping in mappings:
+            store.publish_mapping(mapping)
+        runner, content, artifacts = wire(store, content_root)
+        source = fixture.snapshot.source_records[0]
+        content.put(
+            fixture.content.get(source.content_hash, media_type=source.media_type),
+            media_type=source.media_type,
+        )
+        first = invoke(runner)
+        evidence = SourcePreparationEvidenceV1.model_validate_json(
+            artifacts.read(first.artifact.artifact_id)
+        )
+        assert evidence.status == "blocked"
+        assert evidence.issue_codes == ("REQUIRED_FACTS_UNAVAILABLE",)
+        assert evidence.missing_evidence == tuple(sorted(set(fields) - {"revenue"}))
+        assert evidence.snapshot_id == fixture.snapshot.snapshot_id
+        assert evidence.snapshot_manifest_digest == fixture.snapshot.manifest_digest
+        assert evidence.preparation is None and evidence.calculation is None
+        assert store.get_snapshot(evidence.snapshot_id) == fixture.snapshot
+        assert store.get_fact(fixture.facts[0].fact_id) == fixture.facts[0]
+        assert fixture.facts[0].quality is QualityStatus.PROVISIONAL
+        assert fixture.state.parser_calls == 1
+        calls = fixture.state.provider_calls
+        inventory = tuple(
+            (str(p.relative_to(content_root)), p.read_bytes(), p.stat().st_mtime_ns)
+            for p in sorted(content_root.rglob("*"))
+            if p.is_file()
+        )
+    finally:
+        store.close()
+    reopened = PostgresMetadataStore(source_database)
+    reopened.start()
+    try:
+        runner, _, artifacts = wire(reopened, content_root)
+        for _ in range(2):
+            repeated = invoke(runner)
+            assert repeated == first.model_copy(update={"wrote": False})
+            assert artifacts.read(repeated.artifact.artifact_id) == canonical_bytes(
+                evidence
+            )
+        assert fixture.state.provider_calls == calls
+        assert fixture.state.parser_calls == 1
+        assert len(reopened.list_snapshots()) == len(reopened.list_facts()) == 1
+        assert (
+            tuple(
+                (str(p.relative_to(content_root)), p.read_bytes(), p.stat().st_mtime_ns)
+                for p in sorted(content_root.rglob("*"))
+                if p.is_file()
+            )
+            == inventory
+        )
+    finally:
+        reopened.close()
+    backup = asyncio.run(
+        export_backup(
+            source_database,
+            content_root,
+            tmp_path / "backups",
+            source_revision=REVISION,
+        )
+    )
+    restored_root = tmp_path / "restored-content"
+    asyncio.run(
+        restore_backup(
+            target_database,
+            restored_root,
+            tmp_path / "backups" / backup.manifest_digest,
+            manifest_digest=backup.manifest_digest,
+        )
+    )
+    restored = PostgresMetadataStore(target_database)
+    restored.start()
+    try:
+        runner, _, artifacts = wire(restored, restored_root)
+        receipt = invoke(runner)
+        assert receipt == first.model_copy(update={"wrote": False})
+        assert artifacts.read(receipt.artifact.artifact_id) == canonical_bytes(evidence)
+        assert restored.get_snapshot(evidence.snapshot_id) == fixture.snapshot
+        assert restored.get_fact(fixture.facts[0].fact_id) == fixture.facts[0]
+        assert len(restored.list_snapshots()) == len(restored.list_facts()) == 1
+        assert fixture.state.provider_calls == calls
+        assert fixture.state.parser_calls == 1
+    finally:
+        restored.close()
+
+
+@pytest.mark.skipif(not DATABASE_URL, reason="isolated PostgreSQL is required")
 def test_preparation_and_calculation_reuse_postgres_artifacts_after_restart_and_restore(
     tmp_path, recovery_databases
 ):

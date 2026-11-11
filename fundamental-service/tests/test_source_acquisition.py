@@ -1,5 +1,5 @@
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -8,6 +8,7 @@ from pydantic import ValidationError
 from fundamental_service.arelle_parser import ArelleValidationProfileV1
 from fundamental_service.contracts import (
     IdentityV1,
+    QualityStatus,
     SecFilingSelectorV1,
     SecIngestionRequestV1,
     SecMappingReferenceV1,
@@ -18,6 +19,7 @@ from fundamental_service.historical_dqc import (
     OFFICIAL_SOURCE_SHA256,
 )
 from fundamental_service.serialization import sha256_digest
+from fundamental_service.snapshots import FilesystemContentStore
 from fundamental_service.source_acquisition import (
     SecAcquisitionUseCase,
     parse_supported_filing_forms,
@@ -389,6 +391,175 @@ def _validation_profile(dqc_ruleset_sha256: str = "d" * 64):
         xule_plugin_sha256="b" * 64,
         dqc_ruleset_sha256=dqc_ruleset_sha256,
     )
+
+
+def _partial_acquisition_fixture(tmp_path, *, empty=False):
+    from fundamental_service.facts import CanonicalMappingV1
+    from fundamental_service.sec_source import (
+        SecEdgarSourceAdapter,
+        SecRequestPolicy,
+        _SecResponse,
+    )
+    from test_postgres_metadata import _fact_for_snapshot, _snapshot
+
+    fields = ("revenue", "preferred_claims", "contract_assets")
+    mappings = tuple(
+        CanonicalMappingV1(
+            contract_version="fundamental.v1",
+            decision_id=f"partial-{field}",
+            source_concept=f"us-gaap:{field}",
+            normalized_field=field,
+            mapping_version="partial-v1",
+            status="provisional",
+            confidence="unresolved",
+        )
+        for field in fields
+    )
+    request = _sec_request().model_copy(
+        update={
+            "valuation_timestamp": datetime(2026, 2, 1, tzinfo=UTC),
+            "required_fields": fields,
+            "mappings": tuple(
+                SecMappingReferenceV1(
+                    decision_id=mapping.decision_id,
+                    mapping_version=mapping.mapping_version,
+                    normalized_field=mapping.normalized_field,
+                )
+                for mapping in mappings
+            ),
+        }
+    )
+    content = FilesystemContentStore(tmp_path / "content")
+    raw = b"synthetic validated original; incomplete accounting roles"
+    source_hash = content.put(raw, media_type="application/json")
+    original = _snapshot(
+        source_hash,
+        identity=request.identity,
+        valuation_timestamp=request.valuation_timestamp,
+    )
+    payload = original.model_dump(exclude={"manifest_digest"})
+    payload["source_records"] = (
+        original.source_records[0].model_copy(update={"content_hash": source_hash}),
+    )
+    payload["manifest_digest"] = sha256_digest(
+        {key: value for key, value in payload.items() if key != "snapshot_id"}
+    )
+    snapshot = type(original)(**payload)
+    facts = () if empty else (_fact_for_snapshot(snapshot, f"partial-{source_hash}"),)
+    settings = _runtime_settings()
+    settings.taxonomy_cache_dir = tmp_path / "taxonomy"
+    profile = _validation_profile()
+    prepared = SimpleNamespace(
+        snapshot=snapshot,
+        facts=facts,
+        issues=(),
+        identity_evidence_ref=None,
+        parser_report=SimpleNamespace(
+            taxonomy_cache_hash=settings.taxonomy_cache_sha256,
+            finding_codes=(),
+            validation_profile=profile,
+            validation_profile_digest=profile.digest(),
+        ),
+    )
+    state = SimpleNamespace(provider_calls=0, parser_calls=0)
+    primary = "msft-20240630.htm"
+    accession = request.filing.accession_number
+    submissions = {
+        "cik": int(request.cik),
+        "tickers": [request.ticker],
+        "filings": {
+            "recent": {
+                "accessionNumber": [accession],
+                "filingDate": ["2024-07-30"],
+                "acceptanceDateTime": ["2024-07-30T20:06:22Z"],
+                "form": ["10-K"],
+                "primaryDocument": [primary],
+                "isXBRL": [1],
+                "isInlineXBRL": [1],
+            }
+        },
+    }
+
+    class Provider(SecEdgarSourceAdapter):
+        def _request(self, uri, *, deadline_at=None):
+            state.provider_calls += 1
+            raw = (
+                json.dumps(submissions).encode()
+                if "/submissions/" in uri
+                else _entrypoint_index(
+                    primary, "msft-20240630.xsd", f"{accession}-xbrl.zip"
+                )
+            )
+            return _SecResponse(
+                raw, 200, "application/json", snapshot.captured_at, (), len(raw)
+            )
+
+    def prepare_filing(**kwargs):
+        state.parser_calls += 1
+        return prepared
+
+    provider = Provider(SecRequestPolicy(user_agent="test test@example.com"))
+    return SimpleNamespace(
+        request=request,
+        snapshot=snapshot,
+        facts=facts,
+        mappings=mappings,
+        state=state,
+        content=content,
+        settings=settings,
+        provider=provider,
+        ingestion=SimpleNamespace(prepare_filing=prepare_filing),
+    )
+
+
+@pytest.mark.parametrize("empty", [False, True])
+def test_incomplete_parsed_acquisition_retains_partial_evidence(tmp_path, empty):
+    fixture = _partial_acquisition_fixture(tmp_path, empty=empty)
+    published = []
+
+    def publish(**kwargs):
+        published.append(kwargs)
+        return kwargs["result"]
+
+    metadata = SimpleNamespace(
+        get_mapping={m.decision_id: m for m in fixture.mappings}.__getitem__,
+        publish_sec_ingestion=publish,
+        publish_source_audit=lambda **kwargs: None,
+    )
+    use_case = SecAcquisitionUseCase(
+        adapter=fixture.provider,
+        ingestion=fixture.ingestion,
+        metadata=metadata,
+        content_store=fixture.content,
+        settings=fixture.settings,
+        authorized_organizations=frozenset({"org"}),
+    )
+    result = use_case._acquire_and_publish(
+        fixture.request,
+        acquisition_key="a" * 64,
+        key_payload={},
+        caller_principal="caller",
+        organization_id="org",
+        correlation_id="first",
+        deadline_at=datetime.now(UTC) + timedelta(minutes=1),
+        validation_profile=_validation_profile(),
+    )
+    assert result.status == "abstain"
+    assert result.quality_status is QualityStatus.ABSTAIN
+    assert result.issue_codes == ("REQUIRED_FACTS_UNAVAILABLE",)
+    assert result.missing_evidence == tuple(
+        sorted(
+            fixture.request.required_fields
+            if empty
+            else ("preferred_claims", "contract_assets")
+        )
+    )
+    assert result.snapshot_id == fixture.snapshot.snapshot_id
+    assert result.manifest_digest == fixture.snapshot.manifest_digest
+    assert result.canonical_fact_ids == tuple(f.fact_id for f in fixture.facts)
+    assert published[0]["snapshot"] == fixture.snapshot
+    assert published[0]["facts"] == fixture.facts
+    assert fixture.state.parser_calls == 1
 
 
 def test_canonical_acquisition_key_distinguishes_identity_cutoff_and_coverage():

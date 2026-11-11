@@ -748,7 +748,7 @@ class SecAcquisitionUseCase:
             submissions_source,
             role=SourceRole.ACQUISITION,
         )
-        submissions_hash = self.content_store.put(
+        self.content_store.put(
             submissions_source.content, media_type=submissions_source.media_type
         )
         submissions = self._decode_submissions(submissions_source.content, request)
@@ -871,32 +871,16 @@ class SecAcquisitionUseCase:
         required_missing = tuple(sorted(set(request.required_fields) - present_fields))
         issue_codes = set(preparation.parser_report.finding_codes)
         issue_codes.update(issue.code for issue in preparation.issues)
+        status: Literal["created", "degraded", "abstain"]
         if required_missing:
-            self.metadata.publish_source_audit(
-                acquisition_key=acquisition_key,
-                caller_principal=caller_principal,
-                organization_id=organization_id,
-                correlation_id=correlation_id,
-                source_hashes=tuple(
-                    sorted(
-                        record.content_hash
-                        for record in preparation.snapshot.source_records
-                    )
-                )
-                + (submissions_hash,),
-                outcome="abstain",
-            )
-            raise ServiceError(
-                "REQUIRED_FACTS_UNAVAILABLE",
-                "SEC filing did not provide every requested verified fact",
-                status_code=422,
-                retryable=False,
-            )
-        if (
+            issue_codes.add("REQUIRED_FACTS_UNAVAILABLE")
+            status = "abstain"
+            quality = QualityStatus.ABSTAIN
+        elif (
             verified_fields != set(request.required_fields)
             or preparation.snapshot.coverage_status is not QualityStatus.VERIFIED
         ):
-            status: Literal["created", "degraded"] = "degraded"
+            status = "degraded"
             quality = QualityStatus.PROVISIONAL
         else:
             status = "created"
