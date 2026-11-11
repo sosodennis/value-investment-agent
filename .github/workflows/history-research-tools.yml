@@ -1,0 +1,37 @@
+name: History Research Tools
+
+on:
+  pull_request:
+    paths:
+      - "scripts/audit_history_*.py"
+      - "scripts/verify_issue361_research_archive.py"
+      - "scripts/tests/test_audit_history_*.py"
+      - "scripts/tests/test_verify_issue361_research_archive.py"
+      - ".github/workflows/history-research-tools.yml"
+  push:
+    branches: [main]
+    paths:
+      - "scripts/audit_history_*.py"
+      - "scripts/verify_issue361_research_archive.py"
+      - "scripts/tests/test_audit_history_*.py"
+      - "scripts/tests/test_verify_issue361_research_archive.py"
+      - ".github/workflows/history-research-tools.yml"
+
+jobs:
+  offline-research-contracts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v5
+      - name: Install locked dependencies
+        run: uv sync --frozen --extra dev --project fundamental-service
+      - name: Check research tools
+        run: |
+          uvx --from ruff==0.14.14 ruff check scripts/audit_history_*.py scripts/verify_issue361_research_archive.py scripts/tests/test_audit_history_*.py scripts/tests/test_verify_issue361_research_archive.py
+          uvx --from ruff==0.14.14 ruff format --check scripts/audit_history_*.py scripts/verify_issue361_research_archive.py scripts/tests/test_audit_history_*.py scripts/tests/test_verify_issue361_research_archive.py
+          uvx --from mypy==1.15.0 mypy --follow-imports=skip --ignore-missing-imports scripts/audit_history_*.py scripts/verify_issue361_research_archive.py
+      - name: Test retention and idempotency
+        run: uv run --frozen --project fundamental-service pytest scripts/tests/test_audit_history_*.py scripts/tests/test_verify_issue361_research_archive.py -q
