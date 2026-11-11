@@ -128,6 +128,51 @@ independent review, CI and main merge verification remain required. #361 and #37
 remain open; all 19 full-flow gates remain unverified. The next implementation
 unit is real-source coverage and recovery, not threshold promotion.
 
+## Engineering checkpoint: multi-original history
+
+Implementation `1a1e441d00c05f154d061a71064892a119ec7168`, with API test
+adapter corrections in `e44aa780d8e439e26102c5ce1ef5b94a552cb211`, adds a
+deterministic history snapshot referencing each retained original and its own
+parser-bound integrity. This preserves original source ownership while exposing
+their fact history to the formal #352 composer. Combining raw facts under one
+original's integrity would not establish that relationship. No facts or valuation
+formulas are changed.
+
+The unreleased preparation plan is now V2: one to six ingestion requests, sorted
+distinct original accessions for multiple inputs, matching issuer/date/runtime
+pins, and a complete model-role union. Individual filings may map only the roles
+they support. Existing V1 outcome receipts keep their original shape. Canary,
+serving, cached resolution and offline recovery re-read every component. Missing
+or changed retained originals refuse the history without treating corruption as
+a new acquisition request. Repeating composition preserves bytes and mtime;
+concurrent composition produces one history identity.
+
+[Exact checkpoint evidence](issue-361-history-checkpoint.json) records the final
+implementation commit, commands, runtime pins, failure retention and synthetic
+input/output identities. Input digest:
+`43fa88e1a67536ebe2cdb6fedb7e3dd68af46d8ac8b7d7acc60209efe9311091`;
+command-output digest:
+`d3c8680957fcaa08f0df064b3368ce44fde597249c5cd5193bac0bec2b20f04d`.
+The exact suite passed **530 tests with 11 optional runtime skips**, plus 17
+acceptance-tool tests. Ruff, changed formatting, six-source mypy, architecture
+and diff checks passed. The first exact run's 20 API adapter failures remain
+recorded; fixtures now provide the integrity field and read the requested
+snapshot ID without relaxing production checks.
+
+Synthetic originals demonstrate provisional numerical preparation/calculation,
+unchanged repeated output, source corruption refusal and recovery of the same
+composition into a separate empty PostgreSQL store. The complete synthetic
+history backup digest is
+`6727953622aca133c698c3661c9161f91f5849af153c34a0dfddde0bb5fb3f48`.
+Only this run's tmpfs database/network were removed; all 62 pre-existing
+container identities, image IDs and start times match the baseline.
+
+This is engineering evidence. Reviewed real issuer/period role coverage,
+real-filing numerical success, complete service repeat/restart/restore,
+independent review/CI and main verification remain required. #361 and #379 remain
+open; PR #370 remains draft. The 19 full-flow gates and history thresholds are
+not promoted by synthetic success.
+
 ## Research preservation and removal
 
 Baseline `59830e161c9300e44b2b7b54eea3e43567835bff` has tree
