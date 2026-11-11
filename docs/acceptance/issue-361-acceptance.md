@@ -639,3 +639,17 @@ No real numerical valuation or complete 19-gate acceptance is claimed.
 Threshold remains null and valuations provisional or abstained; #361, #394 and
 PR #370 remain open, with the PR draft. Complete these evidence requirements,
 then review/merge and verify main before closure and final worktree cleanup.
+
+The final citation-binding increment is
+`b8d5163d441809fb5e5c32e83ae1b3939298ff0d`: inventory completeness and PSU-condition
+citations must identify available original filing hashes in the pinned snapshot.
+A retained comparison shows `d57f847b` accepting an unknown citation while this
+increment rejects it as `DILUTION_REVIEW_SOURCE_MISMATCH`. At the new exact commit,
+**787 service/PostgreSQL tests / 11 optional skips**, 52 Agent tests, 17 acceptance
+tool tests and all static checks pass. CI
+[43028954968](https://github.com/sosodennis/value-investment-agent/actions/runs/43028954968)
+passes its 12 executed jobs; release gate is skipped. The two complete persistent
+fixture runs again preserve result digests, all 118 files and `wrote=false` on
+reuse; the dedicated stack is removed with all 62 baseline containers unchanged.
+Receipts are under `equity_review_source_binding_increment` in the same checkpoint.
+The real-source limitations and null history threshold above still apply.
