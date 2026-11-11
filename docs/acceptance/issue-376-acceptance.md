@@ -573,3 +573,129 @@ issuer/period/component/absence review and historical publication/release,
 then #352 real forecast/first-original label/error, reviewed #377 protocol and
 complete isolated service-backed repeat. Formal study completion remains
 **0/100**, threshold null; #376/#383 stay open and #378 stays draft.
+
+## Owning composer-v3 integration checkpoint
+
+Exact implementation is ordinary merge
+`8063d92d82233e57ddfe92f4ce32717d7769b80f` on the separate local branch
+`codex/issue-376-composer-integration`. Its parents are research
+`29321c8f97a0b8978a32fa194ce4ac9a1134b6b3` and owning #361
+`071169f953e69713a5a202c9a0030356f1834802`. Both histories are retained.
+The published #378 research branch and the main chat's checkout, branch,
+database and Docker resources were not changed by this increment.
+
+The shared operating stage now uses the owning `using_valuation_context`,
+`fcff-forecast-composer-v3` and `decimal-50-end-of-year-v1`. Composer and
+numerical-policy versions bind operating input/output identity. Both full
+valuation and operating preparation use the same extracted assumptions and
+operating recurrence. Parent historical parser identity, realized FCFF,
+accounting-role contracts, typed checks and corrected operating-lease treatment
+are retained. No forecast, tax, WACC or valuation formula was introduced in a
+research tool. All successful operating outputs remain provisional; all
+unresolved cases abstain and the supported threshold remains null.
+
+At the exact clean implementation commit:
+
+- Complete Fundamental tests: **693 passed, 48 explicit resource/database skips**.
+- Research tools: **48 passed, no skips**.
+- Scoped Ruff 0.14.10 check/format and mypy 1.19.1 with the CI import-following
+  settings passed. Both architecture guards and `git diff --check` passed.
+- Seven synthetic full-preparation/calculation cases match modules loaded
+  independently from exact owning parent `071169f9`, including both complete
+  models and blocked paths. These are compatibility fixtures, not empirical
+  study forecasts. The complete and no-market goldens were migrated from the
+  old composer baseline using this independent execution.
+- Operating prepared/refused results reproduce under hostile Decimal traps,
+  constrained exponents, reversed inputs and fresh worker threads, with caller
+  state restored. The new owner version fields bind identity.
+- Both operating model outputs and the parent-parity artifact were reexecuted;
+  reused artifacts returned `wrote=false` with unchanged content, sizes and
+  mtimes. No service-backed or Docker acceptance was claimed.
+
+| Exact external artifact | SHA-256 |
+| --- | --- |
+| Engineering checkpoint | `f5c858ba73520ea7d1599795022afa659f5874d23eed5024c09c04ae58e28822` |
+| Engineering inputs | `6d0069ae5b036c65e66b53b6353af83b8886e3fbf4b9945f82fca37577b493aa` |
+| Engineering outputs | `1d556a63c4c7fd18e4b3f890b070d202963dc4753ea957d33e22e284b6d8a2c8` |
+| Owning parent parity report | `884faef59582499c411400fb5324a68ff2a4847b16fc52b2f98864485fd4fdd9` |
+| Parent parity inputs | `da8d9f41be1cb2a3a05725a82cd819bb59c360ffdbc9799820ffbeb5956d9545` |
+| Parent parity outputs | `c30fb2fc280debe5f438f648ce140577a0ba573e5b15f50b58af3681847d14f9` |
+| Integrated operating report | `31a3285bb12fc7523358d2d3ac40795dc782e25569de376a5da6fae1646465fb` |
+| Operating inputs | `da5082fd1a370217fe356896e9dea833b4fa4d27efd64a152a6577d887004002` |
+| Operating outputs | `ab920ccef50cd9b79a2c11e0b220d8ce8b2894a5cb8ff6410a3cf39a68f52d0a` |
+| Source/repeat checkpoint | `cc50119eb0105bbf4f80a4562a0531ee74c1ffb173a121d560e4a180502e7f3b` |
+| Source/repeat inputs | `8382bf168f812da0668f56ae8cc45c09e69eedd95304be95518461abf15f67e0` |
+| Source/repeat outputs | `bfbb176d8b2910ab3e0feec46098d897632ab51dc5868d48f21162afbfe8e0b2` |
+| Shared operating-stage patch against owning parent | `4b8b650adb8234852b5701c3d1cf2dd63a188a8624669fff2b750aa3331178e9` |
+
+Evidence is under `checkpoint-8063d92d/` in the external evidence root.
+`references/issue376-integration-checkpoint.py` retains all exact test/check
+command arrays, exit codes, logs, runtime pins and source digests. The
+independent comparator is `references/issue376-integrated-parent-parity.py`.
+`references/issue376-integration-source-checkpoint.py` reexecutes the four
+source/parity drivers twice each: eight successful commands, zero downloads,
+zero new report/source artifacts, and 18 retained files with identical bytes,
+sizes and mtimes. Command logs and the checkpoint receipt are distinct evidence
+of execution; they are not study data identities.
+
+## Fixed NEWMARKET mapping and historical identity evidence
+
+The fixed case is unchanged: CIK **0001282637**, origin
+**2016-02-12T16:26:17Z**, original history `0001282637-15-000004`, decision
+`0001282637-16-000028`, first-original label `0001282637-17-000005`.
+SEC official submissions acceptance times match all three frozen timestamps.
+Only the original accession/filing/time fields are used for this audit; current
+ticker and survival fields provide no identity or threshold authority.
+The repeat makes zero network downloads and returns `wrote=false`.
+
+The actual `CanonicalMappingV1` contract now validates **24 unapproved direct
+mapping proposals**, covering eight roles across three originals and **66
+annual source observations**. Each binds original accession, available-at,
+parser/source/fact hashes, context, period, unit, scope, amendment state and
+mapping version. All observations outside the declared annual/consolidated
+scope remain in the excluded evidence. No numerical conflict occurs within
+these proposed direct role-period groups. The first-original label proposals
+are stored separately and never contribute to origin mapping inputs.
+
+Four roles remain unresolved: operating current receivables, accrued operating
+liabilities, contract assets and deferred revenue. The report validates **24
+period-specific `AccountingPeriodRuleV1(disposition="unknown")` rules** without
+numeric values or absence claims. Receivable aggregates contain income-tax
+receivables; accrual aggregates contain capital-project payables. Other
+components still need complete nonoverlapping classification. Missing modern
+tags and revenue-recognition prose do not prove a zero balance. The report
+creates no complete rule set with a placeholder security identity and invents
+no missing HTTP receipt.
+
+| Exact original evidence | Report SHA-256 | Output SHA-256 |
+| --- | --- | --- |
+| Official acceptance-time audit | `d1e48df4e9008680d412b552f2a97b16d9980712f582ec1f0c83dd3fbb60ed25` | `77473ebc95343da896ec0c03c7f844f02e175aa60105e2ba61e88c0911cf1851` |
+| Typed mapping proposals | `21773660000382337295044fa3a00612469d1ba8ce5a7fed07b86a9e9d470001` | `32ac6480207f5c87a318a41b299f59ae8ac6ced5988afca07f9c01dbcd0bf6b1` |
+| Original SEC cover acquisition failures | `69efb967a130a7051f7e9e4992cf9706d50e9b35aa8dfa962348faf78622d9f9` | `041e4dafe755caf0decdea7c8151918c4cde0aafc5e42d53707b19db17ba673f` |
+
+The original reports also establish a separate source/identity gap:
+all three complete original parser fact sets lack both `dei:TradingSymbol`
+and `dei:Security12bTitle`. The current security-bound original-DEI policy
+cannot authorize those sources. Exact original cover HTML retrieval returned
+HTTP403 for all three accessions; complete status/body/hash receipts are
+retained, never interpreted as filing content. Both successful acquisition
+and retained403 outcomes repeat without downloads or artifact changes.
+
+[Owning blocker #390](https://github.com/sosodennis/value-investment-agent/issues/390)
+requires an explicit historical identity policy. First distinguish an
+issuer-scoped operating claim from a security-bound per-share valuation. Any
+issuer-scoped release contract needs owner-layer implementation and checks.
+Alternatively, a security-bound original-cover policy needs actual retained
+original bytes, exact class evidence, independent review and versioned source
+validation. Current ticker data, a generated signature, an unchecked secondary
+page or a caller bypass cannot establish the missing authority.
+
+**Formal empirical forecasts remain 0/100, approved roles zero, canonical facts
+published zero, threshold null.** The engineering integration and proposals
+are concrete progress; they do not complete #376/#383. Next: resolve #390 at
+the owner boundary while adjudicating the four fixed-case accounting roles,
+then execute a genuine reviewed release-bound operating forecast, its isolated
+first-original label, error and repeat. #377 still governs the prospective
+accuracy/power/history comparison; preserve all100 issuers/589 targets and
+failures. Main chat source improvements after `071169f9` are not implicitly
+covered by this pinned integration evidence.
