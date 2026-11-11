@@ -41,6 +41,24 @@ rule when each passes its existing source, period and scope checks. Supporting
 classification passages remain in the source set and do not enter arithmetic
 or component-overlap checks. Unknown reported precision remains unknown.
 
+An optional `AccountingComponentV1.finance_lease_expense_location` supports
+two exact statement-location classifications: `FinanceLeaseRightOfUseAssetAmortization`
+at `OperatingExpenseMember`, and `FinanceLeaseInterestExpense` at
+`InterestExpenseMember`, all in the `us-gaap` namespace. Each observation must
+have only `IncomeStatementLocationAxis` and retain its original segmented scope.
+Range, business, geographic and security dimensions are rejected.
+
+A duration `finance_lease_cost` rule adds exactly those two observations. An
+`operating_lease_cost` rule subtracts them from one consolidated `us-gaap:LeaseCost`
+total. Components must share issuer, period and monetary unit; observations and
+result must be nonnegative. Missing pairs, overlaps, other bases and conflicting
+scope flags fail. The result retains the coarsest reported precision, or unknown
+precision when any source has unknown precision. The same evaluator supports
+issuer-only normalization and security-bound normalization. Unset fields preserve
+existing canonical bytes. Independent semantic review must establish that the
+original total and finance components provide complete, nonoverlapping coverage
+for the requested role. This representation does not approve that mapping.
+
 A `disclosed` duration transcribes one finite decimal literal from an exact
 nonnumeric parsed fact. `DisclosedAmountV1` retains Unicode code-point offsets
 for the exact quote, amount token, unit quote and scale token, plus reported

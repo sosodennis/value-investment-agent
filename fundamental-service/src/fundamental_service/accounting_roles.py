@@ -84,15 +84,25 @@ class AccountingComponentV1(RoleModel):
     accrued_interest_swap_exclusion: AccruedInterestSwapExclusionV1 | None = Field(
         default=None, exclude_if=lambda value: value is None
     )
+    finance_lease_expense_location: (
+        Literal["operating_expenses", "interest_expense"] | None
+    ) = Field(default=None, exclude_if=lambda value: value is None)
 
     @model_validator(mode="after")
     def swap_is_an_exclusion(self) -> AccountingComponentV1:
         if self.accrued_interest_swap_exclusion is not None and (
-            self.sign != -1 or self.balance_sheet_location is not None
+            self.sign != -1
+            or self.balance_sheet_location is not None
+            or self.finance_lease_expense_location is not None
         ):
             raise ValueError(
                 "interest swap scope is only valid for a negative component"
             )
+        if (
+            self.balance_sheet_location is not None
+            and self.finance_lease_expense_location is not None
+        ):
+            raise ValueError("a component cannot mix balance-sheet and expense scopes")
         return self
 
 
@@ -423,6 +433,13 @@ def evaluate_period_rule(
             isinstance(component, AccountingComponentV1)
             and component.balance_sheet_location is not None
         )
+        classified_expense = (
+            isinstance(component, AccountingComponentV1)
+            and component.finance_lease_expense_location is not None
+        )
+        if classified_expense:
+            assert isinstance(component, AccountingComponentV1)
+            _validate_finance_lease_expense_classification(rules, rule, component, fact)
         if classified_location:
             assert isinstance(component, AccountingComponentV1)
             _validate_current_lease_classification(rules, rule, component, fact)
@@ -449,6 +466,7 @@ def evaluate_period_rule(
             or fact.entity_identifier.lstrip("0") != rules.issuer_id.lstrip("0")
             or (
                 not classified_location
+                and not classified_expense
                 and not derivative_scope
                 and (fact.dimensions or fact.consolidation_scope != "consolidated")
             )
@@ -456,6 +474,7 @@ def evaluate_period_rule(
                 isinstance(rules, IssuerAccountingRoleRuleSetV1)
                 and not derivative_scope
                 and not classified_location
+                and not classified_expense
                 and fact.security_scope not in {"issuer", "consolidated", "unspecified"}
             )
         ):
@@ -576,7 +595,9 @@ def evaluate_period_rule(
         amounts.append(amount.copy_negate() if component.sign == -1 else amount)
     with localcontext(Context(prec=34, rounding=ROUND_HALF_EVEN)):
         _validate_swap_exclusion(rules, rule, by_digest, unsigned)
-        return sum(amounts, Decimal("0"))
+        result = sum(amounts, Decimal("0"))
+        _validate_lease_expense_components(rules, rule, by_digest, unsigned, result)
+        return result
 
 
 def _transcribe_amount(
@@ -632,7 +653,11 @@ def accounting_reported_decimals(
         for component in rule.components
         if isinstance(component, DatedDisclosureComponentV1)
     )
-    if not disclosed:
+    if not disclosed and not any(
+        isinstance(component, AccountingComponentV1)
+        and component.finance_lease_expense_location is not None
+        for component in rule.components
+    ):
         return None
     precision = [item.reported_decimals for item in disclosed]
     for fact in source_facts:
@@ -641,7 +666,89 @@ def accounting_reported_decimals(
         if fact.decimals is None or not re.fullmatch(r"-?[0-9]+", fact.decimals):
             return None
         precision.append(int(fact.decimals))
-    return min(precision)
+    return min(precision, default=None)
+
+
+def _validate_finance_lease_expense_classification(
+    rules: AccountingRoleRules,
+    rule: AccountingPeriodRuleV1,
+    component: AccountingComponentV1,
+    fact: ParsedXbrlFactV1,
+) -> None:
+    locations = {
+        "us-gaap:FinanceLeaseRightOfUseAssetAmortization": (
+            "operating_expenses",
+            "us-gaap:OperatingExpenseMember",
+        ),
+        "us-gaap:FinanceLeaseInterestExpense": (
+            "interest_expense",
+            "us-gaap:InterestExpenseMember",
+        ),
+    }
+    location, member = locations.get(fact.concept, (None, None))
+    sign = {"finance_lease_cost": 1, "operating_lease_cost": -1}.get(
+        rules.normalized_field
+    )
+    if (
+        location is None
+        or component.finance_lease_expense_location != location
+        or component.sign != sign
+        or rule.disposition != "derived"
+        or rule.period.instant
+        or not rules.unit.startswith("iso4217:")
+        or fact.dimensions != (("us-gaap:IncomeStatementLocationAxis", member),)
+        or fact.consolidation_scope != "segmented"
+        or fact.security_scope != "segmented"
+    ):
+        raise AccountingRoleError(
+            "ACCOUNTING_ROLE_SCOPE_MISMATCH",
+            "finance lease expense requires its exact statement location, role and sign",
+        )
+
+
+def _validate_lease_expense_components(
+    rules: AccountingRoleRules,
+    rule: AccountingPeriodRuleV1,
+    by_digest: dict[str, ParsedXbrlFactV1],
+    unsigned: dict[str, Decimal],
+    result: Decimal,
+) -> None:
+    classified = tuple(
+        item
+        for item in rule.components
+        if isinstance(item, AccountingComponentV1)
+        and item.finance_lease_expense_location is not None
+    )
+    if not classified:
+        return
+    bases = tuple(item for item in rule.components if item not in classified)
+    operating = rules.normalized_field == "operating_lease_cost"
+    if len(classified) != 2 or len(bases) != (1 if operating else 0):
+        raise AccountingRoleError(
+            "ACCOUNTING_ROLE_SCOPE_MISMATCH",
+            "lease expense requires paired finance components and its declared total",
+        )
+    if operating:
+        base = bases[0]
+        fact = by_digest[base.parsed_fact_digest]
+        if (
+            not isinstance(base, AccountingComponentV1)
+            or base.sign != 1
+            or base.balance_sheet_location is not None
+            or base.accrued_interest_swap_exclusion is not None
+            or fact.concept != "us-gaap:LeaseCost"
+            or fact.dimensions
+            or fact.consolidation_scope != "consolidated"
+        ):
+            raise AccountingRoleError(
+                "ACCOUNTING_ROLE_SCOPE_MISMATCH",
+                "operating lease expense requires its consolidated lease-cost total",
+            )
+    if result < 0 or any(value < 0 for value in unsigned.values()):
+        raise AccountingRoleError(
+            "ACCOUNTING_LEASE_COST_INVALID",
+            "lease expense components and the resulting role must be nonnegative",
+        )
 
 
 def _validate_current_lease_classification(

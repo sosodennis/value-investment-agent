@@ -34,6 +34,10 @@ from test_postgres_metadata import DATABASE_URL
 
 
 def _fixture(*, disposition="derived", altered_fact=None, altered_passage=None):
+    if disposition == "lease_expense":
+        from test_lease_expense_classification import fixture
+
+        return fixture()
     if disposition == "dated_disclosure":
         from test_accounting_dated_disclosures import _dated_disclosure_fixture
 
@@ -889,7 +893,8 @@ def test_classification_is_independent_of_callers_decimal_context():
 
 
 @pytest.mark.parametrize(
-    "disposition", ["derived", "disclosed", "classified", "dated_disclosure"]
+    "disposition",
+    ["derived", "disclosed", "classified", "dated_disclosure", "lease_expense"],
 )
 @pytest.mark.parametrize("mutation", [None, "mapping", "integrity"])
 def test_signed_canary_and_http_read_recheck_accounting_bindings(mutation, disposition):
