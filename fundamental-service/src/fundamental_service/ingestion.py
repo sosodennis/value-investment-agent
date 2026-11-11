@@ -165,6 +165,25 @@ def _read_sec_xbrl_archive(
         ) from error
 
 
+def _stage_filing_graphics(
+    roots: tuple[Path, Path],
+    *,
+    html_content: bytes,
+    archive_content: bytes,
+    primary_document: str,
+) -> None:
+    graphics = extract_referenced_graphics(
+        html_content=html_content,
+        archive_content=archive_content,
+        primary_document=primary_document,
+    )
+    for relative_path, content in graphics:
+        for root in roots:
+            resource = root / relative_path
+            resource.parent.mkdir(parents=True, exist_ok=True)
+            resource.write_bytes(content)
+
+
 class IngestionAuditStore(Protocol):
     def put(
         self,
@@ -386,6 +405,12 @@ class SecIngestionService:
             archive_path = archive_root / primary_document
             normalized_path.write_bytes(assessment.normalized_content)
             archive_path.write_bytes(assessment.archive_member)
+            _stage_filing_graphics(
+                (normalized_root, archive_root),
+                html_content=assessment.normalized_content,
+                archive_content=archive_source.content,
+                primary_document=primary_document,
+            )
             for filename in dts_filenames:
                 (normalized_root / filename).write_bytes(members[filename])
                 (archive_root / filename).write_bytes(members[filename])
@@ -838,18 +863,12 @@ class SecIngestionService:
             archive_member_path = archive_root / primary_document
             normalized_path.write_bytes(assessment.normalized_content)
             archive_member_path.write_bytes(assessment.archive_member)
-            graphics = extract_referenced_graphics(
+            _stage_filing_graphics(
+                (normalized_root, archive_root),
                 html_content=assessment.normalized_content,
                 archive_content=archive_source.content,
                 primary_document=primary_document,
             )
-            for relative_path, content in graphics:
-                normalized_resource = normalized_root / relative_path
-                archive_resource = archive_root / relative_path
-                normalized_resource.parent.mkdir(parents=True, exist_ok=True)
-                archive_resource.parent.mkdir(parents=True, exist_ok=True)
-                normalized_resource.write_bytes(content)
-                archive_resource.write_bytes(content)
             for resource in dts_sources:
                 filename = Path(resource.uri).name
                 (normalized_root / filename).write_bytes(resource.content)

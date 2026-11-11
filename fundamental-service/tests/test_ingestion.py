@@ -94,6 +94,10 @@ def test_sec_ingestion_connects_adapter_snapshot_parser_and_fact_selection(
     archive_bytes = archive_path.read_bytes()
     with ZipFile(archive_path) as archive:
         primary_bytes = archive.read("aapl-20240928.htm")
+        graphic_bytes = {
+            name: archive.read(name)
+            for name in ("aapl-20240928_g1.jpg", "aapl-20240928_g2.jpg")
+        }
         dts_bytes = {
             filename: archive.read(filename)
             for filename in (
@@ -154,6 +158,8 @@ def test_sec_ingestion_connects_adapter_snapshot_parser_and_fact_selection(
         source_content_hash,
         deadline_at=None,
     ):
+        for name, expected in graphic_bytes.items():
+            assert (Path(path).parent / name).read_bytes() == expected
         value = (
             "391035000001"
             if parser_state["semantic_mismatch"] and Path(path).parent.name == "archive"
@@ -271,6 +277,21 @@ def test_sec_ingestion_connects_adapter_snapshot_parser_and_fact_selection(
             status="approved",
         ),
     )
+    preparation_args = {
+        key: value
+        for key, value in ingestion_args.items()
+        if key not in {"normalized_field", "mapping"}
+    }
+    preparation_args["mappings"] = (
+        ingestion_args["mapping"].model_copy(
+            update={"status": "provisional", "confidence": "unresolved"}
+        ),
+    )
+    prepared = service.prepare_filing(**preparation_args)
+    assert prepared.facts and all(
+        fact.quality.value == "provisional" for fact in prepared.facts
+    )
+    assert not tuple(snapshot_repository.root.glob("*.json"))
     result = service.ingest_filing(**ingestion_args)
     assert result.snapshot.snapshot_id
     assert (
