@@ -85,3 +85,70 @@ No service runtime or browser workflow changed. Docker/service-backed empirical
 acceptance, formal #352 forecasts, reviewed mappings/policies, complete labels
 and the full forecast replay repeat have **not** passed. The study remains
 incomplete with `supported_history_threshold=null`; #376 must stay open.
+
+## Official assertion and historical parser checkpoints
+
+The next two issue-scoped implementation commits preserve the original
+evidence and modern defaults while repairing historical validation tooling:
+
+| Increment | Exact implementation commit |
+| --- | --- |
+| Official Arelle assertion replay | `33053708d3ee461799d1134634077f84aaddf57c` |
+| Pinned historical parser boundary | `c4c8a352b86f481e9f829716326941587e848a17` |
+
+The corresponding external evidence is under `checkpoint-33053708/` and
+`checkpoint-c4c8a352/` in the same evidence root. Every checkpoint receipt binds
+the exact clean commit, executor source, lockfile, inputs, outputs, complete
+command arrays, exit codes and command-log digests. The executor sources are
+`references/issue376-conformance-checkpoint.py` and
+`references/issue376-parser-checkpoint.py`. Both assert unchanged HEAD and clean
+status at completion. These are host/offline parser checks; no new Compose,
+database publication or forecast invocation occurred.
+
+| Artifact | SHA-256 |
+| --- | --- |
+| Assertion checkpoint receipt | `e55f9167e3d7c2fccc4c4adb11f364933e6492fa121c60f5c609ee6b6429086f` |
+| Assertion checkpoint inputs | `64991f93ab5856aa479799ba7c57b72470bb070d4e256a588609adcff144b8a8` |
+| Assertion checkpoint outputs | `b1e38eac97e3e529ff3bda141bcd719dad8895bef37293c74dca2000d02d6363` |
+| Full assertion report | `192a2758c5cf700c3e0b60841f82f5f5a2308484bf700828ce3e7c7b43c64c28` |
+| Full assertion inputs | `f953c5c320a5d31f543f2736688ef77e852d7ea0635d2331e15a247ce5a5554f` |
+| Full assertion outputs | `1527bfef5f4e7fc493d95c680f4d78ec4dee03af23d7c11ef53602dc574deef4` |
+| Parser checkpoint receipt | `405926ff211280ece62590fbf55896ba848793dd05e808c5285df599efdc7f5d` |
+| Parser checkpoint inputs | `273add3c12a6134d2c45ebe20b13c5a8724020d620551de206fdb5189e18612c` |
+| Parser checkpoint outputs | `54a58d085277922303480ffa9f23c481fcb4324a65b5540ae1ce3f37b486bded` |
+| Original parser report, DQC v1 | `f3254b1597573891f7087917acba4e1a5775944ec4400f36f1e6ca64b2915e0b` |
+| Original parser report, DQC v3 | `67ad1a82a67dc2222e7f35476eb5a13a7f0b71521a4c27970cd618ea655cdc8e` |
+
+The complete assertion replay verifies the official suite ZIP, original input,
+all four pinned shards and all 6,586 case records. Official assertion matching
+and completed execution agree for 6,585 cases. Nine cases previously failed
+only because the bespoke runner demanded equality of all findings. The
+remaining `DQC_0001.57.2612` uses unsupported US GAAP 2011 and remains failed.
+Extra findings, original statuses and severities stay traceable by digest.
+This re-evaluates retained execution, rather than freshly running all rules.
+The second complete assertion replay returned `wrote=false`, matching all
+digests with zero new reports and unchanged bytes, sizes and mtimes.
+
+At the parser commit, the complete Fundamental suite passed 322 tests with 27
+explicit resource/database skips and one existing serializer warning. The
+research tools passed 34 tests without skips. The configured real-original
+historical boundary tests passed 19 tests without skips. Focused Ruff/format,
+mypy, both architecture guards and `git diff --check` all exited 0.
+
+The real-original test uses CIK 0001539778 / accession
+0001477932-16-007985. Both historical profiles independently execute, extract
+327 facts and repeat with identical semantic digests. Each generated original
+parser report was then repeated at the exact commit: `wrote=false`, matching
+input/output/report digests and unchanged bytes/sizes/mtimes. All source,
+taxonomy and plugin hashes remained unchanged. The tests reject changed rule
+packages, incorrect source hashes and unsupported modern historical validation,
+and retain diagnostic findings across the worker boundary.
+
+Blocking negative-PPE finding `DQC.US.0015.2098` survives EDGAR's releveling to
+warning. The current ingestion gate still rejects the unreviewed historical
+completion marker. No mapping/release/publication or history threshold is
+approved. Full cohort source integration, historical applicability/release
+review, issuer/period mappings, market policies, #377 protocol and formal #352
+forecasts/labels plus service-backed repeat remain unfinished. Next: resolve
+the versioned source/validation contract and verify its full fixed inventory;
+keep every refusal and the threshold null.
