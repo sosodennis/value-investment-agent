@@ -8,6 +8,7 @@ from fundamental_service.contracts import (
     QualityStatus,
     SecHistoryIntegrityEvidenceV1,
     SecIntegrityEvidenceV1,
+    SourceRole,
     SourceSnapshotV1,
 )
 from fundamental_service.history_composition import (
@@ -81,9 +82,19 @@ def _original(year: int) -> SourceSnapshotV1:
         xule_version="30055",
         quality_decision="pass",
     )
+    archive = source.model_copy(
+        update={
+            "source_id": "sec-filing-archive",
+            "uri": integrity.archive_uri,
+            "content_hash": integrity.archive_hash,
+            "parser_input_hash": None,
+            "media_type": "application/zip",
+            "received_size": integrity.archive_size,
+        }
+    )
     return _changed(
         snapshot,
-        source_records=(source,),
+        source_records=(source, archive),
         captured_at=VALUATION_TIME,
         sec_integrity_evidence=integrity,
         validation_profile_id="sec-efm-us-dqc-v31.0.3",
@@ -145,6 +156,65 @@ def test_concurrent_composition_has_one_snapshot_and_stable_digest(tmp_path):
         results = tuple(pool.map(lambda _: _compose(repository, originals), range(16)))
     assert len({item.manifest_digest for item in results}) == 1
     assert len(tuple((tmp_path / "snapshots").iterdir())) == 3
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"uri": "https://www.sec.gov/another-archive.zip"},
+        {"content_hash": "0" * 64},
+        {"received_size": 101},
+        {"received_size": None},
+        {"accession_number": "0000000001-25-000002"},
+        {"is_amendment": True, "amendment_scope": "unknown"},
+        {"form": "10-K/A"},
+        {"role": SourceRole.REFERENCE},
+        {"available_at": datetime(2020, 1, 1, tzinfo=UTC)},
+        {"available_at": datetime(2027, 1, 1, tzinfo=UTC)},
+        {"filed_at": datetime(2020, 1, 1, tzinfo=UTC)},
+        {"http_status": 404},
+    ],
+)
+def test_unbound_archive_refuses_history_without_changing_originals(tmp_path, changes):
+    repository, originals = _repository(tmp_path)
+    original = originals[1]
+    broken = _changed(
+        original,
+        source_records=(
+            original.source_records[0],
+            original.source_records[1].model_copy(update=changes),
+        ),
+    )
+    repository = FilesystemSnapshotRepository(tmp_path / "unbound-archive")
+    repository.publish(originals[0])
+    repository.publish(broken)
+    before = {
+        path: (path.read_bytes(), path.stat().st_mtime_ns)
+        for path in repository.root.iterdir()
+    }
+    with pytest.raises(SnapshotError):
+        _compose(repository, (originals[0], broken))
+    assert {
+        path: (path.read_bytes(), path.stat().st_mtime_ns)
+        for path in repository.root.iterdir()
+    } == before
+
+
+@pytest.mark.parametrize("archive_count", [0, 2])
+def test_missing_or_duplicate_archive_refuses_history(tmp_path, archive_count):
+    repository, originals = _repository(tmp_path)
+    original = originals[1]
+    broken = _changed(
+        original,
+        source_records=(original.source_records[0],)
+        + (original.source_records[1],) * archive_count,
+    )
+    repository = FilesystemSnapshotRepository(tmp_path / "archive-count")
+    repository.publish(originals[0])
+    repository.publish(broken)
+    with pytest.raises(SnapshotError):
+        _compose(repository, (originals[0], broken))
+    assert len(tuple(repository.root.iterdir())) == 2
 
 
 @pytest.mark.parametrize(

@@ -42,3 +42,14 @@ or unbound references refuse acquisition; standalone XML selection is unchanged.
 Original bytes, accession integrity, offline regulatory validation, mapping
 review and release/caller approval remain required. This resolves the source
 selection gap tracked by #402 and does not establish financial completeness.
+
+## Original history archives
+
+History composition requires exactly one `sec-filing` and one
+`sec-filing-archive` per independently verified original. Both retain their
+filing role. The archive must match that original's integrity URI, hash, received
+size and accession, and its primary's availability and filing times. Amendments,
+failed HTTP responses and extra, duplicate or missing filing sources refuse
+composition. The aggregate retains all original source records and rechecks its
+components against the immutable repository on read. This corrects #403 without
+changing facts, granting mapping approval or establishing history sufficiency.

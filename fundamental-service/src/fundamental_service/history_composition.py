@@ -33,14 +33,21 @@ def _verify_original(
         for source in component.source_records
         if source.source_id == "sec-filing"
     )
+    archive_sources = tuple(
+        source
+        for source in component.source_records
+        if source.source_id == "sec-filing-archive"
+    )
     if (
         not isinstance(integrity, SecIntegrityEvidenceV1)
         or integrity.quality_decision != "pass"
         or component.coverage_status is not QualityStatus.VERIFIED
         or component.valuation_timestamp > valuation_timestamp
         or len(filing_sources) != 1
+        or len(archive_sources) != 1
         or any(
-            source.role is SourceRole.FILING and source.source_id != "sec-filing"
+            source.role is SourceRole.FILING
+            and source.source_id not in {"sec-filing", "sec-filing-archive"}
             for source in component.source_records
         )
         or any(
@@ -68,6 +75,23 @@ def _verify_original(
         raise SnapshotError(
             "HISTORY_ORIGINAL_INTEGRITY_MISMATCH",
             "original source is not bound to its own integrity evidence",
+        )
+    archive = archive_sources[0]
+    if (
+        archive.role is not SourceRole.FILING
+        or archive.accession_number != integrity.accession_number
+        or archive.content_hash != integrity.archive_hash
+        or archive.uri != integrity.archive_uri
+        or archive.received_size != integrity.archive_size
+        or archive.available_at != source.available_at
+        or archive.filed_at != source.filed_at
+        or archive.is_amendment
+        or archive.form != "10-K"
+        or not 200 <= archive.http_status < 300
+    ):
+        raise SnapshotError(
+            "HISTORY_ORIGINAL_INTEGRITY_MISMATCH",
+            "original archive is not bound to its own integrity evidence",
         )
     return integrity
 
