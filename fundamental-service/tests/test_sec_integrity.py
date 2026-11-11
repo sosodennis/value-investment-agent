@@ -369,6 +369,62 @@ def test_terminal_edge_script_preserves_canonical_body_closing_newline():
     )
 
 
+@pytest.mark.parametrize("closing", (b"</body></html>\n", b"</body>\n</html>\n"))
+def test_script_only_removal_preserves_original_terminal_lf(closing):
+    script = b'<script type="text/javascript" src="/edge/path/token"></script>'
+    member = b"<html><body>canonical" + closing
+    direct = b"<html><body>canonical" + script + closing
+    raw, index, archive = _fixtures(
+        direct=direct,
+        member=member,
+        headers=(("x-akamai-transformed", "0 - 0 -"),),
+        declared_size=len(member),
+    )
+
+    result = assess_filing_response(
+        raw_response=raw, archive_index=index, archive=archive
+    )
+
+    assert result.relation == "normalized"
+    assert result.normalized_content == result.archive_member == member
+    assert result.normalized_content.endswith(b"\n")
+    assert result.normalization_policy_id == "sec-edgar-akamai-script-only-v1"
+    assert result.raw_content_hash == hashlib.sha256(direct).hexdigest()
+    assert result.normalized_content_hash == hashlib.sha256(member).hexdigest()
+    assert len(result.removed_ranges) == 1
+    removed = result.removed_ranges[0]
+    assert direct[removed.start : removed.end] == script
+    assert removed.content_hash == hashlib.sha256(script).hexdigest()
+    assert result == assess_filing_response(
+        raw_response=raw, archive_index=index, archive=archive
+    )
+
+
+@pytest.mark.parametrize("mutation", ("value", "space", "header", "size", "script"))
+def test_script_only_removal_rejects_unproved_changes(mutation):
+    script = b'<script type="text/javascript" src="/edge/path/token"></script>'
+    member = b"<html><body>canonical</body>\n</html>\n"
+    direct = b"<html><body>canonical" + script + b"</body>\n</html>\n"
+    headers = (("x-akamai-transformed", "0 - 0 -"),)
+    size = len(member)
+    if mutation == "value":
+        direct = direct.replace(b"canonical", b"different")
+    elif mutation == "space":
+        direct = direct.replace(b"canonical", b"canonical ")
+    elif mutation == "header":
+        headers = ()
+    elif mutation == "size":
+        size += 1
+    else:
+        direct = direct.replace(b"/edge/path/token", b"https://example.com/token")
+    raw, index, archive = _fixtures(
+        direct=direct, member=member, headers=headers, declared_size=size
+    )
+
+    with pytest.raises(SnapshotError):
+        assess_filing_response(raw_response=raw, archive_index=index, archive=archive)
+
+
 def test_html_tag_line_padding_reconstructs_unchanged_original_archive():
     member = b"<html><body> \t\n  \t\n<div>123</div>  \n</body>\n</html>"
     script = b'<script type="text/javascript" src="/edge/path/token"></script>'

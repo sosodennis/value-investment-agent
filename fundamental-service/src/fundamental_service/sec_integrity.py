@@ -47,6 +47,12 @@ _NORMALIZATION_RULE = (
     "document only when archive index size, Akamai response metadata, and "
     "the exact archive member independently prove the representation delta"
 )
+_SCRIPT_ONLY_POLICY_ID = "sec-edgar-akamai-script-only-v1"
+_SCRIPT_ONLY_RULE = (
+    "remove one terminal SEC edge script only when the accession index size, "
+    "Akamai response metadata and exact ZIP member prove that every remaining "
+    "byte, including the original terminal LF, is unchanged"
+)
 _HTML_TAG_PADDING_POLICY_ID = "sec-edgar-html-tag-line-padding-v1"
 _HTML_TAG_PADDING_RULE = (
     "reconstruct the unchanged accession-matched HTML archive member only when "
@@ -550,28 +556,37 @@ def assess_filing_response(
             "SOURCE_INTEGRITY_MISMATCH",
             "SEC index size does not corroborate the exact script removal",
         )
-    final_lf_start = len(raw) - 1
-    normalized = without_script[:-1]
+    policy_id = _NORMALIZATION_POLICY_ID
+    rule = _NORMALIZATION_RULE
+    normalized = without_script
     removed_ranges = (
         RemovedByteRangeV1(
             start=script_start,
             end=script_end,
             content_hash=_digest(script),
         ),
-        RemovedByteRangeV1(
-            start=final_lf_start,
-            end=final_lf_start + 1,
-            content_hash=_digest(b"\n"),
-        ),
     )
+    if without_script == member:
+        policy_id = _SCRIPT_ONLY_POLICY_ID
+        rule = _SCRIPT_ONLY_RULE
+    else:
+        normalized = without_script[:-1]
+        removed_ranges = (
+            *removed_ranges,
+            RemovedByteRangeV1(
+                start=len(raw) - 1,
+                end=len(raw),
+                content_hash=_digest(b"\n"),
+            ),
+        )
     if normalized != member:
         raise SnapshotError(
             "SOURCE_INTEGRITY_MISMATCH",
             "approved SEC response normalization does not reproduce archive bytes",
         )
     rule_payload = {
-        "policy_id": _NORMALIZATION_POLICY_ID,
-        "rule": _NORMALIZATION_RULE,
+        "policy_id": policy_id,
+        "rule": rule,
         "script_shape": _EDGE_SCRIPT_AT_END.pattern.decode("ascii"),
         "accession": raw_response.accession_number,
         "primary_document": primary_name,
@@ -579,6 +594,15 @@ def assess_filing_response(
         "declared_size": declared_size,
         "archive_member_hash": member_hash,
     }
+    if policy_id == _SCRIPT_ONLY_POLICY_ID:
+        rule_payload.update(
+            raw_content_hash=raw_hash,
+            archive_index_hash=index_hash,
+            archive_hash=archive_hash,
+            removed_script_start=script_start,
+            removed_script_end=script_end,
+            removed_script_hash=_digest(script),
+        )
     return SecIntegrityAssessment(
         relation="normalized",
         normalized_content=normalized,
@@ -591,7 +615,7 @@ def assess_filing_response(
         archive_member_hash=member_hash,
         normalized_content_hash=_digest(normalized),
         removed_ranges=removed_ranges,
-        normalization_policy_id=_NORMALIZATION_POLICY_ID,
+        normalization_policy_id=policy_id,
         normalization_rule_signature=sha256_digest(rule_payload),
-        normalization_reason=_NORMALIZATION_RULE,
+        normalization_reason=rule,
     )
