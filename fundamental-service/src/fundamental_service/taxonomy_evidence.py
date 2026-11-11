@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import io
 import stat
+import zlib
 from pathlib import Path, PurePosixPath
 from zipfile import BadZipFile, ZIP_DEFLATED, ZipFile, ZipInfo
 
@@ -96,6 +97,7 @@ def taxonomy_cache_archive_digest(raw: bytes) -> str:
         RuntimeError,
         NotImplementedError,
         EOFError,
+        zlib.error,
     ) as error:
         raise DataReleaseError(
             "DATA_RELEASE_TAXONOMY_ARCHIVE_INVALID",

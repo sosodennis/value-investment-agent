@@ -4,7 +4,7 @@ import hashlib
 import io
 import json
 import stat
-from zipfile import ZipFile, ZipInfo
+from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
 
 import pytest
 
@@ -103,6 +103,17 @@ def test_symlink_and_truncated_archives_are_rejected():
     for raw in (buffer.getvalue(), buffer.getvalue()[:20]):
         with pytest.raises(DataReleaseError):
             taxonomy_cache_archive_digest(raw)
+
+
+def test_corrupt_deflate_member_retains_typed_evidence_failure():
+    buffer = io.BytesIO()
+    with ZipFile(buffer, "w", compression=ZIP_DEFLATED) as archive:
+        archive.writestr("schema.xsd", b"x" * 10_000)
+    raw = bytearray(buffer.getvalue())
+    raw[30 + len("schema.xsd")] = 255
+    with pytest.raises(DataReleaseError) as error:
+        taxonomy_cache_archive_digest(bytes(raw))
+    assert error.value.code == "DATA_RELEASE_TAXONOMY_ARCHIVE_INVALID"
 
 
 def test_automatic_approval_accepts_original_directory_evidence(tmp_path):
