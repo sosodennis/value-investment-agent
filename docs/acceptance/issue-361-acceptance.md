@@ -653,3 +653,32 @@ fixture runs again preserve result digests, all 118 files and `wrote=false` on
 reuse; the dedicated stack is removed with all 62 baseline containers unchanged.
 Receipts are under `equity_review_source_binding_increment` in the same checkpoint.
 The real-source limitations and null history threshold above still apply.
+
+The parser-source increment is `ff071564261ee047f62a01e71c1407ef35218886`.
+Reviewed inventories now consume original Arelle `segmented` / `unspecified`
+security scopes without rewriting source facts. Only supported `AwardTypeAxis`
+observations are accepted; other/unknown security scopes and stock-class/entity
+dimensions still reject. Divided monetary units retain their exact unit and
+numerator currency. A parser-output-to-signed-release-to-composer test exposes
+the former rejection, and the release fixture uses canonical fact digests.
+
+Exact checks pass **798 service/PostgreSQL tests / 11 optional skips**, 52 Agent
+tests, 17 acceptance-tool tests, Ruff/format, 20-source mypy, architecture and
+diff checks. [CI 43031343690](https://github.com/sosodennis/value-investment-agent/actions/runs/43031343690)
+passes all 12 executed jobs; release gate is skipped. Two complete synthetic
+flow runs retain identical input/output digests, `wrote=false` on reuse and all
+118 file hashes/mtimes. The owned tmpfs test project is removed and all 62
+baseline container identities remain unchanged.
+
+Six real provisional award observations and four mapping proposals are extracted
+from the two retained Microsoft originals, preserving dimensions, precision,
+source hashes and accession/availability. The FY2024 original retains 96m/88m
+comparative/current nonvested awards and USD20.3bn unrecognized compensation.
+Both extraction repeats return `wrote=false`, zero new facts and identical
+digests; all 58 files in the retained original-preparation directory are unchanged.
+This establishes source preservation only. The aggregate restricted-stock member
+does not establish complete RSU/PSU classification or resolved conditions.
+Actual independent review, complete inventory, reviewed quote/policy and six
+scalar gaps remain unresolved. No real numerical or complete 19-gate acceptance
+is claimed; threshold stays null. Compact receipts and next steps are under
+`equity_parser_source_increment` in the existing accounting checkpoint.
