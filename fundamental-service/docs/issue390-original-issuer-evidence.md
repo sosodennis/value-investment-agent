@@ -79,7 +79,12 @@ archive member and normalization evidence. No HTTP receipt is inferred from an
 archive member or a valid signature.
 
 The ingestion converter, accounting evaluator and fact selector regenerate
-the declared facts from each complete original report and released mappings.
+candidates from each complete original report and released mapping. The shared
+canonical resolver selects the released history separately for each role and
+period, applying its existing consolidated-scope and original-version policy.
+This complete selected set is required. Segment-only contexts and superseded
+versions remain in complete original reports; they are not required release
+members, and conflicting eligible observations still fail shared selection.
 Changing an amount fails even if the candidate is signed again. Unknown and
 unsupported accounting rules retain their dispositions without generating a
 numeric placeholder. Complete parser reports retain missing, invalid,

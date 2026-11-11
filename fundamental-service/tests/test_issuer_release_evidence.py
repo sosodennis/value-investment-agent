@@ -1,12 +1,20 @@
 """A valid signature cannot replace the existing SEC byte-integrity proof."""
 
 import json
+from datetime import date, timedelta
 
 import pytest
 
 from fundamental_service.data_releases import DataReleaseError
+from fundamental_service.arelle_parser import fact_semantic_digest
+from fundamental_service.issuer_release_evidence import original_rebuilt_facts
+from fundamental_service.facts import canonical_fact_digest
+from fundamental_service.original_issuer import (
+    compose_issuer_operating_source,
+    evaluate_original_issuer,
+)
 from fundamental_service.serialization import canonical_bytes, sha256_digest
-from test_issuer_operating_release import fixture, resign
+from test_issuer_operating_release import fixture, rebind_original, resign
 
 
 def replace_integrity(bundle, evidence, value):
@@ -104,3 +112,79 @@ def test_release_cannot_hide_an_older_original_observation(tmp_path):
     with pytest.raises(DataReleaseError) as error:
         service.publish(bundle)
     assert error.value.code == "DATA_RELEASE_ORIGINAL_FACT_MISMATCH"
+
+
+def test_complete_original_retains_segment_contexts_without_publishing_them(tmp_path):
+    bundle, service, evidence, _, _ = fixture(tmp_path)
+    report = bundle.sources[0].originals[0].report
+    selected = next(f for f in report.facts if f.concept == "us-gaap:revenue")
+    segmented = tuple(
+        selected.model_copy(
+            update={
+                "context_id": f"segment-{year}",
+                "period_start": date(year, 1, 1),
+                "period_end": date(year, 12, 31),
+                "value": "123",
+                "consolidation_scope": "segmented",
+                "dimensions": (
+                    ("us-gaap:StatementBusinessSegmentsAxis", "example:Other"),
+                ),
+            }
+        )
+        for year in (2018, selected.period_end.year)
+    )
+    bundle = rebind_original(
+        bundle, report_changes={"facts": (*report.facts, *segmented)}
+    )
+    original = bundle.sources[0].originals[0]
+    integrity = json.loads(evidence.values["synthetic-integrity"])
+    integrity.update(
+        {
+            "normalized_fact_digest": fact_semantic_digest(original.report),
+            "archive_fact_digest": fact_semantic_digest(original.report),
+            "normalized_fact_count": len(original.report.facts),
+            "archive_fact_count": len(original.report.facts),
+        }
+    )
+    bundle = replace_integrity(bundle, evidence, integrity)
+    service.publish(bundle)
+    expected = original_rebuilt_facts(
+        bundle.sources[0], {m.decision_id: m for m in bundle.mappings}
+    )
+    assert tuple(map(canonical_fact_digest, expected)) == tuple(
+        map(canonical_fact_digest, bundle.facts)
+    )
+    assert all(not fact.context.dimensions for fact in expected)
+    assert all(f in original.report.facts for f in segmented)
+
+
+def test_rebuilt_history_selects_overlapping_originals_through_shared_resolver(
+    tmp_path,
+):
+    bundle, _, _, _, _ = fixture(tmp_path)
+    old = bundle.sources[0].originals[0]
+    accession = "0000000001-26-000002"
+    source = old.source.model_copy(
+        update={
+            "accession_number": accession,
+            "uri": "https://www.sec.gov/Archives/edgar/data/1/"
+            + accession.replace("-", "")
+            + "/original.xml",
+            "available_at": old.source.available_at + timedelta(days=1),
+            "content_hash": "f" * 64,
+            "parser_input_hash": "f" * 64,
+        }
+    )
+    newer = evaluate_original_issuer(
+        old.report.model_copy(update={"source_content_hash": source.parser_input_hash}),
+        source=source,
+        decision_at=old.decision_at,
+    )
+    view = compose_issuer_operating_source(
+        (old, newer), valuation_timestamp=old.decision_at
+    )
+    expected = original_rebuilt_facts(view, {m.decision_id: m for m in bundle.mappings})
+    assert len(expected) == len(bundle.facts)
+    assert {fact.accession_number for fact in expected} == {accession}
+    assert view.originals == (old, newer)
+    assert len(old.report.facts) == len(newer.report.facts)

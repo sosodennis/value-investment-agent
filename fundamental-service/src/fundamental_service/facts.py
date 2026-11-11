@@ -692,6 +692,13 @@ def select_fact_groups(
     return tuple(select_fact(items, valuation_timestamp) for items in grouped.values())
 
 
+def is_consolidated_fact(fact: CanonicalFactV1) -> bool:
+    return (
+        not fact.context.dimensions
+        and fact.context.consolidation_scope == "consolidated"
+    )
+
+
 def resolve_canonical_facts(
     candidates: Iterable[CanonicalFactV1],
     *,
@@ -753,9 +760,7 @@ def resolve_canonical_facts(
         consolidated_candidates = tuple(
             fact
             for fact in eligible
-            if fact.normalized_field == field
-            and not fact.context.dimensions
-            and fact.context.consolidation_scope == "consolidated"
+            if fact.normalized_field == field and is_consolidated_fact(fact)
         )
         if not consolidated_candidates:
             raise SnapshotError(

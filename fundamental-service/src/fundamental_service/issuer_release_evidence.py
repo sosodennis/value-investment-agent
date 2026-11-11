@@ -7,7 +7,13 @@ from dataclasses import dataclass
 from .arelle_parser import fact_semantic_digest
 from .contracts import CanonicalFactV1, QualityStatus, SecIntegrityEvidenceV1
 from .data_releases import DataReleaseError, IssuerOperatingReleaseManifestV1
-from .facts import CanonicalMappingV1, canonical_fact_digest, select_fact_groups
+from .facts import (
+    CanonicalMappingV1,
+    canonical_fact_digest,
+    is_consolidated_fact,
+    resolve_canonical_facts,
+    select_fact_groups,
+)
 from .original_issuer import IssuerOperatingSourceV1, OriginalIssuerEvidenceV1
 from .regulatory_validation import require_sec_validation_evidence
 from .sec_rebuild import parsed_facts_to_candidates
@@ -171,7 +177,28 @@ def original_rebuilt_facts(
                             }
                         )
                     )
-    return tuple(sorted(facts, key=lambda item: (item.fact_id, sha256_digest(item))))
+    periods: dict[tuple[str, str, str, str], list[CanonicalFactV1]] = {}
+    for fact in facts:
+        key = (
+            fact.normalized_field,
+            fact.period_start.isoformat() if fact.period_start else "",
+            fact.period_end.isoformat() if fact.period_end else "",
+            fact.instant.isoformat() if fact.instant else "",
+        )
+        periods.setdefault(key, []).append(fact)
+    resolved = []
+    for key, candidates in sorted(periods.items()):
+        if not any(is_consolidated_fact(fact) for fact in candidates):
+            continue
+        resolved.extend(
+            resolve_canonical_facts(
+                candidates,
+                snapshot=snapshot,
+                valuation_timestamp=snapshot.valuation_timestamp,
+                required_fields=(key[0],),
+            )
+        )
+    return tuple(sorted(resolved, key=lambda item: (item.fact_id, sha256_digest(item))))
 
 
 def require_original_fact_membership(
