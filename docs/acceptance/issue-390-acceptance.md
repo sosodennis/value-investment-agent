@@ -204,15 +204,18 @@ Canonical checkpoint and all command logs live outside Git under
 | Real declared HTTP200 receipts | `2d3bce073b67901f28d416237bed84fca1bfab2a5b773efa1afae806a37e3117` |
 | Real original integrity report | `66a80897f7d40158d8bedf34c16ea18fa54d11d17c5242b57e878e1f4a660418` |
 
-The old external availability helper selected the first nonempty user-agent
-from the main checkout `.env`, which lacked an email contact. All nine failed
+Both the main checkout and #361 `.env` already contained an email contact.
+The old external helper parsed the main checkout's unquoted, space-containing
+value with `shlex.split(raw)[0]`, retaining only its first token and discarding
+the email. Earlier progress reports incorrectly described the original `.env`
+as lacking a contact; the defect was in the research parser. All nine failed
 responses explicitly said `Your Request Originates from an Undeclared Automated
-Tool`. The corrected research capture uses the existing complete contact in the
-#361 worktree configuration, verifies a nonplaceholder email before acquisition
-and pins its digest in a distinct source profile and acquisition key. No shared
-`.env` was changed, no contact was invented or disclosed, and old missing/403
-receipts remain intact. This is an acquisition configuration correction, not a
-relaxation of source, numeric or review gates.
+Tool`. The successful capture initially selected #361's quoted value, which
+avoided truncation and produced the complete header. It pinned a distinct source
+profile/contact digest; the actual HTTP200/hash/integrity evidence is unchanged.
+No `.env` was changed, no contact was invented or disclosed, and old missing/403
+receipts remain intact. The subsequent shared-reader fix below resolves the
+parser defect without requiring quotes or switching configuration files.
 
 With the declared contact, **9/9 frozen direct XML/index/ZIP requests returned
 actual HTTP200 and exactly matched all nine original retained hashes**. All
@@ -247,3 +250,30 @@ real release was asserted. Remaining: independent semantic mapping review, four
 accounting roles, real release/forecast/first-original label/error/repeat,
 prospective #377 rules, fixed-100 empirical outcomes and main/service acceptance.
 Formal forecasts remain 0/100 and the supported history threshold remains null.
+
+## SEC contact parsing correction
+
+`scripts/audit_history_sec_contact.py` now reads complete literal values through
+the same env reader used by Compose validation and applies the existing
+Fundamental `SecRequestPolicy` contact check. Unquoted and single/double-quoted
+values preserve internal spaces and the final email. An explicit process value
+takes precedence; otherwise the first supplied file defining the key wins.
+An invalid selected value fails before network access instead of silently
+selecting another file. Configuration contents and `os.environ` are not changed.
+
+Both affected external research executors now call that shared reader. Their
+original bytes were retained before editing under `references/archived-executors/`:
+
+| Executor | Preserved original SHA-256 |
+| --- | --- |
+| `issue376-newmarket-availability.py` | `7457115478b4919b59a56b53760ca89513968809deb00fa74cb2b68cbde4bf90` |
+| `issue390-declared-original-capture.py` | `fa25e1436f70552e9eb7c45f2842be80fdd211daf1188c41cd2f3d8e64144fd2` |
+
+The focused regression exercised the actual old helper with a synthetic unquoted
+value `Audit Project/1.0 research@issuer.invalid`. It failed with `Audit` instead
+of the complete header; the fixed helper passes that same case. Permanent tests
+also cover quotes, whitespace/CRLF, `export`, literal equals/shell-looking text,
+process/file precedence, missing/invalid/placeholder contacts and unchanged
+configuration. No SEC request is needed to verify parsing. Existing HTTP200 and
+integrity evidence remains valid; this fix grants no mapping/release authority
+or history-threshold approval.

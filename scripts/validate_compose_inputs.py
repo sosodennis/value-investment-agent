@@ -20,7 +20,8 @@ PLACEHOLDER_USER_AGENTS = {
 }
 
 
-def _read_env_file(path: Path) -> dict[str, str]:
+def read_env_file(path: Path) -> dict[str, str]:
+    """Read complete literal values; spaces do not delimit shell arguments."""
     values: dict[str, str] = {}
     for raw_line in path.read_text(encoding="utf-8").splitlines():
         line = raw_line.strip()
@@ -77,7 +78,7 @@ def validate(
 
     file_values: dict[str, str] = {}
     for path in paths:
-        file_values.update(_read_env_file(path))
+        file_values.update(read_env_file(path))
     referenced, required = _compose_variables(compose_files)
 
     for name in sorted(referenced & file_values.keys() & os.environ.keys()):
