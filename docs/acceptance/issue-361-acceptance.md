@@ -485,5 +485,62 @@ generated evidence remains outside Git.
 This resolves the reproduced numeric-context defect in engineering validation.
 It does not complete real-source numerical valuation, actual independent mapping
 review, dated market evidence, caller approval or all 19 full-service gates.
+
+## Microsoft original identity and accounting normalization
+
+Exact implementation `ef61c81d5bd8b8c6109faeabf3fa57298d5e8690` preserves
+all earlier checkpoints. It fixes reused original trading-symbol/title pairing
+and validates every disambiguating security context (#384). The retained FY2024
+Microsoft acceptance time is corrected to `2024-07-30T20:06:22Z` from SEC
+submissions metadata digest
+`7a94136c40b74495512c975e6bcb62270977e945a855e5f8d8f424b54d08435e`
+(#387). It also adds bounded current-lease balance-sheet classification (#388)
+and uses the existing canonical highest-XBRL-precision selector for accounting
+components (#389). Both preserve the original observations and mapping review
+requirements. The composer and valuation equations are unchanged.
+
+Both real originals pass `SecIngestionService.prepare_filing`, strict EFM/DQC
+and original identity. FY2023 accession `0000950170-23-035122` has 1,839 facts;
+FY2024 accession `0000950170-24-087843` has 1,856 facts. Neither has blocking
+findings or parser network attempts. Exact final input/output digests are:
+
+| Evidence | Input digest | Output digest |
+| --- | --- | --- |
+| FY2023 preparation | `70a06f7410a0c84773453c8c4e3eb69f2da58593943a15caf00154503a7574b8` | `3574443f9a99ec25517e5bcaf1f648f071b46385796803b8e6a7785c4bf751ac` |
+| FY2024 preparation | `623973fac4f672d1a5a19bec7d1461dcdfee0b7a6d8ce0ea5b5b110fcd179301` | `77215d4613199e5d1c873611fb9b440ac5144f4ea7f2d615b2492303510982ea` |
+| Scoped accounting conversion | `1d0e4df006d1df0172aa10fa61e29349990ec113d46a73fed72dba4c41aaffd0` | `298d76c4ccfa1b3720089b636c6737edbaa672f316f9493f7e01308418c7a7c0` |
+
+The accounting conversion yields 22 provisional period facts for six roles,
+including FY2024 current borrowing of USD8,942m from USD6,693m commercial paper
+plus USD2,249m current long-term debt. The rounded USD6,700m observation remains
+in the original report with the canonical lower-precision rejection reason.
+Two prior missing component periods remain unknown. Repeating both strict
+preparations and conversion produces identical digests, zero provider requests,
+zero new artifacts and `wrote=false`; all 68 existing evidence files retain
+their hashes and modification times.
+
+The full 32-role packet has 122 provisional period facts across 24 candidate
+roles. Eight remain unknown: depreciation/amortization, complete operating
+receivables, contract assets, preferred claims, NCI, convertibles, point-in-time
+dilution and other share classes. Packet input
+`d55181716c8ceed03f53c20312e1f10143008ce574db128f8a88feb84c76c3ea`;
+output `98ac0b44f591859e032ef78f82f6778cf79f3cd66dc29d70d5b2168595bed347`.
+Its repeat is unchanged. These proposals establish neither semantic approval
+nor complete numerical valuation. No absence or zero was inferred.
+
+Exact PostgreSQL regression: **690 service tests passed / 11 optional skips**,
+10 Agent client tests and 17 acceptance-tool tests passed; Ruff/format,
+16-source mypy, architecture and diff checks passed. Input
+`849aafc104b39bb327c9e65e8867fff5a9b4740df3c39692a985736cab3e4429`;
+output `767d9106b25099cf09907995bc2c160296c6a18a9ca5e357c3911eda84c8b278`.
+[CI 43013531533](https://github.com/sosodennis/value-investment-agent/actions/runs/43013531533)
+passes all 12 executed jobs; `fundamental-release-gate` is skipped. This round's
+owned tmpfs PostgreSQL container/network were removed. All 62 baseline
+containers retain their IDs, images and start times. Commands, runtime pins,
+failures and digests are retained under `microsoft_source_increment` in the
+existing accounting checkpoint. Generated source/mapping packets remain outside
+Git. #361 and its dependencies remain open pending complete evidence, actual
+review, numerical service acceptance, merge and main verification;
+`supported_history_threshold` remains null.
 Those remain the next work. #361/#385/#386 remain open until accepted delivery
 and merge/main verification; PR #370 remains draft and the history threshold null.
