@@ -14,6 +14,33 @@ precision 34 with half-even rounding. It performs accounting normalization;
 forecast, tax, WACC, dilution and valuation formulas remain with the existing
 Fundamental composer/calculator.
 
+An optional `AccountingComponentV1.accrued_interest_swap_exclusion` can retain
+an original dimensional interest-swap liability as a negative component of an
+instant `accrued_operating_liabilities` rule. Its exact canonical dimension
+tuple must contain balance-sheet location and interest-swap risk, with at most
+one additional derivative-by-nature axis. Business, geographic and security
+segments remain unsupported. The original fact stays dimensional and segmented
+inside the evidence; it is never relabeled as a consolidated observation.
+
+This exclusion requires a positive consolidated accrued-liability base and a
+positive consolidated noncurrent derivative component from the same issuer,
+instant, unit and original report. The exact original derivative classification
+passage must include the applicable year and the accrued/noncurrent locations.
+The evaluator permits one paired exclusion, rejects overlapping concepts, and
+requires the resulting current portion to fit the nonnegative accrued balance.
+All numeric and passage digests join the retained source set. Original precision
+survives in the observations; no unrounded amount is inferred. Independent
+semantic review must establish the location member's meaning, matching coverage
+of the noncurrent component, completeness and remaining operating scope. This
+representation alone establishes a partial accounting relation, not a complete
+operating role. Unset scope is omitted from existing component bytes.
+
+The lease and swap scopes are mutually exclusive on one component. Separate
+lease exclusions, swap exclusions and dated disclosure components may share a
+rule when each passes its existing source, period and scope checks. Supporting
+classification passages remain in the source set and do not enter arithmetic
+or component-overlap checks. Unknown reported precision remains unknown.
+
 A `disclosed` duration transcribes one finite decimal literal from an exact
 nonnumeric parsed fact. `DisclosedAmountV1` retains Unicode code-point offsets
 for the exact quote, amount token, unit quote and scale token, plus reported

@@ -37,17 +37,63 @@ class AccountingPeriodV1(RoleModel):
         return self
 
 
+class AbsencePassageV1(RoleModel):
+    parsed_fact_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    exact_quote: str = Field(min_length=16)
+
+
+class DerivativeClassificationPassageV1(RoleModel):
+    parsed_fact_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    exact_quote: str = Field(min_length=16, max_length=65536)
+
+
+class AccruedInterestSwapExclusionV1(RoleModel):
+    dimensions: tuple[tuple[str, str], ...] = Field(min_length=2, max_length=3)
+    accrued_base_fact_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    noncurrent_fact_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    classification_passage: DerivativeClassificationPassageV1
+
+    @model_validator(mode="after")
+    def supported_dimensions(self) -> AccruedInterestSwapExclusionV1:
+        axes = dict(self.dimensions)
+        required = {
+            "us-gaap:BalanceSheetLocationAxis",
+            "us-gaap:DerivativeInstrumentRiskAxis",
+        }
+        if (
+            len(axes) != len(self.dimensions)
+            or self.dimensions != tuple(sorted(self.dimensions))
+            or not required <= axes.keys()
+            or axes.keys() - required - {"us-gaap:DerivativeByNatureAxis"}
+            or axes["us-gaap:DerivativeInstrumentRiskAxis"]
+            != "us-gaap:InterestRateSwapMember"
+            or any(not member.strip() for member in axes.values())
+        ):
+            raise ValueError(
+                "swap exclusion requires exact supported source dimensions"
+            )
+        return self
+
+
 class AccountingComponentV1(RoleModel):
     parsed_fact_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
     sign: Literal[-1, 1] = 1
     balance_sheet_location: Literal["other_current_liabilities"] | None = Field(
         default=None, exclude_if=lambda value: value is None
     )
+    accrued_interest_swap_exclusion: AccruedInterestSwapExclusionV1 | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
 
-
-class AbsencePassageV1(RoleModel):
-    parsed_fact_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
-    exact_quote: str = Field(min_length=16)
+    @model_validator(mode="after")
+    def swap_is_an_exclusion(self) -> AccountingComponentV1:
+        if self.accrued_interest_swap_exclusion is not None and (
+            self.sign != -1 or self.balance_sheet_location is not None
+        ):
+            raise ValueError(
+                "interest swap scope is only valid for a negative component"
+            )
+        return self
 
 
 class DisclosedValueV1(RoleModel):
@@ -262,7 +308,17 @@ class AccountingPeriodRuleV1(RoleModel):
         if self.disclosed_amount is not None:
             return (self.disclosed_amount.parsed_fact_digest,)
         if self.disposition in {"derived", "classified"}:
-            return tuple(item.parsed_fact_digest for item in self.components)
+            return tuple(
+                dict.fromkeys(
+                    [item.parsed_fact_digest for item in self.components]
+                    + [
+                        item.accrued_interest_swap_exclusion.classification_passage.parsed_fact_digest
+                        for item in self.components
+                        if isinstance(item, AccountingComponentV1)
+                        and item.accrued_interest_swap_exclusion is not None
+                    ]
+                )
+            )
         return tuple(item.parsed_fact_digest for item in self.absence_passages)
 
 
@@ -352,6 +408,17 @@ def evaluate_period_rule(
     components = {item.parsed_fact_digest: item for item in rule.components}
     for fact in source_facts:
         component = components.get(sha256_digest(fact))
+        exclusion = (
+            component.accrued_interest_swap_exclusion
+            if isinstance(component, AccountingComponentV1)
+            else None
+        )
+        derivative_scope = (
+            exclusion is not None
+            and fact.dimensions == exclusion.dimensions
+            and fact.consolidation_scope == "segmented"
+            and fact.security_scope == "segmented"
+        )
         classified_location = (
             isinstance(component, AccountingComponentV1)
             and component.balance_sheet_location is not None
@@ -382,10 +449,13 @@ def evaluate_period_rule(
             or fact.entity_identifier.lstrip("0") != rules.issuer_id.lstrip("0")
             or (
                 not classified_location
+                and not derivative_scope
                 and (fact.dimensions or fact.consolidation_scope != "consolidated")
             )
             or (
                 isinstance(rules, IssuerAccountingRoleRuleSetV1)
+                and not derivative_scope
+                and not classified_location
                 and fact.security_scope not in {"issuer", "consolidated", "unspecified"}
             )
         ):
@@ -427,7 +497,13 @@ def evaluate_period_rule(
                     "absence assertion requires its exact original passage",
                 )
         return Decimal("0")
-    concepts = tuple((fact.concept, fact.dimensions) for fact in source_facts)
+    concepts = tuple(
+        (
+            by_digest[item.parsed_fact_digest].concept,
+            by_digest[item.parsed_fact_digest].dimensions,
+        )
+        for item in rule.components
+    )
     if len(set(concepts)) != len(concepts):
         raise AccountingRoleError(
             "ACCOUNTING_COMPONENT_OVERLAP",
@@ -448,6 +524,7 @@ def evaluate_period_rule(
                 "a total and its classified current portion require total minus current",
             )
     amounts: list[Decimal] = []
+    unsigned: dict[str, Decimal] = {}
     for component in rule.components:
         fact = by_digest[component.parsed_fact_digest]
         if isinstance(component, DatedDisclosureComponentV1):
@@ -467,7 +544,9 @@ def evaluate_period_rule(
                     "ACCOUNTING_DISCLOSED_DATE_MISMATCH",
                     "dated disclosure requires its explicit instant within the original annual or comparative period",
                 )
-            amounts.append(_transcribe_amount(component, fact, rules.unit))
+            amount = _transcribe_amount(component, fact, rules.unit)
+            unsigned[component.parsed_fact_digest] = amount
+            amounts.append(amount)
             continue
         if (
             not fact.is_numeric
@@ -493,8 +572,10 @@ def evaluate_period_rule(
                 "ACCOUNTING_COMPONENT_NON_NUMERIC",
                 "accounting component is not a finite amount",
             )
+        unsigned[component.parsed_fact_digest] = amount
         amounts.append(amount.copy_negate() if component.sign == -1 else amount)
     with localcontext(Context(prec=34, rounding=ROUND_HALF_EVEN)):
+        _validate_swap_exclusion(rules, rule, by_digest, unsigned)
         return sum(amounts, Decimal("0"))
 
 
@@ -604,4 +685,89 @@ def _validate_current_lease_classification(
         raise AccountingRoleError(
             "ACCOUNTING_ROLE_SCOPE_MISMATCH",
             "lease classification requires its exact current-liability axis, role and sign",
+        )
+
+
+def _validate_swap_exclusion(
+    rules: AccountingRoleRules,
+    rule: AccountingPeriodRuleV1,
+    sources: dict[str, ParsedXbrlFactV1],
+    amounts: dict[str, Decimal],
+) -> None:
+    exclusions = tuple(
+        item
+        for item in rule.components
+        if isinstance(item, AccountingComponentV1)
+        and item.accrued_interest_swap_exclusion is not None
+    )
+    if not exclusions:
+        return
+    if (
+        len(exclusions) != 1
+        or rules.normalized_field != "accrued_operating_liabilities"
+        or not rule.period.instant
+    ):
+        raise AccountingRoleError(
+            "ACCOUNTING_DERIVATIVE_EXCLUSION_MISMATCH",
+            "one interest swap exclusion requires an instant accrued operating role",
+        )
+    component = exclusions[0]
+    exclusion = component.accrued_interest_swap_exclusion
+    assert exclusion is not None
+    positive = {item.parsed_fact_digest for item in rule.components if item.sign == 1}
+    total = sources[component.parsed_fact_digest]
+    base = sources.get(exclusion.accrued_base_fact_digest)
+    noncurrent = sources.get(exclusion.noncurrent_fact_digest)
+    passage = sources[exclusion.classification_passage.parsed_fact_digest]
+    quote = exclusion.classification_passage.exact_quote
+    if (
+        component.sign != -1
+        or total.concept
+        != "us-gaap:InterestRateDerivativeInstrumentsNotDesignatedAsHedgingInstrumentsLiabilityAtFairValue"
+        or total.dimensions != exclusion.dimensions
+        or base is None
+        or base.concept != "us-gaap:AccruedLiabilitiesCurrent"
+        or exclusion.accrued_base_fact_digest not in positive
+        or noncurrent is None
+        or noncurrent.concept
+        != "us-gaap:DerivativeInstrumentsAndHedgesLiabilitiesNoncurrent"
+        or exclusion.noncurrent_fact_digest not in positive
+        or passage.is_numeric
+        or passage.concept
+        != "us-gaap:ScheduleOfDerivativeInstrumentsInStatementOfFinancialPositionFairValueTextBlock"
+        or passage.instant is not None
+        or passage.period_start is None
+        or passage.period_end is None
+        or passage.period_end < rule.period.period_end
+        or quote not in passage.value
+        or "Accrued expenses" not in quote
+        or "Other noncurrent liabilities" not in quote
+        or str(rule.period.period_end.year) not in quote
+    ):
+        raise AccountingRoleError(
+            "ACCOUNTING_DERIVATIVE_EXCLUSION_MISMATCH",
+            "swap exclusion requires its exact accrued base, noncurrent pair and original classification passage",
+        )
+    current = (
+        amounts[component.parsed_fact_digest]
+        - amounts[exclusion.noncurrent_fact_digest]
+    )
+    accrued = amounts[exclusion.accrued_base_fact_digest]
+    if (
+        min(
+            amounts[component.parsed_fact_digest],
+            amounts[exclusion.noncurrent_fact_digest],
+            accrued,
+        )
+        < 0
+        or not Decimal("0") <= current <= accrued
+        or sum(
+            (amounts[item.parsed_fact_digest] * item.sign for item in rule.components),
+            Decimal("0"),
+        )
+        < 0
+    ):
+        raise AccountingRoleError(
+            "ACCOUNTING_DERIVATIVE_EXCLUSION_MISMATCH",
+            "current swap exclusion must fit the original nonnegative accrued balance",
         )
