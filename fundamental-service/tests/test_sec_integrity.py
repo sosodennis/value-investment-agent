@@ -369,6 +369,135 @@ def test_terminal_edge_script_preserves_canonical_body_closing_newline():
     )
 
 
+def test_html_tag_line_padding_reconstructs_unchanged_original_archive():
+    member = b"<html><body> \t\n  \t\n<div>123</div>  \n</body>\n</html>"
+    script = b'<script type="text/javascript" src="/edge/path/token"></script>'
+    direct = b"<html><body>\n\n<div>123</div>\n" + script + b"</body>\n</html>\n"
+    raw, index, archive = _fixtures(
+        direct=direct,
+        member=member,
+        declared_size=len(direct) - len(script),
+        headers=(("x-akamai-transformed", "0 - 0 -"),),
+    )
+
+    result = assess_filing_response(
+        raw_response=raw, archive_index=index, archive=archive
+    )
+
+    assert result.normalized_content == member == result.archive_member
+    assert result.normalization_policy_id == "sec-edgar-html-tag-line-padding-v1"
+    assert result.raw_content_hash == hashlib.sha256(direct).hexdigest()
+    assert result.normalized_content_hash == hashlib.sha256(member).hexdigest()
+    assert tuple(
+        raw.content[item.start : item.end] for item in result.removed_ranges
+    ) == (script, b"\n")
+    assert result == assess_filing_response(
+        raw_response=raw, archive_index=index, archive=archive
+    )
+
+
+@pytest.mark.parametrize(
+    ("member", "direct_body"),
+    (
+        (b"<html><body> \n<div>123</div>\n", b"<html><body>\n<div>124</div>\n"),
+        (b"<html><body> \n<div>123</div>\n", b"<html><body>\n<div>12 3</div>\n"),
+        (b"<html><body> \n<div>123</div>\n", b"<html><body>\n <div>123</div>\n"),
+        (b"<html><body> \n<div>123</div>\n", b"<html><body>\n<div>123</div>\n\n"),
+        (b"<html><body> \r\n<div>123</div>\n", b"<html><body>\n<div>123</div>\n"),
+        (b"<html><body>\r \n<div>123</div>\n", b"<html><body>\n<div>123</div>\n"),
+        (b"<html><body>\xa0\n<div>123</div>\n", b"<html><body>\n<div>123</div>\n"),
+        (b"<html><body> \n<div>123</div> \n", b"<html><body> \n<div>123</div>\n"),
+        (
+            b"<html><body>\nrevenue \n<div>123</div>\n",
+            b"<html><body>\nrevenue\n<div>123</div>\n",
+        ),
+    ),
+    ids=(
+        "value-change",
+        "interior-space",
+        "leading-space",
+        "extra-line",
+        "crlf",
+        "bare-cr",
+        "unicode-space",
+        "partial-trim",
+        "text-line-trim",
+    ),
+)
+def test_html_tag_line_padding_rejects_other_representation_changes(
+    member, direct_body
+):
+    script = b'<script type="text/javascript" src="/edge/path/token"></script>'
+    member += b"</body>\n</html>"
+    direct = direct_body + script + b"</body>\n</html>\n"
+    raw, index, archive = _fixtures(
+        direct=direct,
+        member=member,
+        declared_size=len(direct) - len(script),
+        headers=(("x-akamai-transformed", "0 - 0 -"),),
+    )
+
+    with pytest.raises(SnapshotError):
+        assess_filing_response(raw_response=raw, archive_index=index, archive=archive)
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    (
+        "header",
+        "no-script",
+        "script-type",
+        "duplicate-script",
+        "script-location",
+        "no-final-lf",
+        "two-final-lfs",
+        "index-size",
+        "accession",
+        "xml-suffix",
+    ),
+)
+def test_html_tag_line_padding_requires_complete_independent_proof(mutation):
+    member = b"<html><body> \n<div>123</div>\n</body>\n</html>"
+    script = b'<script type="text/javascript" src="/edge/path/token"></script>'
+    direct = b"<html><body>\n<div>123</div>\n" + script + b"</body>\n</html>\n"
+    declared_size = len(direct) - len(script)
+    headers = (("x-akamai-transformed", "0 - 0 -"),)
+    name = PRIMARY_NAME
+    if mutation == "header":
+        headers = ()
+    elif mutation == "no-script":
+        direct = direct.replace(script, b"")
+    elif mutation == "script-type":
+        direct = direct.replace(b"text/javascript", b"text/other-type")
+    elif mutation == "duplicate-script":
+        direct = direct.replace(script, script + script)
+        declared_size += len(script)
+    elif mutation == "script-location":
+        direct = direct.replace(script, b"").replace(b"123", script + b"123")
+    elif mutation == "no-final-lf":
+        direct = direct[:-1]
+        declared_size -= 1
+    elif mutation == "two-final-lfs":
+        direct += b"\n"
+        declared_size += 1
+    elif mutation == "index-size":
+        declared_size += 1
+    elif mutation == "xml-suffix":
+        name = "issuer.xml"
+    raw, index, archive = _fixtures(
+        direct=direct,
+        member=member,
+        primary_name=name,
+        declared_size=declared_size,
+        headers=headers,
+    )
+    if mutation == "accession":
+        raw = replace(raw, accession_number="0000320193-24-000124")
+
+    with pytest.raises(SnapshotError):
+        assess_filing_response(raw_response=raw, archive_index=index, archive=archive)
+
+
 def test_exact_archive_member_requires_exact_declared_size():
     member = b"<html><body>canonical</body></html>"
     raw, index, archive = _fixtures(direct=member, member=member)

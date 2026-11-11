@@ -47,6 +47,13 @@ _NORMALIZATION_RULE = (
     "document only when archive index size, Akamai response metadata, and "
     "the exact archive member independently prove the representation delta"
 )
+_HTML_TAG_PADDING_POLICY_ID = "sec-edgar-html-tag-line-padding-v1"
+_HTML_TAG_PADDING_RULE = (
+    "reconstruct the unchanged accession-matched HTML archive member only when "
+    "removing ASCII SP/TAB before LF on blank or tag-ending lines, appending "
+    "one terminal LF and the exact terminal Akamai script reproduces every "
+    "direct-response byte; the SEC index corroborates the script-free size"
+)
 _MAX_STAGED_GRAPHICS_BYTES = 32 * 1024 * 1024
 _XML_LINE_END_POLICY_ID = "sec-edgar-xbrl-xml10-line-ends-v1"
 _XML_LINE_END_RULE = (
@@ -206,6 +213,94 @@ def _digest(content: bytes) -> str:
     return hashlib.sha256(content).hexdigest()
 
 
+def _html_tag_line_padding(
+    *,
+    raw_response: FilingIntegritySource,
+    archive_index: FilingIntegritySource,
+    archive: FilingIntegritySource,
+    member_name: str,
+    member: bytes,
+    declared_size: int,
+) -> SecIntegrityAssessment | None:
+    raw = raw_response.content
+    if (
+        not raw_response.uri.endswith((".htm", ".html"))
+        or dict(raw_response.response_headers).get("x-akamai-transformed") != "0 - 0 -"
+        or b"\r" in member
+        or not member.endswith((b"</body></html>", b"</body>\n</html>"))
+    ):
+        return None
+    match = _EDGE_SCRIPT_AT_END.search(raw)
+    if match is None:
+        return None
+    script_start, script_end = match.span("script")
+    without_script = raw[:script_start] + raw[script_end:]
+    if len(without_script) != declared_size:
+        return None
+
+    chunks = []
+    padding_ranges = []
+    position = 0
+    for padding in re.finditer(rb"[ \t]+(?=\n)", member):
+        start, end = padding.span()
+        line_start = member.rfind(b"\n", 0, start) + 1
+        prefix = member[line_start:start]
+        if prefix and not prefix.endswith(b">"):
+            return None
+        chunks.append(member[position:start])
+        padding_ranges.append((start, end, _digest(padding.group())))
+        position = end
+    if not padding_ranges:
+        return None
+    chunks.append(member[position:])
+    if b"".join(chunks) + b"\n" != without_script:
+        return None
+
+    raw_hash = _digest(raw)
+    index_hash = _digest(archive_index.content)
+    archive_hash = _digest(archive.content)
+    member_hash = _digest(member)
+    rule_payload = {
+        "policy_id": _HTML_TAG_PADDING_POLICY_ID,
+        "rule": _HTML_TAG_PADDING_RULE,
+        "accession": raw_response.accession_number,
+        "primary_document": raw_response.uri.rsplit("/", 1)[-1],
+        "declared_size": declared_size,
+        "required_header": ("x-akamai-transformed", "0 - 0 -"),
+        "script_shape": _EDGE_SCRIPT_AT_END.pattern.decode("ascii"),
+        "raw_content_hash": raw_hash,
+        "archive_index_hash": index_hash,
+        "archive_hash": archive_hash,
+        "archive_member_hash": member_hash,
+        "archive_padding_ranges": padding_ranges,
+    }
+    return SecIntegrityAssessment(
+        relation="normalized",
+        normalized_content=member,
+        declared_primary_size=declared_size,
+        archive_member_name=member_name,
+        archive_member=member,
+        raw_content_hash=raw_hash,
+        archive_index_hash=index_hash,
+        archive_hash=archive_hash,
+        archive_member_hash=member_hash,
+        normalized_content_hash=member_hash,
+        removed_ranges=(
+            RemovedByteRangeV1(
+                start=script_start,
+                end=script_end,
+                content_hash=_digest(match.group("script")),
+            ),
+            RemovedByteRangeV1(
+                start=len(raw) - 1, end=len(raw), content_hash=_digest(b"\n")
+            ),
+        ),
+        normalization_policy_id=_HTML_TAG_PADDING_POLICY_ID,
+        normalization_rule_signature=sha256_digest(rule_payload),
+        normalization_reason=_HTML_TAG_PADDING_RULE,
+    )
+
+
 def assess_filing_response(
     *,
     raw_response: FilingIntegritySource,
@@ -217,6 +312,7 @@ def assess_filing_response(
     Versioned rules cover a terminal Akamai script/final LF and the exact
     XML 1.0 CRLF/LF, terminal LF and their exact combined representation
     differences. They reconstruct the original accession-matched archive bytes.
+    HTML tag-line padding has a separate exact archive reconstruction rule.
     Every other mismatch blocks.
     """
     try:
@@ -394,6 +490,16 @@ def assess_filing_response(
             ),
             normalization_reason=rule,
         )
+    html_padding = _html_tag_line_padding(
+        raw_response=raw_response,
+        archive_index=archive_index,
+        archive=archive,
+        member_name=member_name,
+        member=member,
+        declared_size=declared_size,
+    )
+    if html_padding is not None:
+        return html_padding
     if len(member) > declared_size or declared_size - len(member) > 1:
         raise SnapshotError(
             "SOURCE_ARCHIVE_SIZE_MISMATCH",
