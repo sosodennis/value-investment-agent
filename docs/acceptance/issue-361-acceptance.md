@@ -43,6 +43,15 @@ preparation, numerical calculation, unchanged repeats, PostgreSQL restart, and
 restore into an empty store. An explicit empty inventory still needs complete
 original coverage and cannot hide released award observations.
 
+Exact documentation commit `d29d1298ac4018a8cf891b391241c0fda0d1565f` passes
+17 acceptance-tool tests, architecture, diff, and prior-checkpoint preservation.
+Its CI `contract-policy` job detects a negated closing-keyword sentence in the
+old PR body. The current body states that #361 remains OPEN. The actual policy
+reproduces the old failure and passes with the corrected body. No validator,
+WIP/draft status, runtime manifest, or financial gate is changed. The checkpoint
+entry `source_review_ci_description_correction` retains both command results.
+The new head still requires CI verification.
+
 These engineering results do not establish a reviewed real issuer valuation.
 The [runtime manifest](issue-361-runtime.json) remains WIP, stopped, not ready,
 and requires revalidation. Its 19 full-flow checks remain unverified. Earlier
