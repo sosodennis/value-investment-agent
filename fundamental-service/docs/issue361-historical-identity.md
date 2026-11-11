@@ -10,9 +10,13 @@ point-in-time source gates before identity or canonical publication.
 Original identity must match the requested CIK, registrant name, ticker and
 security title using explicit original DEI facts. The security ID is the filed
 ticker; the requested share class must equal the filed `Security12bTitle` after
-whitespace/case normalization. The policy supports a single issuer-wide
-security only. It refuses absent, conflicting or dimensional security facts;
-it does not infer a common share class from issuer-level shares outstanding.
+whitespace/case normalization. The requested ticker must identify exactly one
+original security context. Its title must share that context ID, period and
+dimensions. The context may be issuer-wide or have exactly one
+`us-gaap:StatementClassOfStockAxis` member. Other listed securities remain in
+the audit evidence; their titles cannot establish the requested class.
+Absent, conflicting, cross-context or unsupported dimensional evidence fails;
+the policy does not infer a common class from issuer-level shares outstanding.
 The original document type/period, context issuer/scheme, DEI namespace,
 domestic incorporation and USD US-GAAP evidence are checked as well. Currency
 requires unambiguous monetary units from consolidated, dimensionless facts at
@@ -35,7 +39,8 @@ reuses its artifact without modifying its bytes or mtime.
 
 This contract does not establish that the fixed 2016 cohort has the required
 DEI security facts. Missing original facts remain `HISTORICAL_IDENTITY_MISSING`;
-multi-security/context cases remain `HISTORICAL_IDENTITY_SCOPE_UNSUPPORTED`.
+ambiguous ticker contexts remain `HISTORICAL_IDENTITY_CONFLICT`, and unsupported
+dimensions remain `HISTORICAL_IDENTITY_SCOPE_UNSUPPORTED`.
 Reviewed original cover-page evidence would require a separately validated
 policy; current ticker/survival data is not a fallback. A prior regulatory
 validation rejection remains the primary failure and cannot be bypassed by

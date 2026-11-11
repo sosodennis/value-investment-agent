@@ -107,7 +107,7 @@ def validate_original_filing_identity(
     accepted_at: datetime,
     facts: tuple[ParsedXbrlFactV1, ...],
 ) -> None:
-    """Accept only a single security explicitly identified by original DEI facts."""
+    """Bind one security to its original DEI class, without current directories."""
 
     def refuse(code: str, message: str) -> IdentityResolutionError:
         return IdentityResolutionError(code, message, status_code=422)
@@ -124,10 +124,47 @@ def validate_original_filing_identity(
             "invalid original CIK or acceptance",
         )
 
+    security_concepts = {"dei:TradingSymbol", "dei:Security12bTitle"}
+    symbols = tuple(fact for fact in facts if fact.concept == "dei:TradingSymbol")
+    if not symbols:
+        raise refuse(
+            "HISTORICAL_IDENTITY_MISSING", "original filing lacks dei:TradingSymbol"
+        )
+    matching_symbols = tuple(fact for fact in symbols if fact.value.strip() == ticker)
+    if not matching_symbols:
+        raise refuse(
+            "HISTORICAL_IDENTITY_MISMATCH",
+            "requested ticker differs from the original filing",
+        )
+    security_contexts = {
+        (fact.context_id, fact.period_start, fact.period_end, fact.dimensions)
+        for fact in matching_symbols
+    }
+    if len(security_contexts) != 1:
+        raise refuse(
+            "HISTORICAL_IDENTITY_CONFLICT",
+            "requested ticker belongs to multiple original security contexts",
+        )
+    security_context = next(iter(security_contexts))
+
     values: dict[str, str] = {}
     periods: set[date | None] = set()
     for concept in sorted(ORIGINAL_IDENTITY_CONCEPTS):
-        candidates = tuple(fact for fact in facts if fact.concept == concept)
+        candidates = tuple(
+            fact
+            for fact in facts
+            if fact.concept == concept
+            and (
+                concept not in security_concepts
+                or (
+                    fact.context_id,
+                    fact.period_start,
+                    fact.period_end,
+                    fact.dimensions,
+                )
+                == security_context
+            )
+        )
         if not candidates:
             raise refuse(
                 "HISTORICAL_IDENTITY_MISSING", f"original filing lacks {concept}"
@@ -138,7 +175,15 @@ def validate_original_filing_identity(
             or not (fact.entity_identifier or "").isascii()
             or not (fact.entity_identifier or "").isdigit()
             or int(fact.entity_identifier or "0") != int(cik)
-            or fact.dimensions
+            or (
+                fact.dimensions
+                and not (
+                    concept in security_concepts
+                    and len(fact.dimensions) == 1
+                    and fact.dimensions[0][0] == "us-gaap:StatementClassOfStockAxis"
+                    and fact.dimensions[0][1]
+                )
+            )
             or fact.unit is not None
             or fact.is_numeric
             or fact.instant is not None
@@ -149,7 +194,7 @@ def validate_original_filing_identity(
         ):
             raise refuse(
                 "HISTORICAL_IDENTITY_SCOPE_UNSUPPORTED",
-                f"original {concept} lacks an unambiguous issuer-wide DEI context",
+                f"original {concept} lacks a supported issuer or security DEI context",
             )
         unique = {" ".join(fact.value.split()) for fact in candidates}
         if len(unique) != 1 or not next(iter(unique)):

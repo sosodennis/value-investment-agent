@@ -85,6 +85,97 @@ def test_original_identity_uses_only_original_dei_with_no_current_directory():
     _check_original((*facts, facts[0]))
 
 
+def _class_scoped_original():
+    securities = {"dei:TradingSymbol", "dei:Security12bTitle"}
+    facts = tuple(
+        fact.model_copy(
+            update={
+                "context_id": "common-class",
+                "dimensions": (
+                    ("us-gaap:StatementClassOfStockAxis", "us-gaap:CommonStockMember"),
+                ),
+                "consolidation_scope": "segmented",
+                "security_scope": "segmented",
+            }
+        )
+        if fact.concept in securities
+        else fact
+        for fact in _original_identity_facts()
+    )
+    title = next(f for f in facts if f.concept == "dei:Security12bTitle")
+    return (
+        *facts,
+        title.model_copy(
+            update={
+                "context_id": "listed-note",
+                "dimensions": (
+                    ("us-gaap:StatementClassOfStockAxis", "issuer:NotesDue2027Member"),
+                ),
+                "value": "2.000% Notes due 2027",
+            }
+        ),
+    )
+
+
+def test_original_identity_selects_ticker_and_title_in_one_class_context():
+    facts = _class_scoped_original()
+    _check_original(facts)
+    _check_original(tuple(reversed(facts)))
+    _check_original((*facts, facts[-2]))
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"context_id": "different-context"},
+        {"period_start": date(2024, 1, 1)},
+        {"dimensions": ()},
+    ],
+)
+def test_original_identity_cannot_pair_a_title_from_another_class_context(change):
+    facts = tuple(
+        fact.model_copy(update=change)
+        if fact.concept == "dei:Security12bTitle" and fact.value == "Common Stock"
+        else fact
+        for fact in _class_scoped_original()
+    )
+    with pytest.raises(IdentityResolutionError) as error:
+        _check_original(facts)
+    assert error.value.code == "HISTORICAL_IDENTITY_MISSING"
+
+
+def test_original_identity_rejects_the_same_ticker_in_multiple_class_contexts():
+    facts = _class_scoped_original()
+    symbol = next(f for f in facts if f.concept == "dei:TradingSymbol")
+    with pytest.raises(IdentityResolutionError) as error:
+        _check_original((*facts, symbol.model_copy(update={"context_id": "class-b"})))
+    assert error.value.code == "HISTORICAL_IDENTITY_CONFLICT"
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"namespace_uri": "http://example.test/dei/2024"},
+        {"entity_identifier": "0000320194"},
+        {"dimensions": (("us-gaap:StatementBusinessSegmentsAxis", "issuer:USA"),)},
+        {
+            "dimensions": (
+                ("us-gaap:StatementClassOfStockAxis", "us-gaap:CommonStockMember"),
+                ("us-gaap:StatementBusinessSegmentsAxis", "issuer:USA"),
+            )
+        },
+    ],
+)
+def test_original_class_identity_keeps_namespace_entity_and_dimension_guards(change):
+    facts = tuple(
+        fact.model_copy(update=change) if fact.context_id == "common-class" else fact
+        for fact in _class_scoped_original()
+    )
+    with pytest.raises(IdentityResolutionError) as error:
+        _check_original(facts)
+    assert error.value.code == "HISTORICAL_IDENTITY_SCOPE_UNSUPPORTED"
+
+
 @pytest.mark.parametrize(
     "changes",
     [
