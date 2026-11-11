@@ -3,15 +3,20 @@
 from __future__ import annotations
 
 import argparse
+from collections.abc import Iterator
+from contextlib import contextmanager
 import json
+import os
 import re
 import sys
 from pathlib import Path
+from typing import Literal, Protocol
 
 from cryptography.exceptions import UnsupportedAlgorithm
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from pydantic import Field
+from sqlalchemy.exc import SQLAlchemyError
 
 from .data_releases import (
     DataReleaseError,
@@ -22,7 +27,8 @@ from .data_releases import (
     verify_mapping_review_evidence,
 )
 from .facts import CanonicalMappingV1
-from .replay import ArtifactPublicationV1, ArtifactStore
+from .metadata import PostgresArtifactStore, PostgresContentStore, PostgresMetadataStore
+from .replay import ArtifactPublicationV1, ArtifactRecordV1, ArtifactStore
 from .serialization import canonical_bytes, sha256_digest
 from .snapshots import SnapshotError
 
@@ -34,12 +40,52 @@ class MappingReviewSigningReceiptV1(ReleaseModel):
     publication: ArtifactPublicationV1
 
 
+class MappingReviewArtifactStore(Protocol):
+    def get(self, artifact_id: str) -> ArtifactRecordV1: ...
+
+    def read(self, artifact_id: str) -> bytes: ...
+
+    def put_with_receipt(
+        self,
+        artifact_id: str,
+        value: object,
+        dependency_hashes: tuple[str, ...] = (),
+        *,
+        media_type: str = "application/json",
+        retention: Literal["evidence", "operational_cache"] = "evidence",
+    ) -> ArtifactPublicationV1: ...
+
+
+@contextmanager
+def _command_artifacts(
+    offline_root: Path | None,
+) -> Iterator[MappingReviewArtifactStore]:
+    if offline_root is not None:
+        yield ArtifactStore(offline_root)
+        return
+    database_url = os.getenv("FUNDAMENTAL_SERVICE_DATABASE_URL")
+    data_root = os.getenv("FUNDAMENTAL_SERVICE_DATA_ROOT")
+    if not database_url or not data_root:
+        raise DataReleaseError(
+            "MAPPING_REVIEW_STORAGE_UNCONFIGURED",
+            "service database and content root must be configured",
+        )
+    metadata = PostgresMetadataStore(database_url, auto_migrate=False)
+    try:
+        metadata.start()
+        yield PostgresArtifactStore(
+            metadata, PostgresContentStore(Path(data_root) / "content", metadata)
+        )
+    finally:
+        metadata.close()
+
+
 def sign_review(
     *,
     statement_path: Path,
     mapping_path: Path,
     fixture_path: Path,
-    artifacts_root: Path,
+    artifacts: MappingReviewArtifactStore,
     trust_roots_path: Path,
     private_key_path: Path,
     source_revision: str,
@@ -84,9 +130,8 @@ def sign_review(
         raise DataReleaseError(
             "MAPPING_REVIEW_KEY_MISMATCH", "private key differs from trusted reviewer"
         )
-    store = ArtifactStore(artifacts_root)
     for ref in statement.evidence_refs:
-        record = store.get(ref.artifact_id)
+        record = artifacts.get(ref.artifact_id)
         if (
             record.status != "valid"
             or record.retention != "evidence"
@@ -96,7 +141,7 @@ def sign_review(
             raise DataReleaseError(
                 "MAPPING_REVIEW_EVIDENCE_MISMATCH", "retained review evidence differs"
             )
-        store.read(ref.artifact_id)
+        artifacts.read(ref.artifact_id)
     review = sign_mapping_review_evidence(statement.model_dump(mode="python"), key)
     verify_mapping_review_evidence(review, roots)
     output_digest = sha256_digest(review)
@@ -108,7 +153,7 @@ def sign_review(
             "trust_roots_digest": sha256_digest(roots),
         }
     )
-    publication = store.put_with_receipt(
+    publication = artifacts.put_with_receipt(
         f"mapping-review-{output_digest}",
         review,
         dependency_hashes=(
@@ -130,26 +175,34 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--statement", type=Path, required=True)
     parser.add_argument("--mapping", type=Path, required=True)
     parser.add_argument("--fixture", type=Path, required=True)
-    parser.add_argument("--artifacts-root", type=Path, required=True)
+    parser.add_argument(
+        "--artifacts-root",
+        type=Path,
+        help="Use an offline filesystem store instead of the configured service store",
+    )
     parser.add_argument("--trust-roots", type=Path, required=True)
     parser.add_argument("--private-key", type=Path, required=True)
     parser.add_argument("--source-revision", required=True)
     args = parser.parse_args(argv)
     try:
-        receipt = sign_review(
-            statement_path=args.statement,
-            mapping_path=args.mapping,
-            fixture_path=args.fixture,
-            artifacts_root=args.artifacts_root,
-            trust_roots_path=args.trust_roots,
-            private_key_path=args.private_key,
-            source_revision=args.source_revision,
-        )
+        with _command_artifacts(args.artifacts_root) as artifacts:
+            receipt = sign_review(
+                statement_path=args.statement,
+                mapping_path=args.mapping,
+                fixture_path=args.fixture,
+                artifacts=artifacts,
+                trust_roots_path=args.trust_roots,
+                private_key_path=args.private_key,
+                source_revision=args.source_revision,
+            )
     except (DataReleaseError, SnapshotError) as exc:
         print(canonical_bytes({"error_code": exc.code}).decode(), file=sys.stderr)
         return 2
     except OSError:
         print('{"error_code":"MAPPING_REVIEW_IO_FAILED"}', file=sys.stderr)
+        return 2
+    except SQLAlchemyError:
+        print('{"error_code":"MAPPING_REVIEW_STORAGE_FAILED"}', file=sys.stderr)
         return 2
     except (ValueError, TypeError, UnsupportedAlgorithm):
         print('{"error_code":"MAPPING_REVIEW_INPUT_INVALID"}', file=sys.stderr)

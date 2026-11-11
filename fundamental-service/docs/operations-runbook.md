@@ -127,11 +127,19 @@ fundamental-sign-mapping-review \
   --statement /reviews/statement.json \
   --mapping /reviews/mapping.json \
   --fixture /reviews/fixture.json \
-  --artifacts-root /data/artifacts \
   --trust-roots /run/config/data-release-trust-roots.json \
   --private-key /run/secrets/mapping-reviewer.pem \
   --source-revision "$VERIFIED_IMPLEMENTATION_COMMIT"
 ```
+
+By default, this command uses the same `FUNDAMENTAL_SERVICE_DATABASE_URL` and
+`FUNDAMENTAL_SERVICE_DATA_ROOT/content` as the running service. The database must
+already have the installed schema; signing does not run migrations, seed policies
+or activate releases. It closes database resources after success or failure.
+Service readers and the existing export/restore commands can retrieve the signed
+artifact directly from that data plane. For an offline canary artifact store,
+pass `--artifacts-root /reviews/offline-artifacts` explicitly. Both adapters use
+the same signed bytes, content identity and publication receipt contract.
 
 The canonical receipt records the supplied implementation revision, input/output
 digests and artifact publication. The signed artifact uses the unchanged
