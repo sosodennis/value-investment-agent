@@ -60,6 +60,40 @@ domicile, regulatory approval, mapping review and data-release authority
 unestablished; even retained blocking regulatory findings are not approval.
 Do not count a low-level result as a release-backed empirical forecast.
 
+## Trusted issuer operating releases
+
+`IssuerOperatingReleaseManifestV1` explicitly selects the issuer-only protocol
+and pins the complete operating requirements, model, policy, mapping and parser
+versions. `IssuerAccountingRoleRuleSetV1` uses the existing accounting evaluator
+and an issuer-only protocol with no security ID. The legacy security rule and
+release schemas preserve their canonical bytes and security requirements.
+
+`IssuerOperatingReleaseService` publishes an immutable bundle only after the
+existing `DataReleaseCanaryRunner` verifies deployment-owned Ed25519 verifier,
+workflow and suite trust roots, independent signed mapping reviews, artifact
+hashes and the exact original sources. Each original requires retained HTTP200
+source metadata, completed offline SEC EFM/DQC validation, a passing bound
+integrity artifact, taxonomy manifest and retained raw/parser/index/ZIP bytes.
+The same ingestion byte-integrity policy replays those bytes and checks sizes,
+archive member and normalization evidence. No HTTP receipt is inferred from an
+archive member or a valid signature.
+
+The ingestion converter, accounting evaluator and fact selector regenerate
+the declared facts from each complete original report and released mappings.
+Changing an amount fails even if the candidate is signed again. Unknown and
+unsupported accounting rules retain their dispositions without generating a
+numeric placeholder. Complete parser reports retain missing, invalid,
+conflicting and excluded observations. Accounting review still belongs to the
+trusted independent mapping reviewer.
+
+Publication uses the existing atomic content-addressed artifact store. Reading
+requires the exact immutable artifact/manifest pins and reruns current trust,
+artifact, original-source and mapping checks before invoking the existing
+operating composer. Restart and repeat preserve bytes, digests and mtimes;
+duplicate publication returns `wrote=false`. Outputs remain provisional with a
+null threshold. This is a library operation for research; it adds no public HTTP
+route, production active pointer, acquisition service or review authority.
+
 ## Bounded verification and remaining acceptance
 
 The fixed case remains NEWMARKET, CIK `0001282637`, at
@@ -75,12 +109,16 @@ malformed and empty observation retention, source and future-label exclusion,
 strict contract separation, deterministic order/serialization, operating
 numeric parity, and full valuation rejection. Exact-commit reports record the
 lock/runtime pins, source/input/output digests, commands and unchanged repeats.
-Full service tests include explicit resource/database skips; those skips do
-not establish Docker/service acceptance. No Docker resources are needed for
-this pure internal contract increment.
+Release tests use explicitly synthetic keys and evidence to cover independent
+review, deployment trust rotation, artifact/source swaps, original normalization,
+accounting scope, publication/restart and unchanged forecast repeats. These are
+contract tests and never count as real SEC release or empirical outcomes. Full
+service tests include explicit resource/database skips; those skips do not
+establish Docker/service acceptance. No Docker resources are needed for this
+internal library increment.
 
-#390, #383 and #376 remain open. Completion still requires trusted issuer-scoped
-release/serving integration, independent source/semantic review, the four
+#390, #383 and #376 remain open. Completion still requires service-backed
+acceptance of the issuer release path, independent source/semantic review, the four
 unresolved accounting roles, actual original-bound forecast/first-label/error
 and unchanged repeat, prospective #377 rules, all fixed-100 outcomes and
 main/service acceptance. This increment neither closes the study nor approves

@@ -16,7 +16,7 @@ from typing import Protocol
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from .contracts import CanonicalFactV1, SourceSnapshotV1
+from .contracts import CanonicalFactV1, SecIntegrityEvidenceV1, SourceSnapshotV1
 from .data_releases import (
     DataReleaseError,
     DataReleaseManifestV1,
@@ -24,6 +24,7 @@ from .data_releases import (
     DataReleaseVerificationV1,
     FactRefV1,
     MappingRefV1,
+    IssuerOperatingReleaseManifestV1,
     verify_data_release_candidate,
 )
 from .facts import (
@@ -38,6 +39,13 @@ from .replay import ArtifactStore
 from .history_composition import verify_history_components
 from .serialization import canonical_bytes, sha256_digest
 from .snapshots import FilesystemSnapshotRepository, SnapshotError
+from .original_issuer import IssuerOperatingSourceV1
+from .issuer_release_evidence import (
+    require_issuer_release_profile,
+    require_original_fact_membership,
+    verify_original_bytes,
+    verify_original_integrity,
+)
 
 
 class ReleaseMappingReader(Protocol):
@@ -49,7 +57,21 @@ class ReleaseArtifactReader(Protocol):
 
 
 class ReleaseSnapshotReader(Protocol):
-    def get(self, snapshot_id: str) -> SourceSnapshotV1: ...
+    def get(self, snapshot_id: str) -> SourceSnapshotV1 | IssuerOperatingSourceV1: ...
+
+
+class _SecuritySnapshots:
+    def __init__(self, reader: ReleaseSnapshotReader) -> None:
+        self.reader = reader
+
+    def get(self, snapshot_id: str) -> SourceSnapshotV1:
+        snapshot = self.reader.get(snapshot_id)
+        if not isinstance(snapshot, SourceSnapshotV1):
+            raise DataReleaseError(
+                "DATA_RELEASE_SOURCE_SCOPE_MISMATCH",
+                "security histories require security snapshots",
+            )
+        return snapshot
 
 
 class DataReleaseCanaryReportV1(BaseModel):
@@ -103,6 +125,8 @@ class DataReleaseCanaryRunner:
         verification: DataReleaseVerificationV1,
     ) -> DataReleaseCanaryReportV1:
         verify_data_release_candidate(manifest, verification, self._trust_roots)
+        if isinstance(manifest, IssuerOperatingReleaseManifestV1):
+            require_issuer_release_profile(manifest)
         self._verify_artifacts(manifest, verification)
         mappings = self._verify_mappings(manifest.mapping_refs)
         checked_snapshots, checked_facts = self._verify_snapshots_and_facts(
@@ -203,8 +227,22 @@ class DataReleaseCanaryRunner:
                     "DATA_RELEASE_SNAPSHOT_MISMATCH",
                     f"release snapshot {reference.snapshot_id} has a different manifest digest",
                 )
+            issuer_scope = isinstance(snapshot, IssuerOperatingSourceV1)
+            if issuer_scope != isinstance(manifest, IssuerOperatingReleaseManifestV1):
+                raise DataReleaseError(
+                    "DATA_RELEASE_SOURCE_SCOPE_MISMATCH",
+                    "issuer source views require their explicit operating release manifest",
+                )
             try:
-                verify_history_components(snapshot, self._snapshots)
+                if isinstance(snapshot, IssuerOperatingSourceV1):
+                    assert isinstance(manifest, IssuerOperatingReleaseManifestV1)
+                    self._verify_issuer_originals(snapshot, manifest)
+                else:
+                    verify_history_components(
+                        snapshot, _SecuritySnapshots(self._snapshots)
+                    )
+            except DataReleaseError:
+                raise
             except Exception as exc:
                 raise DataReleaseError(
                     "DATA_RELEASE_HISTORY_COMPONENT_INVALID",
@@ -226,6 +264,17 @@ class DataReleaseCanaryRunner:
                     f"release snapshot {reference.snapshot_id} does not cover required fields",
                 )
             history = self._verify_declared_history(snapshot, reference.facts, mappings)
+            if isinstance(snapshot, IssuerOperatingSourceV1):
+                assert isinstance(manifest, IssuerOperatingReleaseManifestV1)
+                if any(
+                    mapping.mapping_version != manifest.mapping_version
+                    for mapping in mappings.values()
+                ):
+                    raise DataReleaseError(
+                        "DATA_RELEASE_MAPPING_VERSION_MISMATCH",
+                        "issuer mappings require the pinned release version",
+                    )
+                require_original_fact_membership(snapshot, history, mappings)
             if {item.normalized_field for item in history} != declared_fields:
                 raise DataReleaseError(
                     "DATA_RELEASE_FIELDS_UNAVAILABLE",
@@ -237,7 +286,7 @@ class DataReleaseCanaryRunner:
 
     def _verify_declared_history(
         self,
-        snapshot: SourceSnapshotV1,
+        snapshot: SourceSnapshotV1 | IssuerOperatingSourceV1,
         references: tuple[FactRefV1, ...],
         mappings: dict[str, CanonicalMappingV1],
     ) -> tuple[CanonicalFactV1, ...]:
@@ -305,7 +354,9 @@ class DataReleaseCanaryRunner:
         return tuple(facts)
 
     def _resolve_facts(
-        self, snapshot: SourceSnapshotV1, required_fields: tuple[str, ...]
+        self,
+        snapshot: SourceSnapshotV1 | IssuerOperatingSourceV1,
+        required_fields: tuple[str, ...],
     ) -> tuple[CanonicalFactV1, ...]:
         try:
             return self._facts.resolve(
@@ -318,6 +369,57 @@ class DataReleaseCanaryRunner:
                 "DATA_RELEASE_CANARY_FAILED",
                 f"point-in-time canary failed for {snapshot.snapshot_id}",
             ) from exc
+
+    def _verify_issuer_originals(
+        self,
+        snapshot: IssuerOperatingSourceV1,
+        manifest: IssuerOperatingReleaseManifestV1,
+    ) -> None:
+        try:
+            integrities = tuple(
+                SecIntegrityEvidenceV1.model_validate_json(
+                    self._artifacts.read(ref.artifact_id)
+                )
+                for ref in manifest.artifact_refs
+                if ref.role == "sec-issuer-integrity-v1"
+            )
+        except ValueError as error:
+            raise DataReleaseError(
+                "DATA_RELEASE_ORIGINAL_INTEGRITY_INVALID",
+                "issuer integrity evidence must satisfy its retained contract",
+            ) from error
+        contents = {
+            ref.content_hash: self._artifacts.read(ref.artifact_id)
+            for ref in (*manifest.artifact_refs, *manifest.taxonomy_refs)
+        }
+        if any(hashlib.sha256(raw).hexdigest() != key for key, raw in contents.items()):
+            raise DataReleaseError(
+                "DATA_RELEASE_ARTIFACT_HASH_MISMATCH",
+                "issuer original artifacts changed during verification",
+            )
+        for original in snapshot.originals:
+            matches = tuple(
+                item
+                for item in integrities
+                if item.accession_number == original.source.accession_number
+            )
+            if len(matches) != 1:
+                raise DataReleaseError(
+                    "DATA_RELEASE_ORIGINAL_INTEGRITY_UNAVAILABLE",
+                    "each issuer original requires one exact source integrity artifact",
+                )
+            integrity = matches[0]
+            verify_original_integrity(
+                original, integrity, parser_version=manifest.parser_version
+            )
+            if integrity.taxonomy_manifest_hash not in {
+                ref.content_hash for ref in manifest.taxonomy_refs
+            }:
+                raise DataReleaseError(
+                    "DATA_RELEASE_TAXONOMY_MANIFEST_UNAVAILABLE",
+                    "issuer release must retain its original taxonomy manifest",
+                )
+            verify_original_bytes(integrity, contents)
 
     def _verify_mappings(
         self, refs: tuple[MappingRefV1, ...]

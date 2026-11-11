@@ -33,7 +33,7 @@ from .facts import (
     FactSelection,
     select_fact_groups,
 )
-from .historical_dqc import historical_profile
+from .regulatory_validation import require_sec_validation_evidence
 from .issuer_identity import (
     ORIGINAL_IDENTITY_CONCEPTS,
     IdentityResolutionError,
@@ -313,7 +313,7 @@ class SecIngestionService:
                 source_content_hash=normalized_hash,
                 deadline_at=deadline_at,
             )
-            self._require_validation_evidence(report)
+            require_sec_validation_evidence(report)
             archive_report = report
             if assessment.relation == "normalized":
                 archive_report = parse_filing_offline(
@@ -324,7 +324,7 @@ class SecIngestionService:
                     source_content_hash=archive_member_hash,
                     deadline_at=deadline_at,
                 )
-                self._require_validation_evidence(archive_report)
+                require_sec_validation_evidence(archive_report)
                 if fact_semantic_digest(report) != fact_semantic_digest(
                     archive_report
                 ) or self._finding_signature(report) != self._finding_signature(
@@ -771,7 +771,7 @@ class SecIngestionService:
                 taxonomy_cache_dir=taxonomy_cache_dir,
                 source_content_hash=normalized_hash,
             )
-            self._require_validation_evidence(parser_report)
+            require_sec_validation_evidence(parser_report)
             archive_report = parser_report
             if assessment.relation == "normalized":
                 archive_report = parse_filing_offline(
@@ -781,7 +781,7 @@ class SecIngestionService:
                     taxonomy_cache_dir=taxonomy_cache_dir,
                     source_content_hash=archive_member_hash,
                 )
-                self._require_validation_evidence(archive_report)
+                require_sec_validation_evidence(archive_report)
                 if fact_semantic_digest(parser_report) != fact_semantic_digest(
                     archive_report
                 ) or self._finding_signature(parser_report) != self._finding_signature(
@@ -961,32 +961,3 @@ class SecIngestionService:
                 for item in report.findings
             )
         )
-
-    @staticmethod
-    def _require_validation_evidence(report: ArelleParseReportV1) -> None:
-        if report.validation_profile.validation_mode != "sec-efm-dqc":
-            raise SnapshotError(
-                "SEC_VALIDATION_REQUIRED",
-                "SEC parser report was not produced by sec-efm-dqc",
-            )
-        if not {"sec-efm", "dqc-us"}.issubset(report.validation_engines):
-            raise SnapshotError(
-                "VALIDATION_EVIDENCE_MISSING",
-                "SEC parser report lacks EFM/DQC engine evidence",
-            )
-        selected_historical = historical_profile(report.validation_profile.profile_id)
-        if not {
-            "strict-sec-efm-profile-selected",
-            selected_historical.completion_marker
-            if selected_historical is not None
-            else "dqc-dqcrt-checks-completed",
-        }.issubset(report.validation_evidence):
-            raise SnapshotError(
-                "VALIDATION_EVIDENCE_MISSING",
-                "SEC parser report lacks EFM/DQC completion evidence",
-            )
-        if report.network_attempt_count != 0:
-            raise SnapshotError(
-                "OFFLINE_NETWORK_ATTEMPT",
-                "SEC parser report records a network attempt",
-            )

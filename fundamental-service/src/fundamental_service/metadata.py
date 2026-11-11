@@ -46,6 +46,7 @@ from .facts import (
     canonical_fact_digest,
     resolve_canonical_facts,
 )
+from .original_issuer import IssuerOperatingSourceV1
 from .policies import ModelSpecV1, PolicyRecordV1
 from .replay import ArtifactPublicationV1, ArtifactRecordV1
 from .serialization import canonical_bytes, sha256_digest
@@ -1650,7 +1651,7 @@ class PostgresCanonicalFactRepository(CanonicalFactRepository):
     def resolve(
         self,
         *,
-        snapshot: SourceSnapshotV1,
+        snapshot: SourceSnapshotV1 | IssuerOperatingSourceV1,
         valuation_timestamp: datetime,
         required_fields: tuple[str, ...],
     ) -> tuple[CanonicalFactV1, ...]:

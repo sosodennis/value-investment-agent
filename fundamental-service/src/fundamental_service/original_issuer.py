@@ -11,7 +11,7 @@ from typing import Literal
 from pydantic import Field, JsonValue, field_serializer, model_validator
 
 from .arelle_parser import ArelleParseReportV1, fact_semantic_digest
-from .contracts import CanonicalFactV1, SourceSnapshotV1, StrictModel
+from .contracts import CanonicalFactV1, SourceRole, SourceSnapshotV1, StrictModel
 from .serialization import sha256_digest
 
 ORIGINAL_ISSUER_POLICY: Literal["original-issuer-operating-v1"] = (
@@ -51,6 +51,34 @@ class OriginalOperatingSourceV1(StrictModel):
     available_at: datetime
     captured_at: datetime
     http_status: int | None = Field(default=None, ge=100, le=599)
+
+    @property
+    def role(self) -> SourceRole:
+        return SourceRole.FILING
+
+    @property
+    def filed_at(self) -> datetime:
+        return self.available_at
+
+    @property
+    def filing_version(self) -> str:
+        return "original"
+
+    @property
+    def amends_accession(self) -> None:
+        return None
+
+    @property
+    def supersedes_accession(self) -> None:
+        return None
+
+    @property
+    def amendment_scope(self) -> None:
+        return None
+
+    @property
+    def terms_reference(self) -> None:
+        return None
 
     @model_validator(mode="after")
     def timestamps_are_aware(self) -> OriginalOperatingSourceV1:
@@ -401,3 +429,19 @@ def fact_matches_operating_identity(
             "unspecified",
         }
     return fact.security_id in {None, snapshot.identity.security_id}
+
+
+def fact_matches_original_source(
+    fact: CanonicalFactV1, snapshot: IssuerOperatingSourceV1
+) -> bool:
+    return any(
+        fact.source.content_hash == source.content_hash
+        and fact.accession_number == source.accession_number
+        and fact.source.accession_number == source.accession_number
+        and fact.source.source_url == source.uri
+        and fact.source.source_role is SourceRole.FILING
+        and fact.source.available_at == source.available_at
+        and fact.available_at == source.available_at
+        and not fact.is_amendment
+        for source in snapshot.source_records
+    )

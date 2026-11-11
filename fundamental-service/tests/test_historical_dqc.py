@@ -1,3 +1,4 @@
+from fundamental_service.regulatory_validation import require_sec_validation_evidence
 import hashlib
 import os
 import shutil
@@ -30,7 +31,6 @@ from fundamental_service.historical_dqc import (
     V3_PROFILE,
     execution_for,
 )
-from fundamental_service.ingestion import SecIngestionService
 from fundamental_service.snapshots import SnapshotError
 
 
@@ -107,13 +107,13 @@ def test_ingestion_requires_completion_evidence_for_the_selected_historical_engi
         ),
         parsed_at=datetime(2026, 11, 10, tzinfo=timezone.utc),
     )
-    SecIngestionService._require_validation_evidence(report)
+    require_sec_validation_evidence(report)
     for markers in (
         ("strict-sec-efm-profile-selected",),
         ("strict-sec-efm-profile-selected", "dqc-dqcrt-checks-completed"),
     ):
         with pytest.raises(SnapshotError) as error:
-            SecIngestionService._require_validation_evidence(
+            require_sec_validation_evidence(
                 report.model_copy(update={"validation_evidence": markers})
             )
         assert error.value.code == "VALIDATION_EVIDENCE_MISSING"
@@ -264,9 +264,9 @@ def test_v3_runs_all_eleven_official_hooks_and_requires_its_completion_marker(
         ),
         parsed_at=datetime(2026, 11, 11, tzinfo=timezone.utc),
     )
-    SecIngestionService._require_validation_evidence(report)
+    require_sec_validation_evidence(report)
     with pytest.raises(SnapshotError) as error:
-        SecIngestionService._require_validation_evidence(
+        require_sec_validation_evidence(
             report.model_copy(
                 update={
                     "validation_evidence": (
@@ -380,7 +380,7 @@ def test_original_historical_xml_replays_with_real_efm_and_official_dqc(
     assert all(report.network_attempt_count == 0 for report in reports)
     assert all(report.validation_engines == ("sec-efm", "dqc-us") for report in reports)
     for report in reports:
-        SecIngestionService._require_validation_evidence(report)
+        require_sec_validation_evidence(report)
     assert len(reports[0].facts) == 327
     original_cik = next(
         f for f in reports[0].facts if f.concept == "dei:EntityCentralIndexKey"

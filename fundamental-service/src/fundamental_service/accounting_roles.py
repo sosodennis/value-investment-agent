@@ -170,12 +170,10 @@ class AccountingPeriodRuleV1(RoleModel):
         return tuple(item.parsed_fact_digest for item in self.absence_passages)
 
 
-class AccountingRoleRuleSetV1(RoleModel):
-    protocol: Literal["sec-accounting-role-v1"] = "sec-accounting-role-v1"
+class _AccountingRoleRules(RoleModel):
     policy_version: str = Field(min_length=1)
     normalized_field: str = Field(min_length=1)
     issuer_id: str = Field(pattern=r"^\d{10}$")
-    security_id: str = Field(min_length=1)
     accession_number: str = Field(pattern=r"^\d{10}-\d{2}-\d{6}$")
     raw_content_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
     parser_input_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
@@ -185,7 +183,7 @@ class AccountingRoleRuleSetV1(RoleModel):
     periods: tuple[AccountingPeriodRuleV1, ...] = Field(min_length=1, max_length=6)
 
     @model_validator(mode="after")
-    def periods_are_distinct_and_ordered(self) -> AccountingRoleRuleSetV1:
+    def periods_are_distinct_and_ordered(self) -> _AccountingRoleRules:
         periods = tuple(sha256_digest(rule.period) for rule in self.periods)
         if len(set(periods)) != len(periods):
             raise ValueError("role rules must have distinct periods")
@@ -201,10 +199,23 @@ class AccountingRoleRuleSetV1(RoleModel):
         return self
 
 
+class AccountingRoleRuleSetV1(_AccountingRoleRules):
+    protocol: Literal["sec-accounting-role-v1"] = "sec-accounting-role-v1"
+    security_id: str = Field(min_length=1)
+
+
+class IssuerAccountingRoleRuleSetV1(_AccountingRoleRules):
+    protocol: Literal["sec-accounting-role-issuer-v1"] = "sec-accounting-role-issuer-v1"
+    security_id: None = None
+
+
+AccountingRoleRules = AccountingRoleRuleSetV1 | IssuerAccountingRoleRuleSetV1
+
+
 class AccountingRoleEvidenceV1(RoleModel):
     """A computed accounting value retains the exact observations it consumes."""
 
-    rule_set: AccountingRoleRuleSetV1
+    rule_set: AccountingRoleRules
     period_rule: AccountingPeriodRuleV1
     source_facts: tuple[ParsedXbrlFactV1, ...] = ()
     value: Decimal | None = None
@@ -224,7 +235,7 @@ class AccountingRoleEvidenceV1(RoleModel):
 
 
 def evaluate_period_rule(
-    rules: AccountingRoleRuleSetV1,
+    rules: AccountingRoleRules,
     rule: AccountingPeriodRuleV1,
     source_facts: tuple[ParsedXbrlFactV1, ...],
 ) -> Decimal | None:
@@ -248,6 +259,10 @@ def evaluate_period_rule(
             or fact.entity_identifier.lstrip("0") != rules.issuer_id.lstrip("0")
             or fact.dimensions
             or fact.consolidation_scope != "consolidated"
+            or (
+                isinstance(rules, IssuerAccountingRoleRuleSetV1)
+                and fact.security_scope not in {"issuer", "consolidated", "unspecified"}
+            )
         ):
             raise AccountingRoleError(
                 "ACCOUNTING_ROLE_SCOPE_MISMATCH",

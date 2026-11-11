@@ -114,6 +114,18 @@ class DataReleaseManifestV1(ReleaseModel):
         return self
 
 
+class IssuerOperatingReleaseManifestV1(DataReleaseManifestV1):
+    protocol: Literal["fundamental.issuer-operating-release.v1"] = (
+        "fundamental.issuer-operating-release.v1"
+    )
+    model_id: Literal["fcff_dcf", "transition_fcff_dcf"]
+    model_version: str = Field(min_length=1)
+    policy_id: str = Field(min_length=1)
+    policy_version: str = Field(min_length=1)
+    mapping_version: str = Field(min_length=1)
+    requirements_profile_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
 class MappingReviewEvidenceV1(ReleaseModel):
     mapping_id: str = Field(min_length=1)
     mapping_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
