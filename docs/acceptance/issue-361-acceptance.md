@@ -63,6 +63,35 @@ real-source numerical result and verifying service restart/restore/repeat remain
 implementation and acceptance work. Existing release signatures must not be
 bypassed to connect those steps.
 
+## Engineering Checkpoint: Retained SEC Originals
+
+Implementation commit `7e9a1f17723f0c8f3bf35fbe214c5ec7b6157ca6` adds
+cross-date reuse for exact accession-scoped SEC archive bytes. Each valuation
+timestamp and source profile still receives its own decision receipt; mutable
+submissions remain date-scoped. Latest-filing acquisition now retains the
+selected original package after accession selection. Interrupted publication
+recovers from the immutable archive receipt, and corrupt evidence fails closed.
+
+The checkpoint input digest is
+`6da1b6b8eaccd1ff2530bc4eb42e8423a8c66537892f4499adccc3c8da982906`; its
+output digest is
+`1ff1cc796ca37cd0deef315db154509230237e389f7f5e0aae4a75c9831072ca`. The
+tested runtime was Python 3.11.15, Arelle 2.47.4 and Pydantic 2.14.2 with
+`fundamental-service/uv.lock` SHA-256
+`57b9ea3f92002720d4bce735df3316df071479da4c0599a31ae914e9e6c32a18`.
+
+- `uv run --frozen --extra dev --project fundamental-service pytest -q fundamental-service/tests/test_sec_capture.py fundamental-service/tests/test_source_acquisition.py`: exit 0, 62 passed; output SHA-256 `de4248f2bff0b3dc39c1d9348cf7218dcc0c16425e82b7e73a03dd2f8990f91e`.
+- `uv run --frozen --extra dev --project fundamental-service pytest -q fundamental-service/tests`: exit 0, 449 passed and 28 skipped; output SHA-256 `667a1b9186a8fe4f6f3043ade1e130bdb0827d8850080958b787a59b44c882ef`.
+- `uvx --from ruff==0.14.10 ruff check fundamental-service` and changed-file `ruff format --check`: exit 0; combined output SHA-256 `c6486b51f483249343d4a4bdb91c41be31f0bdc28887b2f4cd4800e174f8bd6b`.
+- `MYPYPATH=finance-agent-core uv run --frozen --project fundamental-service --with mypy==1.19.1 mypy --no-incremental --follow-imports=silent --ignore-missing-imports fundamental-service/src/fundamental_service/sec_capture.py fundamental-service/src/fundamental_service/source_acquisition.py`: exit 0, no issues; output SHA-256 `f9b031e5c45aa702cd4fef028d465551cb20a2c4698e0913c7b00766b20ac4d8`.
+- `python3 scripts/architecture_guard.py`: exit 0; output SHA-256 `6c8e024ff94859e9781de1f4a3201c70e338bc90774702d8ac83afc8a9a15ab9`.
+- `git diff --check origin/main`: exit 0; output SHA-256 `1393aefd211f885a41b5b3a966b54c00f8d80989148cc9d6c51a2ebe869f5255`.
+
+This checkpoint covers source retention and acquisition retry behavior only. It
+does not satisfy any full-flow gate by itself; all 19
+`persistent-valuation-flow-v1` acceptance checks remain `not_run` until their
+complete behavior is exercised against the isolated service runtime.
+
 ## Research preservation and removal
 
 Baseline `59830e161c9300e44b2b7b54eea3e43567835bff` has tree
