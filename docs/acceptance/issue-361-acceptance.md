@@ -390,3 +390,17 @@ approval or numerical valuation. Complete accounting and dated market-policy
 evidence, actual review, caller approval and all 19 service gates remain required.
 The next step is the supported real-source review packet. PR #370 stays draft,
 #361/#381 stay open, and `supported_history_threshold` remains null.
+
+The follow-up source-bound review packet at exact evidence commit
+`1c9e14b7562a735fd255dc6fcbaeaec2b54ca9b9` retains related parsed observations
+from both validated originals for finance lease cost, contract assets, preferred
+claims, noncontrolling interests, convertibles, point-in-time dilution and other
+share classes. All seven remain `unknown`; related observations and missing
+tags establish neither complete numeric coverage nor economic absence.
+Input: `6703c7fbb6f6fa745123b885ed278d6e25e3d223e938e3599518252467054e0e`;
+output: `da7f96fd20be8d638f6c66299fee4a912de6a9a55ec8c92fda0cda5b69d448f7`.
+The repeat returned `wrote=false` and `input_wrote=false`, with no downloads.
+Full observations remain outside Git; their source, parser, script, runtime and
+artifact digests are in the compact accounting checkpoint. This tests the
+remaining evidence gap directly: transcription support cannot supply an
+undisclosed or unreviewed financial role. Current CI at `1c9e14b7` passed.
