@@ -436,5 +436,54 @@ input produced three result digests. This remains a determinism blocker despite
 the passing existing regression suite. Fix numeric-context ownership and resolve
 the canonical/deployed precision-policy drift before claiming full replay
 acceptance. Real-source role/policy review and all 19 service gates remain
-incomplete; #361 and the blockers stay open, PR #370 stays draft and thresholds
-remain null.
+incomplete at that checkpoint; #361 and the blockers stay open, PR #370 stays
+draft and thresholds remain null.
+
+## Fixed numeric context (#386)
+
+Implementation `07627d14984d758a5054057feba8ebafafd42cb2` removes the import-time
+Decimal mutation and runs existing Fundamental numeric boundaries in a fresh
+fixed context. This retains the model inventory's declared
+`decimal-50-end-of-year-v1` (50 digits, HALF_EVEN), including explicit exponent
+limits, traps and local restoration on both success and refusal. The target
+arithmetic table now records this V1 policy; a 34-digit policy would require a
+separate version and replay evidence. No existing artifact is rewritten.
+Prepared inputs identify `fcff-forecast-composer-v3`, so their caller approvals
+are bound to the corrected preparation version. Financial equations remain in
+the original composer/calculator. The challenger retains its independent
+equations and uses the declared numeric context for its comparisons.
+
+Against explicitly imported archived `1a4ca00f` source, 25 behavior tests fail;
+the new implementation passes all 26 numeric-context tests. The exact full
+regression passes **645 service tests / 11 optional runtime skips**, 10 Agent
+client tests and 17 acceptance-tool tests. Ruff/format, sixteen-source mypy,
+architecture, diff and contract generation pass; generation leaves the tracked
+tree unchanged. PostgreSQL tests execute low-precision/trapping restart and
+fresh-worker restore, preserving artifact bytes and no-write receipts.
+
+The deterministic engineering replay covers both models' prepared inputs and
+Monte Carlo reports in four caller contexts and two fresh worker threads. All
+six runs have one output digest. A second complete execution reuses the input,
+output and report (`wrote=false` for all three); artifact paths, sizes and
+modification times are unchanged. Direct calculation retains the released
+50-digit result hash. No source downloads occur in this synthetic probe.
+
+- Regression input: `a86be343957f4baf93818b7a554b6b54ad903c4e35a25b27b6b28206d56d579b`.
+- Regression output: `6094e535bf53e645e8aff11404ecd6a6bcdf49eef0b93d783177de71dcc951c9`.
+- Replay input: `74097ebf2c103e82dd3f34d132bf16af5e5e86814d4bdd110d22501cce6bb903`.
+- Replay output: `cfe1717966d95f4b63bbed97e69d1e9653e608215c03423fe9a74554224b903b`.
+- Replay report: `c80102252fc091bda693e29896a11c59c7d6be6f686ffa1b5cbab848cdf6d8f7`.
+
+[Exact implementation CI](https://github.com/sosodennis/value-investment-agent/actions/runs/43007596832)
+passes all 12 executed jobs; `fundamental-release-gate` is skipped. The dedicated
+`value-investment-agent-361-flow-tests` tmpfs database/container/network are
+removed; all 62 pre-existing containers retain their IDs, images and start times.
+Commands, output hashes, failure retention, runtime pins and per-model digests
+are recorded in `decimal_context_increment` of the accounting checkpoint. Full
+generated evidence remains outside Git.
+
+This resolves the reproduced numeric-context defect in engineering validation.
+It does not complete real-source numerical valuation, actual independent mapping
+review, dated market evidence, caller approval or all 19 full-service gates.
+Those remain the next work. #361/#385/#386 remain open until accepted delivery
+and merge/main verification; PR #370 remains draft and the history threshold null.
