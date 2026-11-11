@@ -186,13 +186,13 @@ def original_rebuilt_facts(
             fact.instant.isoformat() if fact.instant else "",
         )
         periods.setdefault(key, []).append(fact)
-    resolved = []
-    for key, candidates in sorted(periods.items()):
-        if not any(is_consolidated_fact(fact) for fact in candidates):
+    resolved: list[CanonicalFactV1] = []
+    for key, period_candidates in sorted(periods.items()):
+        if not any(is_consolidated_fact(fact) for fact in period_candidates):
             continue
         resolved.extend(
             resolve_canonical_facts(
-                candidates,
+                period_candidates,
                 snapshot=snapshot,
                 valuation_timestamp=snapshot.valuation_timestamp,
                 required_fields=(key[0],),
