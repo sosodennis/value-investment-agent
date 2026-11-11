@@ -42,6 +42,27 @@ The required manifest profile is `persistent-valuation-flow-v1`.
 checks cannot verify this scope. #369/#371 still limit requests that require
 unsupported historical evidence; #372 remains a separate legacy release gap.
 
+## Scope checkpoint
+
+[Checkpoint evidence](issue-361-scope-checkpoint.json) records exact commit
+`608a8eeb5e419968805db8beb166c84997e50574`, commands, exit codes, input/output
+digests, runtime pins and [CI](https://github.com/sosodennis/value-investment-agent/actions/runs/42964782635).
+CI passed 12 executed checks; its Fundamental suite passed 455 tests with 11
+environment-dependent skips. The legacy release job was skipped. The isolated
+`value-investment-agent-361-flow-tests` PostgreSQL regression passed all 17 tests.
+Its tmpfs-only database container and network were removed after verification;
+all 37 pre-existing container identities, image IDs and start times were unchanged.
+
+This checkpoint verifies scope separation and the remaining regression suite.
+It does not verify the complete valuation flow. At this commit,
+`FundamentalApplication.resolve_snapshot()` reads released snapshots and returns
+`SNAPSHOT_NOT_FOUND` on a miss; it does not initiate acquisition.
+`prepare_valuation()` requires a pinned release containing the selected snapshot
+and facts. Connecting a newly acquired snapshot to trusted preparation, proving a
+real-source numerical result and verifying service restart/restore/repeat remain
+implementation and acceptance work. Existing release signatures must not be
+bypassed to connect those steps.
+
 ## Research preservation and removal
 
 Baseline `59830e161c9300e44b2b7b54eea3e43567835bff` has tree
