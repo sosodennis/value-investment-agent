@@ -10,13 +10,19 @@ from typing import Literal
 
 from pydantic import Field, model_validator
 
-from .annual_history import AnnualHistoryV1, resolve_annual_history
+from .annual_history import (
+    AnnualHistoryPeriodV1,
+    AnnualHistoryV1,
+    resolve_annual_history,
+)
 from .contracts import (
     AssumptionsV1,
     CanonicalFactV1,
     CapitalBridgeAssumptionsV1,
+    FiscalPeriodV1,
     FiscalPeriodSelectorV1,
     ForecastAssumptionsV1,
+    ProvenanceInputV1,
     QualityInputV1,
     QualityStatus,
     SourceRole,
@@ -256,7 +262,7 @@ class ManualValuationOverrideRequestV1(StrictModel):
 
 def _metric(
     metric_id: str,
-    period,
+    period: AnnualHistoryPeriodV1,
     value: Decimal,
     formula: str,
     facts: Iterable[CanonicalFactV1],
@@ -296,7 +302,7 @@ def derive_historical_metrics(
     issue_codes = list(history.issue_codes)
     missing: list[str] = []
     for index, period in enumerate(history.periods):
-        fields = {
+        candidates = {
             field: period.fact(field)
             for field in (
                 "revenue",
@@ -313,21 +319,23 @@ def derive_historical_metrics(
                 "deferred_revenue",
             )
         }
-        absent = tuple(name for name, fact in fields.items() if fact is None)
+        absent = tuple(name for name, fact in candidates.items() if fact is None)
         if absent:
             missing.extend(f"{period.fiscal_year}:{name}" for name in absent)
             continue
-        assert all(fact is not None for fact in fields.values())
-        revenue = fields["revenue"].value
-        operating_income = fields["operating_income"].value
-        income_before_tax = fields["income_before_tax"].value
-        tax_expense = fields["income_tax_expense"].value
-        if not all(
-            isinstance(value, Decimal)
-            for value in (revenue, operating_income, income_before_tax, tax_expense)
-        ):
+        fields = {name: fact for name, fact in candidates.items() if fact is not None}
+        values = {
+            name: fact.value
+            for name, fact in fields.items()
+            if isinstance(fact.value, Decimal)
+        }
+        if len(values) != len(fields):
             issue_codes.append("METRIC_NON_NUMERIC_VALUE")
             continue
+        revenue = values["revenue"]
+        operating_income = values["operating_income"]
+        income_before_tax = values["income_before_tax"]
+        tax_expense = values["income_tax_expense"]
         if revenue <= _ZERO_TOLERANCE:
             issue_codes.append("METRIC_REVENUE_NON_POSITIVE")
             continue
@@ -376,28 +384,79 @@ def derive_historical_metrics(
         if previous_revenue.value <= _ZERO_TOLERANCE:
             issue_codes.append("METRIC_GROWTH_DENOMINATOR_UNSTABLE")
             continue
+        working_capital_fields = (
+            "operating_current_receivables",
+            "inventory",
+            "contract_assets",
+            "operating_current_payables",
+            "accrued_operating_liabilities",
+            "deferred_revenue",
+        )
+        previous_candidates = {
+            name: previous.fact(name) for name in working_capital_fields
+        }
+        absent_previous = tuple(
+            name for name, fact in previous_candidates.items() if fact is None
+        )
+        if absent_previous:
+            missing.extend(
+                f"{period.fiscal_year}:prior_{name}" for name in absent_previous
+            )
+            continue
+        previous_fields = {
+            name: fact for name, fact in previous_candidates.items() if fact is not None
+        }
+        previous_values = {
+            name: fact.value
+            for name, fact in previous_fields.items()
+            if isinstance(fact.value, Decimal)
+        }
+        if len(previous_values) != len(previous_fields):
+            issue_codes.append("METRIC_NON_NUMERIC_VALUE")
+            continue
         current_working_capital = (
-            fields["operating_current_receivables"].value
-            + fields["inventory"].value
-            + fields["contract_assets"].value
-            - fields["operating_current_payables"].value
-            - fields["accrued_operating_liabilities"].value
-            - fields["deferred_revenue"].value
+            values["operating_current_receivables"]
+            + values["inventory"]
+            + values["contract_assets"]
+            - values["operating_current_payables"]
+            - values["accrued_operating_liabilities"]
+            - values["deferred_revenue"]
         )
         previous_working_capital = (
-            previous.fact("operating_current_receivables").value
-            + previous.fact("inventory").value
-            + previous.fact("contract_assets").value
-            - previous.fact("operating_current_payables").value
-            - previous.fact("accrued_operating_liabilities").value
-            - previous.fact("deferred_revenue").value
+            previous_values["operating_current_receivables"]
+            + previous_values["inventory"]
+            + previous_values["contract_assets"]
+            - previous_values["operating_current_payables"]
+            - previous_values["accrued_operating_liabilities"]
+            - previous_values["deferred_revenue"]
         )
         delta_working_capital = current_working_capital - previous_working_capital
-        capex = fields["capital_expenditure"].value
-        depreciation = fields["depreciation_and_amortization"].value
+        capex = values["capital_expenditure"]
+        depreciation = values["depreciation_and_amortization"]
         if abs(nopat) <= _ZERO_TOLERANCE:
             issue_codes.append("METRIC_REINVESTMENT_DENOMINATOR_UNSTABLE")
             continue
+        net_reinvestment = capex - depreciation + delta_working_capital
+        realized_fact_candidates = (
+            fields["operating_income"],
+            fields["income_tax_expense"],
+            fields["income_before_tax"],
+            fields["capital_expenditure"],
+            fields["depreciation_and_amortization"],
+            fields["operating_current_receivables"],
+            fields["inventory"],
+            fields["contract_assets"],
+            fields["operating_current_payables"],
+            fields["accrued_operating_liabilities"],
+            fields["deferred_revenue"],
+            previous_fields["operating_current_receivables"],
+            previous_fields["inventory"],
+            previous_fields["contract_assets"],
+            previous_fields["operating_current_payables"],
+            previous_fields["accrued_operating_liabilities"],
+            previous_fields["deferred_revenue"],
+        )
+        realized_facts = realized_fact_candidates
         metrics.extend(
             (
                 _metric(
@@ -419,19 +478,19 @@ def derive_historical_metrics(
                         fields["operating_current_payables"],
                         fields["accrued_operating_liabilities"],
                         fields["deferred_revenue"],
-                        previous.fact("operating_current_receivables"),
-                        previous.fact("inventory"),
-                        previous.fact("contract_assets"),
-                        previous.fact("operating_current_payables"),
-                        previous.fact("accrued_operating_liabilities"),
-                        previous.fact("deferred_revenue"),
+                        previous_fields["operating_current_receivables"],
+                        previous_fields["inventory"],
+                        previous_fields["contract_assets"],
+                        previous_fields["operating_current_payables"],
+                        previous_fields["accrued_operating_liabilities"],
+                        previous_fields["deferred_revenue"],
                     ),
                     unit="currency",
                 ),
                 _metric(
                     "reinvestment_rate",
                     period,
-                    (capex - depreciation + delta_working_capital) / nopat,
+                    net_reinvestment / nopat,
                     (
                         "(capital_expenditure - depreciation_and_amortization + "
                         "delta_operating_working_capital) / nopat"
@@ -448,13 +507,21 @@ def derive_historical_metrics(
                         fields["operating_income"],
                         fields["income_tax_expense"],
                         fields["income_before_tax"],
-                        previous.fact("operating_current_receivables"),
-                        previous.fact("inventory"),
-                        previous.fact("contract_assets"),
-                        previous.fact("operating_current_payables"),
-                        previous.fact("accrued_operating_liabilities"),
-                        previous.fact("deferred_revenue"),
+                        previous_fields["operating_current_receivables"],
+                        previous_fields["inventory"],
+                        previous_fields["contract_assets"],
+                        previous_fields["operating_current_payables"],
+                        previous_fields["accrued_operating_liabilities"],
+                        previous_fields["deferred_revenue"],
                     ),
+                ),
+                _metric(
+                    "realized_fcff",
+                    period,
+                    nopat - net_reinvestment,
+                    "nopat - (capital_expenditure - depreciation_and_amortization + delta_operating_working_capital)",
+                    realized_facts,
+                    unit="currency",
                 ),
             )
         )
@@ -490,7 +557,9 @@ def _latest_fact(
     )
     if not matches:
         return None
-    latest_period = max(fact.instant for fact in matches)
+    latest_period = max(
+        instant for fact in matches if (instant := fact.instant) is not None
+    )
     period_matches = tuple(fact for fact in matches if fact.instant == latest_period)
     latest_available = max(fact.available_at for fact in period_matches)
     latest = tuple(
@@ -701,15 +770,17 @@ def apply_manual_override(
         "assumptions_evidence": updated_evidence,
         "input": updated_input,
     }
-    return AutomaticValuationPreparationV1(
-        **payload,
-        preparation_digest=sha256_digest(
-            {
-                **payload,
-                "automatic_preparation_digest": preparation.preparation_digest,
-                "manual_provenance": provenance,
-            }
-        ),
+    return AutomaticValuationPreparationV1.model_validate(
+        {
+            **payload,
+            "preparation_digest": sha256_digest(
+                {
+                    **payload,
+                    "automatic_preparation_digest": preparation.preparation_digest,
+                    "manual_provenance": provenance,
+                }
+            ),
+        }
     )
 
 
@@ -940,26 +1011,26 @@ def prepare_automatic_valuation(
         tax_rate = sum((item.value for item in tax_metrics), Decimal("0")) / Decimal(
             len(tax_metrics)
         )
-        wacc = WaccAssumptionsV1(
-            risk_free_rate=market_policy.risk_free_rate,
-            beta=market_policy.beta,
-            equity_risk_premium=market_policy.equity_risk_premium,
-            pre_tax_cost_of_debt=market_policy.pre_tax_cost_of_debt,
-            tax_rate=tax_rate,
-            debt_weight=market_policy.debt_weight,
-            equity_weight=market_policy.equity_weight,
+        wacc = WaccAssumptionsV1.model_validate(
+            {
+                "risk_free_rate": market_policy.risk_free_rate,
+                "beta": market_policy.beta,
+                "equity_risk_premium": market_policy.equity_risk_premium,
+                "pre_tax_cost_of_debt": market_policy.pre_tax_cost_of_debt,
+                "tax_rate": tax_rate,
+                "debt_weight": market_policy.debt_weight,
+                "equity_weight": market_policy.equity_weight,
+            }
         )
-        cost_of_equity = (
-            market_policy.risk_free_rate
-            + market_policy.beta * market_policy.equity_risk_premium
-        )
+        terminal_growth = market_policy.terminal_growth
+        if terminal_growth is None:
+            raise ValueError("terminal growth is required")
+        cost_of_equity = wacc.risk_free_rate + wacc.beta * wacc.equity_risk_premium
         weighted_average_cost = (
-            cost_of_equity * market_policy.equity_weight
-            + market_policy.pre_tax_cost_of_debt
-            * (Decimal("1") - tax_rate)
-            * market_policy.debt_weight
+            cost_of_equity * wacc.equity_weight
+            + wacc.pre_tax_cost_of_debt * (Decimal("1") - tax_rate) * wacc.debt_weight
         )
-        if market_policy.terminal_growth >= min(cost_of_equity, weighted_average_cost):
+        if terminal_growth >= min(cost_of_equity, weighted_average_cost):
             raise PreparationError(
                 "TERMINAL_GROWTH_NOT_BELOW_DISCOUNT_RATE",
                 "terminal growth must be below the applicable discount rates",
@@ -1000,7 +1071,7 @@ def prepare_automatic_valuation(
         ),
         _assumption_evidence(
             "assumptions.terminal_growth",
-            market_policy.terminal_growth,
+            terminal_growth,
             "approved_policy",
             "approved market/policy input",
             trace=market_policy.evidence["terminal_growth"],
@@ -1035,7 +1106,7 @@ def prepare_automatic_valuation(
         data_snapshot_id=snapshot.snapshot_id,
         fiscal_period_selector=FiscalPeriodSelectorV1(
             mode="explicit_periods",
-            periods=tuple({"fiscal_year": year} for year in history_years),
+            periods=tuple(FiscalPeriodV1(fiscal_year=year) for year in history_years),
         ),
         data_release_manifest_digest=data_release_manifest_digest,
         source_selection_policy=snapshot.policy_version,
@@ -1053,15 +1124,15 @@ def prepare_automatic_valuation(
             issue_codes=metrics.issue_codes,
             missing_evidence=metrics.missing_evidence,
         ),
-        provenance={
-            "snapshot_id": snapshot.snapshot_id,
-            "fact_ids": tuple(sorted(item.fact_id for item in selected.facts)),
-            "fiscal_period_selector": context.fiscal_period_selector,
-            "mapping_version": mapping_version,
-            "parser_version": snapshot.parser_version,
-            "taxonomy_version": snapshot.taxonomy_manifest_id or "sec-taxonomy-v1",
-            "policy_version": policy_version,
-        },
+        provenance=ProvenanceInputV1(
+            snapshot_id=snapshot.snapshot_id,
+            fact_ids=tuple(sorted(item.fact_id for item in selected.facts)),
+            fiscal_period_selector=context.fiscal_period_selector,
+            mapping_version=mapping_version,
+            parser_version=snapshot.parser_version,
+            taxonomy_version=snapshot.taxonomy_manifest_id or "sec-taxonomy-v1",
+            policy_version=policy_version,
+        ),
         model_id=model_id,
         model_version=model_version,
         policy_id=policy_id,
@@ -1300,26 +1371,35 @@ def _capital_bridge(
     policy_version: str,
 ) -> CapitalBridgeAssumptionsV1:
     _ = policy_version
-    values = _capital_bridge_facts(facts, snapshot=snapshot)
+    facts_by_field = _capital_bridge_facts(facts, snapshot=snapshot)
+    values = {
+        name: fact.value
+        for name, fact in facts_by_field.items()
+        if isinstance(fact.value, Decimal)
+    }
+    if len(values) != len(facts_by_field):
+        raise PreparationError(
+            "METRIC_NON_NUMERIC_VALUE", "capital bridge facts must be numeric"
+        )
     return CapitalBridgeAssumptionsV1(
-        cash=values["cash_and_equivalents"].value,
+        cash=values["cash_and_equivalents"],
         debt=(
-            values["current_interest_bearing_debt"].value
-            + values["long_term_interest_bearing_debt"].value
-            + values["convertible_instruments"].value
+            values["current_interest_bearing_debt"]
+            + values["long_term_interest_bearing_debt"]
+            + values["convertible_instruments"]
         ),
-        preferred_stock=values["preferred_claims"].value,
+        preferred_stock=values["preferred_claims"],
         lease_liabilities=(
-            values["current_operating_lease_liabilities"].value
-            + values["long_term_operating_lease_liabilities"].value
-            + values["current_finance_lease_liabilities"].value
-            + values["long_term_finance_lease_liabilities"].value
+            values["current_operating_lease_liabilities"]
+            + values["long_term_operating_lease_liabilities"]
+            + values["current_finance_lease_liabilities"]
+            + values["long_term_finance_lease_liabilities"]
         ),
-        non_controlling_interest=values["noncontrolling_interests"].value,
+        non_controlling_interest=values["noncontrolling_interests"],
         diluted_shares=(
-            values["common_shares_outstanding"].value
-            + values["dilutive_instruments"].value
-            + values["other_share_classes"].value
+            values["common_shares_outstanding"]
+            + values["dilutive_instruments"]
+            + values["other_share_classes"]
         ),
     )
 
@@ -1437,9 +1517,8 @@ def _blocked_preparation(
         "snapshot_manifest_digest": snapshot.manifest_digest,
         "fact_ids": tuple(sorted(fact.fact_id for fact in facts)),
     }
-    return AutomaticValuationPreparationV1(
-        **payload,
-        preparation_digest=sha256_digest(digest_payload),
+    return AutomaticValuationPreparationV1.model_validate(
+        {**payload, "preparation_digest": sha256_digest(digest_payload)}
     )
 
 

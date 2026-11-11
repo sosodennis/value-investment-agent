@@ -6,9 +6,13 @@ import json
 import re
 import time
 from collections.abc import Callable
+from contextlib import AbstractContextManager
 from dataclasses import dataclass, replace
 from datetime import date, datetime, timezone
+from email.message import Message
 from email.utils import parsedate_to_datetime
+from http.client import IncompleteRead
+from typing import Protocol
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
@@ -85,7 +89,16 @@ class _NoRedirectHandler(HTTPRedirectHandler):
 _SEC_OPENER = build_opener(_NoRedirectHandler())
 
 
-def _open_sec(request: Request, *, timeout: float) -> object:
+class _SecHttpResponse(Protocol):
+    headers: Message
+    status: int
+
+    def read(self, amt: int | None = None) -> bytes: ...
+
+
+def _open_sec(
+    request: Request, *, timeout: float
+) -> AbstractContextManager[_SecHttpResponse]:
     return _SEC_OPENER.open(request, timeout=timeout)
 
 
@@ -138,7 +151,7 @@ class SecEdgarSourceAdapter:
         self,
         policy: SecRequestPolicy,
         *,
-        opener: Callable[..., object] | None = None,
+        opener: Callable[..., AbstractContextManager[_SecHttpResponse]] | None = None,
         sleep: Callable[[float], None] = time.sleep,
         request_slot: Callable[[float], float] | None = None,
         clock: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
@@ -273,11 +286,11 @@ class SecEdgarSourceAdapter:
                         f"SEC request returned HTTP {error.code}",
                         retryable=retryable,
                     ) from error
-                delay = _parse_retry_after(error.headers.get("Retry-After"))
+                retry_after = _parse_retry_after(error.headers.get("Retry-After"))
                 self._sleep_with_deadline(
-                    delay if delay is not None else 2**attempt, deadline_at
+                    retry_after if retry_after is not None else 2**attempt, deadline_at
                 )
-            except (URLError, TimeoutError, OSError) as error:
+            except (URLError, TimeoutError, OSError, IncompleteRead) as error:
                 last_error = error
                 if attempt + 1 >= self.policy.max_attempts:
                     raise SecSourceError(

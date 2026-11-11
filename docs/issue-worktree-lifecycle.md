@@ -137,6 +137,38 @@ the PR head must descend from that commit and any later commits must change
 acceptance metadata only. A PR cannot use a closing keyword until that policy
 passes.
 
+For Fundamental service work with no application workflow, use acceptance
+schema version 2 with `acceptance_scope: fundamental-service`. This scope omits
+`runtime.app` and `runtime.browser_session`; it must not invent either value.
+The existing schema version 1 and the #351–#355 app/browser contracts remain
+required for those issues. #361 is gated by the service scope in the same
+required `contract-policy` job.
+
+The service tuple records ordered `env_files` with a SHA-256 for each file, the
+Fundamental image ID, installed package source digest and file count, Python/
+Arelle/Pydantic versions, required healthy services and ports, and project-owned
+networks and volumes. The same preflight entrypoint checks Git cleanliness and
+ancestry, each env digest, shell overrides, Compose configuration hashes against
+running containers, health, recorded host bindings, resource ownership, installed
+source equality to Git, runtime versions and `/readyz`. It starts only recorded
+services when `START_ACCEPTANCE_STACK=1`. Source or runtime drift fails before
+acceptance. A passing preflight establishes the runtime tuple; it does not
+establish replay acceptance or independent accounting review.
+
+```sh
+ACCEPTANCE_MANIFEST=docs/acceptance/issue-361-runtime.json \
+  scripts/acceptance_preflight.sh --report-directory /tmp/issue361-preflight
+```
+
+Service preflight reports use canonical JSON and content-addressed names. A
+repeat with the same tuple reuses existing bytes with `wrote=false`. Report
+writes use a temporary file and atomic rename. A VERIFIED #361 tuple requires
+passing mapping, history replay, forecast, label, deterministic replay, failure
+retention, architecture, lint, type, diff, service, full replay repeat and review
+checks, each bound to the exact implementation commit and input/output digests.
+Later #361 evidence commits may change only that issue's acceptance Markdown
+and JSON artifacts. Implementation changes require a new tested commit.
+
 Exact-commit mode rejects tracked changes and every untracked path by default. If a runtime-only override is required, list its exact relative path in `ALLOWED_UNTRACKED_PATHS` and record that path in the tuple. The override remains runtime input and is never evidence that the commit contains the configuration.
 
 Treat a changed Compose project, port, env-file, overlay, or browser session as a new runtime tuple. Open a fresh browser tab after that change and update the recorded URL; never reload a tab that still points at the old port.

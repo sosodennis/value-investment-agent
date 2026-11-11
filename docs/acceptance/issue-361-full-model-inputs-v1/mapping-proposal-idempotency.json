@@ -1,0 +1,49 @@
+{
+  "approved_mapping_count": 0,
+  "command": "UV_CACHE_DIR=/tmp/.uv-cache uv run --project fundamental-service python -m fundamental_service.history_mapping_proposals --review-manifest docs/acceptance/issue-361-full-model-inputs-v1/mapping_review/8b8513870f02c9522c52d4e1ac20ba93c551bb79fe3045eab956249d63cfd602.json.gz",
+  "confirmed_unchanged_issuer_artifacts": 100,
+  "implementation_commit": "5ef6d07fa10134d9248f50c05bc478d51b32a0fb",
+  "issue": 361,
+  "results": [
+    {
+      "command_result": "exit 0",
+      "commit_sha": "5ef6d07fa10134d9248f50c05bc478d51b32a0fb",
+      "input_digest": "8b8513870f02c9522c52d4e1ac20ba93c551bb79fe3045eab956249d63cfd602",
+      "issuer_artifacts_written": 100,
+      "manifest": {
+        "path": "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/docs/acceptance/issue-361-full-model-inputs-v1/mapping_proposals/760ba098cdac8aa52b07bdb8e51a564adf7056ce13fb14d2b46eb0c84fd5011d.json.gz",
+        "sha256": "760ba098cdac8aa52b07bdb8e51a564adf7056ce13fb14d2b46eb0c84fd5011d",
+        "wrote": true
+      },
+      "output_digest": "760ba098cdac8aa52b07bdb8e51a564adf7056ce13fb14d2b46eb0c84fd5011d",
+      "wrote": true
+    },
+    {
+      "command_result": "exit 0",
+      "commit_sha": "5ef6d07fa10134d9248f50c05bc478d51b32a0fb",
+      "input_digest": "8b8513870f02c9522c52d4e1ac20ba93c551bb79fe3045eab956249d63cfd602",
+      "issuer_artifacts_written": 0,
+      "manifest": {
+        "path": "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/docs/acceptance/issue-361-full-model-inputs-v1/mapping_proposals/760ba098cdac8aa52b07bdb8e51a564adf7056ce13fb14d2b46eb0c84fd5011d.json.gz",
+        "sha256": "760ba098cdac8aa52b07bdb8e51a564adf7056ce13fb14d2b46eb0c84fd5011d",
+        "wrote": false
+      },
+      "output_digest": "760ba098cdac8aa52b07bdb8e51a564adf7056ce13fb14d2b46eb0c84fd5011d",
+      "wrote": false
+    },
+    {
+      "command_result": "exit 0",
+      "commit_sha": "5ef6d07fa10134d9248f50c05bc478d51b32a0fb",
+      "input_digest": "8b8513870f02c9522c52d4e1ac20ba93c551bb79fe3045eab956249d63cfd602",
+      "issuer_artifacts_written": 0,
+      "manifest": {
+        "path": "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/docs/acceptance/issue-361-full-model-inputs-v1/mapping_proposals/760ba098cdac8aa52b07bdb8e51a564adf7056ce13fb14d2b46eb0c84fd5011d.json.gz",
+        "sha256": "760ba098cdac8aa52b07bdb8e51a564adf7056ce13fb14d2b46eb0c84fd5011d",
+        "wrote": false
+      },
+      "output_digest": "760ba098cdac8aa52b07bdb8e51a564adf7056ce13fb14d2b46eb0c84fd5011d",
+      "wrote": false
+    }
+  ],
+  "supported_history_threshold": null
+}

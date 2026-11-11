@@ -1,0 +1,97 @@
+{
+  "application_compose_project": null,
+  "application_reason": "service-only evidence preparation; no application or browser workflow in this checkpoint",
+  "branch": "codex/issue-361-replay-evidence",
+  "browser_session": null,
+  "checks": {
+    "changed_python_formats_passed": 44,
+    "changed_source_type_files_passed": 24,
+    "full_module_type_acceptance": false,
+    "identity_resolution_configured": true,
+    "image_source_equality": true,
+    "mypy_incremental": false,
+    "mypy_version": "1.19.1",
+    "offline_tests_passed": 476,
+    "offline_tests_skipped": 26,
+    "postgres_tests_passed": 17,
+    "ready": true,
+    "source_file_count": 53
+  },
+  "commands": {
+    "build": "docker compose --env-file .env --env-file .audit/issue-361-history-runtime/runtime.env -p value-investment-agent-361-replay-evidence -f compose/verification/docker-compose.issue280-operations.yml -f compose/verification/docker-compose.issue312-sec-ingestion.yml -f compose/verification/docker-compose.issue361-history-replay.yml build fundamental-service (exit0)",
+    "start": "docker compose --env-file .env --env-file .audit/issue-361-history-runtime/runtime.env -p value-investment-agent-361-replay-evidence -f compose/verification/docker-compose.issue280-operations.yml -f compose/verification/docker-compose.issue312-sec-ingestion.yml -f compose/verification/docker-compose.issue361-history-replay.yml up -d --no-deps fundamental-service (exit0)",
+    "validation": "see issue-361-historical-identity-v1 report and retained exact commands"
+  },
+  "compose_files": [
+    "compose/verification/docker-compose.issue280-operations.yml",
+    "compose/verification/docker-compose.issue312-sec-ingestion.yml",
+    "compose/verification/docker-compose.issue361-history-replay.yml"
+  ],
+  "compose_project": "value-investment-agent-361-replay-evidence",
+  "container_runtime_pins": {
+    "arelle": "2.47.4",
+    "pydantic": "2.14.2",
+    "python": "3.12.16"
+  },
+  "env_file": "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/.env",
+  "env_file_sha256": "610964e8e6b3f8bdd8d1cfcbc022a2fded6f0cc67fe88c579018782371996c3e",
+  "env_files": [
+    {
+      "path": "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/.env",
+      "sha256": "610964e8e6b3f8bdd8d1cfcbc022a2fded6f0cc67fe88c579018782371996c3e"
+    },
+    {
+      "path": "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/.audit/issue-361-history-runtime/runtime.env",
+      "sha256": "2fc2bbb41743368769b6a4b821d8ee8e233cb285ff0c68d61ab0ad9d4dc29a4f"
+    }
+  ],
+  "full_replay": false,
+  "fundamental_url": "http://127.0.0.1:18661",
+  "historical_taxonomy_certified": false,
+  "image_id": "sha256:2322874f77b35f970e18b59faea9517a1f0328a8a3e77bd221c6795e0be3696f",
+  "implementation_commit": "531c9e76ffb2b00f1d1a902af883af658db5b5dd",
+  "issue": 361,
+  "matched_python_file_count": 53,
+  "network": "value-investment-agent-361-replay-evidence_default",
+  "original_source_docker_repeat": {
+    "database_row_deltas": {
+      "artifact_references": 0,
+      "canonical_facts": 0,
+      "content_objects": 0,
+      "data_release_manifests": 0,
+      "sec_ingestion_acquisitions": 0,
+      "snapshot_manifests": 0
+    },
+    "existing_mtimes_unchanged": true,
+    "input_digest": "64de61ab86c1ac19b8b18f531fd1d591d4340c7bd69ffedb7dc671d3b2241374",
+    "output_digest": "0c7a0a1b211ede9dcaebce27a7705c4f9ff0dc49fbeb6b20c6c87ac3aebd6fb4",
+    "second_network_download_count": 0,
+    "second_new_file_count": 0,
+    "second_provider_original_read_count": 0,
+    "second_wrote": false
+  },
+  "original_source_rejection": "DQC.US.0015.2098; no canonical publication",
+  "preflight": "service-only direct Compose/source/readiness verification; application preflight not applicable and not claimed",
+  "published_ports": {
+    "fundamental-postgres": 18662,
+    "fundamental-service": 18661
+  },
+  "python_source_tree_digest": "2f996514b5b5f9dcdb6f1a46594804db091e959953cbd26e7fec6d4c976fd0fd",
+  "readiness": {
+    "capabilities": {
+      "identity_resolution_configured": true
+    },
+    "contract_version": "internal.v1",
+    "status": "ready"
+  },
+  "status": "PARTIAL_NOT_REPLAY_ACCEPTANCE",
+  "verification_input_digest": "64de61ab86c1ac19b8b18f531fd1d591d4340c7bd69ffedb7dc671d3b2241374",
+  "verification_output_digest": "0c7a0a1b211ede9dcaebce27a7705c4f9ff0dc49fbeb6b20c6c87ac3aebd6fb4",
+  "verification_report_digest": "a516f9dbc25cd02f349311328d294f4d65ea723b0d7bb9c83b641add5177587e",
+  "verified_source_commit": "531c9e76ffb2b00f1d1a902af883af658db5b5dd",
+  "volumes": [
+    "value-investment-agent-361-replay-evidence_fundamental-postgres-data",
+    "value-investment-agent-361-replay-evidence_fundamental-service-data"
+  ],
+  "worktree": "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence"
+}

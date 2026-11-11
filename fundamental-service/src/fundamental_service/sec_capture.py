@@ -1,0 +1,153 @@
+"""Durable original SEC responses scoped to a pinned historical acquisition."""
+
+from __future__ import annotations
+
+import hashlib
+from collections.abc import Callable
+from contextlib import AbstractContextManager
+from datetime import UTC, datetime
+from typing import Literal, Protocol
+
+from pydantic import AwareDatetime, Field
+
+from .contracts import StrictModel
+from .replay import ArtifactRecordV1
+from .sec_source import SecEdgarSourceAdapter, SecSourceError, _SecResponse
+from .serialization import sha256_digest
+from .snapshots import ContentAddressedStore, SnapshotError
+
+
+class SecCaptureScopeV1(StrictModel):
+    cik: str = Field(pattern=r"^\d{10}$")
+    accession_number: str = Field(pattern=r"^\d{10}-\d{2}-\d{6}$")
+    valuation_timestamp: AwareDatetime
+    source_profile: str = Field(min_length=1)
+
+
+class SecResponseReceiptV1(StrictModel):
+    schema_version: Literal["sec-response-receipt.v1"] = "sec-response-receipt.v1"
+    scope: SecCaptureScopeV1
+    uri: str
+    content_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    http_status: int = Field(ge=200, lt=300)
+    media_type: str
+    captured_at: AwareDatetime
+    response_headers: tuple[tuple[str, str], ...]
+    declared_size: int | None = Field(default=None, ge=0)
+    received_size: int = Field(ge=0)
+
+
+class SecCaptureStore(Protocol):
+    def get(self, artifact_id: str) -> ArtifactRecordV1: ...
+
+    def read(self, artifact_id: str) -> bytes: ...
+
+    def put(
+        self,
+        artifact_id: str,
+        value: object,
+        dependency_hashes: tuple[str, ...] = (),
+        *,
+        media_type: str = "application/json",
+        retention: Literal["evidence", "operational_cache"] = "evidence",
+    ) -> ArtifactRecordV1: ...
+
+
+class RetainedSecSourceAdapter(SecEdgarSourceAdapter):
+    """Reuse exact original receipts before provider I/O, including after failure."""
+
+    def __init__(
+        self,
+        delegate: SecEdgarSourceAdapter,
+        *,
+        scope: SecCaptureScopeV1,
+        receipts: SecCaptureStore,
+        content: ContentAddressedStore,
+        capture_lock: Callable[[str], AbstractContextManager[None]],
+    ) -> None:
+        super().__init__(delegate.policy)
+        self._delegate = delegate
+        self.scope = scope
+        self._receipts = receipts
+        self._content = content
+        self._capture_lock = capture_lock
+
+    def _request(
+        self, uri: str, *, deadline_at: datetime | None = None
+    ) -> _SecResponse:
+        if deadline_at is not None and deadline_at <= datetime.now(UTC):
+            raise SecSourceError(
+                "REQUEST_DEADLINE_EXCEEDED",
+                "SEC acquisition deadline expired",
+                retryable=True,
+            )
+        key = sha256_digest(
+            {"protocol": "sec-response-receipt.v1", "scope": self.scope, "uri": uri}
+        )
+        artifact_id = f"sec-response:{key}"
+        with self._capture_lock(key):
+            try:
+                record = self._receipts.get(artifact_id)
+            except SnapshotError as error:
+                if error.code != "ARTIFACT_NOT_FOUND":
+                    raise
+            else:
+                if record.status != "valid" or record.retention != "evidence":
+                    raise SnapshotError(
+                        "SEC_CAPTURE_INVALID",
+                        "retained SEC receipt is not valid evidence",
+                    )
+                try:
+                    receipt = SecResponseReceiptV1.model_validate_json(
+                        self._receipts.read(artifact_id)
+                    )
+                except ValueError as error:
+                    raise SnapshotError(
+                        "SEC_CAPTURE_INVALID", "retained SEC receipt is invalid"
+                    ) from error
+                if receipt.scope != self.scope or receipt.uri != uri:
+                    raise SnapshotError(
+                        "SEC_CAPTURE_IDENTITY_MISMATCH",
+                        "retained SEC receipt differs from its key",
+                    )
+                payload = self._content.get(
+                    receipt.content_hash,
+                    media_type=receipt.media_type or "application/octet-stream",
+                )
+                if (
+                    len(payload) != receipt.received_size
+                    or hashlib.sha256(payload).hexdigest() != receipt.content_hash
+                ):
+                    raise SnapshotError(
+                        "SEC_CAPTURE_HASH_MISMATCH",
+                        "retained SEC response failed verification",
+                    )
+                return _SecResponse(
+                    content=payload,
+                    http_status=receipt.http_status,
+                    media_type=receipt.media_type,
+                    available_at=receipt.captured_at,
+                    response_headers=receipt.response_headers,
+                    declared_size=receipt.declared_size,
+                )
+            response = self._delegate._request(uri, deadline_at=deadline_at)
+            media_type = response.media_type or "application/octet-stream"
+            content_hash = self._content.put(response.content, media_type=media_type)
+            if content_hash != hashlib.sha256(response.content).hexdigest():
+                raise SnapshotError(
+                    "SEC_CAPTURE_HASH_MISMATCH",
+                    "SEC response store returned a different digest",
+                )
+            receipt = SecResponseReceiptV1(
+                scope=self.scope,
+                uri=uri,
+                content_hash=content_hash,
+                http_status=response.http_status,
+                media_type=response.media_type,
+                captured_at=response.available_at,
+                response_headers=response.response_headers,
+                declared_size=response.declared_size,
+                received_size=len(response.content),
+            )
+            self._receipts.put(artifact_id, receipt, (content_hash,))
+            return response

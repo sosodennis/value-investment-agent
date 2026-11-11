@@ -1,7 +1,7 @@
 import hashlib
 import json
 import os
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from email.message import Message
 from io import BytesIO
 from pathlib import Path
@@ -15,7 +15,8 @@ from fundamental_service.arelle_parser import (
     ParsedXbrlFactV1,
     _directory_hash,
 )
-from fundamental_service.contracts import IdentityV1, Severity
+from fundamental_service.contracts import IdentityV1, Severity, SecIntegrityEvidenceV1
+from fundamental_service.historical_dqc import V1_PROFILE, V3_PROFILE
 from fundamental_service.facts import (
     CanonicalMappingV1,
     FilesystemCanonicalFactRepository,
@@ -77,9 +78,13 @@ def test_sec_xbrl_archive_rejects_missing_or_duplicate_required_members():
         )
 
 
+@pytest.mark.parametrize(
+    "historical", (None, V1_PROFILE, V3_PROFILE), ids=("modern", "v1", "v3")
+)
 def test_sec_ingestion_connects_adapter_snapshot_parser_and_fact_selection(
     tmp_path: Path,
     monkeypatch,
+    historical,
 ):
     fixture_root = Path(__file__).parent / "fixtures" / "sec-edgar"
     direct_filing_bytes = (
@@ -126,7 +131,10 @@ def test_sec_ingestion_connects_adapter_snapshot_parser_and_fact_selection(
     ruleset = tmp_path / "dqc-ruleset.zip"
     ruleset.write_bytes(b"pinned-dqc")
     profile = ArelleValidationProfileV1(
-        profile_id="sec-efm-dqc-fixture-v1",
+        profile_id=historical.profile_id if historical else "sec-efm-dqc-fixture-v1",
+        dqc_version=historical.dqc_version if historical else "v31.0.3",
+        historical_dqc_dir=tmp_path if historical else None,
+        historical_dqc_sha256=historical.source_sha256 if historical else None,
         validation_mode="sec-efm-dqc",
         edgar_plugin_dir=edgar_dir,
         xule_plugin_dir=xule_dir,
@@ -153,10 +161,12 @@ def test_sec_ingestion_connects_adapter_snapshot_parser_and_fact_selection(
         )
         fact = ParsedXbrlFactV1(
             concept="us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
+            namespace_uri="http://fasb.org/us-gaap/2024",
             value=value,
             context_id="ctx-revenue",
             unit="iso4217:USD",
             entity_identifier="0000320193",
+            entity_scheme="http://www.sec.gov/CIK",
             period_start=datetime(2023, 9, 30, tzinfo=timezone.utc).date(),
             period_end=datetime(2024, 9, 28, tzinfo=timezone.utc).date(),
             is_numeric=True,
@@ -165,9 +175,10 @@ def test_sec_ingestion_connects_adapter_snapshot_parser_and_fact_selection(
         finding = (
             (
                 ArelleFindingV1(
-                    code="EFM.blockingFixture",
-                    severity="error",
-                    message="fixture blocking EFM finding",
+                    code="DQC.US.0015.2098",
+                    severity="warning",
+                    rule_severity="error",
+                    message="fixture official DQC error demoted by EDGAR",
                 ),
             )
             if parser_state["blocking"]
@@ -185,7 +196,9 @@ def test_sec_ingestion_connects_adapter_snapshot_parser_and_fact_selection(
             validation_engines=("sec-efm", "dqc-us"),
             validation_evidence=(
                 "strict-sec-efm-profile-selected",
-                "dqc-dqcrt-checks-completed",
+                historical.completion_marker
+                if historical
+                else "dqc-dqcrt-checks-completed",
             ),
             parsed_at=datetime(2026, 11, 4, tzinfo=timezone.utc),
             source_content_hash=source_content_hash,
@@ -299,6 +312,21 @@ def test_sec_ingestion_connects_adapter_snapshot_parser_and_fact_selection(
     replay = service.ingest_filing(**ingestion_args)
     assert replay.snapshot.manifest_digest == result.snapshot.manifest_digest
     assert replay.integrity_evidence == result.integrity_evidence
+    expected_marker = (
+        historical.completion_marker if historical else "dqc-dqcrt-checks-completed"
+    )
+    for marker in (
+        V1_PROFILE.completion_marker,
+        V3_PROFILE.completion_marker,
+        "dqc-dqcrt-checks-completed",
+        "dqc-not-completed",
+    ):
+        if marker == expected_marker:
+            continue
+        payload = result.integrity_evidence.model_dump()
+        payload["validation_evidence"] = ("strict-sec-efm-profile-selected", marker)
+        with pytest.raises(ValueError, match="requires EFM and DQC evidence"):
+            SecIntegrityEvidenceV1.model_validate(payload)
 
     rejected_repository = FilesystemSnapshotRepository(tmp_path / "rejected-snapshots")
     rejected_service = SecIngestionService(
@@ -324,6 +352,16 @@ def test_sec_ingestion_connects_adapter_snapshot_parser_and_fact_selection(
     with pytest.raises(SnapshotError) as blocking_error:
         rejected_service.ingest_filing(**ingestion_args)
     assert blocking_error.value.code == "PARSER_VALIDATION_BLOCKED"
+    assert blocking_error.value.evidence_ref is not None
+    rejection = json.loads(audit_store.read(blocking_error.value.evidence_ref))
+    assert rejection["integrity_evidence"]["findings"] == [
+        {
+            "code": "DQC.US.0015.2098",
+            "severity": "warning",
+            "rule_severity": "error",
+            "blocks": True,
+        }
+    ]
     with pytest.raises(SnapshotError) as blocking_retry_error:
         rejected_service.ingest_filing(**ingestion_args)
     assert blocking_retry_error.value.code == blocking_error.value.code
@@ -364,6 +402,87 @@ def test_sec_ingestion_connects_adapter_snapshot_parser_and_fact_selection(
     )
     assert missing_field_result.missing_fields == ("cash_and_equivalents",)
     assert missing_field_issue.severity is Severity.ERROR
+
+    historical_args = {
+        **prepare_args,
+        "identity_basis": "original-filing-dei-v1",
+        "identity_ticker": "AAPL",
+        "accepted_at": ingestion_args["filed_at"],
+    }
+    rejected_service = SecIngestionService(
+        source_adapter=adapter,
+        content_store=content_store,
+        snapshot_repository=rejected_repository,
+        audit_store=audit_store,
+    )
+    with pytest.raises(SnapshotError) as identity_error:
+        rejected_service.prepare_filing(**historical_args)
+    assert identity_error.value.code == "HISTORICAL_IDENTITY_MISSING"
+    assert identity_error.value.evidence_ref
+    evidence = json.loads(audit_store.read(identity_error.value.evidence_ref))
+    assert evidence["identity_basis"] == "original-filing-dei-v1"
+    assert evidence["outcome"] == "refused"
+    assert evidence["source_hash"] == hashlib.sha256(filing_bytes).hexdigest()
+    assert evidence["current_ticker_or_survival_data_used"] is False
+    assert evidence["facts"] == []
+    before = {p: p.stat().st_mtime_ns for p in tmp_path.rglob("*") if p.is_file()}
+    with pytest.raises(SnapshotError) as retry_error:
+        rejected_service.prepare_filing(**historical_args)
+    assert retry_error.value.evidence_ref == identity_error.value.evidence_ref
+    assert before == {
+        p: p.stat().st_mtime_ns for p in tmp_path.rglob("*") if p.is_file()
+    }
+    assert not rejected_repository.find(
+        identity=ingestion_args["identity"],
+        valuation_timestamp=ingestion_args["valuation_timestamp"],
+    )
+
+    original_values = {
+        "EntityCentralIndexKey": "0000320193",
+        "EntityRegistrantName": "Apple Inc.",
+        "EntityIncorporationStateCountryCode": "CA",
+        "DocumentType": "10-K",
+        "DocumentPeriodEndDate": "2024-09-28",
+        "TradingSymbol": "AAPL",
+        "Security12bTitle": "Common Stock",
+    }
+
+    def identity_parser(path, **kwargs):
+        report = fake_parser(path, **kwargs)
+        identity_facts = tuple(
+            ParsedXbrlFactV1(
+                concept=f"dei:{name}",
+                namespace_uri="http://xbrl.sec.gov/dei/2024",
+                value=value,
+                context_id="original-annual",
+                entity_scheme="http://www.sec.gov/CIK",
+                entity_identifier="0000320193",
+                period_start=date(2023, 10, 1),
+                period_end=date(2024, 9, 28),
+            )
+            for name, value in original_values.items()
+        )
+        return report.model_copy(update={"facts": (*report.facts, *identity_facts)})
+
+    monkeypatch.setattr(
+        "fundamental_service.ingestion.parse_filing_offline", identity_parser
+    )
+    historical_args["identity"] = historical_args["identity"].model_copy(
+        update={"share_class": "Common Stock"}
+    )
+    matched = rejected_service.prepare_filing(**historical_args)
+    assert matched.identity_evidence_ref
+    proof = json.loads(audit_store.read(matched.identity_evidence_ref))
+    assert proof["outcome"] == "matched"
+    assert proof["error_code"] is None
+    assert len(proof["facts"]) == 7
+    before = {p: p.stat().st_mtime_ns for p in tmp_path.rglob("*") if p.is_file()}
+    repeated = rejected_service.prepare_filing(**historical_args)
+    assert repeated.identity_evidence_ref == matched.identity_evidence_ref
+    assert repeated.snapshot.manifest_digest == matched.snapshot.manifest_digest
+    assert before == {
+        p: p.stat().st_mtime_ns for p in tmp_path.rglob("*") if p.is_file()
+    }
 
 
 def test_sec_ingestion_publishes_aapl_with_archived_graphics_staged_offline(

@@ -10,7 +10,9 @@ import posixpath
 import re
 import stat
 from dataclasses import dataclass
+from typing import Literal
 from urllib.parse import unquote, urlsplit
+from xml.etree import ElementTree
 from zipfile import BadZipFile, ZipFile, ZipInfo
 
 from .contracts import RemovedByteRangeV1
@@ -29,6 +31,39 @@ _NORMALIZATION_RULE = (
     "the exact archive member independently prove the representation delta"
 )
 _MAX_STAGED_GRAPHICS_BYTES = 32 * 1024 * 1024
+_XML_LINE_END_POLICY_ID = "sec-edgar-xbrl-xml10-line-ends-v1"
+_XML_LINE_END_RULE = (
+    "reconstruct the original archive XML 1.0 XBRL instance from its direct LF "
+    "representation only when replacing archive CRLF pairs with LF reproduces "
+    "the exact direct response and its indexed size; insert CR bytes only; "
+    "preserve all original bytes and validate the reconstructed archive instance"
+)
+_XML_FINAL_LF_POLICY_ID = "sec-edgar-xbrl-xml10-terminal-lf-v1"
+_XML_FINAL_LF_RULE = (
+    "remove exactly one direct-response terminal LF after an XML 1.0 XBRL "
+    "closing element only when the SEC index confirms the full direct size "
+    "and the remaining bytes equal the accession-matched ZIP member exactly; "
+    "preserve both representations and validate the unchanged archive instance"
+)
+_XML_COMBINED_LF_POLICY_ID = "sec-edgar-xbrl-xml10-line-ends-terminal-lf-v1"
+_XML_COMBINED_LF_RULE = (
+    "reconstruct the unchanged accession-matched archive XML 1.0 XBRL instance "
+    "only when replacing its CRLF pairs with LF and appending exactly one LF "
+    "after its closing root reproduces every indexed direct-response byte; "
+    "retain both representations, the removed LF offset and inserted CR count"
+)
+
+
+def _is_xml10_xbrl(content: bytes) -> bool:
+    if not re.match(rb"<\?xml\s+version\s*=\s*(['\"])1\.0\1(?:\s|\?>)", content):
+        return False
+    if b"<!DOCTYPE" in content:
+        return False
+    try:
+        root = next(ElementTree.iterparse(io.BytesIO(content), events=("start",)))[1]
+    except (ElementTree.ParseError, StopIteration):
+        return False
+    return root.tag == "{http://www.xbrl.org/2003/instance}xbrl"
 
 
 class _ImageSourceParser(HTMLParser):
@@ -134,9 +169,9 @@ def extract_referenced_graphics(
 
 @dataclass(frozen=True)
 class SecIntegrityAssessment:
-    relation: str
+    relation: Literal["exact", "normalized"]
     normalized_content: bytes
-    archive_index_entry: dict[str, object]
+    declared_primary_size: int
     archive_member_name: str
     archive_member: bytes
     raw_content_hash: str
@@ -162,11 +197,10 @@ def assess_filing_response(
 ) -> SecIntegrityAssessment:
     """Match raw response, SEC archive index, and XBRL ZIP member.
 
-    Normalization is limited to a single terminal Akamai script and a final
-    terminal script and final LF. The closing tags may use the exact line break
-    present in the canonical archive member. The removal must produce the
-    accession index's declared size and exact archive member bytes. Every other
-    mismatch is a blocking error.
+    Versioned rules cover a terminal Akamai script/final LF and the exact
+    XML 1.0 CRLF/LF, terminal LF and their exact combined representation
+    differences. They reconstruct the original accession-matched archive bytes.
+    Every other mismatch blocks.
     """
     try:
         index_data = json.loads(archive_index.content)
@@ -246,6 +280,103 @@ def assess_filing_response(
     archive_hash = _digest(archive.content)
     member_hash = _digest(member)
     index_hash = _digest(archive_index.content)
+    if (
+        primary_name.endswith(".xml")
+        and len(raw) == declared_size
+        and raw == member + b"\n"
+        and re.search(rb"</(?:[A-Za-z_][A-Za-z0-9_.-]*:)?xbrl>$", member)
+        and _is_xml10_xbrl(member)
+    ):
+        return SecIntegrityAssessment(
+            relation="normalized",
+            normalized_content=member,
+            declared_primary_size=declared_size,
+            archive_member_name=member_name,
+            archive_member=member,
+            raw_content_hash=raw_hash,
+            archive_index_hash=index_hash,
+            archive_hash=archive_hash,
+            archive_member_hash=member_hash,
+            normalized_content_hash=member_hash,
+            removed_ranges=(
+                RemovedByteRangeV1(
+                    start=len(member), end=len(raw), content_hash=_digest(b"\n")
+                ),
+            ),
+            normalization_policy_id=_XML_FINAL_LF_POLICY_ID,
+            normalization_rule_signature=sha256_digest(
+                {
+                    "policy_id": _XML_FINAL_LF_POLICY_ID,
+                    "rule": _XML_FINAL_LF_RULE,
+                    "accession": expected_accession,
+                    "primary_document": primary_name,
+                    "declared_size": declared_size,
+                    "raw_content_hash": raw_hash,
+                    "archive_index_hash": index_hash,
+                    "archive_hash": archive_hash,
+                    "archive_member_hash": member_hash,
+                    "removed_lf_offset": len(member),
+                }
+            ),
+            normalization_reason=_XML_FINAL_LF_RULE,
+        )
+    line_ended_member = member.replace(b"\r\n", b"\n")
+    combined_lf = (
+        raw == line_ended_member + b"\n"
+        and re.search(rb"</(?:[A-Za-z_][A-Za-z0-9_.-]*:)?xbrl>$", member) is not None
+    )
+    if (
+        primary_name.endswith(".xml")
+        and len(raw) == declared_size
+        and b"\r\n" in member
+        and b"\r" not in raw
+        and (raw == line_ended_member or combined_lf)
+        and _is_xml10_xbrl(raw)
+    ):
+        policy_id = (
+            _XML_COMBINED_LF_POLICY_ID if combined_lf else _XML_LINE_END_POLICY_ID
+        )
+        rule = _XML_COMBINED_LF_RULE if combined_lf else _XML_LINE_END_RULE
+        return SecIntegrityAssessment(
+            relation="normalized",
+            normalized_content=member,
+            declared_primary_size=declared_size,
+            archive_member_name=member_name,
+            archive_member=member,
+            raw_content_hash=raw_hash,
+            archive_index_hash=index_hash,
+            archive_hash=archive_hash,
+            archive_member_hash=member_hash,
+            normalized_content_hash=member_hash,
+            removed_ranges=(
+                (
+                    RemovedByteRangeV1(
+                        start=len(raw) - 1,
+                        end=len(raw),
+                        content_hash=_digest(b"\n"),
+                    ),
+                )
+                if combined_lf
+                else ()
+            ),
+            normalization_policy_id=policy_id,
+            normalization_rule_signature=sha256_digest(
+                {
+                    "policy_id": policy_id,
+                    "rule": rule,
+                    "accession": expected_accession,
+                    "primary_document": primary_name,
+                    "declared_size": declared_size,
+                    "raw_content_hash": raw_hash,
+                    "archive_index_hash": index_hash,
+                    "archive_hash": archive_hash,
+                    "archive_member_hash": member_hash,
+                    "inserted_cr_count": member.count(b"\r\n"),
+                    **({"removed_lf_offset": len(raw) - 1} if combined_lf else {}),
+                }
+            ),
+            normalization_reason=rule,
+        )
     if len(member) > declared_size or declared_size - len(member) > 1:
         raise SnapshotError(
             "SOURCE_ARCHIVE_SIZE_MISMATCH",
@@ -260,7 +391,7 @@ def assess_filing_response(
         return SecIntegrityAssessment(
             relation="exact",
             normalized_content=raw,
-            archive_index_entry=entry,
+            declared_primary_size=declared_size,
             archive_member_name=member_name,
             archive_member=member,
             raw_content_hash=raw_hash,
@@ -328,7 +459,7 @@ def assess_filing_response(
     return SecIntegrityAssessment(
         relation="normalized",
         normalized_content=normalized,
-        archive_index_entry=entry,
+        declared_primary_size=declared_size,
         archive_member_name=member_name,
         archive_member=member,
         raw_content_hash=raw_hash,

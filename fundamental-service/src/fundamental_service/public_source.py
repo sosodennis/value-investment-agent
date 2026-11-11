@@ -5,15 +5,24 @@ from __future__ import annotations
 import json
 import time
 from collections.abc import Callable
+from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from email.message import Message
 from email.utils import parsedate_to_datetime
+from typing import Protocol
 from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, urlsplit
 from urllib.request import Request, urlopen
 
 from .contracts import SourceRole
 from .snapshots import CapturedSource, LegalSource, SnapshotError, SourceRegister
+
+
+class PublicResponsePort(Protocol):
+    headers: Message
+
+    def read(self) -> bytes: ...
 
 
 @dataclass(frozen=True)
@@ -60,6 +69,18 @@ PUBLIC_SOURCE_SPECS: tuple[PublicSourceSpec, ...] = (
         SourceRole.MACRO,
         "https://www.federalreserve.gov/datadownload/",
         "https://www.federalreserve.gov/data.htm",
+    ),
+    PublicSourceSpec(
+        "federal-reserve-policy",
+        SourceRole.REFERENCE,
+        "https://www.federalreserve.gov/newsevents/pressreleases/",
+        "https://www.federalreserve.gov/disclaimer.htm",
+    ),
+    PublicSourceSpec(
+        "damodaran-archive-index",
+        SourceRole.REFERENCE,
+        "https://pages.stern.nyu.edu/~adamodar/New_Home_Page/dataarchived.html",
+        "https://pages.stern.nyu.edu/~adamodar/New_Home_Page/datafile/",
     ),
     PublicSourceSpec(
         "fdic-bankfind",
@@ -203,7 +224,7 @@ class PublicSourceAdapter:
         max_attempts: int = 3,
         min_interval_seconds: float = 0.11,
         timeout_seconds: float = 30.0,
-        opener: Callable[..., object] = urlopen,
+        opener: Callable[..., AbstractContextManager[PublicResponsePort]] = urlopen,
         sleep: Callable[[float], None] = time.sleep,
     ) -> None:
         if not user_agent.strip() or "@" not in user_agent:

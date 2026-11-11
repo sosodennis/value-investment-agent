@@ -1,7 +1,9 @@
 import hashlib
 import json
+from contextlib import nullcontext
 from datetime import datetime, timezone
 from email.message import Message
+from http.client import IncompleteRead
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from threading import Thread
 from urllib.error import HTTPError
@@ -9,12 +11,15 @@ from urllib.request import Request
 
 import pytest
 from fundamental_service.contracts import SourceRole
+from fundamental_service.replay import ArtifactStore
+from fundamental_service.sec_capture import RetainedSecSourceAdapter, SecCaptureScopeV1
 from fundamental_service.sec_source import (
     SecEdgarSourceAdapter,
     SecRequestPolicy,
     SecSourceError,
     _open_sec,
 )
+from fundamental_service.snapshots import FilesystemContentStore
 
 
 class FakeResponse:
@@ -313,3 +318,112 @@ def test_sec_source_rejects_custom_port():
             uri="https://data.sec.gov:443/api/xbrl/companyfacts/CIK0000000001.json",
         )
     assert error.value.code == "SOURCE_URI_NOT_ALLOWED"
+
+
+@pytest.mark.parametrize(
+    ("failures", "max_attempts", "succeeds"),
+    [(1, 3, True), (3, 3, False), (1, 1, False)],
+)
+def test_truncated_chunked_response_retries_without_retaining_partial_bytes(
+    tmp_path, failures, max_attempts, succeeds
+):
+    payload = b'{"padding":"' + b"x" * (1024 * 1024 + 64) + b'"}'
+    attempts = []
+    responses = []
+    delays = []
+
+    class ChunkedHandler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            attempts.append(self.path)
+            truncated = len(attempts) <= failures
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Transfer-Encoding", "chunked")
+            self.send_header("Connection", "close")
+            self.end_headers()
+            declared = len(payload) + 100 if truncated else len(payload)
+            self.wfile.write(f"{declared:X}\r\n".encode() + payload)
+            if not truncated:
+                self.wfile.write(b"\r\n0\r\n\r\n")
+            self.close_connection = True
+
+        def log_message(self, *_args):
+            return
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), ChunkedHandler)
+    thread = Thread(target=server.serve_forever, daemon=True)
+
+    def opener(_request, timeout):
+        response = _open_sec(
+            Request(f"http://127.0.0.1:{server.server_address[1]}/original"),
+            timeout=timeout,
+        )
+        responses.append(response)
+        return response
+
+    provider = SecEdgarSourceAdapter(
+        SecRequestPolicy(
+            user_agent="value-agent test@example.com",
+            min_interval_seconds=0,
+            max_attempts=max_attempts,
+            timeout_seconds=2,
+        ),
+        opener=opener,
+        sleep=delays.append,
+    )
+    receipts = ArtifactStore(tmp_path / "receipts")
+    adapter = RetainedSecSourceAdapter(
+        provider,
+        scope=SecCaptureScopeV1(
+            cik="0001539778",
+            accession_number="0001477932-16-007985",
+            valuation_timestamp=datetime(2016, 1, 12, tzinfo=timezone.utc),
+            source_profile="truncated-transfer-test-v1",
+        ),
+        receipts=receipts,
+        content=FilesystemContentStore(tmp_path / "content"),
+        capture_lock=lambda _key: nullcontext(),
+    )
+    initial = {
+        p: (p.read_bytes(), p.stat().st_mtime_ns)
+        for p in tmp_path.rglob("*")
+        if p.is_file()
+    }
+    try:
+        thread.start()
+        if succeeds:
+            source = adapter.capture_submissions("0001539778")
+            assert source.content == payload
+            assert len(attempts) == failures + 1
+            before = {
+                p: (p.read_bytes(), p.stat().st_mtime_ns)
+                for p in tmp_path.rglob("*")
+                if p.is_file()
+            }
+            assert adapter.capture_submissions("0001539778") == source
+            assert len(attempts) == failures + 1
+            assert {
+                p: (p.read_bytes(), p.stat().st_mtime_ns)
+                for p in tmp_path.rglob("*")
+                if p.is_file()
+            } == before
+            assert len(receipts._records) == 1
+        else:
+            with pytest.raises(SecSourceError) as error:
+                adapter.capture_submissions("0001539778")
+            assert error.value.code == "SOURCE_UNAVAILABLE"
+            assert error.value.retryable is True
+            assert isinstance(error.value.__cause__, IncompleteRead)
+            assert len(attempts) == max_attempts
+            assert not receipts._records
+            assert {
+                p: (p.read_bytes(), p.stat().st_mtime_ns)
+                for p in tmp_path.rglob("*")
+                if p.is_file()
+            } == initial
+        assert delays == [2**i for i in range(len(attempts) - 1)]
+        assert all(response.isclosed() for response in responses)
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)

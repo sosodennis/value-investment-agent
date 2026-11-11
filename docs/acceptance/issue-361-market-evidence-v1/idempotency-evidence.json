@@ -1,0 +1,49 @@
+{
+  "assertions": {
+    "all_observation_availability_no_later_than_decision": true,
+    "approved_policy_count": 0,
+    "full_replay": false,
+    "issuer_links": 100,
+    "same_digest": true,
+    "second_downloads": 0,
+    "second_wrote": false,
+    "source_vintages": 35
+  },
+  "command": "UV_CACHE_DIR=/tmp/.uv-cache uv run --project fundamental-service python -m fundamental_service.history_market_evidence --source-manifest docs/acceptance/issue-361-full-model-inputs-v1/source_manifest/83909f9be4368fe1453d7707902b8b70009dfe62727e27db4c27f94b1f9cc020.json.gz",
+  "implementation_commit": "19797ff0ab8f87e22b945202f62d16bcae504a6b",
+  "issue": 361,
+  "results": [
+    {
+      "artifact": {
+        "path": "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/docs/acceptance/issue-361-market-evidence-v1/review/2c17fd3e0a6022e70ab07e92241ec010541480d6c99662bd3fb9394e80979580.json.gz",
+        "sha256": "2c17fd3e0a6022e70ab07e92241ec010541480d6c99662bd3fb9394e80979580",
+        "wrote": true
+      },
+      "command_result": "exit 0",
+      "commit_sha": "19797ff0ab8f87e22b945202f62d16bcae504a6b",
+      "downloads": 35,
+      "input_digest": "83909f9be4368fe1453d7707902b8b70009dfe62727e27db4c27f94b1f9cc020",
+      "observed_candidate_count": 35,
+      "output_digest": "2c17fd3e0a6022e70ab07e92241ec010541480d6c99662bd3fb9394e80979580",
+      "selected_issuer_count": 100,
+      "source_count": 35,
+      "wrote": true
+    },
+    {
+      "artifact": {
+        "path": "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/docs/acceptance/issue-361-market-evidence-v1/review/2c17fd3e0a6022e70ab07e92241ec010541480d6c99662bd3fb9394e80979580.json.gz",
+        "sha256": "2c17fd3e0a6022e70ab07e92241ec010541480d6c99662bd3fb9394e80979580",
+        "wrote": false
+      },
+      "command_result": "exit 0",
+      "commit_sha": "19797ff0ab8f87e22b945202f62d16bcae504a6b",
+      "downloads": 0,
+      "input_digest": "83909f9be4368fe1453d7707902b8b70009dfe62727e27db4c27f94b1f9cc020",
+      "observed_candidate_count": 35,
+      "output_digest": "2c17fd3e0a6022e70ab07e92241ec010541480d6c99662bd3fb9394e80979580",
+      "selected_issuer_count": 100,
+      "source_count": 35,
+      "wrote": false
+    }
+  ]
+}

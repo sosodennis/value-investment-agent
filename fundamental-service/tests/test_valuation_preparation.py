@@ -1,7 +1,9 @@
+from dataclasses import replace
 from datetime import UTC, datetime
 from decimal import Decimal
 
 import pytest
+from fundamental_service.annual_history import resolve_annual_history
 from fundamental_service.application.service import _approved_market_policy
 from fundamental_service.contracts import (
     IdentityV1,
@@ -17,6 +19,7 @@ from fundamental_service.valuation_preparation import (
     ManualProvenanceV1,
     PreparationError,
     apply_manual_override,
+    derive_historical_metrics,
     prepare_automatic_valuation,
 )
 from fundamental_service.uncertainty import run_uncertainty
@@ -484,3 +487,95 @@ def test_manual_override_rejects_wrong_automatic_digest_or_unsupported_path() ->
             value=Decimal("1"),
             provenance=valid_provenance,
         )
+
+
+@pytest.mark.parametrize(
+    "field", ["inventory", "capital_expenditure", "depreciation_and_amortization"]
+)
+def test_non_numeric_reinvestment_facts_abstain_with_reason(field: str) -> None:
+    snapshot = _snapshot(
+        "valuation-preparation",
+        identity=IdentityV1(
+            issuer_id="CIK1",
+            issuer_name="Example Co",
+            domicile="US",
+            reporting_basis="us-gaap",
+            security_id="COMMON",
+            share_class="common",
+            currency="USD",
+        ),
+        valuation_timestamp=VALUATION_TIME,
+    )
+    history = resolve_annual_history(
+        _facts(),
+        snapshot=snapshot,
+        valuation_timestamp=VALUATION_TIME,
+        profile=valuation_requirements_profile("fcff_dcf"),
+    )
+    last = history.periods[-1]
+    changed = replace(
+        last,
+        duration_facts=tuple(
+            fact.model_copy(update={"value": "unavailable"})
+            if fact.normalized_field == field
+            else fact
+            for fact in last.duration_facts
+        ),
+        instant_facts=tuple(
+            fact.model_copy(update={"value": "unavailable"})
+            if fact.normalized_field == field
+            else fact
+            for fact in last.instant_facts
+        ),
+    )
+    result = derive_historical_metrics(
+        replace(history, periods=(*history.periods[:-1], changed))
+    )
+    assert result.quality_status is QualityStatus.ABSTAIN
+    assert "METRIC_NON_NUMERIC_VALUE" in result.issue_codes
+    assert not any(
+        metric.metric_id == "realized_fcff" and metric.fiscal_year == last.fiscal_year
+        for metric in result.metrics
+    )
+
+
+def test_missing_prior_working_capital_retains_reason_without_partial_fcff() -> None:
+    snapshot = _snapshot(
+        "valuation-preparation",
+        identity=IdentityV1(
+            issuer_id="CIK1",
+            issuer_name="Example Co",
+            domicile="US",
+            reporting_basis="us-gaap",
+            security_id="COMMON",
+            share_class="common",
+            currency="USD",
+        ),
+        valuation_timestamp=VALUATION_TIME,
+    )
+    history = resolve_annual_history(
+        _facts(),
+        snapshot=snapshot,
+        valuation_timestamp=VALUATION_TIME,
+        profile=valuation_requirements_profile("fcff_dcf"),
+    )
+    prior = replace(
+        history.periods[-2],
+        instant_facts=tuple(
+            fact
+            for fact in history.periods[-2].instant_facts
+            if fact.normalized_field != "inventory"
+        ),
+    )
+    result = derive_historical_metrics(
+        replace(history, periods=(*history.periods[:-2], prior, history.periods[-1]))
+    )
+    assert "METRIC_REQUIRED_FIELDS_MISSING" in result.issue_codes
+    assert (
+        f"{history.periods[-1].fiscal_year}:prior_inventory" in result.missing_evidence
+    )
+    assert not any(
+        metric.metric_id == "realized_fcff"
+        and metric.fiscal_year == history.periods[-1].fiscal_year
+        for metric in result.metrics
+    )

@@ -6,6 +6,7 @@ import hashlib
 import multiprocessing
 import os
 import queue
+import re
 import signal
 import sys
 import tempfile
@@ -20,6 +21,11 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from .historical_dqc import (
+    HistoricalDqcExecution,
+    execution_for,
+    historical_profile,
+)
 from .serialization import sha256_digest
 
 _NON_BLOCKING_ARELLE_CODES = frozenset(
@@ -89,9 +95,16 @@ class ParserResourcePolicy:
 
 
 class ArelleParserError(RuntimeError):
-    def __init__(self, code: str, message: str) -> None:
+    def __init__(
+        self,
+        code: str,
+        message: str,
+        *,
+        validation_failure: ArelleValidationFailureV1 | None = None,
+    ) -> None:
         super().__init__(message)
         self.code = code
+        self.validation_failure = validation_failure
 
 
 @contextmanager
@@ -158,6 +171,8 @@ class ArelleValidationProfileV1(BaseModel):
     edgar_plugin_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
     xule_plugin_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
     dqc_ruleset_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    historical_dqc_dir: Path | None = None
+    historical_dqc_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
 
     @model_validator(mode="after")
     def pinned_runtime(self) -> "ArelleValidationProfileV1":
@@ -165,8 +180,32 @@ class ArelleValidationProfileV1(BaseModel):
             raise ValueError("Arelle version must be pinned to 2.47.4")
         if self.efm_profile != "efm-strict-all-years":
             raise ValueError("SEC validation requires strict all-years EFM")
-        if self.dqc_version != "v31.0.3" or self.xule_version != "30055":
+        historical = historical_profile(self.profile_id)
+        if (
+            self.dqc_version != (historical.dqc_version if historical else "v31.0.3")
+            or self.xule_version != "30055"
+        ):
             raise ValueError("SEC validation profile versions are not pinned")
+        if historical:
+            if (
+                self.validation_mode != "sec-efm-dqc"
+                or self.historical_dqc_dir is None
+                or self.historical_dqc_sha256 is None
+            ):
+                raise ValueError(
+                    "historical DQC requires SEC validation and pinned source"
+                )
+            if self.historical_dqc_sha256 != historical.source_sha256:
+                raise ValueError(
+                    "historical DQC source must match its pinned official package"
+                )
+        elif (
+            self.historical_dqc_dir is not None
+            or self.historical_dqc_sha256 is not None
+        ):
+            raise ValueError(
+                "historical source cannot be used with a modern DQC profile"
+            )
         if not self.offline:
             raise ValueError("offline parser profile must set offline=true")
         configured = (
@@ -193,7 +232,12 @@ class ArelleValidationProfileV1(BaseModel):
 
     def digest(self) -> str:
         payload = self.model_dump(mode="json")
-        for name in ("edgar_plugin_dir", "xule_plugin_dir", "dqc_ruleset_path"):
+        for name in (
+            "edgar_plugin_dir",
+            "xule_plugin_dir",
+            "dqc_ruleset_path",
+            "historical_dqc_dir",
+        ):
             if payload[name] is not None:
                 payload[name] = Path(payload[name]).name
         return sha256_digest(payload)
@@ -203,6 +247,7 @@ class ParsedXbrlFactV1(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     concept: str = Field(min_length=1)
+    namespace_uri: str | None = None
     value: str
     context_id: str = Field(min_length=1)
     unit: str | None = None
@@ -225,6 +270,26 @@ class ArelleFindingV1(BaseModel):
     code: str = Field(min_length=1)
     severity: str = Field(min_length=1)
     message: str = Field(min_length=1)
+    rule_severity: Literal["warning", "error", "critical", "fatal"] | None = None
+
+
+class ArelleValidationFailureV1(BaseModel):
+    """Retained evidence of incomplete validation, never a release certificate."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    validation_profile_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    source_content_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    taxonomy_namespaces: tuple[str, ...]
+    findings: tuple[ArelleFindingV1, ...]
+    validation_engines: tuple[str, ...]
+    validation_evidence: tuple[str, ...]
+
+    def replay_digest(self) -> str:
+        payload = self.model_dump(mode="json")
+        payload["taxonomy_namespaces"] = sorted(set(self.taxonomy_namespaces))
+        payload["findings"] = sorted(payload["findings"], key=sha256_digest)
+        return sha256_digest(payload)
 
 
 class ArelleParseReportV1(BaseModel):
@@ -257,7 +322,10 @@ class ArelleParseReportV1(BaseModel):
                 {
                     finding.code
                     for finding in self.findings
-                    if finding.severity in {"error", "critical", "fatal"}
+                    if (
+                        finding.severity in {"error", "critical", "fatal"}
+                        or finding.rule_severity in {"error", "critical", "fatal"}
+                    )
                     and finding.code not in _NON_BLOCKING_ARELLE_CODES
                 }
             )
@@ -343,6 +411,7 @@ def _validation_plugin_root(profile: "ArelleValidationProfileV1") -> Path:
 
 def _finding_from_log(record: dict[str, Any]) -> ArelleFindingV1 | None:
     level = str(record.get("level", "")).lower()
+    level = {"warning-semantic": "warning", "error-semantic": "error"}.get(level, level)
     if level not in {"error", "critical", "warning", "fatal"}:
         return None
     code = str(record.get("code") or "arelle:unknown")
@@ -353,7 +422,18 @@ def _finding_from_log(record: dict[str, Any]) -> ArelleFindingV1 | None:
         message_text = str(message.get("text") or code)
     else:
         message_text = str(message or code)
-    return ArelleFindingV1(code=code, severity=level, message=message_text[:2048])
+    details = message.get("args") if isinstance(message, dict) else None
+    rule_severity = (
+        details.get("fundamental_rule_severity") if isinstance(details, dict) else None
+    )
+    if rule_severity not in {"warning", "error", "critical", "fatal"}:
+        rule_severity = None
+    return ArelleFindingV1(
+        code=code,
+        severity=level,
+        message=message_text[:2048],
+        rule_severity=rule_severity,
+    )
 
 
 def _unlogged_model_error_findings(
@@ -376,8 +456,15 @@ def _unlogged_model_error_findings(
 
 
 def _dqc_validation_completed(handler: Any, records: tuple[Any, ...]) -> bool:
-    for record in records:
-        entry = handler.recordToJson(record)
+    entries = tuple(handler.recordToJson(record) for record in records)
+    codes = {str(entry.get("code") or "") for entry in entries}
+    if codes & {
+        "xule.ValidationIncomplete",
+        "xule:ValidationException",
+        "arelle:dqcrtException",
+    } or any(code.startswith("DQC") and code.endswith(".incomplete") for code in codes):
+        return False
+    for entry in entries:
         code = str(entry.get("code") or "")
         if code.startswith("DQC"):
             return True
@@ -390,6 +477,70 @@ def _dqc_validation_completed(handler: Any, records: tuple[Any, ...]) -> bool:
         ):
             return True
     return False
+
+
+def _missing_dqc_error(
+    profile: ArelleValidationProfileV1,
+    source_hash: str,
+    namespaces: tuple[str, ...],
+    findings: tuple[ArelleFindingV1, ...],
+    historical_execution: HistoricalDqcExecution | None = None,
+) -> ArelleParserError:
+    diagnostic = ArelleValidationFailureV1(
+        validation_profile_digest=profile.digest(),
+        source_content_hash=source_hash,
+        taxonomy_namespaces=tuple(sorted(set(namespaces))),
+        findings=tuple(
+            sorted(findings, key=lambda item: sha256_digest(item.model_dump()))
+        ),
+        validation_engines=("sec-efm",),
+        validation_evidence=("strict-sec-efm-profile-selected", "dqc-not-completed")
+        + (
+            tuple(
+                f"historical-module-returned:{name}"
+                for name in historical_execution.returned_modules
+            )
+            if historical_execution is not None
+            else ()
+        ),
+    )
+    if historical_profile(profile.profile_id) is not None:
+        unsupported = historical_execution is not None and bool(
+            historical_execution.unsupported_namespaces
+        )
+        return ArelleParserError(
+            "DQC_TAXONOMY_UNSUPPORTED" if unsupported else "DQC_VALIDATION_UNAVAILABLE",
+            "official historical DQC does not cover the filing's namespaces"
+            if unsupported
+            else "official historical DQC modules did not all complete",
+            validation_failure=diagnostic,
+        )
+    years = {
+        match.group(1)
+        for namespace in namespaces
+        if (
+            match := re.fullmatch(
+                r"http://fasb\.org/us-gaap/(\d{4})(?:-\d{2}-\d{2})?", namespace
+            )
+        )
+    }
+    # EDGAR 26.3 loadDqcRules explicitly excludes US GAAP before 2020.
+    if (
+        profile.efm_release == "26.3"
+        and profile.efm_validation_version == "1.26.3"
+        and years
+        and max(years) < "2020"
+    ):
+        return ArelleParserError(
+            "DQC_TAXONOMY_UNSUPPORTED",
+            "pinned EDGAR DQC rules exclude the filing's pre-2020 US GAAP taxonomy",
+            validation_failure=diagnostic,
+        )
+    return ArelleParserError(
+        "DQC_VALIDATION_UNAVAILABLE",
+        "DQC rules did not complete",
+        validation_failure=diagnostic,
+    )
 
 
 def _parse_worker(
@@ -416,8 +567,8 @@ def _parse_worker(
             attempted_network += 1
             raise OSError("offline Arelle worker attempted network access")
 
-        socket.socket.connect = block_network
-        socket.socket.connect_ex = block_network
+        setattr(socket.socket, "connect", block_network)
+        setattr(socket.socket, "connect_ex", block_network)
         report = _parse_in_process(
             Path(filing_path),
             ArelleValidationProfileV1.model_validate(profile_data),
@@ -444,6 +595,9 @@ def _parse_worker(
                 "error": error.code,
                 "message": str(error),
                 "network_attempt_count": attempted_network,
+                "validation_failure": error.validation_failure.model_dump(mode="json")
+                if error.validation_failure is not None
+                else None,
             }
         )
     except Exception as error:
@@ -536,6 +690,17 @@ def _parse_in_process(
                 "VALIDATION_RESOURCE_HASH_MISMATCH",
                 "pinned EFM/DQC resource hash does not match",
             )
+    if profile.historical_dqc_dir is not None:
+        if not profile.historical_dqc_dir.is_dir():
+            raise ArelleParserError(
+                "VALIDATION_RESOURCES_UNAVAILABLE",
+                "historical DQC source is unavailable",
+            )
+        if _directory_hash(profile.historical_dqc_dir) != profile.historical_dqc_sha256:
+            raise ArelleParserError(
+                "VALIDATION_RESOURCE_HASH_MISMATCH",
+                "historical DQC source hash does not match",
+            )
 
     manager = None
     findings: tuple[ArelleFindingV1, ...] = ()
@@ -567,15 +732,45 @@ def _parse_in_process(
                 "validate/DQC": dqc_plugin,
                 "EDGAR/validate": edgar_plugin,
             }
+            plugin_names = ["EDGAR/validate", "validate/DQC"]
+            if profile.historical_dqc_dir is not None:
+                import arelle
+
+                historical_plugin = str(
+                    Path(__file__).with_name("historical_dqc_plugin.py")
+                )
+                logging_plugin = str(
+                    Path(arelle.__file__).parent / "plugin/logging/dqcParameters.py"
+                )
+                for name in (logging_plugin, historical_plugin):
+                    loaded_plugin = controller._pluginManager.addPluginModule(name)
+                    if loaded_plugin is None:
+                        raise ArelleParserError(
+                            "DQC_PLUGIN_UNAVAILABLE",
+                            "historical DQC adapter did not load",
+                        )
+                    controller.preloadedPlugins[name] = loaded_plugin
+                    plugin_names.append(name)
+                controller._pluginManager.pluginMethodsForClasses.clear()
             controller.startLogging(logHandler=LogToXmlHandler(controller))
             options = RuntimeOptions(
                 pluginOptions={
                     "xule_rule_set": str(profile.dqc_ruleset_path),
                     "xule_multi": False,
                     "xule_bypass_packages": False,
+                    **(
+                        {
+                            "fundamental_historical_dqc_root": str(
+                                profile.historical_dqc_dir
+                            ),
+                            "fundamental_historical_dqc_profile": profile.profile_id,
+                        }
+                        if profile.historical_dqc_dir is not None
+                        else {}
+                    ),
                 },
                 entrypointFile=str(filing_path),
-                plugins="EDGAR/validate|validate/DQC",
+                plugins="|".join(plugin_names),
                 validate=True,
                 disclosureSystemName=profile.efm_profile,
                 workOffline=True,
@@ -632,14 +827,28 @@ def _parse_in_process(
             )
             logged_codes = {item.code for item in findings}
             findings += _unlogged_model_error_findings(model_errors, logged_codes)
-            if not _dqc_validation_completed(handler, records):
-                raise ArelleParserError(
-                    "DQC_VALIDATION_UNAVAILABLE", "DQC rules did not run"
+            historical_execution = execution_for(controller)
+            dqc_completed = (
+                historical_execution is not None and historical_execution.completed
+                if profile.historical_dqc_dir is not None
+                else _dqc_validation_completed(handler, records)
+            )
+            if not dqc_completed:
+                namespaces = tuple(str(namespace) for namespace in model.namespaceDocs)
+                raise _missing_dqc_error(
+                    profile,
+                    actual_source_hash,
+                    namespaces,
+                    findings,
+                    historical_execution,
                 )
             validation_engines = ("sec-efm", "dqc-us")
+            selected_historical = historical_profile(profile.profile_id)
             validation_evidence = (
                 "strict-sec-efm-profile-selected",
-                "dqc-dqcrt-checks-completed",
+                selected_historical.completion_marker
+                if selected_historical is not None
+                else "dqc-dqcrt-checks-completed",
             )
         else:
             blocking_model_errors = tuple(
@@ -699,6 +908,7 @@ def _parse_in_process(
                 ParsedXbrlFactV1(
                     concept=str(concept),
                     value=str(getattr(fact, "value", "")),
+                    namespace_uri=str(concept.namespaceURI),
                     context_id=str(context),
                     unit=unit,
                     decimals=str(getattr(fact, "decimals", "")) or None,
@@ -852,6 +1062,12 @@ def parse_filing_offline(
         )
     if "error" in result:
         raise ArelleParserError(
-            str(result["error"]), str(result.get("message", "Arelle parse failed"))
+            str(result["error"]),
+            str(result.get("message", "Arelle parse failed")),
+            validation_failure=ArelleValidationFailureV1.model_validate(
+                result["validation_failure"]
+            )
+            if result.get("validation_failure") is not None
+            else None,
         )
     return ArelleParseReportV1.model_validate(result)

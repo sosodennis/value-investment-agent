@@ -12,9 +12,10 @@ from fundamental_service.replay import (
     build_provenance_graph,
     build_release_manifest,
     ReplayEnvelopeV1,
-    replay_manifest,
     replay_calculation,
 )
+from fundamental_service.application.service import FundamentalApplication
+from fundamental_service.operations import OperationalMetrics, OperationsConfig
 from fundamental_service.calculator import calculate
 from fundamental_service.testsupport import make_valuation
 
@@ -228,9 +229,11 @@ def test_manifest_driven_replay_is_offline(tmp_path: Path):
         numerical_settings={"precision": "50"},
         release_profile_thresholds={"quality": "verified"},
     )
-    report = replay_manifest(
-        ReplayEnvelopeV1(manifest=manifest, request=request, expected=expected),
+    application = FundamentalApplication(
         artifact_store=store,
+        content_store=None,
+        config=OperationsConfig.testing(),
+        metrics=OperationalMetrics(),
         snapshot_repository=SimpleNamespace(
             get=lambda snapshot_id: SimpleNamespace(
                 snapshot_id=snapshot_id,
@@ -245,6 +248,9 @@ def test_manifest_driven_replay_is_offline(tmp_path: Path):
                 ),
             )
         ),
+    )
+    report = application.replay_valuation(
+        ReplayEnvelopeV1(manifest=manifest, request=request, expected=expected)
     )
     assert report.status == "match"
     assert report.offline is True

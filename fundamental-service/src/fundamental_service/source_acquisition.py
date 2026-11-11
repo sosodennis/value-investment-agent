@@ -5,6 +5,9 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import re
+from contextlib import contextmanager
+from collections.abc import Iterator
 from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
@@ -24,20 +27,27 @@ from .contracts import (
     SecIngestionSourceV1,
     SourceRole,
 )
-from .facts import CanonicalMappingV1
+from .facts import CanonicalFactRepository, CanonicalMappingV1
+from .historical_dqc import historical_profile
 from .ingestion import SecIngestionService
 from .issuer_identity import (
     IdentityResolutionError,
     resolve_issuer_cik,
     resolve_issuer_identity,
 )
-from .metadata import PostgresArtifactStore, PostgresMetadataStore
+from .metadata import PostgresArtifactStore, PostgresContentStore, PostgresMetadataStore
 from .operations import ServiceError
+from .sec_capture import RetainedSecSourceAdapter, SecCaptureScopeV1, SecCaptureStore
 from .sec_source import SecEdgarSourceAdapter, SecRequestPolicy, SecSourceError
 from .serialization import sha256_digest
-from .snapshots import CapturedSource, ContentAddressedStore, SnapshotError
+from .snapshots import (
+    CapturedSource,
+    ContentAddressedStore,
+    SnapshotError,
+    SnapshotRepository,
+)
 
-IDENTITY_MAPPING_VERSION = "sec-issuer-identity-v1"
+IDENTITY_MAPPING_VERSION: Literal["sec-issuer-identity-v1"] = "sec-issuer-identity-v1"
 LOGGER = logging.getLogger("fundamental_service")
 _SUPPORTED_SEC_FILING_FORMS = frozenset({"10-K", "10-K/A", "10-Q", "10-Q/A"})
 
@@ -53,6 +63,7 @@ class _RecentFilings(_SecPayload):
     form: list[str]
     primaryDocument: list[str]
     isXBRL: list[int | str]
+    isInlineXBRL: list[int | str] | None = None
 
 
 class _SecFilings(_SecPayload):
@@ -93,8 +104,19 @@ class SecAcquisitionSettings:
     dqc_ruleset_sha256: str
     supported_filing_years: tuple[int, ...]
     supported_filing_forms: tuple[str, ...]
+    historical_dqc_dir: Path | None = None
+    historical_dqc_sha256: str | None = None
 
     def __post_init__(self) -> None:
+        if (self.historical_dqc_dir is None) != (self.historical_dqc_sha256 is None):
+            raise ValueError(
+                "historical DQC source and hash must be configured together"
+            )
+        if self.historical_dqc_dir is not None:
+            if not self.historical_dqc_dir.is_dir():
+                raise ValueError("pinned historical DQC source is unavailable")
+            if _directory_hash(self.historical_dqc_dir) != self.historical_dqc_sha256:
+                raise ValueError("pinned historical DQC source hash does not match")
         if (
             not self.supported_filing_years
             or tuple(sorted(set(self.supported_filing_years)))
@@ -170,6 +192,7 @@ class _SelectedFiling:
     filing_date: date
     accepted_at: datetime
     primary_document: str
+    is_inline_xbrl: bool | None = None
 
     @property
     def is_amendment(self) -> bool:
@@ -237,14 +260,16 @@ class SecIdentityResolutionUseCase:
                 "SOURCE_HASH_MISMATCH",
                 "SEC issuer source bytes do not match the content address",
             )
-        return IdentitySourceEvidenceV1(
-            source_id=source.source_id,
-            source_uri=source.uri,
-            content_hash=stored_hash,
-            captured_at=source.captured_at or source.available_at,
-            available_at=source.available_at,
-            media_type="application/json",
-            byte_count=len(source.content),
+        return IdentitySourceEvidenceV1.model_validate(
+            {
+                "source_id": source.source_id,
+                "source_uri": source.uri,
+                "content_hash": stored_hash,
+                "captured_at": source.captured_at or source.available_at,
+                "available_at": source.available_at,
+                "media_type": "application/json",
+                "byte_count": len(source.content),
+            }
         )
 
     def execute(
@@ -426,6 +451,7 @@ class SecAcquisitionUseCase:
         content_store: ContentAddressedStore,
         settings: SecAcquisitionSettings,
         authorized_organizations: frozenset[str],
+        capture_store: SecCaptureStore | None = None,
     ) -> None:
         self.adapter = adapter
         self.ingestion = ingestion
@@ -433,6 +459,7 @@ class SecAcquisitionUseCase:
         self.content_store = content_store
         self.settings = settings
         self.authorized_organizations = authorized_organizations
+        self.capture_store = capture_store
 
     @staticmethod
     def _canonical_key_payload(request: SecIngestionRequestV1) -> dict[str, object]:
@@ -458,6 +485,14 @@ class SecAcquisitionUseCase:
     def _validation_profile(
         self, request: SecIngestionRequestV1
     ) -> ArelleValidationProfileV1:
+        historical = historical_profile(request.validation_profile_id)
+        if historical and self.settings.historical_dqc_dir is None:
+            raise ServiceError(
+                "VALIDATION_RESOURCES_UNAVAILABLE",
+                "historical DQC source is not configured",
+                status_code=503,
+                retryable=False,
+            )
         return ArelleValidationProfileV1(
             profile_id=request.validation_profile_id,
             validation_mode="sec-efm-dqc",
@@ -467,6 +502,11 @@ class SecAcquisitionUseCase:
             edgar_plugin_sha256=self.settings.edgar_plugin_sha256,
             xule_plugin_sha256=self.settings.xule_plugin_sha256,
             dqc_ruleset_sha256=self.settings.dqc_ruleset_sha256,
+            dqc_version=historical.dqc_version if historical else "v31.0.3",
+            historical_dqc_dir=self.settings.historical_dqc_dir if historical else None,
+            historical_dqc_sha256=self.settings.historical_dqc_sha256
+            if historical
+            else None,
         )
 
     def _runtime_key_payload(
@@ -658,6 +698,20 @@ class SecAcquisitionUseCase:
         finally:
             self.metadata.release_ingestion_lock(lease)
 
+    @contextmanager
+    def _capture_lock(self, key: str) -> Iterator[None]:
+        lease = self.metadata.try_acquire_ingestion_lock(key)
+        if lease is None:
+            raise SecSourceError(
+                "SEC_CAPTURE_IN_PROGRESS",
+                "identical SEC response capture is in progress",
+                retryable=True,
+            )
+        try:
+            yield
+        finally:
+            self.metadata.release_ingestion_lock(lease)
+
     def _acquire_and_publish(
         self,
         request: SecIngestionRequestV1,
@@ -670,7 +724,24 @@ class SecAcquisitionUseCase:
         deadline_at: datetime,
         validation_profile: ArelleValidationProfileV1,
     ) -> SecIngestionResponseV1:
-        submissions_source = self.adapter.capture_submissions(
+        adapter = self.adapter
+        if (
+            self.capture_store is not None
+            and request.filing.accession_number is not None
+        ):
+            adapter = RetainedSecSourceAdapter(
+                adapter,
+                scope=SecCaptureScopeV1(
+                    cik=request.cik,
+                    accession_number=request.filing.accession_number,
+                    valuation_timestamp=request.valuation_timestamp,
+                    source_profile=request.source_selection_policy,
+                ),
+                receipts=self.capture_store,
+                content=self.content_store,
+                capture_lock=self._capture_lock,
+            )
+        submissions_source = adapter.capture_submissions(
             request.cik, deadline_at=deadline_at
         )
         submissions_source = replace(
@@ -688,7 +759,7 @@ class SecAcquisitionUseCase:
             supported_filing_years=self.settings.supported_filing_years,
             supported_filing_forms=self.settings.supported_filing_forms,
         )
-        index_source = self.adapter.capture_filing_index(
+        index_source = adapter.capture_filing_index(
             cik=request.cik,
             accession_number=filing.accession_number,
             deadline_at=deadline_at,
@@ -704,19 +775,34 @@ class SecAcquisitionUseCase:
             is_amendment=filing.is_amendment,
             amendment_scope="unknown" if filing.is_amendment else None,
         )
+        xbrl_entrypoint = self._select_xbrl_entrypoint(
+            index_source.content,
+            filing.primary_document,
+            is_inline_xbrl=filing.is_inline_xbrl,
+        )
         dts_filenames = self._select_dts_filenames(
-            index_source.content, filing.primary_document
+            index_source.content, xbrl_entrypoint
         )
         filing_archive_filename = self._select_filing_archive_filename(
             index_source.content, filing.accession_number
         )
         mappings = self._resolve_mappings(request, correlation_id=correlation_id)
-        captured_at = datetime.now(UTC)
+        captured_at = (
+            max(
+                item.captured_at or item.available_at
+                for item in (submissions_source, index_source)
+            )
+            if isinstance(adapter, RetainedSecSourceAdapter)
+            else datetime.now(UTC)
+        )
         preparation = self.ingestion.prepare_filing(
+            source_adapter=adapter,
             identity=request.identity,
+            identity_basis=request.identity_basis,
+            identity_ticker=request.ticker,
             cik=request.cik,
             accession_number=filing.accession_number,
-            primary_document=filing.primary_document,
+            primary_document=xbrl_entrypoint,
             filing_archive_filename=filing_archive_filename,
             filed_at=filing.accepted_at,
             accepted_at=filing.accepted_at,
@@ -811,6 +897,7 @@ class SecAcquisitionUseCase:
                 sorted(fact.fact_id for fact in preparation.facts)
             ),
             source_evidence=source_evidence,
+            identity_evidence_ref=preparation.identity_evidence_ref,
             quality_status=quality,
             issue_codes=tuple(sorted(issue_codes)),
             missing_evidence=required_missing,
@@ -905,7 +992,9 @@ class SecAcquisitionUseCase:
                 status_code=422,
                 retryable=False,
             )
-        if request.ticker not in {item.upper() for item in submissions.tickers}:
+        if request.identity_basis == "current-sec-ticker-v1" and request.ticker not in {
+            item.upper() for item in submissions.tickers
+        }:
             raise ServiceError(
                 "IDENTITY_AMBIGUOUS",
                 "requested ticker is not registered to the SEC issuer",
@@ -920,6 +1009,8 @@ class SecAcquisitionUseCase:
             len(submissions.filings.recent.primaryDocument),
             len(submissions.filings.recent.isXBRL),
         }
+        if submissions.filings.recent.isInlineXBRL is not None:
+            lengths.add(len(submissions.filings.recent.isInlineXBRL))
         if len(lengths) != 1:
             raise ServiceError(
                 "SOURCE_PAYLOAD_INVALID",
@@ -995,6 +1086,18 @@ class SecAcquisitionUseCase:
                         retryable=False,
                     )
                 continue
+            inline_flags = recent.isInlineXBRL
+            is_inline_xbrl = None
+            if inline_flags is not None:
+                inline_flag = str(inline_flags[index]).lower()
+                if inline_flag not in {"0", "1", "false", "true"}:
+                    raise ServiceError(
+                        "FILING_METADATA_INVALID",
+                        "SEC inline XBRL indicator is invalid",
+                        status_code=502,
+                        retryable=False,
+                    )
+                is_inline_xbrl = inline_flag in {"1", "true"}
             eligible.append(
                 _SelectedFiling(
                     accession_number=accession,
@@ -1002,6 +1105,7 @@ class SecAcquisitionUseCase:
                     filing_date=filing_date,
                     accepted_at=accepted_at.astimezone(UTC),
                     primary_document=recent.primaryDocument[index],
+                    is_inline_xbrl=is_inline_xbrl,
                 )
             )
         if not eligible:
@@ -1019,6 +1123,54 @@ class SecAcquisitionUseCase:
                 retryable=False,
             )
         return max(eligible, key=lambda item: (item.accepted_at, item.accession_number))
+
+    def _select_xbrl_entrypoint(
+        self,
+        payload: bytes,
+        primary_document: str,
+        *,
+        is_inline_xbrl: bool | None,
+    ) -> str:
+        try:
+            filing_index = _FilingIndex.model_validate_json(payload)
+        except ValidationError as error:
+            raise ServiceError(
+                "SOURCE_PAYLOAD_INVALID",
+                "SEC filing index response does not match the expected schema",
+                status_code=502,
+                retryable=False,
+            ) from error
+        names = [item.name for item in filing_index.directory.item]
+        if is_inline_xbrl is not False:
+            candidates = [primary_document]
+        else:
+            candidates = [
+                name
+                for name in names
+                if name.endswith(".xml")
+                and not name.endswith(self._DTS_LINKBASE_SUFFIXES)
+                and f"{Path(name).stem}.xsd" in names
+            ]
+            if primary_document.endswith(".xml"):
+                candidates = [name for name in candidates if name == primary_document]
+        if (
+            len(candidates) != 1
+            or not re.fullmatch(r"[A-Za-z0-9_.-]{1,200}", candidates[0])
+            or names.count(candidates[0]) != 1
+            or names.count(f"{Path(candidates[0]).stem}.xsd") != 1
+            or (
+                is_inline_xbrl is True
+                and Path(candidates[0]).suffix.lower()
+                not in {".htm", ".html", ".xhtml"}
+            )
+        ):
+            raise ServiceError(
+                "XBRL_ENTRYPOINT_UNRESOLVED",
+                "SEC filing does not identify one schema-bound XBRL entrypoint",
+                status_code=422,
+                retryable=False,
+            )
+        return candidates[0]
 
     def _select_dts_filenames(
         self, payload: bytes, primary_document: str
@@ -1143,9 +1295,9 @@ class SecAcquisitionUseCase:
 def build_runtime_sec_acquisition(
     *,
     metadata: PostgresMetadataStore,
-    content_store: ContentAddressedStore,
-    snapshot_repository: object,
-    fact_repository: object,
+    content_store: PostgresContentStore,
+    snapshot_repository: SnapshotRepository,
+    fact_repository: CanonicalFactRepository,
     service_token: str | None,
     user_agent: str | None,
     taxonomy_cache_dir: str | None,
@@ -1161,6 +1313,8 @@ def build_runtime_sec_acquisition(
     supported_filing_years: tuple[int, ...] | None,
     supported_filing_forms: tuple[str, ...] | None,
     authorized_organizations: frozenset[str],
+    historical_dqc_dir: str | None = None,
+    historical_dqc_sha256: str | None = None,
 ) -> SecAcquisitionUseCase | None:
     values = (
         service_token,
@@ -1193,6 +1347,8 @@ def build_runtime_sec_acquisition(
         dqc_ruleset_sha256=dqc_ruleset_sha256 or "",
         supported_filing_years=supported_filing_years or (),
         supported_filing_forms=supported_filing_forms or (),
+        historical_dqc_dir=Path(historical_dqc_dir) if historical_dqc_dir else None,
+        historical_dqc_sha256=historical_dqc_sha256,
     )
     adapter = SecEdgarSourceAdapter(
         policy=SecRequestPolicy(user_agent=user_agent or ""),
@@ -1212,6 +1368,7 @@ def build_runtime_sec_acquisition(
         content_store=content_store,
         settings=settings,
         authorized_organizations=authorized_organizations,
+        capture_store=PostgresArtifactStore(metadata, content_store),
     )
 
 

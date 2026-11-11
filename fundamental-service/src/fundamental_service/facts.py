@@ -137,11 +137,20 @@ class FilesystemCanonicalFactRepository:
 class PinnedValidationProfile(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    profile_id: Literal["sec-efm-us-gaap-v1"] = "sec-efm-us-gaap-v1"
+    profile_id: Literal["sec-efm-us-gaap-v1", "sec-efm-us-dqc-v1.0.0-historical"] = (
+        "sec-efm-us-gaap-v1"
+    )
     arelle_version: Literal["2.47.4"] = "2.47.4"
-    dqc_version: Literal["v31.0.3"] = "v31.0.3"
+    dqc_version: Literal["v31.0.3", "v1.0.0"] = "v31.0.3"
     xule_version: Literal["30055"] = "30055"
     profile_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+    @model_validator(mode="after")
+    def dqc_version_matches_profile(self) -> "PinnedValidationProfile":
+        historical = self.profile_id == "sec-efm-us-dqc-v1.0.0-historical"
+        if self.dqc_version != ("v1.0.0" if historical else "v31.0.3"):
+            raise ValueError("DQC version must match the pinned profile")
+        return self
 
 
 class TaxonomyPackageV1(BaseModel):
@@ -280,6 +289,8 @@ class FactCandidateV1(BaseModel):
     def canonical_fact(
         self, *, quality: QualityStatus, issue_codes: tuple[str, ...] = ()
     ) -> CanonicalFactV1:
+        period_end = self.period_end or self.instant
+        assert period_end is not None
         context = XbrlContextV1(
             concept_qname=self.concept,
             period_type=self.period_type,
@@ -305,7 +316,7 @@ class FactCandidateV1(BaseModel):
             scale=self.scale,
             currency=self.currency,
             period_start=self.period_start,
-            period_end=self.period_end or self.instant,
+            period_end=period_end,
             instant=self.instant,
             context=context,
             as_of=self.as_of,
@@ -742,10 +753,8 @@ def resolve_canonical_facts(
 def _select_latest_period_in_filing(
     candidates: list[CanonicalFactV1],
 ) -> tuple[CanonicalFactV1, dict[str, str]]:
-    latest_end = max(fact.period_end or fact.instant for fact in candidates)
-    latest_period = tuple(
-        fact for fact in candidates if (fact.period_end or fact.instant) == latest_end
-    )
+    latest_end = max(fact.period_end for fact in candidates)
+    latest_period = tuple(fact for fact in candidates if fact.period_end == latest_end)
     durations = {
         fact.fact_id: (
             (fact.period_end - fact.period_start).days

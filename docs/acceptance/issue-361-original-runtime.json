@@ -1,0 +1,171 @@
+{
+  "acceptance_scope": "fundamental-service",
+  "blockers": [
+    "https://github.com/sosodennis/value-investment-agent/issues/369",
+    "https://github.com/sosodennis/value-investment-agent/issues/371",
+    "Historical validation/identity and independent mapping/policy review remain incomplete; full original-source diagnostics completed but composer replay has not executed."
+  ],
+  "branch": "codex/issue-361-replay-evidence",
+  "checks": [
+    {
+      "command": "See completed 4c original-source diagnostics in issue-361-complete-original-diagnostic.md; this check does not assert reviewed mappings or composer forecasts.",
+      "name": "mapping",
+      "status": "not_run"
+    },
+    {
+      "command": "See completed 4c original-source diagnostics in issue-361-complete-original-diagnostic.md; this check does not assert reviewed mappings or composer forecasts.",
+      "name": "history_replay",
+      "status": "not_run"
+    },
+    {
+      "command": "See completed 4c original-source diagnostics in issue-361-complete-original-diagnostic.md; this check does not assert reviewed mappings or composer forecasts.",
+      "name": "forecast",
+      "status": "not_run"
+    },
+    {
+      "command": "See completed 4c original-source diagnostics in issue-361-complete-original-diagnostic.md; this check does not assert reviewed mappings or composer forecasts.",
+      "name": "label",
+      "status": "not_run"
+    },
+    {
+      "command": "See completed 4c original-source diagnostics in issue-361-complete-original-diagnostic.md; this check does not assert reviewed mappings or composer forecasts.",
+      "name": "deterministic_replay",
+      "status": "not_run"
+    },
+    {
+      "command": "See completed 4c original-source diagnostics in issue-361-complete-original-diagnostic.md; this check does not assert reviewed mappings or composer forecasts.",
+      "name": "failure_retention",
+      "status": "not_run"
+    },
+    {
+      "command": "python3 scripts/architecture_guard.py",
+      "commit": "4c65950b1d31797d0cb50a69d56674e586f3c3fc",
+      "evidence": "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/docs/acceptance/issue-361-fixed-original-validation-v1/checks/636734a021544365504fef2653629a65cf5b237f5bacaef97a41cd6a763b5f7a.json.gz",
+      "exit_code": 0,
+      "input_digest": "23284b90721598824608244dd6ce5016d9b352a215ca8a9db90edccb0889293c",
+      "name": "architecture",
+      "output_digest": "021832dd3312813b9217a18c5a745913174eb359d07f15e82757f318d42588ce",
+      "status": "pass"
+    },
+    {
+      "command": "uvx --from ruff==0.14.10 ruff check fundamental-service && uvx --from ruff==0.14.10 ruff check scripts/acceptance_service_preflight.py scripts/validate_acceptance_manifest.py scripts/validate_compose_inputs.py scripts/validate_issue_acceptance_policy.py scripts/tests/test_acceptance_service_preflight.py scripts/tests/test_validate_acceptance_manifest.py scripts/tests/test_validate_compose_inputs.py",
+      "commit": "4c65950b1d31797d0cb50a69d56674e586f3c3fc",
+      "evidence": "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/docs/acceptance/issue-361-fixed-original-validation-v1/checks/636734a021544365504fef2653629a65cf5b237f5bacaef97a41cd6a763b5f7a.json.gz",
+      "exit_code": 0,
+      "input_digest": "e0c7ea0c217895cd3e4465bbe59a1f91c9a63310e3a09b52447743b8dfc985b1",
+      "name": "ruff",
+      "output_digest": "928be0fe410c4e7a517de63e14f0823d38ee88a7569f39f0a6d73830cd220881",
+      "status": "pass"
+    },
+    {
+      "command": "uvx --from mypy==1.19.1 mypy --no-incremental --follow-imports=silent --ignore-missing-imports fundamental-service/src/fundamental_service/app.py fundamental-service/src/fundamental_service/application/service.py fundamental-service/src/fundamental_service/arelle_parser.py fundamental-service/src/fundamental_service/contracts.py fundamental-service/src/fundamental_service/facts.py fundamental-service/src/fundamental_service/historical_dqc.py fundamental-service/src/fundamental_service/historical_dqc_plugin.py fundamental-service/src/fundamental_service/history_forecast_replay.py fundamental-service/src/fundamental_service/history_forecast_replay_cli.py fundamental-service/src/fundamental_service/history_mapping_audit.py fundamental-service/src/fundamental_service/history_mapping_proposals.py fundamental-service/src/fundamental_service/history_market_evidence.py fundamental-service/src/fundamental_service/history_original_validation.py fundamental-service/src/fundamental_service/history_policy_proposal.py fundamental-service/src/fundamental_service/history_replay.py fundamental-service/src/fundamental_service/history_replay_inputs.py fundamental-service/src/fundamental_service/history_review_signing.py fundamental-service/src/fundamental_service/ingestion.py fundamental-service/src/fundamental_service/issuer_identity.py fundamental-service/src/fundamental_service/policies.py fundamental-service/src/fundamental_service/public_source.py fundamental-service/src/fundamental_service/sec_capture.py fundamental-service/src/fundamental_service/sec_integrity.py fundamental-service/src/fundamental_service/source_acquisition.py fundamental-service/src/fundamental_service/valuation_preparation.py fundamental-service/scripts/validate_fixed_history_originals.py && uvx --from mypy==1.19.1 mypy --no-incremental --follow-imports=silent --ignore-missing-imports scripts/acceptance_service_preflight.py scripts/validate_acceptance_manifest.py scripts/validate_compose_inputs.py scripts/validate_issue_acceptance_policy.py",
+      "commit": "4c65950b1d31797d0cb50a69d56674e586f3c3fc",
+      "evidence": "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/docs/acceptance/issue-361-fixed-original-validation-v1/checks/636734a021544365504fef2653629a65cf5b237f5bacaef97a41cd6a763b5f7a.json.gz",
+      "exit_code": 0,
+      "input_digest": "f554eefcaa475efd962183110461a6e5c7e2ef209e34d4876af17d4e7838db12",
+      "name": "types",
+      "output_digest": "f84c5a5429cd145f7a17b1e5e96f5562dc48911e0a10fdfdb91b4e13dc86ffc7",
+      "status": "pass"
+    },
+    {
+      "command": "git diff --check",
+      "commit": "4c65950b1d31797d0cb50a69d56674e586f3c3fc",
+      "evidence": "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/docs/acceptance/issue-361-fixed-original-validation-v1/checks/636734a021544365504fef2653629a65cf5b237f5bacaef97a41cd6a763b5f7a.json.gz",
+      "exit_code": 0,
+      "input_digest": "6ed54767651f9740decd80c5f3e1d504d1d583482ba66cb1333b870fb6449710",
+      "name": "diff",
+      "output_digest": "7357ab69a7a51e21477349ffa9b84244191242838024f634449bf8a705efd953",
+      "status": "pass"
+    },
+    {
+      "command": "ACCEPTANCE_MANIFEST=/tmp/issue361-fixed-original-runtime.json bash scripts/acceptance_preflight.sh --report-directory /tmp/issue361-fixed-original-preflight",
+      "commit": "4c65950b1d31797d0cb50a69d56674e586f3c3fc",
+      "evidence": "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/docs/acceptance/issue-361-fixed-original-validation-v1/preflight/08b6c266ce4b85d757e46787ea70d57905fafb1ef31443b70bc5d2f88a7cbd04.json.gz",
+      "exit_code": 0,
+      "input_digest": "85a1dab18a3151a909369e326ec64ee91c8d1a50c82a7b7ac04ecc660830f0d1",
+      "name": "service_acceptance",
+      "output_digest": "3fea65c813964c8eadaaf67b6ed2ba2960d5103bd7724e87a7e12f42bf0ea2a9",
+      "status": "pass"
+    },
+    {
+      "command": "See completed 4c original-source diagnostics in issue-361-complete-original-diagnostic.md; this check does not assert reviewed mappings or composer forecasts.",
+      "name": "full_replay_repeat",
+      "status": "not_run"
+    },
+    {
+      "command": "See completed 4c original-source diagnostics in issue-361-complete-original-diagnostic.md; this check does not assert reviewed mappings or composer forecasts.",
+      "name": "review",
+      "status": "not_run"
+    }
+  ],
+  "commit": "4c65950b1d31797d0cb50a69d56674e586f3c3fc",
+  "issue": 361,
+  "next_step": "Resolve historical validation/identity and actual mapping/policy approval, then publish trusted releases and execute formal composer replay twice. The complete frozen 4c source diagnostic/repeat is retained in issue-361-complete-original-diagnostic.md; latest-source replay remains pending.",
+  "original_diagnostic_evidence": "docs/acceptance/issue-361-complete-original-diagnostic.md",
+  "readiness": {
+    "capabilities": {
+      "identity_resolution_configured": true
+    },
+    "contract_version": "internal.v1",
+    "status": "ready"
+  },
+  "runtime": {
+    "allowed_untracked_paths": [],
+    "fundamental": {
+      "compose_files": [
+        "compose/verification/docker-compose.issue280-operations.yml",
+        "compose/verification/docker-compose.issue312-sec-ingestion.yml",
+        "compose/verification/docker-compose.issue361-history-replay.yml",
+        ".audit/issue-361-history-runtime/host-storage.yml"
+      ],
+      "compose_project": "value-investment-agent-361-replay-evidence",
+      "container_port": 8080,
+      "dependencies": [
+        {
+          "container_port": 5432,
+          "published_host": "0.0.0.0",
+          "published_port": 18662,
+          "service": "fundamental-postgres"
+        }
+      ],
+      "env_files": [
+        {
+          "path": "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/.env",
+          "sha256": "610964e8e6b3f8bdd8d1cfcbc022a2fded6f0cc67fe88c579018782371996c3e"
+        },
+        {
+          "path": "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/.audit/issue-361-history-runtime/runtime.env",
+          "sha256": "2fc2bbb41743368769b6a4b821d8ee8e233cb285ff0c68d61ab0ad9d4dc29a4f"
+        }
+      ],
+      "image_id": "sha256:303673a4d4ae36812aa89c78d4a08c8cb18cfb24b3cb1fe63f4df1066cf3a132",
+      "networks": [
+        "value-investment-agent-361-replay-evidence_default"
+      ],
+      "published_host": "0.0.0.0",
+      "published_port": 18661,
+      "runtime_pins": {
+        "arelle-release": "2.47.4",
+        "pydantic": "2.14.2",
+        "python": "3.12.16"
+      },
+      "service": "fundamental-service",
+      "source": {
+        "container_path": "/app/src/fundamental_service",
+        "file_count": 54,
+        "repository_path": "fundamental-service/src/fundamental_service",
+        "sha256": "b7da0d00df03e95876bec30b73be27d8ec3d451cfd1b7718ec19f7bfaf8f2f08"
+      },
+      "url": "http://127.0.0.1:18661",
+      "volumes": [
+        "value-investment-agent-361-replay-evidence_fundamental-postgres-data",
+        "value-investment-agent-361-replay-evidence_fundamental-service-data"
+      ]
+    },
+    "worktree": "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence"
+  },
+  "runtime_observation": "Archived frozen4c complete diagnostic. After retaining it,the owned original project was replaced with exactEA image for a new partial diagnostic;see issue-361-latest-original-runtime.json.",
+  "schema_version": 2,
+  "sec_identity_required": true,
+  "status": "BLOCKED"
+}

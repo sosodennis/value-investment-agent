@@ -1,0 +1,223 @@
+{
+  "command_log_sha256": "5300a5faff668c5d3ae58ce7700b21ab6c9d2fa9b7c835182df57c87a5a832a8",
+  "commit": "dc34aa0846f66378de7d876b9d40047850e4113c",
+  "identity_digest": "e541afcf1d21bb4afa58e56a6db3b222688c9ec89dfe590b54d9d11772556047",
+  "initialization": {
+    "identity_wrote": true,
+    "key_wrote": true,
+    "repeat_identity_wrote": false,
+    "repeat_key_wrote": false
+  },
+  "input_digests": [
+    "760ba098cdac8aa52b07bdb8e51a564adf7056ce13fb14d2b46eb0c84fd5011d",
+    "97f2f7ddd4100cd990d3cb5197f3a8c94f46a349383ef535c7e4dfc60a88604b"
+  ],
+  "private_key": {
+    "contents_recorded": false,
+    "git_ignored": true,
+    "mode": "0o600",
+    "path": ".audit/issue-361-signing/project-signer.pem"
+  },
+  "records": [
+    {
+      "command": [
+        "uv",
+        "run",
+        "--project",
+        "fundamental-service",
+        "fundamental-history-review-sign",
+        "seal",
+        "--identity",
+        "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/docs/acceptance/issue-361-signatures-v1/identities/e541afcf1d21bb4afa58e56a6db3b222688c9ec89dfe590b54d9d11772556047.json.gz",
+        "--document",
+        "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/docs/acceptance/issue-361-full-model-inputs-v1/mapping_proposals/760ba098cdac8aa52b07bdb8e51a564adf7056ce13fb14d2b46eb0c84fd5011d.json.gz"
+      ],
+      "exit_code": 0,
+      "result": {
+        "artifact": {
+          "path": "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/docs/acceptance/issue-361-signatures-v1/proposal_seals/f2b81ec096309842457df27879e1377f58f6daa87e0ff87b05312c5cdc560651.json.gz",
+          "sha256": "f2b81ec096309842457df27879e1377f58f6daa87e0ff87b05312c5cdc560651",
+          "wrote": true
+        },
+        "iteration": 1,
+        "runtime": {
+          "commit_sha": "dc34aa0846f66378de7d876b9d40047850e4113c",
+          "fundamental_service_lock_sha256": "1f8a1bc3e6150f8d7bb3ba48778076bef51d72c3bbef7f020b1237998ed9a330",
+          "pydantic_version": "2.14.2",
+          "python_implementation": "CPython",
+          "python_version": "3.11.15"
+        }
+      },
+      "stdout_sha256": "82791cb8faab7721cbd03f3027c82c375dc15557086ddb43be86e1c98f1a9cf1"
+    },
+    {
+      "command": [
+        "uv",
+        "run",
+        "--project",
+        "fundamental-service",
+        "fundamental-history-review-sign",
+        "seal",
+        "--identity",
+        "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/docs/acceptance/issue-361-signatures-v1/identities/e541afcf1d21bb4afa58e56a6db3b222688c9ec89dfe590b54d9d11772556047.json.gz",
+        "--document",
+        "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/docs/acceptance/issue-361-market-evidence-v1/policy_proposal/97f2f7ddd4100cd990d3cb5197f3a8c94f46a349383ef535c7e4dfc60a88604b.json.gz"
+      ],
+      "exit_code": 0,
+      "result": {
+        "artifact": {
+          "path": "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/docs/acceptance/issue-361-signatures-v1/proposal_seals/0de95c472620d6510a0980bf3e4f6078070e9ec04f60ca0796aabf50a06829d8.json.gz",
+          "sha256": "0de95c472620d6510a0980bf3e4f6078070e9ec04f60ca0796aabf50a06829d8",
+          "wrote": true
+        },
+        "iteration": 1,
+        "runtime": {
+          "commit_sha": "dc34aa0846f66378de7d876b9d40047850e4113c",
+          "fundamental_service_lock_sha256": "1f8a1bc3e6150f8d7bb3ba48778076bef51d72c3bbef7f020b1237998ed9a330",
+          "pydantic_version": "2.14.2",
+          "python_implementation": "CPython",
+          "python_version": "3.11.15"
+        }
+      },
+      "stdout_sha256": "d9f688c6446c7ea105619c6923f8929aa4ef817a999f6fbeeb7ff709ca6d2c37"
+    },
+    {
+      "command": [
+        "uv",
+        "run",
+        "--project",
+        "fundamental-service",
+        "fundamental-history-review-sign",
+        "seal",
+        "--identity",
+        "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/docs/acceptance/issue-361-signatures-v1/identities/e541afcf1d21bb4afa58e56a6db3b222688c9ec89dfe590b54d9d11772556047.json.gz",
+        "--document",
+        "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/docs/acceptance/issue-361-full-model-inputs-v1/mapping_proposals/760ba098cdac8aa52b07bdb8e51a564adf7056ce13fb14d2b46eb0c84fd5011d.json.gz"
+      ],
+      "exit_code": 0,
+      "result": {
+        "artifact": {
+          "path": "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/docs/acceptance/issue-361-signatures-v1/proposal_seals/f2b81ec096309842457df27879e1377f58f6daa87e0ff87b05312c5cdc560651.json.gz",
+          "sha256": "f2b81ec096309842457df27879e1377f58f6daa87e0ff87b05312c5cdc560651",
+          "wrote": false
+        },
+        "iteration": 2,
+        "runtime": {
+          "commit_sha": "dc34aa0846f66378de7d876b9d40047850e4113c",
+          "fundamental_service_lock_sha256": "1f8a1bc3e6150f8d7bb3ba48778076bef51d72c3bbef7f020b1237998ed9a330",
+          "pydantic_version": "2.14.2",
+          "python_implementation": "CPython",
+          "python_version": "3.11.15"
+        }
+      },
+      "stdout_sha256": "9cdf529d24601387f43f31aedeed90506497eddfd9f9a812dcefc22c2ba5e2ab"
+    },
+    {
+      "command": [
+        "uv",
+        "run",
+        "--project",
+        "fundamental-service",
+        "fundamental-history-review-sign",
+        "seal",
+        "--identity",
+        "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/docs/acceptance/issue-361-signatures-v1/identities/e541afcf1d21bb4afa58e56a6db3b222688c9ec89dfe590b54d9d11772556047.json.gz",
+        "--document",
+        "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/docs/acceptance/issue-361-market-evidence-v1/policy_proposal/97f2f7ddd4100cd990d3cb5197f3a8c94f46a349383ef535c7e4dfc60a88604b.json.gz"
+      ],
+      "exit_code": 0,
+      "result": {
+        "artifact": {
+          "path": "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/docs/acceptance/issue-361-signatures-v1/proposal_seals/0de95c472620d6510a0980bf3e4f6078070e9ec04f60ca0796aabf50a06829d8.json.gz",
+          "sha256": "0de95c472620d6510a0980bf3e4f6078070e9ec04f60ca0796aabf50a06829d8",
+          "wrote": false
+        },
+        "iteration": 2,
+        "runtime": {
+          "commit_sha": "dc34aa0846f66378de7d876b9d40047850e4113c",
+          "fundamental_service_lock_sha256": "1f8a1bc3e6150f8d7bb3ba48778076bef51d72c3bbef7f020b1237998ed9a330",
+          "pydantic_version": "2.14.2",
+          "python_implementation": "CPython",
+          "python_version": "3.11.15"
+        }
+      },
+      "stdout_sha256": "d4b367243d0e3535b80aa40d31b39d3bd28eb494b8c509acc82c25a87f8abb75"
+    },
+    {
+      "command": [
+        "uv",
+        "run",
+        "--project",
+        "fundamental-service",
+        "fundamental-history-review-sign",
+        "verify",
+        "--identity",
+        "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/docs/acceptance/issue-361-signatures-v1/identities/e541afcf1d21bb4afa58e56a6db3b222688c9ec89dfe590b54d9d11772556047.json.gz",
+        "--document",
+        "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/docs/acceptance/issue-361-signatures-v1/proposal_seals/f2b81ec096309842457df27879e1377f58f6daa87e0ff87b05312c5cdc560651.json.gz",
+        "--subject",
+        "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/docs/acceptance/issue-361-full-model-inputs-v1/mapping_proposals/760ba098cdac8aa52b07bdb8e51a564adf7056ce13fb14d2b46eb0c84fd5011d.json.gz"
+      ],
+      "exit_code": 0,
+      "result": {
+        "runtime": {
+          "commit_sha": "dc34aa0846f66378de7d876b9d40047850e4113c",
+          "fundamental_service_lock_sha256": "1f8a1bc3e6150f8d7bb3ba48778076bef51d72c3bbef7f020b1237998ed9a330",
+          "pydantic_version": "2.14.2",
+          "python_implementation": "CPython",
+          "python_version": "3.11.15"
+        },
+        "sha256": "f2b81ec096309842457df27879e1377f58f6daa87e0ff87b05312c5cdc560651",
+        "verified": true
+      }
+    },
+    {
+      "command": [
+        "uv",
+        "run",
+        "--project",
+        "fundamental-service",
+        "fundamental-history-review-sign",
+        "verify",
+        "--identity",
+        "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/docs/acceptance/issue-361-signatures-v1/identities/e541afcf1d21bb4afa58e56a6db3b222688c9ec89dfe590b54d9d11772556047.json.gz",
+        "--document",
+        "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/docs/acceptance/issue-361-signatures-v1/proposal_seals/0de95c472620d6510a0980bf3e4f6078070e9ec04f60ca0796aabf50a06829d8.json.gz",
+        "--subject",
+        "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/docs/acceptance/issue-361-market-evidence-v1/policy_proposal/97f2f7ddd4100cd990d3cb5197f3a8c94f46a349383ef535c7e4dfc60a88604b.json.gz"
+      ],
+      "exit_code": 0,
+      "result": {
+        "runtime": {
+          "commit_sha": "dc34aa0846f66378de7d876b9d40047850e4113c",
+          "fundamental_service_lock_sha256": "1f8a1bc3e6150f8d7bb3ba48778076bef51d72c3bbef7f020b1237998ed9a330",
+          "pydantic_version": "2.14.2",
+          "python_implementation": "CPython",
+          "python_version": "3.11.15"
+        },
+        "sha256": "0de95c472620d6510a0980bf3e4f6078070e9ec04f60ca0796aabf50a06829d8",
+        "verified": true
+      }
+    },
+    {
+      "command": [
+        "uv",
+        "run",
+        "--project",
+        "fundamental-service",
+        "fundamental-history-review-sign",
+        "init-key"
+      ],
+      "exit_code": 0,
+      "result": {
+        "identity": {
+          "path": "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/docs/acceptance/issue-361-signatures-v1/identities/e541afcf1d21bb4afa58e56a6db3b222688c9ec89dfe590b54d9d11772556047.json.gz",
+          "sha256": "e541afcf1d21bb4afa58e56a6db3b222688c9ec89dfe590b54d9d11772556047",
+          "wrote": false
+        },
+        "key_wrote": false
+      }
+    }
+  ],
+  "scope": "project evidence authentication only; no independent mapping approval or policy approval asserted"
+}

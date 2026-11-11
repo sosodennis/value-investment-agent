@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timezone
 from decimal import Decimal
 from pathlib import Path
-from typing import Literal, Protocol
+from typing import Literal, Protocol, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
@@ -30,6 +30,8 @@ from .contracts import (
 )
 from .serialization import canonical_bytes, sha256_digest
 from .snapshots import SnapshotError
+
+AssumptionGroup = TypeVar("AssumptionGroup", bound=BaseModel)
 
 
 class ModelSpecV1(BaseModel):
@@ -135,7 +137,9 @@ class PolicyRecordV1(BaseModel):
         if self.policy_digest == sha256_digest(payload):
             return self
         legacy_payload = self.model_dump(exclude={"policy_digest", "market_inputs"})
-        if self.policy_digest != sha256_digest(legacy_payload):
+        if self.market_inputs is not None or self.policy_digest != sha256_digest(
+            legacy_payload
+        ):
             raise ValueError("policy_digest does not match policy content")
         return self
 
@@ -148,7 +152,9 @@ class PolicyRegistry:
         model_repository: ModelRepository | None = None,
         repository: PolicyRepository | None = None,
     ) -> None:
-        self._models = {(item.model_id, item.model_version): item for item in models}
+        self._models: dict[tuple[str, str], ModelSpecV1] = {
+            (item.model_id, item.model_version): item for item in models
+        }
         self._policies = {item.policy_id: item for item in policies}
         self._model_repository = model_repository
         self._repository = repository
@@ -215,6 +221,7 @@ class PolicyRegistry:
             raise PolicyError(
                 "MODEL_UNSUPPORTED", "requested model version is not active"
             )
+        candidates: tuple[PolicyRecordV1, ...]
         if policy_id is not None:
             policy = self.policy(policy_id)
             if policy is None:
@@ -228,7 +235,19 @@ class PolicyRegistry:
                 and item.model_version == model_version
                 and item.status == "active"
                 and item.effective_at <= valuation_timestamp
+                and (
+                    item.market_inputs is None
+                    or all(
+                        evidence.available_at <= valuation_timestamp
+                        for evidence in item.market_inputs.evidence
+                    )
+                )
             )
+            if candidates:
+                latest = max(item.effective_at for item in candidates)
+                candidates = tuple(
+                    item for item in candidates if item.effective_at == latest
+                )
         if len(candidates) != 1:
             code = "POLICY_NOT_FOUND" if not candidates else "POLICY_AMBIGUOUS"
             raise PolicyError(code, "no unique effective policy release is available")
@@ -242,6 +261,14 @@ class PolicyRegistry:
             raise PolicyError(
                 "POLICY_NOT_EFFECTIVE",
                 "policy release is not active at the valuation timestamp",
+            )
+        if policy.market_inputs is not None and any(
+            item.available_at > valuation_timestamp
+            for item in policy.market_inputs.evidence
+        ):
+            raise PolicyError(
+                "POLICY_NOT_EFFECTIVE",
+                "policy market evidence is unavailable at the valuation timestamp",
             )
         if model.lifecycle != "active" and policy.assumptions is not None:
             raise PolicyError(
@@ -282,7 +309,7 @@ class ModelRepository(Protocol):
     def publish_model(self, model: ModelSpecV1) -> None: ...
 
 
-class PolicyRepository:
+class PolicyRepository(Protocol):
     def list(self) -> tuple[PolicyRecordV1, ...]: ...
 
     def get(self, policy_id: str) -> PolicyRecordV1: ...
@@ -290,10 +317,28 @@ class PolicyRepository:
     def publish(self, policy: PolicyRecordV1) -> None: ...
 
 
+class ModelMetadataPort(Protocol):
+    def list_models(self) -> tuple[ModelSpecV1, ...]: ...
+
+    def get_model(self, model_id: str, model_version: str) -> ModelSpecV1: ...
+
+    def publish_model(
+        self, model: object, *, model_id: str, model_version: str
+    ) -> None: ...
+
+
+class PolicyMetadataPort(Protocol):
+    def list_policies(self) -> tuple[PolicyRecordV1, ...]: ...
+
+    def publish_policy(
+        self, policy: object, *, policy_id: str, policy_version: str
+    ) -> None: ...
+
+
 class MetadataModelRepository:
     """Adapter for the service-owned metadata persistence port."""
 
-    def __init__(self, metadata: object) -> None:
+    def __init__(self, metadata: ModelMetadataPort) -> None:
         self._metadata = metadata
 
     def list_models(self) -> tuple[ModelSpecV1, ...]:
@@ -316,7 +361,7 @@ class MetadataModelRepository:
 class MetadataPolicyRepository:
     """Adapter for immutable policy releases stored by the service."""
 
-    def __init__(self, metadata: object) -> None:
+    def __init__(self, metadata: PolicyMetadataPort) -> None:
         self._metadata = metadata
 
     def list(self) -> tuple[PolicyRecordV1, ...]:
@@ -541,27 +586,29 @@ def _initial_market_inputs() -> MarketPolicyInputsV1:
 
 def initial_policy_records() -> tuple[PolicyRecordV1, ...]:
     return tuple(
-        PolicyRecordV1(
-            **(
-                payload := {
-                    "contract_version": "fundamental.v1",
-                    "policy_id": f"{model_id}-us-gaap-public-v1",
-                    "policy_version": f"{model_version}-quality-v1",
-                    "profile_id": "us-gaap-public-v1",
-                    "model_id": model_id,
-                    "model_version": model_version,
-                    "assumptions": None,
-                    "market_inputs": _initial_market_inputs(),
-                    "source_refs": (
-                        "fundamental-service/docs/fundamental-enterprise-grade-target-state.md#24.4.3",
-                    ),
-                    # The first released policy is effective for every supported
-                    # historical snapshot; later releases supersede it by version.
-                    "effective_at": datetime(1970, 1, 1, tzinfo=UTC),
-                    "status": "active",
-                }
-            ),
-            policy_digest=sha256_digest(payload),
+        PolicyRecordV1.model_validate(
+            {
+                **(
+                    payload := {
+                        "contract_version": "fundamental.v1",
+                        "policy_id": f"{model_id}-us-gaap-public-v1",
+                        "policy_version": f"{model_version}-quality-v1",
+                        "profile_id": "us-gaap-public-v1",
+                        "model_id": model_id,
+                        "model_version": model_version,
+                        "assumptions": None,
+                        "market_inputs": _initial_market_inputs(),
+                        "source_refs": (
+                            "fundamental-service/docs/fundamental-enterprise-grade-target-state.md#24.4.3",
+                        ),
+                        # The first released policy is effective for every supported
+                        # historical snapshot; later releases supersede it by version.
+                        "effective_at": datetime(1970, 1, 1, tzinfo=UTC),
+                        "status": "active",
+                    }
+                ),
+                "policy_digest": sha256_digest(payload),
+            }
         )
         for model_id, model_version in (
             ("fcff_dcf", "fcff_dcf-v1"),
@@ -589,6 +636,8 @@ def resolve_policy(
         or policy.model_version != request.model_version
     ):
         raise ValueError("policy model ID/version does not match request")
+    resolved: dict[str, object]
+    precedence: dict[str, Literal["caller", "policy"]]
     if policy.assumptions is None:
         assumptions = request.assumptions
         resolved = _flatten_assumptions(assumptions.model_dump())
@@ -609,6 +658,7 @@ def resolve_policy(
                 "CALLER_APPROVAL_CONFLICT",
                 "caller approval is bound to a different resolved input_digest",
             )
+        assert resolved_input.input_digest is not None
         return resolved_input, PolicyResolutionV1(
             contract_version="fundamental.v1",
             policy_id=policy.policy_id,
@@ -623,13 +673,14 @@ def resolve_policy(
     defaults = policy.assumptions.model_dump()
     if request.model_id not in {"fcff_dcf", "transition_fcff_dcf"}:
         raise ValueError("policy resolution is not released for this model family")
-    if any(
+    capital_bridge = policy.assumptions.capital_bridge
+    if capital_bridge is None or any(
         defaults.get(group) is None
         for group in ("forecast", "wacc", "capital_bridge", "trace")
     ):
         raise ValueError("policy does not contain a complete FCFF assumption set")
-    resolved: dict[str, object] = {}
-    precedence: dict[str, Literal["caller", "policy"]] = {}
+    resolved = {}
+    precedence = {}
     for group, values in defaults.items():
         if not isinstance(values, dict):
             key = f"assumptions.{group}"
@@ -661,7 +712,7 @@ def resolve_policy(
             if caller.get("terminal_growth") is not None
             else defaults["terminal_growth"]
         ),
-        capital_bridge=policy.assumptions.capital_bridge.model_copy(
+        capital_bridge=capital_bridge.model_copy(
             update=caller.get("capital_bridge", {})
         ),
         trace=request.assumptions.trace,
@@ -684,6 +735,7 @@ def resolve_policy(
             "CALLER_APPROVAL_CONFLICT",
             "caller approval is bound to a different resolved input_digest",
         )
+    assert resolved_input.input_digest is not None
     resolution = PolicyResolutionV1(
         contract_version="fundamental.v1",
         policy_id=policy.policy_id,
@@ -730,7 +782,7 @@ def resolve_policy_overrides(
     resolved_fields: dict[str, object] = {}
     precedence: dict[str, Literal["caller", "policy"]] = {}
 
-    def resolve_group(name: str, model_type: type[BaseModel]) -> BaseModel:
+    def resolve_group(name: str, model_type: type[AssumptionGroup]) -> AssumptionGroup:
         default_group = getattr(defaults, name)
         caller_group = getattr(overrides, name)
         default_values = (
@@ -809,7 +861,7 @@ def resolve_policy_overrides(
         "policy_id": policy.policy_id,
     }
     try:
-        resolved = ValuationInputV1(**payload).with_digest()
+        resolved = ValuationInputV1.model_validate({**payload}).with_digest()
     except ValidationError as error:
         raise PolicyError(
             "POLICY_ASSUMPTIONS_INVALID",
@@ -836,6 +888,7 @@ def resolve_policy_overrides(
             update={"caller_approval": request.caller_approval}
         )
 
+    assert resolved.input_digest is not None
     return resolved, PolicyResolutionV1(
         contract_version="fundamental.v1",
         policy_id=policy.policy_id,
@@ -930,16 +983,11 @@ def evaluate_eligibility(
 
 
 def initial_model_specs() -> tuple[ModelSpecV1, ...]:
+    required_fields = ("revenue", "operating_income", "cash", "debt", "diluted_shares")
     common = {
         "contract_version": "fundamental.v1",
         "profile_id": "us-gaap-public-v1",
-        "required_fields": (
-            "revenue",
-            "operating_income",
-            "cash",
-            "debt",
-            "diluted_shares",
-        ),
+        "required_fields": required_fields,
         "supported_archetypes": ("mature_non_financial",),
         "owner": "fundamental-service",
         "validator": "quality-policy-v1",
@@ -983,17 +1031,21 @@ def initial_model_specs() -> tuple[ModelSpecV1, ...]:
         ),
     }
     return (
-        ModelSpecV1(model_id="fcff_dcf", model_version="fcff_dcf-v1", **common),
-        ModelSpecV1(
-            model_id="transition_fcff_dcf",
-            model_version="transition_fcff_dcf-v1",
-            required_fields=(*common["required_fields"], "filed_operating_evidence"),
-            supported_archetypes=("high_growth_non_financial",),
-            **{
-                key: value
-                for key, value in common.items()
-                if key not in {"required_fields", "supported_archetypes"}
-            },
+        ModelSpecV1.model_validate(
+            {"model_id": "fcff_dcf", "model_version": "fcff_dcf-v1", **common}
+        ),
+        ModelSpecV1.model_validate(
+            {
+                "model_id": "transition_fcff_dcf",
+                "model_version": "transition_fcff_dcf-v1",
+                "required_fields": (*required_fields, "filed_operating_evidence"),
+                "supported_archetypes": ("high_growth_non_financial",),
+                **{
+                    key: value
+                    for key, value in common.items()
+                    if key not in {"required_fields", "supported_archetypes"}
+                },
+            }
         ),
     )
 
@@ -1377,57 +1429,51 @@ def expansion_model_specs() -> tuple[ModelSpecV1, ...]:
         },
     )
     return tuple(
-        ModelSpecV1(
-            contract_version="fundamental.v1",
-            model_id=family["model_id"],
-            model_version=f"{family['model_id']}-v1",
-            profile_id=family["profile_id"],
-            required_fields=family["required_fields"],
-            forbidden_conditions=family["forbidden_conditions"],
-            supported_archetypes=(family["archetype"],),
-            owner="fundamental-service",
-            validator="independent-model-validation",
-            lifecycle="exploratory",
-            economic_purpose=family["economic_purpose"],
-            valuation_basis=family["valuation_basis"],
-            jurisdictions=("US",),
-            accounting_bases=(
-                ("ifrs",) if family["model_id"] == "ifrs_fcff_dcf" else ("us-gaap",)
-            ),
-            required_evidence=family["evidence"],
-            assumption_policy=family["assumption_policy"],
-            formula_graph=family["formula_graph"],
-            numerical_policy="decimal-50-end-of-year-v1",
-            eligibility_policy=(
-                "model-required-facts-forbidden-conditions-and-quality-v1"
-            ),
-            abstention_policy=(
-                "abstain-on-any-required-evidence-or-entity-scope-failure-v1"
-            ),
-            uncertainty_policy=family["uncertainty_policy"],
-            calibration_policy="chronological-point-in-time-oos-before-promotion-v1",
-            calibration_targets=family["calibration_targets"],
-            calibration_required_for_promotion=True,
-            required_release_gates=(
-                "public-source-coverage",
-                "point-in-time-accounting",
-                "positive-negative-golden-cohorts",
-                "independent-node-challenger",
-                "calibration-oos",
-                "replay-reproducibility",
-            ),
-            source_register=family["sources"],
-            capital_bridge_policy=family["capital_bridge_policy"],
-            golden_cohort=f"{family['model_id']}-positive-negative-golden-cohort-v1",
-            challenger=f"{family['model_id']}-independent-node-challenger-v1",
-            independent_validator="independent-model-validation",
-            retirement_trigger=(
-                "source-loss-drift-validation-failure-or-expired-review-v1"
-            ),
-            rollback_policy="restore-last-promoted-release-manifest-and-replay-v1",
-            monitoring_policy=(
-                "monthly-source-health-drift-missingness-and-abstention-v1"
-            ),
+        ModelSpecV1.model_validate(
+            {
+                "contract_version": "fundamental.v1",
+                "model_id": family["model_id"],
+                "model_version": f"{family['model_id']}-v1",
+                "profile_id": family["profile_id"],
+                "required_fields": family["required_fields"],
+                "forbidden_conditions": family["forbidden_conditions"],
+                "supported_archetypes": (family["archetype"],),
+                "owner": "fundamental-service",
+                "validator": "independent-model-validation",
+                "lifecycle": "exploratory",
+                "economic_purpose": family["economic_purpose"],
+                "valuation_basis": family["valuation_basis"],
+                "jurisdictions": ("US",),
+                "accounting_bases": ("ifrs",)
+                if family["model_id"] == "ifrs_fcff_dcf"
+                else ("us-gaap",),
+                "required_evidence": family["evidence"],
+                "assumption_policy": family["assumption_policy"],
+                "formula_graph": family["formula_graph"],
+                "numerical_policy": "decimal-50-end-of-year-v1",
+                "eligibility_policy": "model-required-facts-forbidden-conditions-and-quality-v1",
+                "abstention_policy": "abstain-on-any-required-evidence-or-entity-scope-failure-v1",
+                "uncertainty_policy": family["uncertainty_policy"],
+                "calibration_policy": "chronological-point-in-time-oos-before-promotion-v1",
+                "calibration_targets": family["calibration_targets"],
+                "calibration_required_for_promotion": True,
+                "required_release_gates": (
+                    "public-source-coverage",
+                    "point-in-time-accounting",
+                    "positive-negative-golden-cohorts",
+                    "independent-node-challenger",
+                    "calibration-oos",
+                    "replay-reproducibility",
+                ),
+                "source_register": family["sources"],
+                "capital_bridge_policy": family["capital_bridge_policy"],
+                "golden_cohort": f"{family['model_id']}-positive-negative-golden-cohort-v1",
+                "challenger": f"{family['model_id']}-independent-node-challenger-v1",
+                "independent_validator": "independent-model-validation",
+                "retirement_trigger": "source-loss-drift-validation-failure-or-expired-review-v1",
+                "rollback_policy": "restore-last-promoted-release-manifest-and-replay-v1",
+                "monitoring_policy": "monthly-source-health-drift-missingness-and-abstention-v1",
+            }
         )
         for family in families
     )
@@ -1452,5 +1498,9 @@ def expansion_policy_records() -> tuple[PolicyRecordV1, ...]:
             "effective_at": datetime(1970, 1, 1, tzinfo=UTC),
             "status": "active",
         }
-        policies.append(PolicyRecordV1(**payload, policy_digest=sha256_digest(payload)))
+        policies.append(
+            PolicyRecordV1.model_validate(
+                {**payload, "policy_digest": sha256_digest(payload)}
+            )
+        )
     return tuple(policies)
