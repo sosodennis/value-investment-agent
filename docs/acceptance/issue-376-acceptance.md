@@ -340,3 +340,110 @@ labels and one horizon mismatch remain in the denominator. **Canonical study
 forecasts remain zero, supported_history_threshold remains null, and #376 / PR
 #378 remain open/draft.** This is completed engineering evidence, not a completed
 empirical study or an approved underpowered forecast conclusion.
+
+## Frozen first real case and source packet
+
+The repository owner confirmed the delivery order now recorded in #376:
+historical applicability/input semantics; one real forecast/label/error/repeat;
+freeze #377 before threshold selection; expand to the unchanged fixed cohort.
+Primary study progress remains **0/100** completed issuer forecast/error paths.
+
+Exact implementation `6fcab170d82b5ff7aa14a61702099c39855fe1b3` adds
+`scripts/audit_history_first_case.py` and its boundary tests. The frozen rule
+sorts by original decision timestamp then issuer ID, selects a source-supported
+original decision/history/first-label diagnostic packet and preserves every
+ineligible issuer and reason. It binds the 187 updated targets only to original
+source-size refusals and retains all original digests/statuses. This is an
+overlay of retained batches, not a new full-589 parser run or model eligibility.
+
+The full 100-issuer / 589-filing audit finds seven diagnostic cases. The first
+is **CIK 0001282637 / NEWMARKET CORP**, origin **2016-02-12T16:26:17Z**.
+Its selected source filings are:
+
+| Role | Original accession | Facts | Fresh executions | Blocking findings |
+| --- | --- | ---: | ---: | ---: |
+| History | `0001282637-15-000004` | 1,687 | 2 | 0 |
+| Decision | `0001282637-16-000028` | 1,485 | 2 | 0 |
+| First subsequent annual label | `0001282637-17-000005` | 1,378 | 2 | 0 |
+
+The complete original case inventory also retains its other refused history
+filings. Discovering role gaps does not authorize selecting another issuer.
+Each selected original was freshly parsed twice under the pinned strict EFM /
+historical DQC v3.6.2 profile at the exact implementation. Both executions match,
+and every full fact multiset matches its retained original. Parser sources,
+resources and the independent taxonomy-cache hashes remain unchanged. The three
+canonical parser artifacts and the full source packet repeat with `wrote=false`.
+The later label's observations remain separate from origin observations.
+
+The review packet reads current formal Fundamental requirements and queries
+original parsed observations. The old CompanyFacts proposal supplies only
+unapproved concept-name search hints, never numeric values. Six additional
+source-observed concept hint groups remain explicitly unapproved. These include
+combined basic/diluted-share tags, net receivables, legacy rent expense and
+total/noncurrent debt; their existence does not establish complete/nonoverlapping
+role coverage. The packet retains context, namespace, period, unit, dimensions,
+scope, value, source hash, accession and exact parsed-fact digest for review.
+
+It finds original consolidated numeric candidates for **19/32 FCFF roles**;
+13 roles lack such candidates under these hints. This does not establish model
+period completeness, exact amount/precision, accounting-era applicability or
+semantic approval. Transition additionally requires its filed operating evidence,
+which has not been adjudicated. **Zero roles and zero historical market policies
+are approved** in this packet; no canonical facts, release or forecast is created.
+
+A concrete disclosure narrows the owning #381 gap: the FY2015 original
+`DisclosureOfCompensationRelatedCostsShareBasedPaymentsTextBlock` reports
+recognized restricted-stock/RSU compensation expense for 2015, 2014 and 2013,
+despite the absent directly matching numeric tag. The narrative receipt binds
+the exact source fact/hash/context and source-view quote offsets. Missing numeric
+tags cannot justify a zero. Those rounded, class-specific amounts also do not
+automatically cover the full role. Source-bound numeric disclosure extraction,
+currency/precision/class coverage and independent semantic review need the
+owning Fundamental contract, recorded in
+[#381](https://github.com/sosodennis/value-investment-agent/issues/381#issuecomment-6792426312).
+No competing accounting API or alternative valuation formula was added here.
+
+At the clean implementation, **48 research tests passed** with no skips;
+focused Ruff 0.14.14 check/format, mypy 1.15.0, both architecture guards and diff
+check exited 0. Tests cover stable selection independent of forecast outcomes,
+all-case/failure retention, duplicate/foreign/changed overlays, frozen label
+identity, future input and in-sample-label rejection, null selection, corruption
+and unchanged artifact reuse. Production service code is unchanged by this
+increment; its previously passed local suite was not redundantly rerun. All
+12 executed implementation CI checks passed; the separate release gate skipped.
+
+External evidence lives under `checkpoint-6fcab170/` in the same root. Run the
+drivers using `uv run --frozen --project fundamental-service python` followed by
+the external absolute `references/` path:
+`issue376-first-case-checkpoint.py`, `issue376-first-case-source-packet.py`, and
+`issue376-first-case-narrative-gap.py`. All exited 0 at the exact clean commit.
+The first driver records full argv, exits and content-addressed command logs;
+the source packet log is `source-packet-first.log`. Each report binds executor,
+source reports, code/lock/runtime and applicable resource digests. Runtime remains
+CPython 3.11.15 / Arelle 2.47.4 / lxml 6.1.3 / Pydantic 2.14.2. The full case
+selection repeat has identical digests and unchanged bytes/sizes/mtimes. The
+fresh source-parser repeats are distinct from selection-artifact reuse.
+
+| Artifact | SHA-256 |
+| --- | --- |
+| Exact first-case checkpoint | `905a95fe0d8ead90a32c3ad0e9fc1e7f398a58cdbc3378146dee0346da64dd1a` |
+| Checkpoint inputs | `659a606f68f374e08892549a53c6fec3f5f4a998861c72af7abf2dc95ef1260b` |
+| Checkpoint outputs | `a645afb7138db2f7249afbd25a74ca30f0396e6e45913ec5b26c5a48aeacadb8` |
+| Complete fixed-case selection | `1dde4561b08965b9abb12426f4a78548c066444ebcd3f4e997948c22e854fee0` |
+| Selection inputs | `9b7fb752ca808c8ef8760236ab0f066465aea465fd8bf2fe0ca1581fd575d848` |
+| Selection outputs | `22870d2ed909e62135f86d51c278e948b6e90e23e1088bbb36cea4e6eb4d6b77` |
+| Original-source review packet | `1e256221adb0fc2a3faf83ff98f5fdca416004cafe261c634b74ab5e5dec7bf7` |
+| Packet inputs | `87aaed87b04560c686763f26070803523096fd61f8aa36c16cd2c3329ba5a6eb` |
+| Packet outputs | `f1c8a580297a229c5b80844c917ecf0b341a6a05bda0425ff2aab77dcf2ed56f` |
+| Narrative gap receipt | `783f98dada98e9f2fc273adc5442fcd4ebe746d129530035f0c40c19e2b657e1` |
+| Narrative inputs | `3bf10a5fd6850e025b86bd0ef1ce011bceeb94c599edfc6f20dcabc6564ada93` |
+| Narrative outputs | `e75a012ac66f6a97339b31afa2a8f1918248851d891fc641cdb5c87b7c5f83c0` |
+
+Next delivery remains this fixed issuer's reviewed role/adoption evidence,
+historical policy and trusted source/mapping releases, using #361/#379/#381
+owning contracts and #371 historical validation review. Then execute formal
+#352 forecast, first-original label, error and full service-backed repeat. All
+100 issuers and every failure remain in the study; these three filings were
+already in the prior passing set and do not increase the aggregate pass count.
+No parent checkout, DB or Docker resource changed. #376 / PR #378 remain
+open/draft and supported_history_threshold remains null.
