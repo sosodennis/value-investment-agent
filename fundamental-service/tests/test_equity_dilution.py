@@ -3,7 +3,7 @@ from decimal import Decimal, Inexact, ROUND_DOWN, localcontext
 
 import pytest
 
-from fundamental_service.contracts import PeriodType, SourceRole, TraceV1
+from fundamental_service.contracts import DimensionV1, PeriodType, SourceRole, TraceV1
 from fundamental_service.equity_dilution import (
     CommonShareQuoteV1,
     DilutionError,
@@ -318,3 +318,53 @@ def test_awards_require_the_same_original_filing(change):
     with pytest.raises(DilutionError) as error:
         _compute(inventory, quote, policy)
     assert error.value.code == "DILUTION_FACT_SCOPE_MISMATCH"
+
+
+@pytest.mark.parametrize("dimensional", [False, True])
+def test_duplicate_context_aliases_and_total_component_overlap_are_rejected(
+    dimensional,
+):
+    inventory, _, _ = _inputs()
+    original = inventory.instruments[1]
+    changes = {"context_id": "context-alias"}
+    if dimensional:
+        changes.update(
+            dimensions=(
+                DimensionV1(
+                    name="us-gaap:AwardTypeAxis", member="us-gaap:RestrictedStockMember"
+                ),
+            ),
+            consolidation_scope="segmented",
+        )
+    quantity = original.quantity.model_copy(
+        update={
+            "fact_id": "quantity-alias",
+            "context": original.quantity.context.model_copy(update=changes),
+        }
+    )
+    compensation = original.unrecognized_compensation.model_copy(
+        update={
+            "fact_id": "compensation-alias",
+            "concept": "us-gaap:DifferentCompensation",
+            "context": original.unrecognized_compensation.context.model_copy(
+                update={"concept_qname": "us-gaap:DifferentCompensation"}
+            ),
+        }
+    )
+    duplicate = original.model_copy(
+        update={
+            "instrument_id": "alias",
+            "quantity": quantity,
+            "unrecognized_compensation": compensation,
+        }
+    )
+    with pytest.raises(
+        ValueError,
+        match="totals with class components" if dimensional else "observation twice",
+    ):
+        EquityAwardInventoryV1.model_validate(
+            {
+                **inventory.model_dump(),
+                "instruments": (*inventory.instruments, duplicate),
+            }
+        )

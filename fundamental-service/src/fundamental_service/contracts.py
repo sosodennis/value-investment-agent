@@ -1497,6 +1497,9 @@ class ProvenanceInputV1(StrictModel):
     preparation_version: str | None = Field(
         default=None, min_length=1, exclude_if=lambda value: value is None
     )
+    equity_dilution_evidence_digest: str | None = Field(
+        default=None, pattern=r"^[0-9a-f]{64}$", exclude_if=lambda value: value is None
+    )
 
 
 class CallerApprovalEnvelopeV1(StrictModel):

@@ -57,10 +57,12 @@ class SourcePreparationPlanV2(StrictModel):
 
     @model_validator(mode="after")
     def requirements_match(self) -> SourcePreparationPlanV2:
-        required = valuation_requirements_profile(self.model_id).required_fact_fields
-        if {
+        profile = valuation_requirements_profile(self.model_id)
+        required = set(profile.required_fact_fields)
+        requested = {
             field for request in self.ingestions for field in request.required_fields
-        } != set(required):
+        }
+        if not required <= requested <= required | set(profile.supporting_fact_fields):
             raise ValueError("source plan must cover the complete model requirements")
         first = self.ingestions[0]
         for request in self.ingestions:

@@ -146,7 +146,7 @@ class _Client:
                     "data_release_manifest_digest"
                 ],
                 "source_selection_policy": "pit-v1",
-                "coverage_profile": "fcff-valuation-requirements-v1",
+                "coverage_profile": "fcff-valuation-requirements-v2",
             },
             "historical_facts": list(self.ingestion["canonical_fact_ids"]),
             "assumptions": {
@@ -175,7 +175,7 @@ class _Client:
                 "status": "prepared",
                 "model_id": input_payload["model_id"],
                 "model_version": "fcff_dcf-v1",
-                "profile_id": "fcff-valuation-requirements-v1",
+                "profile_id": "fcff-valuation-requirements-v2",
                 "profile_digest": "d" * 64,
                 "policy_id": "fcff_dcf-us-gaap-public-v1",
                 "policy_version": "fcff_dcf-v1-quality-v1",
@@ -322,7 +322,6 @@ async def test_producer_resolves_identity_then_ingests_and_pins_request() -> Non
         "noncontrolling_interests",
         "convertible_instruments",
         "common_shares_outstanding",
-        "dilutive_instruments",
         "other_share_classes",
     ]
     assert prepared.snapshot_selector["identity"] == prepared.identity
@@ -372,7 +371,7 @@ async def test_producer_enriches_compact_caller_request_without_inventing_inputs
         "data_snapshot_id": "snapshot-aapl-1",
         "data_release_manifest_digest": "b" * 64,
         "source_selection_policy": "pit-v1",
-        "coverage_profile": "fcff-valuation-requirements-v1",
+        "coverage_profile": "fcff-valuation-requirements-v2",
     }
     assert [operation for operation, _ in client.calls] == [
         "resolve_identity",
@@ -424,9 +423,11 @@ async def test_producer_routes_manual_override_back_through_fundamental_service(
 @pytest.mark.asyncio
 async def test_transition_request_adds_filed_evidence_to_complete_profile() -> None:
     client = _Client(ingestion=_ingestion())
+    request = _compact_request()
+    request["model_id"] = "transition_fcff_dcf"
 
     await prepare_service_valuation_request(
-        _state(request=_compact_request(), model_type="dcf_growth"),
+        _state(request=request, model_type="dcf_growth"),
         client=client,
         principal=_principal(),
         correlation_id="correlation-1",
@@ -435,7 +436,7 @@ async def test_transition_request_adds_filed_evidence_to_complete_profile() -> N
 
     ingestion_payload = client.calls[1][1]
     assert ingestion_payload["required_fields"][-1] == "filed_operating_evidence"
-    assert len(ingestion_payload["required_fields"]) == 33
+    assert len(ingestion_payload["required_fields"]) == 32
 
 
 @pytest.mark.asyncio
@@ -565,7 +566,6 @@ async def test_facts_only_projection_uses_base_evidence_for_growth_model() -> No
         "noncontrolling_interests",
         "convertible_instruments",
         "common_shares_outstanding",
-        "dilutive_instruments",
         "other_share_classes",
     ]
     assert [operation for operation, _ in client.calls] == ["resolve_identity"]

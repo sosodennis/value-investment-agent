@@ -18,6 +18,7 @@ from fundamental_service.contracts import (
     SecMappingReferenceV1,
 )
 from fundamental_service.data_releases import (
+    ArtifactRefV1,
     ActiveDataReleaseV1,
     ActiveDataReleaseWithManifestV1,
     DataReleaseCandidatePublishRequestV1,
@@ -51,6 +52,11 @@ from fundamental_service.release_runner import DataReleaseCanaryRunner
 from fundamental_service.replay import ArtifactRecordV1, ArtifactStore
 from fundamental_service.serialization import canonical_bytes, sha256_digest
 from fundamental_service.snapshots import FilesystemSnapshotRepository
+from fundamental_service.equity_award_evidence import (
+    EQUITY_DILUTION_ARTIFACT_ROLE,
+    EQUITY_QUOTE_SOURCE_ROLE,
+)
+from equity_award_fixtures import QUOTE_BYTES, award_evidence
 from fundamental_service.valuation_requirements import valuation_requirements_profile
 from test_api import _release_manifest_for
 from test_postgres_metadata import DATABASE_URL, _sec_ingestion_request, _snapshot
@@ -67,7 +73,8 @@ VALUATION_TIME = datetime(2026, 3, 1, tzinfo=UTC)
 def _fixture(tmp_path: Path, *, released: bool = True, namespace: str = "runner"):
     source_bytes = b'{"source":"synthetic original filing fixture"}'
     source_hash = hashlib.sha256(source_bytes).hexdigest()
-    required = valuation_requirements_profile("fcff_dcf").required_fact_fields
+    profile = valuation_requirements_profile("fcff_dcf")
+    required = (*profile.required_fact_fields, *profile.supporting_fact_fields[:2])
     base = _sec_ingestion_request()
     ingestion = base.model_copy(
         update={
@@ -146,6 +153,13 @@ def _fixture(tmp_path: Path, *, released: bool = True, namespace: str = "runner"
         )
         for fact in _facts()
     )
+    dilution = award_evidence(snapshot)
+    stored = (
+        *tuple(
+            fact for fact in stored if fact.normalized_field != "dilutive_instruments"
+        ),
+        *dilution.facts,
+    )
     for fact in stored:
         facts.publish(fact)
     manifest = _release_manifest_for(snapshot, stored)
@@ -156,6 +170,21 @@ def _fixture(tmp_path: Path, *, released: bool = True, namespace: str = "runner"
         mapping_refs=tuple(
             MappingRefV1(mapping_id=key, mapping_digest=sha256_digest(mapping))
             for key, mapping in sorted(mappings.items())
+        ),
+        artifact_refs=(
+            *manifest.artifact_refs,
+            ArtifactRefV1(
+                artifact_id=f"equity-dilution:{dilution.digest}",
+                content_hash=dilution.digest,
+                media_type="application/json",
+                role=EQUITY_DILUTION_ARTIFACT_ROLE,
+            ),
+            ArtifactRefV1(
+                artifact_id="synthetic-quote",
+                content_hash=hashlib.sha256(QUOTE_BYTES).hexdigest(),
+                media_type="application/json",
+                role=EQUITY_QUOTE_SOURCE_ROLE,
+            ),
         ),
     )
     manifest = DataReleaseManifestV1(**payload, manifest_digest=sha256_digest(payload))
@@ -177,6 +206,10 @@ def _fixture(tmp_path: Path, *, released: bool = True, namespace: str = "runner"
         get_mapping=mappings.__getitem__,
     )
     artifacts = ArtifactStore(tmp_path / "artifacts")
+    artifacts.put_with_receipt(f"equity-dilution:{dilution.digest}", dilution)
+    artifacts.put_with_receipt(
+        "synthetic-quote", {"price": "10", "synthetic-test-only": True}
+    )
     config = replace(
         OperationsConfig.testing(),
         release_publish_authorized_organizations=frozenset({"operators"}),
@@ -199,6 +232,7 @@ def _fixture(tmp_path: Path, *, released: bool = True, namespace: str = "runner"
         mappings=mappings,
         facts=facts,
         artifacts=artifacts,
+        dilution=dilution,
         active=active,
         state=state,
         source_bytes=source_bytes,
@@ -266,10 +300,23 @@ def _reviewed_candidate(fixture):
     manifest_payload = fixture.manifest.model_dump(exclude={"manifest_digest"})
     manifest_payload.update(
         taxonomy_refs=seed_manifest.taxonomy_refs,
-        artifact_refs=seed_manifest.artifact_refs,
+        artifact_refs=(
+            *seed_manifest.artifact_refs,
+            *(
+                ref
+                for ref in fixture.manifest.artifact_refs
+                if ref.role in {EQUITY_DILUTION_ARTIFACT_ROLE, EQUITY_QUOTE_SOURCE_ROLE}
+            ),
+        ),
     )
     manifest = DataReleaseManifestV1(
         **manifest_payload, manifest_digest=sha256_digest(manifest_payload)
+    )
+    review_artifacts = artifacts
+    artifacts = SimpleNamespace(
+        read=lambda artifact_id: fixture.artifacts.read(artifact_id)
+        if artifact_id != "release-evidence"
+        else review_artifacts.read(artifact_id)
     )
     verification_payload = verification.model_dump(
         exclude={"signature", "verification_digest"}
@@ -357,7 +404,7 @@ def test_released_source_uses_formal_composer_and_reuses_artifact_after_restart(
     assert prepared.status == "approval_required"
     assert prepared.preparation.status == "prepared"
     assert prepared.preparation.input.provenance.preparation_version == (
-        "fcff-forecast-composer-v3"
+        "fcff-forecast-composer-v4"
     )
     assert prepared.preparation.input.assumptions.capital_bridge.lease_liabilities == (
         20
@@ -763,7 +810,12 @@ def test_preparation_and_calculation_reuse_postgres_artifacts_after_restart_and_
         for mapping in fixture.mappings.values():
             store.publish_mapping(mapping)
         for reference in candidate.manifest.artifact_refs:
-            raw = review_artifacts.read(reference.artifact_id)
+            raw = (
+                fixture.artifacts
+                if reference.role
+                in {EQUITY_DILUTION_ARTIFACT_ROLE, EQUITY_QUOTE_SOURCE_ROLE}
+                else review_artifacts
+            ).read(reference.artifact_id)
             assert (
                 content.put(raw, media_type=reference.media_type)
                 == reference.content_hash
@@ -969,7 +1021,10 @@ def test_multi_original_plan_covers_model_with_partial_per_filing_roles(tmp_path
     plan = SourcePreparationPlanV2.model_validate(
         {**fixture.plan.model_dump(), "ingestions": tuple(requests)}
     )
-    assert plan.resolution_request().required_fields == first.required_fields
+    assert (
+        plan.resolution_request().required_fields
+        == valuation_requirements_profile("fcff_dcf").required_fact_fields
+    )
     assert (
         SourcePreparationPlanV2.model_validate_json(canonical_bytes(plan)).digest
         == plan.digest
@@ -1015,12 +1070,17 @@ def test_multi_original_plan_acquires_composes_then_reuses_trusted_history(tmp_p
                     "accession_number": source.accession_number,
                     "available_at": source.available_at,
                     "filed_at": source.filed_at,
+                    "security_scope": original.identity.security_id,
+                    "context": fact.context.model_copy(
+                        update={"entity_scope": original.identity.issuer_id}
+                    ),
                     "source": fact.source.model_copy(
                         update={
                             "content_hash": source.content_hash,
                             "source_url": source.uri,
                             "available_at": source.available_at,
                             "filed_at": source.filed_at,
+                            "accession_number": source.accession_number,
                         }
                     ),
                 }
@@ -1064,12 +1124,64 @@ def test_multi_original_plan_acquires_composes_then_reuses_trusted_history(tmp_p
     assert first.status == "release_required"
     history = fixture.snapshots.get(first.snapshot_id)
     fixture.snapshot = history
+    award_facts = {
+        fact.normalized_field: fact
+        for fact in facts
+        if fact.normalized_field.startswith("equity_award_")
+    }
+    award = fixture.dilution.inventory.instruments[0].model_copy(
+        update={
+            "quantity": award_facts["equity_award_quantity"],
+            "unrecognized_compensation": award_facts[
+                "equity_award_unrecognized_compensation"
+            ],
+        }
+    )
+    inventory = fixture.dilution.inventory.model_copy(
+        update={
+            "issuer_id": history.identity.issuer_id,
+            "security_id": history.identity.security_id,
+            "coverage_evidence": fixture.dilution.inventory.coverage_evidence.model_copy(
+                update={"source_refs": (award.quantity.source.content_hash,)}
+            ),
+            "instruments": (award,),
+        }
+    )
+    fixture.dilution = fixture.dilution.model_copy(
+        update={
+            "snapshot_manifest_digest": history.manifest_digest,
+            "inventory": inventory,
+            "quote": fixture.dilution.quote.model_copy(
+                update={
+                    "issuer_id": history.identity.issuer_id,
+                    "security_id": history.identity.security_id,
+                }
+            ),
+        }
+    )
+    fixture.artifacts.put_with_receipt(
+        f"equity-dilution:{fixture.dilution.digest}", fixture.dilution
+    )
     manifest = _release_manifest_for(history, tuple(facts))
     payload = manifest.model_dump(exclude={"manifest_digest"})
     payload.update(
         profile_id=plan.release_profile_id,
         required_fields=first_request.required_fields,
         mapping_refs=fixture.manifest.mapping_refs,
+        artifact_refs=(
+            *manifest.artifact_refs,
+            ArtifactRefV1(
+                artifact_id=f"equity-dilution:{fixture.dilution.digest}",
+                content_hash=fixture.dilution.digest,
+                media_type="application/json",
+                role=EQUITY_DILUTION_ARTIFACT_ROLE,
+            ),
+            *(
+                ref
+                for ref in fixture.manifest.artifact_refs
+                if ref.role == EQUITY_QUOTE_SOURCE_ROLE
+            ),
+        ),
     )
     fixture.manifest = DataReleaseManifestV1(
         **payload, manifest_digest=sha256_digest(payload)

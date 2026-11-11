@@ -64,7 +64,6 @@ _FCFF_REQUIRED_FIELDS = [
     "noncontrolling_interests",
     "convertible_instruments",
     "common_shares_outstanding",
-    "dilutive_instruments",
     "other_share_classes",
 ]
 
@@ -637,7 +636,7 @@ class _FactsOnlyClient(_Client):
                 "data_release_manifest_digest"
             ],
             "source_selection_policy": "pit-v1",
-            "coverage_profile": "fcff-valuation-requirements-v1",
+            "coverage_profile": "fcff-valuation-requirements-v2",
         }
         prepared["provenance"] = {
             **prepared["provenance"],
@@ -655,7 +654,7 @@ class _FactsOnlyClient(_Client):
                 "status": "prepared",
                 "model_id": input_payload["model_id"],
                 "model_version": "fcff_dcf-v1",
-                "profile_id": "fcff-valuation-requirements-v1",
+                "profile_id": "fcff-valuation-requirements-v2",
                 "profile_digest": "d" * 64,
                 "policy_id": "fcff_dcf-us-gaap-public-v1",
                 "policy_version": "fcff_dcf-v1-quality-v1",
@@ -683,7 +682,7 @@ class _FactsOnlyClient(_Client):
                 "identity": facts.identity.model_dump(mode="json"),
                 "valuation_timestamp": facts.valuation_timestamp,
                 "model_id": input_payload["model_id"],
-                "profile_id": "fcff-valuation-requirements-v1",
+                "profile_id": "fcff-valuation-requirements-v2",
                 "profile_digest": "d" * 64,
                 "quality_status": "provisional",
                 "issue_codes": ["HISTORY_THRESHOLD_UNVALIDATED"],
@@ -1307,7 +1306,7 @@ async def test_cutover_compacts_nested_automatic_preparation_evidence() -> None:
         )
     )
     preparation_metrics = {
-        "profile_id": "fcff-valuation-requirements-v1",
+        "profile_id": "fcff-valuation-requirements-v2",
         "profile_digest": "d" * 64,
         "quality_status": "provisional",
         "issue_codes": ["HISTORY_THRESHOLD_UNVALIDATED"] * 64,

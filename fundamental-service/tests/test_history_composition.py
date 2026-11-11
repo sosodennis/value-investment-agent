@@ -264,6 +264,9 @@ def test_history_adds_required_prior_periods_to_formal_composer_without_changing
 ):
     repository, originals = _repository(tmp_path)
     history = _compose(repository, originals)
+    from equity_award_fixtures import award_evidence
+
+    dilution = award_evidence(history)
     facts = []
     for fact in _facts():
         if fact.period_end.year < 2022:
@@ -294,7 +297,7 @@ def test_history_adds_required_prior_periods_to_formal_composer_without_changing
 
     def prepare(snapshot):
         return prepare_automatic_valuation(
-            tuple(facts),
+            (*facts, *dilution.facts),
             snapshot=snapshot,
             model_id="fcff_dcf",
             model_version="fcff_dcf-v1",
@@ -302,6 +305,7 @@ def test_history_adds_required_prior_periods_to_formal_composer_without_changing
             policy_version="fcff_dcf-v1-quality-v1",
             data_release_manifest_digest="d" * 64,
             market_policy=_market_policy(),
+            equity_dilution_evidence=dilution,
         )
 
     for original in originals:

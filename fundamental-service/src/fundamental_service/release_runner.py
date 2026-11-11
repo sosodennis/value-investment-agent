@@ -34,6 +34,12 @@ from .facts import (
     resolve_canonical_facts,
     verify_accounting_role_evidence,
 )
+from .equity_award_evidence import (
+    AWARD_FACT_FIELDS,
+    EQUITY_DILUTION_ARTIFACT_ROLE,
+    load_release_dilution_evidence,
+)
+from .equity_dilution import DilutionError, compute_treasury_stock_dilution
 from .replay import ArtifactStore
 from .history_composition import verify_history_components
 from .serialization import canonical_bytes, sha256_digest
@@ -108,6 +114,7 @@ class DataReleaseCanaryRunner:
         checked_snapshots, checked_facts = self._verify_snapshots_and_facts(
             manifest, mappings
         )
+        self._verify_equity_dilution(manifest)
 
         canary_payload = {
             "manifest_digest": manifest.manifest_digest,
@@ -127,6 +134,59 @@ class DataReleaseCanaryRunner:
             "canary_digest": canary_digest,
         }
         return DataReleaseCanaryReportV1.model_validate(report_payload)
+
+    def _verify_equity_dilution(self, manifest: DataReleaseManifestV1) -> None:
+        references = tuple(
+            ref
+            for ref in manifest.artifact_refs
+            if ref.role == EQUITY_DILUTION_ARTIFACT_ROLE
+        )
+        has_award_facts = any(
+            self._facts.get(ref.fact_id).normalized_field in AWARD_FACT_FIELDS
+            for snapshot in manifest.snapshot_refs
+            for ref in snapshot.facts
+        )
+        if not references and not has_award_facts:
+            return
+        matched = 0
+        try:
+            for declaration in manifest.snapshot_refs:
+                snapshot = self._snapshots.get(declaration.snapshot_id)
+                facts = tuple(self._facts.get(ref.fact_id) for ref in declaration.facts)
+                evidence = load_release_dilution_evidence(
+                    manifest,
+                    snapshot=snapshot,
+                    artifacts=self._artifacts,
+                    released_facts=facts,
+                )
+                declared_awards = {
+                    fact.fact_id
+                    for fact in facts
+                    if fact.normalized_field in AWARD_FACT_FIELDS
+                }
+                if evidence is None:
+                    if declared_awards:
+                        raise DilutionError(
+                            "DILUTION_EVIDENCE_MISSING",
+                            "release award observations lack their reviewed inventory",
+                        )
+                    continue
+                matched += 1
+                compute_treasury_stock_dilution(
+                    evidence.inventory,
+                    evidence.quote,
+                    evidence.policy,
+                    valuation_timestamp=snapshot.valuation_timestamp,
+                )
+            if matched != len(references):
+                raise DilutionError(
+                    "DILUTION_SNAPSHOT_MISMATCH",
+                    "award evidence must bind one declared snapshot",
+                )
+        except (DilutionError, SnapshotError, ValueError) as error:
+            raise DataReleaseError(
+                getattr(error, "code", "DILUTION_EVIDENCE_INVALID"), str(error)
+            ) from error
 
     def _verify_artifacts(
         self,
@@ -210,7 +270,12 @@ class DataReleaseCanaryRunner:
                     "DATA_RELEASE_HISTORY_COMPONENT_INVALID",
                     "release history does not match its independently validated originals",
                 ) from exc
-            resolved = self._resolve_facts(snapshot, manifest.required_fields)
+            base_fields = tuple(
+                field
+                for field in manifest.required_fields
+                if field not in AWARD_FACT_FIELDS
+            )
+            resolved = self._resolve_facts(snapshot, base_fields) if base_fields else ()
             declared = {item.fact_id: item.fact_digest for item in reference.facts}
             actual = {item.fact_id: canonical_fact_digest(item) for item in resolved}
             if any(
@@ -220,13 +285,17 @@ class DataReleaseCanaryRunner:
                     "DATA_RELEASE_FACT_MISMATCH",
                     f"release snapshot {reference.snapshot_id} failed its fact canary",
                 )
-            if {item.normalized_field for item in resolved} != declared_fields:
+            if {item.normalized_field for item in resolved} != set(base_fields):
                 raise DataReleaseError(
                     "DATA_RELEASE_FIELDS_UNAVAILABLE",
                     f"release snapshot {reference.snapshot_id} does not cover required fields",
                 )
             history = self._verify_declared_history(snapshot, reference.facts, mappings)
-            if {item.normalized_field for item in history} != declared_fields:
+            if (
+                not declared_fields
+                <= {item.normalized_field for item in history}
+                <= declared_fields | set(AWARD_FACT_FIELDS)
+            ):
                 raise DataReleaseError(
                     "DATA_RELEASE_FIELDS_UNAVAILABLE",
                     f"release snapshot {reference.snapshot_id} has undeclared field roles",
@@ -283,6 +352,8 @@ class DataReleaseCanaryRunner:
             periods.setdefault(key, []).append(fact)
             facts.append(fact)
         for candidates in periods.values():
+            if candidates[0].normalized_field in AWARD_FACT_FIELDS:
+                continue
             try:
                 selected = resolve_canonical_facts(
                     candidates,

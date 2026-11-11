@@ -31,6 +31,7 @@ from fundamental_service.valuation_requirements import (
 )
 from test_api import _canonical_fact
 from test_postgres_metadata import _snapshot
+from equity_award_fixtures import award_evidence
 
 VALUATION_TIME = datetime(2026, 3, 1, tzinfo=UTC)
 RELEASE_DIGEST = "d" * 64
@@ -50,6 +51,7 @@ def _fact(
     base = _canonical_fact(fact_id or f"{field}-{year}", field)
     return base.model_copy(
         update={
+            "issuer_id": "0000000001",
             "concept": f"us-gaap:{field}",
             "value": Decimal(value),
             "period_start": period_start,
@@ -109,7 +111,6 @@ def _facts() -> tuple:
         "noncontrolling_interests",
         "convertible_instruments",
         "common_shares_outstanding",
-        "dilutive_instruments",
         "other_share_classes",
     )
     facts = []
@@ -172,27 +173,30 @@ def _prepare(
     market_policy=None,
     model_id: str = "fcff_dcf",
 ):
-    return prepare_automatic_valuation(
-        facts,
-        snapshot=_snapshot(
-            "valuation-preparation",
-            identity=IdentityV1(
-                issuer_id="CIK1",
-                issuer_name="Example Co",
-                domicile="US",
-                reporting_basis="us-gaap",
-                security_id="COMMON",
-                share_class="common",
-                currency="USD",
-            ),
-            valuation_timestamp=VALUATION_TIME,
+    snapshot = _snapshot(
+        "valuation-preparation",
+        identity=IdentityV1(
+            issuer_id="0000000001",
+            issuer_name="Example Co",
+            domicile="US",
+            reporting_basis="us-gaap",
+            security_id="COMMON",
+            share_class="common",
+            currency="USD",
         ),
+        valuation_timestamp=VALUATION_TIME,
+    )
+    dilution = award_evidence(snapshot)
+    return prepare_automatic_valuation(
+        (*facts, *dilution.facts),
+        snapshot=snapshot,
         model_id=model_id,
         model_version=f"{model_id}-v1",
         policy_id="fcff_dcf-us-gaap-public-v1",
         policy_version="fcff_dcf-v1-quality-v1",
         data_release_manifest_digest=RELEASE_DIGEST,
         market_policy=market_policy,
+        equity_dilution_evidence=dilution,
     )
 
 
@@ -259,7 +263,7 @@ def test_operating_lease_balances_are_disclosed_without_an_equity_deduction(mode
     assert results[0].intrinsic_value == results[1].intrinsic_value
     assert results[0].per_share_value == results[1].per_share_value
     assert changed.input.assumptions.capital_bridge.lease_liabilities == Decimal("20")
-    assert changed.input.provenance.preparation_version == "fcff-forecast-composer-v3"
+    assert changed.input.provenance.preparation_version == "fcff-forecast-composer-v4"
     lease_evidence = next(
         item
         for item in changed.assumptions_evidence
@@ -438,7 +442,7 @@ def test_transition_filing_evidence_can_be_non_numeric_but_remains_release_bound
         snapshot=_snapshot(
             "transition-evidence",
             identity=IdentityV1(
-                issuer_id="CIK1",
+                issuer_id="0000000001",
                 issuer_name="Example Co",
                 domicile="US",
                 reporting_basis="us-gaap",
@@ -599,7 +603,7 @@ def test_non_numeric_reinvestment_facts_abstain_with_reason(field: str) -> None:
     snapshot = _snapshot(
         "valuation-preparation",
         identity=IdentityV1(
-            issuer_id="CIK1",
+            issuer_id="0000000001",
             issuer_name="Example Co",
             domicile="US",
             reporting_basis="us-gaap",
@@ -646,7 +650,7 @@ def test_missing_prior_working_capital_retains_reason_without_partial_fcff() -> 
     snapshot = _snapshot(
         "valuation-preparation",
         identity=IdentityV1(
-            issuer_id="CIK1",
+            issuer_id="0000000001",
             issuer_name="Example Co",
             domicile="US",
             reporting_basis="us-gaap",

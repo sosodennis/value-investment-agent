@@ -52,6 +52,8 @@ from ..facts import (
     canonical_fact_digest,
     verify_accounting_role_evidence,
 )
+from ..equity_award_evidence import load_release_dilution_evidence
+from ..equity_dilution import DilutionError
 from ..fiscal_periods import resolve_fiscal_periods
 from ..governance import ModelInventory
 from ..history_composition import verify_history_components
@@ -1212,6 +1214,20 @@ class FundamentalApplication:
             policy,
             valuation_timestamp=snapshot.valuation_timestamp,
         )
+        try:
+            dilution = load_release_dilution_evidence(
+                self._data_release_manifest(request.data_release_manifest_digest),
+                snapshot=snapshot,
+                artifacts=self.artifact_store,
+                released_facts=evidence.facts,
+            )
+        except (DilutionError, SnapshotError, ValueError) as error:
+            raise ServiceError(
+                getattr(error, "code", "DILUTION_EVIDENCE_INVALID"),
+                str(error),
+                status_code=422,
+                retryable=False,
+            ) from error
         return prepare_automatic_valuation(
             evidence.facts,
             snapshot=snapshot,
@@ -1224,6 +1240,7 @@ class FundamentalApplication:
             data_release_manifest_digest=request.data_release_manifest_digest,
             market_policy=market_policy,
             mapping_version=evidence.mapping_version or "sec-canonical-mapping-v1",
+            equity_dilution_evidence=dilution,
         )
 
     def apply_manual_override(

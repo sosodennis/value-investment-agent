@@ -69,7 +69,6 @@ _POINT_IN_TIME_FACT_FIELDS = (
     "noncontrolling_interests",
     "convertible_instruments",
     "common_shares_outstanding",
-    "dilutive_instruments",
     "other_share_classes",
 )
 _BASE_REQUIRED_FIELDS = (

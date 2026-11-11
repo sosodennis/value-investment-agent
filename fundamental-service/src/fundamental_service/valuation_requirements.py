@@ -18,6 +18,7 @@ from .contracts import (
     StrictModel,
 )
 from .serialization import sha256_digest
+from .equity_award_evidence import AWARD_FACT_FIELDS
 
 
 class ValuationRequirementsProfileV1(StrictModel):
@@ -30,6 +31,7 @@ class ValuationRequirementsProfileV1(StrictModel):
     annual_instant_fields: tuple[str, ...] = Field(min_length=1)
     point_in_time_fact_fields: tuple[str, ...] = ()
     market_policy_input_roles: tuple[str, ...] = ()
+    supporting_fact_fields: tuple[str, ...] = ()
     history_window_years: int = Field(default=5, ge=1)
     candidate_minimum_complete_years: int = Field(default=3, ge=1)
     supported_history_threshold: int | None = Field(default=None, ge=1)
@@ -43,6 +45,7 @@ class ValuationRequirementsProfileV1(StrictModel):
             self.annual_instant_fields,
             self.point_in_time_fact_fields,
             self.market_policy_input_roles,
+            self.supporting_fact_fields,
         )
         if any(len(values) != len(set(values)) for values in groups):
             raise ValueError("requirements profile fields must be unique")
@@ -102,7 +105,8 @@ def select_released_facts(
     rejected: list[str] = []
     for fact in facts:
         if (
-            fact.normalized_field not in required_fields
+            fact.normalized_field
+            not in (*required_fields, *profile.supporting_fact_fields)
             or fact.issuer_id != snapshot.identity.issuer_id
             or fact.security_id not in {None, snapshot.identity.security_id}
             or fact.source.content_hash not in source_hashes
@@ -180,7 +184,6 @@ _POINT_IN_TIME_FACT_FIELDS = (
     "noncontrolling_interests",
     "convertible_instruments",
     "common_shares_outstanding",
-    "dilutive_instruments",
     "other_share_classes",
 )
 
@@ -196,22 +199,24 @@ _MARKET_POLICY_INPUT_ROLES = (
 
 _PROFILES = {
     "fcff_dcf": ValuationRequirementsProfileV1(
-        profile_id="fcff-valuation-requirements-v1",
-        profile_version="fcff-valuation-requirements-v1",
+        profile_id="fcff-valuation-requirements-v2",
+        profile_version="fcff-valuation-requirements-v2",
         model_id="fcff_dcf",
         annual_duration_fields=_ANNUAL_DURATION_FIELDS,
         annual_instant_fields=_ANNUAL_INSTANT_FIELDS,
         point_in_time_fact_fields=_POINT_IN_TIME_FACT_FIELDS,
         market_policy_input_roles=_MARKET_POLICY_INPUT_ROLES,
+        supporting_fact_fields=AWARD_FACT_FIELDS,
     ),
     "transition_fcff_dcf": ValuationRequirementsProfileV1(
-        profile_id="transition-fcff-valuation-requirements-v1",
-        profile_version="transition-fcff-valuation-requirements-v1",
+        profile_id="transition-fcff-valuation-requirements-v2",
+        profile_version="transition-fcff-valuation-requirements-v2",
         model_id="transition_fcff_dcf",
         annual_duration_fields=_ANNUAL_DURATION_FIELDS,
         annual_instant_fields=_ANNUAL_INSTANT_FIELDS,
         point_in_time_fact_fields=_POINT_IN_TIME_FACT_FIELDS,
         market_policy_input_roles=_MARKET_POLICY_INPUT_ROLES,
+        supporting_fact_fields=AWARD_FACT_FIELDS,
         transition_filing_evidence_required=True,
     ),
 }

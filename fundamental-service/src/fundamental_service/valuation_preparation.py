@@ -35,6 +35,15 @@ from .contracts import (
     WaccAssumptionsV1,
 )
 from .numerical_policy import using_valuation_context
+from .equity_award_evidence import (
+    EquityDilutionEvidenceV1,
+    verify_dilution_fact_bindings,
+)
+from .equity_dilution import (
+    DilutionError,
+    TreasuryStockResultV1,
+    compute_treasury_stock_dilution,
+)
 from .serialization import sha256_digest
 from .uncertainty_policy import (
     DEFAULT_UNCERTAINTY_POLICY_VERSION,
@@ -52,7 +61,7 @@ _MAX_REVENUE_GROWTH = Decimal("1.00")
 _MIN_REINVESTMENT_RATE = Decimal("-1.00")
 _MAX_REINVESTMENT_RATE = Decimal("1.00")
 _FORECAST_PERIODS = 5
-FORECAST_COMPOSER_VERSION = "fcff-forecast-composer-v3"
+FORECAST_COMPOSER_VERSION = "fcff-forecast-composer-v4"
 
 
 class PreparationError(ValueError):
@@ -239,6 +248,9 @@ class AutomaticValuationPreparationV1(StrictModel):
     historical_metrics: HistoricalMetricsV1
     assumptions_evidence: tuple[AssumptionEvidenceV1, ...] = ()
     input: ValuationInputV1 | None = None
+    equity_dilution: TreasuryStockResultV1 | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
     preparation_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
 
     @model_validator(mode="after")
@@ -839,6 +851,7 @@ def prepare_automatic_valuation(
     data_release_manifest_digest: str,
     market_policy: ApprovedMarketPolicyInputsV1 | None = None,
     mapping_version: str = "sec-canonical-mapping-v1",
+    equity_dilution_evidence: EquityDilutionEvidenceV1 | None = None,
 ) -> AutomaticValuationPreparationV1:
     """Compose a deterministic valuation request or an explicit gate outcome."""
 
@@ -1041,11 +1054,26 @@ def prepare_automatic_valuation(
                 "TERMINAL_GROWTH_NOT_BELOW_DISCOUNT_RATE",
                 "terminal growth must be below the applicable discount rates",
             )
-        capital = _capital_bridge(selected.facts, snapshot, policy_version)
+        if equity_dilution_evidence is None:
+            raise PreparationError(
+                "DILUTION_EVIDENCE_MISSING",
+                "reviewed award inventory and valuation-date quote are required",
+                missing=("equity_dilution_evidence",),
+            )
+        verify_dilution_fact_bindings(
+            equity_dilution_evidence, snapshot=snapshot, released_facts=selected.facts
+        )
+        dilution = compute_treasury_stock_dilution(
+            equity_dilution_evidence.inventory,
+            equity_dilution_evidence.quote,
+            equity_dilution_evidence.policy,
+            valuation_timestamp=snapshot.valuation_timestamp,
+        )
+        capital = _capital_bridge(selected.facts, snapshot, dilution)
     except (PreparationError, TypeError, ValueError) as error:
         code = (
             error.code
-            if isinstance(error, PreparationError)
+            if isinstance(error, (PreparationError, DilutionError))
             else "MARKET_POLICY_INPUTS_INVALID"
         )
         missing = error.missing if isinstance(error, PreparationError) else ()
@@ -1139,6 +1167,7 @@ def prepare_automatic_valuation(
             taxonomy_version=snapshot.taxonomy_manifest_id or "sec-taxonomy-v1",
             policy_version=policy_version,
             preparation_version=FORECAST_COMPOSER_VERSION,
+            equity_dilution_evidence_digest=equity_dilution_evidence.digest,
         ),
         model_id=model_id,
         model_version=model_version,
@@ -1175,6 +1204,11 @@ def prepare_automatic_valuation(
     reinvestment_facts = metric_facts("reinvestment_rate")
     tax_facts = metric_facts("normalized_tax_rate")
     capital_fact_map = _capital_bridge_facts(selected.facts, snapshot=snapshot)
+    share_facts = (
+        capital_fact_map["common_shares_outstanding"],
+        *equity_dilution_evidence.facts,
+        capital_fact_map["other_share_classes"],
+    )
     assumptions_evidence = (
         *evidence,
         *tuple(
@@ -1326,19 +1360,21 @@ def prepare_automatic_valuation(
             "assumptions.capital_bridge.diluted_shares",
             capital.diluted_shares,
             "derived",
-            "common_shares_outstanding + dilutive_instruments + other_share_classes",
-            facts=(
-                capital_fact_map["common_shares_outstanding"],
-                capital_fact_map["dilutive_instruments"],
-                capital_fact_map["other_share_classes"],
-            ),
-            policy_version=policy_version,
-            as_of=latest_fact_time(
-                (
-                    capital_fact_map["common_shares_outstanding"],
-                    capital_fact_map["dilutive_instruments"],
-                    capital_fact_map["other_share_classes"],
+            "common_shares_outstanding + sum(max(0, award_quantity - (exercise_proceeds + unrecognized_compensation) / valuation_date_quote)) + other_share_classes",
+            facts=share_facts,
+            trace=TraceV1(
+                source_refs=tuple(
+                    sorted(
+                        {
+                            equity_dilution_evidence.quote.content_hash,
+                            *(fact.source.content_hash for fact in share_facts),
+                        }
+                    )
                 )
+            ),
+            policy_version=equity_dilution_evidence.policy.policy_version,
+            as_of=max(
+                latest_fact_time(share_facts), equity_dilution_evidence.quote.as_of
             ),
         ),
     )
@@ -1365,15 +1401,15 @@ def prepare_automatic_valuation(
         assumptions_evidence=assumptions_evidence,
         input=request,
         preparation_digest=digest,
+        equity_dilution=dilution,
     )
 
 
 def _capital_bridge(
     facts: Iterable[CanonicalFactV1],
     snapshot: SourceSnapshotV1,
-    policy_version: str,
+    dilution: TreasuryStockResultV1,
 ) -> CapitalBridgeAssumptionsV1:
-    _ = policy_version
     facts_by_field = _capital_bridge_facts(facts, snapshot=snapshot)
     values = {
         name: fact.value
@@ -1399,7 +1435,7 @@ def _capital_bridge(
         non_controlling_interest=values["noncontrolling_interests"],
         diluted_shares=(
             values["common_shares_outstanding"]
-            + values["dilutive_instruments"]
+            + dilution.incremental_shares
             + values["other_share_classes"]
         ),
     )
@@ -1424,7 +1460,6 @@ def _capital_bridge_facts(
         "noncontrolling_interests",
         "convertible_instruments",
         "common_shares_outstanding",
-        "dilutive_instruments",
         "other_share_classes",
     ):
         eligible = tuple(

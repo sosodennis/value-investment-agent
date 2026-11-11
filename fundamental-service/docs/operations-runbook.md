@@ -173,7 +173,7 @@ valuation artifact, and rerun its pinned preparation/calculation. Compare all
 source/input/output digests with the recorded evidence. A successful copy alone
 does not establish full-flow acceptance.
 
-Automatic FCFF inputs identify `fcff-forecast-composer-v3` in
+Automatic FCFF inputs identify `fcff-forecast-composer-v4` in
 `provenance.preparation_version`, which participates in the input digest and
 caller approval. This composer implements the declared `lease-treatment-v1`:
 only current/noncurrent finance lease obligations enter the equity-bridge lease
@@ -184,18 +184,41 @@ Existing artifacts and approvals retain their original identities; prepare and
 approve the corrected input before calculating it. Unknown lease roles still
 abstain, and history thresholds remain unset.
 
-Composer v3 also isolates historical metrics, automatic preparation, manual
+Composer v4 retains the isolation of historical metrics, automatic preparation, manual
 overrides and uncertainty estimation from caller/thread Decimal state. Calculator
 and uncertainty execution use the declared `decimal-50-end-of-year-v1` policy:
 50 digits, HALF_EVEN, exponent bounds -999999 to 999999, clamp 0, and traps for
 InvalidOperation, DivisionByZero and Overflow. Each synchronous boundary gets a
 fresh local context, restores caller settings/flags even on refusal, and never
 changes the importing thread's context. Same-runtime result bytes under the
-previous intended 50-digit context remain unchanged. The preparation version
-changes the prepared input identity, so existing v2 approvals cannot authorize a
-v3 input. The prior target-table precision34 was inconsistent with the released
+previous intended 50-digit context remain unchanged for the same calculator inputs.
+The preparation version changes the prepared input identity, so existing approvals
+cannot authorize a newly prepared v4 input. The prior target-table precision34 was inconsistent with the released
 model inventory; moving to 34 requires a separately versioned numerical/model
 policy and replay evidence. Stored artifacts are never rewritten.
+
+Requirements profiles `fcff-valuation-requirements-v2` and
+`transition-fcff-valuation-requirements-v2` replace the precomputed numeric
+`dilutive_instruments` input with a release-bound award inventory. Raw observations
+use `equity_award_quantity`, `equity_award_unrecognized_compensation`, and, for
+options, `equity_award_exercise_price`. Each class retains its original facts and
+dimensions. An inventory cannot count equivalent contexts twice or combine a
+consolidated total with its class components.
+
+Publish canonical `EquityDilutionEvidenceV1` as an artifact with role
+`equity-dilution-evidence-v1`, and include the quote's original bytes as an artifact
+with role `equity-dilution-quote-source-v1` in the same signed data release. The
+bundle binds one snapshot manifest, issuer/security/currency, complete reviewed
+inventory, dated quote and explicit versioned freshness policy. Every inventory
+fact must match the release's reviewed fact and mapping; every released award
+observation must appear in the inventory. The read-only release canary and serving
+path reject mismatches and missing source bytes. The formal composer applies the
+treasury-stock method under the existing Decimal policy and preserves per-class
+anti-dilution exclusions. Unknown performance conditions, missing inventory or
+quote, stale/future evidence and unsupported share scope refuse per-share preparation.
+The full bundle digest participates in the prepared input and caller approval;
+equal numerical share counts do not make different quote evidence interchangeable.
+These contracts provide no independent review or release authority themselves.
 
 - A missing snapshot or artifact returns `SOURCE_UNAVAILABLE` or a stable
   not-found code. The caller receives an unavailable/degraded result and must

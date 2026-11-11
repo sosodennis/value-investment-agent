@@ -289,6 +289,9 @@ class FundamentalValuationPreparationResultV1(BaseModel):
     assumptions_evidence: tuple[dict[str, object], ...] = ()
     input: dict[str, object] | None = None
     preparation_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    equity_dilution: dict[str, object] | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
 
     @model_validator(mode="after")
     def status_matches_input(

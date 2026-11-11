@@ -76,7 +76,18 @@ class EquityAwardInventoryV1(DilutionModel):
             raise ValueError("award inventory must have distinct instrument identities")
         facts = tuple(fact for item in self.instruments for fact in _award_facts(item))
         keys = tuple(
-            (fact.source.content_hash, fact.context.context_id, fact.concept)
+            (
+                fact.source.content_hash,
+                fact.concept,
+                fact.instant,
+                fact.unit,
+                fact.context.entity_scope,
+                fact.context.consolidation_scope,
+                tuple(
+                    (dimension.name, dimension.member)
+                    for dimension in fact.context.dimensions
+                ),
+            )
             for fact in facts
         )
         if len(set(keys)) != len(keys) or len({fact.fact_id for fact in facts}) != len(
@@ -85,6 +96,13 @@ class EquityAwardInventoryV1(DilutionModel):
             raise ValueError(
                 "award inventory cannot count an original observation twice"
             )
+        scopes: dict[tuple[str, str], set[bool]] = {}
+        for fact in facts:
+            scopes.setdefault((fact.source.content_hash, fact.concept), set()).add(
+                bool(fact.context.dimensions)
+            )
+        if any(len(values) > 1 for values in scopes.values()):
+            raise ValueError("award inventory cannot mix totals with class components")
         return self
 
 
@@ -227,6 +245,7 @@ def compute_treasury_stock_dilution(
             if (
                 fact.issuer_id != inventory.issuer_id
                 or fact.security_id != inventory.security_id
+                or fact.security_scope != inventory.security_id
                 or fact.instant != inventory.period_end
                 or fact.period_start is not None
                 or fact.period_end != inventory.period_end
