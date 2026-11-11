@@ -604,3 +604,38 @@ Compact command receipts, digests and retained failure evidence are in
 `a5a8ba070ba5b38f44e36d229dbdade7e6de017a704d0966032e3a5ed7f8ff9e`). Generated source/mapping/backup corpus stays
 outside this PR. The separate #390/#393 checkpoint is a research integration
 reference pinned to its own earlier baseline; it is not silently merged here.
+
+## Formal award dilution integration — real release still pending
+
+Implementation `d57f847b489c0de68d5d7d8cd443164594a7df8f` follows arithmetic
+checkpoint `2baa69bb`. Composer v4 derives treasury-stock dilution from a typed,
+complete award inventory and a dated quote. Requirements v2 replaces the old
+precomputed net-dilution fact. The signed release binds the inventory, exact
+reviewed source facts, snapshot manifest, quote bytes and freshness policy.
+Both canary and serving reject changed or missing evidence; caller approval
+pins the complete evidence digest even when different quotes produce equal
+share counts. Annual EPS dilution cannot substitute for point-in-time awards.
+
+At that exact commit, **785 service/PostgreSQL tests pass / 11 optional skips**,
+52 Agent client/producer/cutover tests and 17 acceptance-tool tests pass. Ruff,
+formatting, 20-source mypy, architecture and diff checks pass. CI
+[43027327939](https://github.com/sosodennis/value-investment-agent/actions/runs/43027327939)
+passes all 12 executed jobs; the release gate remains skipped.
+
+The synthetic persistent flow calculates after its explicit fixture approval,
+repeats with `wrote=false`, and survives PostgreSQL restart and digest-checked
+backup/restore. Two complete filesystem runs additionally retain identical
+input/result digests and all **118** file hashes/mtimes, with zero new artifacts
+or provider requests on repeats and reconstructed readers. Only this issue's
+tmpfs test project is removed; all 62 baseline container identities remain
+unchanged. Compact receipts and exact input/output digests are in
+`issue-361-accounting-checkpoint.json` under `equity_dilution_increment`.
+
+This establishes the engineering integration with synthetic fixtures. The prior
+real Microsoft source and persistence evidence remains separately scoped. Its
+six scalar-role gaps, complete award/PSU conditions, approved dated quote/policy,
+actual independent review, trusted release and caller approval remain unresolved.
+No real numerical valuation or complete 19-gate acceptance is claimed.
+Threshold remains null and valuations provisional or abstained; #361, #394 and
+PR #370 remain open, with the PR draft. Complete these evidence requirements,
+then review/merge and verify main before closure and final worktree cleanup.
