@@ -51,9 +51,46 @@ digest from exact member paths and bytes. Blob/tree identities remain distinct.
 Tests exercise real directory hashing, release acceptance and unsafe, duplicate,
 unordered, symbolic-link, corrupt and mismatched evidence refusals.
 
+## Exact automatic mapping checkpoint
+
+Implementation `b8961d4f169444e6afff0aaae4732d9668cd5669` passes 1,196 Service/PostgreSQL, 52 Agent boundary
+and 17 acceptance-tool tests; 11 optional resource tests skip. One warning is
+intentional duplicate-ZIP test construction. Ruff/format, 47-source mypy,
+architecture and diff checks pass. [Implementation CI](https://github.com/sosodennis/value-investment-agent/actions/runs/43119599803) passes all
+12 executed jobs; release skips.
+
+Both real NVE originals produce 36 automatic decisions: 34 approved mappings
+across 17 of 31 scalar roles; both D&A mappings abstain. The audit retains 67
+eligible and 8 rejected observations, including dimensional net-income contexts.
+No zero, complete role coverage, numerical valuation, analyst/LLM ground truth,
+AI verifier or human reviewer impersonation is claimed. This supersedes the
+historical NVE proposal's zero-approved status below.
+
+Mapping input `507df0b1e8d000fb0b809e2b8e3482ed0526e6cb9970a8e994b93d54416a3888`; output
+`57b724a245d826c8cb114277eaf24887afc7bb1b7bff267866b794f4ce6b2b7d`. The full second run returns `wrote=false`, creates
+zero artifacts and preserves all 321 content files'
+hashes, sizes and mtimes. Both runs make zero provider/parser calls. Prior
+policy-version artifacts remain retained outside Git.
+
+Actual mapping-store backup restores into a separate empty PostgreSQL database.
+All 36 decisions reproduce input/output digests and return `wrote=false` with
+identical 18-table / 741-row counts and
+unchanged restored bytes. Re-export and a second complete recovery command both
+return unchanged. Recovery input `63bfd3aa49f4a3d2d5c25fd283d14ab0450c9f206281820e190096fcf6b33a19`; output
+`54fe8b22daacf161fb36deb204edc059fd503393fe99f972b85130acd8f25249`. Backup manifest
+`ae31299ac10581cd91100f9f2213884ab4bfe0210c83bf371ce010310bc981a1`. This verifies mapping evidence recovery;
+it does not establish the remaining full numerical service acceptance.
+
+The appended `automatic_mapping_approval_increment` preserves all 41 prior
+checkpoint entries (42 total). No containers, networks or volumes were started
+or cleaned. The existing isolated PostgreSQL project remains healthy on18665;
+only #361-owned databases/content/backups were added. AI validation remains
+future scope; exact-input caller approval and independent PR review remain
+separate gates. #361, #407 and PR #370 remain open, with the PR draft.
+
 ## Current implementation and verification
 
-The latest implementation commit is `e30d2e5068f49709c68e794dbb0be1d2c1d11a96`.
+The earlier source-determinism implementation is `e30d2e5068f49709c68e794dbb0be1d2c1d11a96`.
 It follows script-only integrity fix `5e45f306` and type correction `60ab6278`;
 all earlier WIP and checkpoint commits remain intact.
 Fetched `origin/main`, `52e84dfe5a0dae0c11d2e62fd9a58e885b6eadc9`, is already an
@@ -202,7 +239,7 @@ CIK `0000724910`, cutoff `2025-04-01T00:00:00Z`. Originals
 `0001376474-23-000283` and `0001376474-24-000214` pass formal strict parsing
 with 499 and 519 facts. This additional service case replaces no #376 issuer.
 Its 36 accession-bound mapping proposals retain 75 provisional facts across
-18 of 31 required scalar roles. None is approved. Audit input is
+18 of 31 required scalar roles. None was approved at that proposal checkpoint; the automatic checkpoint above supersedes this historical status. Audit input is
 `e15f3a71a11215aea97a455f2ee703cb951be566c746f77475dd51c03beaca10`;
 output is `470c236d4c08f9bcaa46cfbffe830a13b35c9c37c1893c6afea098904f45dfdd`.
 
@@ -325,4 +362,4 @@ Generated sources, mappings, proposals, diagnostics, and backups remain in ignor
 restore `.tmp-issue355-sec-useragent-compose.yml` or clean another project.
 #361, unresolved blockers #369/#381/#394, and PR #370 remain open. Implemented
 normalization blockers #404/#405/#406 still need delivery and main verification. Complete
-source scope and actual review precede numerical acceptance; thresholds stay null.
+source scope and supported automatic mapping approval precede numerical acceptance; thresholds stay null.
