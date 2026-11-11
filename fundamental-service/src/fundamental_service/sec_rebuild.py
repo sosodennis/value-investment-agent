@@ -266,7 +266,7 @@ def _accounting_candidates(
                 "ACCOUNTING_ROLE_SOURCE_MISMATCH",
                 "accounting source observation is unavailable",
             ) from error
-        if rule.disposition == "derived":
+        if rule.disposition in {"derived", "classified"}:
             for selected in source_facts:
                 comparable = tuple(
                     fact

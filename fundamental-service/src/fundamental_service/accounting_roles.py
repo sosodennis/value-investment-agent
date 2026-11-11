@@ -40,6 +40,9 @@ class AccountingPeriodV1(RoleModel):
 class AccountingComponentV1(RoleModel):
     parsed_fact_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
     sign: Literal[-1, 1] = 1
+    balance_sheet_location: Literal["other_current_liabilities"] | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
 
 
 class AbsencePassageV1(RoleModel):
@@ -119,7 +122,12 @@ class DisclosedAmountV1(RoleModel):
 class AccountingPeriodRuleV1(RoleModel):
     period: AccountingPeriodV1
     disposition: Literal[
-        "derived", "disclosed", "confirmed_absent", "unknown", "unsupported"
+        "derived",
+        "classified",
+        "disclosed",
+        "confirmed_absent",
+        "unknown",
+        "unsupported",
     ]
     components: tuple[AccountingComponentV1, ...] = ()
     absence_passages: tuple[AbsencePassageV1, ...] = ()
@@ -138,6 +146,17 @@ class AccountingPeriodRuleV1(RoleModel):
             ):
                 raise ValueError(
                     "derived roles require at least two numeric components"
+                )
+        elif self.disposition == "classified":
+            if (
+                len(self.components) != 1
+                or self.components[0].sign != 1
+                or self.components[0].balance_sheet_location is None
+                or self.absence_passages
+                or self.disclosed_amount
+            ):
+                raise ValueError(
+                    "classified roles require one scoped positive component"
                 )
         elif self.disposition == "disclosed":
             if (
@@ -165,7 +184,7 @@ class AccountingPeriodRuleV1(RoleModel):
     def source_references(self) -> tuple[str, ...]:
         if self.disclosed_amount is not None:
             return (self.disclosed_amount.parsed_fact_digest,)
-        if self.disposition == "derived":
+        if self.disposition in {"derived", "classified"}:
             return tuple(item.parsed_fact_digest for item in self.components)
         return tuple(item.parsed_fact_digest for item in self.absence_passages)
 
@@ -242,12 +261,22 @@ def evaluate_period_rule(
             "ACCOUNTING_ROLE_SOURCE_MISMATCH",
             "role evidence does not match its exact source references",
         )
+    components = {item.parsed_fact_digest: item for item in rule.components}
     for fact in source_facts:
+        component = components.get(sha256_digest(fact))
+        classified_location = (
+            component is not None and component.balance_sheet_location is not None
+        )
+        if classified_location:
+            assert component is not None
+            _validate_current_lease_classification(rules, rule, component, fact)
         if (
             fact.entity_identifier is None
             or fact.entity_identifier.lstrip("0") != rules.issuer_id.lstrip("0")
-            or fact.dimensions
-            or fact.consolidation_scope != "consolidated"
+            or (
+                not classified_location
+                and (fact.dimensions or fact.consolidation_scope != "consolidated")
+            )
         ):
             raise AccountingRoleError(
                 "ACCOUNTING_ROLE_SCOPE_MISMATCH",
@@ -313,12 +342,26 @@ def evaluate_period_rule(
                     "absence assertion requires its exact original passage",
                 )
         return Decimal("0")
-    concepts = tuple(fact.concept for fact in source_facts)
+    concepts = tuple((fact.concept, fact.dimensions) for fact in source_facts)
     if len(set(concepts)) != len(concepts):
         raise AccountingRoleError(
             "ACCOUNTING_COMPONENT_OVERLAP",
             "a role cannot count equivalent source concepts twice",
         )
+    for component in rule.components:
+        fact = by_digest[component.parsed_fact_digest]
+        if not fact.dimensions:
+            continue
+        if any(
+            other.concept == fact.concept
+            and not other.dimensions
+            and (component.sign != -1 or components[sha256_digest(other)].sign != 1)
+            for other in source_facts
+        ):
+            raise AccountingRoleError(
+                "ACCOUNTING_COMPONENT_OVERLAP",
+                "a total and its classified current portion require total minus current",
+            )
     amounts: list[Decimal] = []
     for component in rule.components:
         fact = by_digest[component.parsed_fact_digest]
@@ -349,3 +392,43 @@ def evaluate_period_rule(
         amounts.append(amount.copy_negate() if component.sign == -1 else amount)
     with localcontext(Context(prec=34, rounding=ROUND_HALF_EVEN)):
         return sum(amounts, Decimal("0"))
+
+
+def _validate_current_lease_classification(
+    rules: AccountingRoleRuleSetV1,
+    rule: AccountingPeriodRuleV1,
+    component: AccountingComponentV1,
+    fact: ParsedXbrlFactV1,
+) -> None:
+    allowed = {
+        "current_operating_lease_liabilities": (
+            ("us-gaap:OperatingLeaseLiability", 1),
+        ),
+        "current_finance_lease_liabilities": (("us-gaap:FinanceLeaseLiability", 1),),
+        "long_term_operating_lease_liabilities": (
+            ("us-gaap:OperatingLeaseLiability", -1),
+        ),
+        "long_term_finance_lease_liabilities": (("us-gaap:FinanceLeaseLiability", -1),),
+        "accrued_operating_liabilities": (
+            ("us-gaap:OperatingLeaseLiability", -1),
+            ("us-gaap:FinanceLeaseLiability", -1),
+        ),
+    }
+    if (
+        component.balance_sheet_location != "other_current_liabilities"
+        or (fact.concept, component.sign) not in allowed.get(rules.normalized_field, ())
+        or not rule.period.instant
+        or fact.dimensions
+        != (
+            (
+                "us-gaap:BalanceSheetLocationAxis",
+                "us-gaap:OtherCurrentLiabilitiesMember",
+            ),
+        )
+        or fact.consolidation_scope != "segmented"
+        or fact.security_scope != "segmented"
+    ):
+        raise AccountingRoleError(
+            "ACCOUNTING_ROLE_SCOPE_MISMATCH",
+            "lease classification requires its exact current-liability axis, role and sign",
+        )

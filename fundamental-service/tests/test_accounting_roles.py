@@ -1,5 +1,6 @@
 from datetime import date
 from decimal import Decimal, Inexact, ROUND_DOWN, localcontext
+import json
 
 import pytest
 
@@ -188,6 +189,270 @@ def _candidates(snapshot, report, mapping):
         normalized_field=mapping.normalized_field,
         mapping=mapping,
     )
+
+
+def _classified_lease_fixture(
+    *, noncurrent=False, changes=None, classification=True, kind="finance"
+):
+    snapshot, report, mapping = _fixture()
+    total = report.facts[0].model_copy(
+        update={
+            "concept": "us-gaap:FinanceLeaseLiability"
+            if kind == "finance"
+            else "us-gaap:OperatingLeaseLiability",
+            "value": "100",
+        }
+    )
+    current = total.model_copy(
+        update={
+            "context_id": "other-current-liabilities",
+            "value": "20",
+            "dimensions": (
+                (
+                    "us-gaap:BalanceSheetLocationAxis",
+                    "us-gaap:OtherCurrentLiabilitiesMember",
+                ),
+            ),
+            "consolidation_scope": "segmented",
+            "security_scope": "segmented",
+            **(changes or {}),
+        }
+    )
+    report = report.model_copy(update={"facts": (total, current)})
+    scoped = AccountingComponentV1(
+        parsed_fact_digest=sha256_digest(current),
+        sign=-1 if noncurrent else 1,
+        balance_sheet_location="other_current_liabilities" if classification else None,
+    )
+    rule = AccountingPeriodRuleV1(
+        period=AccountingPeriodV1(period_end=date(2023, 12, 31), instant=True),
+        disposition="derived" if noncurrent or not classification else "classified",
+        components=(
+            AccountingComponentV1(parsed_fact_digest=sha256_digest(total)),
+            scoped,
+        )
+        if noncurrent or not classification
+        else (scoped,),
+        rationale="Test-only current lease classification from a consolidated balance-sheet location.",
+    )
+    role = ("long_term_" if noncurrent else "current_") + kind + "_lease_liabilities"
+    rules = mapping.accounting_rules.model_copy(
+        update={
+            "normalized_field": role,
+            "parser_fact_digest": fact_semantic_digest(report),
+            "periods": (rule,),
+        }
+    )
+    mapping = mapping.model_copy(
+        update={
+            "normalized_field": role,
+            "source_concept": "computed:" + role,
+            "accounting_rules": rules,
+        }
+    )
+    snapshot = _changed(
+        snapshot,
+        sec_integrity_evidence=snapshot.sec_integrity_evidence.model_copy(
+            update={
+                "normalized_fact_digest": fact_semantic_digest(report),
+                "archive_fact_digest": fact_semantic_digest(report),
+            }
+        ),
+    )
+    return snapshot, report, mapping
+
+
+@pytest.mark.parametrize("noncurrent,expected", [(False, "20"), (True, "80")])
+@pytest.mark.parametrize("kind", ["finance", "operating"])
+def test_classified_current_lease_and_total_minus_current_keep_original_dimensions(
+    noncurrent, expected, kind
+):
+    snapshot, report, mapping = _classified_lease_fixture(
+        noncurrent=noncurrent, kind=kind
+    )
+    (candidate,) = _candidates(snapshot, report, mapping)
+    fact = candidate.canonical_fact(quality=QualityStatus.VERIFIED)
+    assert fact.value == Decimal(expected)
+    assert fact.context.dimensions == ()
+    assert any(f.dimensions for f in fact.accounting_evidence.source_facts)
+    restored = CanonicalFactV1.model_validate_json(canonical_bytes(fact))
+    assert canonical_fact_digest(restored) == canonical_fact_digest(fact)
+    verify_accounting_role_evidence(restored, mapping, snapshot)
+    assert _candidates(snapshot, report, mapping) == (candidate,)
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"dimensions": ()},
+        {
+            "dimensions": (
+                (
+                    "us-gaap:BalanceSheetLocationAxis",
+                    "us-gaap:OtherNoncurrentLiabilitiesMember",
+                ),
+            )
+        },
+        {
+            "dimensions": (
+                ("us-gaap:StatementBusinessSegmentsAxis", "issuer:CloudMember"),
+            )
+        },
+        {
+            "dimensions": (
+                (
+                    "us-gaap:BalanceSheetLocationAxis",
+                    "us-gaap:OtherCurrentLiabilitiesMember",
+                ),
+                ("us-gaap:StatementBusinessSegmentsAxis", "issuer:CloudMember"),
+            )
+        },
+        {"consolidation_scope": "consolidated"},
+        {"security_scope": "security"},
+        {"concept": "us-gaap:DebtCurrent"},
+        {"entity_identifier": "9999999999"},
+        {"instant": date(2022, 12, 31)},
+        {"unit": "iso4217:EUR"},
+    ],
+)
+def test_lease_classification_cannot_strip_arbitrary_scope_or_misalign_sources(changes):
+    snapshot, report, mapping = _classified_lease_fixture(changes=changes)
+    with pytest.raises(SnapshotError):
+        _candidates(snapshot, report, mapping)
+
+
+def test_dimensional_lease_sources_require_explicit_mapping_classification():
+    snapshot, report, mapping = _classified_lease_fixture(classification=False)
+    with pytest.raises(SnapshotError) as error:
+        _candidates(snapshot, report, mapping)
+    assert error.value.code == "ACCOUNTING_ROLE_SCOPE_MISMATCH"
+
+
+@pytest.mark.parametrize(
+    "role",
+    [
+        "contract_assets",
+        "current_operating_lease_liabilities",
+        "long_term_finance_lease_liabilities",
+    ],
+)
+def test_classified_finance_amount_cannot_supply_another_role_or_positive_noncurrent(
+    role,
+):
+    snapshot, report, mapping = _classified_lease_fixture()
+    rules = mapping.accounting_rules.model_copy(update={"normalized_field": role})
+    mapping = mapping.model_copy(
+        update={
+            "normalized_field": role,
+            "source_concept": "computed:" + role,
+            "accounting_rules": rules,
+        }
+    )
+    with pytest.raises(SnapshotError) as error:
+        _candidates(snapshot, report, mapping)
+    assert error.value.code == "ACCOUNTING_ROLE_SCOPE_MISMATCH"
+
+
+def test_classified_source_conflicts_are_retained_and_rejected():
+    snapshot, report, mapping = _classified_lease_fixture()
+    report = report.model_copy(
+        update={
+            "facts": (
+                *report.facts,
+                report.facts[-1].model_copy(update={"value": "21"}),
+            )
+        }
+    )
+    mapping = mapping.model_copy(
+        update={
+            "accounting_rules": mapping.accounting_rules.model_copy(
+                update={"parser_fact_digest": fact_semantic_digest(report)}
+            )
+        }
+    )
+    with pytest.raises(SnapshotError) as error:
+        _candidates(snapshot, report, mapping)
+    assert error.value.code == "ACCOUNTING_COMPONENT_CONFLICT"
+
+
+def test_unclassified_components_preserve_their_canonical_serialization():
+    component = AccountingComponentV1(parsed_fact_digest="a" * 64)
+    assert json.loads(canonical_bytes(component)) == {
+        "parsed_fact_digest": "a" * 64,
+        "sign": 1,
+    }
+
+
+def test_current_lease_classification_cannot_add_a_total_and_its_current_portion():
+    snapshot, report, mapping = _classified_lease_fixture(noncurrent=True)
+    rules = mapping.accounting_rules
+    rule = rules.periods[0]
+    rule = rule.model_copy(
+        update={
+            "components": (
+                rule.components[0],
+                rule.components[1].model_copy(update={"sign": 1}),
+            )
+        }
+    )
+    role = "current_finance_lease_liabilities"
+    mapping = mapping.model_copy(
+        update={
+            "normalized_field": role,
+            "source_concept": "computed:" + role,
+            "accounting_rules": rules.model_copy(
+                update={"normalized_field": role, "periods": (rule,)}
+            ),
+        }
+    )
+    with pytest.raises(SnapshotError) as error:
+        _candidates(snapshot, report, mapping)
+    assert error.value.code == "ACCOUNTING_COMPONENT_OVERLAP"
+
+
+def test_operating_accrual_classification_subtracts_current_lease_amount():
+    snapshot, report, mapping = _classified_lease_fixture(noncurrent=True)
+    total, current = report.facts
+    total = total.model_copy(update={"concept": "us-gaap:OtherLiabilitiesCurrent"})
+    report = report.model_copy(update={"facts": (total, current)})
+    rules = mapping.accounting_rules
+    rule = rules.periods[0]
+    rule = rule.model_copy(
+        update={
+            "components": (
+                AccountingComponentV1(parsed_fact_digest=sha256_digest(total)),
+                rule.components[1],
+            )
+        }
+    )
+    role = "accrued_operating_liabilities"
+    mapping = mapping.model_copy(
+        update={
+            "normalized_field": role,
+            "source_concept": "computed:" + role,
+            "accounting_rules": rules.model_copy(
+                update={
+                    "normalized_field": role,
+                    "parser_fact_digest": fact_semantic_digest(report),
+                    "periods": (rule,),
+                }
+            ),
+        }
+    )
+    assert _candidates(snapshot, report, mapping)[0].value == Decimal("80")
+
+
+def test_classified_mapping_stays_provisional_without_review():
+    from fundamental_service.facts import select_fact_groups
+
+    snapshot, report, mapping = _classified_lease_fixture()
+    mapping = mapping.model_copy(
+        update={"status": "provisional", "confidence": "unresolved", "reviewer": None}
+    )
+    (selection,) = select_fact_groups(
+        _candidates(snapshot, report, mapping), snapshot.valuation_timestamp
+    )
+    assert selection.fact.quality is QualityStatus.PROVISIONAL
 
 
 @pytest.mark.parametrize(
@@ -483,7 +748,7 @@ def test_classification_is_independent_of_callers_decimal_context():
     assert expected[0].value == Decimal("120.1234567890123456789012345678901")
 
 
-@pytest.mark.parametrize("disposition", ["derived", "disclosed"])
+@pytest.mark.parametrize("disposition", ["derived", "disclosed", "classified"])
 @pytest.mark.parametrize("mutation", [None, "mapping", "integrity"])
 def test_signed_canary_and_http_read_recheck_accounting_bindings(mutation, disposition):
     from types import SimpleNamespace
@@ -510,7 +775,11 @@ def test_signed_canary_and_http_read_recheck_accounting_bindings(mutation, dispo
     )
     from test_release_runner import _candidate
 
-    snapshot, report, mapping = _fixture(disposition=disposition)
+    snapshot, report, mapping = (
+        _classified_lease_fixture()
+        if disposition == "classified"
+        else _fixture(disposition=disposition)
+    )
     (candidate,) = _candidates(snapshot, report, mapping)
     fact = candidate.canonical_fact(quality=QualityStatus.VERIFIED)
     if mutation == "mapping":
@@ -732,7 +1001,7 @@ def test_duplicate_component_and_unrelated_absence_period_refuse():
 
 
 @pytest.mark.skipif(not DATABASE_URL, reason="isolated PostgreSQL is required")
-@pytest.mark.parametrize("disposition", ["derived", "disclosed"])
+@pytest.mark.parametrize("disposition", ["derived", "disclosed", "classified"])
 @pytest.mark.parametrize("omit", [None, "mapping", "original"])
 def test_accounting_sources_survive_persistent_restart_and_backup_restore(
     tmp_path, recovery_databases, omit, disposition
@@ -750,7 +1019,11 @@ def test_accounting_sources_survive_persistent_restart_and_backup_restore(
     source_database, target_database = recovery_databases
     raw = b"synthetic SEC accounting source for persistent boundary acceptance"
     source_hash = hashlib.sha256(raw).hexdigest()
-    snapshot, report, mapping = _fixture(disposition=disposition)
+    snapshot, report, mapping = (
+        _classified_lease_fixture()
+        if disposition == "classified"
+        else _fixture(disposition=disposition)
+    )
     source = snapshot.source_records[0].model_copy(
         update={"content_hash": source_hash, "parser_input_hash": source_hash}
     )
