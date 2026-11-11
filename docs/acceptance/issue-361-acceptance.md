@@ -359,3 +359,34 @@ snapshot publication, a trusted release or numerical valuation. All full-flow
 gates and blockers #375/#379/#381/#382/#384 remain open pending actual
 acceptance, review, merge and main verification. The compact evidence lives in
 `issue-361-accounting-checkpoint.json`; full SEC artifacts stay outside Git.
+
+## Disclosed amount checkpoint c1e409c7
+
+Exact implementation `c1e409c7e5ec6d7fbe125fc74ec94436eeaeaa43` retains a
+disclosed amount's original text, exact offsets, unit, scale and reported
+precision. Wrong periods, partial numeric tokens and incomplete role scope are
+rejected. The 124 retained facts and 50 retained mappings keep their digests.
+
+The isolated PostgreSQL regression passed **609 service tests**, with 11 optional
+runtime skips, including disclosed-evidence store restart and backup/restore.
+The 10 Agent client tests and 17 acceptance-tool tests passed, together with
+Ruff, changed formatting, nine-source mypy, architecture and diff checks.
+Input: `8ba2b74c0347e4c2100e5750ed5b0cb15c02719acfe57805841df8ca6243043e`;
+output: `411d15beab6bfd4bc81e707c0062d1de31968cf717876b91580eb66b26d052b9`.
+All 12 executed CI jobs passed; the legacy release job was skipped. The owned
+tmpfs PostgreSQL project was removed; all 62 baseline containers are unchanged.
+
+A retained AAPL FY2024 original also demonstrates a provisional transcription of
+the narrower **fixed-payment operating lease cost**, with value 2,000,000,000 USD
+and reported decimals -8. It matches the same-period numeric original observation.
+Input: `ab445da6ec9074fb609fc011977592232becc43f9e086f9a108be47c0789f356`;
+output: `4246bb1f15a3214abb48e0e01d9a220d4784e3b20138cbb4774f701c566608bc`.
+The repeat returned `wrote=false` and `input_wrote=false`, with identical digests
+and zero source downloads. The earlier diagnostic string-comparison failure is
+retained; comparing Decimal values fixed the probe without changing source data.
+
+This transcription does not establish complete lease costs, independent mapping
+approval or numerical valuation. Complete accounting and dated market-policy
+evidence, actual review, caller approval and all 19 service gates remain required.
+The next step is the supported real-source review packet. PR #370 stays draft,
+#361/#381 stay open, and `supported_history_threshold` remains null.
