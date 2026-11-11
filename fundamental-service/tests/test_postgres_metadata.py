@@ -21,6 +21,7 @@ from sqlalchemy.exc import DBAPIError
 
 from fundamental_service.app import create_app
 from fundamental_service.contracts import (
+    CandidateRejectionV1,
     CanonicalFactV1,
     FiscalPeriodSelectorV1,
     IdentityV1,
@@ -47,7 +48,7 @@ from fundamental_service.data_releases import (
     sign_data_release_verification,
     sign_mapping_review_evidence,
 )
-from fundamental_service.facts import CanonicalMappingV1
+from fundamental_service.facts import CanonicalMappingV1, canonical_fact_digest
 from fundamental_service.metadata import (
     SCHEMA_VERSION,
     PostgresArtifactStore,
@@ -1239,6 +1240,92 @@ def test_sec_ingestion_publish_rolls_back_snapshot_and_facts_then_recovers(
         )
         == result
     )
+
+
+@pytest.mark.parametrize("transactional", [False, True])
+@pytest.mark.parametrize("mutation", ["value", "source"])
+def test_fact_publication_reuses_source_identity_across_selection_views(
+    metadata, transactional, mutation
+):
+    suffix = uuid4().hex
+    snapshot = _snapshot(suffix)
+    fact = _fact_for_snapshot(snapshot, f"fact-{suffix}").model_copy(
+        update={
+            "point_in_time_policy": "sec-public-pit-v1",
+            "selection_reason": "first PIT selection",
+            "rejected_candidate_reasons": (
+                CandidateRejectionV1(candidate_id="later", reason="not available"),
+            ),
+        }
+    )
+    metadata.publish_fact(fact)
+    second_view = fact.model_copy(
+        update={
+            "selection_reason": "another valid PIT selection",
+            "rejected_candidate_reasons": (),
+        }
+    )
+
+    def publish(value):
+        if transactional:
+            result = _sec_ingestion_result(
+                snapshot, correlation_id=suffix, canonical_fact_ids=(value.fact_id,)
+            )
+            metadata.publish_sec_ingestion(
+                acquisition_key=sha256_digest({"fact": value.model_dump(mode="json")}),
+                acquisition_payload={"suffix": suffix},
+                snapshot=snapshot,
+                facts=(value,),
+                result=result,
+                caller_principal="test-caller",
+                organization_id="test-org",
+            )
+        else:
+            metadata.publish_fact(value)
+
+    publish(second_view)
+    publish(second_view)
+    assert metadata.get_fact(fact.fact_id) == fact
+    assert canonical_fact_digest(fact) == canonical_fact_digest(second_view)
+    with pytest.raises(SnapshotError) as error:
+        publish(
+            second_view.model_copy(
+                update={"value": Decimal(101)}
+                if mutation == "value"
+                else {
+                    "source": fact.source.model_copy(update={"content_hash": "e" * 64})
+                }
+            )
+        )
+    assert error.value.code == (
+        "INGESTION_FACT_SOURCE_MISMATCH"
+        if transactional and mutation == "source"
+        else "METADATA_IMMUTABLE"
+    )
+    assert metadata.get_fact(fact.fact_id) == fact
+
+
+def test_concurrent_fact_selection_views_publish_one_canonical_row(metadata):
+    suffix = uuid4().hex
+    fact = _fact_for_snapshot(_snapshot(suffix), f"fact-{suffix}")
+    barrier = Barrier(2)
+
+    def publish(reason):
+        view = fact.model_copy(
+            update={
+                "selection_reason": reason,
+                "point_in_time_policy": "sec-public-pit-v1",
+            }
+        )
+        barrier.wait(timeout=5)
+        metadata.publish_fact(view)
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        tuple(pool.map(publish, ("first view", "second view")))
+    retained = metadata.get_fact(fact.fact_id)
+    assert retained.selection_reason in {"first view", "second view"}
+    assert canonical_fact_digest(retained) == canonical_fact_digest(fact)
+    assert sum(value.fact_id == fact.fact_id for value in metadata.list_facts()) == 1
 
 
 def test_unauthorized_sec_ingestion_is_rejected_and_audited_in_postgres(

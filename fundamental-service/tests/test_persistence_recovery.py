@@ -20,12 +20,13 @@ from fundamental_service.persistence_recovery import (
     restore_backup,
 )
 from fundamental_service.serialization import canonical_bytes, sha256_digest
+from fundamental_service.contracts import CandidateRejectionV1
 from fundamental_service.history_composition import verify_history_components
 from test_history_composition import _changed, _compose, _original
 from test_postgres_metadata import _fact_for_snapshot, _snapshot
 
 
-def _seed(database_url, root):
+def _seed(database_url, root, *, selected_view=False):
     store = PostgresMetadataStore(database_url, auto_migrate=True)
     store.start()
     content = PostgresContentStore(root, store)
@@ -46,6 +47,19 @@ def _seed(database_url, root):
     fact = fact.model_copy(
         update={"source": fact.source.model_copy(update={"content_hash": source_hash})}
     )
+    if selected_view:
+        fact = fact.model_copy(
+            update={
+                "point_in_time_policy": "sec-public-pit-v1",
+                "selection_reason": "original observation selected for the requested instant",
+                "rejected_candidate_reasons": (
+                    CandidateRejectionV1(
+                        candidate_id="later-original",
+                        reason="A later original was unavailable at this instant",
+                    ),
+                ),
+            }
+        )
     store.publish_fact(fact)
     store.publish_source_audit(
         acquisition_key="a" * 64,
@@ -90,12 +104,15 @@ def _restore(database_url, target, bundle, digest):
     )
 
 
+@pytest.mark.parametrize("selected_view", [False, True])
 def test_backup_restores_metadata_and_bytes_and_repeats_without_writes(
-    recovery_databases, tmp_path
+    recovery_databases, tmp_path, selected_view
 ):
     source_db, target_db = recovery_databases
     source = tmp_path / "source"
-    store, snapshot, fact, artifact = _seed(source_db, source)
+    store, snapshot, fact, artifact = _seed(
+        source_db, source, selected_view=selected_view
+    )
     store.close()
     backups, target = tmp_path / "backups", tmp_path / "restored"
     first = _export(source_db, source, backups)

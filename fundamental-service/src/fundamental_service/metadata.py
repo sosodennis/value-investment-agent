@@ -575,42 +575,7 @@ class PostgresMetadataStore:
                 )
 
             for fact in facts:
-                fact_payload = fact.model_dump(mode="json")
-                fact_digest = canonical_fact_digest(fact)
-                await connection.execute(
-                    text(
-                        "INSERT INTO fundamental.canonical_facts "
-                        "(fact_id, fact_digest, payload) "
-                        "VALUES (:fact_id, :digest, CAST(:payload AS jsonb)) "
-                        "ON CONFLICT (fact_id) DO NOTHING"
-                    ),
-                    {
-                        "fact_id": fact.fact_id,
-                        "digest": fact_digest,
-                        "payload": self._payload_json(fact_payload),
-                    },
-                )
-                stored_fact = (
-                    (
-                        await connection.execute(
-                            text(
-                                "SELECT fact_digest, payload FROM "
-                                "fundamental.canonical_facts WHERE fact_id=:fact_id"
-                            ),
-                            {"fact_id": fact.fact_id},
-                        )
-                    )
-                    .mappings()
-                    .first()
-                )
-                if (
-                    stored_fact is None
-                    or stored_fact["fact_digest"] != fact_digest
-                    or not self._payload_equal(stored_fact["payload"], fact_payload)
-                ):
-                    raise SnapshotError(
-                        "METADATA_IMMUTABLE", "canonical fact is already different"
-                    )
+                await self._publish_fact_in_transaction(connection, fact)
                 await connection.execute(
                     text(
                         "INSERT INTO fundamental.snapshot_facts (snapshot_id, fact_id) "
@@ -647,16 +612,58 @@ class PostgresMetadataStore:
 
     def publish_fact(self, fact: CanonicalFactV1) -> None:
         self._require_ready()
-        self._runner.run(
-            self._immutable_put(
-                table="canonical_facts",
-                key_column="fact_id",
-                key=fact.fact_id,
-                digest_column="fact_digest",
-                digest=sha256_digest(fact.model_dump(mode="json")),
-                payload=fact.model_dump(mode="json"),
-            )
+        self._runner.run(self._publish_fact(fact))
+
+    async def _publish_fact(self, fact: CanonicalFactV1) -> None:
+        async with self._runner._engine.begin() as connection:
+            await self._publish_fact_in_transaction(connection, fact)
+
+    async def _publish_fact_in_transaction(
+        self, connection: AsyncConnection, fact: CanonicalFactV1
+    ) -> None:
+        """Keep the first complete view; source identity excludes PIT annotations."""
+        digest = canonical_fact_digest(fact)
+        await connection.execute(
+            text(
+                "INSERT INTO fundamental.canonical_facts "
+                "(fact_id, fact_digest, payload) "
+                "VALUES (:fact_id, :digest, CAST(:payload AS jsonb)) "
+                "ON CONFLICT (fact_id) DO NOTHING"
+            ),
+            {
+                "fact_id": fact.fact_id,
+                "digest": digest,
+                "payload": self._payload_json(fact.model_dump(mode="json")),
+            },
         )
+        stored = (
+            (
+                await connection.execute(
+                    text(
+                        "SELECT fact_digest, payload FROM fundamental.canonical_facts WHERE fact_id=:fact_id"
+                    ),
+                    {"fact_id": fact.fact_id},
+                )
+            )
+            .mappings()
+            .first()
+        )
+        if stored is None or stored["fact_digest"] != digest:
+            raise SnapshotError(
+                "METADATA_IMMUTABLE", "canonical fact is already different"
+            )
+        try:
+            retained = CanonicalFactV1.model_validate_json(
+                canonical_bytes(stored["payload"])
+            )
+        except ValueError as error:
+            raise SnapshotError(
+                "METADATA_CORRUPT", "canonical fact metadata is invalid"
+            ) from error
+        if canonical_fact_digest(retained) != digest:
+            raise SnapshotError(
+                "METADATA_IMMUTABLE", "canonical fact is already different"
+            )
 
     def get_fact(self, fact_id: str) -> CanonicalFactV1:
         try:
