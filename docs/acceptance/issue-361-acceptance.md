@@ -723,3 +723,51 @@ inventory, obtain actual independent review and approved dated quote/policy, the
 perform real numerical repeat/restart/restore acceptance. Threshold stays null;
 no real numerical or complete 19-gate result is claimed. #361 and PR #370 remain
 open, with the PR draft, pending those gates and review/merge/main verification.
+
+## Engineering checkpoint: signing in the persistent service store
+
+Implementation `c038b05a83526f359367c6e7bfc15172ef7ebe73` connects the review
+signer to the production PostgreSQL/content adapters. The default reads the same
+database/content configuration as the service; `--artifacts-root` explicitly
+selects the offline canary store. Schema startup is read-only, connections close
+on every path, and storage failures expose stable redacted error codes.
+
+An isolated PostgreSQL test seeds synthetic review evidence and exercises three
+separate signer processes. Repeats preserve content hashes/mtimes, signed bytes,
+input/output digests and the full metadata backup digest. Restoring to another
+empty database/content root preserves the signature and service-reader result;
+signing there again returns `wrote=false`. Missing configuration/schema refuses
+without a fallback store or migration, including when the service auto-migrate
+environment variable is enabled. These are synthetic engineering checks, not
+actual issuer review or a real numerical valuation.
+
+Exact checks pass **821 service/PostgreSQL tests / 11 optional runtime skips**,
+52 Agent boundary tests, 17 acceptance-tool tests, Ruff/format, 22-source mypy,
+architecture and diff checks. Input:
+`7affc96f473760850686d9a1ef6d1b57ae75347c9a4cc1590226f179d84d79ab`;
+output:
+`e12b2b6521aa5c5f14b66cdaa36fe82d2f9c5fd73217b29fa55c7cbd622978e7`.
+[CI 43039497672](https://github.com/sosodennis/value-investment-agent/actions/runs/43039497672)
+passes all 12 executed jobs; release gate skipped. The owned tmpfs PostgreSQL
+project is removed, with no owned containers/networks/volumes remaining and all
+62 baseline container identities, images and start times unchanged.
+
+One historical daily-bar response is also retained outside Git using the trading
+symbol from the available Microsoft original. The initial request returned HTTP
+200; both subsequent complete capture runs make zero provider requests, return
+`wrote=false` and preserve all five existing source/input/output files. Input:
+`e051860c3c9cb5ba9239c683a222dc8246957952c36073a94050bbc49762b0e9`;
+output:
+`e788ebdf49da0704266209c06325716488c40349d3b1835edf3e5d9c797bf90b`.
+This remains unreviewed discovery evidence. A daily bar's timestamp does not by
+itself establish an exact close/publication timestamp. Current metadata and
+adjusted close are not selected; source/identity/price, available-at, freshness
+and financial policy still require actual review before admission.
+
+`mapping_review_persistence_increment` in the existing accounting checkpoint
+retains exact commands, pins, digests and the earlier checkpoint entries. Six
+real scalar gaps, complete award/PSU inventory, actual quote/policy and independent
+mapping review, trusted release and caller approval remain unresolved. No real
+numerical or full 19-gate completion is claimed; threshold stays null. Complete
+those evidence gates, real service acceptance and PR/main verification before
+closing #361 or its unresolved blockers.
