@@ -35,6 +35,27 @@ of the noncurrent component, completeness and remaining operating scope. This
 representation alone establishes a partial accounting relation, not a complete
 operating role. Unset scope is omitted from existing component bytes.
 
+An optional `AccountingComponentV1.discontinued_depreciation_exclusion` retains
+an original dimensional D&A observation as the negative component of a duration
+`depreciation_and_amortization` rule. The rule permits exactly one positive
+consolidated D&A base and one excluded D&A observation. Its exact dimensions
+must identify discontinued income, with at most one business-segment axis;
+an ordinary `AllOther` segment observation alone is insufficient. Other roles,
+unrelated dimensions, overlapping components and a negative resulting amount
+remain unsupported. A component cannot carry both swap and D&A scopes.
+
+The same original report must supply the aligned issuer, duration and unit,
+plus the exact original segment-reporting passage that identifies the target
+year and discontinued D&A classification. The passage may describe an earlier
+comparative period; it does not replace the duration on the numeric observation.
+The evidence retains all original dimensions, classification text, source
+digests and reported decimals. The derived candidate does not invent a new
+decimal precision or substitute a more precise observation with another scope.
+A rounded discontinued amount remains rounded. Independent semantic review
+must establish coverage, inclusion in the consolidated base and continuing
+business scope before approving any mapping. The representation supplies no
+absence assertion, trusted release or verified forecast.
+
 A `disclosed` duration transcribes one finite decimal literal from an exact
 nonnumeric parsed fact. `DisclosedAmountV1` retains Unicode code-point offsets
 for the exact quote, amount token, unit quote and scale token, plus reported

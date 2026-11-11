@@ -75,19 +75,61 @@ class AccruedInterestSwapExclusionV1(RoleModel):
         return self
 
 
+class DiscontinuedDepreciationPassageV1(RoleModel):
+    parsed_fact_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    exact_quote: str = Field(min_length=16, max_length=65536)
+
+
+class DiscontinuedDepreciationExclusionV1(RoleModel):
+    dimensions: tuple[tuple[str, str], ...] = Field(min_length=1, max_length=2)
+    consolidated_base_fact_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    classification_passage: DiscontinuedDepreciationPassageV1
+
+    @model_validator(mode="after")
+    def supported_dimensions(self) -> DiscontinuedDepreciationExclusionV1:
+        axes = dict(self.dimensions)
+        location = axes.get("us-gaap:IncomeStatementLocationAxis", "")
+        if (
+            len(axes) != len(self.dimensions)
+            or self.dimensions != tuple(sorted(self.dimensions))
+            or axes.keys()
+            - {
+                "us-gaap:IncomeStatementLocationAxis",
+                "us-gaap:StatementBusinessSegmentsAxis",
+            }
+            or location.rsplit(":", 1)[-1]
+            not in {
+                "IncomeLossFromOperationsOfDiscontinuedBusinessNetOfTaxMember",
+                "IncomeLossFromDiscontinuedOperationsNetOfTaxMember",
+            }
+            or any(not member.strip() for member in axes.values())
+        ):
+            raise ValueError(
+                "depreciation exclusion requires exact discontinued-income dimensions"
+            )
+        return self
+
+
 class AccountingComponentV1(RoleModel):
     parsed_fact_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
     sign: Literal[-1, 1] = 1
     accrued_interest_swap_exclusion: AccruedInterestSwapExclusionV1 | None = Field(
         default=None, exclude_if=lambda value: value is None
     )
+    discontinued_depreciation_exclusion: DiscontinuedDepreciationExclusionV1 | None = (
+        Field(default=None, exclude_if=lambda value: value is None)
+    )
 
     @model_validator(mode="after")
-    def swap_is_an_exclusion(self) -> AccountingComponentV1:
-        if self.accrued_interest_swap_exclusion is not None and self.sign != -1:
-            raise ValueError(
-                "interest swap scope is only valid for a negative component"
-            )
+    def scope_is_an_exclusion(self) -> AccountingComponentV1:
+        scopes = (
+            self.accrued_interest_swap_exclusion,
+            self.discontinued_depreciation_exclusion,
+        )
+        if sum(scope is not None for scope in scopes) > 1:
+            raise ValueError("an accounting component has one classification scope")
+        if any(scope is not None for scope in scopes) and self.sign != -1:
+            raise ValueError("dimensional scope is only valid for a negative component")
         return self
 
 
@@ -218,6 +260,11 @@ class AccountingPeriodRuleV1(RoleModel):
                         for item in self.components
                         if item.accrued_interest_swap_exclusion is not None
                     ]
+                    + [
+                        item.discontinued_depreciation_exclusion.classification_passage.parsed_fact_digest
+                        for item in self.components
+                        if item.discontinued_depreciation_exclusion is not None
+                    ]
                 )
             )
         return tuple(item.parsed_fact_digest for item in self.absence_passages)
@@ -308,12 +355,14 @@ def evaluate_period_rule(
         )
     scoped = {
         item.parsed_fact_digest: item.accrued_interest_swap_exclusion
+        or item.discontinued_depreciation_exclusion
         for item in rule.components
         if item.accrued_interest_swap_exclusion is not None
+        or item.discontinued_depreciation_exclusion is not None
     }
     for fact in source_facts:
         exclusion = scoped.get(sha256_digest(fact))
-        derivative_scope = (
+        dimensional_scope = (
             exclusion is not None
             and fact.dimensions == exclusion.dimensions
             and fact.consolidation_scope == "segmented"
@@ -323,12 +372,12 @@ def evaluate_period_rule(
             fact.entity_identifier is None
             or fact.entity_identifier.lstrip("0") != rules.issuer_id.lstrip("0")
             or (
-                not derivative_scope
+                not dimensional_scope
                 and (fact.dimensions or fact.consolidation_scope != "consolidated")
             )
             or (
                 isinstance(rules, IssuerAccountingRoleRuleSetV1)
-                and not derivative_scope
+                and not dimensional_scope
                 and fact.security_scope not in {"issuer", "consolidated", "unspecified"}
             )
         ):
@@ -399,7 +448,16 @@ def evaluate_period_rule(
     concepts = tuple(
         by_digest[item.parsed_fact_digest].concept for item in rule.components
     )
-    if len(set(concepts)) != len(concepts):
+    depreciation_pair = (
+        len(rule.components) == 2
+        and sum(
+            item.discontinued_depreciation_exclusion is not None
+            for item in rule.components
+        )
+        == 1
+        and set(concepts) == {"us-gaap:DepreciationDepletionAndAmortization"}
+    )
+    if len(set(concepts)) != len(concepts) and not depreciation_pair:
         raise AccountingRoleError(
             "ACCOUNTING_COMPONENT_OVERLAP",
             "a role cannot count equivalent source concepts twice",
@@ -436,7 +494,74 @@ def evaluate_period_rule(
         amounts.append(amount.copy_negate() if component.sign == -1 else amount)
     with localcontext(Context(prec=34, rounding=ROUND_HALF_EVEN)):
         _validate_swap_exclusion(rules, rule, by_digest, unsigned)
+        _validate_discontinued_depreciation(rules, rule, by_digest, unsigned)
         return sum(amounts, Decimal("0"))
+
+
+def _validate_discontinued_depreciation(
+    rules: AccountingRoleRules,
+    rule: AccountingPeriodRuleV1,
+    sources: dict[str, ParsedXbrlFactV1],
+    amounts: dict[str, Decimal],
+) -> None:
+    exclusions = tuple(
+        item
+        for item in rule.components
+        if item.discontinued_depreciation_exclusion is not None
+    )
+    if not exclusions:
+        return
+    if (
+        len(exclusions) != 1
+        or len(rule.components) != 2
+        or rules.normalized_field != "depreciation_and_amortization"
+        or rule.period.instant
+    ):
+        raise AccountingRoleError(
+            "ACCOUNTING_DEPRECIATION_EXCLUSION_MISMATCH",
+            "one discontinued depreciation exclusion requires one duration base",
+        )
+    component = exclusions[0]
+    exclusion = component.discontinued_depreciation_exclusion
+    assert exclusion is not None
+    excluded = sources[component.parsed_fact_digest]
+    base = sources.get(exclusion.consolidated_base_fact_digest)
+    passage = sources[exclusion.classification_passage.parsed_fact_digest]
+    quote = exclusion.classification_passage.exact_quote
+    if (
+        component.sign != -1
+        or excluded.concept != "us-gaap:DepreciationDepletionAndAmortization"
+        or excluded.dimensions != exclusion.dimensions
+        or base is None
+        or base.concept != excluded.concept
+        or base.dimensions
+        or base.consolidation_scope != "consolidated"
+        or not any(
+            item.parsed_fact_digest == exclusion.consolidated_base_fact_digest
+            and item.sign == 1
+            and item.discontinued_depreciation_exclusion is None
+            for item in rule.components
+        )
+        or passage.is_numeric
+        or passage.concept != "us-gaap:SegmentReportingDisclosureTextBlock"
+        or passage.instant is not None
+        or passage.period_start is None
+        or passage.period_end is None
+        or passage.period_end < rule.period.period_end
+        or quote not in passage.value
+        or str(rule.period.period_end.year) not in quote
+        or any(
+            word not in quote.lower()
+            for word in ("depreciation", "amortization", "discontinued")
+        )
+        or amounts[component.parsed_fact_digest] < 0
+        or amounts[exclusion.consolidated_base_fact_digest]
+        < amounts[component.parsed_fact_digest]
+    ):
+        raise AccountingRoleError(
+            "ACCOUNTING_DEPRECIATION_EXCLUSION_MISMATCH",
+            "depreciation exclusion requires its exact consolidated base and original discontinued classification",
+        )
 
 
 def _validate_swap_exclusion(
