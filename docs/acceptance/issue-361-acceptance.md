@@ -295,3 +295,35 @@ They grant no actual issuer mapping approval, release or numerical acceptance.
 Real issuer/period coverage and review, all 19 full service gates, independent
 PR review, latest CI and merge/main verification remain incomplete. #381, #361
 and PR #370 remain open; the PR stays draft and history thresholds stay null.
+
+
+Real-source increment at `a729700f68629d4fc5978ac58f5f2f62fa8bb7b4`: AAPL original
+`0000320193-24-000123` passed strict EFM/DQC using the retained complete taxonomy
+cache: 1,127 facts, no blocking finding, no parser network attempts. A second
+independent parser execution produced identical replay digest
+`05f406e6ce8352c0e25c6a3371b52bbf7ae49c90c76b01602da2b638846a010d`.
+Original-validation input `6a79284558ab75ca1145f39400675d93cc43140a3cf5a00e67a3582dd10043d0`,
+output `3a2722aa27cb2f1665f0be1f3a0d6f14bc99d6ed3848b698f13352b0d12dee57`.
+The old fixture lacked normalization headers; the missing raw response metadata
+was actually acquired and retained by the existing source adapter. A remembered
+taxonomy directory was empty; its failed validation is retained. No source header
+was invented and no DQC rule was waived.
+
+The accounting proposal now retains **62 provisional period facts across 25/32
+roles**, including 3 derived classifications. Input
+`6c9700cee047716b6848044b120f3a6c4ab89121df6f58f11feed4bb06fe9ee0`, output
+`11f2dd2a7f08b8cf23a4e70485c8d90481ab61f7e7aec1ea6327cd9f979a5047`.
+Both original-validation and proposal cache repeats returned `wrote=false` with
+identical content/mtime inventories; source repeat made zero provider calls.
+Raw bytes, complete reports, scripts and proposed mappings stay in ignored
+service evidence storage, outside the PR. The compact checkpoint records their
+commands, exact commit, pins and digests.
+
+Finance-lease cost, contract assets, preferred claims, noncontrolling interests,
+convertibles, point-in-time dilution and other share classes remain unknown.
+Related RSU evidence is retained with its AwardTypeAxis; it is not silently
+reclassified as consolidated dilution. No absence is approved, all mapping
+proposals remain unreviewed, forecast/valuation count is zero and threshold null.
+Additional original history, actual review and full numerical service acceptance
+remain required. CI at `a729700f` passed all 12 executed jobs; legacy release gate
+was skipped. All three architecture skill entrypoints remain current.
