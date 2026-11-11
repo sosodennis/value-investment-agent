@@ -173,7 +173,7 @@ valuation artifact, and rerun its pinned preparation/calculation. Compare all
 source/input/output digests with the recorded evidence. A successful copy alone
 does not establish full-flow acceptance.
 
-Automatic FCFF inputs identify `fcff-forecast-composer-v2` in
+Automatic FCFF inputs identify `fcff-forecast-composer-v3` in
 `provenance.preparation_version`, which participates in the input digest and
 caller approval. This composer implements the declared `lease-treatment-v1`:
 only current/noncurrent finance lease obligations enter the equity-bridge lease
@@ -183,6 +183,19 @@ assumption's formula and fact IDs identify only the finance lease obligations.
 Existing artifacts and approvals retain their original identities; prepare and
 approve the corrected input before calculating it. Unknown lease roles still
 abstain, and history thresholds remain unset.
+
+Composer v3 also isolates historical metrics, automatic preparation, manual
+overrides and uncertainty estimation from caller/thread Decimal state. Calculator
+and uncertainty execution use the declared `decimal-50-end-of-year-v1` policy:
+50 digits, HALF_EVEN, exponent bounds -999999 to 999999, clamp 0, and traps for
+InvalidOperation, DivisionByZero and Overflow. Each synchronous boundary gets a
+fresh local context, restores caller settings/flags even on refusal, and never
+changes the importing thread's context. Same-runtime result bytes under the
+previous intended 50-digit context remain unchanged. The preparation version
+changes the prepared input identity, so existing v2 approvals cannot authorize a
+v3 input. The prior target-table precision34 was inconsistent with the released
+model inventory; moving to 34 requires a separately versioned numerical/model
+policy and replay evidence. Stored artifacts are never rewritten.
 
 - A missing snapshot or artifact returns `SOURCE_UNAVAILABLE` or a stable
   not-found code. The caller receives an unavailable/degraded result and must

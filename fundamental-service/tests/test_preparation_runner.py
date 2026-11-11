@@ -3,6 +3,7 @@ import hashlib
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
+from decimal import Context, Inexact, ROUND_DOWN, localcontext
 from pathlib import Path
 from types import SimpleNamespace
 from uuid import uuid4
@@ -340,7 +341,9 @@ def test_released_source_uses_formal_composer_and_reuses_artifact_after_restart(
 
     first = _run(runner, fixture.plan)
     prepared = _reader(fixture, first)
-    repeated = _run(runner, fixture.plan, correlation="second")
+    with localcontext(Context(prec=7, rounding=ROUND_DOWN)) as context:
+        context.traps[Inexact] = True
+        repeated = _run(runner, fixture.plan, correlation="second")
     restarted = SourcePreparationRunner(
         application=fixture.application,
         metadata=fixture.metadata,
@@ -348,12 +351,13 @@ def test_released_source_uses_formal_composer_and_reuses_artifact_after_restart(
         artifacts=ArtifactStore(tmp_path / "artifacts"),
         canary=None,
     )
-    after_restart = _run(restarted, fixture.plan)
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        after_restart = pool.submit(_run, restarted, fixture.plan).result()
 
     assert prepared.status == "approval_required"
     assert prepared.preparation.status == "prepared"
     assert prepared.preparation.input.provenance.preparation_version == (
-        "fcff-forecast-composer-v2"
+        "fcff-forecast-composer-v3"
     )
     assert prepared.preparation.input.assumptions.capital_bridge.lease_liabilities == (
         20
@@ -801,9 +805,11 @@ def test_preparation_and_calculation_reuse_postgres_artifacts_after_restart_and_
         )
         store.start()
         restarted, _, restored_artifacts = wire(store)
-        repeated = _run(
-            restarted, fixture.plan, approval=approval, correlation="restart"
-        )
+        with localcontext(Context(prec=7, rounding=ROUND_DOWN)) as context:
+            context.traps[Inexact] = True
+            repeated = _run(
+                restarted, fixture.plan, approval=approval, correlation="restart"
+            )
         assert repeated.artifact == calculated.artifact
         assert repeated.wrote is False
         assert restored_artifacts.read(
@@ -838,9 +844,14 @@ def test_preparation_and_calculation_reuse_postgres_artifacts_after_restart_and_
         recovered.start()
         try:
             restored_runner, _, restored_artifacts = wire(recovered, restored_root)
-            restored_result = _run(
-                restored_runner, fixture.plan, approval=approval, correlation="restore"
-            )
+            with ThreadPoolExecutor(max_workers=1) as pool:
+                restored_result = pool.submit(
+                    _run,
+                    restored_runner,
+                    fixture.plan,
+                    approval=approval,
+                    correlation="restore",
+                ).result()
             assert restored_result.artifact == calculated.artifact
             assert restored_result.wrote is False
             assert restored_artifacts.read(

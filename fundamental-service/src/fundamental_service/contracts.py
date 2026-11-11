@@ -17,6 +17,7 @@ from pydantic import (
 )
 
 from .historical_dqc import V1_PROFILE, V3_PROFILE
+from .numerical_policy import using_valuation_context
 from .serialization import is_digest, sha256_digest
 from .accounting_roles import AccountingRoleEvidenceV1
 
@@ -218,6 +219,7 @@ class MarketPolicyInputsV1(StrictModel):
     evidence: tuple[MarketPolicyEvidenceV1, ...] = Field(min_length=1)
 
     @model_validator(mode="after")
+    @using_valuation_context
     def evidence_matches_policy(self) -> MarketPolicyInputsV1:
         evidence_by_role = {item.role: item for item in self.evidence}
         if len(evidence_by_role) != len(self.evidence):
@@ -1176,6 +1178,7 @@ class WaccAssumptionsV1(StrictModel):
     equity_weight: Decimal
 
     @model_validator(mode="after")
+    @using_valuation_context
     def weights_and_rates(self) -> WaccAssumptionsV1:
         if self.equity_weight + self.debt_weight != Decimal("1"):
             raise ValueError("debt_weight and equity_weight must sum to 1")
@@ -1213,10 +1216,12 @@ class BankAssumptionsV1(StrictModel):
     trace: TraceV1
 
     @property
+    @using_valuation_context
     def cet1_ratio(self) -> Decimal:
         return self.cet1_capital / self.reported_rwa
 
     @model_validator(mode="after")
+    @using_valuation_context
     def regulatory_constraints(self) -> BankAssumptionsV1:
         if self.cet1_capital / self.reported_rwa < self.minimum_cet1_ratio:
             raise ValueError("reported CET1 ratio is below the model minimum")

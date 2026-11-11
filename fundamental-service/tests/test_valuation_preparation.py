@@ -259,7 +259,7 @@ def test_operating_lease_balances_are_disclosed_without_an_equity_deduction(mode
     assert results[0].intrinsic_value == results[1].intrinsic_value
     assert results[0].per_share_value == results[1].per_share_value
     assert changed.input.assumptions.capital_bridge.lease_liabilities == Decimal("20")
-    assert changed.input.provenance.preparation_version == "fcff-forecast-composer-v2"
+    assert changed.input.provenance.preparation_version == "fcff-forecast-composer-v3"
     lease_evidence = next(
         item
         for item in changed.assumptions_evidence
