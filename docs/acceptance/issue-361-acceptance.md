@@ -268,3 +268,30 @@ Implementation `16ce3baa841d68de8e2fb307a3fb4697e6318df1` binds release reuse to
 Exact-commit isolated PostgreSQL engineering checks: **538 passed, 11 optional runtime skips**; **17 acceptance-tool tests passed**. Ruff, changed-file formatting, six-source mypy, architecture guard and `git diff --check origin/main` exited 0. Input digest `cf536b86c41055cb5d711ec484cedbb389286b6f3f05e6b1f37fba5b47dc4f5d`; command-output digest `8281fec427035e0def7c17c3a2a5174576c926b617dc5b393b46f0b68c84f4d0`. Exact commands/runtime and retained failure-log digests are in `issue-361-source-plan-checkpoint.json`. Disposable project `value-investment-agent-361-flow-tests` was removed; the 62 pre-existing containers retained their IDs, images, start times and status.
 
 Prior-head CI `42986810091` at `7f589080` passed all 12 executed checks; `fundamental-release-gate` was skipped. This does not establish CI for `16ce3baa`, independent review, real-source numerical success, or the 19 full-flow gates. Threshold stays null. Next: concrete real original-filing financial-role coverage and semantic review, then numerical service repeat/restart/restore.
+
+
+## Accounting-role evidence checkpoint
+
+Implementation `8397497b984cfbceb5df249e445461fd2ab51779`, with the test-boundary fix
+`883e8e13736425967f8e80d842331154cc44b2b2`, adds exact source-bound accounting
+components, cited absence and explicit unresolved roles. Direct observed
+facts/mappings retain their canonical bytes. Canary, HTTP evidence serving and
+backup/restore recheck the rule, released mapping and validated original.
+Classification uses a fixed Decimal context; no #352 valuation formula changes.
+
+At exact `883e8e13`: **569 Fundamental tests passed, 11 optional runtime skips**;
+**10 Agent client tests** and **17 acceptance-tool tests** passed. Ruff, changed
+format, eight-source mypy, architecture and diff checks passed. Input digest
+`143d17173a31bfb93ab16009219df304bb96badd288ab0611dba1d69bc46c63b`; output
+`b5978bf81959136a72510b6edd5577e74e3ca2964b0386c2e51f012e8ad5ffbd`.
+[Exact commands, runtime and failure retention](issue-361-accounting-checkpoint.json).
+The first exact run's forbidden test import and working adapter failures are
+retained. Disposable PostgreSQL project `value-investment-agent-361-flow-tests`
+was removed; all 62 baseline containers retained their identity, image, start
+time and status.
+
+These are engineering checks, including synthetic source/reviewer fixtures.
+They grant no actual issuer mapping approval, release or numerical acceptance.
+Real issuer/period coverage and review, all 19 full service gates, independent
+PR review, latest CI and merge/main verification remain incomplete. #381, #361
+and PR #370 remain open; the PR stays draft and history thresholds stay null.
