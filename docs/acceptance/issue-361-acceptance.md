@@ -21,13 +21,13 @@ No completed #351 through #355 acceptance is changed. #350 is outside scope.
 
 ## Current implementation and verification
 
-The implementation commit is `01b091f82096711cb6c07a6f59fe9f8e847082e1`.
-The previous acceptance checkpoint is `a179e4c6c989fdaccd2774b49d39b0ea16a7a88b`.
+The latest implementation commit is `ed733e4ec5008feaf579706f927af0a6fa7e6ddd`.
+The preceding metadata checkpoint is `f79a29387f8a8f921f519e60af68ffc4433b1fcd`.
 Fetched `origin/main`, `52e84dfe5a0dae0c11d2e62fd9a58e885b6eadc9`, is already an
 ancestor. A normal `git merge --no-edit origin/main` reports `Already up to date.`
 The WIP and checkpoint chain remains intact.
 
-At the exact implementation commit, 1,118 service and PostgreSQL tests, 52 Agent
+At prior implementation `01b091f8`, 1,118 service and PostgreSQL tests, 52 Agent
 boundary tests, and 17 acceptance-tool tests pass. Eleven optional runtime tests
 skip. Ruff, formatting, mypy, architecture, and diff checks pass.
 [Implementation CI](https://github.com/sosodennis/value-investment-agent/actions/runs/43088113783)
@@ -51,6 +51,28 @@ reproduces the old failure and passes with the corrected body. No validator,
 WIP/draft status, runtime manifest, or financial gate is changed. The checkpoint
 entry `source_review_ci_description_correction` retains both command results.
 The new head still requires CI verification.
+
+Latest implementation `ed733e4e` retains annual-history conflicts as explicit
+abstention in the formal composer. Ten regressions fail before the correction,
+including a released cross-field period mismatch returning HTTP 500. They pass
+afterward. Exact-commit checks pass 1,128 Service/PostgreSQL tests, 52 Agent tests,
+17 acceptance-tool tests, Ruff, formatting, types, architecture, and diff checks;
+11 optional runtime checks skip. [Implementation CI](https://github.com/sosodennis/value-investment-agent/actions/runs/43098094595)
+remains queued, with no reported jobs.
+
+An isolated synthetic service project, `value-investment-agent-361-history-conflict`
+(ports 18672/18673), passes six installed HTTP checks across repeat, restart,
+and empty-store restore. The runner preserves the blocked artifact. Two further
+complete runner/HTTP/export/restore repeats retain the same digests, 34 file
+hashes/mtimes, and database rows; runner, backup, and restore report `wrote=false`.
+Repeating the verifier itself also reports `wrote=false`. Its input digest is
+`08ccec1bd33dd1c947d48581e376028cd7ac65f2cb4a76582902e31c3f86a20e`;
+output is `9f660b4e602770349f233d768d0f2f40952018de8ea725e683cd441fcabaf717`.
+A verified backup remains outside Git. Only this temporary project was removed;
+all 63 baseline containers retain their IDs, images, and start times. Synthetic
+fixture signatures establish no actual financial review or caller approval.
+The checkpoint entry `history_conflict_abstention_increment` records exact
+commands, digests, runtime pins, retained harness failures, and source refusals.
 
 These engineering results do not establish a reviewed real issuer valuation.
 The [runtime manifest](issue-361-runtime.json) remains WIP, stopped, not ready,
@@ -105,6 +127,13 @@ other conversion claims. Their inclusion in reported common shares and their
 classification remain unresolved. Raw HTML discovery is not a formal parser
 report, canonical mapping, zero claim, complete empty award inventory, or
 numerical acceptance. This case remains retained and unresolved.
+
+Formal ingestion separately refuses both United-Guardian originals. The 2023
+original retains 22 blocking `EFM.6.08.05.firstLetter` findings. The 2024 original
+retains the same 22 naming findings plus one `IOerror` and 15 missing-reference
+findings; its 498 archive facts remain diagnostic. An earlier stdin/spawn launch
+failure is recorded separately as a harness error. No validation gate is waived
+and neither rejection publishes canonical facts.
 
 ### Dated market-input proposal
 
@@ -191,8 +220,9 @@ The worktree is
 on `codex/issue-361-replay-evidence`. The existing regression PostgreSQL project
 is `value-investment-agent-361-flow-tests`, port 18665. Earlier dedicated service
 projects were backed up and removed under their recorded checkpoints. This
-source-review increment starts or cleans no Docker resource and claims no new
-installed HTTP acceptance. Re-read and revalidate the canonical runtime tuple
+earlier source-review increment started or cleaned no Docker resource. The
+focused conflict validation above used and removed its own project and does not
+establish the full numerical acceptance profile. Re-read the canonical runtime tuple
 before the next service acceptance run.
 
 Generated sources, mappings, proposals, diagnostics, and backups remain in ignored
