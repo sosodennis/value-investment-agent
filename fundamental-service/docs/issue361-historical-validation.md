@@ -1,5 +1,18 @@
 # Historical SEC validation for issue 361
 
+EDGAR 26.3 diagnostic adapter `dqc-0090-bound-diagnostics-v1` uses Arelle's
+`Logging.Message.Parameters` hook for rules `DQC.US.0090.9374` and `.9375`.
+The pinned official EDGAR branch binds the correct reconciliation facts but
+formats context/unit from an unrelated earlier loop variable. The adapter binds
+those two diagnostic parameters to the unique referenced US GAAP sum fact.
+It preserves rule execution, numeric parameters, warning codes, severity and
+message templates. Missing or ambiguous bindings fail closed. No upstream
+package bytes change. The adapter file hash is retained in validation evidence
+and therefore the parser replay digest; new results remain distinct from older
+reports. It supplies no mapping, financial policy, release or caller approval.
+The real fail-before source and strict fresh replay evidence are tracked in
+[#406](https://github.com/sosodennis/value-investment-agent/issues/406).
+
 The opt-in `sec-efm-us-dqc-v1.0.0-historical` profile runs strict all-years EFM and the unchanged official DQC v1 Python hooks. It is a compatibility candidate until complete conformance and the actual cohort acceptance pass. It does not approve mappings, market policies, releases or a history threshold.
 
 Official source: [DataQualityCommittee/dqc_us_rules at 266946cdecddf37c3d7d43b258eecb945a2daed3](https://github.com/DataQualityCommittee/dqc_us_rules/tree/266946cdecddf37c3d7d43b258eecb945a2daed3). Use the 15 original files under `dqc_us_rules/`, including CSV/JSON resources. Exclude download receipts and Python bytecode. The directory hash must be `771ac2f5630e01e646a68b6730f6b4ae78e38e2e80db4a3b36608faf7dfd2301`, computed by the existing parser directory-hash algorithm. The profile rejects any other source hash before execution. License and acquisition evidence are retained in the issue's official-assets package.

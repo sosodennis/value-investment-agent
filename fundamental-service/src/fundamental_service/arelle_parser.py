@@ -733,6 +733,25 @@ def _parse_in_process(
                 "EDGAR/validate": edgar_plugin,
             }
             plugin_names = ["EDGAR/validate", "validate/DQC"]
+            diagnostic_evidence: tuple[str, ...] = ()
+            if (
+                profile.efm_release == "26.3"
+                and profile.efm_validation_version == "1.26.3"
+            ):
+                diagnostic_plugin = Path(__file__).with_name("dqc_diagnostic_plugin.py")
+                name = str(diagnostic_plugin)
+                loaded_plugin = controller._pluginManager.addPluginModule(name)
+                if loaded_plugin is None:
+                    raise ArelleParserError(
+                        "DQC_PLUGIN_UNAVAILABLE", "bound DQC diagnostics did not load"
+                    )
+                controller.preloadedPlugins[name] = loaded_plugin
+                plugin_names.append(name)
+                diagnostic_evidence = (
+                    "dqc-0090-bound-diagnostics-v1:"
+                    + hashlib.sha256(diagnostic_plugin.read_bytes()).hexdigest(),
+                )
+                controller._pluginManager.pluginMethodsForClasses.clear()
             if profile.historical_dqc_dir is not None:
                 import arelle
 
@@ -849,7 +868,7 @@ def _parse_in_process(
                 selected_historical.completion_marker
                 if selected_historical is not None
                 else "dqc-dqcrt-checks-completed",
-            )
+            ) + diagnostic_evidence
         else:
             blocking_model_errors = tuple(
                 code for code in model_errors if code not in _NON_BLOCKING_ARELLE_CODES
