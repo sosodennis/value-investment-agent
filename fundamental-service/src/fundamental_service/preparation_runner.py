@@ -32,29 +32,73 @@ from .data_releases import (
     DataReleaseTrustRootsV1,
 )
 from .operations import ServiceError
+from .history_composition import compose_original_history
 from .release_runner import DataReleaseCanaryRunner
 from .replay import ArtifactPublicationV1
 from .uncertainty import UncertaintyReportV1
 from .serialization import canonical_bytes, sha256_digest
 from .source_acquisition import SecAcquisitionUseCase
+from .snapshots import SnapshotError
 from .valuation_preparation import AutomaticValuationPreparationV1
 from .valuation_requirements import valuation_requirements_profile
 
 
-class SourcePreparationPlanV1(StrictModel):
+class SourcePreparationPlanV2(StrictModel):
     """Explicit deployment input; mappings and source pins stay service-owned."""
 
-    protocol: Literal["source-preparation-v1"] = "source-preparation-v1"
+    protocol: Literal["source-preparation-v2"] = "source-preparation-v2"
     source_revision: str = Field(pattern=r"^[0-9a-f]{40}$")
     release_profile_id: str = Field(min_length=1)
     model_id: InitialModelId
-    ingestion: SecIngestionRequestV1
+    ingestions: tuple[SecIngestionRequestV1, ...] = Field(min_length=1, max_length=6)
 
     @model_validator(mode="after")
-    def requirements_match(self) -> SourcePreparationPlanV1:
+    def requirements_match(self) -> SourcePreparationPlanV2:
         required = valuation_requirements_profile(self.model_id).required_fact_fields
-        if set(self.ingestion.required_fields) != set(required):
+        if {
+            field for request in self.ingestions for field in request.required_fields
+        } != set(required):
             raise ValueError("source plan must cover the complete model requirements")
+        first = self.ingestions[0]
+        for request in self.ingestions:
+            if any(
+                getattr(request, field) != getattr(first, field)
+                for field in (
+                    "identity",
+                    "cik",
+                    "ticker",
+                    "identity_basis",
+                    "valuation_timestamp",
+                    "fiscal_period_selector",
+                    "coverage_profile",
+                    "source_selection_policy",
+                    "legal_use_profile",
+                    "parser_version",
+                    "policy_version",
+                    "taxonomy_manifest_id",
+                    "taxonomy_version",
+                    "validation_profile_id",
+                )
+            ):
+                raise ValueError(
+                    "source plan components must share issuer, date and runtime profile"
+                )
+        if len(self.ingestions) > 1:
+            accessions = tuple(
+                request.filing.accession_number for request in self.ingestions
+            )
+            if (
+                None in accessions
+                or len(set(accessions)) != len(accessions)
+                or any(request.filing.forms != ("10-K",) for request in self.ingestions)
+            ):
+                raise ValueError(
+                    "history plan requires distinct pinned original annual filings"
+                )
+            if accessions != tuple(
+                sorted(accession for accession in accessions if accession is not None)
+            ):
+                raise ValueError("history plan accessions must be sorted")
         return self
 
     @property
@@ -62,14 +106,17 @@ class SourcePreparationPlanV1(StrictModel):
         return sha256_digest(self)
 
     def resolution_request(self) -> SnapshotResolutionRequestV1:
+        first = self.ingestions[0]
         return SnapshotResolutionRequestV1(
             contract_version="fundamental.v1",
             release_profile_id=self.release_profile_id,
-            identity=self.ingestion.identity,
-            valuation_timestamp=self.ingestion.valuation_timestamp,
+            identity=first.identity,
+            valuation_timestamp=first.valuation_timestamp,
             source_selection_policy="pit-v1",
-            coverage_profile=self.ingestion.coverage_profile,
-            required_fields=self.ingestion.required_fields,
+            coverage_profile=first.coverage_profile,
+            required_fields=valuation_requirements_profile(
+                self.model_id
+            ).required_fact_fields,
         )
 
 
@@ -143,7 +190,7 @@ class SourcePreparationRunner:
         self._artifacts = artifacts
         self._canary = canary
 
-    def _resolve(self, plan: SourcePreparationPlanV1) -> SnapshotResolutionV1 | None:
+    def _resolve(self, plan: SourcePreparationPlanV2) -> SnapshotResolutionV1 | None:
         try:
             resolution = self._application.resolve_snapshot(plan.resolution_request())
         except ServiceError as error:
@@ -155,7 +202,7 @@ class SourcePreparationRunner:
 
     def _candidate_snapshot_available(
         self,
-        plan: SourcePreparationPlanV1,
+        plan: SourcePreparationPlanV2,
         candidate: DataReleaseCandidatePublishRequestV1,
     ) -> bool:
         for reference in candidate.manifest.snapshot_refs:
@@ -171,21 +218,30 @@ class SourcePreparationRunner:
 
     @staticmethod
     def _matches_plan(
-        plan: SourcePreparationPlanV1, snapshot: SourceSnapshotV1
+        plan: SourcePreparationPlanV2, snapshot: SourceSnapshotV1
     ) -> bool:
-        if (
-            snapshot.identity != plan.ingestion.identity
-            or snapshot.valuation_timestamp != plan.ingestion.valuation_timestamp
+        first = plan.ingestions[0]
+        if any(
+            getattr(snapshot, field) != getattr(first, field)
+            for field in (
+                "identity",
+                "valuation_timestamp",
+                "fiscal_period_selector",
+                "parser_version",
+                "policy_version",
+                "taxonomy_manifest_id",
+                "validation_profile_id",
+            )
         ):
             return False
-        accession = plan.ingestion.filing.accession_number
-        if accession is not None:
+        expected = {request.filing.accession_number for request in plan.ingestions}
+        if None not in expected:
             accessions = {
                 source.accession_number
                 for source in snapshot.source_records
                 if source.role is SourceRole.FILING
             }
-            if accessions != {accession}:
+            if accessions != expected:
                 return False
         return True
 
@@ -196,7 +252,7 @@ class SourcePreparationRunner:
         actor_id: str,
         organization_id: str,
         correlation_id: str,
-        plan: SourcePreparationPlanV1,
+        plan: SourcePreparationPlanV2,
     ) -> None:
         config = self._application.config
         if (
@@ -287,7 +343,7 @@ class SourcePreparationRunner:
 
     def run(
         self,
-        plan: SourcePreparationPlanV1,
+        plan: SourcePreparationPlanV2,
         *,
         actor_id: str,
         organization_id: str,
@@ -303,7 +359,7 @@ class SourcePreparationRunner:
         if candidate is not None and (
             candidate.manifest.profile_id != plan.release_profile_id
             or candidate.verification.source_revision != plan.source_revision
-            or not set(plan.ingestion.required_fields).issubset(
+            or not set(plan.resolution_request().required_fields).issubset(
                 candidate.manifest.required_fields
             )
         ):
@@ -321,13 +377,49 @@ class SourcePreparationRunner:
                     retryable=False,
                 )
             try:
-                acquired = self._acquisition.execute(
-                    plan.ingestion,
-                    caller_principal=actor_id,
-                    organization_id=organization_id,
-                    correlation_id=correlation_id,
-                    deadline_at=deadline_at,
-                )
+                snapshots = []
+                for request in plan.ingestions:
+                    acquired = self._acquisition.execute(
+                        request,
+                        caller_principal=actor_id,
+                        organization_id=organization_id,
+                        correlation_id=correlation_id,
+                        deadline_at=deadline_at,
+                    )
+                    if acquired.quality_status is not QualityStatus.VERIFIED:
+                        return self._persist(
+                            SourcePreparationEvidenceV1(
+                                source_revision=plan.source_revision,
+                                plan_digest=plan.digest,
+                                status="blocked",
+                                snapshot_id=acquired.snapshot_id,
+                                snapshot_manifest_digest=acquired.manifest_digest,
+                                issue_codes=tuple(sorted(set(acquired.issue_codes))),
+                                missing_evidence=tuple(
+                                    sorted(set(acquired.missing_evidence))
+                                ),
+                            )
+                        )
+                    if acquired.snapshot_id is None:
+                        raise ValueError(
+                            "verified acquisition must identify a stored snapshot"
+                        )
+                    snapshots.append(self._application.snapshot(acquired.snapshot_id))
+                snapshot = snapshots[0]
+                if len(snapshots) > 1:
+                    repository = self._application.snapshot_repository
+                    if repository is None:
+                        raise ValueError(
+                            "history composition requires a snapshot repository"
+                        )
+                    snapshot = compose_original_history(
+                        repository,
+                        tuple(item.snapshot_id for item in snapshots),
+                        valuation_timestamp=plan.ingestions[0].valuation_timestamp,
+                        fiscal_period_selector=plan.ingestions[
+                            0
+                        ].fiscal_period_selector,
+                    )
             except ServiceError as error:
                 if error.retryable or error.status_code != 422:
                     raise
@@ -339,19 +431,18 @@ class SourcePreparationRunner:
                         issue_codes=(error.code,),
                     )
                 )
-            if acquired.quality_status is not QualityStatus.VERIFIED:
+            except SnapshotError as error:
+                if error.retryable:
+                    raise
                 return self._persist(
                     SourcePreparationEvidenceV1(
                         source_revision=plan.source_revision,
                         plan_digest=plan.digest,
                         status="blocked",
-                        snapshot_id=acquired.snapshot_id,
-                        snapshot_manifest_digest=acquired.manifest_digest,
-                        issue_codes=tuple(sorted(set(acquired.issue_codes))),
-                        missing_evidence=tuple(sorted(set(acquired.missing_evidence))),
+                        issue_codes=(error.code,),
                     )
                 )
-            if candidate is not None and acquired.snapshot_id not in {
+            if candidate is not None and snapshot.snapshot_id not in {
                 item.snapshot_id for item in candidate.manifest.snapshot_refs
             }:
                 raise ValueError("candidate does not contain the acquired snapshot")
@@ -362,8 +453,8 @@ class SourcePreparationRunner:
                         source_revision=plan.source_revision,
                         plan_digest=plan.digest,
                         status="release_required",
-                        snapshot_id=acquired.snapshot_id,
-                        snapshot_manifest_digest=acquired.manifest_digest,
+                        snapshot_id=snapshot.snapshot_id,
+                        snapshot_manifest_digest=snapshot.manifest_digest,
                         issue_codes=("DATA_RELEASE_REQUIRED",),
                     )
                 )
@@ -478,7 +569,7 @@ class SourcePreparationRunner:
 async def _run_command(args: argparse.Namespace) -> ArtifactPublicationV1:
     from .app import app
 
-    plan = SourcePreparationPlanV1.model_validate_json(args.plan.read_bytes())
+    plan = SourcePreparationPlanV2.model_validate_json(args.plan.read_bytes())
     if plan.digest != args.plan_digest:
         raise ValueError("plan digest does not match the pinned input")
     candidate = (

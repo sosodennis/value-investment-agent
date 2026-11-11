@@ -34,6 +34,7 @@ from .facts import (
     resolve_canonical_facts,
 )
 from .replay import ArtifactStore
+from .history_composition import verify_history_components
 from .serialization import canonical_bytes, sha256_digest
 from .snapshots import FilesystemSnapshotRepository
 
@@ -201,6 +202,13 @@ class DataReleaseCanaryRunner:
                     "DATA_RELEASE_SNAPSHOT_MISMATCH",
                     f"release snapshot {reference.snapshot_id} has a different manifest digest",
                 )
+            try:
+                verify_history_components(snapshot, self._snapshots)
+            except Exception as exc:
+                raise DataReleaseError(
+                    "DATA_RELEASE_HISTORY_COMPONENT_INVALID",
+                    "release history does not match its independently validated originals",
+                ) from exc
             resolved = self._resolve_facts(snapshot, manifest.required_fields)
             declared = {item.fact_id: item.fact_digest for item in reference.facts}
             actual = {item.fact_id: canonical_fact_digest(item) for item in resolved}

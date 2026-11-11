@@ -42,7 +42,7 @@ from fundamental_service.metadata import (
 )
 from fundamental_service.preparation_runner import (
     SourcePreparationEvidenceV1,
-    SourcePreparationPlanV1,
+    SourcePreparationPlanV2,
     SourcePreparationRunner,
     main,
 )
@@ -54,6 +54,7 @@ from fundamental_service.valuation_requirements import valuation_requirements_pr
 from test_api import _release_manifest_for
 from test_postgres_metadata import DATABASE_URL, _sec_ingestion_request, _snapshot
 from test_release_runner import _candidate
+from test_history_composition import _changed, _original
 from test_valuation_preparation import _facts
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
@@ -84,14 +85,20 @@ def _fixture(tmp_path: Path, *, released: bool = True, namespace: str = "runner"
             ),
         }
     )
-    plan = SourcePreparationPlanV1(
+    plan = SourcePreparationPlanV2(
         source_revision=REVISION,
         release_profile_id=f"sec-public-pit-{namespace}",
         model_id="fcff_dcf",
-        ingestion=ingestion,
+        ingestions=(ingestion,),
     )
     snapshot = _snapshot(
-        namespace, identity=ingestion.identity, valuation_timestamp=VALUATION_TIME
+        namespace,
+        identity=ingestion.identity,
+        valuation_timestamp=VALUATION_TIME,
+        parser_version=ingestion.parser_version,
+        policy_version=ingestion.policy_version,
+        taxonomy_manifest_id=ingestion.taxonomy_manifest_id,
+        validation_profile_id=ingestion.validation_profile_id,
     )
     sources = tuple(
         source.model_copy(
@@ -726,9 +733,219 @@ def test_preparation_and_calculation_reuse_postgres_artifacts_after_restart_and_
 def test_plan_rejects_partial_model_requirements(tmp_path):
     fixture = _fixture(tmp_path)
     payload = fixture.plan.model_dump()
-    payload["ingestion"] = _sec_ingestion_request()
+    payload["ingestions"] = (_sec_ingestion_request(),)
     with pytest.raises(ValueError, match="complete model requirements"):
-        SourcePreparationPlanV1(**payload)
+        SourcePreparationPlanV2(**payload)
+
+
+@pytest.mark.parametrize(
+    "mismatch", ["order", "duplicate", "taxonomy_version", "ticker"]
+)
+def test_multi_original_plan_requires_sorted_distinct_accessions_and_shared_pins(
+    tmp_path, mismatch
+):
+    fixture = _fixture(tmp_path)
+    first = fixture.plan.ingestions[0]
+    first = first.model_copy(
+        update={
+            "filing": first.filing.model_copy(
+                update={"accession_number": "0000000001-24-000001", "forms": ("10-K",)}
+            )
+        }
+    )
+    second = first.model_copy(
+        update={
+            "filing": first.filing.model_copy(
+                update={"accession_number": "0000000001-26-000001"}
+            )
+        }
+    )
+    requests = (first, second)
+    if mismatch == "order":
+        requests = requests[::-1]
+    elif mismatch == "duplicate":
+        requests = (first, first)
+    else:
+        requests = (first, second.model_copy(update={mismatch: "OTHER"}))
+    with pytest.raises(ValueError):
+        SourcePreparationPlanV2.model_validate(
+            {**fixture.plan.model_dump(), "ingestions": requests}
+        )
+
+
+def test_multi_original_plan_covers_model_with_partial_per_filing_roles(tmp_path):
+    fixture = _fixture(tmp_path)
+    first = fixture.plan.ingestions[0]
+    requests = []
+    for index in range(2):
+        fields = first.required_fields[index::2]
+        requests.append(
+            first.model_copy(
+                update={
+                    "required_fields": fields,
+                    "mappings": tuple(
+                        item
+                        for item in first.mappings
+                        if item.normalized_field in fields
+                    ),
+                    "filing": first.filing.model_copy(
+                        update={
+                            "accession_number": f"0000000001-{24 + index:02d}-000001",
+                            "forms": ("10-K",),
+                        }
+                    ),
+                }
+            )
+        )
+    plan = SourcePreparationPlanV2.model_validate(
+        {**fixture.plan.model_dump(), "ingestions": tuple(requests)}
+    )
+    assert plan.resolution_request().required_fields == first.required_fields
+    assert (
+        SourcePreparationPlanV2.model_validate_json(canonical_bytes(plan)).digest
+        == plan.digest
+    )
+
+
+def test_multi_original_plan_acquires_composes_then_reuses_trusted_history(tmp_path):
+    fixture = _fixture(tmp_path, released=False)
+    originals = tuple(_original(year) for year in (2023, 2025))
+    first_request = fixture.plan.ingestions[0]
+    requests = tuple(
+        first_request.model_copy(
+            update={
+                "identity": original.identity,
+                "cik": original.identity.issuer_id,
+                "taxonomy_manifest_id": original.taxonomy_manifest_id,
+                "policy_version": original.policy_version,
+                "filing": first_request.filing.model_copy(
+                    update={
+                        "accession_number": original.sec_integrity_evidence.accession_number,
+                        "forms": ("10-K",),
+                    }
+                ),
+            }
+        )
+        for original in originals
+    )
+    plan = SourcePreparationPlanV2.model_validate(
+        {**fixture.plan.model_dump(), "ingestions": requests}
+    )
+    facts = []
+    for fact in fixture.facts.list():
+        if fact.period_end.year < 2022:
+            continue
+        original = originals[0] if fact.period_end.year <= 2023 else originals[1]
+        source = original.source_records[0]
+        assert fact.period_end < source.available_at.date()
+        facts.append(
+            fact.model_copy(
+                update={
+                    "issuer_id": original.identity.issuer_id,
+                    "security_id": original.identity.security_id,
+                    "accession_number": source.accession_number,
+                    "available_at": source.available_at,
+                    "filed_at": source.filed_at,
+                    "source": fact.source.model_copy(
+                        update={
+                            "content_hash": source.content_hash,
+                            "source_url": source.uri,
+                            "available_at": source.available_at,
+                            "filed_at": source.filed_at,
+                        }
+                    ),
+                }
+            )
+        )
+    fact_repository = FilesystemCanonicalFactRepository(tmp_path / "history-facts")
+    for fact in facts:
+        fact_repository.publish(fact)
+    fixture.facts = fact_repository
+    fixture.application = replace(fixture.application, fact_repository=fact_repository)
+    fixture.plan = plan
+    calls = []
+
+    def execute(request, **kwargs):
+        calls.append(request.filing.accession_number)
+        original = next(
+            item
+            for item in originals
+            if item.sec_integrity_evidence.accession_number
+            == request.filing.accession_number
+        )
+        fixture.snapshots.publish(original)
+        return SecIngestionResponseV1(
+            contract_version="fundamental.v1",
+            status="created",
+            identity=original.identity,
+            valuation_timestamp=VALUATION_TIME,
+            snapshot_id=original.snapshot_id,
+            manifest_digest=original.manifest_digest,
+            quality_status=QualityStatus.VERIFIED,
+            parser_version="2.47.4",
+            validation_profile_id="sec-efm-us-dqc-v31.0.3",
+            validation_profile_digest="e" * 64,
+            taxonomy_manifest_id="taxonomy-modern",
+            taxonomy_version="us-gaap-modern",
+            correlation_id=kwargs["correlation_id"],
+        )
+
+    runner = _runner(fixture, acquisition=SimpleNamespace(execute=execute))
+    first = _reader(fixture, _run(runner, plan))
+    assert first.status == "release_required"
+    history = fixture.snapshots.get(first.snapshot_id)
+    fixture.snapshot = history
+    manifest = _release_manifest_for(history, tuple(facts))
+    payload = manifest.model_dump(exclude={"manifest_digest"})
+    payload.update(
+        profile_id=plan.release_profile_id,
+        required_fields=first_request.required_fields,
+        mapping_refs=fixture.manifest.mapping_refs,
+    )
+    fixture.manifest = DataReleaseManifestV1(
+        **payload, manifest_digest=sha256_digest(payload)
+    )
+    candidate, canary = _reviewed_candidate(fixture)
+    calls_before = tuple(calls)
+    approved = _run(
+        _runner(fixture, acquisition=SimpleNamespace(execute=execute), canary=canary),
+        plan,
+        candidate=candidate,
+    )
+    assert _reader(fixture, approved).status == "approval_required"
+    assert tuple(calls) == calls_before
+    preparation = _reader(fixture, approved).preparation
+    approval = CallerApprovalEnvelopeV1(
+        input_digest=preparation.input.input_digest,
+        decision="approved",
+        caller_id="operator",
+        decided_at=VALUATION_TIME,
+    )
+    calculated = _run(_runner(fixture), plan, approval=approval)
+    assert _reader(fixture, calculated).calculation.base.per_share_value > 0
+    assert _run(_runner(fixture), plan, approval=approval).wrote is False
+    assert tuple(calls) == calls_before
+    altered = _changed(originals[0], policy_version="tampered")
+    (fixture.snapshots.root / f"{originals[0].snapshot_id}.json").write_bytes(
+        canonical_bytes(altered)
+    )
+    with pytest.raises(DataReleaseError) as error:
+        canary.validate(candidate.manifest, candidate.verification)
+    assert error.value.code == "DATA_RELEASE_HISTORY_COMPONENT_INVALID"
+    for operation in (
+        lambda: fixture.application.snapshot(history.snapshot_id),
+        lambda: fixture.application.resolve_snapshot(plan.resolution_request()),
+        lambda: _run(_runner(fixture), plan, approval=approval),
+    ):
+        with pytest.raises(ServiceError) as serving_error:
+            operation()
+        assert serving_error.value.code == "HISTORY_COMPONENT_MISMATCH"
+    assert tuple(calls) == calls_before
+    (fixture.snapshots.root / f"{originals[0].snapshot_id}.json").unlink()
+    with pytest.raises(ServiceError) as missing_error:
+        _run(runner, plan, approval=approval)
+    assert missing_error.value.code == "HISTORY_COMPONENT_UNAVAILABLE"
+    assert tuple(calls) == calls_before
 
 
 def test_command_rejects_changed_plan_digest(tmp_path, capsys):

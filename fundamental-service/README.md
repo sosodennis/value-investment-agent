@@ -30,14 +30,25 @@ fundamental-prepare-source \
   --actor <operator-id> --organization <authorized-organization>
 ```
 
-The versioned `SourcePreparationPlanV1` pins a source revision, release profile,
-model and complete `SecIngestionRequestV1`. Its digest is SHA-256 over the service's
+The versioned `SourcePreparationPlanV2` pins a source revision, release profile,
+model and one to six `SecIngestionRequestV1` values in `ingestions`. Their field
+union must cover the complete model requirements. Multiple requests must pin
+distinct original 10-K accessions in sorted order, with the same issuer, valuation
+date and runtime profile. Each request may map only the roles supported by that
+filing. Its digest is SHA-256 over the service's
 canonical serialization. The command first resolves released evidence. On a miss,
 it uses existing SEC acquisition and retention; an already stored snapshot can be
 used with `--candidate <trusted-candidate.json>` without another acquisition.
 Candidate publication and activation require the configured organizations, release
 verification and independent mapping review signatures. This command does not
 create review signatures or approve new mappings.
+
+For several originals, the service publishes a deterministic history snapshot
+that references each immutable component and its own integrity evidence. It does
+not copy or change facts. Release validation, serving and backup verification
+re-read those components; a missing or changed original refuses the history.
+Repeating composition reuses the same snapshot without provider I/O. History
+sufficiency remains the formal #352 composer's decision.
 
 The canonical JSON receipt contains an artifact reference and `wrote`. Read its
 metadata and bytes through the authenticated `/v1/artifacts/{artifact_id}` and

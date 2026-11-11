@@ -50,6 +50,7 @@ from ..data_releases import (
 from ..facts import CanonicalFactRepository, canonical_fact_digest
 from ..fiscal_periods import resolve_fiscal_periods
 from ..governance import ModelInventory
+from ..history_composition import verify_history_components
 from ..operations import (
     OperationalMetrics,
     OperationsConfig,
@@ -351,9 +352,7 @@ class FundamentalApplication:
                 status_code=503,
                 retryable=True,
             )
-        snapshot = self.snapshot_repository.get(
-            value.valuation_context.data_snapshot_id
-        )
+        snapshot = self.snapshot(value.valuation_context.data_snapshot_id)
         source_hashes = {record.content_hash for record in snapshot.source_records}
         facts = []
         for fact_id in value.historical_facts:
@@ -956,7 +955,9 @@ class FundamentalApplication:
                 retryable=True,
             )
         try:
-            return self.snapshot_repository.get(snapshot_id)
+            snapshot = self.snapshot_repository.get(snapshot_id)
+            verify_history_components(snapshot, self.snapshot_repository)
+            return snapshot
         except SnapshotError as error:
             self.metrics.increment("source_health_failures_total")
             raise _snapshot_error(error) from error
@@ -1357,6 +1358,7 @@ class FundamentalApplication:
             if cache_status == "hit" and isinstance(
                 cached_resolution, SnapshotResolutionV1
             ):
+                self.snapshot(cached_resolution.snapshot_id)
                 self.metrics.increment("cache_hit_total")
                 return cached_resolution
             if cache_status == "hit":
@@ -1395,6 +1397,7 @@ class FundamentalApplication:
             )
         selector_requested = request.fiscal_period_selector is not None
         for snapshot in candidates:
+            snapshot = self.snapshot(snapshot.snapshot_id)
             declared_snapshot = (
                 None
                 if declared_snapshots is None

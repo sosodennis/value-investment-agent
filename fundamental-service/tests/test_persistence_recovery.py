@@ -10,6 +10,7 @@ from fundamental_service.metadata import (
     PostgresArtifactStore,
     PostgresContentStore,
     PostgresMetadataStore,
+    PostgresSnapshotRepository,
 )
 from fundamental_service.persistence_recovery import (
     PersistenceBackupV1,
@@ -19,6 +20,8 @@ from fundamental_service.persistence_recovery import (
     restore_backup,
 )
 from fundamental_service.serialization import canonical_bytes, sha256_digest
+from fundamental_service.history_composition import verify_history_components
+from test_history_composition import _changed, _compose, _original
 from test_postgres_metadata import _fact_for_snapshot, _snapshot
 
 
@@ -132,6 +135,71 @@ def test_backup_restores_metadata_and_bytes_and_repeats_without_writes(
         reopened.close()
     assert _export(target_db, target, backups).wrote is False
     assert _inventory(backups) == before
+
+
+@pytest.mark.parametrize("damage", [None, "missing", "changed"])
+def test_history_backup_requires_each_original_and_recovers_same_composition(
+    recovery_databases, tmp_path, damage
+):
+    source_db, target_db = recovery_databases
+    source = tmp_path / "source"
+    store = PostgresMetadataStore(source_db, auto_migrate=True)
+    store.start()
+    try:
+        content = PostgresContentStore(source, store)
+        repository = PostgresSnapshotRepository(store)
+        originals = tuple(_original(year) for year in (2023, 2025))
+        for year, original in zip((2023, 2025), originals, strict=True):
+            assert (
+                content.put(
+                    canonical_bytes({"synthetic_original": year}),
+                    media_type=original.source_records[0].media_type,
+                )
+                == original.source_records[0].content_hash
+            )
+        # Compose separately so a deliberately incomplete store can be tested.
+        from fundamental_service.snapshots import FilesystemSnapshotRepository
+
+        staging = FilesystemSnapshotRepository(tmp_path / "components")
+        for original in originals:
+            staging.publish(original)
+        history = _compose(staging, originals)
+        for index, original in enumerate(originals):
+            if index == 0 and damage == "missing":
+                continue
+            if index == 0 and damage == "changed":
+                original = _changed(original, policy_version="tampered")
+            repository.publish(original)
+        repository.publish(history)
+    finally:
+        store.close()
+    backups = tmp_path / "backups"
+    if damage is not None:
+        with pytest.raises(RecoveryError, match="retained original"):
+            _export(source_db, source, backups)
+        assert list(backups.iterdir()) == []
+        return
+    receipt = _export(source_db, source, backups)
+    before = _inventory(backups)
+    assert _export(source_db, source, backups).wrote is False
+    assert _inventory(backups) == before
+    target = tmp_path / "target"
+    _restore(
+        target_db, target, backups / receipt.manifest_digest, receipt.manifest_digest
+    )
+    reopened = PostgresMetadataStore(target_db)
+    reopened.start()
+    try:
+        restored = PostgresSnapshotRepository(reopened)
+        assert (
+            verify_history_components(restored.get(history.snapshot_id), restored)
+            == originals
+        )
+        assert _compose(restored, originals) == history
+        assert len(reopened.list_snapshots()) == 3
+    finally:
+        reopened.close()
+    assert _export(target_db, target, backups).wrote is False
 
 
 @pytest.mark.parametrize("damage", ["content", "table", "manifest", "extra", "symlink"])

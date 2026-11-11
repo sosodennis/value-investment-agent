@@ -582,6 +582,39 @@ class SecIntegrityEvidenceV1(StrictModel):
         return self
 
 
+class SecHistoryComponentV1(StrictModel):
+    """An immutable original snapshot and its own parser-bound integrity."""
+
+    snapshot_id: str = Field(min_length=1)
+    manifest_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    integrity: SecIntegrityEvidenceV1
+
+
+class SecHistoryIntegrityEvidenceV1(StrictModel):
+    """Evidence for a composition of independently validated original filings."""
+
+    protocol: Literal["sec-original-history-v1"] = "sec-original-history-v1"
+    components: tuple[SecHistoryComponentV1, ...] = Field(min_length=2, max_length=6)
+    quality_decision: Literal["pass"] = "pass"
+
+    @model_validator(mode="after")
+    def original_components_are_unique(self) -> SecHistoryIntegrityEvidenceV1:
+        ids = tuple(component.snapshot_id for component in self.components)
+        accessions = tuple(
+            component.integrity.accession_number for component in self.components
+        )
+        if ids != tuple(sorted(set(ids))) or len(accessions) != len(set(accessions)):
+            raise ValueError(
+                "history components must be sorted, unique original snapshots"
+            )
+        if any(
+            component.integrity.quality_decision != "pass"
+            for component in self.components
+        ):
+            raise ValueError("every history original must pass its own integrity gates")
+        return self
+
+
 class SecCapturedSourceEvidenceV1(StrictModel):
     source_id: str = Field(min_length=1)
     uri: str = Field(min_length=1)
@@ -663,7 +696,9 @@ class SourceSnapshotV1(StrictModel):
     policy_version: str = Field(min_length=1)
     coverage_status: QualityStatus
     issues: tuple[IssueV1, ...] = ()
-    sec_integrity_evidence: SecIntegrityEvidenceV1 | None = None
+    sec_integrity_evidence: (
+        SecIntegrityEvidenceV1 | SecHistoryIntegrityEvidenceV1 | None
+    ) = None
     manifest_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
 
     @model_validator(mode="after")
@@ -696,6 +731,41 @@ class SourceSnapshotV1(StrictModel):
             and self.coverage_status is QualityStatus.VERIFIED
         ):
             raise ValueError("verified snapshots must cover every source capture time")
+        return self
+
+    @model_validator(mode="after")
+    def history_integrity_covers_each_original(self) -> SourceSnapshotV1:
+        evidence = self.sec_integrity_evidence
+        if not isinstance(evidence, SecHistoryIntegrityEvidenceV1):
+            return self
+        originals = {
+            component.integrity.accession_number: component.integrity
+            for component in evidence.components
+        }
+        filing_sources = tuple(
+            source for source in self.source_records if source.source_id == "sec-filing"
+        )
+        if {source.accession_number for source in filing_sources} != set(originals):
+            raise ValueError(
+                "history must cover exactly the declared original accessions"
+            )
+        for source in filing_sources:
+            if source.accession_number is None:
+                raise ValueError("history filing must identify its original accession")
+            integrity = originals[source.accession_number]
+            if (
+                source.content_hash != integrity.raw_content_hash
+                or source.parser_input_hash != integrity.parser_input_hash
+                or source.uri != integrity.primary_document_uri
+                or source.is_amendment
+                or source.form != "10-K"
+                or source.available_at > self.valuation_timestamp
+                or integrity.captured_at > self.captured_at
+                or integrity.validation_profile_digest != self.validation_profile_digest
+            ):
+                raise ValueError(
+                    "history filing source differs from its original integrity evidence"
+                )
         return self
 
 

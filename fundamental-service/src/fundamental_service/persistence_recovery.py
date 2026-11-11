@@ -20,6 +20,7 @@ import asyncpg
 from pydantic import Field, model_validator
 
 from .contracts import SourceSnapshotV1, StrictModel
+from .history_composition import verify_history_components
 from .metadata import SCHEMA_VERSION, PostgresMetadataStore
 from .serialization import canonical_bytes, sha256_digest
 from .snapshots import SnapshotError
@@ -283,9 +284,23 @@ def _rows(root: Path, table: BackupTableV1):
         raise RecoveryError("backup row count does not match the manifest")
 
 
+class _BackupSnapshots:
+    def __init__(self) -> None:
+        self.snapshots: dict[str, SourceSnapshotV1] = {}
+
+    def get(self, snapshot_id: str) -> SourceSnapshotV1:
+        try:
+            return self.snapshots[snapshot_id]
+        except KeyError as error:
+            raise SnapshotError(
+                "HISTORY_COMPONENT_MISSING", "history original is absent from backup"
+            ) from error
+
+
 def _verify_rows(root: Path, manifest: PersistenceBackupV1) -> None:
     objects = {item.path: item for item in manifest.objects}
     hashes = {item.digest for item in manifest.objects}
+    snapshots = _BackupSnapshots()
 
     def require_content(content_hash: str, media_type: str) -> BackupFileV1:
         suffix = ".json" if media_type == "application/json" else ".bin"
@@ -311,11 +326,21 @@ def _verify_rows(root: Path, manifest: PersistenceBackupV1) -> None:
                     or snapshot.snapshot_id != row["snapshot_id"]
                 ):
                     raise RecoveryError("snapshot metadata digest is inconsistent")
+                if snapshot.snapshot_id in snapshots.snapshots:
+                    raise RecoveryError("backup contains duplicate snapshot identities")
+                snapshots.snapshots[snapshot.snapshot_id] = snapshot
                 for source in snapshot.source_records:
                     require_content(source.content_hash, source.media_type)
             elif table.name == "canonical_facts":
                 if json.loads(row["payload"])["source"]["content_hash"] not in hashes:
                     raise RecoveryError("canonical fact source is absent from backup")
+    for snapshot in snapshots.snapshots.values():
+        try:
+            verify_history_components(snapshot, snapshots)
+        except SnapshotError as error:
+            raise RecoveryError(
+                "backup history does not match its retained original snapshots"
+            ) from error
 
 
 def _receipt(manifest: PersistenceBackupV1, *, wrote: bool) -> RecoveryReceiptV1:
