@@ -110,7 +110,7 @@
     "capabilities": {
       "identity_resolution_configured": true
     },
-    "status": "not_running"
+    "status": "not_ready"
   },
   "research_archive": "docs/acceptance/issue-361-research-archive.json",
   "runtime": {
