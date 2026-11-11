@@ -809,3 +809,48 @@ classification/conditions, actual quote/policy and independent review. Resolve
 those evidence gaps before signing a release or attempting real numerical
 acceptance. Further parser or signing changes alone cannot establish missing
 economic disclosures. Threshold remains null; #361 and draft PR #370 stay open.
+
+## Incomplete acquisition evidence retention
+
+Implementation `662e51c9282053df3813a1bcf0b1ea5acbd28707` addresses #398 in
+Fundamental Service acquisition. Once source integrity and parser gates pass,
+missing required roles produce an atomically retained abstained result with the
+partial snapshot, all selected facts and sorted missing roles. Preparation stays
+blocked. Two owner regressions failed before the change with `ServiceError: SEC
+filing did not provide every requested verified fact`; both pass after it.
+
+Exact-commit checks: **824 service/PostgreSQL tests passed, 11 optional runtime
+skips; 52 Agent boundary tests and 17 acceptance-tool tests passed**. Ruff,
+format, 23-source mypy, architecture guard and diff checks exit 0. Input digest
+`32b8d1fdb178b46a99b485ff0d45dc2d76d302059b751b134017267d8ae97761`;
+output `9f7c6c2ea308cb482cebd115d87c89bd50cf856f2babe9624d8d936ea9cee268`.
+[Implementation CI](https://github.com/sosodennis/value-investment-agent/actions/runs/43048165106)
+has 12 successful jobs and the skipped release gate.
+
+A new execution against the retained Microsoft FY2024 original uses the real
+strict parser and isolated Docker PostgreSQL. Two explicitly unreviewed concept
+probes retain 57 provisional revenue facts across periods/dimensions, including
+three independently checked consolidated annual amounts. Missing
+`contract_assets` remains unknown, with an abstained acquisition; tag absence
+does not establish zero. The snapshot retains passing source integrity and
+original-filing identity evidence. Restart, repeated backup/restore and restored
+retrieval preserve the response digest. Two further complete process executions
+return `wrote=false`, make zero provider/parser calls and preserve hashes/mtimes
+of all 65 evidence files. Real input
+`2fe66f64032677bb5510e293ef07a0ab01c093b63a509002bb8401f87ef9a54c`;
+output `c90be0b37bb47b018434572779d1bb82b604ba0bec09a93125a896cb209cada0`.
+
+The checkpoint retains both corrected harness failures: an initial three-fact
+count assumption, and an attempted old-backup restore over appended access
+audits that production correctly refused. No restore guard was weakened.
+Disposable project `value-investment-agent-361-flow-tests` has no remaining
+containers, networks or volumes; all 62 baseline containers preserve their IDs,
+images and start times. Backups and generated corpus remain outside Git.
+
+Exact commands, digests and all 31 earlier checkpoint entries are retained under
+`incomplete_acquisition_retention_increment` in the existing accounting
+checkpoint. This verifies a native service-use-case refusal with real originals,
+not complete FCFF preparation, HTTP/service acceptance, independent semantic
+review or a numerical valuation. Complete role/award/market-policy evidence,
+review/release, caller approval and PR/main verification remain outstanding.
+Threshold stays null; #398, #361 and draft PR #370 remain open.
