@@ -4,7 +4,7 @@ Status: partial research evidence; empirical study incomplete. No threshold,
 mapping, policy, release or valuation quality is approved by this checkpoint.
 Refs #376; protocol blocker #377; historical owners #369 and #371.
 
-Implementation tested: `6323686e69594a804e61111cba12fe608c3f74cc` on
+Initial implementation tested: `6323686e69594a804e61111cba12fe608c3f74cc` on
 `codex/issue-376-history-study`, based on main
 `52e84dfe5a0dae0c11d2e62fd9a58e885b6eadc9`.
 Worktree:
@@ -191,11 +191,152 @@ byte-match its separately indexed ZIP member. A versioned source contract
 should identify the selected authority, retain both original representations
 and discrepancies, verify each object's own index size/hash/receipt and require
 the selected parser/financial evidence checks. It must not claim byte identity
-or erase text differences. That source contract is still unimplemented and
-unapproved; original size refusals remain retained.
+or erase text differences. At that checkpoint the source contract was
+unimplemented and unapproved; original size refusals remain retained. The next
+increment implements an internal research selector without approving publication.
 
 GitHub checks at `f5bee8396ad2c34168117cbee4f4b62f55568bcc`: all 12 executed
 checks passed, including `offline-research-contracts`; the separate
 `fundamental-release-gate` was skipped. The saved status receipt is
 `checkpoint-c4c8a352/github-ci-f5bee839.json`. PR #378 remains draft; CI success
 does not replace historical release review or the empirical forecast study.
+
+## Accession archive implementation and complete subset execution
+
+Exact implementation: `fb4c983a3428a3141936ff02a1c72f7214bb0df2`.
+Fundamental Service now owns the internal
+`historical-archive-selection.v1` / `sec-original-xbrl-archive-v1` research
+contract and the shared bounded ZIP reader. It binds the frozen filing metadata,
+each object's own indexed length and unchanged member/source hashes; it retains
+both representations and discrepancies. The audit reports the archived missing
+HTTP receipts as null, never as invented HTTP 200. It binds supplied acceptance
+metadata without independently certifying original/amendment history. Existing
+production exact/Akamai integrity and publication policy remain in force.
+
+At that exact clean commit, the complete Fundamental suite passed **357 tests**
+with 27 explicit resource/database skips and one existing serializer warning.
+The five research test files passed **36 tests** without skips. Ruff 0.14.14
+check/format, mypy 1.15.0, both architecture guards and `git diff --check` all
+exited 0. The checkpoint receipt records complete command arrays and log hashes.
+Runtime: CPython 3.11.15, Arelle 2.47.4, lxml 6.1.3, Pydantic 2.14.2; the locked
+dependencies, exact parser profile, plugin resources and taxonomy cache are
+bound in the inputs and verified unchanged after execution.
+
+All 187 original source-size-refusal rows remain in the selected subset, spanning
+61 independent issuers within the fixed 100-issuer / 589-filing population.
+The selection audit chose 180 original ZIPs for validation and retained seven
+10-K/A refusals under the original-only policy. The complete selection repeat
+returned identical digests and `wrote=false`, with unchanged bytes/sizes/mtimes.
+No issuer or filing was substituted.
+
+All 180 selected originals then received **fresh offline parser execution** with
+strict EFM and the pinned historical DQC v3.6.2 profile:
+
+| Outcome | Filings | Decision | History | Label |
+| --- | ---: | ---: | ---: | ---: |
+| Parsed without blocking findings | 26 | 10 | 11 | 5 |
+| Parsed with retained blocking findings | 134 | 24 | 100 | 10 |
+| Unsupported taxonomy refusal | 20 | 0 | 20 | 0 |
+| Original-only selection refusal | 7 | 0 | 7 | 0 |
+
+The 160 parsed filings yield 278,767 facts. All 20 taxonomy refusals use US GAAP
+2011; these are unresolved, not passed through a newer-rule fallback. Findings,
+original severities, fact identities, failures and every target remain retained.
+These outcome counts describe the subset only, not 160 approved filings or
+completed forecasts. No rule revision is certified historically applicable by
+its execution in this profile.
+
+The complete second pass rehashed **559 unique retained source objects**, then
+reused all **180 parser result artifacts** with zero newly written results.
+Its report returned `wrote=false` and the same input/output/report digests;
+all existing corpus bytes, sizes and mtimes remained unchanged. This verifies
+complete deterministic artifact reuse after source reverification. It is
+**not** a second fresh execution of all 180 parser workers and is not the
+unexecuted full forecast replay.
+
+Two canaries were selected prospectively by minimum direct byte length among
+original Canonical-XML-different targets within decision/history roles, with a
+canonical target tie-break. Both direct and archive representations were freshly
+parsed twice per canary; no favorable case replacement was made:
+
+- CIK 0001269190, accession 0001193125-16-519551: 678 facts per representation;
+  equal numeric fact multisets; a differing text-block group remains retained.
+  `EFM.6.11.05` remains blocking for two monetary extension concepts without
+  adequate sign-disambiguating documentation labels under the pinned EDGAR rule.
+- CIK 0001107280, accession 0001273511-13-000018: 298 facts per representation;
+  equal numeric fact multisets; two differing text-block groups remain retained;
+  neither representation has blocking findings under the selected profile.
+
+Both canaries have different complete fact semantic digests across their source
+representations. Numeric agreement does not establish full equivalence or grant
+mapping, materiality or publication approval. Repeated canonical parser reports
+returned `wrote=false` and unchanged bytes/sizes/mtimes after fresh execution.
+
+The official family-date diagnostic was also applied to all new subset results,
+including findings retained in parser failures. Of 134 blocked parsed filings,
+84 have only pre-effective DQC blockers: 12 decisions and 72 history filings.
+The other 50 retain non-DQC or other applicability review. Every original status
+and severity remains unchanged. Family dates do not resolve the exact revision,
+historical EFM applicability or financial materiality. The diagnostic's repeated
+canonical report returned `wrote=false` with unchanged bytes/sizes/mtimes.
+
+All evidence below is outside Git under `checkpoint-fb4c983a/` in the existing
+external evidence root. The executor sources are retained under `references/`.
+
+| Artifact | SHA-256 |
+| --- | --- |
+| Checkpoint receipt | `f149888f62bda2ba0a639d84692ae5edd89659471e6d5359d01dae2b6ec61576` |
+| Checkpoint inputs | `f411df67e9329c12ac22f112542d625a7ac01021fd97fede0ba53cfbb0dbd09a` |
+| Checkpoint outputs | `9395a70a085dd56365f04e871299dad2f323027c9f0cc782c4a9cf1b30a1db18` |
+| Selection report | `bca60230eabdaa335b2481e3cfac18bad8b72c39b982b9baf0656c34d3fcd850` |
+| Selection inputs | `f010156dff840070032f5be20b5e4cb641e4f47279ab1d3c193db6fb96f3094b` |
+| Selection outputs | `c8c17bd12fa054771a37122e66e375765d71997c65780e897bbdcc5b63079047` |
+| Complete subset parser report | `b72ee05062541e45b9122b5c49b45e327b210ccd4f93f3d950df21b725fa1857` |
+| Complete subset parser inputs | `5605c14c0ff9c878c8fdff1508dadaa9ad60642d2f56eddfb4fd7cea8ed1ae51` |
+| Complete subset parser outputs | `918da2b55e4671c10f9bf3ff104d7c09a3fddc0ab144e9164526f7c97ffb9eb6` |
+| Complete subset repeat receipt | `2ba93273ec9765d8debc6eb7e0631913e2b2ddef235dd9cc2ff0e45d473c049e` |
+| Complete subset repeat inputs | `204cef59981655af2df384545e0d9dd6288245d11b7084ae2c3d1fd702fa93f4` |
+| Complete subset repeat outputs | `3a1a9ba8703d931a1884a2603abada433dd3ef21756f17a42ab46bcfe078036e` |
+| Pinned canary fact-delta report | `fb83b0f8b8eb6ed71e2852829229d905f3d9107f138f364bb047656f1a0c642d` |
+| Pinned canary fact-delta inputs | `d117a97e06021960b7d4992a589e9ef71e39293f688954c876a0a6c63814f0ff` |
+| Pinned canary fact-delta outputs | `50df59193d064be341af99cef61eb4e45326919119c56b5d5b9d1f83020eb7cc` |
+| Subset applicability report | `37133f2e1b33b132d94df590f8520572efeecc30ddf32e24e5c6dbd57e92065f` |
+| Subset applicability inputs | `176b031254a57f60982b458dd8c0aba1daaf699a9de0f9ee86d801d1bcaf8746` |
+| Subset applicability outputs | `7dcae8bbce79485ad5f84e9282422ef2b2b7627c779cf1977d3aba36c618403c` |
+
+Execute each driver using `uv run --frozen --project fundamental-service python`
+followed by the absolute external `references/` path. In order, the driver names
+are `issue376-archive-checkpoint.py`, `issue376-archive-fact-delta.py`,
+`issue376-archive-corpus-parser.py`, `issue376-archive-corpus-repeat.py` and
+`issue376-archive-corpus-applicability.py`. All exited 0 at the exact clean
+implementation commit; first corpus stdout is `corpus-parser-first.log`, repeat
+receipt stdout is `corpus-repeat.log`, and applicability stdout is
+`corpus-applicability-first.log`. The repeat receipt records exact argv, exit,
+executor/log hashes and reverified source hashes. The corpus and applicability
+reports bind their driver hashes, complete inputs and owning classifier pins.
+
+All 12 executed GitHub checks passed at the implementation commit; the separate
+`fundamental-release-gate` was skipped. Saved status:
+`checkpoint-fb4c983a/github-ci-fb4c983a.json`. Documentation added after these
+checks does not change the tested code or replace empirical acceptance.
+
+### Remaining work and next delivery
+
+The [FASB accounting-era evidence](../research/history-sufficiency-study.md#accounting-era-mapping-evidence)
+adds linked blocker #380: unconditional modern lease and contract-asset roles
+do not establish the correct 2016 input representation. Review issuer/period
+original adoption/disclosures and implement versioned applicability in owning
+Fundamental contracts. Do not invent zeros, equate commitments with recognized
+liabilities, double-count receivables or leak later restatements.
+
+Next: resolve #371 historical applicability/materiality and release integration,
+US GAAP 2011 and amendment/receipt limitations, #380 accounting-era roles,
+issuer/period semantic review, #369 historical market-policy review and trusted
+releases. Freeze #377's error/power and within-issuer history comparison protocol
+before threshold selection. Then execute formal #352 forecasts/labels and the
+isolated service-backed complete replay/repeat. No Docker resources were created
+or changed by this increment. The original 100 issuers remain fixed; nine missing
+labels and one horizon mismatch remain in the denominator. **Canonical study
+forecasts remain zero, supported_history_threshold remains null, and #376 / PR
+#378 remain open/draft.** This is completed engineering evidence, not a completed
+empirical study or an approved underpowered forecast conclusion.

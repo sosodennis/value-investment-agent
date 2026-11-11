@@ -264,5 +264,49 @@ zeros from a missing tag or rewrite #352 valuation formulas in research tools.
 These references guide compatibility diagnosis; they are not threshold ground
 truth or automatically backdated valuation inputs.
 
+The subsequent [FASB ASU 2015-14](https://storage.fasb.org/ASU%202015-14.pdf),
+printed page 1 (PDF page 7), defers public-entity Topic 606 application to annual
+periods beginning after December 15, 2017, with early application permitted only
+for periods beginning after December 15, 2016. Its retained SHA-256 is
+`59e9083d8547d2d2da53d31f3f5a0b3c742933eaaf3066ecad988a81f3b59f3d`.
+The superseded original ASU 2014-09 Section A is retained separately at
+`0fa5f4241d383af7a7ea1ab24b742797c598c7967b133e21e09d9c3d92166848`.
+Use the amended effective date when diagnosing historical requirements.
+
+The unconditional modern `contract_assets` role therefore also needs original
+issuer/period accounting-policy and disclosure adjudication. Do not automatically
+rename pre-adoption unbilled receivables as contract assets, add amounts already
+included in receivables, infer zero from an absent tag or use future restatements
+at a 2016 origin. Applicability, recognized amounts, aggregates and unavailable
+evidence need distinct reviewed representations in the owning Fundamental input
+contract. These accounting references diagnose compatibility; they do not approve
+any issuer's mapping or supply a forecast label.
+
 [Blocker #380](https://github.com/sosodennis/value-investment-agent/issues/380)
-tracks the canonical lease-role applicability gap and its real-disclosure tests.
+tracks the accounting-era role applicability gap and real-disclosure tests.
+
+## Executed archive subset
+
+At exact commit `fb4c983a3428a3141936ff02a1c72f7214bb0df2`, all 187 retained
+source-size-refusal targets were evaluated under the explicit archive policy.
+This subset spans 61 issuers within the unchanged 100-issuer / 589-filing study.
+All 180 selected original archives received fresh offline parser execution:
+160 yielded facts, including 26 without blocking findings and 134 with findings;
+20 remained refused for unsupported taxonomy. Seven amendments retain explicit
+original-only selection refusal. These are parser outcomes, not release approvals.
+
+The complete second pass reverified 559 unique retained source objects, reused
+all 180 parser result artifacts and returned the same report/input/output digests
+with `wrote=false`. Existing corpus bytes, sizes and mtimes remained unchanged.
+This is deterministic artifact reuse, not fresh execution of all 180 workers a
+second time. Two separately selected direct/archive canaries freshly execute both
+representations twice. Numerical fact multisets agree for those canaries; their
+text blocks and complete fact semantic digests differ and remain retained.
+
+Applying the pinned official DQC family-date classifier to this new subset
+identifies 84 filings whose original blockers are exclusively pre-effective DQC
+findings: 12 decision filings and 72 history filings. The other 50 blocked
+filings retain non-DQC or other applicability review. Family dates establish
+neither exact rule-revision applicability nor financial materiality. No original
+status or severity is changed. Full digests, commands, repeat semantics and
+limitations are indexed in the [acceptance evidence](../acceptance/issue-376-acceptance.md).
