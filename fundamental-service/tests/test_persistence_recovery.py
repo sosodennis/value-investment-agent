@@ -174,6 +174,13 @@ def test_history_backup_requires_each_original_and_recovers_same_composition(
                 )
                 == original.source_records[0].content_hash
             )
+            assert (
+                content.put(
+                    canonical_bytes({"synthetic_archive": year}),
+                    media_type=original.source_records[1].media_type,
+                )
+                == original.source_records[1].content_hash
+            )
         # Compose separately so a deliberately incomplete store can be tested.
         from fundamental_service.snapshots import FilesystemSnapshotRepository
 
