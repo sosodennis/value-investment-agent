@@ -55,6 +55,7 @@ from .history_composition import verify_history_components
 from .serialization import canonical_bytes, sha256_digest
 from .snapshots import FilesystemSnapshotRepository, SnapshotError
 from .sec_rebuild import parsed_facts_to_candidates
+from .taxonomy_evidence import require_original_taxonomy
 from .original_issuer import IssuerOperatingSourceV1, OriginalOperatingSourceV1
 from .issuer_release_evidence import (
     require_issuer_release_profile,
@@ -603,13 +604,9 @@ class DataReleaseCanaryRunner:
             verify_original_integrity(
                 original, integrity, parser_version=manifest.parser_version
             )
-            if integrity.taxonomy_manifest_hash not in {
-                ref.content_hash for ref in manifest.taxonomy_refs
-            }:
-                raise DataReleaseError(
-                    "DATA_RELEASE_TAXONOMY_MANIFEST_UNAVAILABLE",
-                    "issuer release must retain its original taxonomy manifest",
-                )
+            require_original_taxonomy(
+                integrity.taxonomy_manifest_hash, manifest.taxonomy_refs, contents
+            )
             verify_original_bytes(integrity, contents)
 
     def _verify_mappings(

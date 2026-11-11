@@ -129,6 +129,15 @@ Existing canonical JSON publication is unchanged. Original 10-K identity,
 amendment status, available-at cutoff, strict offline validation and byte
 integrity must pass before approval.
 
+When the parser pins a taxonomy directory digest, retain a deterministic ZIP
+with role `sec-taxonomy-cache-archive-v1`. `build_taxonomy_cache_archive` preserves
+the parser's member order and exact bytes with fixed ZIP metadata. Verification
+streams members through the same path + NUL + bytes digest without extraction
+or network access. It rejects duplicate/unsafe paths, symlinks, noncanonical
+ordering and excessive counts/size. The archive blob digest and original cache
+tree digest remain distinct. The same verifier serves automatic mapping and
+issuer release canaries; source/report pins are preserved.
+
 Provision a separate Ed25519 machine key in PKCS8 PEM format and configure its
 public key under `automatic_mapping_evaluators` in deployment trust roots. Each
 entry pins `public_key_ed25519_base64` and `policy_digest`. Keep the private key

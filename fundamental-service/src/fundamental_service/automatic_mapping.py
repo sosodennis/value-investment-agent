@@ -23,6 +23,7 @@ from .facts import CanonicalMappingV1, MappingObservationScopeV1
 from .issuer_release_evidence import verify_original_bytes, verify_original_integrity
 from .original_issuer import OriginalIssuerEvidenceV1
 from .serialization import sha256_digest
+from .taxonomy_evidence import require_original_taxonomy
 
 AUTOMATIC_MAPPING_INPUT_ROLE = "automatic-mapping-input-v1"
 AUTOMATIC_MAPPING_POLICY: Literal["consolidated-direct-us-gaap-v1"] = (
@@ -105,6 +106,7 @@ def automatic_mapping_policy_digest() -> str:
                     "regulatory_validation.py",
                     "sec_integrity.py",
                     "serialization.py",
+                    "taxonomy_evidence.py",
                 )
             },
         }
@@ -239,12 +241,9 @@ def evaluate_automatic_mapping(
                     "MAPPING_SOURCE_ARTIFACT_UNAVAILABLE",
                     "automatic mapping requires its retained evidence bytes",
                 )
-        if original.report.taxonomy_cache_hash not in {
-            ref.content_hash for ref in request.evidence_refs
-        }:
-            raise DataReleaseError(
-                "MAPPING_TAXONOMY_UNAVAILABLE", "retain the pinned taxonomy manifest"
-            )
+        require_original_taxonomy(
+            original.report.taxonomy_cache_hash or "", request.evidence_refs, contents
+        )
         verify_original_integrity(
             original, request.integrity, parser_version=original.report.parser_version
         )

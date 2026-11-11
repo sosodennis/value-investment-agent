@@ -43,6 +43,14 @@ complete goal remains open and draft. AI verification is future scope and the
 history threshold remains null. Exact commit checks and real original results
 are recorded in the appended checkpoint when available.
 
+Real-source execution exposed [#407](https://github.com/sosodennis/value-investment-agent/issues/407):
+the parser pins an ordered taxonomy directory digest, whereas the release had
+required a single artifact blob with that digest. The owning evidence layer now
+retains a deterministic taxonomy-cache archive and reproduces the original tree
+digest from exact member paths and bytes. Blob/tree identities remain distinct.
+Tests exercise real directory hashing, release acceptance and unsafe, duplicate,
+unordered, symbolic-link, corrupt and mismatched evidence refusals.
+
 ## Current implementation and verification
 
 The latest implementation commit is `e30d2e5068f49709c68e794dbb0be1d2c1d11a96`.
