@@ -152,6 +152,52 @@ def test_original_identity_rejects_the_same_ticker_in_multiple_class_contexts():
     assert error.value.code == "HISTORICAL_IDENTITY_CONFLICT"
 
 
+def test_original_identity_pairs_reused_ticker_with_its_exact_security_title():
+    facts = _class_scoped_original()
+    symbol = next(f for f in facts if f.concept == "dei:TradingSymbol")
+    note = facts[-1]
+    reused_symbol = symbol.model_copy(
+        update={"context_id": note.context_id, "dimensions": note.dimensions}
+    )
+    actual = (*facts, reused_symbol)
+    _check_original(actual)
+    _check_original(tuple(reversed(actual)))
+    _check_original((*actual, reused_symbol))
+
+
+def test_original_identity_rejects_multiple_complete_contexts_with_the_same_title():
+    facts = _class_scoped_original()
+    common = tuple(f for f in facts if f.context_id == "common-class")
+    with pytest.raises(IdentityResolutionError) as error:
+        _check_original(
+            (
+                *facts,
+                *(f.model_copy(update={"context_id": "second-common"}) for f in common),
+            )
+        )
+    assert error.value.code == "HISTORICAL_IDENTITY_CONFLICT"
+
+
+def test_original_identity_rejects_conflicting_titles_for_a_reused_ticker():
+    facts = _class_scoped_original()
+    symbol = next(f for f in facts if f.concept == "dei:TradingSymbol")
+    note = facts[-1]
+    with pytest.raises(IdentityResolutionError) as error:
+        _check_original(
+            (
+                *facts,
+                symbol.model_copy(
+                    update={
+                        "context_id": note.context_id,
+                        "dimensions": note.dimensions,
+                    }
+                ),
+                note.model_copy(update={"value": "A conflicting title"}),
+            )
+        )
+    assert error.value.code == "HISTORICAL_IDENTITY_CONFLICT"
+
+
 @pytest.mark.parametrize(
     "change",
     [

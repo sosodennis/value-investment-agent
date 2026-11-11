@@ -140,6 +140,35 @@ def validate_original_filing_identity(
         (fact.context_id, fact.period_start, fact.period_end, fact.dimensions)
         for fact in matching_symbols
     }
+    if len(security_contexts) > 1:
+        titles_by_context = {
+            context: {
+                _name(fact.value)
+                for fact in facts
+                if fact.concept == "dei:Security12bTitle"
+                and (
+                    fact.context_id,
+                    fact.period_start,
+                    fact.period_end,
+                    fact.dimensions,
+                )
+                == context
+            }
+            for context in security_contexts
+        }
+        if any(
+            len(titles) != 1 or not next(iter(titles))
+            for titles in titles_by_context.values()
+        ):
+            raise refuse(
+                "HISTORICAL_IDENTITY_CONFLICT",
+                "reused ticker requires one paired title in every security context",
+            )
+        security_contexts = {
+            context
+            for context, titles in titles_by_context.items()
+            if titles == {_name(identity.share_class)}
+        }
     if len(security_contexts) != 1:
         raise refuse(
             "HISTORICAL_IDENTITY_CONFLICT",
