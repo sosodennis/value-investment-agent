@@ -999,3 +999,40 @@ Its checkpoint digest is
 `9027d7dde5a420e3df4ac0eca2c3bdaa9701598a7e3e368de46a7ffe11556c39`.
 Complete numerical acceptance and independent review remain outstanding;
 supported history thresholds remain null and #361/PR #370 remain open/draft.
+
+## Engineering checkpoint: original lease expense classification
+
+Exact implementation `41a3f28533f7a52a60bf8735e9886fc933ed5e6b` addresses the
+representation gap in #404. Paired finance lease amortization/interest retain
+their exact statement-location dimensions; the existing accounting evaluator
+derives finance cost or the operating remainder from the consolidated total.
+Wrong scope, signs, units, periods, overlaps and negative amounts refuse.
+Validation passes 1,107 service/PostgreSQL tests (11 optional skips), 52 Agent
+boundary tests, 17 acceptance-tool tests, Ruff/format, types and architecture.
+All 12 executed [CI jobs](https://github.com/sosodennis/value-investment-agent/actions/runs/43081707253)
+pass; release is skipped. No valuation formula or approval changes.
+
+Two real originals normalize 2022–2024 lease and cash-flow D&A proposals through
+both issuer and security paths. Twelve security-bound provisional facts and six
+mappings survive connection reconstruction, backup and empty-store restore.
+The installed service matches all 58 source files; SEC preflight, original HTTP
+retrieval and evidence reconstruction pass before/after restart. Verified-fact
+HTTP requests correctly reject these provisional observations. Two complete
+repeat bundles reproduce input `9e8f70a28e1d88574706138a35b82b1fc065044f99545d27d91640dc57e6dcbe`
+and output `4e7e7f875940ab4db8964b425861e1a5606f95fb2e2996eebcb3b4d22cd1c095`;
+the second returns `wrote=false` and preserves 1,326 files' hashes/mtimes.
+The new service is backed up/removed; all 63 baseline containers are unchanged.
+
+The role audit now has 21/31 source-backed candidate roles. A separate payables
+partition proposal retains the changed 2023 vendor comparative; deferred-order
+payments still need reconciliation with the accrued-liability table. Original
+award quantity and unrecognized cost use different class members; no complete
+inventory or class split is asserted. One retained historical price observation
+needs source/timing and market-policy review. These proposals remain outside Git
+and pass independent unchanged repeats. `lease_expense_classification_increment`
+preserves all 35 prior checkpoint entries, exact commands/digests, failures,
+runtime pins and verified backups; digest
+`c5b7794017ab91b8479939afa005937db545ca80c1b38e38217e8f0ac1b3b0f3`.
+Complete accounting/award/market evidence, actual semantic review/release/input
+approval, numerical acceptance and independent PR review remain outstanding.
+Threshold stays null; #361/#404 and PR #370 remain open/draft.
