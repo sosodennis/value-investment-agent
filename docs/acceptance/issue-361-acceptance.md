@@ -168,7 +168,7 @@ review, missing facts, financial policy, or caller approval.
 ## Evidence, runtime, and preserved history
 
 [The accounting checkpoint](issue-361-accounting-checkpoint.json) preserves every
-previous top-level entry. Its newest entry,
+previous top-level entry. Its source-review entry,
 `dated_market_source_review_increment`, records source hashes, proposal and
 repeat digests, exact commands, retained failures, unverified gates, and next
 steps. The preceding implementation entry is
