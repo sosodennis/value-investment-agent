@@ -22,6 +22,7 @@ from .data_releases import (
     DataReleaseManifestV1,
     DataReleaseTrustRootsV1,
     DataReleaseVerificationV1,
+    FactRefV1,
     MappingRefV1,
     verify_data_release_candidate,
 )
@@ -30,6 +31,7 @@ from .facts import (
     CanonicalMappingV1,
     FilesystemCanonicalFactRepository,
     canonical_fact_digest,
+    resolve_canonical_facts,
 )
 from .replay import ArtifactStore
 from .serialization import canonical_bytes, sha256_digest
@@ -42,6 +44,10 @@ class ReleaseMappingReader(Protocol):
 
 class ReleaseArtifactReader(Protocol):
     def read(self, artifact_id: str) -> bytes: ...
+
+
+class ReleaseSnapshotReader(Protocol):
+    def get(self, snapshot_id: str) -> SourceSnapshotV1: ...
 
 
 class DataReleaseCanaryReportV1(BaseModel):
@@ -77,7 +83,7 @@ class DataReleaseCanaryRunner:
     def __init__(
         self,
         *,
-        snapshot_repository: object,
+        snapshot_repository: ReleaseSnapshotReader,
         fact_repository: CanonicalFactRepository,
         mapping_reader: ReleaseMappingReader,
         artifact_reader: ReleaseArtifactReader,
@@ -96,8 +102,10 @@ class DataReleaseCanaryRunner:
     ) -> DataReleaseCanaryReportV1:
         verify_data_release_candidate(manifest, verification, self._trust_roots)
         self._verify_artifacts(manifest, verification)
-        checked_snapshots, checked_facts = self._verify_snapshots_and_facts(manifest)
-        self._verify_mappings(manifest.mapping_refs)
+        mappings = self._verify_mappings(manifest.mapping_refs)
+        checked_snapshots, checked_facts = self._verify_snapshots_and_facts(
+            manifest, mappings
+        )
 
         canary_payload = {
             "manifest_digest": manifest.manifest_digest,
@@ -175,7 +183,7 @@ class DataReleaseCanaryRunner:
         return tuple(sorted({reference.content_hash for reference in refs}))
 
     def _verify_snapshots_and_facts(
-        self, manifest: DataReleaseManifestV1
+        self, manifest: DataReleaseManifestV1, mappings: dict[str, CanonicalMappingV1]
     ) -> tuple[tuple[str, ...], tuple[str, ...]]:
         snapshot_ids: list[str] = []
         fact_digests: list[str] = []
@@ -196,7 +204,9 @@ class DataReleaseCanaryRunner:
             resolved = self._resolve_facts(snapshot, manifest.required_fields)
             declared = {item.fact_id: item.fact_digest for item in reference.facts}
             actual = {item.fact_id: canonical_fact_digest(item) for item in resolved}
-            if actual != declared:
+            if any(
+                declared.get(fact_id) != digest for fact_id, digest in actual.items()
+            ):
                 raise DataReleaseError(
                     "DATA_RELEASE_FACT_MISMATCH",
                     f"release snapshot {reference.snapshot_id} failed its fact canary",
@@ -206,9 +216,77 @@ class DataReleaseCanaryRunner:
                     "DATA_RELEASE_FIELDS_UNAVAILABLE",
                     f"release snapshot {reference.snapshot_id} does not cover required fields",
                 )
+            history = self._verify_declared_history(snapshot, reference.facts, mappings)
+            if {item.normalized_field for item in history} != declared_fields:
+                raise DataReleaseError(
+                    "DATA_RELEASE_FIELDS_UNAVAILABLE",
+                    f"release snapshot {reference.snapshot_id} has undeclared field roles",
+                )
             snapshot_ids.append(snapshot.snapshot_id)
-            fact_digests.extend(sorted(actual.values()))
+            fact_digests.extend(sorted(canonical_fact_digest(fact) for fact in history))
         return tuple(snapshot_ids), tuple(sorted(fact_digests))
+
+    def _verify_declared_history(
+        self,
+        snapshot: SourceSnapshotV1,
+        references: tuple[FactRefV1, ...],
+        mappings: dict[str, CanonicalMappingV1],
+    ) -> tuple[CanonicalFactV1, ...]:
+        periods: dict[tuple[object, ...], list[CanonicalFactV1]] = {}
+        facts: list[CanonicalFactV1] = []
+        for reference in references:
+            try:
+                fact = self._facts.get(reference.fact_id)
+            except Exception as exc:  # pragma: no cover - adapter boundary
+                raise DataReleaseError(
+                    "DATA_RELEASE_FACT_UNAVAILABLE",
+                    f"release fact {reference.fact_id} is unavailable",
+                ) from exc
+            if canonical_fact_digest(fact) != reference.fact_digest:
+                raise DataReleaseError(
+                    "DATA_RELEASE_FACT_MISMATCH",
+                    f"release fact {reference.fact_id} has a different digest",
+                )
+            mapping = mappings.get(fact.mapping_decision_id or "")
+            if (
+                mapping is None
+                or mapping.source_concept != fact.concept
+                or mapping.normalized_field != fact.normalized_field
+                or fact.mapping_confidence != mapping.confidence
+            ):
+                raise DataReleaseError(
+                    "DATA_RELEASE_MAPPING_FACT_MISMATCH",
+                    f"release fact {fact.fact_id} does not match a released mapping",
+                )
+            key = (
+                fact.normalized_field,
+                fact.period_start,
+                fact.period_end,
+                fact.instant,
+            )
+            periods.setdefault(key, []).append(fact)
+            facts.append(fact)
+        for candidates in periods.values():
+            try:
+                selected = resolve_canonical_facts(
+                    candidates,
+                    snapshot=snapshot,
+                    valuation_timestamp=snapshot.valuation_timestamp,
+                    required_fields=(candidates[0].normalized_field,),
+                )
+            except Exception as exc:  # pragma: no cover - adapter boundary
+                raise DataReleaseError(
+                    "DATA_RELEASE_CANARY_FAILED",
+                    "a declared history period failed point-in-time selection",
+                ) from exc
+            if {fact.fact_id for fact in selected} != {
+                fact.fact_id for fact in candidates
+            }:
+                raise DataReleaseError(
+                    "DATA_RELEASE_FACT_MISMATCH",
+                    "a declared history period contains noncanonical candidates",
+                )
+        return tuple(facts)
 
     def _resolve_facts(
         self, snapshot: SourceSnapshotV1, required_fields: tuple[str, ...]
@@ -225,7 +303,10 @@ class DataReleaseCanaryRunner:
                 f"point-in-time canary failed for {snapshot.snapshot_id}",
             ) from exc
 
-    def _verify_mappings(self, refs: tuple[MappingRefV1, ...]) -> None:
+    def _verify_mappings(
+        self, refs: tuple[MappingRefV1, ...]
+    ) -> dict[str, CanonicalMappingV1]:
+        mappings = {}
         for reference in refs:
             try:
                 mapping = self._mappings.get_mapping(reference.mapping_id)
@@ -235,11 +316,13 @@ class DataReleaseCanaryRunner:
                     f"release mapping {reference.mapping_id} is unavailable",
                 ) from exc
             actual = sha256_digest(mapping.model_dump(mode="json"))
-            if actual != reference.mapping_digest:
+            if actual != reference.mapping_digest or mapping.status != "approved":
                 raise DataReleaseError(
                     "DATA_RELEASE_MAPPING_HASH_MISMATCH",
                     f"release mapping {reference.mapping_id} failed hash verification",
                 )
+            mappings[reference.mapping_id] = mapping
+        return mappings
 
 
 class _FilesystemMappingReader:

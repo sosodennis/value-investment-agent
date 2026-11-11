@@ -47,7 +47,7 @@ from .facts import (
     resolve_canonical_facts,
 )
 from .policies import ModelSpecV1, PolicyRecordV1
-from .replay import ArtifactRecordV1
+from .replay import ArtifactPublicationV1, ArtifactRecordV1
 from .serialization import canonical_bytes, sha256_digest
 from .snapshots import SnapshotError, SnapshotRepository
 
@@ -1403,11 +1403,11 @@ class PostgresMetadataStore:
                 },
             )
 
-    def publish_artifact(self, record: ArtifactRecordV1) -> None:
+    def publish_artifact(self, record: ArtifactRecordV1) -> bool:
         self._require_ready()
-        self._runner.run(self._publish_artifact(record))
+        return bool(self._runner.run(self._publish_artifact(record)))
 
-    async def _publish_artifact(self, record: ArtifactRecordV1) -> None:
+    async def _publish_artifact(self, record: ArtifactRecordV1) -> bool:
         async with self._runner._engine.begin() as connection:
             existing = (
                 (
@@ -1428,19 +1428,21 @@ class PostgresMetadataStore:
                     existing["content_hash"] != record.content_hash
                     or existing["media_type"] != record.media_type
                     or tuple(existing["dependency_hashes"]) != record.dependency_hashes
+                    or existing["status"] != record.status
+                    or existing["retention"] != record.retention
                 ):
                     raise SnapshotError(
                         "ARTIFACT_ID_REUSED", "artifact IDs are immutable"
                     )
-                return
-            await connection.execute(
+                return False
+            inserted = await connection.execute(
                 text(
                     "INSERT INTO fundamental.artifact_references"
                     "(artifact_id, content_hash, media_type, dependency_hashes, "
                     "status, retention) "
                     "VALUES (:artifact_id, :content_hash, :media_type, "
                     "CAST(:dependency_hashes AS jsonb), :status, :retention) "
-                    "ON CONFLICT (artifact_id) DO NOTHING"
+                    "ON CONFLICT (artifact_id) DO NOTHING RETURNING artifact_id"
                 ),
                 {
                     "artifact_id": record.artifact_id,
@@ -1469,8 +1471,11 @@ class PostgresMetadataStore:
                 existing["content_hash"] != record.content_hash
                 or existing["media_type"] != record.media_type
                 or tuple(existing["dependency_hashes"]) != record.dependency_hashes
+                or existing["status"] != record.status
+                or existing["retention"] != record.retention
             ):
                 raise SnapshotError("ARTIFACT_ID_REUSED", "artifact IDs are immutable")
+            return inserted.scalar_one_or_none() is not None
 
     def get_artifact(self, artifact_id: str) -> ArtifactRecordV1:
         self._require_ready()
@@ -1675,8 +1680,25 @@ class PostgresArtifactStore:
         media_type: str = "application/json",
         retention: Literal["evidence", "operational_cache"] = "evidence",
     ) -> ArtifactRecordV1:
+        return self.put_with_receipt(
+            artifact_id,
+            value,
+            dependency_hashes,
+            media_type=media_type,
+            retention=retention,
+        ).artifact
+
+    def put_with_receipt(
+        self,
+        artifact_id: str,
+        value: object,
+        dependency_hashes: tuple[str, ...] = (),
+        *,
+        media_type: str = "application/json",
+        retention: Literal["evidence", "operational_cache"] = "evidence",
+    ) -> ArtifactPublicationV1:
         payload = canonical_bytes(value)
-        content_hash = self._content.put(payload, media_type=media_type)
+        content_hash = sha256_digest(value)
         record = ArtifactRecordV1(
             artifact_id=artifact_id,
             content_hash=content_hash,
@@ -1684,8 +1706,23 @@ class PostgresArtifactStore:
             media_type=media_type,
             retention=retention,
         )
-        self._metadata.publish_artifact(record)
-        return record
+        try:
+            previous = self._metadata.get_artifact(artifact_id)
+        except SnapshotError as error:
+            if error.code != "ARTIFACT_NOT_FOUND":
+                raise
+        else:
+            if previous != record:
+                raise SnapshotError("ARTIFACT_ID_REUSED", "artifact IDs are immutable")
+            if self.read(artifact_id) != payload:
+                raise SnapshotError(
+                    "ARTIFACT_BYTES_UNAVAILABLE",
+                    "published artifact bytes failed verification",
+                )
+            return ArtifactPublicationV1(artifact=previous, wrote=False)
+        self._content.put(payload, media_type=media_type)
+        wrote = self._metadata.publish_artifact(record)
+        return ArtifactPublicationV1(artifact=record, wrote=wrote)
 
     def get(self, artifact_id: str) -> ArtifactRecordV1:
         return self._metadata.get_artifact(artifact_id)

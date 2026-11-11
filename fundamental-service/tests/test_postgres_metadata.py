@@ -1085,19 +1085,46 @@ def test_artifact_publication_is_concurrent_and_hash_verified(
     artifacts = PostgresArtifactStore(metadata, content)
     artifact_id = f"artifact-{uuid4().hex}"
 
-    def publish() -> str:
-        return artifacts.put(artifact_id, {"value": "immutable"}).content_hash
+    def publish():
+        return artifacts.put_with_receipt(artifact_id, {"value": "immutable"})
 
     with ThreadPoolExecutor(max_workers=6) as executor:
-        hashes = tuple(executor.map(lambda _: publish(), range(12)))
-    assert set(hashes) == {hashes[0]}
+        receipts = tuple(executor.map(lambda _: publish(), range(12)))
+    assert sum(receipt.wrote for receipt in receipts) == 1
+    assert len({receipt.artifact.content_hash for receipt in receipts}) == 1
     assert artifacts.read(artifact_id) == b'{"value":"immutable"}'
 
     record = artifacts.get(artifact_id)
     path = content._filesystem._path(record.content_hash, record.media_type)
+    original_mtime = path.stat().st_mtime_ns
+    restarted = PostgresMetadataStore(DATABASE_URL or "", auto_migrate=False)
+    restarted.start()
+    try:
+        restarted_artifacts = PostgresArtifactStore(
+            restarted, PostgresContentStore(tmp_path / "content", restarted)
+        )
+        repeated = restarted_artifacts.put_with_receipt(
+            artifact_id, {"value": "immutable"}
+        )
+        assert repeated.artifact == record
+        assert repeated.wrote is False
+        assert path.stat().st_mtime_ns == original_mtime
+    finally:
+        restarted.close()
+
+    with pytest.raises(SnapshotError) as conflict:
+        artifacts.put_with_receipt(
+            artifact_id, {"value": "immutable"}, dependency_hashes=("f" * 64,)
+        )
+    assert conflict.value.code == "ARTIFACT_ID_REUSED"
+    assert path.stat().st_mtime_ns == original_mtime
+
     path.write_bytes(b"tampered")
     with pytest.raises(SnapshotError, match="verification"):
         artifacts.read(artifact_id)
+    with pytest.raises(SnapshotError):
+        publish()
+    assert path.read_bytes() == b"tampered"
 
 
 def test_distinct_sec_acquisition_keys_hold_independent_postgres_locks(

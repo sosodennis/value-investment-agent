@@ -22,6 +22,7 @@ dependencies = [
 
 [project.scripts]
 fundamental-data-release-canary = "fundamental_service.release_runner:main"
+fundamental-prepare-source = "fundamental_service.preparation_runner:main"
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0", "httpx>=0.27", "httpx2>=2.0"]

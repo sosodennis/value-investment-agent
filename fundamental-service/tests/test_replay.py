@@ -5,6 +5,8 @@ from threading import Barrier, Lock, Thread
 from time import sleep
 import sys
 
+import pytest
+
 from fundamental_service.replay import (
     ArtifactStore,
     CacheLifecycle,
@@ -18,6 +20,7 @@ from fundamental_service.application.service import FundamentalApplication
 from fundamental_service.operations import OperationalMetrics, OperationsConfig
 from fundamental_service.calculator import calculate
 from fundamental_service.testsupport import make_valuation
+from fundamental_service.snapshots import SnapshotError
 
 
 def test_offline_replay_matches_and_reports_first_difference(tmp_path: Path):
@@ -64,6 +67,25 @@ def test_artifact_store_and_cache_lifecycle_are_separate(tmp_path: Path):
     assert cache.invalidate_dependency(dependency_a) == ("dependent",)
     assert cache.get("dependent")[0] == "stale"
     assert cache.get("independent") == ("hit", 2)
+
+
+def test_artifact_publication_receipt_reports_unchanged_and_rejects_corruption(
+    tmp_path: Path,
+):
+    store = ArtifactStore(tmp_path / "artifacts")
+    first = store.put_with_receipt("source-preparation", {"value": 42})
+    repeated = store.put_with_receipt("source-preparation", {"value": 42})
+
+    assert first.wrote is True
+    assert repeated.wrote is False
+    assert repeated.artifact == first.artifact
+
+    artifact_path = store._artifact_path(
+        first.artifact.content_hash, "application/json"
+    )
+    artifact_path.write_bytes(b"corrupt")
+    with pytest.raises(SnapshotError, match="failed verification"):
+        store.put_with_receipt("source-preparation", {"value": 42})
 
 
 def test_cache_rebuild_populates_once_for_concurrent_callers():
