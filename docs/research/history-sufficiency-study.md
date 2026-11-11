@@ -310,3 +310,45 @@ filings retain non-DQC or other applicability review. Family dates establish
 neither exact rule-revision applicability nor financial materiality. No original
 status or severity is changed. Full digests, commands, repeat semantics and
 limitations are indexed in the [acceptance evidence](../acceptance/issue-376-acceptance.md).
+
+## Delivery order and first real case protocol
+
+The repository owner confirmed this delivery order: historical applicability and
+accounting-era inputs; one real formal forecast/label/error/repeat path; freeze
+#377 before using outcomes for threshold selection; expand to the fixed cohort
+and isolated service acceptance. Track independent issuers completing that full
+path, currently 0/100. Parser success remains supporting engineering evidence.
+Reuse #361/#379/#381 for multi-filing and accounting-role contracts; this study
+does not introduce competing release or accounting APIs.
+
+`scripts/audit_history_first_case.py` freezes the diagnostic selection rule
+`fixed100-first-case-diagnostic-v1`. It overlays the retained baseline with only
+its uniquely bound original source-size-refusal subset and preserves every
+issuer, filing, original result and current failure. Sort by frozen decision
+timestamp, then issuer ID. Choose the first case with a passed/unpublished
+original decision, the frozen first subsequent original annual label within the
+original horizon, and at least one passed original history filing available by
+the decision. Record every failed condition and retain a null selection if none
+qualifies. Discovering later mapping gaps does not authorize case replacement.
+No forecast value or error participates in this selection.
+
+This rule chooses a source evidence packet, not three complete annual model
+periods or a publication-ready issuer. Each original annual filing may carry
+several comparative periods; only the formal Fundamental resolver can determine
+aligned, complete, nonconflicting model history. Mapping/adoption review, #369
+policy, trusted releases and all original failure cases still apply. The label
+is a later evaluation source and cannot fill origin inputs or supply a later
+restatement. Do not infer a threshold from diagnostic eligibility.
+
+```sh
+uv run --frozen --project fundamental-service python scripts/audit_history_first_case.py \
+  --baseline-report "$STUDY_FAILURE_REPORT" \
+  --baseline-sha256 "$STUDY_FAILURE_DIGEST" \
+  --subset-report "$STUDY_ARCHIVE_PARSER_REPORT" \
+  --subset-sha256 "$STUDY_ARCHIVE_PARSER_DIGEST" \
+  --output-directory "$STUDY_FIRST_CASE_OUTPUT"
+```
+
+The CLI enforces the unchanged 100/589 population, canonical report/input/output
+digests and external output storage. Repeating it reuses the canonical atomic
+report. It performs no downloads, database publications, signing or forecasts.
