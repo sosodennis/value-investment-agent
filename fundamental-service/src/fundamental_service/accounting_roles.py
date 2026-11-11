@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 from decimal import Context, Decimal, InvalidOperation, localcontext, ROUND_HALF_EVEN
 import re
 from typing import Literal
@@ -50,7 +50,7 @@ class AbsencePassageV1(RoleModel):
     exact_quote: str = Field(min_length=16)
 
 
-class DisclosedAmountV1(RoleModel):
+class DisclosedValueV1(RoleModel):
     parsed_fact_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
     quote_start: int = Field(ge=0)
     exact_quote: str = Field(min_length=16, max_length=8192)
@@ -76,10 +76,9 @@ class DisclosedAmountV1(RoleModel):
     reported_unit: str = Field(min_length=1)
     reported_decimals: int = Field(ge=-9, le=18)
     covered_classes: tuple[str, ...] = Field(min_length=1, max_length=32)
-    complete_role: Literal[True]
 
     @model_validator(mode="after")
-    def transcription_is_consistent(self) -> DisclosedAmountV1:
+    def transcription_is_consistent(self) -> DisclosedValueV1:
         scales = {
             "dollars": 0,
             "shares": 0,
@@ -119,6 +118,67 @@ class DisclosedAmountV1(RoleModel):
         return self
 
 
+class DisclosedAmountV1(DisclosedValueV1):
+    complete_role: Literal[True]
+
+
+class DisclosedInstantDateV1(RoleModel):
+    period_end: date
+    month_day_start: int = Field(ge=0)
+    month_day_token: str = Field(min_length=5, max_length=12)
+    year_start: int = Field(ge=0)
+    year_token: str = Field(pattern=r"^[0-9]{4}$")
+
+    @model_validator(mode="after")
+    def explicit_date_matches_target(self) -> DisclosedInstantDateV1:
+        months = (
+            "January",
+            "February",
+            "March",
+            "April",
+            "May",
+            "June",
+            "July",
+            "August",
+            "September",
+            "October",
+            "November",
+            "December",
+        )
+        expected = f"{months[self.period_end.month - 1]} {self.period_end.day}"
+        if self.month_day_token != expected or self.year_token != str(
+            self.period_end.year
+        ):
+            raise ValueError("disclosed date tokens must match the target instant")
+        return self
+
+
+class DatedDisclosureComponentV1(DisclosedValueV1):
+    kind: Literal["dated_disclosure"]
+    sign: Literal[1] = 1
+    date: DisclosedInstantDateV1
+    complete_component: Literal[True]
+
+    @model_validator(mode="after")
+    def date_spans_are_exact(self) -> DatedDisclosureComponentV1:
+        for start, token in (
+            (self.date.month_day_start, self.date.month_day_token),
+            (self.date.year_start, self.date.year_token),
+        ):
+            end = start + len(token)
+            if (
+                self.exact_quote[start:end] != token
+                or (start and self.exact_quote[start - 1].isalnum())
+                or (end < len(self.exact_quote) and self.exact_quote[end].isalnum())
+            ):
+                raise ValueError("disclosed date must reference exact complete tokens")
+        if self.date.year_start <= self.date.month_day_start + len(
+            self.date.month_day_token
+        ):
+            raise ValueError("disclosed year must follow its month and day")
+        return self
+
+
 class AccountingPeriodRuleV1(RoleModel):
     period: AccountingPeriodV1
     disposition: Literal[
@@ -129,7 +189,7 @@ class AccountingPeriodRuleV1(RoleModel):
         "unknown",
         "unsupported",
     ]
-    components: tuple[AccountingComponentV1, ...] = ()
+    components: tuple[AccountingComponentV1 | DatedDisclosureComponentV1, ...] = ()
     absence_passages: tuple[AbsencePassageV1, ...] = ()
     disclosed_amount: DisclosedAmountV1 | None = Field(
         default=None, exclude_if=lambda value: value is None
@@ -144,12 +204,11 @@ class AccountingPeriodRuleV1(RoleModel):
                 or self.absence_passages
                 or self.disclosed_amount
             ):
-                raise ValueError(
-                    "derived roles require at least two numeric components"
-                )
+                raise ValueError("derived roles require at least two source components")
         elif self.disposition == "classified":
             if (
                 len(self.components) != 1
+                or not isinstance(self.components[0], AccountingComponentV1)
                 or self.components[0].sign != 1
                 or self.components[0].balance_sheet_location is None
                 or self.absence_passages
@@ -178,6 +237,24 @@ class AccountingPeriodRuleV1(RoleModel):
         if self.components and not any(item.sign == 1 for item in self.components):
             raise ValueError(
                 "accounting classification needs a positive base component"
+            )
+        disclosed = tuple(
+            item
+            for item in self.components
+            if isinstance(item, DatedDisclosureComponentV1)
+        )
+        if disclosed and (
+            self.disposition != "derived"
+            or not self.period.instant
+            or any(item.date.period_end != self.period.period_end for item in disclosed)
+        ):
+            raise ValueError(
+                "dated disclosure components require their same-date instant derived role"
+            )
+        classes = tuple(name for item in disclosed for name in item.covered_classes)
+        if len(set(classes)) != len(classes):
+            raise ValueError(
+                "dated disclosure components cannot repeat covered classes"
             )
         return self
 
@@ -265,18 +342,23 @@ def evaluate_period_rule(
     for fact in source_facts:
         component = components.get(sha256_digest(fact))
         classified_location = (
-            component is not None and component.balance_sheet_location is not None
+            isinstance(component, AccountingComponentV1)
+            and component.balance_sheet_location is not None
         )
         if classified_location:
-            assert component is not None
+            assert isinstance(component, AccountingComponentV1)
             _validate_current_lease_classification(rules, rule, component, fact)
             if rules.normalized_field.startswith("long_term_") and (
                 len(rule.components) != 2
                 or not any(
                     other.concept == fact.concept
                     and not other.dimensions
-                    and components[sha256_digest(other)].sign == 1
-                    and components[sha256_digest(other)].balance_sheet_location is None
+                    and isinstance(
+                        other_component := components[sha256_digest(other)],
+                        AccountingComponentV1,
+                    )
+                    and other_component.sign == 1
+                    and other_component.balance_sheet_location is None
                     for other in source_facts
                 )
             ):
@@ -300,44 +382,18 @@ def evaluate_period_rule(
         transcription = rule.disclosed_amount
         assert transcription is not None
         fact = by_digest[transcription.parsed_fact_digest]
-        scale_end = transcription.scale_start + len(transcription.scale_token)
-        unit_end = transcription.unit_start + len(transcription.unit_quote)
         if (
             fact.is_numeric
             or rule.period.instant
             or fact.period_start != rule.period.period_start
             or fact.period_end != rule.period.period_end
             or fact.instant is not None
-            or transcription.reported_unit != rules.unit
-            or fact.value[
-                transcription.quote_start : transcription.quote_start
-                + len(transcription.exact_quote)
-            ]
-            != transcription.exact_quote
-            or fact.value[transcription.scale_start : scale_end]
-            != transcription.scale_token
-            or fact.value[transcription.unit_start : unit_end]
-            != transcription.unit_quote
-            or re.search(r"[A-Za-z]", fact.value[scale_end : scale_end + 1])
-            or (
-                transcription.scale_start
-                and re.search(
-                    r"[A-Za-z]",
-                    fact.value[
-                        transcription.scale_start - 1 : transcription.scale_start
-                    ],
-                )
-            )
         ):
             raise AccountingRoleError(
                 "ACCOUNTING_DISCLOSED_AMOUNT_MISMATCH",
                 "disclosed transcription requires its exact original period, unit and spans",
             )
-        with localcontext(Context(prec=34, rounding=ROUND_HALF_EVEN)):
-            value = Decimal(transcription.amount_token.replace(",", "")).scaleb(
-                transcription.scale
-            )
-        return Decimal(format(value, "f"))
+        return _transcribe_amount(transcription, fact, rules.unit)
     if rule.disposition == "confirmed_absent":
         for passage in rule.absence_passages:
             fact = by_digest[passage.parsed_fact_digest]
@@ -379,6 +435,25 @@ def evaluate_period_rule(
     amounts: list[Decimal] = []
     for component in rule.components:
         fact = by_digest[component.parsed_fact_digest]
+        if isinstance(component, DatedDisclosureComponentV1):
+            if (
+                not rule.period.instant
+                or component.date.period_end != rule.period.period_end
+                or fact.is_numeric
+                or fact.instant is not None
+                or fact.period_start is None
+                or fact.period_end is None
+                or not 330 <= (fact.period_end - fact.period_start).days <= 371
+                or not fact.period_start - timedelta(days=1)
+                <= rule.period.period_end
+                <= fact.period_end
+            ):
+                raise AccountingRoleError(
+                    "ACCOUNTING_DISCLOSED_DATE_MISMATCH",
+                    "dated disclosure requires its explicit instant within the original annual or comparative period",
+                )
+            amounts.append(_transcribe_amount(component, fact, rules.unit))
+            continue
         if (
             not fact.is_numeric
             or fact.unit != rules.unit
@@ -406,6 +481,71 @@ def evaluate_period_rule(
         amounts.append(amount.copy_negate() if component.sign == -1 else amount)
     with localcontext(Context(prec=34, rounding=ROUND_HALF_EVEN)):
         return sum(amounts, Decimal("0"))
+
+
+def _transcribe_amount(
+    transcription: DisclosedValueV1, fact: ParsedXbrlFactV1, unit: str
+) -> Decimal:
+    # Revalidate nested token/date constraints even for in-process model_copy callers.
+    try:
+        transcription = type(transcription).model_validate(transcription.model_dump())
+    except ValueError as error:
+        raise AccountingRoleError(
+            "ACCOUNTING_DISCLOSED_AMOUNT_MISMATCH",
+            "disclosed transcription requires its exact original period, unit and spans",
+        ) from error
+    scale_end = transcription.scale_start + len(transcription.scale_token)
+    unit_end = transcription.unit_start + len(transcription.unit_quote)
+    if (
+        transcription.reported_unit != unit
+        or fact.value[
+            transcription.quote_start : transcription.quote_start
+            + len(transcription.exact_quote)
+        ]
+        != transcription.exact_quote
+        or fact.value[transcription.scale_start : scale_end]
+        != transcription.scale_token
+        or fact.value[transcription.unit_start : unit_end] != transcription.unit_quote
+        or re.search(r"[A-Za-z]", fact.value[scale_end : scale_end + 1])
+        or (
+            transcription.scale_start
+            and re.search(
+                r"[A-Za-z]",
+                fact.value[transcription.scale_start - 1 : transcription.scale_start],
+            )
+        )
+    ):
+        raise AccountingRoleError(
+            "ACCOUNTING_DISCLOSED_AMOUNT_MISMATCH",
+            "disclosed transcription requires its exact original period, unit and spans",
+        )
+    with localcontext(Context(prec=34, rounding=ROUND_HALF_EVEN)):
+        value = Decimal(transcription.amount_token.replace(",", "")).scaleb(
+            transcription.scale
+        )
+    return Decimal(format(value, "f"))
+
+
+def accounting_reported_decimals(
+    rule: AccountingPeriodRuleV1, source_facts: tuple[ParsedXbrlFactV1, ...]
+) -> int | None:
+    if rule.disclosed_amount is not None:
+        return rule.disclosed_amount.reported_decimals
+    disclosed = tuple(
+        component
+        for component in rule.components
+        if isinstance(component, DatedDisclosureComponentV1)
+    )
+    if not disclosed:
+        return None
+    precision = [item.reported_decimals for item in disclosed]
+    for fact in source_facts:
+        if not fact.is_numeric or fact.decimals == "INF":
+            continue
+        if fact.decimals is None or not re.fullmatch(r"-?[0-9]+", fact.decimals):
+            return None
+        precision.append(int(fact.decimals))
+    return min(precision)
 
 
 def _validate_current_lease_classification(

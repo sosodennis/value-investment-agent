@@ -24,6 +24,27 @@ dimensional disclosures and partial-role amounts remain unsupported. Reported
 precision survives candidate selection and canonical fact decoding. Existing
 rules omit the unset transcription field and keep their canonical bytes.
 
+A derived instant may combine numeric components with a
+`DatedDisclosureComponentV1`. This explicitly typed component transcribes one
+partial-role amount from an original annual duration passage, using the same
+amount/unit/scale/precision spans. It additionally retains exact quote-relative
+month/day and year tokens, including separately listed comparative years, bound
+to the target instant. That instant must fall within the annual source period
+or on its opening comparative date (start minus one day); the annual source
+period itself cannot be future evidence. Dimensional, foreign-issuer, quarterly,
+undated and mismatched-date passages fail. Components cannot repeat source facts
+or declared covered classes. Numeric observations still use the canonical XBRL
+precision selector; the sum retains the coarsest known component precision, or
+unknown precision when a numeric component has no reported precision. The full
+narrative remains in canonical evidence and survives persistence/restore checks.
+
+`complete_component=true` declares completeness only for the cited component;
+it cannot claim `complete_role`. Token membership validates transcription and
+date spelling, while independent semantic review must establish that the
+particular amount belongs to that date, currency and operating class, and that
+the proposed components cover the role without overlap. A comparative
+"respectively" passage requires that review; position alone cannot approve it.
+
 Source membership and deterministic scaling establish transcription only. The
 independent mapping review must establish currency, period, scope, completeness
 and overlap. For example, a rounded RSU-only cost cannot automatically supply

@@ -19,7 +19,7 @@ from pydantic import (
 from .historical_dqc import V1_PROFILE, V3_PROFILE
 from .numerical_policy import using_valuation_context
 from .serialization import is_digest, sha256_digest
-from .accounting_roles import AccountingRoleEvidenceV1
+from .accounting_roles import AccountingRoleEvidenceV1, accounting_reported_decimals
 
 _MANIFEST_STRINGS = TypeAdapter(tuple[str, ...])
 
@@ -917,6 +917,11 @@ class CanonicalFactV1(StrictModel):
                 or self.accession_number != rules.accession_number
                 or self.is_amendment
                 or self.available_at.date() < period.period_end
+                or any(
+                    (fact.instant or fact.period_end or period.period_end)
+                    > self.available_at.date()
+                    for fact in evidence.source_facts
+                )
                 or self.context.concept_qname != self.concept
                 or self.context.unit_qname != self.unit
                 or self.context.dimensions
@@ -925,10 +930,9 @@ class CanonicalFactV1(StrictModel):
                 or self.context.instant != self.instant
                 or self.context.end_date
                 != (None if period.instant else period.period_end)
-                or (
-                    evidence.period_rule.disclosed_amount is not None
-                    and self.decimals
-                    != evidence.period_rule.disclosed_amount.reported_decimals
+                or self.decimals
+                != accounting_reported_decimals(
+                    evidence.period_rule, evidence.source_facts
                 )
             ):
                 raise ValueError(

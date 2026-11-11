@@ -34,6 +34,10 @@ from test_postgres_metadata import DATABASE_URL
 
 
 def _fixture(*, disposition="derived", altered_fact=None, altered_passage=None):
+    if disposition == "dated_disclosure":
+        from test_accounting_dated_disclosures import _dated_disclosure_fixture
+
+        return _dated_disclosure_fixture()
     snapshot = _original(2023)
     source = snapshot.source_records[0]
     observations = tuple(
@@ -884,7 +888,9 @@ def test_classification_is_independent_of_callers_decimal_context():
     assert expected[0].value == Decimal("120.1234567890123456789012345678901")
 
 
-@pytest.mark.parametrize("disposition", ["derived", "disclosed", "classified"])
+@pytest.mark.parametrize(
+    "disposition", ["derived", "disclosed", "classified", "dated_disclosure"]
+)
 @pytest.mark.parametrize("mutation", [None, "mapping", "integrity"])
 def test_signed_canary_and_http_read_recheck_accounting_bindings(mutation, disposition):
     from types import SimpleNamespace
@@ -1137,7 +1143,9 @@ def test_duplicate_component_and_unrelated_absence_period_refuse():
 
 
 @pytest.mark.skipif(not DATABASE_URL, reason="isolated PostgreSQL is required")
-@pytest.mark.parametrize("disposition", ["derived", "disclosed", "classified"])
+@pytest.mark.parametrize(
+    "disposition", ["derived", "disclosed", "classified", "dated_disclosure"]
+)
 @pytest.mark.parametrize("omit", [None, "mapping", "original"])
 def test_accounting_sources_survive_persistent_restart_and_backup_restore(
     tmp_path, recovery_databases, omit, disposition

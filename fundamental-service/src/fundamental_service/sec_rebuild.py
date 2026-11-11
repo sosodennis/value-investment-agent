@@ -10,6 +10,7 @@ from .arelle_parser import ArelleParseReportV1, ParsedXbrlFactV1, fact_semantic_
 from .accounting_roles import (
     AccountingRoleError,
     AccountingRoleEvidenceV1,
+    accounting_reported_decimals,
     evaluate_period_rule,
 )
 from .serialization import sha256_digest
@@ -267,8 +268,19 @@ def _accounting_candidates(
                 "ACCOUNTING_ROLE_SOURCE_MISMATCH",
                 "accounting source observation is unavailable",
             ) from error
+        if any(
+            (fact.instant or fact.period_end or rule.period.period_end)
+            > source.available_at.date()
+            for fact in source_facts
+        ):
+            raise SnapshotError(
+                "ACCOUNTING_ROLE_FUTURE_PERIOD",
+                "accounting source cannot disclose a future financial period",
+            )
         if rule.disposition in {"derived", "classified"}:
             for selected in source_facts:
+                if not selected.is_numeric:
+                    continue
                 comparable = tuple(
                     fact
                     for fact in report.facts
@@ -329,9 +341,7 @@ def _accounting_candidates(
                 value=value,
                 unit=rules.unit,
                 scale=0,
-                decimals=rule.disclosed_amount.reported_decimals
-                if rule.disclosed_amount is not None
-                else None,
+                decimals=accounting_reported_decimals(rule, source_facts),
                 currency=rules.currency,
                 period_type=PeriodType.INSTANT
                 if period.instant
