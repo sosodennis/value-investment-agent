@@ -26,6 +26,7 @@ from .facts import (
     CanonicalMappingV1,
     FactCandidateV1,
     FactSelection,
+    select_fact,
     select_fact_groups,
 )
 from .snapshots import SnapshotError
@@ -280,10 +281,34 @@ def _accounting_candidates(
                     and fact.dimensions == selected.dimensions
                     and fact.consolidation_scope == selected.consolidation_scope
                 )
-                if len({_decimal_value(fact.value) for fact in comparable}) != 1:
+                observations = parsed_facts_to_candidates(
+                    report.model_copy(update={"facts": comparable}),
+                    source=source,
+                    issuer_id=issuer_id,
+                    security_id=security_id,
+                    normalized_field=selected.concept,
+                )
+                selection = select_fact(observations, source.available_at)
+                if selection.fact is None:
                     raise SnapshotError(
                         "ACCOUNTING_COMPONENT_CONFLICT",
                         "original contains conflicting accounting observations",
+                    )
+                selected_observations = parsed_facts_to_candidates(
+                    report.model_copy(update={"facts": (selected,)}),
+                    source=source,
+                    issuer_id=issuer_id,
+                    security_id=security_id,
+                    normalized_field=selected.concept,
+                )
+                if (
+                    len(selected_observations) != 1
+                    or selected_observations[0].decimals != selection.fact.decimals
+                    or selected_observations[0].value != selection.fact.value
+                ):
+                    raise SnapshotError(
+                        "ACCOUNTING_COMPONENT_NOT_SELECTED",
+                        "accounting component must use the highest-precision original observation",
                     )
         try:
             value = evaluate_period_rule(rules, rule, source_facts)

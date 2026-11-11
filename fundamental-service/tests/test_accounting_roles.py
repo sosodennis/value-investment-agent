@@ -472,6 +472,112 @@ def test_noncurrent_classification_requires_the_corresponding_lease_total():
     assert error.value.code == "ACCOUNTING_ROLE_SCOPE_MISMATCH"
 
 
+@pytest.mark.parametrize("classified", [False, True])
+def test_accounting_components_use_highest_xbrl_precision_and_retain_rounded_originals(
+    classified,
+):
+    snapshot, report, mapping = (
+        _classified_lease_fixture()
+        if classified
+        else _fixture(altered_fact={"value": "6693000000", "decimals": "-6"})
+    )
+    selected = report.facts[-1] if classified else report.facts[0]
+    if classified:
+        selected = selected.model_copy(update={"value": "6693000000", "decimals": "-6"})
+        report = report.model_copy(update={"facts": (report.facts[0], selected)})
+        rules = mapping.accounting_rules
+        rule = rules.periods[0]
+        rule = rule.model_copy(
+            update={
+                "components": (
+                    rule.components[0].model_copy(
+                        update={"parsed_fact_digest": sha256_digest(selected)}
+                    ),
+                )
+            }
+        )
+        mapping = mapping.model_copy(
+            update={"accounting_rules": rules.model_copy(update={"periods": (rule,)})}
+        )
+    rounded = selected.model_copy(update={"value": "6700000000", "decimals": "-8"})
+    report = report.model_copy(update={"facts": (*report.facts, rounded)})
+    mapping = mapping.model_copy(
+        update={
+            "accounting_rules": mapping.accounting_rules.model_copy(
+                update={"parser_fact_digest": fact_semantic_digest(report)}
+            )
+        }
+    )
+    expected = _candidates(snapshot, report, mapping)
+    assert expected[0].value == Decimal("6693000000") + (
+        Decimal("0") if classified else Decimal("20")
+    )
+    assert rounded in report.facts
+    assert selected in expected[0].accounting_evidence.source_facts
+    assert (
+        _candidates(
+            snapshot,
+            report.model_copy(update={"facts": tuple(reversed(report.facts))}),
+            mapping,
+        )
+        == expected
+    )
+    duplicate_report = report.model_copy(update={"facts": (*report.facts, rounded)})
+    duplicate_mapping = mapping.model_copy(
+        update={
+            "accounting_rules": mapping.accounting_rules.model_copy(
+                update={"parser_fact_digest": fact_semantic_digest(duplicate_report)}
+            )
+        }
+    )
+    assert (
+        _candidates(snapshot, duplicate_report, duplicate_mapping)[0].value
+        == expected[0].value
+    )
+    rules = mapping.accounting_rules
+    rule = rules.periods[0]
+    rule = rule.model_copy(
+        update={
+            "components": tuple(
+                c.model_copy(update={"parsed_fact_digest": sha256_digest(rounded)})
+                if c.parsed_fact_digest == sha256_digest(selected)
+                else c
+                for c in rule.components
+            )
+        }
+    )
+    low_precision = mapping.model_copy(
+        update={"accounting_rules": rules.model_copy(update={"periods": (rule,)})}
+    )
+    with pytest.raises(SnapshotError) as error:
+        _candidates(snapshot, report, low_precision)
+    assert error.value.code == "ACCOUNTING_COMPONENT_NOT_SELECTED"
+
+
+def test_equal_precision_component_conflicts_still_refuse():
+    snapshot, report, mapping = _fixture(
+        altered_fact={"value": "6693000000", "decimals": "-6"}
+    )
+    report = report.model_copy(
+        update={
+            "facts": (
+                *report.facts,
+                report.facts[0].model_copy(update={"value": "6700000000"}),
+            )
+        }
+    )
+    mapping = mapping.model_copy(
+        update={
+            "accounting_rules": mapping.accounting_rules.model_copy(
+                update={"parser_fact_digest": fact_semantic_digest(report)}
+            )
+        }
+    )
+    with pytest.raises(SnapshotError) as error:
+        _candidates(snapshot, report, mapping)
+    assert error.value.code == "ACCOUNTING_COMPONENT_CONFLICT"
+
+
 def test_classified_mapping_stays_provisional_without_review():
     from fundamental_service.facts import select_fact_groups
 
