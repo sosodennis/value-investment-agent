@@ -152,3 +152,50 @@ review, issuer/period mappings, market policies, #377 protocol and formal #352
 forecasts/labels plus service-backed repeat remain unfinished. Next: resolve
 the versioned source/validation contract and verify its full fixed inventory;
 keep every refusal and the threshold null.
+
+## Source character-delta diagnostic and CI
+
+At clean documentation HEAD `f5bee8396ad2c34168117cbee4f4b62f55568bcc`, an
+external diagnostic compared all 132 Canonical-XML-different direct/archive
+pairs using their hash-checked retained sources. The script is preserved at
+`references/issue376-source-delta-probe.py`; its source digest, dependency
+source digests, lockfile and runtime pins are bound in the report inputs.
+It compares parsed element order, names, namespace maps and attributes, then
+classifies character-data differences without modifying either source.
+
+All 132 retain the same compared structure/attributes/namespaces. Fifty-eight
+differ only by spaces/tabs on otherwise empty lines. The other 74 have other
+XML whitespace differences. No pair changes character content after erasing
+XML whitespace, and none changes the text of a fact carrying `unitRef`.
+Whitespace remains XML character data; this diagnostic neither establishes
+complete XBRL semantic equivalence nor approves blanket whitespace stripping,
+source publication, financial materiality or mappings.
+
+| Artifact | SHA-256 |
+| --- | --- |
+| Character-delta report | `d92a3543abe63419d3454255b204e33f96049dec0600b498d400cb71b86fef9b` |
+| Character-delta inputs | `10dc4759909a0918db2777a73400f418f68b50347b20e2e791987f6730b4d9da` |
+| Character-delta outputs | `9baafea780af75bf1b593b83110879f0ed0ec84182ac05b6763a369892150de7` |
+| Repeat command receipt | `d77886fec8ecc5c9e109cf97310f36e5e525a1c69405a23595155a580ca5196f` |
+| Repeat receipt inputs | `d2d8dc1dc5a921a3b99c012e4793edbb5d9224b6ebc8cfd6e8c639372c5261e6` |
+| Repeat receipt outputs | `5e8631b4b3e28fc5f09b1c4e98cbd82070c1f9d6a66e575ed99e44f58edfc881` |
+
+Run with `uv run --frozen --project fundamental-service python` followed by the
+external probe path above. `references/issue376-source-delta-repeat.py` records
+the complete command, exit 0 and log digest; repeat returned `wrote=false`
+without new probe artifacts or changed existing bytes/sizes/mtimes. Reports
+are under `source-delta-probe/` and `source-delta-repeat/` outside Git.
+
+This supports reviewing the premise that the indexed SEC direct XML must
+byte-match its separately indexed ZIP member. A versioned source contract
+should identify the selected authority, retain both original representations
+and discrepancies, verify each object's own index size/hash/receipt and require
+the selected parser/financial evidence checks. It must not claim byte identity
+or erase text differences. That source contract is still unimplemented and
+unapproved; original size refusals remain retained.
+
+GitHub checks at `f5bee8396ad2c34168117cbee4f4b62f55568bcc`: all 12 executed
+checks passed, including `offline-research-contracts`; the separate
+`fundamental-release-gate` was skipped. The saved status receipt is
+`checkpoint-c4c8a352/github-ci-f5bee839.json`. PR #378 remains draft; CI success
+does not replace historical release review or the empirical forecast study.
