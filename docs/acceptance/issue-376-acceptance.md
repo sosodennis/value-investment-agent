@@ -447,3 +447,129 @@ owning contracts and #371 historical validation review. Then execute formal
 already in the prior passing set and do not increase the aggregate pass count.
 No parent checkout, DB or Docker resource changed. #376 / PR #378 remain
 open/draft and supported_history_threshold remains null.
+
+## Shared formal operating stage (#383)
+
+Exact implementation: `e4b1eaf7181f36dee5796a56539824ad0efe9da0`.
+The issue owner approved continuing toward a real case; the concrete design
+and ownership boundaries were recorded in linked blocker #383 before editing.
+The archived study's revenue/undiscounted-FCFF targets now have an explicit
+internal Fundamental contract. Full valuation and research share the original
+#352 forecast composition and operating recurrence. Full valuation still
+requires all 32 accounting roles, market policy and the capital bridge. No
+research/Agent/UI formula or dummy market/share assumption was introduced.
+The distinct operating profile has twelve annual numeric dependencies and
+retains transition filing evidence, existing three-period candidate minimum,
+five-period window and growth/reinvestment policy. Successful output is always
+provisional, with null supported threshold and no per-share/intrinsic value.
+
+The low-level composer takes already authenticated canonical evidence. Like
+its existing full-valuation counterpart, it does not authenticate a supplied
+release digest. The real research boundary must still verify original source,
+mapping, trusted semantic review/release and the first-original label. This
+increment supplies no new release authority, signed review or canonical facts.
+Operating accuracy cannot establish the complete valuation's accuracy; #377
+must explicitly freeze that claim before outcomes select a threshold.
+
+At the exact clean commit, the retained external executor
+`references/issue376-operating-checkpoint.py` ran all of these with exit 0:
+
+- `uv run --frozen --extra dev --project fundamental-service pytest -q fundamental-service/tests --tb=short`:
+  **397 passed, 27 explicit resource/database skips**, one existing serializer warning.
+- `uv run --frozen --extra dev --project fundamental-service pytest -q scripts/tests/test_audit_history_*.py scripts/tests/test_verify_issue361_research_archive.py --tb=short`:
+  **48 passed, no skips**. The executor records expanded argv.
+- Ruff 0.14.14 check for Fundamental; focused format for all five changed source
+  modules plus `test_operating_forecast.py`; mypy 1.15.0
+  `--follow-imports=skip --ignore-missing-imports` for the five changed modules.
+- `python3 scripts/architecture_guard.py`;
+  `uv run --frozen --project fundamental-service python -m fundamental_service.architecture_guard`;
+  `git diff --check`.
+- `uv run --frozen --project fundamental-service python` followed by external
+  `references/issue376-full-valuation-parity.py`.
+
+The 40 new tests cover both-model operating/full numeric parity, the six
+pre-extraction preparation digests, required roles, wrong issuer/source/unit,
+future facts/sources, missing history, dimensional and misaligned facts,
+amendments, conflicting/duplicate IDs, tax/growth refusals, complete selected
+and rejected evidence identity, versions, input order and independent Decimal
+context. The output schema refuses verified quality or a supported threshold.
+CI now covers these modules and keeps the full Fundamental suite.
+
+Before extraction, six complete/blocked full-valuation cases were captured at
+clean `824d2f6f`; their complete preparation/calculation output is **identical**
+at `e4b1eaf7`, digest
+`04f18826f52bcdaab01e8b7f88a68aa9239c42c2b2a4eff16009781b000563cc`.
+The synthetic operating results for both models repeat canonically, and the
+content-addressed report repeats with `wrote=false`, unchanged bytes/sizes/mtimes.
+This is operating/synthetic parity acceptance, not empirical or Docker/service
+acceptance of the fixed cohort. Runtime: CPython 3.11.15, Arelle 2.47.4,
+Pydantic 2.14.2 and lxml 6.1.3; exact locks and executor/code hashes are in receipts.
+
+All artifacts remain outside Git under `checkpoint-e4b1eaf7/` in the same evidence root:
+
+| Artifact | SHA-256 |
+| --- | --- |
+| Exact checkpoint | `377cd60325ece2ad0bff55b10df1c242882137a37bc76703109d4ff7daf83d9e` |
+| Checkpoint input | `3c29ee0685b9b6f80519bcba5088747d28c54f12af61135d3c1996653e202840` |
+| Checkpoint output | `48ebe8d6f73aa489e45cbf8a86afebe5143620d1e9aad98cbab1d883212e25cf` |
+| Operating report | `607fb9f14eb16b10cdb9ecc0a2678f85fea1e49723e506634b10bcc6a75be2bd` |
+| Operating input | `5cdf1cb4670d1c0bcf9b6eb018e6f98096d8de69da137670547c670efcada3fe` |
+| Operating output | `38711d54d06a675d5ecb9cf226c711ad87aec4e32c6e30f0063d9d50ebe7f1a9` |
+| Full-valuation parity report | `0e9452b0a0bfc24e2ab72e8a8163be203d56e1b3b3404495f69ccdf5d47ba505` |
+| Original full-valuation parity report | `7aff748b59058115585d890938a89c911b1b91c976264317fe48b01caa8382f3` |
+
+The retained dependency probe at `824d2f6f` had eight synthetic cases across
+both models: altered capital/share claims and discount/terminal growth leave
+revenue/FCFF unchanged while affecting per-share value; the tax positive control
+changes FCFF. Report
+`89ea205cd4e6e848014b44bf6010410d8146f671ddc421b04db34906b5b40408`,
+input `ace79fafd9b74de92b42a140482edf89c3190dc9c0f02fa6438d00b4a8aa6505`,
+output `359d93022b7620338f62907f8788b5174b21e36b32dc3638e17dec1534ff102f`.
+Two import attempts and a strict Python-vs-JSON validation attempt initially
+failed; the corrected probe validates JSON at its actual boundary. The first
+extraction test found a removed local-name reference, corrected before commit.
+A broader mypy 1.19.1 follow-imports analysis does not pass the existing
+optional/nonnumeric contracts; it is not the passing scoped CI type check.
+Ruff 0.14.14 whole-suite formatting also flags the existing, unchanged
+`test_release_runner.py`; only affected files were formatted/checked.
+
+The architecture standard and all three project agent-skill entrypoints were
+checked. No Agent graph/state/layer/import/runtime boundary changes here make
+their existing guidance stale; no skill update or architecture exception is
+needed. No parent checkout, DB, container, network or volume changed.
+
+### Original operating-role review packet
+
+At the same exact commit, external
+`references/issue376-operating-source-review.py` exits 0 and preserves the same
+NEWMARKET issuer/origin and original history/decision/first-label sources.
+It verifies the existing source/parser/packet input and output digests, retains
+all original observations, and separately organizes origin versus label facts.
+It finds search candidates for **10/12 operating roles**, with **zero approved
+roles**. `contract_assets` and `deferred_revenue` remain unknown; pre-Topic606
+vocabulary or an unreported modern tag cannot establish economic absence.
+
+The packet retains 46 component observations and 18 original disclosure views
+with exact raw fact/context/unit/period/accession/source/parser hashes. The
+FY2015 receivables table explicitly includes USD20.141m income-tax receivables
+within USD287.967m trade-and-other receivables. Its accrued-expense table
+includes USD13.927m capital-project payables within USD99.511m accrued expenses.
+These are original disclosed components, not newly approved normalized roles.
+Other receivables/accruals, allowance coverage and nonoverlapping classification
+still require review; do not map either whole aggregate directly to operating
+working capital or fill missing balances with zero.
+
+| Artifact | SHA-256 |
+| --- | --- |
+| Source operating review report | `6ab2dc8e43e619935c2baf74f96196e1e59ee42d0b496f29d55e313b394ec46e` |
+| Source review input | `e924f7e13f348d543ea96c7c85fc4da042053bb67e729d98fd2183fe7057efa0` |
+| Source review output | `d5885f70fd90211dda6b382e14116b9123efb1a0396e34eba4db044314f940d2` |
+
+Immediate repeat returns `wrote=false`, identical input/output/report digests,
+unchanged existing bytes/sizes/mtimes, zero downloads and no canonical facts.
+The full original sample stays 100 issuers/589 targets; this source packet does
+not replace the first case or authorize promotion. Remaining work is actual
+issuer/period/component/absence review and historical publication/release,
+then #352 real forecast/first-original label/error, reviewed #377 protocol and
+complete isolated service-backed repeat. Formal study completion remains
+**0/100**, threshold null; #376/#383 stay open and #378 stays draft.
