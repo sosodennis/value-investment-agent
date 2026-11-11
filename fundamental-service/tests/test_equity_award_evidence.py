@@ -5,6 +5,11 @@ from types import SimpleNamespace
 
 import pytest
 
+from fundamental_service.arelle_parser import (
+    ArelleParseReportV1,
+    ArelleValidationProfileV1,
+    ParsedXbrlFactV1,
+)
 from fundamental_service.contracts import (
     DimensionV1,
     QualityStatus,
@@ -22,6 +27,8 @@ from fundamental_service.equity_award_evidence import (
     verify_dilution_fact_bindings,
 )
 from fundamental_service.equity_dilution import DilutionError, PerformanceStockAwardV1
+from fundamental_service.facts import select_fact_groups
+from fundamental_service.sec_rebuild import parsed_facts_to_candidates
 from fundamental_service.serialization import canonical_bytes, sha256_digest
 from fundamental_service.valuation_preparation import prepare_automatic_valuation
 from test_preparation_runner import _fixture, _reviewed_candidate
@@ -276,8 +283,10 @@ def test_signed_candidate_with_stale_quote_refuses_before_activation(tmp_path):
     assert fixture.state.publications == 0
 
 
+@pytest.mark.parametrize("rebuild_from_parser", [False, True])
 def test_signed_release_retains_two_distinct_award_classes_without_scalar_collapse(
     tmp_path,
+    rebuild_from_parser,
 ):
     fixture = _fixture(tmp_path, released=False)
     original = fixture.dilution.inventory.instruments[0]
@@ -304,6 +313,10 @@ def test_signed_release_retains_two_distinct_award_classes_without_scalar_collap
                     }
                 )
             )
+        if rebuild_from_parser:
+            observations = [
+                _rebuild_award_observation(fixture, fact) for fact in observations
+            ]
         awards.append(
             original.model_copy(
                 update={
@@ -362,6 +375,51 @@ def test_signed_release_retains_two_distinct_award_classes_without_scalar_collap
     assert prepared.equity_dilution.incremental_shares == Decimal(20)
     assert prepared.input.assumptions.capital_bridge.diluted_shares == Decimal(130)
     assert fixture.state.active is None
+
+
+def _rebuild_award_observation(fixture, observation):
+    """Synthetic parser output uses the same scope shape as real Arelle output."""
+    source = max(fixture.snapshot.source_records, key=lambda item: item.available_at)
+    profile = ArelleValidationProfileV1(profile_id="synthetic-parser-shape-only")
+    report = ArelleParseReportV1(
+        filing_path="/synthetic/filing.htm",
+        parser_version=source.parser_version.removeprefix("arelle-release=="),
+        taxonomy_version="synthetic-us-gaap-2025",
+        validation_profile=profile,
+        validation_profile_digest=profile.digest(),
+        parsed_at=source.captured_at,
+        source_content_hash=source.parser_input_hash or source.content_hash,
+        facts=(
+            ParsedXbrlFactV1(
+                concept=observation.concept,
+                value=str(observation.value),
+                unit=observation.unit,
+                context_id=observation.context.context_id,
+                instant=observation.instant,
+                entity_identifier=observation.issuer_id,
+                dimensions=tuple(
+                    (item.name, item.member) for item in observation.context.dimensions
+                ),
+                is_numeric=True,
+                consolidation_scope="segmented",
+                security_scope="segmented",
+            ),
+        ),
+    )
+    candidates = parsed_facts_to_candidates(
+        report,
+        source=source,
+        issuer_id=observation.issuer_id,
+        security_id=observation.security_id,
+        normalized_field=observation.normalized_field,
+        mapping=fixture.mappings[observation.mapping_decision_id],
+    )
+    selections = select_fact_groups(candidates, fixture.snapshot.valuation_timestamp)
+    assert len(selections) == 1 and selections[0].fact is not None
+    fact = selections[0].fact
+    assert fact.security_scope == "segmented"
+    assert fact.context.dimensions == observation.context.dimensions
+    return fact
 
 
 @pytest.mark.parametrize("conditional", [False, True])

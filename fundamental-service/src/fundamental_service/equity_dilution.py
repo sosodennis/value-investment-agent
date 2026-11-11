@@ -245,7 +245,11 @@ def compute_treasury_stock_dilution(
             if (
                 fact.issuer_id != inventory.issuer_id
                 or fact.security_id != inventory.security_id
-                or fact.security_scope != inventory.security_id
+                or fact.security_scope
+                not in {
+                    inventory.security_id,
+                    "segmented" if fact.context.dimensions else "unspecified",
+                }
                 or fact.instant != inventory.period_end
                 or fact.period_start is not None
                 or fact.period_end != inventory.period_end

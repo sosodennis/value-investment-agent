@@ -149,6 +149,85 @@ def test_excluded_anti_dilutive_awards_are_retained_per_class():
     assert result.instruments[0].assumed_repurchased_shares == Decimal(125)
 
 
+@pytest.mark.parametrize("dimensional", [False, True])
+def test_reviewed_inventory_keeps_parser_scope_without_rewriting_originals(dimensional):
+    inventory, quote, policy = _inputs()
+    award = inventory.instruments[1]
+    dimensions = (
+        (DimensionV1(name="us-gaap:AwardTypeAxis", member="synthetic:RSU"),)
+        if dimensional
+        else ()
+    )
+    scope = "segmented" if dimensional else "unspecified"
+    facts = tuple(
+        fact.model_copy(
+            update={
+                "security_scope": scope,
+                "context": fact.context.model_copy(
+                    update={
+                        "dimensions": dimensions,
+                        "consolidation_scope": "segmented"
+                        if dimensional
+                        else "consolidated",
+                    }
+                ),
+            }
+        )
+        for fact in (award.quantity, award.unrecognized_compensation)
+    )
+    inventory = inventory.model_copy(
+        update={
+            "instruments": (
+                award.model_copy(
+                    update={"quantity": facts[0], "unrecognized_compensation": facts[1]}
+                ),
+            )
+        }
+    )
+    result = _compute(inventory, quote, policy)
+    assert result.incremental_shares == Decimal(140)
+    assert inventory.instruments[0].quantity.security_scope == scope
+    assert result.instruments[0].input_evidence_digests
+
+
+@pytest.mark.parametrize("scope", ["OTHER", "unknown", "segmented", None])
+def test_inventory_cannot_bind_unknown_other_or_inconsistent_parser_scope(scope):
+    inventory, quote, policy = _inputs()
+    award = inventory.instruments[1]
+    award = award.model_copy(
+        update={"quantity": award.quantity.model_copy(update={"security_scope": scope})}
+    )
+    inventory = inventory.model_copy(update={"instruments": (award,)})
+    with pytest.raises(DilutionError) as error:
+        _compute(inventory, quote, policy)
+    assert error.value.code == "DILUTION_FACT_SCOPE_MISMATCH"
+
+
+@pytest.mark.parametrize(
+    "axis", ["us-gaap:StatementClassOfStockAxis", "us-gaap:StatementGeographicalAxis"]
+)
+def test_parser_segment_scope_does_not_authorize_other_share_or_entity_dimensions(axis):
+    inventory, quote, policy = _inputs()
+    award = inventory.instruments[1]
+    quantity = award.quantity.model_copy(
+        update={
+            "security_scope": "segmented",
+            "context": award.quantity.context.model_copy(
+                update={
+                    "dimensions": (DimensionV1(name=axis, member="synthetic:Other"),),
+                    "consolidation_scope": "segmented",
+                }
+            ),
+        }
+    )
+    inventory = inventory.model_copy(
+        update={"instruments": (award.model_copy(update={"quantity": quantity}),)}
+    )
+    with pytest.raises(DilutionError) as error:
+        _compute(inventory, quote, policy)
+    assert error.value.code == "DILUTION_FACT_SCOPE_MISMATCH"
+
+
 def test_order_digest_repeat_and_hostile_decimal_context_are_deterministic():
     inventory, quote, policy = _inputs()
     first = _compute(inventory, quote, policy)

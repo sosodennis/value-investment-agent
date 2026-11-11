@@ -163,7 +163,9 @@ def parsed_facts_to_candidates(
         else:
             continue
         currency = (
-            fact.unit.rsplit(":", 1)[-1] if fact.unit.startswith("iso4217:") else None
+            fact.unit.partition("/")[0].removeprefix("iso4217:")
+            if fact.unit.startswith("iso4217:")
+            else None
         )
         dimensions = tuple(
             DimensionV1(name=name, member=member) for name, member in fact.dimensions

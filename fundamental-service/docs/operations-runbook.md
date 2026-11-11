@@ -205,6 +205,14 @@ options, `equity_award_exercise_price`. Each class retains its original facts an
 dimensions. An inventory cannot count equivalent contexts twice or combine a
 consolidated total with its class components.
 
+Original parser scope remains intact: an undimensioned observation may retain
+`security_scope=unspecified`; an `AwardTypeAxis` observation may retain
+`security_scope=segmented`. The signed inventory binds those observations to the
+snapshot's reviewed security. Other security IDs, unknown scopes, and stock-class
+or entity dimensions remain unsupported. Currency for a divided monetary unit
+comes from its numerator (`iso4217:USD/xbrli:shares` retains `USD` and the exact
+original unit); source facts are not rewritten to resemble prepared inputs.
+
 Publish canonical `EquityDilutionEvidenceV1` as an artifact with role
 `equity-dilution-evidence-v1`, and include the quote's original bytes as an artifact
 with role `equity-dilution-quote-source-v1` in the same signed data release. The

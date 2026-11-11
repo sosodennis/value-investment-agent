@@ -229,7 +229,7 @@ def _release_manifest_for(snapshot, facts):
     fact_refs = tuple(
         FactRefV1(
             fact_id=fact.fact_id,
-            fact_digest=sha256_digest(fact.model_dump(mode="json")),
+            fact_digest=canonical_fact_digest(fact),
         )
         for fact in facts
     )
