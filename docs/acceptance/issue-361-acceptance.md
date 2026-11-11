@@ -922,3 +922,44 @@ A complete numerical case still needs six complete scalar roles, company-wide
 award/PSU scope, actual market policy, independent trusted semantic review and
 release, and exact-input caller approval. The 19-gate acceptance, independent
 PR review, merge and main verification remain incomplete; threshold stays null.
+
+## Engineering checkpoint: inline original and referenced schema
+
+Implementations `edf76372f0d4bca3edb00abcd3fe57a0b640b8d5` and
+`aadb9ae7c5f4abf91a51c6e38c00e60d8981986f` resolve #401/#402 in the owning
+SEC integrity/acquisition layer. Tandy original `0001140361-25-006103` retains
+its unchanged archive member and selects `tlfa-20241231.xsd` from the original's
+namespace-bound reference. A fresh independent parser repeat reproduces all
+714 parsed facts and the semantic/replay digests, with zero downloads and
+`wrote=false`. No mapping or financial approval is inferred.
+
+At exact `aadb9ae7`, 1,059 service/PostgreSQL tests pass with 11 optional runtime
+skips; 52 Agent boundary and 17 acceptance-tool tests pass. Ruff, changed-file
+formatting, 29-source mypy, architecture and diff checks pass. All 12 executed
+[CI jobs](https://github.com/sosodennis/value-investment-agent/actions/runs/43072943741)
+pass; the release gate is skipped. Exact check input is
+`e7e1ce0a757dfd5b719abd8d52071a26f9c69c0f2f401413723a7e805fb72477`;
+output is `a37b72bb79f8485fc3743eaa76596bdffeadcb80d5ad924145542abfa716d0e9`.
+
+The real native acquisition persists eight provisional revenue facts and one
+snapshot, retaining missing `contract_assets` as abstain. Two complete repeats,
+reconstructed connections and recovery into an empty store preserve all domain
+digests and content mtimes, with zero provider/parser calls on repeats. The
+separate installed service matches all 58 Git source files; SEC preflight and
+two complete HTTP/restart checks pass. The second HTTP harness execution writes
+no input/report or domain artifacts. HTTP input is
+`1542a6219f3900a75cef52a6a1a7f424175609bdb467fc4d89c8a887bcce66ba`;
+output is `67ad5d2f0c07964556959683911ac6bed8da8473b6d2ca3256a6682c3b44b8d2`.
+Operational access audits may append. The new service project
+`value-investment-agent-361-integrity-service` is backed up and removed; its
+containers/networks/volumes are absent and all 62 baseline containers retain
+ID/image/start time. The separate regression PostgreSQL project remains in use.
+
+`inline_original_selection_increment` in the existing accounting checkpoint
+preserves all 33 previous entries, command/output digests, runtime tuple,
+failure receipts and verified backups. Source/research/diagnostic bytes remain
+outside Git. The prior-year original remains blocked by five missing SEC 2023
+enumeration schemas in the old offline cache; a separately pinned complete
+cache is the next step. Complete role/award evidence, market policy, actual
+independent review/release/input approval and numerical 19-gate acceptance
+remain incomplete. #361 and PR #370 remain open/draft; thresholds remain null.

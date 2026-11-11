@@ -2,7 +2,7 @@
   "acceptance_profile": "persistent-valuation-flow-v1",
   "acceptance_scope": "fundamental-service",
   "blockers": [
-    "Actual installed-source and abstained HTTP reuse/restart passed; dedicated stacks removed after verified backup. Full real numerical acceptance and independent review/release/input approval remain incomplete."
+    "Actual Tandy incomplete acquisition and HTTP reuse/restart/restore passed; only this new service stack was backed up and removed. Full numerical case, complete mapping/market evidence and actual independent review/release/input approval remain incomplete."
   ],
   "branch": "codex/issue-361-replay-evidence",
   "checks": [
@@ -102,15 +102,15 @@
       "status": "not_run"
     }
   ],
-  "commit": "51ab09ced690f401f623c655cbd344cdac77da4a",
+  "commit": "aadb9ae7c5f4abf91a51c6e38c00e60d8981986f",
   "issue": 361,
   "latest_engineering_evidence": "docs/acceptance/issue-361-acceptance.md",
-  "next_step": "Complete real scalar accounting and per-class award scope, actual market/source policy and independent trusted semantic review/release; present exact input for actual caller approval, then run full numerical 19-gate HTTP acceptance and PR review/merge/main verification.",
+  "next_step": "Complete a separately pinned 2023/2024 offline taxonomy cache, validate prior original for three annual observations, finish real scalar/per-class award and dated market-policy evidence, obtain actual independent review/trusted release/exact-input caller approval, then full numerical 19-gate service acceptance, PR review/merge and main validation.",
   "readiness": {
     "capabilities": {
       "identity_resolution_configured": true
     },
-    "status": "not_ready"
+    "status": "not_running"
   },
   "research_archive": "docs/acceptance/issue-361-research-archive.json",
   "runtime": {
@@ -119,9 +119,9 @@
       "compose_files": [
         "compose/verification/docker-compose.issue280-operations.yml",
         "compose/verification/docker-compose.issue312-sec-ingestion.yml",
-        ".audit/issue-361-shared-integration/51ab09ced690f401f623c655cbd344cdac77da4a/service/overlay.yml"
+        ".audit/issue-361-shared-integration/aadb9ae7c5f4abf91a51c6e38c00e60d8981986f/service/overlay.yml"
       ],
-      "compose_project": "value-investment-agent-361-shared-service",
+      "compose_project": "value-investment-agent-361-integrity-service",
       "container_port": 8080,
       "dependencies": [
         {
@@ -133,13 +133,13 @@
       ],
       "env_files": [
         {
-          "path": "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/.audit/issue-361-shared-integration/51ab09ced690f401f623c655cbd344cdac77da4a/service/runtime.env",
-          "sha256": "8a48c39f91c280a6b31da35c4763fb67c5c6c03fdf2d2c2db0887960814ab380"
+          "path": "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/.audit/issue-361-shared-integration/aadb9ae7c5f4abf91a51c6e38c00e60d8981986f/service/runtime.env",
+          "sha256": "c18ab76ac83bddef23666912cce400b5f6d7075c2c48d2a2c6a3648e6dd008c2"
         }
       ],
-      "image_id": "sha256:c0af0034bdb624cfc84c8228eebec3fdce2f6812565961498d94df12fbbfda37",
+      "image_id": "sha256:765b822d745803ab46d89e69178d607bdfd5e31c3761fca23b60b80f51438ddc",
       "networks": [
-        "value-investment-agent-361-shared-service_default"
+        "value-investment-agent-361-integrity-service_default"
       ],
       "published_host": "0.0.0.0",
       "published_port": 18666,
@@ -153,11 +153,11 @@
         "container_path": "/app/src/fundamental_service",
         "file_count": 58,
         "repository_path": "fundamental-service/src/fundamental_service",
-        "sha256": "ce55fea2f9c488fcf668bd0946d1d07e936f20852ff8ba57735a2b413e033584"
+        "sha256": "767ac3bc739af9d57c986b71b9fd7874f230a3b10643c1994b5bfc47eb99ec80"
       },
       "url": "http://127.0.0.1:18666",
       "volumes": [
-        "value-investment-agent-361-shared-service_fundamental-postgres-data"
+        "value-investment-agent-361-integrity-service_fundamental-postgres-data"
       ]
     },
     "worktree": "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence"
