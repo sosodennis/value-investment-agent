@@ -1,3 +1,5 @@
+import asyncio
+import hashlib
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
@@ -30,6 +32,7 @@ from fundamental_service.facts import (
     FilesystemCanonicalFactRepository,
 )
 from fundamental_service.operations import OperationsConfig, ServiceError
+from fundamental_service.persistence_recovery import export_backup, restore_backup
 from fundamental_service.metadata import (
     PostgresArtifactStore,
     PostgresCanonicalFactRepository,
@@ -60,6 +63,8 @@ VALUATION_TIME = datetime(2026, 3, 1, tzinfo=UTC)
 
 
 def _fixture(tmp_path: Path, *, released: bool = True, namespace: str = "runner"):
+    source_bytes = b'{"source":"synthetic original filing fixture"}'
+    source_hash = hashlib.sha256(source_bytes).hexdigest()
     required = valuation_requirements_profile("fcff_dcf").required_fact_fields
     base = _sec_ingestion_request()
     ingestion = base.model_copy(
@@ -89,7 +94,12 @@ def _fixture(tmp_path: Path, *, released: bool = True, namespace: str = "runner"
         namespace, identity=ingestion.identity, valuation_timestamp=VALUATION_TIME
     )
     sources = tuple(
-        source.model_copy(update={"accession_number": base.filing.accession_number})
+        source.model_copy(
+            update={
+                "accession_number": base.filing.accession_number,
+                "content_hash": source_hash,
+            }
+        )
         for source in snapshot.source_records
     )
     payload = snapshot.model_dump(exclude={"manifest_digest"})
@@ -123,6 +133,7 @@ def _fixture(tmp_path: Path, *, released: bool = True, namespace: str = "runner"
                 "mapping_decision_id": f"mapping-{fact.normalized_field}",
                 "mapping_confidence": "high",
                 "captured_at": VALUATION_TIME,
+                "source": fact.source.model_copy(update={"content_hash": source_hash}),
             }
         )
         for fact in _facts()
@@ -182,6 +193,7 @@ def _fixture(tmp_path: Path, *, released: bool = True, namespace: str = "runner"
         artifacts=artifacts,
         active=active,
         state=state,
+        source_bytes=source_bytes,
     )
 
 
@@ -544,17 +556,22 @@ def test_concurrent_preparations_publish_one_artifact(tmp_path):
 
 
 @pytest.mark.skipif(not DATABASE_URL, reason="isolated PostgreSQL is required")
-def test_preparation_and_calculation_reuse_postgres_artifacts_after_restart(tmp_path):
+def test_preparation_and_calculation_reuse_postgres_artifacts_after_restart_and_restore(
+    tmp_path, recovery_databases
+):
+    source_database, target_database = recovery_databases
     fixture = _fixture(tmp_path, released=False, namespace=uuid4().hex)
     candidate, _ = _reviewed_candidate(fixture)
     _, _, _, _, _, review_artifacts, roots = _candidate()
     store = PostgresMetadataStore(
-        DATABASE_URL or "", auto_migrate=True, data_release_trust_roots=roots
+        source_database, auto_migrate=True, data_release_trust_roots=roots
     )
     store.start()
 
-    def wire(metadata):
-        content = PostgresContentStore(tmp_path / "durable-content", metadata)
+    def wire(metadata, content_root=None):
+        content = PostgresContentStore(
+            content_root or tmp_path / "durable-content", metadata
+        )
         artifacts = PostgresArtifactStore(metadata, content)
         application = create_app(
             snapshot_repository=PostgresSnapshotRepository(metadata),
@@ -591,6 +608,7 @@ def test_preparation_and_calculation_reuse_postgres_artifacts_after_restart(tmp_
 
     try:
         runner, content, artifacts = wire(store)
+        content.put(fixture.source_bytes, media_type="application/json")
         store.publish_snapshot(fixture.snapshot)
         for fact in fixture.facts.list():
             store.publish_fact(fact)
@@ -635,7 +653,7 @@ def test_preparation_and_calculation_reuse_postgres_artifacts_after_restart(tmp_
 
         store.close()
         store = PostgresMetadataStore(
-            DATABASE_URL or "", auto_migrate=False, data_release_trust_roots=roots
+            source_database, auto_migrate=False, data_release_trust_roots=roots
         )
         store.start()
         restarted, _, restored_artifacts = wire(store)
@@ -652,6 +670,55 @@ def test_preparation_and_calculation_reuse_postgres_artifacts_after_restart(tmp_
             fact_count,
         )
         assert content_inventory() == before
+        backup = asyncio.run(
+            export_backup(
+                source_database,
+                tmp_path / "durable-content",
+                tmp_path / "backups",
+                source_revision=REVISION,
+            )
+        )
+        bundle = tmp_path / "backups" / backup.manifest_digest
+        restored_root = tmp_path / "restored-content"
+        asyncio.run(
+            restore_backup(
+                target_database,
+                restored_root,
+                bundle,
+                manifest_digest=backup.manifest_digest,
+            )
+        )
+        recovered = PostgresMetadataStore(
+            target_database, data_release_trust_roots=roots
+        )
+        recovered.start()
+        try:
+            restored_runner, _, restored_artifacts = wire(recovered, restored_root)
+            restored_result = _run(
+                restored_runner, fixture.plan, approval=approval, correlation="restore"
+            )
+            assert restored_result.artifact == calculated.artifact
+            assert restored_result.wrote is False
+            assert restored_artifacts.read(
+                calculated.artifact.artifact_id
+            ) == canonical_bytes(evidence)
+            assert (len(recovered.list_snapshots()), len(recovered.list_facts())) == (
+                snapshot_count,
+                fact_count,
+            )
+        finally:
+            recovered.close()
+        assert (
+            asyncio.run(
+                export_backup(
+                    target_database,
+                    restored_root,
+                    tmp_path / "backups",
+                    source_revision=REVISION,
+                )
+            ).wrote
+            is False
+        )
     finally:
         store.close()
 

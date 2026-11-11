@@ -107,6 +107,72 @@ in the service-owned audit table.
 
 ## Recovery checks
 
+### Export and restore the persistent data plane
+
+`fundamental-persistence` is an offline operator command. Stop every API and
+acquisition/preparation writer using the source database and content root before
+export, and keep all writers off the target until restore completes. The command
+locks the Fundamental tables and rejects observed content changes. It does not
+provide a coordinated live backup across independently running filesystem
+writers. Run it with the same installed release, migrations and PostgreSQL major
+version as the source. It uses `FUNDAMENTAL_SERVICE_DATABASE_URL` and
+`FUNDAMENTAL_SERVICE_DATA_ROOT`; neither credentials nor source bytes are printed.
+
+```sh
+fundamental-persistence export \
+  --source-revision "$VERIFIED_IMPLEMENTATION_COMMIT" \
+  --destination /backups/fundamental
+```
+
+The receipt identifies `/backups/fundamental/<manifest_digest>/manifest.json`.
+Copy the complete directory to retained storage outside the disposable service
+volume. The canonical manifest pins the implementation revision, migration and
+schema digests, PostgreSQL major version, every table's columns/row count/file
+digest, and every source/content file's digest and length. Source bytes from
+failed ingestion are included even if registration was interrupted. Missing or
+corrupt snapshot/fact/artifact source bytes refuse publication. Table values are
+exported as sorted canonical JSON lines containing PostgreSQL text values;
+timestamps retain their original UTC values. Operational audit rows remain part
+of the backup, separate from valuation identity.
+
+The complete backup is staged, verified and atomically renamed to its digest.
+Re-exporting identical state and revision returns `wrote=false` without touching
+the existing directory. An existing corrupt backup is rejected, never replaced.
+Record the receipt and exact command in acceptance evidence. Export is not an
+independent mapping review or a release signature.
+
+Point the environment at a **new, isolated database and content root**, then use
+the recorded digest, obtained independently of the backup's current contents:
+
+```sh
+fundamental-persistence restore \
+  --bundle /backups/fundamental/<manifest_digest> \
+  --manifest-digest <manifest_digest>
+```
+
+Restore checks the entire inventory, referenced bytes, schema and runtime
+compatibility before importing rows. It initializes the owned schema only when
+absent. An existing target must be empty apart from schema bootstrap records, or
+already contain exactly the backed-up metadata; unrelated data is refused. The
+content root may contain only a matching subset of the backup's objects. Bytes
+are published atomically before a single metadata transaction imports all rows
+in foreign-key order. Failure rolls back the metadata transaction; already
+restored matching bytes are retained for retry. Temporary copy bytes stay in
+`.restore-pending`, which is outside the published
+content inventory; a killed copy cannot publish a partial object or block retry.
+Uncommitted staging bytes are retained locally and excluded from export.
+The acquisition-audit sequence continues beyond restored IDs. The transaction verifies the restored table
+digests before commit. Repeating a complete restore returns `wrote=false` and
+does not modify existing content files.
+
+Deployment secrets, trust roots, parser/taxonomy assets and service configuration
+are not data backup contents. Restore their separately pinned deployment inputs
+before starting the service; existing release-trust and caller-approval checks
+remain enforced. After restore, check `/readyz`, retrieve a known snapshot and
+valuation artifact, and rerun its pinned preparation/calculation. Compare all
+source/input/output digests with the recorded evidence. A successful copy alone
+does not establish full-flow acceptance.
+
 - A missing snapshot or artifact returns `SOURCE_UNAVAILABLE` or a stable
   not-found code. The caller receives an unavailable/degraded result and must
   not calculate locally.
