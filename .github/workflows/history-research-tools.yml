@@ -13,6 +13,11 @@ on:
       - "fundamental-service/src/fundamental_service/historical_source.py"
       - "fundamental-service/src/fundamental_service/sec_archive.py"
       - "fundamental-service/src/fundamental_service/ingestion.py"
+      - "fundamental-service/src/fundamental_service/operating_*.py"
+      - "fundamental-service/src/fundamental_service/calculator.py"
+      - "fundamental-service/src/fundamental_service/valuation_preparation.py"
+      - "fundamental-service/src/fundamental_service/valuation_requirements.py"
+      - "fundamental-service/tests/test_operating_forecast.py"
       - "fundamental-service/tests/test_historical_dqc.py"
       - "fundamental-service/tests/test_historical_source.py"
       - "fundamental-service/tests/test_ingestion.py"
@@ -29,6 +34,11 @@ on:
       - "fundamental-service/src/fundamental_service/historical_source.py"
       - "fundamental-service/src/fundamental_service/sec_archive.py"
       - "fundamental-service/src/fundamental_service/ingestion.py"
+      - "fundamental-service/src/fundamental_service/operating_*.py"
+      - "fundamental-service/src/fundamental_service/calculator.py"
+      - "fundamental-service/src/fundamental_service/valuation_preparation.py"
+      - "fundamental-service/src/fundamental_service/valuation_requirements.py"
+      - "fundamental-service/tests/test_operating_forecast.py"
       - "fundamental-service/tests/test_historical_dqc.py"
       - "fundamental-service/tests/test_historical_source.py"
       - "fundamental-service/tests/test_ingestion.py"
@@ -51,6 +61,11 @@ jobs:
           uvx --from mypy==1.15.0 mypy --follow-imports=skip --ignore-missing-imports scripts/audit_history_*.py scripts/verify_issue361_research_archive.py
       - name: Test retention and idempotency
         run: uv run --frozen --project fundamental-service pytest scripts/tests/test_audit_history_*.py scripts/tests/test_verify_issue361_research_archive.py -q
+      - name: Check shared operating forecast contracts
+        run: |
+          uvx --from ruff==0.14.14 ruff check fundamental-service/src/fundamental_service/operating_*.py fundamental-service/src/fundamental_service/calculator.py fundamental-service/src/fundamental_service/valuation_preparation.py fundamental-service/src/fundamental_service/valuation_requirements.py fundamental-service/tests/test_operating_forecast.py
+          uvx --from ruff==0.14.14 ruff format --check fundamental-service/src/fundamental_service/operating_*.py fundamental-service/src/fundamental_service/calculator.py fundamental-service/src/fundamental_service/valuation_preparation.py fundamental-service/src/fundamental_service/valuation_requirements.py fundamental-service/tests/test_operating_forecast.py
+          uvx --from mypy==1.15.0 mypy --follow-imports=skip --ignore-missing-imports fundamental-service/src/fundamental_service/operating_*.py fundamental-service/src/fundamental_service/calculator.py fundamental-service/src/fundamental_service/valuation_preparation.py fundamental-service/src/fundamental_service/valuation_requirements.py
       - name: Check historical parser boundary
         run: |
           uvx --from ruff==0.14.14 ruff check fundamental-service/src/fundamental_service/arelle_parser.py fundamental-service/src/fundamental_service/historical_dqc*.py fundamental-service/tests/test_historical_dqc.py

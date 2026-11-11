@@ -202,6 +202,51 @@ Project signatures prove document integrity; they do not supply semantic review.
 Do not approve a threshold, label a valuation verified, close #376 or present
 zero executed forecasts as a completed history-sufficiency study.
 
+## Operating targets and full valuation (#383)
+
+The archived replay scores next-year revenue and undiscounted FCFF, while its
+execution path requires a complete per-share valuation. An eight-case synthetic
+probe at `824d2f6f` used the unmodified #352 calculator for both models: changing
+capital/share claims or market discount/terminal growth preserved those two
+operating targets while changing per-share value. A tax-rate positive control
+changed FCFF. This is a controlled dependency observation, not cohort accuracy
+or permission to waive a valuation requirement. The external canonical report
+is `89ea205cd4e6e848014b44bf6010410d8146f671ddc421b04db34906b5b40408`;
+repeated publication returns `wrote=false` and preserves bytes/sizes/mtimes.
+
+[Blocker #383](https://github.com/sosodennis/value-investment-agent/issues/383)
+owns the explicit internal `fundamental.operating-forecast.v1` contract.
+`fundamental_service.operating_forecast.prepare_operating_forecast` uses the
+same `compose_forecast_assumptions` as full valuation; both paths use
+`project_operating_nodes` for the operating recurrence. No financial formula
+lives in the research tool. The original valuation profile, market policy,
+capital bridge and full calculation authorization remain required for valuation.
+No dummy market, share or claim inputs are supplied for research.
+
+The distinct operating profile requires the twelve annual roles consumed by
+the existing metric graph: revenue, operating income, pretax income, income tax,
+capex, depreciation/amortization, operating receivables, inventory, contract
+assets, operating payables, accrued operating liabilities and deferred revenue.
+It retains the candidate minimum of three contiguous complete periods, the
+five-period window and existing growth/reinvestment policy. Transition also
+requires its original filed-operating evidence. Unknown accounting roles cannot
+be filled by zero; monetary units, original source, issuer, availability,
+period alignment, scope, amendments and conflicts remain evidence constraints.
+Every supplied fact, including rejected facts, binds the canonical input digest.
+The result includes metric/fact lineage, versions, release reference, input and
+output digests, failure reasons and provisional/abstain disposition. It carries
+no intrinsic/per-share value, verified quality or supported history threshold.
+
+This pure, low-level operation accepts canonical evidence already checked by
+its caller. A supplied digest does **not** authenticate a release or approve a
+mapping. Real replay must authenticate source/mapping/trusted review through the
+owning release path, preserve the first original label and freeze #377's target
+scope before using outcomes for threshold selection. Operating-target accuracy
+cannot validate the complete valuation or every omitted accounting adjustment.
+Historical market policy #369 still blocks a complete valuation; it does not
+become an input to an explicitly scoped undiscounted operating target. At this
+increment, real study forecasts remain zero and #376/#383 remain open.
+
 ## Accession archive selection boundary
 
 `fundamental_service.historical_source.select_historical_archive` now provides

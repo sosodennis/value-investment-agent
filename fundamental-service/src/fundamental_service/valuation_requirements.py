@@ -232,10 +232,36 @@ def valuation_requirements_profile(
         ) from error
 
 
+def operating_forecast_requirements_profile(
+    model_id: str,
+) -> ValuationRequirementsProfileV1:
+    """Evidence dependencies of operating targets, without valuation claims."""
+
+    valuation = valuation_requirements_profile(model_id)
+    return ValuationRequirementsProfileV1(
+        profile_id=f"{model_id}-operating-forecast-requirements-v1",
+        profile_version="operating-forecast-requirements-v1",
+        model_id=valuation.model_id,
+        annual_duration_fields=(
+            "revenue",
+            "operating_income",
+            "income_before_tax",
+            "income_tax_expense",
+            "capital_expenditure",
+            "depreciation_and_amortization",
+        ),
+        annual_instant_fields=valuation.annual_instant_fields,
+        history_window_years=valuation.history_window_years,
+        candidate_minimum_complete_years=valuation.candidate_minimum_complete_years,
+        transition_filing_evidence_required=valuation.transition_filing_evidence_required,
+    )
+
+
 __all__ = [
     "ReleasedFactSelectionV1",
     "UnsupportedValuationModel",
     "ValuationRequirementsProfileV1",
+    "operating_forecast_requirements_profile",
     "select_released_facts",
     "valuation_requirements_profile",
 ]
