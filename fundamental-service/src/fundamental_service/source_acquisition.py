@@ -759,6 +759,21 @@ class SecAcquisitionUseCase:
             supported_filing_years=self.settings.supported_filing_years,
             supported_filing_forms=self.settings.supported_filing_forms,
         )
+        if self.capture_store is not None and not isinstance(
+            adapter, RetainedSecSourceAdapter
+        ):
+            adapter = RetainedSecSourceAdapter(
+                adapter,
+                scope=SecCaptureScopeV1(
+                    cik=request.cik,
+                    accession_number=filing.accession_number,
+                    valuation_timestamp=request.valuation_timestamp,
+                    source_profile=request.source_selection_policy,
+                ),
+                receipts=self.capture_store,
+                content=self.content_store,
+                capture_lock=self._capture_lock,
+            )
         index_source = adapter.capture_filing_index(
             cik=request.cik,
             accession_number=filing.accession_number,
