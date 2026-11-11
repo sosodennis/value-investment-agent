@@ -105,6 +105,12 @@ but it cannot publish a snapshot or verified fact set. Authorized attempts
 record principal, organization, correlation ID, hashes when known, and outcome
 in the service-owned audit table.
 
+An award inventory must explicitly supply `instruments`. An empty array means
+the reviewed complete inventory confirms no outstanding awards at that instant;
+it still requires dated original coverage, snapshot/release bindings, a quote
+and the quote policy. It cannot hide any released award observations. Missing
+inventory remains missing evidence; do not manufacture zero-valued award facts.
+
 ## Sign an independent mapping review
 
 After an authorized independent reviewer has completed the semantic review, use

@@ -70,11 +70,20 @@ REVISION = "1" * 40
 VALUATION_TIME = datetime(2026, 3, 1, tzinfo=UTC)
 
 
-def _fixture(tmp_path: Path, *, released: bool = True, namespace: str = "runner"):
+def _fixture(
+    tmp_path: Path,
+    *,
+    released: bool = True,
+    namespace: str = "runner",
+    empty_awards: bool = False,
+):
     source_bytes = b'{"source":"synthetic original filing fixture"}'
     source_hash = hashlib.sha256(source_bytes).hexdigest()
     profile = valuation_requirements_profile("fcff_dcf")
-    required = (*profile.required_fact_fields, *profile.supporting_fact_fields[:2])
+    required = (
+        *profile.required_fact_fields,
+        *(profile.supporting_fact_fields[:2] if not empty_awards else ()),
+    )
     base = _sec_ingestion_request()
     ingestion = base.model_copy(
         update={
@@ -154,6 +163,14 @@ def _fixture(tmp_path: Path, *, released: bool = True, namespace: str = "runner"
         for fact in _facts()
     )
     dilution = award_evidence(snapshot)
+    if empty_awards:
+        dilution = dilution.model_copy(
+            update={
+                "inventory": type(dilution.inventory).model_validate(
+                    {**dilution.inventory.model_dump(), "instruments": ()}
+                )
+            }
+        )
     stored = (
         *tuple(
             fact for fact in stored if fact.normalized_field != "dilutive_instruments"
@@ -923,11 +940,14 @@ def test_incomplete_acquisition_stays_blocked_and_reuses_evidence_after_restore(
 
 
 @pytest.mark.skipif(not DATABASE_URL, reason="isolated PostgreSQL is required")
+@pytest.mark.parametrize("empty_awards", [False, True])
 def test_preparation_and_calculation_reuse_postgres_artifacts_after_restart_and_restore(
-    tmp_path, recovery_databases
+    tmp_path, recovery_databases, empty_awards
 ):
     source_database, target_database = recovery_databases
-    fixture = _fixture(tmp_path, released=False, namespace=uuid4().hex)
+    fixture = _fixture(
+        tmp_path, released=False, namespace=uuid4().hex, empty_awards=empty_awards
+    )
     candidate, _ = _reviewed_candidate(fixture)
     _, _, _, _, _, review_artifacts, roots = _candidate()
     store = PostgresMetadataStore(
@@ -1018,6 +1038,9 @@ def test_preparation_and_calculation_reuse_postgres_artifacts_after_restart_and_
         assert evidence.status == "calculated"
         assert evidence.calculation.base.per_share_value > 0
         assert evidence.calculation.base.quality_status is QualityStatus.PROVISIONAL
+        assert evidence.preparation.equity_dilution.incremental_shares == (
+            0 if empty_awards else 10
+        )
         before = content_inventory()
         snapshot_count, fact_count = (
             len(store.list_snapshots()),

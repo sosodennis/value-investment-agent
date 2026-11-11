@@ -60,7 +60,7 @@ class EquityAwardInventoryV1(DilutionModel):
     period_end: date
     complete_inventory: Literal[True]
     coverage_evidence: TraceV1
-    instruments: tuple[AwardV1, ...] = Field(min_length=1)
+    instruments: tuple[AwardV1, ...]
 
     @field_validator("instruments")
     @classmethod
