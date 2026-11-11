@@ -175,3 +175,43 @@ The prior preflight at digest
 `e298ab873bb96a44a8d8e916a8aeb1f7d110dd335b2f2fac79e2a84bf5085de0`
 remains in that archive and at the baseline Git commit. Its zero canonical
 forecasts are not changed or claimed as success.
+
+## Engineering checkpoint: persistent backup and recovery
+
+Implementation `1997fdb77206ee0fae465985c14f1e6d37f96cf8` adds the offline
+`fundamental-persistence export/restore` operator command. It exports sorted
+canonical metadata rows and hash-checked source/content bytes as an atomic
+versioned bundle. Restore accepts only an empty or identical metadata store and
+a matching content subset, imports metadata transactionally, verifies the result,
+and preserves incomplete staging for retry. Repeated export and restore return
+`wrote=false` without changing existing content. The operations runbook records
+the writer shutdown, compatible runtime and separately pinned trust/configuration
+requirements. This is service-owned persistence work; valuation formulas, release
+trust and caller approval are unchanged.
+
+[Exact recovery checkpoint](issue-361-recovery-checkpoint.json) records commands,
+exit codes and runtime pins. Input digest:
+`de73787c814237d053a77326ad4371263e2fac7d429451f6a62173758294890d`;
+command-output digest:
+`231b19d9284abcb86ffbc79e477cd3a92a7b917cee3bf2ad2ee6d98803ac405e`.
+The exact implementation passed 505 Fundamental tests with 11 optional runtime
+skips and one existing serializer warning, 17 acceptance-tool tests, Ruff, changed
+formatting, one-source mypy, architecture guard and diff checks.
+
+The synthetic formal-composer calculation was restored into a separate empty
+PostgreSQL database and recomputed with the same valuation input/artifact digest;
+its repeat returned `wrote=false`. Its backup digest is
+`a5a146b1d4071edc6fff0b7bd547f2e968ddc07de30cd20859dbec24f7476744`;
+its valuation artifact digest is
+`23c430a5cd5c4ef930001a9064ca0e123670a4903eea249508ab60a93b750332`.
+Negative cases retain evidence and reject corrupted, incomplete or conflicting
+stores; interrupted import rolls back and retries. Four complete synthetic backup
+bundles remain verified outside Git; damaged negative fixtures are not counted
+as usable backups. Only this run's disposable tmpfs database/network were removed;
+all 62 pre-existing container IDs, image IDs and start times were unchanged.
+
+Real original-filing role coverage/multi-filing composition, actual numerical
+success, the complete isolated service repeat/restart/restore acceptance,
+independent review, CI and main merge verification remain outstanding. This
+checkpoint does not verify any full-flow gate by itself; #361 stays open and
+PR #370 stays draft. Neither model has an approved history threshold.
