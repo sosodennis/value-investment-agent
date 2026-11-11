@@ -958,8 +958,44 @@ ID/image/start time. The separate regression PostgreSQL project remains in use.
 `inline_original_selection_increment` in the existing accounting checkpoint
 preserves all 33 previous entries, command/output digests, runtime tuple,
 failure receipts and verified backups. Source/research/diagnostic bytes remain
-outside Git. The prior-year original remains blocked by five missing SEC 2023
-enumeration schemas in the old offline cache; a separately pinned complete
-cache is the next step. Complete role/award evidence, market policy, actual
+outside Git. At that checkpoint the old offline cache lacked five SEC 2023
+enumeration schemas; the following increment supplies an independently pinned
+complete cache. Complete role/award evidence, market policy, actual
 independent review/release/input approval and numerical 19-gate acceptance
 remain incomplete. #361 and PR #370 remain open/draft; thresholds remain null.
+
+## Engineering checkpoint: retained original history archives
+
+Implementation `bcb29a27`, recovery-fixture correction and exact validation
+`e7593db21b4ab32872971720f5105e26d2456a93` address #403. Composition now accepts
+the formal ingestion shape: one primary and one retained accession-bound ZIP.
+Archive URI/hash/size/accession/form/availability remain bound to each original's
+integrity evidence; missing, duplicate, amended or mismatched archives refuse.
+The regression fails before the fix and passes after it. The full suite passes
+1,073 service/PostgreSQL tests with 11 optional runtime skips, 52 Agent boundary
+tests and 17 acceptance-tool tests. Ruff/format, mypy, architecture and diff pass;
+all 12 executed [CI jobs](https://github.com/sosodennis/value-investment-agent/actions/runs/43076960427)
+pass and the release gate is skipped.
+
+Two real Tandy originals provide 722 and 714 formally parsed facts using the
+same complete taxonomy cache, without further SEC requests. Their three stored
+snapshots survive PostgreSQL connection reconstruction, backup and empty-store
+restore. The installed service's 58 Python files match the exact commit;
+SEC-enabled preflight and HTTP retrieval of all three snapshots before/after
+restart pass. Two complete repeat bundles have identical input/output digests;
+the second returns `wrote=false`, with all 1,331 evidence/content/cache files'
+hashes and mtimes unchanged. The new service project is backed up and removed;
+all 63 baseline containers retain ID/image/start time. The regression PostgreSQL
+project remains available. Runtime configuration failures and the corrected
+backup-fixture failure remain recorded outside Git.
+
+The role audit retains all observations and produces 74 provisional facts for
+18 direct role candidates. Thirteen roles still need semantic classification,
+aggregation or absence evidence; all annual periods remain incomplete. No
+mapping, zero balance, financial policy, trusted release or caller approval is
+inferred. `history_archive_integrity_increment` preserves the prior 34 checkpoint
+entries, exact commands, input/output digests, runtime pins and backup evidence.
+Its checkpoint digest is
+`9027d7dde5a420e3df4ac0eca2c3bdaa9701598a7e3e368de46a7ffe11556c39`.
+Complete numerical acceptance and independent review remain outstanding;
+supported history thresholds remain null and #361/PR #370 remain open/draft.
