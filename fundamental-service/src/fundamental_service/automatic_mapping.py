@@ -26,8 +26,8 @@ from .serialization import sha256_digest
 from .taxonomy_evidence import require_original_taxonomy
 
 AUTOMATIC_MAPPING_INPUT_ROLE = "automatic-mapping-input-v1"
-AUTOMATIC_MAPPING_POLICY: Literal["consolidated-direct-us-gaap-v1"] = (
-    "consolidated-direct-us-gaap-v1"
+AUTOMATIC_MAPPING_POLICY: Literal["consolidated-direct-us-gaap-v2"] = (
+    "consolidated-direct-us-gaap-v2"
 )
 _GAAP_NAMESPACE = re.compile(
     r"http://(?:fasb\.org|xbrl\.us)/us-gaap/\d{4}(?:-\d{2}-\d{2})?"
@@ -36,57 +36,64 @@ _GAAP_NAMESPACE = re.compile(
 
 @dataclass(frozen=True)
 class DirectMappingRule:
-    concept: str
+    concepts: tuple[str, ...]
     period: Literal["annual", "instant"]
     unit: Literal["iso4217:USD", "xbrli:shares"] = "iso4217:USD"
 
 
-# Partial revenue tags, aggregate D&A, absence claims, computed partitions and
-# awards deliberately have no direct rule. Adding one changes the policy digest.
+# SalesRevenueNet is the historical taxonomy's total normal-business revenue.
+# Goods-only/services-only revenue, aggregate D&A and computed partitions remain
+# unsupported. Every rule change changes the executable policy digest.
 _RULES = {
-    "revenue": DirectMappingRule("us-gaap:Revenues", "annual"),
-    "cost_of_revenue": DirectMappingRule("us-gaap:CostOfRevenue", "annual"),
-    "operating_income": DirectMappingRule("us-gaap:OperatingIncomeLoss", "annual"),
+    "revenue": DirectMappingRule(
+        ("us-gaap:Revenues", "us-gaap:SalesRevenueNet"), "annual"
+    ),
+    "cost_of_revenue": DirectMappingRule(("us-gaap:CostOfRevenue",), "annual"),
+    "operating_income": DirectMappingRule(("us-gaap:OperatingIncomeLoss",), "annual"),
     "income_before_tax": DirectMappingRule(
-        "us-gaap:IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest",
+        (
+            "us-gaap:IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest",
+        ),
         "annual",
     ),
     "income_tax_expense": DirectMappingRule(
-        "us-gaap:IncomeTaxExpenseBenefit", "annual"
+        ("us-gaap:IncomeTaxExpenseBenefit",), "annual"
     ),
-    "net_income": DirectMappingRule("us-gaap:NetIncomeLoss", "annual"),
+    "net_income": DirectMappingRule(("us-gaap:NetIncomeLoss",), "annual"),
     "capital_expenditure": DirectMappingRule(
-        "us-gaap:PaymentsToAcquirePropertyPlantAndEquipment", "annual"
+        ("us-gaap:PaymentsToAcquirePropertyPlantAndEquipment",), "annual"
     ),
-    "operating_lease_cost": DirectMappingRule("us-gaap:OperatingLeaseCost", "annual"),
+    "operating_lease_cost": DirectMappingRule(
+        ("us-gaap:OperatingLeaseCost",), "annual"
+    ),
     "basic_weighted_average_shares": DirectMappingRule(
-        "us-gaap:WeightedAverageNumberOfSharesOutstandingBasic",
+        ("us-gaap:WeightedAverageNumberOfSharesOutstandingBasic",),
         "annual",
         "xbrli:shares",
     ),
     "diluted_weighted_average_shares": DirectMappingRule(
-        "us-gaap:WeightedAverageNumberOfDilutedSharesOutstanding",
+        ("us-gaap:WeightedAverageNumberOfDilutedSharesOutstanding",),
         "annual",
         "xbrli:shares",
     ),
     "operating_current_receivables": DirectMappingRule(
-        "us-gaap:AccountsReceivableNetCurrent", "instant"
+        ("us-gaap:AccountsReceivableNetCurrent",), "instant"
     ),
-    "inventory": DirectMappingRule("us-gaap:InventoryNet", "instant"),
+    "inventory": DirectMappingRule(("us-gaap:InventoryNet",), "instant"),
     "operating_current_payables": DirectMappingRule(
-        "us-gaap:AccountsPayableCurrent", "instant"
+        ("us-gaap:AccountsPayableCurrent",), "instant"
     ),
     "cash_and_equivalents": DirectMappingRule(
-        "us-gaap:CashAndCashEquivalentsAtCarryingValue", "instant"
+        ("us-gaap:CashAndCashEquivalentsAtCarryingValue",), "instant"
     ),
     "current_operating_lease_liabilities": DirectMappingRule(
-        "us-gaap:OperatingLeaseLiabilityCurrent", "instant"
+        ("us-gaap:OperatingLeaseLiabilityCurrent",), "instant"
     ),
     "long_term_operating_lease_liabilities": DirectMappingRule(
-        "us-gaap:OperatingLeaseLiabilityNoncurrent", "instant"
+        ("us-gaap:OperatingLeaseLiabilityNoncurrent",), "instant"
     ),
     "common_shares_outstanding": DirectMappingRule(
-        "us-gaap:CommonStockSharesOutstanding", "instant", "xbrli:shares"
+        ("us-gaap:CommonStockSharesOutstanding",), "instant", "xbrli:shares"
     ),
 }
 
@@ -148,7 +155,7 @@ class AutomaticMappingDecisionV1(ReleaseModel):
     input_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
     source_revision: str = Field(pattern=r"^[0-9a-f]{40}$")
     evaluator_id: str = Field(min_length=1)
-    policy_version: Literal["consolidated-direct-us-gaap-v1"] = AUTOMATIC_MAPPING_POLICY
+    policy_version: Literal["consolidated-direct-us-gaap-v2"] = AUTOMATIC_MAPPING_POLICY
     policy_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
     status: Literal["approved", "abstain"]
     reason_codes: tuple[str, ...]
@@ -257,7 +264,7 @@ def evaluate_automatic_mapping(
     rule = _RULES.get(proposal.normalized_field)
     if (
         rule is None
-        or proposal.source_concept != rule.concept
+        or proposal.source_concept not in rule.concepts
         or proposal.accounting_rules is not None
         or proposal.observation_scope is not None
         or proposal.status != "provisional"
@@ -270,7 +277,7 @@ def evaluate_automatic_mapping(
             continue
         reason = (
             "MAPPING_AUTOMATIC_RULE_UNSUPPORTED"
-            if rule is None or proposal.source_concept != rule.concept
+            if rule is None or proposal.source_concept not in rule.concepts
             else _observation_rejection(fact, request, rule)
         )
         if reason:
@@ -287,6 +294,23 @@ def evaluate_automatic_mapping(
     for fact in selected:
         key = (fact.period_start, fact.period_end, fact.instant)
         periods.setdefault(key, set()).add(Decimal(fact.value))
+    if rule is not None and len(rule.concepts) > 1:
+        for fact in sorted(original.report.facts, key=sha256_digest):
+            if (
+                fact.concept not in rule.concepts
+                or fact.concept == proposal.source_concept
+                or _observation_rejection(fact, request, rule) is not None
+            ):
+                continue
+            key = (fact.period_start, fact.period_end, fact.instant)
+            if key in periods and Decimal(fact.value) not in periods[key]:
+                periods[key].add(Decimal(fact.value))
+                rejected.append(
+                    MappingObservationRejectionV1(
+                        observation_digest=sha256_digest(fact),
+                        reason_code="MAPPING_OBSERVATION_CONFLICT",
+                    )
+                )
     if any(len(values) != 1 for values in periods.values()):
         reasons.add("MAPPING_OBSERVATION_CONFLICT")
     mapping = None
