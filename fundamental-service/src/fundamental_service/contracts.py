@@ -1485,6 +1485,9 @@ class ProvenanceInputV1(StrictModel):
     parser_version: str = Field(min_length=1)
     taxonomy_version: str = Field(min_length=1)
     policy_version: str | None = None
+    preparation_version: str | None = Field(
+        default=None, min_length=1, exclude_if=lambda value: value is None
+    )
 
 
 class CallerApprovalEnvelopeV1(StrictModel):

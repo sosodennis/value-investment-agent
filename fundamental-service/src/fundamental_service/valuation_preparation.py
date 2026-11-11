@@ -51,6 +51,7 @@ _MAX_REVENUE_GROWTH = Decimal("1.00")
 _MIN_REINVESTMENT_RATE = Decimal("-1.00")
 _MAX_REINVESTMENT_RATE = Decimal("1.00")
 _FORECAST_PERIODS = 5
+FORECAST_COMPOSER_VERSION = "fcff-forecast-composer-v2"
 
 
 class PreparationError(ValueError):
@@ -1132,6 +1133,7 @@ def prepare_automatic_valuation(
             parser_version=snapshot.parser_version,
             taxonomy_version=snapshot.taxonomy_manifest_id or "sec-taxonomy-v1",
             policy_version=policy_version,
+            preparation_version=FORECAST_COMPOSER_VERSION,
         ),
         model_id=model_id,
         model_version=model_version,
@@ -1278,12 +1280,10 @@ def prepare_automatic_valuation(
             "assumptions.capital_bridge.lease_liabilities",
             capital.lease_liabilities,
             "derived",
-            "current_and_long_term_operating_and_finance_lease_liabilities",
+            "current_finance_lease_liabilities + long_term_finance_lease_liabilities",
             facts=tuple(
                 capital_fact_map[field]
                 for field in (
-                    "current_operating_lease_liabilities",
-                    "long_term_operating_lease_liabilities",
                     "current_finance_lease_liabilities",
                     "long_term_finance_lease_liabilities",
                 )
@@ -1293,8 +1293,6 @@ def prepare_automatic_valuation(
                 tuple(
                     capital_fact_map[field]
                     for field in (
-                        "current_operating_lease_liabilities",
-                        "long_term_operating_lease_liabilities",
                         "current_finance_lease_liabilities",
                         "long_term_finance_lease_liabilities",
                     )
@@ -1390,9 +1388,7 @@ def _capital_bridge(
         ),
         preferred_stock=values["preferred_claims"],
         lease_liabilities=(
-            values["current_operating_lease_liabilities"]
-            + values["long_term_operating_lease_liabilities"]
-            + values["current_finance_lease_liabilities"]
+            values["current_finance_lease_liabilities"]
             + values["long_term_finance_lease_liabilities"]
         ),
         non_controlling_interest=values["noncontrolling_interests"],

@@ -352,6 +352,12 @@ def test_released_source_uses_formal_composer_and_reuses_artifact_after_restart(
 
     assert prepared.status == "approval_required"
     assert prepared.preparation.status == "prepared"
+    assert prepared.preparation.input.provenance.preparation_version == (
+        "fcff-forecast-composer-v2"
+    )
+    assert prepared.preparation.input.assumptions.capital_bridge.lease_liabilities == (
+        20
+    )
     assert prepared.preparation.quality_status is QualityStatus.PROVISIONAL
     assert "HISTORY_THRESHOLD_UNVALIDATED" in prepared.preparation.issue_codes
     assert first.wrote is True

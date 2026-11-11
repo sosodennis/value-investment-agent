@@ -173,6 +173,17 @@ valuation artifact, and rerun its pinned preparation/calculation. Compare all
 source/input/output digests with the recorded evidence. A successful copy alone
 does not establish full-flow acceptance.
 
+Automatic FCFF inputs identify `fcff-forecast-composer-v2` in
+`provenance.preparation_version`, which participates in the input digest and
+caller approval. This composer implements the declared `lease-treatment-v1`:
+only current/noncurrent finance lease obligations enter the equity-bridge lease
+deduction. Operating lease costs remain in FCFF; operating lease balances remain
+required source observations without a second equity deduction. The lease
+assumption's formula and fact IDs identify only the finance lease obligations.
+Existing artifacts and approvals retain their original identities; prepare and
+approve the corrected input before calculating it. Unknown lease roles still
+abstain, and history thresholds remain unset.
+
 - A missing snapshot or artifact returns `SOURCE_UNAVAILABLE` or a stable
   not-found code. The caller receives an unavailable/degraded result and must
   not calculate locally.
