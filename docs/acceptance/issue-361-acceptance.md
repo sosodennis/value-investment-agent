@@ -327,3 +327,35 @@ proposals remain unreviewed, forecast/valuation count is zero and threshold null
 Additional original history, actual review and full numerical service acceptance
 remain required. CI at `a729700f` passed all 12 executed jobs; legacy release gate
 was skipped. All three architecture skill entrypoints remain current.
+## Original preparation checkpoint cd514ae8
+
+At exact implementation `cd514ae8b12f67c3c00e5459363097ae39eaacb5`, the
+Fundamental suite passed 578 tests with 11 optional runtime skips; 10 Agent
+client tests, 17 acceptance-tool tests, Ruff/format, nine-source mypy,
+architecture and diff checks passed. Isolated PostgreSQL regression input:
+`c59705fa699083fba4518f86667e3f88d2b5b38245032472588a0acead866206`;
+output: `e7575588d9319dfceb1ba411c22b88259b5859c355f6eb4b3efe81dc8cbc9a63`.
+The disposable tmpfs project was removed; all 62 existing containers retained
+their IDs, images, start times and status.
+
+Real AAPL FY2023 original `0000320193-23-000106` now passes the existing
+`SecIngestionService.prepare_filing` source and original-DEI identity gates:
+1,164 parsed facts, strict EFM/DQC, no blocking findings or parser network
+attempts. #382 fixes omitted archive graphics in prepare. #384 binds the
+requested ticker and title to one original security class context while
+retaining other listed securities as evidence. The original failures remain
+retained; no findings, identity checks or mapping approvals were waived.
+
+Real prepare input:
+`cd6b9c44106a44475f7ba114d30a3e7d71c002e25ab382bec1173e24f71476d1`;
+output: `5d4da70fe5b7b8ee0eb05972329575da9665165b8add622754e2978ce5ebd5e6`.
+An independent service execution reran the parser and reproduced snapshot,
+fact, integrity, identity evidence and semantic/replay digests. It returned
+`wrote=false`, `input_wrote=false`, made zero provider requests and left all
+46 retained source/preparation files' content and mtimes unchanged.
+
+This is provisional source preparation, not approved financial-role coverage,
+snapshot publication, a trusted release or numerical valuation. All full-flow
+gates and blockers #375/#379/#381/#382/#384 remain open pending actual
+acceptance, review, merge and main verification. The compact evidence lives in
+`issue-361-accounting-checkpoint.json`; full SEC artifacts stay outside Git.
