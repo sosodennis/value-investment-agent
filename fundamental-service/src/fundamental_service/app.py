@@ -324,7 +324,7 @@ def create_app(
             return response
         except ServiceError as error:
             status_code = error.status_code
-            context = getattr(request.state, "context", None)
+            failed_context = getattr(request.state, "context", None)
             LOGGER.warning(
                 "fundamental_request_failed path=%s status_code=%s error_code=%s "
                 "error_message=%s organization_id=%s",
@@ -332,7 +332,9 @@ def create_app(
                 error.status_code,
                 error.code,
                 error.message,
-                getattr(getattr(context, "principal", None), "organization_id", None),
+                getattr(
+                    getattr(failed_context, "principal", None), "organization_id", None
+                ),
             )
             if (
                 error.code.startswith("internal_auth")
@@ -777,10 +779,12 @@ def create_app(
     async def validate_valuation(request: Request) -> JSONResponse:
         raw_input = request.state.operation_input
         if any(key in raw_input for key in ("scenarios", "sensitivity", "monte_carlo")):
-            value = UncertaintyRequestV1.model_validate_json(
+            uncertainty_value = UncertaintyRequestV1.model_validate_json(
                 json.dumps(normalize_uncertainty_payload(raw_input))
             )
-            return success_response(request, application.validate_uncertainty(value))
+            return success_response(
+                request, application.validate_uncertainty(uncertainty_value)
+            )
         value = decode_input(request, ValuationInputV1)
         return success_response(request, application.validate_valuation(value))
 
@@ -950,7 +954,7 @@ def create_app(
         app.openapi_schema = schema
         return schema
 
-    app.openapi = openapi_with_typed_internal_envelopes
+    setattr(app, "openapi", openapi_with_typed_internal_envelopes)
     return app
 
 
@@ -1014,6 +1018,9 @@ def create_runtime_app() -> FastAPI:
         edgar_plugin_sha256=edgar_plugin_sha256,
         xule_plugin_sha256=xule_plugin_sha256,
         dqc_ruleset_sha256=dqc_ruleset_sha256,
+        historical_dqc_dir=os.getenv("FUNDAMENTAL_SEC_HISTORICAL_DQC_DIR") or None,
+        historical_dqc_sha256=os.getenv("FUNDAMENTAL_SEC_HISTORICAL_DQC_SHA256")
+        or None,
         supported_filing_years=supported_filing_years,
         supported_filing_forms=supported_filing_forms,
         authorized_organizations=config.ingestion_authorized_organizations,

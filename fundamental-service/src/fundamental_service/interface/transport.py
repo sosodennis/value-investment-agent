@@ -61,7 +61,7 @@ class TypedFundamentalResponseEnvelopeV1(BaseModel, Generic[ResponseResult]):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     correlation_id: str
-    contract_version: Literal[INTERNAL_CONTRACT_VERSION]
+    contract_version: Literal["internal.v1"]
     schema_version: Literal["fundamental.v1"]
     result: ResponseResult
 
@@ -78,7 +78,7 @@ class FundamentalResponseEnvelopeV1(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     correlation_id: str
-    contract_version: Literal[INTERNAL_CONTRACT_VERSION]
+    contract_version: Literal["internal.v1"]
     schema_version: Literal["fundamental.v1"]
     result: dict[str, object]
 
@@ -218,11 +218,13 @@ def success_response(
         if isinstance(result, BaseModel)
         else dict(result)
     )
-    body = FundamentalResponseEnvelopeV1(
-        correlation_id=context.correlation_id,
-        contract_version=INTERNAL_CONTRACT_VERSION,
-        schema_version="fundamental.v1",
-        result=payload,
+    body = FundamentalResponseEnvelopeV1.model_validate(
+        {
+            "correlation_id": context.correlation_id,
+            "contract_version": INTERNAL_CONTRACT_VERSION,
+            "schema_version": "fundamental.v1",
+            "result": payload,
+        }
     )
     return JSONResponse(
         content=body.model_dump(mode="json"),
@@ -246,7 +248,7 @@ def readiness_response(
     )
 
 
-def decode_input(request: Request, model: type[BaseModel]) -> BaseModel:
+def decode_input(request: Request, model: type[RequestInput]) -> RequestInput:
     """Decode JSON wire values through the model's strict JSON boundary."""
 
     return model.model_validate_json(json.dumps(request.state.operation_input))

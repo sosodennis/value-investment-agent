@@ -1,0 +1,181 @@
+{
+  "acceptance_profile": "persistent-valuation-flow-v1",
+  "acceptance_scope": "fundamental-service",
+  "blockers": [
+    "Complete source-to-valuation flow, real-source numerical success, persistence/restart/restore and service acceptance remain unverified under the revised scope.",
+    "Historical requests remain subject to #369/#371 source, mapping and policy coverage; no unsupported 2016 profile is approved.",
+    "Independent review, exact-implementation CI and merge-commit verification remain outstanding."
+  ],
+  "branch": "codex/issue-361-replay-evidence",
+  "checks": [
+    {
+      "command": "Not run for persistent-valuation-flow-v1; old research checks do not satisfy this scope.",
+      "name": "architecture",
+      "status": "not_run"
+    },
+    {
+      "command": "Not run for persistent-valuation-flow-v1; old research checks do not satisfy this scope.",
+      "name": "artifact_retrieval",
+      "status": "not_run"
+    },
+    {
+      "command": "Not run for persistent-valuation-flow-v1; old research checks do not satisfy this scope.",
+      "name": "calculation",
+      "status": "not_run"
+    },
+    {
+      "command": "Not run for persistent-valuation-flow-v1; old research checks do not satisfy this scope.",
+      "name": "concurrent_deduplication",
+      "status": "not_run"
+    },
+    {
+      "command": "Not run for persistent-valuation-flow-v1; old research checks do not satisfy this scope.",
+      "name": "deterministic_repeat",
+      "status": "not_run"
+    },
+    {
+      "command": "Not run for persistent-valuation-flow-v1; old research checks do not satisfy this scope.",
+      "name": "diff",
+      "status": "not_run"
+    },
+    {
+      "command": "Not run for persistent-valuation-flow-v1; old research checks do not satisfy this scope.",
+      "name": "failure_retention",
+      "status": "not_run"
+    },
+    {
+      "command": "Not run for persistent-valuation-flow-v1; old research checks do not satisfy this scope.",
+      "name": "forecast",
+      "status": "not_run"
+    },
+    {
+      "command": "Not run for persistent-valuation-flow-v1; old research checks do not satisfy this scope.",
+      "name": "full_flow_repeat",
+      "status": "not_run"
+    },
+    {
+      "command": "Not run for persistent-valuation-flow-v1; old research checks do not satisfy this scope.",
+      "name": "mapping",
+      "status": "not_run"
+    },
+    {
+      "command": "Not run for persistent-valuation-flow-v1; old research checks do not satisfy this scope.",
+      "name": "preparation",
+      "status": "not_run"
+    },
+    {
+      "command": "Not run for persistent-valuation-flow-v1; old research checks do not satisfy this scope.",
+      "name": "restart_restore",
+      "status": "not_run"
+    },
+    {
+      "command": "Not run for persistent-valuation-flow-v1; old research checks do not satisfy this scope.",
+      "name": "review",
+      "status": "not_run"
+    },
+    {
+      "command": "Not run for persistent-valuation-flow-v1; old research checks do not satisfy this scope.",
+      "name": "ruff",
+      "status": "not_run"
+    },
+    {
+      "command": "Not run for persistent-valuation-flow-v1; old research checks do not satisfy this scope.",
+      "name": "service_acceptance",
+      "status": "not_run"
+    },
+    {
+      "command": "Not run for persistent-valuation-flow-v1; old research checks do not satisfy this scope.",
+      "name": "snapshot_persistence",
+      "status": "not_run"
+    },
+    {
+      "command": "Not run for persistent-valuation-flow-v1; old research checks do not satisfy this scope.",
+      "name": "source_acquisition",
+      "status": "not_run"
+    },
+    {
+      "command": "Not run for persistent-valuation-flow-v1; old research checks do not satisfy this scope.",
+      "name": "source_reuse",
+      "status": "not_run"
+    },
+    {
+      "command": "Not run for persistent-valuation-flow-v1; old research checks do not satisfy this scope.",
+      "name": "types",
+      "status": "not_run"
+    }
+  ],
+  "commit": "59830e161c9300e44b2b7b54eea3e43567835bff",
+  "issue": 361,
+  "latest_engineering_evidence": "docs/acceptance/issue-361-acceptance.md",
+  "next_step": "Implement and verify the complete supported source acquisition/reuse, snapshot persistence, automatic preparation, #352 calculation and artifact retrieval flow, including restart/restore and a repeated request. Revalidate the recorded runtime tuple before service acceptance.",
+  "readiness": {
+    "capabilities": {
+      "identity_resolution_configured": true
+    },
+    "status": "not_run"
+  },
+  "research_archive": "docs/acceptance/issue-361-research-archive.json",
+  "runtime": {
+    "allowed_untracked_paths": [],
+    "fundamental": {
+      "compose_files": [
+        "compose/verification/docker-compose.issue280-operations.yml",
+        "compose/verification/docker-compose.issue312-sec-ingestion.yml",
+        "compose/verification/docker-compose.issue361-history-replay.yml",
+        ".audit/issue-361-cohort-root-runtime/image.yml"
+      ],
+      "compose_project": "value-investment-agent-361-candidate-contracts",
+      "container_port": 8080,
+      "dependencies": [
+        {
+          "container_port": 5432,
+          "published_host": "0.0.0.0",
+          "published_port": 18664,
+          "service": "fundamental-postgres"
+        }
+      ],
+      "env_files": [
+        {
+          "path": "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/.env",
+          "sha256": "610964e8e6b3f8bdd8d1cfcbc022a2fded6f0cc67fe88c579018782371996c3e"
+        },
+        {
+          "path": "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/.audit/issue-361-history-runtime/runtime.env",
+          "sha256": "2fc2bbb41743368769b6a4b821d8ee8e233cb285ff0c68d61ab0ad9d4dc29a4f"
+        },
+        {
+          "path": "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/.audit/issue-361-candidate-runtime/ports.env",
+          "sha256": "ed15ed45773812f3877a8a0d9c79a12c8a1e0a0bf391bff0b25a905521fedb81"
+        }
+      ],
+      "image_id": "sha256:aa80161e7dbbc4a592ce74ac7a924ac92349186e723d45755d79c44635ba95b4",
+      "networks": [
+        "value-investment-agent-361-candidate-contracts_default"
+      ],
+      "published_host": "0.0.0.0",
+      "published_port": 18663,
+      "runtime_pins": {
+        "arelle-release": "2.47.4",
+        "pydantic": "2.14.2",
+        "python": "3.12.16"
+      },
+      "service": "fundamental-service",
+      "source": {
+        "container_path": "/app/src/fundamental_service",
+        "file_count": 54,
+        "repository_path": "fundamental-service/src/fundamental_service",
+        "sha256": "6486a41b3ebfef62ff75c83f37363f37b734ec062bc31af2a08a45ecd639e8fe"
+      },
+      "url": "http://127.0.0.1:18663",
+      "volumes": [
+        "value-investment-agent-361-candidate-contracts_fundamental-postgres-data",
+        "value-investment-agent-361-candidate-contracts_fundamental-service-data"
+      ]
+    },
+    "worktree": "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence"
+  },
+  "runtime_revalidation_required": true,
+  "schema_version": 2,
+  "sec_identity_required": true,
+  "status": "WIP"
+}

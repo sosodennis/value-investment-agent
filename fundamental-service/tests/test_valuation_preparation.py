@@ -1,14 +1,18 @@
+from dataclasses import replace
 from datetime import UTC, datetime
 from decimal import Decimal
 
 import pytest
+from fundamental_service.annual_history import resolve_annual_history
 from fundamental_service.application.service import _approved_market_policy
+from fundamental_service.calculator import calculate
 from fundamental_service.contracts import (
     IdentityV1,
     PeriodType,
     QualityStatus,
     SourceRole,
     TraceV1,
+    UncertaintyV1,
 )
 from fundamental_service.policies import initial_policy_records
 from fundamental_service.valuation_preparation import (
@@ -17,6 +21,7 @@ from fundamental_service.valuation_preparation import (
     ManualProvenanceV1,
     PreparationError,
     apply_manual_override,
+    derive_historical_metrics,
     prepare_automatic_valuation,
 )
 from fundamental_service.uncertainty import run_uncertainty
@@ -214,6 +219,107 @@ def test_complete_history_prepares_provisional_input_with_lineage_and_digest() -
         result.preparation_digest
         == _prepare(_facts(), market_policy=_market_policy()).preparation_digest
     )
+
+
+@pytest.mark.parametrize("model_id", ("fcff_dcf", "transition_fcff_dcf"))
+def test_operating_lease_balances_are_disclosed_without_an_equity_deduction(model_id):
+    facts = _facts()
+    if model_id == "transition_fcff_dcf":
+        facts = (
+            *facts,
+            _fact("filed_operating_evidence", 2025, "1").model_copy(
+                update={"value": "filed evidence"}
+            ),
+        )
+    baseline = _prepare(facts, market_policy=_market_policy(), model_id=model_id)
+    changed = _prepare(
+        tuple(
+            fact.model_copy(update={"value": fact.value + Decimal("500")})
+            if fact.normalized_field
+            in {
+                "current_operating_lease_liabilities",
+                "long_term_operating_lease_liabilities",
+            }
+            else fact
+            for fact in facts
+        ),
+        market_policy=_market_policy(),
+        model_id=model_id,
+    )
+    assert baseline.input is not None and changed.input is not None
+    results = tuple(
+        calculate(
+            prepared.input.model_copy(
+                update={"uncertainty": UncertaintyV1(mode="none")}
+            ).with_digest(),
+            allow_provisional=True,
+        )
+        for prepared in (baseline, changed)
+    )
+    assert results[0].intrinsic_value == results[1].intrinsic_value
+    assert results[0].per_share_value == results[1].per_share_value
+    assert changed.input.assumptions.capital_bridge.lease_liabilities == Decimal("20")
+    assert changed.input.provenance.preparation_version == "fcff-forecast-composer-v3"
+    lease_evidence = next(
+        item
+        for item in changed.assumptions_evidence
+        if item.path == "assumptions.capital_bridge.lease_liabilities"
+    )
+    assert set(lease_evidence.fact_ids) == {
+        "current_finance_lease_liabilities-2025",
+        "long_term_finance_lease_liabilities-2025",
+    }
+    assert lease_evidence.formula == (
+        "current_finance_lease_liabilities + long_term_finance_lease_liabilities"
+    )
+    assert {
+        "current_operating_lease_liabilities-2025",
+        "long_term_operating_lease_liabilities-2025",
+    } <= set(changed.input.historical_facts)
+
+
+@pytest.mark.parametrize(
+    "field",
+    (
+        "current_operating_lease_liabilities",
+        "long_term_operating_lease_liabilities",
+        "current_finance_lease_liabilities",
+        "long_term_finance_lease_liabilities",
+        "operating_lease_cost",
+        "finance_lease_cost",
+    ),
+)
+def test_unknown_lease_role_still_abstains(field):
+    result = _prepare(
+        tuple(fact for fact in _facts() if fact.normalized_field != field),
+        market_policy=_market_policy(),
+    )
+    assert result.status == "abstained"
+    assert result.input is None
+    assert field in result.missing_evidence
+
+
+def test_finance_lease_increase_reduces_equity_by_the_reported_amount():
+    baseline = _prepare(_facts(), market_policy=_market_policy())
+    changed = _prepare(
+        tuple(
+            fact.model_copy(update={"value": fact.value + Decimal("100")})
+            if fact.normalized_field == "current_finance_lease_liabilities"
+            else fact
+            for fact in _facts()
+        ),
+        market_policy=_market_policy(),
+    )
+    results = tuple(
+        calculate(
+            prepared.input.model_copy(
+                update={"uncertainty": UncertaintyV1(mode="none")}
+            ).with_digest(),
+            allow_provisional=True,
+        )
+        for prepared in (baseline, changed)
+    )
+    assert results[0].intrinsic_value - results[1].intrinsic_value == Decimal("100")
 
 
 def test_prepared_input_runs_service_owned_monte_carlo_as_provisional():
@@ -484,3 +590,95 @@ def test_manual_override_rejects_wrong_automatic_digest_or_unsupported_path() ->
             value=Decimal("1"),
             provenance=valid_provenance,
         )
+
+
+@pytest.mark.parametrize(
+    "field", ["inventory", "capital_expenditure", "depreciation_and_amortization"]
+)
+def test_non_numeric_reinvestment_facts_abstain_with_reason(field: str) -> None:
+    snapshot = _snapshot(
+        "valuation-preparation",
+        identity=IdentityV1(
+            issuer_id="CIK1",
+            issuer_name="Example Co",
+            domicile="US",
+            reporting_basis="us-gaap",
+            security_id="COMMON",
+            share_class="common",
+            currency="USD",
+        ),
+        valuation_timestamp=VALUATION_TIME,
+    )
+    history = resolve_annual_history(
+        _facts(),
+        snapshot=snapshot,
+        valuation_timestamp=VALUATION_TIME,
+        profile=valuation_requirements_profile("fcff_dcf"),
+    )
+    last = history.periods[-1]
+    changed = replace(
+        last,
+        duration_facts=tuple(
+            fact.model_copy(update={"value": "unavailable"})
+            if fact.normalized_field == field
+            else fact
+            for fact in last.duration_facts
+        ),
+        instant_facts=tuple(
+            fact.model_copy(update={"value": "unavailable"})
+            if fact.normalized_field == field
+            else fact
+            for fact in last.instant_facts
+        ),
+    )
+    result = derive_historical_metrics(
+        replace(history, periods=(*history.periods[:-1], changed))
+    )
+    assert result.quality_status is QualityStatus.ABSTAIN
+    assert "METRIC_NON_NUMERIC_VALUE" in result.issue_codes
+    assert not any(
+        metric.metric_id == "realized_fcff" and metric.fiscal_year == last.fiscal_year
+        for metric in result.metrics
+    )
+
+
+def test_missing_prior_working_capital_retains_reason_without_partial_fcff() -> None:
+    snapshot = _snapshot(
+        "valuation-preparation",
+        identity=IdentityV1(
+            issuer_id="CIK1",
+            issuer_name="Example Co",
+            domicile="US",
+            reporting_basis="us-gaap",
+            security_id="COMMON",
+            share_class="common",
+            currency="USD",
+        ),
+        valuation_timestamp=VALUATION_TIME,
+    )
+    history = resolve_annual_history(
+        _facts(),
+        snapshot=snapshot,
+        valuation_timestamp=VALUATION_TIME,
+        profile=valuation_requirements_profile("fcff_dcf"),
+    )
+    prior = replace(
+        history.periods[-2],
+        instant_facts=tuple(
+            fact
+            for fact in history.periods[-2].instant_facts
+            if fact.normalized_field != "inventory"
+        ),
+    )
+    result = derive_historical_metrics(
+        replace(history, periods=(*history.periods[:-2], prior, history.periods[-1]))
+    )
+    assert "METRIC_REQUIRED_FIELDS_MISSING" in result.issue_codes
+    assert (
+        f"{history.periods[-1].fiscal_year}:prior_inventory" in result.missing_evidence
+    )
+    assert not any(
+        metric.metric_id == "realized_fcff"
+        and metric.fiscal_year == history.periods[-1].fiscal_year
+        for metric in result.metrics
+    )

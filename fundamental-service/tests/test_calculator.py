@@ -1,5 +1,6 @@
 import pytest
 from fundamental_service.calculator import CalculationRefusal, calculate
+from fundamental_service.contracts import QualityStatus
 from fundamental_service.testsupport import make_valuation
 
 
@@ -17,11 +18,14 @@ def test_calculator_is_deterministic_and_has_formula_nodes():
 
 
 def test_unverified_quality_refuses_calculation():
-    request = (
-        make_valuation()
-        .model_copy(update={"quality": {"status": "provisional"}})
-        .with_digest()
-    )
+    base = make_valuation()
+    request = base.model_copy(
+        update={
+            "quality": base.quality.model_copy(
+                update={"status": QualityStatus.PROVISIONAL}
+            )
+        }
+    ).with_digest()
     with pytest.raises(CalculationRefusal, match="verified"):
         calculate(request)
 

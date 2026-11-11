@@ -3,6 +3,7 @@
 from decimal import Decimal
 
 from .contracts import CalculationNodeV1, ForecastAssumptionsV1, TraceV1
+from .numerical_policy import using_valuation_context
 
 
 class OperatingProjectionError(ValueError):
@@ -11,6 +12,7 @@ class OperatingProjectionError(ValueError):
         self.code = code
 
 
+@using_valuation_context
 def project_operating_nodes(
     forecast: ForecastAssumptionsV1,
     *,

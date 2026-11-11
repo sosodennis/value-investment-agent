@@ -23,6 +23,7 @@ from .contracts import (
     SecCapturedSourceEvidenceV1,
     SecIngestionRejectionEvidenceV1,
     SecIntegrityEvidenceV1,
+    SecIdentityBasis,
     Severity,
     SourceRole,
 )
@@ -31,6 +32,12 @@ from .facts import (
     CanonicalMappingV1,
     FactSelection,
     select_fact_groups,
+)
+from .historical_dqc import historical_profile
+from .issuer_identity import (
+    ORIGINAL_IDENTITY_CONCEPTS,
+    IdentityResolutionError,
+    validate_original_filing_identity,
 )
 from .replay import ArtifactRecordV1
 from .sec_archive import read_sec_xbrl_archive
@@ -47,6 +54,25 @@ from .snapshots import (
     SnapshotRepository,
     SourceSnapshotV1,
 )
+
+
+def _stage_filing_graphics(
+    roots: tuple[Path, Path],
+    *,
+    html_content: bytes,
+    archive_content: bytes,
+    primary_document: str,
+) -> None:
+    graphics = extract_referenced_graphics(
+        html_content=html_content,
+        archive_content=archive_content,
+        primary_document=primary_document,
+    )
+    for relative_path, content in graphics:
+        for root in roots:
+            resource = root / relative_path
+            resource.parent.mkdir(parents=True, exist_ok=True)
+            resource.write_bytes(content)
 
 
 class IngestionAuditStore(Protocol):
@@ -70,6 +96,7 @@ class SecIngestionResult:
     facts: tuple[CanonicalFactV1, ...] = ()
     missing_fields: tuple[str, ...] = ()
     issues: tuple[IssueV1, ...] = ()
+    identity_evidence_ref: str | None = None
 
 
 class SecIngestionService:
@@ -116,11 +143,22 @@ class SecIngestionService:
         deadline_at: datetime | None = None,
         dts_filenames: tuple[str, ...] = (),
         profile: ArelleValidationProfileV1 | None = None,
+        source_adapter: SecEdgarSourceAdapter | None = None,
         form: str = "10-K",
         is_amendment: bool = False,
         amends_accession: str | None = None,
         amendment_scope: str | None = None,
+        identity_basis: SecIdentityBasis = "current-sec-ticker-v1",
+        identity_ticker: str | None = None,
     ) -> SecIngestionResult:
+        adapter = source_adapter or self.source_adapter
+        if identity_basis == "original-filing-dei-v1" and (
+            form != "10-K" or is_amendment or not identity_ticker or accepted_at is None
+        ):
+            raise SnapshotError(
+                "HISTORICAL_IDENTITY_SCOPE_UNSUPPORTED",
+                "original identity requires a pinned original 10-K, acceptance and ticker",
+            )
         if profile is None:
             raise SnapshotError(
                 "VALIDATION_PROFILE_REQUIRED",
@@ -145,7 +183,7 @@ class SecIngestionService:
             None,
         )
         if index_source is None:
-            index_source = self.source_adapter.capture_filing_index(
+            index_source = adapter.capture_filing_index(
                 cik=cik,
                 accession_number=accession_number,
                 filed_at=accepted_at or filed_at,
@@ -164,7 +202,7 @@ class SecIngestionService:
                 is_amendment=is_amendment,
                 amendment_scope="unknown" if is_amendment else amendment_scope,
             )
-        archive_source = self.source_adapter.capture_filing_archive(
+        archive_source = adapter.capture_filing_archive(
             cik=cik,
             accession_number=accession_number,
             filename=filing_archive_filename,
@@ -176,7 +214,7 @@ class SecIngestionService:
             amendment_scope=amendment_scope,
             deadline_at=deadline_at,
         )
-        source = self.source_adapter.capture_filing(
+        source = adapter.capture_filing(
             cik=cik,
             accession_number=accession_number,
             primary_document=primary_document,
@@ -258,6 +296,12 @@ class SecIngestionService:
             archive_path = archive_root / primary_document
             normalized_path.write_bytes(assessment.normalized_content)
             archive_path.write_bytes(assessment.archive_member)
+            _stage_filing_graphics(
+                (normalized_root, archive_root),
+                html_content=assessment.normalized_content,
+                archive_content=archive_source.content,
+                primary_document=primary_document,
+            )
             for filename in dts_filenames:
                 (normalized_root / filename).write_bytes(members[filename])
                 (archive_root / filename).write_bytes(members[filename])
@@ -306,7 +350,7 @@ class SecIngestionService:
             captured_at=source.captured_at or captured_at,
             archive_index_uri=index_source.uri,
             archive_index_hash=assessment.archive_index_hash,
-            declared_primary_size=int(assessment.archive_index_entry["size"]),
+            declared_primary_size=assessment.declared_primary_size,
             raw_response_headers=source.response_headers,
             raw_received_size=(
                 source.received_size
@@ -347,10 +391,13 @@ class SecIngestionService:
             dqc_version=profile.dqc_version,
             xule_version=profile.xule_version,
             findings=tuple(
-                ArelleFindingEvidenceV1(
-                    code=finding.code,
-                    severity=finding.severity,
-                    blocks=finding.code in blocking_codes,
+                ArelleFindingEvidenceV1.model_validate(
+                    {
+                        "code": finding.code,
+                        "severity": finding.severity,
+                        "blocks": finding.code in blocking_codes,
+                        "rule_severity": finding.rule_severity,
+                    }
                 )
                 for finding in report.findings
             ),
@@ -396,6 +443,64 @@ class SecIngestionService:
         if not report.facts:
             raise SnapshotError("PARSER_FACTS_MISSING", "Arelle produced no XBRL facts")
 
+        identity_evidence_ref = None
+        if identity_basis == "original-filing-dei-v1":
+            identity_failure = None
+            try:
+                validate_original_filing_identity(
+                    identity,
+                    cik=cik,
+                    ticker=identity_ticker or "",
+                    accepted_at=accepted_at or filed_at,
+                    facts=report.facts,
+                )
+            except IdentityResolutionError as error:
+                identity_failure = error
+            identity_evidence = {
+                "schema_version": "sec-original-identity-evidence.v1",
+                "identity_basis": identity_basis,
+                "identity": identity,
+                "cik": cik,
+                "ticker": identity_ticker,
+                "accession_number": accession_number,
+                "available_at": accepted_at,
+                "source_hash": assessment.raw_content_hash,
+                "parser_input_hash": report.source_content_hash,
+                "validation_profile_digest": report.validation_profile_digest,
+                "parser_replay_digest": report.replay_digest(),
+                "facts": tuple(
+                    sorted(
+                        (
+                            f
+                            for f in report.facts
+                            if f.concept in ORIGINAL_IDENTITY_CONCEPTS
+                        ),
+                        key=sha256_digest,
+                    )
+                ),
+                "outcome": "refused" if identity_failure else "matched",
+                "error_code": identity_failure.code if identity_failure else None,
+                "reason": str(identity_failure) if identity_failure else None,
+                "current_ticker_or_survival_data_used": False,
+            }
+            record = self.audit_store.put(
+                f"sec-original-identity-{sha256_digest(identity_evidence)}",
+                identity_evidence,
+                (
+                    assessment.raw_content_hash,
+                    normalized_hash,
+                    report.validation_profile_digest,
+                ),
+                retention="evidence",
+            )
+            identity_evidence_ref = record.artifact_id
+            if identity_failure:
+                raise SnapshotError(
+                    identity_failure.code,
+                    str(identity_failure),
+                    evidence_ref=identity_evidence_ref,
+                ) from identity_failure
+
         other_sources = tuple(
             item for item in reference_sources if item.source_id != "sec-filing-index"
         )
@@ -424,6 +529,17 @@ class SecIngestionService:
         issues: list[IssueV1] = []
         first_selection = FactSelection(None, (), ())
         for index, mapping in enumerate(mappings):
+            if mapping.accounting_rules is not None:
+                for rule in mapping.accounting_rules.periods:
+                    if rule.disposition in {"unknown", "unsupported"}:
+                        issues.append(
+                            IssueV1(
+                                code=f"ACCOUNTING_ROLE_{rule.disposition.upper()}",
+                                severity=Severity.ERROR,
+                                message=f"{rule.period.period_end.isoformat()}: {rule.rationale}",
+                                field=mapping.normalized_field,
+                            )
+                        )
             candidates = parsed_facts_to_candidates(
                 report,
                 source=source_record,
@@ -485,6 +601,7 @@ class SecIngestionService:
             facts=tuple(all_facts),
             missing_fields=tuple(sorted(set(missing_fields))),
             issues=tuple(issues),
+            identity_evidence_ref=identity_evidence_ref,
         )
 
     def ingest_filing(
@@ -637,18 +754,12 @@ class SecIngestionService:
             archive_member_path = archive_root / primary_document
             normalized_path.write_bytes(assessment.normalized_content)
             archive_member_path.write_bytes(assessment.archive_member)
-            graphics = extract_referenced_graphics(
+            _stage_filing_graphics(
+                (normalized_root, archive_root),
                 html_content=assessment.normalized_content,
                 archive_content=archive_source.content,
                 primary_document=primary_document,
             )
-            for relative_path, content in graphics:
-                normalized_resource = normalized_root / relative_path
-                archive_resource = archive_root / relative_path
-                normalized_resource.parent.mkdir(parents=True, exist_ok=True)
-                archive_resource.parent.mkdir(parents=True, exist_ok=True)
-                normalized_resource.write_bytes(content)
-                archive_resource.write_bytes(content)
             for resource in dts_sources:
                 filename = Path(resource.uri).name
                 (normalized_root / filename).write_bytes(resource.content)
@@ -685,10 +796,13 @@ class SecIngestionService:
         archive_fact_digest = fact_semantic_digest(archive_report)
         blocking_codes = set(parser_report.blocking_finding_codes())
         finding_evidence = tuple(
-            ArelleFindingEvidenceV1(
-                code=item.code,
-                severity=item.severity,
-                blocks=item.code in blocking_codes,
+            ArelleFindingEvidenceV1.model_validate(
+                {
+                    "code": item.code,
+                    "severity": item.severity,
+                    "blocks": item.code in blocking_codes,
+                    "rule_severity": item.rule_severity,
+                }
             )
             for item in parser_report.findings
         )
@@ -705,7 +819,7 @@ class SecIngestionService:
             captured_at=source.captured_at or captured_at,
             archive_index_uri=index_source.uri,
             archive_index_hash=assessment.archive_index_hash,
-            declared_primary_size=int(assessment.archive_index_entry["size"]),
+            declared_primary_size=assessment.declared_primary_size,
             raw_response_headers=source.response_headers,
             raw_received_size=source.received_size or len(source.content),
             raw_content_hash=assessment.raw_content_hash,
@@ -860,9 +974,12 @@ class SecIngestionService:
                 "VALIDATION_EVIDENCE_MISSING",
                 "SEC parser report lacks EFM/DQC engine evidence",
             )
+        selected_historical = historical_profile(report.validation_profile.profile_id)
         if not {
             "strict-sec-efm-profile-selected",
-            "dqc-dqcrt-checks-completed",
+            selected_historical.completion_marker
+            if selected_historical is not None
+            else "dqc-dqcrt-checks-completed",
         }.issubset(report.validation_evidence):
             raise SnapshotError(
                 "VALIDATION_EVIDENCE_MISSING",

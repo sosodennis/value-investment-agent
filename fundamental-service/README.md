@@ -17,6 +17,68 @@ fixture and must not be used as a production trust root.
 
 The service will own its source snapshots, point-in-time facts, model definitions, deterministic calculations, calibration artifacts, replay, and cache. The existing agent will call the service through a versioned API after the service passes the release gate for its declared coverage profile. The service must not import the existing agent's private implementation or share its valuation database.
 
+## Source preparation command
+
+`fundamental-prepare-source` coordinates source acquisition, trusted release
+activation and the existing automatic composer outside the serving API request
+path. Run it with the service's configured PostgreSQL, content volume, SEC
+validation assets and trust roots:
+
+```sh
+fundamental-prepare-source \
+  --plan approved-source-plan.json --plan-digest <canonical-plan-sha256> \
+  --actor <operator-id> --organization <authorized-organization>
+```
+
+The versioned `SourcePreparationPlanV2` pins a source revision, release profile,
+model and one to six `SecIngestionRequestV1` values in `ingestions`. Their field
+union must cover the complete model requirements. Multiple requests must pin
+distinct original 10-K accessions in sorted order, with the same issuer, valuation
+date and runtime profile. Each request may map only the roles supported by that
+filing. Its digest is SHA-256 over the service's
+canonical serialization. The command first resolves released evidence. On a miss,
+it uses existing SEC acquisition and retention; an already stored snapshot can be
+used with `--candidate <trusted-candidate.json>` without another acquisition.
+Candidate publication and activation require the configured organizations, release
+verification and independent mapping review signatures. This command does not
+create review signatures or approve new mappings.
+
+Reuse also checks the plan's mapping decision IDs, versions and financial roles
+against the immutable release, and each declared fact against the mapping pinned
+for its original accession and role. A release containing another reviewed mapping
+does not authorize substituting it. Changed mapping or fact bytes fail as corrupt
+evidence before any new acquisition or calculation.
+
+For several originals, the service publishes a deterministic history snapshot
+that references each immutable component and its own integrity evidence. It does
+not copy or change facts. Release validation, serving and backup verification
+re-read those components; a missing or changed original refuses the history.
+Repeating composition reuses the same snapshot without provider I/O. History
+sufficiency remains the formal #352 composer's decision.
+
+[Accounting role evidence](docs/accounting-role-evidence.md) distinguishes direct
+observations, source-bound accounting classifications, explicitly reviewed absence
+and unresolved roles. It preserves the original observations and existing release
+review/approval boundaries.
+
+The canonical JSON receipt contains an artifact reference and `wrote`. Read its
+metadata and bytes through the authenticated `/v1/artifacts/{artifact_id}` and
+`/v1/artifacts/{artifact_id}/content` endpoints. Identical evidence is reused with
+`wrote=false`; corrupt or conflicting evidence fails without replacement.
+
+The stored outcome is `release_required` for an acquired but unreleased snapshot,
+`blocked` for retained evidence failures, or `approval_required` when the formal
+composer prepares an input. To calculate, pass `--approval <approval.json>` with
+the caller's explicit approval of that exact prepared input digest. `calculated`
+retains the existing calculator's uncertainty report and provenance. The command
+does not own a valuation session or job, and it never manufactures caller approval.
+
+The #361 complete-flow acceptance remains pending. Synthetic fixtures prove
+coordination and persistence mechanics; they do not certify real issuer mappings,
+multi-filing coverage or end-to-end original-filing numerical success. History
+thresholds remain null, and supported calculations remain provisional where the
+existing composer requires that disposition.
+
 The service consumes the shared `internal.v1` context from
 `finance-agent-core/src/shared/internal_services` through the supported Docker
 additional build context. Its operation payloads are `{context, input}` and its

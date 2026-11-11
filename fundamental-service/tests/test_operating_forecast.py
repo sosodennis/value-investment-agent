@@ -1,8 +1,9 @@
 """Operating accuracy has explicit evidence scope and shares full-model math."""
 
 import json
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
-from decimal import Decimal, ROUND_DOWN, localcontext
+from decimal import Context, Decimal, Inexact, ROUND_DOWN, Rounded, localcontext
 
 import pytest
 from pydantic import ValidationError
@@ -21,7 +22,9 @@ from fundamental_service.operating_forecast import (
     OperatingForecastV1,
     prepare_operating_forecast,
 )
+from fundamental_service.numerical_policy import VALUATION_NUMERICAL_POLICY
 from fundamental_service.serialization import canonical_bytes, sha256_digest
+from fundamental_service.valuation_preparation import FORECAST_COMPOSER_VERSION
 from fundamental_service.valuation_requirements import (
     operating_forecast_requirements_profile,
     valuation_requirements_profile,
@@ -136,6 +139,45 @@ def test_repeat_order_and_decimal_context_cannot_change_operating_identity():
     assert first.output_digest == sha256_digest(
         first.model_dump(exclude={"output_digest"})
     )
+
+
+@pytest.mark.parametrize("missing_role", (None, "contract_assets"))
+def test_operating_result_and_refusal_ignore_traps_and_fresh_threads(missing_role):
+    facts = tuple(
+        fact for fact in operating_facts() if fact.normalized_field != missing_role
+    )
+    expected = canonical_bytes(prepare(facts))
+    hostile = Context(prec=7, rounding=ROUND_DOWN, Emin=-2, Emax=2, clamp=1)
+    hostile.traps[Inexact] = hostile.traps[Rounded] = True
+    hostile.flags[Inexact] = True
+    with localcontext(hostile) as context:
+        before = repr(context)
+        assert canonical_bytes(prepare(facts)) == expected
+        assert repr(context) == before
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        repeated = tuple(pool.map(lambda _: canonical_bytes(prepare(facts)), range(4)))
+    assert repeated == (expected,) * 4
+
+
+@pytest.mark.parametrize("version", ("composer_version", "numerical_policy_version"))
+def test_owning_composer_and_numerical_versions_bind_operating_identity(
+    monkeypatch, version
+):
+    import fundamental_service.operating_forecast as owner
+
+    baseline = prepare(operating_facts())
+    assert baseline.composer_version == FORECAST_COMPOSER_VERSION
+    assert baseline.numerical_policy_version == VALUATION_NUMERICAL_POLICY
+    attribute = (
+        "FORECAST_COMPOSER_VERSION"
+        if version == "composer_version"
+        else "VALUATION_NUMERICAL_POLICY"
+    )
+    monkeypatch.setattr(owner, attribute, "changed-owner-version")
+    altered = prepare(operating_facts())
+    assert altered.input_digest != baseline.input_digest
+    assert altered.output_digest != baseline.output_digest
+    assert altered.nodes == baseline.nodes
 
 
 @pytest.mark.parametrize(
@@ -343,11 +385,11 @@ def test_unbound_source_and_future_snapshot_source_cannot_supply_missing_role():
     (
         (
             "complete",
-            "d73e001a62f1e9ea2119af0fc4b4197719a49732aaf037b401d9fff4a0b1c658",
+            "cede9b879fe03ec5142126a6ecd63d9d2ccf345dc26d0ca15d59e3771c861bc1",
         ),
         (
             "no_market",
-            "031e492646af63c9a3028d8d9eec64712ac4be0787bfa3f1e14838ce8b29871e",
+            "726307f62cb7383f5983ac21e248c2fee3dbe6a92e418a73d0d6da098fa10c09",
         ),
         (
             "missing_capital",
@@ -367,7 +409,8 @@ def test_unbound_source_and_future_snapshot_source_cannot_supply_missing_role():
         ),
     ),
 )
-def test_full_valuation_preparation_matches_pre_extraction_digest(case, expected):
+def test_full_valuation_preparation_matches_owning_parent_071169f9(case, expected):
+    """Goldens executed independently from the pinned composer-v3 parent."""
     facts = _facts()
     if case in {"missing_capital", "missing_annual"}:
         excluded = (

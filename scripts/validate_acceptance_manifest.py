@@ -18,6 +18,130 @@ SENSITIVE_KEY_RE = re.compile(
 )
 STATUSES = {"WIP", "BLOCKED", "VERIFIED"}
 CHECK_STATUSES = {"pass", "fail", "not_run"}
+VALUATION_FLOW_PROFILE = "persistent-valuation-flow-v1"
+VALUATION_FLOW_CHECKS = {
+    "source_acquisition",
+    "source_reuse",
+    "snapshot_persistence",
+    "mapping",
+    "preparation",
+    "forecast",
+    "calculation",
+    "artifact_retrieval",
+    "restart_restore",
+    "deterministic_repeat",
+    "failure_retention",
+    "concurrent_deduplication",
+    "architecture",
+    "ruff",
+    "types",
+    "diff",
+    "service_acceptance",
+    "full_flow_repeat",
+    "review",
+}
+
+
+def acceptance_metadata_path(path: str, issue: int) -> bool:
+    if issue == 361:
+        return (
+            bool(
+                re.fullmatch(
+                    r"docs/acceptance/issue-361-[a-zA-Z0-9_./-]+\.(?:md|json|json\.gz)",
+                    path,
+                )
+            )
+            and ".." not in Path(path).parts
+        )
+    return path in {
+        f"docs/acceptance/issue-{issue}-runtime.json",
+        f"docs/acceptance/issue-{issue}-acceptance.md",
+    } or bool(re.fullmatch(rf"docs/acceptance/issue-{issue}-progress-.+\.md", path))
+
+
+def _digest(value: Any, path: str, errors: list[str]) -> None:
+    if not isinstance(value, str) or not SHA256_RE.fullmatch(value):
+        errors.append(f"{path} must be a 64-character lowercase SHA-256")
+
+
+def _service_evidence(service: dict[str, Any], errors: list[str]) -> None:
+    prefix = "runtime.fundamental"
+    if service.get("published_host") not in {"127.0.0.1", "0.0.0.0", "[::1]", "[::]"}:
+        errors.append(f"{prefix}.published_host must record the local Docker binding")
+    env_files = service.get("env_files")
+    if not isinstance(env_files, list) or not env_files:
+        errors.append(f"{prefix}.env_files must be a non-empty ordered list")
+    else:
+        paths = []
+        for index, entry in enumerate(env_files):
+            path = f"{prefix}.env_files[{index}]"
+            if not isinstance(entry, dict):
+                errors.append(f"{path} must be an object")
+                continue
+            paths.append(_string(entry.get("path"), f"{path}.path", errors))
+            _digest(entry.get("sha256"), f"{path}.sha256", errors)
+        if len(paths) != len(set(paths)):
+            errors.append(f"{prefix}.env_files contains duplicate paths")
+    if not re.fullmatch(r"sha256:[0-9a-f]{64}", str(service.get("image_id", ""))):
+        errors.append(f"{prefix}.image_id must pin a Docker image SHA-256")
+    source = service.get("source")
+    if not isinstance(source, dict):
+        errors.append(f"{prefix}.source must be an object")
+    else:
+        # This scope checks the installed Fundamental Python package against Git.
+        for key, expected in {
+            "repository_path": "fundamental-service/src/fundamental_service",
+            "container_path": "/app/src/fundamental_service",
+        }.items():
+            if source.get(key) != expected:
+                errors.append(f"{prefix}.source.{key} must be {expected}")
+        _digest(source.get("sha256"), f"{prefix}.source.sha256", errors)
+        _positive_int(source.get("file_count"), f"{prefix}.source.file_count", errors)
+    pins = service.get("runtime_pins")
+    if not isinstance(pins, dict) or set(pins) != {
+        "python",
+        "arelle-release",
+        "pydantic",
+    }:
+        errors.append(
+            f"{prefix}.runtime_pins must pin python, arelle-release and pydantic"
+        )
+    else:
+        for name, value in pins.items():
+            _string(value, f"{prefix}.runtime_pins.{name}", errors)
+    dependencies = service.get("dependencies")
+    if not isinstance(dependencies, list) or not dependencies:
+        errors.append(f"{prefix}.dependencies must list required healthy services")
+    else:
+        for index, dependency in enumerate(dependencies):
+            path = f"{prefix}.dependencies[{index}]"
+            if not isinstance(dependency, dict):
+                errors.append(f"{path} must be an object")
+                continue
+            _string(dependency.get("service"), f"{path}.service", errors)
+            if dependency.get("published_host") not in {
+                "127.0.0.1",
+                "0.0.0.0",
+                "[::1]",
+                "[::]",
+            }:
+                errors.append(
+                    f"{path}.published_host must record the local Docker binding"
+                )
+            for key in ("container_port", "published_port"):
+                _positive_int(dependency.get(key), f"{path}.{key}", errors)
+    for key in ("networks", "volumes"):
+        values = service.get(key)
+        if (
+            not isinstance(values, list)
+            or not values
+            or any(
+                not isinstance(value, str)
+                or not value.startswith(str(service.get("compose_project")) + "_")
+                for value in values
+            )
+        ):
+            errors.append(f"{prefix}.{key} must list project-owned resource names")
 
 
 def _required(mapping: dict[str, Any], key: str, path: str, errors: list[str]) -> Any:
@@ -56,7 +180,7 @@ def _sensitive_keys(value: Any, path: str = "manifest") -> list[str]:
 
 
 def _validate_service(
-    runtime: dict[str, Any], name: str, errors: list[str]
+    runtime: dict[str, Any], name: str, errors: list[str], *, service_only: bool = False
 ) -> dict[str, Any] | None:
     service = _required(runtime, name, "runtime", errors)
     if not isinstance(service, dict):
@@ -68,15 +192,23 @@ def _validate_service(
         f"runtime.{name}.compose_project",
         errors,
     )
-    env_file = _string(
-        _required(service, "env_file", f"runtime.{name}", errors),
-        f"runtime.{name}.env_file",
-        errors,
+    env_file = (
+        None
+        if service_only
+        else _string(
+            _required(service, "env_file", f"runtime.{name}", errors),
+            f"runtime.{name}.env_file",
+            errors,
+        )
     )
-    env_file_sha256 = _string(
-        _required(service, "env_file_sha256", f"runtime.{name}", errors),
-        f"runtime.{name}.env_file_sha256",
-        errors,
+    env_file_sha256 = (
+        None
+        if service_only
+        else _string(
+            _required(service, "env_file_sha256", f"runtime.{name}", errors),
+            f"runtime.{name}.env_file_sha256",
+            errors,
+        )
     )
     if env_file_sha256 is not None and not SHA256_RE.fullmatch(env_file_sha256):
         errors.append(
@@ -111,14 +243,33 @@ def _validate_service(
             _string(compose_file, f"runtime.{name}.compose_files[{index}]", errors)
 
     if url is not None:
-        parsed = urlsplit(url)
+        try:
+            parsed = urlsplit(url)
+            port = parsed.port
+        except ValueError:
+            errors.append(f"runtime.{name}.url must be a valid HTTP URL")
+            parsed = urlsplit("")
+            port = None
         if parsed.scheme not in {"http", "https"} or not parsed.hostname:
             errors.append(f"runtime.{name}.url must be an HTTP URL with a hostname")
-        elif parsed.port != published_port:
+        elif port != published_port:
             errors.append(
-                f"runtime.{name}.url port {parsed.port} does not match "
+                f"runtime.{name}.url port {port} does not match "
                 f"published_port {published_port}"
             )
+
+        if parsed.username or parsed.password or parsed.query or parsed.fragment:
+            errors.append(
+                f"runtime.{name}.url cannot contain credentials, query or fragment"
+            )
+        if service_only and (
+            parsed.hostname not in {"127.0.0.1", "localhost", "::1"}
+            or parsed.path not in {"", "/"}
+        ):
+            errors.append(f"runtime.{name}.url must use the local service root")
+
+    if service_only:
+        _service_evidence(service, errors)
 
     return {
         "compose_project": compose_project,
@@ -140,8 +291,17 @@ def validate_manifest(
     require_sec_identity: bool = False,
 ) -> list[str]:
     errors: list[str] = []
-    if manifest.get("schema_version") != 1:
-        errors.append("schema_version must be 1")
+    service_only = manifest.get("schema_version") == 2
+    if manifest.get("schema_version") not in {1, 2}:
+        errors.append("schema_version must be 1 or 2")
+    if service_only and manifest.get("acceptance_scope") != "fundamental-service":
+        errors.append("schema_version 2 requires acceptance_scope=fundamental-service")
+    if service_only and manifest.get("acceptance_profile") != VALUATION_FLOW_PROFILE:
+        errors.append(
+            f"schema_version 2 requires acceptance_profile={VALUATION_FLOW_PROFILE}"
+        )
+    if not service_only and "acceptance_scope" in manifest:
+        errors.append("schema_version 1 retains the app and browser acceptance scope")
 
     issue = manifest.get("issue")
     if not isinstance(issue, int) or isinstance(issue, bool) or issue <= 0:
@@ -167,9 +327,17 @@ def validate_manifest(
         errors.append("runtime must be an object")
         runtime = {}
     _string(runtime.get("worktree"), "runtime.worktree", errors)
-    _string(runtime.get("browser_session"), "runtime.browser_session", errors)
-    _validate_service(runtime, "app", errors)
-    fundamental = _validate_service(runtime, "fundamental", errors)
+    if service_only:
+        if "app" in runtime or "browser_session" in runtime:
+            errors.append(
+                "fundamental-service scope cannot contain app or browser_session"
+            )
+    else:
+        _string(runtime.get("browser_session"), "runtime.browser_session", errors)
+        _validate_service(runtime, "app", errors)
+    fundamental = _validate_service(
+        runtime, "fundamental", errors, service_only=service_only
+    )
 
     allowed_untracked = runtime.get("allowed_untracked_paths", [])
     if not isinstance(allowed_untracked, list) or any(
@@ -218,6 +386,28 @@ def validate_manifest(
         if check_status not in CHECK_STATUSES:
             errors.append(f"{path}.status must be one of {sorted(CHECK_STATUSES)}")
         _string(check.get("command"), f"{path}.command", errors)
+        if service_only and check_status == "pass":
+            if check.get("commit") != commit:
+                errors.append(f"{path}.commit must match the tested manifest commit")
+            for key in ("input_digest", "output_digest"):
+                _digest(check.get(key), f"{path}.{key}", errors)
+            exit_code = check.get("exit_code")
+            if (
+                not isinstance(exit_code, int)
+                or isinstance(exit_code, bool)
+                or exit_code != 0
+            ):
+                errors.append(f"{path}.exit_code must be 0 for a passing check")
+
+    if service_only:
+        names = [check.get("name") for check in checks if isinstance(check, dict)]
+        if len(names) != len(set(str(name) for name in names)):
+            errors.append("checks must have unique names")
+        missing = VALUATION_FLOW_CHECKS - set(str(name) for name in names)
+        if missing:
+            errors.append(
+                f"missing persistent valuation flow checks: {', '.join(sorted(missing))}"
+            )
 
     blockers = manifest.get("blockers", [])
     if not isinstance(blockers, list) or any(
@@ -254,6 +444,9 @@ def load_manifest(path: Path) -> dict[str, Any]:
 
 
 def emit_preflight_env(manifest: dict[str, Any]) -> None:
+    if manifest.get("schema_version") == 2:
+        print("ACCEPTANCE_SCOPE\tfundamental-service")
+        return
     runtime = manifest["runtime"]
     app = runtime["app"]
     fundamental = runtime["fundamental"]

@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from .contracts import CalculationArtifactV1, QualityStatus, ValuationInputV1
+from .numerical_policy import using_valuation_context
 from .serialization import canonical_bytes
 
 
@@ -91,6 +92,7 @@ def _quality_status(request: ValuationInputV1) -> QualityStatus:
     return value if isinstance(value, QualityStatus) else QualityStatus(value)
 
 
+@using_valuation_context
 def independent_calculate(request: ValuationInputV1) -> IndependentResult:
     """Recompute the production graph with independently entered equations.
 
@@ -122,6 +124,12 @@ def independent_calculate(request: ValuationInputV1) -> IndependentResult:
     assumptions = request.assumptions
     wacc = assumptions.wacc
     growth = assumptions.terminal_growth
+    forecast = assumptions.forecast
+    bridge = assumptions.capital_bridge
+    if wacc is None or growth is None or forecast is None or bridge is None:
+        raise VerificationRefusal(
+            "ASSUMPTIONS_INCOMPLETE", "complete FCFF assumptions are required"
+        )
     if wacc.debt_weight + wacc.equity_weight != Decimal("1"):
         raise VerificationRefusal(
             "WACC_WEIGHTS_INVALID", "capital weights do not sum to one"
@@ -142,7 +150,6 @@ def independent_calculate(request: ValuationInputV1) -> IndependentResult:
             raise VerificationRefusal(
                 "DISCOUNT_RATE_INVALID", "WACC must exceed terminal growth and zero"
             )
-        forecast = assumptions.forecast
         if forecast.base_revenue is None or forecast.base_revenue <= 0:
             raise VerificationRefusal(
                 "BASE_REVENUE_MISSING", "a positive base revenue fact is required"
@@ -257,7 +264,6 @@ def independent_calculate(request: ValuationInputV1) -> IndependentResult:
             )
         )
         enterprise = present_value + terminal_pv
-        bridge = assumptions.capital_bridge
         equity = (
             enterprise
             + bridge.cash
@@ -317,6 +323,7 @@ def _within(actual: Decimal, expected: Decimal, tolerance: NodeTolerance) -> boo
     return difference <= max(tolerance.absolute, tolerance.relative * scale)
 
 
+@using_valuation_context
 def compare_artifact(
     reference: IndependentResult, artifact: CalculationArtifactV1
 ) -> tuple[str, ...]:
@@ -364,6 +371,7 @@ def compare_artifact(
     return tuple(findings)
 
 
+@using_valuation_context
 def invariant_findings(
     request: ValuationInputV1, result: IndependentResult
 ) -> tuple[str, ...]:
@@ -393,6 +401,10 @@ def invariant_findings(
     ):
         findings.append("enterprise_value:conservation")
     bridge = request.assumptions.capital_bridge
+    if bridge is None:
+        raise VerificationRefusal(
+            "ASSUMPTIONS_INCOMPLETE", "capital bridge is required"
+        )
     expected_equity = (
         values["enterprise_value"].value
         + bridge.cash
@@ -411,19 +423,26 @@ def invariant_findings(
     return tuple(findings)
 
 
+@using_valuation_context
 def property_findings(request: ValuationInputV1) -> tuple[str, ...]:
     """Run deterministic monotonicity and metamorphic checks over the reference."""
 
     baseline = independent_calculate(request)
     assumptions = request.assumptions
+    bridge = assumptions.capital_bridge
+    wacc = assumptions.wacc
+    if bridge is None or wacc is None:
+        raise VerificationRefusal(
+            "ASSUMPTIONS_INCOMPLETE", "FCFF assumptions are required"
+        )
     checks: list[str] = []
 
     higher_cash = request.model_copy(
         update={
             "assumptions": assumptions.model_copy(
                 update={
-                    "capital_bridge": assumptions.capital_bridge.model_copy(
-                        update={"cash": assumptions.capital_bridge.cash + Decimal("1")}
+                    "capital_bridge": bridge.model_copy(
+                        update={"cash": bridge.cash + Decimal("1")}
                     )
                 }
             )
@@ -436,8 +455,8 @@ def property_findings(request: ValuationInputV1) -> tuple[str, ...]:
         update={
             "assumptions": assumptions.model_copy(
                 update={
-                    "capital_bridge": assumptions.capital_bridge.model_copy(
-                        update={"debt": assumptions.capital_bridge.debt + Decimal("1")}
+                    "capital_bridge": bridge.model_copy(
+                        update={"debt": bridge.debt + Decimal("1")}
                     )
                 }
             )
@@ -450,11 +469,8 @@ def property_findings(request: ValuationInputV1) -> tuple[str, ...]:
         update={
             "assumptions": assumptions.model_copy(
                 update={
-                    "capital_bridge": assumptions.capital_bridge.model_copy(
-                        update={
-                            "diluted_shares": assumptions.capital_bridge.diluted_shares
-                            * Decimal("2")
-                        }
+                    "capital_bridge": bridge.model_copy(
+                        update={"diluted_shares": bridge.diluted_shares * Decimal("2")}
                     )
                 }
             )
@@ -472,10 +488,9 @@ def property_findings(request: ValuationInputV1) -> tuple[str, ...]:
         update={
             "assumptions": assumptions.model_copy(
                 update={
-                    "wacc": assumptions.wacc.model_copy(
+                    "wacc": wacc.model_copy(
                         update={
-                            "risk_free_rate": assumptions.wacc.risk_free_rate
-                            + Decimal("0.005")
+                            "risk_free_rate": wacc.risk_free_rate + Decimal("0.005")
                         }
                     )
                 }
@@ -487,6 +502,7 @@ def property_findings(request: ValuationInputV1) -> tuple[str, ...]:
     return tuple(checks)
 
 
+@using_valuation_context
 def mutation_findings(request: ValuationInputV1) -> tuple[str, ...]:
     """Ensure a one-unit mutation of critical outputs is caught by tolerances."""
 

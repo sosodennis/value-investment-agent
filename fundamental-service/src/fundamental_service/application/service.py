@@ -6,7 +6,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from dataclasses import field as dataclass_field
 from datetime import datetime
-from typing import Any
+from typing import Any, overload
 
 from pydantic import model_validator
 
@@ -26,6 +26,7 @@ from ..contracts import (
     FiscalPeriodSelectorV1,
     PolicyValuationInputV1,
     QualityStatus,
+    ResolvedFiscalPeriodV1,
     SnapshotResolutionRequestV1,
     SnapshotResolutionV1,
     SourceSnapshotV1,
@@ -46,9 +47,14 @@ from ..data_releases import (
     DataReleaseVerificationV1,
     ReleaseResolutionCacheKeyV1,
 )
-from ..facts import CanonicalFactRepository, canonical_fact_digest
+from ..facts import (
+    CanonicalFactRepository,
+    canonical_fact_digest,
+    verify_accounting_role_evidence,
+)
 from ..fiscal_periods import resolve_fiscal_periods
 from ..governance import ModelInventory
+from ..history_composition import verify_history_components
 from ..operations import (
     OperationalMetrics,
     OperationsConfig,
@@ -200,7 +206,10 @@ def normalize_uncertainty_payload(raw: Mapping[str, object]) -> dict[str, object
     """Fold transport wrappers into the canonical uncertainty group before decode."""
 
     data = dict(raw)
-    uncertainty = dict(data.get("uncertainty") or {})
+    raw_uncertainty = data.get("uncertainty")
+    if raw_uncertainty and not isinstance(raw_uncertainty, Mapping):
+        raise ValueError("uncertainty must be an object")
+    uncertainty = dict(raw_uncertainty) if isinstance(raw_uncertainty, Mapping) else {}
     monte_carlo = data.get("monte_carlo")
     if isinstance(monte_carlo, Mapping):
         monte_spec = monte_carlo.get("uncertainty")
@@ -219,6 +228,16 @@ def normalize_uncertainty_payload(raw: Mapping[str, object]) -> dict[str, object
 
 
 def _snapshot_error(error: SnapshotError) -> ServiceError:
+    if error.code in {
+        "ACCOUNTING_ROLE_MAPPING_MISMATCH",
+        "ACCOUNTING_ROLE_INTEGRITY_MISMATCH",
+    }:
+        return ServiceError(
+            error.code,
+            "accounting evidence conflicts with its released mapping or original",
+            status_code=409,
+            retryable=False,
+        )
     if error.code in {
         "SNAPSHOT_NOT_FOUND",
         "ARTIFACT_NOT_FOUND",
@@ -347,9 +366,7 @@ class FundamentalApplication:
                 status_code=503,
                 retryable=True,
             )
-        snapshot = self.snapshot_repository.get(
-            value.valuation_context.data_snapshot_id
-        )
+        snapshot = self.snapshot(value.valuation_context.data_snapshot_id)
         source_hashes = {record.content_hash for record in snapshot.source_records}
         facts = []
         for fact_id in value.historical_facts:
@@ -387,6 +404,14 @@ class FundamentalApplication:
                 tuple(facts),
                 required_fields=(),
             )
+
+    @overload
+    def _data_release_manifest(self, manifest_digest: str) -> DataReleaseManifestV1: ...
+
+    @overload
+    def _data_release_manifest(
+        self, manifest_digest: str | None
+    ) -> DataReleaseManifestV1 | None: ...
 
     def _data_release_manifest(
         self, manifest_digest: str | None
@@ -705,6 +730,7 @@ class FundamentalApplication:
                 quality_status = QualityStatus.PROVISIONAL
             issue_codes = (*issue_codes, "POLICY_NOT_PINNED_EXPLORATORY")
             missing_evidence = (*missing_evidence, "caller_pinned_policy_id")
+        assert value.input_digest is not None
         return ValidationResponseV1(
             contract_version="fundamental.v1",
             input=value,
@@ -943,7 +969,9 @@ class FundamentalApplication:
                 retryable=True,
             )
         try:
-            return self.snapshot_repository.get(snapshot_id)
+            snapshot = self.snapshot_repository.get(snapshot_id)
+            verify_history_components(snapshot, self.snapshot_repository)
+            return snapshot
         except SnapshotError as error:
             self.metrics.increment("source_health_failures_total")
             raise _snapshot_error(error) from error
@@ -1077,6 +1105,60 @@ class FundamentalApplication:
             if issue_codes
             else QualityStatus.PROVISIONAL
         )
+        mapping_version = None
+        mapping_reader = getattr(self.metadata_store, "get_mapping", None)
+        if callable(mapping_reader):
+            assert manifest is not None
+            try:
+                mappings = tuple(
+                    mapping_reader(ref.mapping_id) for ref in manifest.mapping_refs
+                )
+            except SnapshotError as error:
+                raise _snapshot_error(error) from error
+            if any(
+                mapping.decision_id != ref.mapping_id
+                or sha256_digest(mapping) != ref.mapping_digest
+                or mapping.status != "approved"
+                for mapping, ref in zip(mappings, manifest.mapping_refs, strict=True)
+            ):
+                raise ServiceError(
+                    "DATA_RELEASE_MAPPING_MISMATCH",
+                    "a canonical mapping differs from the pinned release",
+                    status_code=409,
+                    retryable=False,
+                )
+            versions = {mapping.mapping_version for mapping in mappings}
+            mapping_by_id = {mapping.decision_id: mapping for mapping in mappings}
+            if len(versions) != 1 or any(
+                fact.mapping_decision_id not in mapping_by_id
+                or mapping_by_id[fact.mapping_decision_id].source_concept
+                != fact.concept
+                or mapping_by_id[fact.mapping_decision_id].normalized_field
+                != fact.normalized_field
+                for fact in selection.facts
+            ):
+                raise ServiceError(
+                    "DATA_RELEASE_MAPPING_FACT_MISMATCH",
+                    "release facts must bind one coherent reviewed mapping version",
+                    status_code=409,
+                    retryable=False,
+                )
+            mapping_version = next(iter(versions))
+            for fact in selection.facts:
+                assert fact.mapping_decision_id is not None
+                try:
+                    verify_accounting_role_evidence(
+                        fact, mapping_by_id[fact.mapping_decision_id], snapshot
+                    )
+                except SnapshotError as error:
+                    raise _snapshot_error(error) from error
+        elif self.require_metadata:
+            raise ServiceError(
+                "DATA_RELEASE_MAPPING_UNAVAILABLE",
+                "release mapping metadata is unavailable",
+                status_code=503,
+                retryable=True,
+            )
         return ValuationEvidenceReadResponseV1(
             contract_version="fundamental.v1",
             snapshot_id=snapshot.snapshot_id,
@@ -1091,6 +1173,7 @@ class FundamentalApplication:
             issue_codes=tuple(dict.fromkeys(issue_codes)),
             missing_fields=tuple(sorted(missing)),
             rejected_fact_ids=selection.rejected_fact_ids,
+            mapping_version=mapping_version,
             facts=selection.facts,
         )
 
@@ -1140,6 +1223,7 @@ class FundamentalApplication:
             policy_version=policy_version,
             data_release_manifest_digest=request.data_release_manifest_digest,
             market_policy=market_policy,
+            mapping_version=evidence.mapping_version or "sec-canonical-mapping-v1",
         )
 
     def apply_manual_override(
@@ -1296,6 +1380,7 @@ class FundamentalApplication:
             if cache_status == "hit" and isinstance(
                 cached_resolution, SnapshotResolutionV1
             ):
+                self.snapshot(cached_resolution.snapshot_id)
                 self.metrics.increment("cache_hit_total")
                 return cached_resolution
             if cache_status == "hit":
@@ -1334,6 +1419,7 @@ class FundamentalApplication:
             )
         selector_requested = request.fiscal_period_selector is not None
         for snapshot in candidates:
+            snapshot = self.snapshot(snapshot.snapshot_id)
             declared_snapshot = (
                 None
                 if declared_snapshots is None
@@ -1360,7 +1446,7 @@ class FundamentalApplication:
                     continue
                 raise _snapshot_error(error) from error
             period_resolution = None
-            resolved_periods = ()
+            resolved_periods: tuple[ResolvedFiscalPeriodV1, ...] = ()
             if selector_requested:
                 list_facts = getattr(self.fact_repository, "list", None)
                 if not callable(list_facts):
@@ -1389,6 +1475,7 @@ class FundamentalApplication:
                     )
                 facts = selection.facts
             if declared_snapshot is not None:
+                assert active_release is not None
                 self._verify_release_snapshot_and_facts(
                     active_release.manifest,
                     snapshot,
@@ -1644,7 +1731,7 @@ class FundamentalApplication:
                 status_code=422,
                 retryable=False,
             ) from error
-        if report.status.value in {"abstain", "degraded"}:
+        if report.status == "abstain":
             self.metrics.increment("abstention_total")
         return report
 
@@ -1725,6 +1812,8 @@ class FundamentalApplication:
                 resolved,
                 correlation_id="uncertainty-base",
             )
+            if isinstance(base, UncertaintyReportV1):
+                base = base.base
             result = run_uncertainty(
                 resolved_value,
                 monte_carlo=monte_carlo,

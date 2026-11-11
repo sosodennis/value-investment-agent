@@ -4,8 +4,29 @@ from __future__ import annotations
 
 import re
 from collections.abc import Mapping
+from datetime import date, datetime
+from typing import TYPE_CHECKING
 
 from .contracts import IdentityResolutionRequestV1, IdentityV1
+
+if TYPE_CHECKING:
+    from .arelle_parser import ParsedXbrlFactV1
+
+ORIGINAL_IDENTITY_CONCEPTS = frozenset(
+    {
+        "dei:EntityCentralIndexKey",
+        "dei:EntityRegistrantName",
+        "dei:EntityIncorporationStateCountryCode",
+        "dei:DocumentType",
+        "dei:DocumentPeriodEndDate",
+        "dei:TradingSymbol",
+        "dei:Security12bTitle",
+    }
+)
+_DEI_NAMESPACE = re.compile(r"http://xbrl\.(?:sec\.gov|us)/dei/\d{4}(?:-\d{2}-\d{2})?")
+_GAAP_NAMESPACE = re.compile(
+    r"http://(?:fasb\.org|xbrl\.us)/us-gaap/\d{4}(?:-\d{2}-\d{2})?"
+)
 
 _US_INCORPORATION_STATES = frozenset(
     (
@@ -76,6 +97,200 @@ class IdentityResolutionError(ValueError):
         super().__init__(message)
         self.code = code
         self.status_code = status_code
+
+
+def validate_original_filing_identity(
+    identity: IdentityV1,
+    *,
+    cik: str,
+    ticker: str,
+    accepted_at: datetime,
+    facts: tuple[ParsedXbrlFactV1, ...],
+) -> None:
+    """Bind one security to its original DEI class, without current directories."""
+
+    def refuse(code: str, message: str) -> IdentityResolutionError:
+        return IdentityResolutionError(code, message, status_code=422)
+
+    if (
+        len(cik) != 10
+        or not cik.isascii()
+        or not cik.isdigit()
+        or accepted_at.tzinfo is None
+        or accepted_at.utcoffset() is None
+    ):
+        raise refuse(
+            "HISTORICAL_IDENTITY_SCOPE_UNSUPPORTED",
+            "invalid original CIK or acceptance",
+        )
+
+    security_concepts = {"dei:TradingSymbol", "dei:Security12bTitle"}
+    symbols = tuple(fact for fact in facts if fact.concept == "dei:TradingSymbol")
+    if not symbols:
+        raise refuse(
+            "HISTORICAL_IDENTITY_MISSING", "original filing lacks dei:TradingSymbol"
+        )
+    matching_symbols = tuple(fact for fact in symbols if fact.value.strip() == ticker)
+    if not matching_symbols:
+        raise refuse(
+            "HISTORICAL_IDENTITY_MISMATCH",
+            "requested ticker differs from the original filing",
+        )
+    security_contexts = {
+        (fact.context_id, fact.period_start, fact.period_end, fact.dimensions)
+        for fact in matching_symbols
+    }
+    if len(security_contexts) > 1:
+        titles_by_context = {
+            context: {
+                _name(fact.value)
+                for fact in facts
+                if fact.concept == "dei:Security12bTitle"
+                and (
+                    fact.context_id,
+                    fact.period_start,
+                    fact.period_end,
+                    fact.dimensions,
+                )
+                == context
+            }
+            for context in security_contexts
+        }
+        if any(
+            len(titles) != 1 or not next(iter(titles))
+            for titles in titles_by_context.values()
+        ):
+            raise refuse(
+                "HISTORICAL_IDENTITY_CONFLICT",
+                "reused ticker requires one paired title in every security context",
+            )
+        security_contexts = {
+            context
+            for context, titles in titles_by_context.items()
+            if titles == {_name(identity.share_class)}
+        }
+    if len(security_contexts) != 1:
+        raise refuse(
+            "HISTORICAL_IDENTITY_CONFLICT",
+            "requested ticker belongs to multiple original security contexts",
+        )
+    security_context = next(iter(security_contexts))
+
+    values: dict[str, str] = {}
+    periods: set[date | None] = set()
+    for concept in sorted(ORIGINAL_IDENTITY_CONCEPTS):
+        candidates = tuple(
+            fact
+            for fact in facts
+            if fact.concept == concept
+            and (
+                concept not in security_concepts
+                or (
+                    fact.context_id,
+                    fact.period_start,
+                    fact.period_end,
+                    fact.dimensions,
+                )
+                == security_context
+            )
+        )
+        if not candidates:
+            raise refuse(
+                "HISTORICAL_IDENTITY_MISSING", f"original filing lacks {concept}"
+            )
+        if any(
+            not _DEI_NAMESPACE.fullmatch(fact.namespace_uri or "")
+            or fact.entity_scheme != "http://www.sec.gov/CIK"
+            or not (fact.entity_identifier or "").isascii()
+            or not (fact.entity_identifier or "").isdigit()
+            or int(fact.entity_identifier or "0") != int(cik)
+            or (
+                fact.dimensions
+                and not (
+                    concept in security_concepts
+                    and len(fact.dimensions) == 1
+                    and fact.dimensions[0][0] == "us-gaap:StatementClassOfStockAxis"
+                    and fact.dimensions[0][1]
+                )
+            )
+            or fact.unit is not None
+            or fact.is_numeric
+            or fact.instant is not None
+            or fact.period_start is None
+            or fact.period_end is None
+            or fact.period_start > fact.period_end
+            for fact in candidates
+        ):
+            raise refuse(
+                "HISTORICAL_IDENTITY_SCOPE_UNSUPPORTED",
+                f"original {concept} lacks a supported issuer or security DEI context",
+            )
+        unique = {" ".join(fact.value.split()) for fact in candidates}
+        if len(unique) != 1 or not next(iter(unique)):
+            raise refuse(
+                "HISTORICAL_IDENTITY_CONFLICT", f"original {concept} conflicts"
+            )
+        values[concept] = next(iter(unique))
+        periods.update(fact.period_end for fact in candidates)
+    try:
+        report_end = date.fromisoformat(values["dei:DocumentPeriodEndDate"])
+    except ValueError as error:
+        raise refuse(
+            "HISTORICAL_IDENTITY_SCOPE_UNSUPPORTED", "invalid original report date"
+        ) from error
+    if (
+        periods != {report_end}
+        or report_end > accepted_at.date()
+        or values["dei:DocumentType"] != "10-K"
+    ):
+        raise refuse(
+            "HISTORICAL_IDENTITY_SCOPE_UNSUPPORTED",
+            "original identity does not belong to the selected annual report period",
+        )
+    original_cik = values["dei:EntityCentralIndexKey"]
+    if (
+        not original_cik.isascii()
+        or not original_cik.isdigit()
+        or int(original_cik) != int(cik)
+        or not identity.issuer_id.isascii()
+        or not identity.issuer_id.isdigit()
+        or int(identity.issuer_id) != int(cik)
+        or _name(values["dei:EntityRegistrantName"]) != _name(identity.issuer_name)
+        or values["dei:TradingSymbol"] != ticker
+        or identity.security_id != ticker
+        or _name(identity.share_class) != _name(values["dei:Security12bTitle"])
+    ):
+        raise refuse(
+            "HISTORICAL_IDENTITY_MISMATCH",
+            "requested issuer or security differs from the original filing",
+        )
+    monetary_units = {
+        fact.unit
+        for fact in facts
+        if _GAAP_NAMESPACE.fullmatch(fact.namespace_uri or "")
+        and fact.is_numeric
+        and fact.unit is not None
+        and re.fullmatch(r"iso4217:[A-Z]{3}", fact.unit)
+        and not fact.dimensions
+        and fact.consolidation_scope == "consolidated"
+        and (fact.period_end == report_end or fact.instant == report_end)
+        and (fact.entity_identifier or "").isascii()
+        and (fact.entity_identifier or "").isdigit()
+        and int(fact.entity_identifier or "0") == int(cik)
+        and fact.entity_scheme == "http://www.sec.gov/CIK"
+    }
+    if (
+        values["dei:EntityIncorporationStateCountryCode"]
+        not in _US_INCORPORATION_STATES
+        or identity.domicile != "US"
+        or identity.reporting_basis != "us-gaap"
+        or identity.currency != "USD"
+        or monetary_units != {"iso4217:USD"}
+    ):
+        raise refuse(
+            "HISTORICAL_IDENTITY_SCOPE_UNSUPPORTED",
+            "original filing does not establish the supported domestic USD GAAP scope",
+        )
 
 
 def _source_invalid() -> IdentityResolutionError:

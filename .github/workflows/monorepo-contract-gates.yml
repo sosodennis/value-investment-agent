@@ -9,6 +9,75 @@ on:
   workflow_dispatch:
 
 jobs:
+  fundamental-service-contract-gate:
+    runs-on: ubuntu-latest
+    services:
+      fundamental-postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: fundamental
+          POSTGRES_PASSWORD: fundamental
+          POSTGRES_DB: fundamental_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U fundamental -d fundamental_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Install frozen Fundamental Service dependencies
+        run: uv sync --frozen --extra dev --project fundamental-service
+
+      - name: Run Fundamental Service contracts and PostgreSQL tests
+        env:
+          FUNDAMENTAL_TEST_DATABASE_URL: postgresql+asyncpg://fundamental:fundamental@127.0.0.1:5432/fundamental_test
+          PYTHONHASHSEED: "0"
+        run: uv run --frozen --extra dev --project fundamental-service pytest fundamental-service/tests -ra
+
+      - name: Check Fundamental Service lint
+        run: uvx --from ruff==0.14.10 ruff check fundamental-service
+
+      - name: Check changed Fundamental Service formatting and types
+        env:
+          CI_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          MYPYPATH: finance-agent-core
+        run: |
+          base_sha="${CI_BASE_SHA}"
+          if [[ -z "${base_sha}" || "${base_sha}" =~ ^0+$ ]]; then
+            base_sha=origin/main
+          fi
+          git diff --name-only --diff-filter=ACMR -z "${base_sha}" HEAD -- fundamental-service > "${RUNNER_TEMP}/fundamental-changed-paths"
+          format_paths=()
+          type_paths=()
+          while IFS= read -r -d '' path; do
+            [[ "${path}" != *.py ]] && continue
+            format_paths+=("${path}")
+            if [[ "${path}" == fundamental-service/src/* || "${path}" == fundamental-service/scripts/* ]]; then
+              type_paths+=("${path}")
+            fi
+          done < "${RUNNER_TEMP}/fundamental-changed-paths"
+          if (( ${#format_paths[@]} )); then
+            uvx --from ruff==0.14.10 ruff format --check "${format_paths[@]}"
+          fi
+          if (( ${#type_paths[@]} )); then
+            uv run --frozen --project fundamental-service --with mypy==1.19.1 mypy \
+              --no-incremental --follow-imports=silent --ignore-missing-imports "${type_paths[@]}"
+          fi
+
   model-inference-service-contract-gate:
     runs-on: ubuntu-latest
     defaults:
@@ -637,6 +706,16 @@ jobs:
           # The acceptance policy checks ancestry from the verified implementation commit.
           # A shallow synthetic merge checkout cannot prove that relationship.
           fetch-depth: 0
+
+      - name: Setup Python for acceptance tooling tests
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Test acceptance scopes and runtime gates
+        run: |
+          python3 -m pip install pytest==8.4.2
+          python3 -m pytest scripts/tests/test_validate_acceptance_manifest.py scripts/tests/test_validate_compose_inputs.py scripts/tests/test_acceptance_service_preflight.py -q
 
       - name: Validate issue-scoped acceptance policy
         env:

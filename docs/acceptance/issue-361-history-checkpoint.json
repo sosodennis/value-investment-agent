@@ -1,0 +1,344 @@
+{
+  "changes": [
+    "Versioned history integrity references independently validated original snapshots",
+    "Deterministic composition; source facts and formal #352 formulas unchanged",
+    "V2 bounded source preparation plans with complete role union and pinned shared source/runtime profiles",
+    "Canary, serving, cached resolution and backup re-read each retained component",
+    "Missing retained evidence refuses without triggering new acquisition"
+  ],
+  "checks": {
+    "acceptance_contracts": {
+      "command": [
+        "uv",
+        "run",
+        "--frozen",
+        "--extra",
+        "dev",
+        "--project",
+        "fundamental-service",
+        "pytest",
+        "-q",
+        "scripts/tests/test_acceptance_service_preflight.py",
+        "scripts/tests/test_validate_acceptance_manifest.py"
+      ],
+      "exit_code": 0,
+      "output_log": "acceptance_contracts-ef979515a3e91f154f9f0783a9d4c3a4b72525b361073a7eab41d509892dacc1.log",
+      "output_sha256": "ef979515a3e91f154f9f0783a9d4c3a4b72525b361073a7eab41d509892dacc1"
+    },
+    "architecture": {
+      "command": [
+        "python3",
+        "scripts/architecture_guard.py"
+      ],
+      "exit_code": 0,
+      "output_log": "architecture-6c8e024ff94859e9781de1f4a3201c70e338bc90774702d8ac83afc8a9a15ab9.log",
+      "output_sha256": "6c8e024ff94859e9781de1f4a3201c70e338bc90774702d8ac83afc8a9a15ab9"
+    },
+    "diff": {
+      "command": [
+        "git",
+        "diff",
+        "--check",
+        "origin/main"
+      ],
+      "exit_code": 0,
+      "output_log": "diff-e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855.log",
+      "output_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "format": {
+      "command": [
+        "uvx",
+        "--from",
+        "ruff==0.14.10",
+        "ruff",
+        "format",
+        "--check",
+        "fundamental-service/src/fundamental_service/history_composition.py",
+        "fundamental-service/src/fundamental_service/contracts.py",
+        "fundamental-service/src/fundamental_service/preparation_runner.py",
+        "fundamental-service/src/fundamental_service/release_runner.py",
+        "fundamental-service/src/fundamental_service/application/service.py",
+        "fundamental-service/src/fundamental_service/persistence_recovery.py",
+        "fundamental-service/tests/test_history_composition.py",
+        "fundamental-service/tests/test_preparation_runner.py",
+        "fundamental-service/tests/test_persistence_recovery.py",
+        "fundamental-service/tests/test_api.py"
+      ],
+      "exit_code": 0,
+      "output_log": "format-5b9f70ad96522f492ef846065642c069b5627379aff2ab3f74acd2e3b9ecfe34.log",
+      "output_sha256": "5b9f70ad96522f492ef846065642c069b5627379aff2ab3f74acd2e3b9ecfe34"
+    },
+    "fundamental": {
+      "command": [
+        "uv",
+        "run",
+        "--frozen",
+        "--extra",
+        "dev",
+        "--project",
+        "fundamental-service",
+        "pytest",
+        "-q",
+        "fundamental-service/tests",
+        "--basetemp",
+        "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/.audit/issue-361-history-checkpoint/e44aa780d8e439e26102c5ce1ef5b94a552cb211/pytest"
+      ],
+      "exit_code": 0,
+      "output_log": "fundamental-c7d63300cb6fd9e257ec75728938a88fb608f0f2b0c5573e4f378259e529c7ec.log",
+      "output_sha256": "c7d63300cb6fd9e257ec75728938a88fb608f0f2b0c5573e4f378259e529c7ec"
+    },
+    "lint": {
+      "command": [
+        "uvx",
+        "--from",
+        "ruff==0.14.10",
+        "ruff",
+        "check",
+        "fundamental-service"
+      ],
+      "exit_code": 0,
+      "output_log": "lint-82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18.log",
+      "output_sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18"
+    },
+    "types": {
+      "command": [
+        "uv",
+        "run",
+        "--frozen",
+        "--project",
+        "fundamental-service",
+        "--with",
+        "mypy==1.19.1",
+        "mypy",
+        "--no-incremental",
+        "--follow-imports=silent",
+        "--ignore-missing-imports",
+        "fundamental-service/src/fundamental_service/history_composition.py",
+        "fundamental-service/src/fundamental_service/contracts.py",
+        "fundamental-service/src/fundamental_service/preparation_runner.py",
+        "fundamental-service/src/fundamental_service/release_runner.py",
+        "fundamental-service/src/fundamental_service/application/service.py",
+        "fundamental-service/src/fundamental_service/persistence_recovery.py"
+      ],
+      "exit_code": 0,
+      "output_log": "types-ab35ee42183d4d6d3ba483825ab037d18a5a15622d03be01d82220b1564851ff.log",
+      "output_sha256": "ab35ee42183d4d6d3ba483825ab037d18a5a15622d03be01d82220b1564851ff"
+    }
+  },
+  "cleanup": {
+    "docker_after_sha256": "a1bfc8f6685809f194be3c00d3fbda208f2828bbe2a86250d6abda51b34b0b87",
+    "docker_before_sha256": "a1bfc8f6685809f194be3c00d3fbda208f2828bbe2a86250d6abda51b34b0b87",
+    "identities_images_start_times_unchanged": true,
+    "preexisting_container_count": 62,
+    "project": "value-investment-agent-361-flow-tests",
+    "removed_only_owned_tmpfs_database_and_network": true
+  },
+  "implementation_change_commit": "1a1e441d00c05f154d061a71064892a119ec7168",
+  "implementation_commit": "e44aa780d8e439e26102c5ce1ef5b94a552cb211",
+  "input_digest": "43fa88e1a67536ebe2cdb6fedb7e3dd68af46d8ac8b7d7acc60209efe9311091",
+  "input_manifest_sha256": "43fa88e1a67536ebe2cdb6fedb7e3dd68af46d8ac8b7d7acc60209efe9311091",
+  "issue": 361,
+  "linked_blocker": 379,
+  "next_step": "Prepare and review real issuer/period mapping and role coverage for one supported original-filing case; do not manufacture absent facts or approvals",
+  "outcomes": {
+    "acceptance_tools": "17 passed",
+    "focused_history_preparation_recovery_canary": "67 passed against isolated PostgreSQL before final exact suite",
+    "full_service_acceptance": "not_run",
+    "fundamental": "530 passed, 11 optional runtime skips; one existing serializer warning",
+    "history_backup": "complete synthetic bundle validated, restored to separate empty store, recomposition/export unchanged",
+    "numerical_evidence": "synthetic formal #352 provisional result; repeat wrote=false",
+    "real_filing_numerical_flow": "not_run",
+    "review": "self-review only; independent full-diff review not_run"
+  },
+  "output_digest": "d3c8680957fcaa08f0df064b3368ce44fde597249c5cd5193bac0bec2b20f04d",
+  "remaining": [
+    "reviewed real issuer/period financial role coverage and supported market-policy evidence",
+    "real original-filing-backed preparation, explicit caller approval and numerical calculation",
+    "isolated complete-service retrieval/repeat/concurrency/restart/backup restore",
+    "independent review, CI, merge and merged-SHA verification before issue closure and ownership-scoped cleanup"
+  ],
+  "retained_evidence_directory": "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/.audit/issue-361-history-checkpoint/e44aa780d8e439e26102c5ce1ef5b94a552cb211",
+  "retained_failed_checkpoint": {
+    "checks": {
+      "acceptance_contracts": {
+        "command": [
+          "uv",
+          "run",
+          "--frozen",
+          "--extra",
+          "dev",
+          "--project",
+          "fundamental-service",
+          "pytest",
+          "-q",
+          "scripts/tests/test_acceptance_service_preflight.py",
+          "scripts/tests/test_validate_acceptance_manifest.py"
+        ],
+        "exit_code": 0,
+        "output_log": "acceptance_contracts-102b5f09729e7de7fca934a8a0c5b0fa261f883f82308146d6aab5a8d721840f.log",
+        "output_sha256": "102b5f09729e7de7fca934a8a0c5b0fa261f883f82308146d6aab5a8d721840f"
+      },
+      "architecture": {
+        "command": [
+          "python3",
+          "scripts/architecture_guard.py"
+        ],
+        "exit_code": 0,
+        "output_log": "architecture-6c8e024ff94859e9781de1f4a3201c70e338bc90774702d8ac83afc8a9a15ab9.log",
+        "output_sha256": "6c8e024ff94859e9781de1f4a3201c70e338bc90774702d8ac83afc8a9a15ab9"
+      },
+      "diff": {
+        "command": [
+          "git",
+          "diff",
+          "--check",
+          "origin/main"
+        ],
+        "exit_code": 0,
+        "output_log": "diff-e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855.log",
+        "output_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "format": {
+        "command": [
+          "uvx",
+          "--from",
+          "ruff==0.14.10",
+          "ruff",
+          "format",
+          "--check",
+          "fundamental-service/src/fundamental_service/history_composition.py",
+          "fundamental-service/src/fundamental_service/contracts.py",
+          "fundamental-service/src/fundamental_service/preparation_runner.py",
+          "fundamental-service/src/fundamental_service/release_runner.py",
+          "fundamental-service/src/fundamental_service/application/service.py",
+          "fundamental-service/src/fundamental_service/persistence_recovery.py",
+          "fundamental-service/tests/test_history_composition.py",
+          "fundamental-service/tests/test_preparation_runner.py",
+          "fundamental-service/tests/test_persistence_recovery.py"
+        ],
+        "exit_code": 0,
+        "output_log": "format-2ce9758b9f8abd876ec3e76c589e099e8b05377b1e7ea2331e81ee80f07bdff8.log",
+        "output_sha256": "2ce9758b9f8abd876ec3e76c589e099e8b05377b1e7ea2331e81ee80f07bdff8"
+      },
+      "fundamental": {
+        "command": [
+          "uv",
+          "run",
+          "--frozen",
+          "--extra",
+          "dev",
+          "--project",
+          "fundamental-service",
+          "pytest",
+          "-q",
+          "fundamental-service/tests",
+          "--basetemp",
+          "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/.audit/issue-361-history-checkpoint/1a1e441d00c05f154d061a71064892a119ec7168/pytest"
+        ],
+        "exit_code": 1,
+        "output_log": "fundamental-1228ddbbecbea49938e2e9b963b034f42ab7ecfb7f3be6d74061e09a508a382d.log",
+        "output_sha256": "1228ddbbecbea49938e2e9b963b034f42ab7ecfb7f3be6d74061e09a508a382d"
+      },
+      "lint": {
+        "command": [
+          "uvx",
+          "--from",
+          "ruff==0.14.10",
+          "ruff",
+          "check",
+          "fundamental-service"
+        ],
+        "exit_code": 0,
+        "output_log": "lint-82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18.log",
+        "output_sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18"
+      },
+      "types": {
+        "command": [
+          "uv",
+          "run",
+          "--frozen",
+          "--project",
+          "fundamental-service",
+          "--with",
+          "mypy==1.19.1",
+          "mypy",
+          "--no-incremental",
+          "--follow-imports=silent",
+          "--ignore-missing-imports",
+          "fundamental-service/src/fundamental_service/history_composition.py",
+          "fundamental-service/src/fundamental_service/contracts.py",
+          "fundamental-service/src/fundamental_service/preparation_runner.py",
+          "fundamental-service/src/fundamental_service/release_runner.py",
+          "fundamental-service/src/fundamental_service/application/service.py",
+          "fundamental-service/src/fundamental_service/persistence_recovery.py"
+        ],
+        "exit_code": 0,
+        "output_log": "types-ab35ee42183d4d6d3ba483825ab037d18a5a15622d03be01d82220b1564851ff.log",
+        "output_sha256": "ab35ee42183d4d6d3ba483825ab037d18a5a15622d03be01d82220b1564851ff"
+      }
+    },
+    "implementation_commit": "1a1e441d00c05f154d061a71064892a119ec7168",
+    "input_digest": "3ef4c300a454ea244f8282c3a96ae95b6f3cc301c4661487397b6a0f90041356",
+    "outcome": "20 API test adapter failures; 510 passed; 11 skips; corrected in e44aa780 without relaxing production validation",
+    "output_digest": "5248d3512a6b195aa41b466f0edf9a903b962614b32f39379af088ef35c7650f"
+  },
+  "runtime": {
+    "arelle-release": "2.47.4",
+    "browser_session": null,
+    "compose_files": [
+      ".audit/issue-361-flow-tests/compose.yml"
+    ],
+    "compose_sha256": "a3e07ccc3f276acd55aa6fabff25235b5ecd5fa191e9d3d4f9054939a8c79a4d",
+    "database_profile": "disposable tmpfs fixture DB; per-test generated recovery databases",
+    "env_files": [],
+    "full_service_acceptance": false,
+    "postgres_image": "postgres@sha256:0cefaabd882e42bcb2a2f3dc56d3ce4770560ba62fd7f197f1a2e008fd5731ab",
+    "postgres_project": "value-investment-agent-361-flow-tests",
+    "published_postgres_port": "127.0.0.1:18665",
+    "pydantic": "2.14.2",
+    "python": "3.11.15",
+    "uv_lock_sha256": "57b9ea3f92002720d4bce735df3316df071479da4c0599a31ae914e9e6c32a18"
+  },
+  "scope": "multi-original history composition engineering checkpoint; synthetic evidence only",
+  "supported_history_threshold": null,
+  "synthetic_history_evidence": [
+    {
+      "input_digest": null,
+      "output_digest": "17b436e575b40bf1bace9a74f56ea5dd4e10755194d6a87d2c4d9d510667ea7c",
+      "plan_digest": "727645c54155754ef6f344525a2003b192144f22cdb5438e303683b23ba419dd",
+      "quality": null,
+      "release_digest": null,
+      "snapshot_digest": "26f60fc98a89ee123b16c4f00a09826b47ac58ed67da5ea244811c815000cd52",
+      "status": "release_required",
+      "threshold": null
+    },
+    {
+      "input_digest": "613886727e17399a7193b015e3c548e6ec2cbcdd1bdb605f29fcb9e9d7b83d00",
+      "output_digest": "6a82e4ac36bb404700a13e5bc505779c5ea992b9022f4202f4b3040272a43440",
+      "plan_digest": "727645c54155754ef6f344525a2003b192144f22cdb5438e303683b23ba419dd",
+      "quality": "provisional",
+      "release_digest": "750c17c554971b581b5458af7f415300cf834c5888b22583fd6eb3dfbedee559",
+      "snapshot_digest": "26f60fc98a89ee123b16c4f00a09826b47ac58ed67da5ea244811c815000cd52",
+      "status": "calculated",
+      "threshold": null
+    },
+    {
+      "input_digest": "613886727e17399a7193b015e3c548e6ec2cbcdd1bdb605f29fcb9e9d7b83d00",
+      "output_digest": "7b482e479a97d9ea8b37ac374acf90adccfb8719fe2cbbf7f0a48d1fbf51c322",
+      "plan_digest": "727645c54155754ef6f344525a2003b192144f22cdb5438e303683b23ba419dd",
+      "quality": "provisional",
+      "release_digest": "750c17c554971b581b5458af7f415300cf834c5888b22583fd6eb3dfbedee559",
+      "snapshot_digest": "26f60fc98a89ee123b16c4f00a09826b47ac58ed67da5ea244811c815000cd52",
+      "status": "approval_required",
+      "threshold": null
+    }
+  ],
+  "verified_synthetic_history_backups": [
+    {
+      "digest": "6727953622aca133c698c3661c9161f91f5849af153c34a0dfddde0bb5fb3f48",
+      "objects": 2,
+      "rows": 8,
+      "tables": 18
+    }
+  ]
+}

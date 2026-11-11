@@ -232,16 +232,13 @@ class ArelleValidationProfileV1(BaseModel):
 
     def digest(self) -> str:
         payload = self.model_dump(mode="json")
-        if self.historical_dqc_dir is None:
-            payload.pop("historical_dqc_dir")
-            payload.pop("historical_dqc_sha256")
         for name in (
             "edgar_plugin_dir",
             "xule_plugin_dir",
             "dqc_ruleset_path",
             "historical_dqc_dir",
         ):
-            if payload.get(name) is not None:
+            if payload[name] is not None:
                 payload[name] = Path(payload[name]).name
         return sha256_digest(payload)
 

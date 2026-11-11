@@ -59,7 +59,7 @@ from fundamental_service.policies import (
 )
 from fundamental_service.replay import ArtifactStore, replay_calculation
 from fundamental_service.serialization import sha256_digest
-from fundamental_service.snapshots import FilesystemContentStore
+from fundamental_service.snapshots import FilesystemContentStore, SnapshotError
 from fundamental_service.source_acquisition import SecIdentityResolutionUseCase
 from fundamental_service.testsupport import (
     TEST_SERVICE_TOKEN,
@@ -109,6 +109,7 @@ class _SnapshotRepository:
             policy_version="source-policy-v1",
             coverage_status=QualityStatus.VERIFIED,
             issues=(),
+            sec_integrity_evidence=None,
         )
 
     def get(self, snapshot_id: str):
@@ -133,6 +134,12 @@ class _ReleaseSnapshotRepository(_ResolvingSnapshotRepository):
     def __init__(self, *snapshots):
         self.snapshots = snapshots
         self.snapshot = snapshots[0]
+
+    def get(self, snapshot_id: str):
+        for snapshot in self.snapshots:
+            if snapshot.snapshot_id == snapshot_id:
+                return snapshot
+        raise SnapshotError("SNAPSHOT_NOT_FOUND", "test snapshot is unavailable")
 
     def find(self, *, identity, valuation_timestamp):
         return tuple(
@@ -444,6 +451,7 @@ def test_snapshot_resolution_returns_service_owned_snapshot_and_fact_refs():
         taxonomy_manifest_id="taxonomy-v1",
         policy_version="policy-v1",
         source_records=(),
+        sec_integrity_evidence=None,
     )
     client = TestClient(
         create_app(
@@ -483,6 +491,7 @@ def test_snapshot_resolution_returns_immutable_snapshot_timestamp():
         taxonomy_manifest_id="taxonomy-v1",
         policy_version="policy-v1",
         source_records=(),
+        sec_integrity_evidence=None,
     )
     client = TestClient(
         create_app(

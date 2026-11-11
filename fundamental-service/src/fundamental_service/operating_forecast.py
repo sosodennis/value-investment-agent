@@ -6,7 +6,7 @@ mapping approval. Empirical replay must still use the verified release path.
 """
 
 from collections.abc import Iterable
-from decimal import Context, Decimal, localcontext
+from decimal import Decimal
 from typing import Literal
 
 from pydantic import Field, model_validator
@@ -20,9 +20,11 @@ from .contracts import (
     SourceSnapshotV1,
     StrictModel,
 )
+from .numerical_policy import VALUATION_NUMERICAL_POLICY, using_valuation_context
 from .operating_projection import OperatingProjectionError, project_operating_nodes
 from .serialization import sha256_digest
 from .valuation_preparation import (
+    FORECAST_COMPOSER_VERSION,
     HistoricalMetricsV1,
     PreparationError,
     _transition_filing_evidence,
@@ -42,6 +44,8 @@ class OperatingForecastV1(StrictModel):
         "fundamental.operating-forecast.v1"
     )
     scope: Literal["operating_targets_only"] = "operating_targets_only"
+    composer_version: str = FORECAST_COMPOSER_VERSION
+    numerical_policy_version: str = VALUATION_NUMERICAL_POLICY
     status: Literal["prepared", "abstained"]
     model_id: Literal["fcff_dcf", "transition_fcff_dcf"]
     model_version: str = Field(min_length=1)
@@ -84,6 +88,7 @@ class OperatingForecastV1(StrictModel):
         return self
 
 
+@using_valuation_context
 def prepare_operating_forecast(
     facts: Iterable[CanonicalFactV1],
     *,
@@ -101,17 +106,16 @@ def prepare_operating_forecast(
     function performs no I/O, release verification, signing or quality promotion.
     """
 
-    with localcontext(Context(prec=50)):
-        return _prepare(
-            tuple(facts),
-            snapshot=snapshot,
-            model_id=model_id,
-            model_version=model_version,
-            policy_id=policy_id,
-            policy_version=policy_version,
-            mapping_version=mapping_version,
-            data_release_manifest_digest=data_release_manifest_digest,
-        )
+    return _prepare(
+        tuple(facts),
+        snapshot=snapshot,
+        model_id=model_id,
+        model_version=model_version,
+        policy_id=policy_id,
+        policy_version=policy_version,
+        mapping_version=mapping_version,
+        data_release_manifest_digest=data_release_manifest_digest,
+    )
 
 
 def _prepare(
@@ -135,6 +139,8 @@ def _prepare(
     input_digest = sha256_digest(
         {
             "contract_version": "fundamental.operating-forecast.v1",
+            "composer_version": FORECAST_COMPOSER_VERSION,
+            "numerical_policy_version": VALUATION_NUMERICAL_POLICY,
             "facts": sorted(
                 facts, key=lambda fact: (fact.fact_id, sha256_digest(fact))
             ),
