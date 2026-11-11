@@ -12,7 +12,11 @@ from .contracts import (
     QualityStatus,
     SourceSnapshotV1,
 )
-from .valuation_requirements import ValuationRequirementsProfileV1
+from .original_issuer import IssuerOperatingSourceV1, fact_matches_operating_identity
+from .valuation_requirements import (
+    ValuationRequirementsProfileV1,
+    require_operating_source_profile,
+)
 
 _MIN_ANNUAL_DAYS = 300
 _MAX_ANNUAL_DAYS = 380
@@ -58,7 +62,7 @@ class AnnualHistoryV1:
 def resolve_annual_history(
     facts: Iterable[CanonicalFactV1],
     *,
-    snapshot: SourceSnapshotV1,
+    snapshot: SourceSnapshotV1 | IssuerOperatingSourceV1,
     valuation_timestamp: datetime,
     profile: ValuationRequirementsProfileV1,
 ) -> AnnualHistoryV1:
@@ -70,6 +74,7 @@ def resolve_annual_history(
 
     if valuation_timestamp.tzinfo is None or valuation_timestamp.utcoffset() is None:
         raise ValueError("valuation_timestamp must include a timezone")
+    require_operating_source_profile(snapshot, profile)
 
     duration_fields = profile.annual_duration_fields
     instant_fields = profile.annual_instant_fields
@@ -79,8 +84,7 @@ def resolve_annual_history(
         fact
         for fact in facts
         if fact.normalized_field in requested_fields
-        and fact.issuer_id == snapshot.identity.issuer_id
-        and fact.security_id in {None, snapshot.identity.security_id}
+        and fact_matches_operating_identity(fact, snapshot)
         and fact.source.content_hash in source_records
         and fact.available_at <= valuation_timestamp
         and source_records[fact.source.content_hash].available_at <= valuation_timestamp
@@ -108,9 +112,9 @@ def resolve_annual_history(
         by_year: dict[int, list[CanonicalFactV1]] = {}
         for fact in field_facts:
             by_year.setdefault(fact.period_end.year, []).append(fact)
-        for fiscal_year, candidates in by_year.items():
+        for fiscal_year, period_candidates in by_year.items():
             selected = _select_period_fact(
-                candidates,
+                tuple(period_candidates),
                 fiscal_year=fiscal_year,
                 field=field,
                 expected_instant=None,
@@ -147,6 +151,7 @@ def resolve_annual_history(
                 f"duration facts do not align to one fiscal period in {fiscal_year}",
             )
         period_start, period_end = next(iter(period_shapes))
+        assert period_start is not None
         selected_instant: dict[str, CanonicalFactV1] = {}
         for field in instant_fields:
             candidates = tuple(

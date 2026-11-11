@@ -29,7 +29,17 @@ from .contracts import (
     XbrlContextV1,
 )
 from .serialization import canonical_bytes, sha256_digest
-from .accounting_roles import AccountingRoleEvidenceV1, AccountingRoleRuleSetV1
+from .accounting_roles import (
+    AccountingRoleEvidenceV1,
+    AccountingRoleRules,
+    IssuerAccountingRoleRuleSetV1,
+)
+from .arelle_parser import fact_semantic_digest
+from .original_issuer import (
+    IssuerOperatingSourceV1,
+    fact_matches_operating_identity,
+    fact_matches_original_source,
+)
 from .snapshots import SnapshotError
 
 
@@ -66,7 +76,7 @@ class CanonicalFactRepository(Protocol):
     def resolve(
         self,
         *,
-        snapshot: "SourceSnapshotV1",
+        snapshot: SourceSnapshotV1 | IssuerOperatingSourceV1,
         valuation_timestamp: datetime,
         required_fields: tuple[str, ...],
     ) -> tuple[CanonicalFactV1, ...]: ...
@@ -125,7 +135,7 @@ class FilesystemCanonicalFactRepository:
     def resolve(
         self,
         *,
-        snapshot: "SourceSnapshotV1",
+        snapshot: SourceSnapshotV1 | IssuerOperatingSourceV1,
         valuation_timestamp: datetime,
         required_fields: tuple[str, ...],
     ) -> tuple[CanonicalFactV1, ...]:
@@ -203,7 +213,7 @@ class CanonicalMappingV1(BaseModel):
     reviewer: str | None = None
     reviewed_at: datetime | None = None
     status: Literal["approved", "provisional", "ambiguous", "rejected"]
-    accounting_rules: AccountingRoleRuleSetV1 | None = Field(
+    accounting_rules: AccountingRoleRules | None = Field(
         default=None, exclude_if=lambda value: value is None
     )
 
@@ -241,7 +251,7 @@ class CanonicalMappingV1(BaseModel):
 def verify_accounting_role_evidence(
     fact: CanonicalFactV1,
     mapping: CanonicalMappingV1,
-    snapshot: SourceSnapshotV1,
+    snapshot: SourceSnapshotV1 | IssuerOperatingSourceV1,
 ) -> None:
     evidence = fact.accounting_evidence
     if evidence is None and mapping.accounting_rules is None:
@@ -251,6 +261,26 @@ def verify_accounting_role_evidence(
             "ACCOUNTING_ROLE_MAPPING_MISMATCH",
             "computed accounting evidence differs from its released mapping",
         )
+    rules = evidence.rule_set
+    if isinstance(snapshot, IssuerOperatingSourceV1):
+        if not isinstance(rules, IssuerAccountingRoleRuleSetV1) or not any(
+            item.source.content_hash == rules.raw_content_hash
+            and item.source.accession_number == rules.accession_number
+            and item.source.parser_input_hash == rules.parser_input_hash
+            and fact_semantic_digest(item.report) == rules.parser_fact_digest
+            and rules.issuer_id == snapshot.identity.issuer_id
+            for item in snapshot.originals
+        ):
+            raise SnapshotError(
+                "ACCOUNTING_ROLE_INTEGRITY_MISMATCH",
+                "issuer accounting rules differ from their exact original",
+            )
+        return
+    if isinstance(rules, IssuerAccountingRoleRuleSetV1):
+        raise SnapshotError(
+            "ACCOUNTING_ROLE_SCOPE_MISMATCH",
+            "issuer-only rules cannot authorize security-bound facts",
+        )
     integrity = snapshot.sec_integrity_evidence
     originals = (
         (integrity,)
@@ -259,7 +289,6 @@ def verify_accounting_role_evidence(
         if isinstance(integrity, SecHistoryIntegrityEvidenceV1)
         else ()
     )
-    rules = evidence.rule_set
     if not any(
         item.raw_content_hash == rules.raw_content_hash
         and item.accession_number == rules.accession_number
@@ -663,10 +692,17 @@ def select_fact_groups(
     return tuple(select_fact(items, valuation_timestamp) for items in grouped.values())
 
 
+def is_consolidated_fact(fact: CanonicalFactV1) -> bool:
+    return (
+        not fact.context.dimensions
+        and fact.context.consolidation_scope == "consolidated"
+    )
+
+
 def resolve_canonical_facts(
     candidates: Iterable[CanonicalFactV1],
     *,
-    snapshot: SourceSnapshotV1,
+    snapshot: SourceSnapshotV1 | IssuerOperatingSourceV1,
     valuation_timestamp: datetime,
     required_fields: tuple[str, ...],
 ) -> tuple[CanonicalFactV1, ...]:
@@ -684,8 +720,13 @@ def resolve_canonical_facts(
         if fact.issuer_id != snapshot.identity.issuer_id:
             rejected_reasons[fact.fact_id] = "issuer_mismatch"
             continue
-        if fact.security_id not in {None, snapshot.identity.security_id}:
+        if not fact_matches_operating_identity(fact, snapshot):
             rejected_reasons[fact.fact_id] = "security_mismatch"
+            continue
+        if isinstance(
+            snapshot, IssuerOperatingSourceV1
+        ) and not fact_matches_original_source(fact, snapshot):
+            rejected_reasons[fact.fact_id] = "original_source_mismatch"
             continue
         if fact.quality is not QualityStatus.VERIFIED:
             rejected_reasons[fact.fact_id] = "fact_quality_not_verified"
@@ -719,9 +760,7 @@ def resolve_canonical_facts(
         consolidated_candidates = tuple(
             fact
             for fact in eligible
-            if fact.normalized_field == field
-            and not fact.context.dimensions
-            and fact.context.consolidation_scope == "consolidated"
+            if fact.normalized_field == field and is_consolidated_fact(fact)
         )
         if not consolidated_candidates:
             raise SnapshotError(
@@ -922,14 +961,16 @@ def _select_canonical_fact_key(
 
 
 def _canonical_fact_key(
-    fact: CanonicalFactV1, snapshot: SourceSnapshotV1
+    fact: CanonicalFactV1, snapshot: SourceSnapshotV1 | IssuerOperatingSourceV1
 ) -> tuple[object, ...]:
     dimensions = tuple(
         sorted((item.name, item.member) for item in fact.context.dimensions)
     )
     return (
         fact.issuer_id,
-        fact.security_id or snapshot.identity.security_id,
+        None
+        if isinstance(snapshot, IssuerOperatingSourceV1)
+        else fact.security_id or snapshot.identity.security_id,
         fact.concept,
         fact.context.period_type,
         fact.period_start,
@@ -940,7 +981,9 @@ def _canonical_fact_key(
         dimensions,
         fact.context.entity_scope,
         fact.context.consolidation_scope,
-        fact.security_scope or snapshot.identity.share_class,
+        "issuer"
+        if isinstance(snapshot, IssuerOperatingSourceV1)
+        else fact.security_scope or snapshot.identity.share_class,
     )
 
 

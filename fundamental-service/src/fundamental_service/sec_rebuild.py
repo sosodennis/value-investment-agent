@@ -11,6 +11,7 @@ from .accounting_roles import (
     AccountingRoleError,
     AccountingRoleEvidenceV1,
     accounting_reported_decimals,
+    IssuerAccountingRoleRuleSetV1,
     evaluate_period_rule,
 )
 from .serialization import sha256_digest
@@ -31,16 +32,30 @@ from .facts import (
     select_fact_groups,
 )
 from .snapshots import SnapshotError
+from .original_issuer import OriginalOperatingSourceV1
 
 
 def _candidate_id(
     fact: ParsedXbrlFactV1,
     *,
-    source: SourceRecordV1,
+    source: SourceRecordV1 | OriginalOperatingSourceV1,
     normalized_field: str,
     security_id: str | None,
     mapping: CanonicalMappingV1 | None,
 ) -> str:
+    if isinstance(source, OriginalOperatingSourceV1):
+        return "sec-issuer-fact-" + sha256_digest(
+            {
+                "protocol": "issuer-original-fact-v1",
+                "issuer_id": source.cik,
+                "accession": source.accession_number,
+                "source_hash": source.content_hash,
+                "parser_input_hash": source.parser_input_hash,
+                "fact": fact,
+                "normalized_field": normalized_field,
+                "mapping": mapping,
+            }
+        )
     payload = "|".join(
         (
             source.content_hash,
@@ -70,7 +85,7 @@ def _decimal_value(value: str) -> Decimal | None:
 def parsed_facts_to_candidates(
     report: ArelleParseReportV1,
     *,
-    source: SourceRecordV1,
+    source: SourceRecordV1 | OriginalOperatingSourceV1,
     issuer_id: str,
     normalized_field: str,
     mapping: CanonicalMappingV1 | None = None,
@@ -91,9 +106,20 @@ def parsed_facts_to_candidates(
         raise SnapshotError(
             "SOURCE_HASH_MISMATCH", "parser report is not bound to source bytes"
         )
+    if isinstance(source, OriginalOperatingSourceV1) and (
+        source.cik != issuer_id or security_id is not None
+    ):
+        raise SnapshotError(
+            "ISSUER_SCOPE_MISMATCH", "issuer rebuild cannot assert a security"
+        )
+    parser_version = (
+        report.parser_version
+        if isinstance(source, OriginalOperatingSourceV1)
+        else source.parser_version
+    )
     if (
-        report.parser_version != source.parser_version
-        and source.parser_version != f"arelle-release=={report.parser_version}"
+        report.parser_version != parser_version
+        and parser_version != f"arelle-release=={report.parser_version}"
     ):
         raise SnapshotError(
             "PARSER_VERSION_MISMATCH",
@@ -119,7 +145,7 @@ def parsed_facts_to_candidates(
         available_at=source.available_at,
         filed_at=source.filed_at,
         accession_number=source.accession_number,
-        parser_version=source.parser_version,
+        parser_version=parser_version,
         taxonomy_version=report.taxonomy_version,
         terms_reference=source.terms_reference,
     )
@@ -226,7 +252,7 @@ def parsed_facts_to_candidates(
 def _accounting_candidates(
     report: ArelleParseReportV1,
     *,
-    source: SourceRecordV1,
+    source: SourceRecordV1 | OriginalOperatingSourceV1,
     provenance: SourceProvenanceV1,
     mapping: CanonicalMappingV1,
     issuer_id: str,
@@ -235,7 +261,9 @@ def _accounting_candidates(
     rules = mapping.accounting_rules
     assert rules is not None
     if (
-        rules.issuer_id != issuer_id
+        isinstance(source, OriginalOperatingSourceV1)
+        != isinstance(rules, IssuerAccountingRoleRuleSetV1)
+        or rules.issuer_id != issuer_id
         or rules.security_id != security_id
         or rules.accession_number != source.accession_number
         or rules.raw_content_hash != source.content_hash
@@ -354,7 +382,9 @@ def _accounting_candidates(
                 dimensions=(),
                 entity_scope=issuer_id,
                 consolidation_scope="consolidated",
-                security_scope="security",
+                security_scope="issuer"
+                if isinstance(source, OriginalOperatingSourceV1)
+                else "security",
                 as_of=datetime.combine(
                     period.period_end, datetime.min.time(), tzinfo=timezone.utc
                 ),

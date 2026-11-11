@@ -10,14 +10,31 @@ import posixpath
 import re
 import stat
 from dataclasses import dataclass
-from typing import Literal
+from typing import Literal, Protocol
 from urllib.parse import unquote, urlsplit
 from xml.etree import ElementTree
 from zipfile import BadZipFile, ZipFile, ZipInfo
 
 from .contracts import RemovedByteRangeV1
 from .serialization import sha256_digest
-from .snapshots import CapturedSource, SnapshotError
+from .snapshots import SnapshotError
+
+
+class FilingIntegritySource(Protocol):
+    """Byte evidence consumed by the policy; HTTP authority is checked separately."""
+
+    @property
+    def uri(self) -> str: ...
+
+    @property
+    def content(self) -> bytes: ...
+
+    @property
+    def accession_number(self) -> str | None: ...
+
+    @property
+    def response_headers(self) -> tuple[tuple[str, str], ...]: ...
+
 
 _EDGE_SCRIPT_AT_END = re.compile(
     rb'(?P<script><script type="text/javascript"\s+'
@@ -191,9 +208,9 @@ def _digest(content: bytes) -> str:
 
 def assess_filing_response(
     *,
-    raw_response: CapturedSource,
-    archive_index: CapturedSource,
-    archive: CapturedSource,
+    raw_response: FilingIntegritySource,
+    archive_index: FilingIntegritySource,
+    archive: FilingIntegritySource,
 ) -> SecIntegrityAssessment:
     """Match raw response, SEC archive index, and XBRL ZIP member.
 
