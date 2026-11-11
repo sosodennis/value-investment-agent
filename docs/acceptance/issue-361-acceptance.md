@@ -260,3 +260,11 @@ success, the complete isolated service repeat/restart/restore acceptance,
 independent review, CI and main merge verification remain outstanding. This
 checkpoint does not verify any full-flow gate by itself; #361 stays open and
 PR #370 stays draft. Neither model has an approved history threshold.
+
+## Source-plan mapping checkpoint
+
+Implementation `16ce3baa841d68de8e2fb307a3fb4697e6318df1` binds release reuse to the plan's mapping decision IDs, versions, roles and original accessions. It also verifies all declared historical fact digests before reuse. A candidate containing a different reviewed mapping cannot substitute that mapping for the actual facts. Conflicting references to one mapping ID are rejected at the plan boundary.
+
+Exact-commit isolated PostgreSQL engineering checks: **538 passed, 11 optional runtime skips**; **17 acceptance-tool tests passed**. Ruff, changed-file formatting, six-source mypy, architecture guard and `git diff --check origin/main` exited 0. Input digest `cf536b86c41055cb5d711ec484cedbb389286b6f3f05e6b1f37fba5b47dc4f5d`; command-output digest `8281fec427035e0def7c17c3a2a5174576c926b617dc5b393b46f0b68c84f4d0`. Exact commands/runtime and retained failure-log digests are in `issue-361-source-plan-checkpoint.json`. Disposable project `value-investment-agent-361-flow-tests` was removed; the 62 pre-existing containers retained their IDs, images, start times and status.
+
+Prior-head CI `42986810091` at `7f589080` passed all 12 executed checks; `fundamental-release-gate` was skipped. This does not establish CI for `16ce3baa`, independent review, real-source numerical success, or the 19 full-flow gates. Threshold stays null. Next: concrete real original-filing financial-role coverage and semantic review, then numerical service repeat/restart/restore.
