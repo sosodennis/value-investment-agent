@@ -98,6 +98,42 @@ approve differing documents, regulatory validation, mappings or releases.
 An archive-first source profile is a design candidate requiring its own
 provenance and validation contract; this audit does not implement or authorize it.
 
+## Historical DQC conformance assertion repair
+
+The archived v3.6.2 executor compared the entire unblocked finding Counter with
+the expected Counter. That is stricter than the official suite's documented
+Arelle invocation. Pinned
+[Arelle 2.47.4](https://github.com/Arelle/Arelle/blob/2f1170826a791bb61ff055254234063c9d5c3e3a/arelle/Validate.py#L773)
+matches declared error counts by default; equality with the total error count
+applies only to explicit `match-all`. The
+[official suite instructions](https://github.com/DataQualityCommittee/dqc_us_rules/blob/cafb54391c1d21e4c219bc3d491b855a9b877cb6/tests/test_suite/readme.md)
+use the default matcher and `logging/dqcParameters.py`. Their retained source
+hashes are `6247dcde32eff3333f961871fb960e69427522138bddd19568deb24fd7a98861`
+and `dc60a54889432e0b9d9b62a6c01305ca192f48f4afc316186536294f208820da`.
+
+```sh
+uv run --frozen --project fundamental-service python scripts/audit_history_dqc_conformance.py \
+  --evidence-root "$STUDY_DQC362_CONFORMANCE" \
+  --official-suite "$STUDY_DQC362_OFFICIAL_SUITE" \
+  --output-directory "$STUDY_DQC362_ASSERTION_OUTPUT"
+```
+
+The tool hashes the official ZIP, original input, all four pinned shards and
+every referenced case. It loads all 6,586 official variation definitions into
+the actual pinned Arelle matcher, verifies their inventory against the original
+execution, and uses original rule severity before EDGAR releveling. Explicit
+`match-all`, no-error expectations, incomplete modules, unknown severity,
+network attempts and runtime failures still fail. Every original record and
+finding remains traceable by digest. The output separates the official
+assertion status from execution completeness and original pass/fail status.
+
+The complete retained-record replay matches 6,585 cases, including nine that
+the bespoke Counter assertion rejected for extra findings. The remaining case,
+`DQC_0001.57.2612`, uses unsupported US GAAP 2011 and remains failed. This fixes
+a conformance assertion defect. It is not a fresh execution of the historical
+rules or approval of their current parser integration, date applicability,
+financial mappings or any real filing. The historical owner #371 remains open.
+
 ## Research protocol gap (#377)
 
 There are nine missing first-original labels and one 731-day horizon mismatch.
