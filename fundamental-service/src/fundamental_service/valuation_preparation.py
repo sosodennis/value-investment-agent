@@ -11,6 +11,7 @@ from typing import Literal
 from pydantic import Field, model_validator
 
 from .annual_history import (
+    AnnualHistoryError,
     AnnualHistoryPeriodV1,
     AnnualHistoryV1,
     resolve_annual_history,
@@ -954,13 +955,15 @@ def prepare_automatic_valuation(
             profile=profile,
         )
         metrics = derive_historical_metrics(history)
-    except PreparationError as error:
+    except (PreparationError, AnnualHistoryError) as error:
         metrics = HistoricalMetricsV1(
             profile_id=profile.profile_id,
             profile_digest=profile.digest,
             quality_status=QualityStatus.ABSTAIN,
             issue_codes=(error.code,),
-            missing_evidence=error.missing,
+            missing_evidence=error.missing
+            if isinstance(error, PreparationError)
+            else (),
         )
         return _blocked_from_metrics(
             metrics,

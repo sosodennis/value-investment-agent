@@ -71,3 +71,37 @@ def test_http_prepare_composes_complete_release_and_policy_inputs(tmp_path: Path
     assert repeat_result["status"] == "prepared"
     assert repeat_result["quality_status"] == "provisional"
     assert repeat_result["preparation_digest"] == result["preparation_digest"]
+
+
+def test_http_prepare_preserves_released_history_conflict_as_abstention(tmp_path: Path):
+    fixture = _fixture(tmp_path, misaligned_history=True)
+    app = create_app(
+        snapshot_repository=fixture.snapshots,
+        fact_repository=fixture.facts,
+        artifact_store=fixture.artifacts,
+        metadata_store=fixture.metadata,
+        config=fixture.application.config,
+    )
+    payload = make_internal_envelope(
+        {
+            "contract_version": "fundamental.v1",
+            "snapshot_id": fixture.snapshot.snapshot_id,
+            "data_release_manifest_digest": fixture.manifest.manifest_digest,
+            "model_id": "fcff_dcf",
+        }
+    )
+    client = TestClient(app)
+    response = client.post(
+        "/v1/valuation/prepare", headers=auth_headers(), json=payload
+    )
+    repeated = client.post(
+        "/v1/valuation/prepare", headers=auth_headers(), json=payload
+    )
+
+    assert response.status_code == repeated.status_code == 200
+    result = response.json()["result"]
+    assert result["status"] == "abstained"
+    assert result["quality_status"] == "abstain"
+    assert result["issue_codes"] == ["HISTORY_PERIOD_ALIGNMENT_CONFLICT"]
+    assert result["input"] is None
+    assert result == repeated.json()["result"]

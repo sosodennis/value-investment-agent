@@ -1,5 +1,5 @@
 from dataclasses import replace
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
 
 import pytest
@@ -223,6 +223,64 @@ def test_complete_history_prepares_provisional_input_with_lineage_and_digest() -
         result.preparation_digest
         == _prepare(_facts(), market_policy=_market_policy()).preparation_digest
     )
+
+
+@pytest.mark.parametrize("model_id", ("fcff_dcf", "transition_fcff_dcf"))
+@pytest.mark.parametrize(
+    "conflict,code",
+    (
+        ("period", "HISTORY_PERIOD_ALIGNMENT_CONFLICT"),
+        ("mapping", "HISTORY_MAPPING_CONFLICT"),
+        ("value", "HISTORY_FACT_CONFLICT"),
+        ("amendment", "FACT_AMENDMENT_SCOPE_UNKNOWN"),
+    ),
+)
+def test_history_conflicts_abstain_with_a_stable_reason(model_id, conflict, code):
+    facts = _facts()
+    conflicting = _fact("revenue", 2025, "999", fact_id="conflicting-revenue")
+    if conflict == "period":
+        conflicting = conflicting.model_copy(
+            update={
+                "period_start": date(2025, 1, 2),
+                "context": conflicting.context.model_copy(
+                    update={"start_date": date(2025, 1, 2)}
+                ),
+            }
+        )
+    elif conflict == "mapping":
+        conflicting = conflicting.model_copy(
+            update={
+                "concept": "issuer:AlternateRevenue",
+                "context": conflicting.context.model_copy(
+                    update={"concept_qname": "issuer:AlternateRevenue"}
+                ),
+            }
+        )
+    elif conflict == "amendment":
+        conflicting = conflicting.model_copy(
+            update={"is_amendment": True, "amendment_scope": "unknown"}
+        )
+    if model_id == "transition_fcff_dcf":
+        facts = (
+            *facts,
+            _fact("filed_operating_evidence", 2025, "1").model_copy(
+                update={"value": "filed evidence"}
+            ),
+        )
+    facts = (*facts, conflicting)
+
+    result = _prepare(facts, market_policy=_market_policy(), model_id=model_id)
+    repeated = _prepare(
+        tuple(reversed(facts)), market_policy=_market_policy(), model_id=model_id
+    )
+
+    assert result.status == "abstained"
+    assert result.quality_status is QualityStatus.ABSTAIN
+    assert result.input is None
+    assert result.issue_codes == (code,)
+    assert result.historical_metrics.issue_codes == (code,)
+    assert result.preparation_digest == repeated.preparation_digest
+    assert result == repeated
 
 
 @pytest.mark.parametrize("model_id", ("fcff_dcf", "transition_fcff_dcf"))

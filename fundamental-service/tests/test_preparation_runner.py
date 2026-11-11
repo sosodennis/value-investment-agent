@@ -2,7 +2,7 @@ import asyncio
 import hashlib
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from decimal import Context, Inexact, ROUND_DOWN, localcontext
 from pathlib import Path
 from types import SimpleNamespace
@@ -76,6 +76,7 @@ def _fixture(
     released: bool = True,
     namespace: str = "runner",
     empty_awards: bool = False,
+    misaligned_history: bool = False,
 ):
     source_bytes = b'{"source":"synthetic original filing fixture"}'
     source_hash = hashlib.sha256(source_bytes).hexdigest()
@@ -162,6 +163,21 @@ def _fixture(
         )
         for fact in _facts()
     )
+    if misaligned_history:
+        stored = tuple(
+            fact.model_copy(
+                update={
+                    "period_start": date(2025, 1, 2),
+                    "context": fact.context.model_copy(
+                        update={"start_date": date(2025, 1, 2)}
+                    ),
+                }
+            )
+            if fact.normalized_field == "operating_income"
+            and fact.period_end.year == 2025
+            else fact
+            for fact in stored
+        )
     dilution = award_evidence(snapshot)
     if empty_awards:
         dilution = dilution.model_copy(
@@ -433,6 +449,45 @@ def test_released_source_uses_formal_composer_and_reuses_artifact_after_restart(
     assert after_restart.wrote is False
     assert first.artifact == repeated.artifact == after_restart.artifact
     assert fixture.snapshot.manifest_digest in first.artifact.dependency_hashes
+
+
+def test_history_conflict_is_persisted_and_reused_after_reopen(tmp_path):
+    fixture = _fixture(tmp_path, misaligned_history=True)
+    runner = _runner(fixture)
+
+    first = _run(runner, fixture.plan)
+    evidence = _reader(fixture, first)
+    artifact_root = tmp_path / "artifacts"
+    files_before = {
+        item.name: (item.read_bytes(), item.stat().st_mtime_ns)
+        for item in artifact_root.glob("*.artifact")
+    }
+    repeated = _run(runner, fixture.plan, correlation="repeated-conflict")
+    reopened = SourcePreparationRunner(
+        application=fixture.application,
+        metadata=fixture.metadata,
+        acquisition=None,
+        artifacts=ArtifactStore(tmp_path / "artifacts"),
+        canary=None,
+    )
+    after_reopen = _run(reopened, fixture.plan)
+
+    assert evidence.status == "blocked"
+    assert evidence.issue_codes == ("HISTORY_PERIOD_ALIGNMENT_CONFLICT",)
+    assert evidence.snapshot_manifest_digest == fixture.snapshot.manifest_digest
+    assert evidence.data_release_manifest_digest == fixture.manifest.manifest_digest
+    assert evidence.preparation.status == "abstained"
+    assert evidence.preparation.quality_status is QualityStatus.ABSTAIN
+    assert evidence.preparation.input is None
+    assert evidence.calculation is None
+    assert first.wrote is True
+    assert repeated.wrote is after_reopen.wrote is False
+    assert first.artifact == repeated.artifact == after_reopen.artifact
+    assert _reader(fixture, repeated) == _reader(fixture, after_reopen) == evidence
+    assert files_before == {
+        item.name: (item.read_bytes(), item.stat().st_mtime_ns)
+        for item in artifact_root.glob("*.artifact")
+    }
 
 
 def test_source_miss_retains_unreleased_snapshot_without_self_approval(tmp_path):
