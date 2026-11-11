@@ -38,7 +38,7 @@ _GAAP_NAMESPACE = re.compile(
 class DirectMappingRule:
     concept: str
     period: Literal["annual", "instant"]
-    unit: Literal["iso4217:USD", "shares"] = "iso4217:USD"
+    unit: Literal["iso4217:USD", "xbrli:shares"] = "iso4217:USD"
 
 
 # Partial revenue tags, aggregate D&A, absence claims, computed partitions and
@@ -60,10 +60,14 @@ _RULES = {
     ),
     "operating_lease_cost": DirectMappingRule("us-gaap:OperatingLeaseCost", "annual"),
     "basic_weighted_average_shares": DirectMappingRule(
-        "us-gaap:WeightedAverageNumberOfSharesOutstandingBasic", "annual", "shares"
+        "us-gaap:WeightedAverageNumberOfSharesOutstandingBasic",
+        "annual",
+        "xbrli:shares",
     ),
     "diluted_weighted_average_shares": DirectMappingRule(
-        "us-gaap:WeightedAverageNumberOfDilutedSharesOutstanding", "annual", "shares"
+        "us-gaap:WeightedAverageNumberOfDilutedSharesOutstanding",
+        "annual",
+        "xbrli:shares",
     ),
     "operating_current_receivables": DirectMappingRule(
         "us-gaap:AccountsReceivableNetCurrent", "instant"
@@ -82,7 +86,7 @@ _RULES = {
         "us-gaap:OperatingLeaseLiabilityNoncurrent", "instant"
     ),
     "common_shares_outstanding": DirectMappingRule(
-        "us-gaap:CommonStockSharesOutstanding", "instant", "shares"
+        "us-gaap:CommonStockSharesOutstanding", "instant", "xbrli:shares"
     ),
 }
 

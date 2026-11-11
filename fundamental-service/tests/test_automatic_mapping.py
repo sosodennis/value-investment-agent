@@ -475,3 +475,57 @@ def test_automatic_mapping_passes_existing_release_and_read_only_canary(tmp_path
 def test_policy_digest_is_available_without_storage_or_a_human(tmp_path, capsys):
     assert main(["--print-policy-digest"]) == 0
     assert capsys.readouterr().out.strip() == automatic_mapping_policy_digest()
+
+
+@pytest.mark.parametrize(
+    "role,concept,instant",
+    (
+        (
+            "basic_weighted_average_shares",
+            "us-gaap:WeightedAverageNumberOfSharesOutstandingBasic",
+            False,
+        ),
+        (
+            "diluted_weighted_average_shares",
+            "us-gaap:WeightedAverageNumberOfDilutedSharesOutstanding",
+            False,
+        ),
+        ("common_shares_outstanding", "us-gaap:CommonStockSharesOutstanding", True),
+    ),
+)
+def test_parser_xbrli_share_units_are_approved_without_relabelling_periods(
+    tmp_path, role, concept, instant
+):
+    request, _, _, _ = case(tmp_path)
+    observed = next(
+        f for f in request.original.report.facts if f.concept == "us-gaap:Revenues"
+    )
+    changes = {
+        "concept": concept,
+        "unit": "xbrli:shares",
+        "context_id": "canonical-share-unit",
+    }
+    if instant:
+        changes.update(
+            {"period_start": None, "period_end": None, "instant": date(2025, 12, 31)}
+        )
+    shares = observed.model_copy(update=changes)
+    request, store, _, _ = case(
+        tmp_path / "share-case",
+        proposal_changes={"source_concept": concept, "normalized_field": role},
+        extra=(shares,),
+    )
+    result = evaluate(request, store)
+    assert result.status == "approved"
+    assert result.mapping.observation_scope.observation_digests == (
+        sha256_digest(shares),
+    )
+    wrong_unit = shares.model_copy(update={"unit": "shares"})
+    request, store, _, _ = case(
+        tmp_path / "noncanonical-share-unit",
+        proposal_changes={"source_concept": concept, "normalized_field": role},
+        extra=(wrong_unit,),
+    )
+    refused = evaluate(request, store)
+    assert refused.status == "abstain"
+    assert refused.rejected_observations[0].reason_code == "MAPPING_UNIT_UNSUPPORTED"
