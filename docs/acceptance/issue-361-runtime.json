@@ -2,9 +2,7 @@
   "acceptance_profile": "persistent-valuation-flow-v1",
   "acceptance_scope": "fundamental-service",
   "blockers": [
-    "Complete source-to-valuation flow, real-source numerical success, persistence/restart/restore and service acceptance remain unverified under the revised scope.",
-    "Historical requests remain subject to #369/#371 source, mapping and policy coverage; no unsupported 2016 profile is approved.",
-    "Independent review, exact-implementation CI and merge-commit verification remain outstanding."
+    "Actual installed-source and abstained HTTP reuse/restart passed; dedicated stacks removed after verified backup. Full real numerical acceptance and independent review/release/input approval remain incomplete."
   ],
   "branch": "codex/issue-361-replay-evidence",
   "checks": [
@@ -104,15 +102,15 @@
       "status": "not_run"
     }
   ],
-  "commit": "59830e161c9300e44b2b7b54eea3e43567835bff",
+  "commit": "51ab09ced690f401f623c655cbd344cdac77da4a",
   "issue": 361,
   "latest_engineering_evidence": "docs/acceptance/issue-361-acceptance.md",
-  "next_step": "Implement and verify the complete supported source acquisition/reuse, snapshot persistence, automatic preparation, #352 calculation and artifact retrieval flow, including restart/restore and a repeated request. Revalidate the recorded runtime tuple before service acceptance.",
+  "next_step": "Complete real scalar accounting and per-class award scope, actual market/source policy and independent trusted semantic review/release; present exact input for actual caller approval, then run full numerical 19-gate HTTP acceptance and PR review/merge/main verification.",
   "readiness": {
     "capabilities": {
       "identity_resolution_configured": true
     },
-    "status": "not_run"
+    "status": "not_ready"
   },
   "research_archive": "docs/acceptance/issue-361-research-archive.json",
   "runtime": {
@@ -121,39 +119,30 @@
       "compose_files": [
         "compose/verification/docker-compose.issue280-operations.yml",
         "compose/verification/docker-compose.issue312-sec-ingestion.yml",
-        "compose/verification/docker-compose.issue361-history-replay.yml",
-        ".audit/issue-361-cohort-root-runtime/image.yml"
+        ".audit/issue-361-shared-integration/51ab09ced690f401f623c655cbd344cdac77da4a/service/overlay.yml"
       ],
-      "compose_project": "value-investment-agent-361-candidate-contracts",
+      "compose_project": "value-investment-agent-361-shared-service",
       "container_port": 8080,
       "dependencies": [
         {
           "container_port": 5432,
           "published_host": "0.0.0.0",
-          "published_port": 18664,
+          "published_port": 18667,
           "service": "fundamental-postgres"
         }
       ],
       "env_files": [
         {
-          "path": "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/.env",
-          "sha256": "610964e8e6b3f8bdd8d1cfcbc022a2fded6f0cc67fe88c579018782371996c3e"
-        },
-        {
-          "path": "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/.audit/issue-361-history-runtime/runtime.env",
-          "sha256": "2fc2bbb41743368769b6a4b821d8ee8e233cb285ff0c68d61ab0ad9d4dc29a4f"
-        },
-        {
-          "path": "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/.audit/issue-361-candidate-runtime/ports.env",
-          "sha256": "ed15ed45773812f3877a8a0d9c79a12c8a1e0a0bf391bff0b25a905521fedb81"
+          "path": "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/.audit/issue-361-shared-integration/51ab09ced690f401f623c655cbd344cdac77da4a/service/runtime.env",
+          "sha256": "8a48c39f91c280a6b31da35c4763fb67c5c6c03fdf2d2c2db0887960814ab380"
         }
       ],
-      "image_id": "sha256:aa80161e7dbbc4a592ce74ac7a924ac92349186e723d45755d79c44635ba95b4",
+      "image_id": "sha256:c0af0034bdb624cfc84c8228eebec3fdce2f6812565961498d94df12fbbfda37",
       "networks": [
-        "value-investment-agent-361-candidate-contracts_default"
+        "value-investment-agent-361-shared-service_default"
       ],
       "published_host": "0.0.0.0",
-      "published_port": 18663,
+      "published_port": 18666,
       "runtime_pins": {
         "arelle-release": "2.47.4",
         "pydantic": "2.14.2",
@@ -162,14 +151,13 @@
       "service": "fundamental-service",
       "source": {
         "container_path": "/app/src/fundamental_service",
-        "file_count": 54,
+        "file_count": 58,
         "repository_path": "fundamental-service/src/fundamental_service",
-        "sha256": "6486a41b3ebfef62ff75c83f37363f37b734ec062bc31af2a08a45ecd639e8fe"
+        "sha256": "ce55fea2f9c488fcf668bd0946d1d07e936f20852ff8ba57735a2b413e033584"
       },
-      "url": "http://127.0.0.1:18663",
+      "url": "http://127.0.0.1:18666",
       "volumes": [
-        "value-investment-agent-361-candidate-contracts_fundamental-postgres-data",
-        "value-investment-agent-361-candidate-contracts_fundamental-service-data"
+        "value-investment-agent-361-shared-service_fundamental-postgres-data"
       ]
     },
     "worktree": "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence"

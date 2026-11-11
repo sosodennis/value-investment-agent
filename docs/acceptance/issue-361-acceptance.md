@@ -854,3 +854,71 @@ not complete FCFF preparation, HTTP/service acceptance, independent semantic
 review or a numerical valuation. Complete role/award/market-policy evidence,
 review/release, caller approval and PR/main verification remain outstanding.
 Threshold stays null; #398, #361 and draft PR #370 remain open.
+
+## Shared composer integration and real HTTP reuse
+
+Implementation commits `cec7185d40682d8543edef22ce1f44a228af44f0`,
+`fe28b77c4fcdceb086e1ee20b05860187ef8399b` and
+`51ab09ced690f401f623c655cbd344cdac77da4a` integrate the shared #352
+operating forecast/projection and issuer-only evidence contracts, then bounded
+swap exclusion from the #399 dependency. Existing lease, dated disclosure,
+source precision and equity paths remain tested together. Composer v4 and the
+pre-extraction numerical outputs are preserved. Issuer-only operating releases
+cannot authorize security valuation. Research corpus and research commands are
+not imported into this PR.
+
+Exact `51ab09ce` validation passes **1,006 service/PostgreSQL tests, 11 optional
+runtime skips, 52 Agent boundary tests and 17 acceptance-tool tests**, Ruff,
+format, 29-source mypy, architecture and diff checks. Verification command:
+`FUNDAMENTAL_TEST_DATABASE_URL=postgresql://fundamental:fundamental@127.0.0.1:18665/issue361_test uv run --frozen --project fundamental-service python .audit/issue-361-shared-integration/verify_unit.py full`.
+Input digest `504e31094c07df5893b171ded7b3c6707fe3565baa2951424562def1de4d843e`;
+output `16fe50a99e701a00914823212294891ddcd27aab187de20fa80c9e6a68e7d120`.
+[Implementation CI](https://github.com/sosodennis/value-investment-agent/actions/runs/43064167983)
+has 12 successful jobs; the release gate is skipped.
+
+The real Microsoft incomplete-acquisition harness passes at this exact commit,
+including two additional complete process executions with zero provider/parser
+calls and `wrote=false`. It retains 57 provisional revenue facts, three
+consolidated annual observations and unknown `contract_assets`, with quality
+`abstain`. Native input
+`3ba7ba51fd5715fc103f96e0098286938e56908adb16ef5ef6d1ae30be7f7a3a`;
+output `d7702fa7544ad1299b46f9c3399f4c10d29165ce786511af12af9842012d5fd3`.
+
+An independently built installed service is also verified. Its 58 Python files
+match Git exactly: source digest
+`ce55fea2f9c488fcf668bd0946d1d07e936f20852ff8ba57735a2b413e033584`;
+image `sha256:c0af0034bdb624cfc84c8228eebec3fdce2f6812565961498d94df12fbbfda37`;
+Python 3.12.16, Arelle 2.47.4, Pydantic 2.14.2. The recorded SEC-enabled
+`acceptance_preflight.sh` exits 0. Its input is
+`f12bfc1bacaa52f379b4b6771662b27a6f55d6ae87d081030c97cc1d55b3c327`,
+output `022fa438d765210abe60a69a6287ff7270cf6b24abc153d8e126ac0e703979e9`.
+
+Actual POST `/v1/data/ingestions` and GET snapshot requests reuse the restored
+real abstained acquisition before and after restarting only this service.
+Canonical response digest remains
+`db119ed7bf1dbc4e24393e73efd4f289285cd0a91385df5c63461b1c157ad8a7`;
+no domain rows, content bytes or existing mtimes change. Operational source
+access audit rows may append. Two full HTTP-harness executions exit 0; the
+second reuses the input/report with `wrote=false`. HTTP input
+`1c3c1a647a1edcb48ec4ba3ca37f4a47557163a5afc15439bd21fdbc85d4edf0`;
+output `f2ac1945b10583396a94bb889e74e847b9b6c535c1bc7c02544246326592b40a`;
+report `2e3523720f4edcff44684463151fde90094753f6742f970d8e8080b2c3a1a40f`.
+Development trust fixtures are used only for runtime/refusal checks; they grant
+no real financial release or caller approval.
+
+Projects `value-investment-agent-361-shared-service` (ports 18666/18667) and
+`value-investment-agent-361-flow-tests` (18665) are removed after backup.
+Service backup manifest
+`f7af33dbb74080a908d9b180859332b8464e07da75c42b0288bf653ee4da2c7a`;
+cleanup report `af808b612ef2c62592781eb6474e27710cb65d048a169e88d7c92903e3142fcb`.
+Neither project retains containers, networks or volumes. All 62 baseline
+containers retain ID/image/start time. The canonical runtime manifest records
+this stopped tuple and requires revalidation before reuse.
+
+`shared_composer_integration_increment` in the existing accounting checkpoint
+preserves all prior entries, exact commands and corrected harness failures.
+This increment establishes integration and real abstained HTTP reuse/restart.
+A complete numerical case still needs six complete scalar roles, company-wide
+award/PSU scope, actual market policy, independent trusted semantic review and
+release, and exact-input caller approval. The 19-gate acceptance, independent
+PR review, merge and main verification remain incomplete; threshold stays null.
