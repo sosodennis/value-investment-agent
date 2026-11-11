@@ -17,10 +17,12 @@ from .contracts import (
     CanonicalFactV1,
     ForecastAssumptionsV1,
     QualityStatus,
+    SourceRole,
     SourceSnapshotV1,
     StrictModel,
 )
 from .numerical_policy import VALUATION_NUMERICAL_POLICY, using_valuation_context
+from .original_issuer import IssuerOperatingSourceV1
 from .operating_projection import OperatingProjectionError, project_operating_nodes
 from .serialization import sha256_digest
 from .valuation_preparation import (
@@ -92,7 +94,7 @@ class OperatingForecastV1(StrictModel):
 def prepare_operating_forecast(
     facts: Iterable[CanonicalFactV1],
     *,
-    snapshot: SourceSnapshotV1,
+    snapshot: SourceSnapshotV1 | IssuerOperatingSourceV1,
     model_id: Literal["fcff_dcf", "transition_fcff_dcf"],
     model_version: str,
     policy_id: str,
@@ -121,7 +123,7 @@ def prepare_operating_forecast(
 def _prepare(
     facts: tuple[CanonicalFactV1, ...],
     *,
-    snapshot: SourceSnapshotV1,
+    snapshot: SourceSnapshotV1 | IssuerOperatingSourceV1,
     model_id: Literal["fcff_dcf", "transition_fcff_dcf"],
     model_version: str,
     policy_id: str,
@@ -171,6 +173,26 @@ def _prepare(
                     "OPERATING_FACT_ID_DUPLICATE", "input fact IDs must be unique"
                 )
             for fact in selected.facts:
+                if isinstance(snapshot, IssuerOperatingSourceV1):
+                    source = next(
+                        source
+                        for source in snapshot.source_records
+                        if source.content_hash == fact.source.content_hash
+                    )
+                    if (
+                        fact.accession_number != source.accession_number
+                        or fact.source.accession_number != source.accession_number
+                        or fact.source.source_url != source.uri
+                        or fact.source.source_role is not SourceRole.FILING
+                        or fact.source.available_at != source.available_at
+                        or fact.available_at != source.available_at
+                        or fact.is_amendment
+                    ):
+                        raise PreparationError(
+                            "OPERATING_ORIGINAL_SOURCE_MISMATCH",
+                            "issuer operating facts require their exact original source",
+                            missing=(fact.fact_id,),
+                        )
                 if fact.normalized_field == "filed_operating_evidence":
                     continue
                 currency = snapshot.identity.currency

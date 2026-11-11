@@ -18,6 +18,7 @@ from .contracts import (
     StrictModel,
 )
 from .serialization import sha256_digest
+from .original_issuer import IssuerOperatingSourceV1, fact_matches_operating_identity
 
 
 class ValuationRequirementsProfileV1(StrictModel):
@@ -91,11 +92,12 @@ def select_released_facts(
     facts: Iterable[CanonicalFactV1],
     *,
     profile: ValuationRequirementsProfileV1,
-    snapshot: SourceSnapshotV1,
+    snapshot: SourceSnapshotV1 | IssuerOperatingSourceV1,
     valuation_timestamp: datetime,
 ) -> ReleasedFactSelectionV1:
     """Select every eligible candidate for the profile without caller mappings."""
 
+    require_operating_source_profile(snapshot, profile)
     source_hashes = {record.content_hash for record in snapshot.source_records}
     required_fields = profile.required_fact_fields
     selected: list[CanonicalFactV1] = []
@@ -103,8 +105,7 @@ def select_released_facts(
     for fact in facts:
         if (
             fact.normalized_field not in required_fields
-            or fact.issuer_id != snapshot.identity.issuer_id
-            or fact.security_id not in {None, snapshot.identity.security_id}
+            or not fact_matches_operating_identity(fact, snapshot)
             or fact.source.content_hash not in source_hashes
             or fact.available_at > valuation_timestamp
             or next(
@@ -141,6 +142,16 @@ def select_released_facts(
         rejected_fact_ids=tuple(sorted(rejected)),
         issue_codes=tuple(issue_codes),
     )
+
+
+def require_operating_source_profile(
+    snapshot: SourceSnapshotV1 | IssuerOperatingSourceV1,
+    profile: ValuationRequirementsProfileV1,
+) -> None:
+    if isinstance(snapshot, IssuerOperatingSourceV1) and profile != (
+        operating_forecast_requirements_profile(profile.model_id)
+    ):
+        raise ValueError("issuer-only evidence requires the exact operating profile")
 
 
 _ANNUAL_DURATION_FIELDS = (

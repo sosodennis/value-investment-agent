@@ -35,6 +35,7 @@ from .contracts import (
     WaccAssumptionsV1,
 )
 from .numerical_policy import using_valuation_context
+from .original_issuer import IssuerOperatingSourceV1
 from .serialization import sha256_digest
 from .uncertainty_policy import (
     DEFAULT_UNCERTAINTY_POLICY_VERSION,
@@ -792,7 +793,7 @@ def apply_manual_override(
 def _transition_filing_evidence(
     facts: Iterable[CanonicalFactV1],
     *,
-    snapshot: SourceSnapshotV1,
+    snapshot: SourceSnapshotV1 | IssuerOperatingSourceV1,
 ) -> tuple[CanonicalFactV1, ...]:
     """Require transition evidence to remain tied to a filed SEC source."""
 
