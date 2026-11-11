@@ -10,6 +10,7 @@ from fundamental_service.accounting_roles import (
     AccountingPeriodV1,
     AccountingRoleEvidenceV1,
     AccountingRoleRuleSetV1,
+    DisclosedAmountV1,
 )
 from fundamental_service.arelle_parser import (
     ArelleParseReportV1,
@@ -31,7 +32,7 @@ from test_valuation_preparation import _facts
 from test_postgres_metadata import DATABASE_URL
 
 
-def _fixture(*, disposition="derived", altered_fact=None):
+def _fixture(*, disposition="derived", altered_fact=None, altered_passage=None):
     snapshot = _original(2023)
     source = snapshot.source_records[0]
     observations = tuple(
@@ -57,6 +58,15 @@ def _fixture(*, disposition="derived", altered_fact=None):
         entity_identifier=snapshot.identity.issuer_id,
         consolidation_scope="consolidated",
     )
+    if disposition == "disclosed":
+        passage = passage.model_copy(
+            update={
+                "concept": "us-gaap:ShareBasedCompensationTextBlock",
+                "value": "The company recognized total stock-based compensation cost of $2 million during fiscal 2023.",
+            }
+        )
+    if altered_passage:
+        passage = passage.model_copy(update=altered_passage)
     if altered_fact:
         observations = (
             observations[0].model_copy(update=altered_fact),
@@ -85,7 +95,11 @@ def _fixture(*, disposition="derived", altered_fact=None):
             )
         }
     )
-    period = AccountingPeriodV1(period_end=date(2023, 12, 31), instant=True)
+    period = AccountingPeriodV1(
+        period_start=date(2023, 1, 1) if disposition == "disclosed" else None,
+        period_end=date(2023, 12, 31),
+        instant=disposition != "disclosed",
+    )
     rule = AccountingPeriodRuleV1(
         period=period,
         disposition=disposition,
@@ -102,11 +116,31 @@ def _fixture(*, disposition="derived", altered_fact=None):
         )
         if disposition == "confirmed_absent"
         else (),
+        disclosed_amount=DisclosedAmountV1(
+            parsed_fact_digest=sha256_digest(passage),
+            quote_start=0,
+            exact_quote=passage.value,
+            amount_start=passage.value.index("$2") + 1,
+            amount_token="2",
+            scale_start=passage.value.index("million"),
+            scale_token="million",
+            scale=6,
+            unit_start=passage.value.index("$2"),
+            unit_quote="$",
+            reported_unit="iso4217:USD",
+            reported_decimals=-6,
+            covered_classes=("all stock-based awards",),
+            complete_role=True,
+        )
+        if disposition == "disclosed"
+        else None,
         rationale="Synthetic rule exercises source classification; it is not a reviewed issuer mapping.",
     )
     role = (
         "current_interest_bearing_debt"
         if disposition == "derived"
+        else "stock_based_compensation"
+        if disposition == "disclosed"
         else "preferred_claims"
     )
     rules = AccountingRoleRuleSetV1(
@@ -157,7 +191,8 @@ def _candidates(snapshot, report, mapping):
 
 
 @pytest.mark.parametrize(
-    "disposition,expected", [("derived", "120"), ("confirmed_absent", "0")]
+    "disposition,expected",
+    [("derived", "120"), ("confirmed_absent", "0"), ("disclosed", "2000000")],
 )
 def test_accounting_value_keeps_sources_and_roundtrips(disposition, expected):
     snapshot, report, mapping = _fixture(disposition=disposition)
@@ -173,6 +208,163 @@ def test_accounting_value_keeps_sources_and_roundtrips(disposition, expected):
     verify_accounting_role_evidence(fact, mapping, snapshot)
     assert canonical_fact_digest(fact) == canonical_fact_digest(restored)
     assert _candidates(snapshot, report, mapping) == (candidate,)
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"quote_start": 1},
+        {"scale_start": 1},
+        {"unit_start": 1},
+        {"reported_unit": "iso4217:EUR"},
+    ],
+)
+def test_disclosed_amount_requires_exact_original_quote_unit_and_scale_span(change):
+    snapshot, report, mapping = _fixture(disposition="disclosed")
+    rules = mapping.accounting_rules
+    rule = rules.periods[0]
+    amount = rule.disclosed_amount.model_copy(update=change)
+    mapping = mapping.model_copy(
+        update={
+            "accounting_rules": rules.model_copy(
+                update={
+                    "periods": (rule.model_copy(update={"disclosed_amount": amount}),)
+                }
+            )
+        }
+    )
+    with pytest.raises(SnapshotError, match="exact original period, unit and spans"):
+        _candidates(snapshot, report, mapping)
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"scale": 3},
+        {"reported_decimals": 0},
+        {"amount_start": 0},
+        {"amount_token": "NaN"},
+        {"amount_token": "2e6"},
+        {"covered_classes": ()},
+        {"complete_role": False},
+    ],
+)
+def test_disclosed_amount_rejects_inconsistent_or_partial_transcription(change):
+    _, _, mapping = _fixture(disposition="disclosed")
+    data = mapping.accounting_rules.periods[0].disclosed_amount.model_dump()
+    with pytest.raises(ValueError):
+        DisclosedAmountV1.model_validate({**data, **change})
+
+
+def test_disclosed_amount_preserves_precision_provisional_quality_and_decimal_context():
+    snapshot, report, mapping = _fixture(disposition="disclosed")
+    mapping = mapping.model_copy(
+        update={"status": "provisional", "confidence": "unresolved"}
+    )
+    with localcontext() as context:
+        context.prec = 2
+        context.rounding = ROUND_DOWN
+        context.traps[Inexact] = True
+        (candidate,) = _candidates(snapshot, report, mapping)
+    fact = candidate.canonical_fact(quality=QualityStatus.PROVISIONAL)
+    assert fact.value == Decimal("2000000")
+    assert fact.decimals == -6
+    assert fact.quality is QualityStatus.PROVISIONAL
+    assert CanonicalFactV1.model_validate_json(canonical_bytes(fact)) == fact
+    with pytest.raises(ValueError):
+        CanonicalFactV1.model_validate_json(
+            canonical_bytes(fact.model_copy(update={"decimals": 0}))
+        )
+
+
+def test_existing_period_rule_bytes_omit_unset_disclosed_amount():
+    _, _, mapping = _fixture()
+    rule = mapping.accounting_rules.periods[0]
+    assert "disclosed_amount" not in rule.model_dump(mode="json")
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"period_start": date(2022, 1, 1)},
+        {"period_end": date(2022, 12, 31)},
+        {"entity_identifier": "0000000002"},
+        {
+            "dimensions": (
+                ("us-gaap:AwardTypeAxis", "us-gaap:RestrictedStockUnitsRSUMember"),
+            )
+        },
+        {"consolidation_scope": "segmented"},
+        {"is_numeric": True},
+    ],
+)
+def test_disclosed_amount_cannot_relabel_other_period_or_partial_source_scope(change):
+    snapshot, report, mapping = _fixture(
+        disposition="disclosed", altered_passage=change
+    )
+    with pytest.raises(SnapshotError):
+        _candidates(snapshot, report, mapping)
+
+
+def test_disclosed_quote_cannot_select_a_substring_of_a_numeric_token():
+    _, _, mapping = _fixture(disposition="disclosed")
+    amount = mapping.accounting_rules.periods[0].disclosed_amount
+    data = amount.model_dump()
+    data.update(
+        exact_quote=amount.exact_quote.replace("$2", "$12"),
+        amount_start=amount.amount_start + 1,
+    )
+    with pytest.raises(ValueError, match="complete numeric token"):
+        DisclosedAmountV1.model_validate(data)
+
+
+@pytest.mark.parametrize(
+    "token,scale_token,scale,precision,expected",
+    [
+        ("2.5", "million", 6, -5, "2500000"),
+        ("-1,250.25", "thousand", 3, -1, "-1250250"),
+        ("1.125", "billion", 9, -6, "1125000000"),
+        ("123.45", "dollars", 0, 2, "123.45"),
+    ],
+)
+def test_disclosed_literals_retain_grouping_sign_fraction_and_scaled_precision(
+    token, scale_token, scale, precision, expected
+):
+    snapshot, report, mapping = _fixture(disposition="disclosed")
+    original = report.facts[-1]
+    text = f"The company's total compensation cost was ${token} {scale_token} for fiscal 2023."
+    passage = original.model_copy(update={"value": text})
+    amount = DisclosedAmountV1(
+        parsed_fact_digest=sha256_digest(passage),
+        quote_start=0,
+        exact_quote=text,
+        amount_start=text.index("$") + 1,
+        amount_token=token,
+        scale_start=text.index(scale_token),
+        scale_token=scale_token,
+        scale=scale,
+        unit_start=text.index("$"),
+        unit_quote="$",
+        reported_unit="iso4217:USD",
+        reported_decimals=precision,
+        covered_classes=("all awards",),
+        complete_role=True,
+    )
+    report = report.model_copy(update={"facts": (*report.facts[:-1], passage)})
+    rule = mapping.accounting_rules.periods[0].model_copy(
+        update={"disclosed_amount": amount}
+    )
+    rules = mapping.accounting_rules.model_copy(
+        update={"periods": (rule,), "parser_fact_digest": fact_semantic_digest(report)}
+    )
+    mapping = mapping.model_copy(update={"accounting_rules": rules})
+    (candidate,) = _candidates(snapshot, report, mapping)
+    fact = candidate.canonical_fact(quality=QualityStatus.PROVISIONAL)
+    assert fact.value == Decimal(expected)
+    assert fact.decimals == precision
+    assert canonical_fact_digest(fact) == canonical_fact_digest(
+        CanonicalFactV1.model_validate_json(canonical_bytes(fact))
+    )
 
 
 @pytest.mark.parametrize("disposition", ["unknown", "unsupported"])
@@ -291,8 +483,9 @@ def test_classification_is_independent_of_callers_decimal_context():
     assert expected[0].value == Decimal("120.1234567890123456789012345678901")
 
 
+@pytest.mark.parametrize("disposition", ["derived", "disclosed"])
 @pytest.mark.parametrize("mutation", [None, "mapping", "integrity"])
-def test_signed_canary_and_http_read_recheck_accounting_bindings(mutation):
+def test_signed_canary_and_http_read_recheck_accounting_bindings(mutation, disposition):
     from types import SimpleNamespace
 
     from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
@@ -317,7 +510,7 @@ def test_signed_canary_and_http_read_recheck_accounting_bindings(mutation):
     )
     from test_release_runner import _candidate
 
-    snapshot, report, mapping = _fixture()
+    snapshot, report, mapping = _fixture(disposition=disposition)
     (candidate,) = _candidates(snapshot, report, mapping)
     fact = candidate.canonical_fact(quality=QualityStatus.VERIFIED)
     if mutation == "mapping":
@@ -539,9 +732,10 @@ def test_duplicate_component_and_unrelated_absence_period_refuse():
 
 
 @pytest.mark.skipif(not DATABASE_URL, reason="isolated PostgreSQL is required")
+@pytest.mark.parametrize("disposition", ["derived", "disclosed"])
 @pytest.mark.parametrize("omit", [None, "mapping", "original"])
 def test_accounting_sources_survive_persistent_restart_and_backup_restore(
-    tmp_path, recovery_databases, omit
+    tmp_path, recovery_databases, omit, disposition
 ):
     import asyncio
     import hashlib
@@ -556,7 +750,7 @@ def test_accounting_sources_survive_persistent_restart_and_backup_restore(
     source_database, target_database = recovery_databases
     raw = b"synthetic SEC accounting source for persistent boundary acceptance"
     source_hash = hashlib.sha256(raw).hexdigest()
-    snapshot, report, mapping = _fixture()
+    snapshot, report, mapping = _fixture(disposition=disposition)
     source = snapshot.source_records[0].model_copy(
         update={"content_hash": source_hash, "parser_input_hash": source_hash}
     )

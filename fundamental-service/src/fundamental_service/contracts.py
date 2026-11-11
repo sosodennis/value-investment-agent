@@ -923,6 +923,11 @@ class CanonicalFactV1(StrictModel):
                 or self.context.instant != self.instant
                 or self.context.end_date
                 != (None if period.instant else period.period_end)
+                or (
+                    evidence.period_rule.disclosed_amount is not None
+                    and self.decimals
+                    != evidence.period_rule.disclosed_amount.reported_decimals
+                )
             ):
                 raise ValueError(
                     "computed role fact differs from its source-bound accounting evidence"

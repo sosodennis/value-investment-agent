@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import date
 from decimal import Context, Decimal, InvalidOperation, localcontext, ROUND_HALF_EVEN
+import re
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -46,26 +47,111 @@ class AbsencePassageV1(RoleModel):
     exact_quote: str = Field(min_length=16)
 
 
+class DisclosedAmountV1(RoleModel):
+    parsed_fact_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    quote_start: int = Field(ge=0)
+    exact_quote: str = Field(min_length=16, max_length=8192)
+    amount_start: int = Field(ge=0)
+    amount_token: str = Field(
+        pattern=r"^-?(?:[0-9]{1,3}(?:,[0-9]{3})+|[0-9]+)(?:\.[0-9]+)?$",
+        max_length=80,
+    )
+    scale_start: int = Field(ge=0)
+    scale_token: Literal[
+        "dollars",
+        "shares",
+        "thousand",
+        "thousands",
+        "million",
+        "millions",
+        "billion",
+        "billions",
+    ]
+    scale: Literal[0, 3, 6, 9]
+    unit_start: int = Field(ge=0)
+    unit_quote: str = Field(min_length=1, max_length=64)
+    reported_unit: str = Field(min_length=1)
+    reported_decimals: int = Field(ge=-9, le=18)
+    covered_classes: tuple[str, ...] = Field(min_length=1, max_length=32)
+    complete_role: Literal[True]
+
+    @model_validator(mode="after")
+    def transcription_is_consistent(self) -> DisclosedAmountV1:
+        scales = {
+            "dollars": 0,
+            "shares": 0,
+            "thousand": 3,
+            "thousands": 3,
+            "million": 6,
+            "millions": 6,
+            "billion": 9,
+            "billions": 9,
+        }
+        fractional_digits = len(self.amount_token.partition(".")[2])
+        if (
+            self.scale != scales[self.scale_token]
+            or self.reported_decimals != fractional_digits - self.scale
+            or len(self.amount_token.replace(",", "").replace(".", "").lstrip("-")) > 34
+        ):
+            raise ValueError(
+                "disclosed scale and precision must match the source token"
+            )
+        end = self.amount_start + len(self.amount_token)
+        if self.exact_quote[self.amount_start : end] != self.amount_token:
+            raise ValueError("disclosed amount is not at its exact quote offset")
+        for neighbor in (
+            self.exact_quote[self.amount_start - 1 : self.amount_start]
+            if self.amount_start
+            else "",
+            self.exact_quote[end : end + 1],
+        ):
+            if neighbor and neighbor in "0123456789.,-":
+                raise ValueError(
+                    "disclosed amount must reference a complete numeric token"
+                )
+        if len(set(self.covered_classes)) != len(self.covered_classes) or any(
+            not item.strip() for item in self.covered_classes
+        ):
+            raise ValueError("disclosed covered classes must be distinct and nonempty")
+        return self
+
+
 class AccountingPeriodRuleV1(RoleModel):
     period: AccountingPeriodV1
-    disposition: Literal["derived", "confirmed_absent", "unknown", "unsupported"]
+    disposition: Literal[
+        "derived", "disclosed", "confirmed_absent", "unknown", "unsupported"
+    ]
     components: tuple[AccountingComponentV1, ...] = ()
     absence_passages: tuple[AbsencePassageV1, ...] = ()
+    disclosed_amount: DisclosedAmountV1 | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
     rationale: str = Field(min_length=1)
 
     @model_validator(mode="after")
     def disposition_has_evidence(self) -> AccountingPeriodRuleV1:
         if self.disposition == "derived":
-            if len(self.components) < 2 or self.absence_passages:
+            if (
+                len(self.components) < 2
+                or self.absence_passages
+                or self.disclosed_amount
+            ):
                 raise ValueError(
                     "derived roles require at least two numeric components"
                 )
+        elif self.disposition == "disclosed":
+            if (
+                self.components
+                or self.absence_passages
+                or self.disclosed_amount is None
+            ):
+                raise ValueError("disclosed roles require one exact original amount")
         elif self.disposition == "confirmed_absent":
-            if self.components or not self.absence_passages:
+            if self.components or not self.absence_passages or self.disclosed_amount:
                 raise ValueError(
                     "confirmed absence requires original disclosure passages"
                 )
-        elif self.components or self.absence_passages:
+        elif self.components or self.absence_passages or self.disclosed_amount:
             raise ValueError("unresolved roles cannot carry resolved numeric evidence")
         keys = tuple(item.parsed_fact_digest for item in self.components)
         if len(set(keys)) != len(keys):
@@ -75,6 +161,13 @@ class AccountingPeriodRuleV1(RoleModel):
                 "accounting classification needs a positive base component"
             )
         return self
+
+    def source_references(self) -> tuple[str, ...]:
+        if self.disclosed_amount is not None:
+            return (self.disclosed_amount.parsed_fact_digest,)
+        if self.disposition == "derived":
+            return tuple(item.parsed_fact_digest for item in self.components)
+        return tuple(item.parsed_fact_digest for item in self.absence_passages)
 
 
 class AccountingRoleRuleSetV1(RoleModel):
@@ -143,11 +236,7 @@ def evaluate_period_rule(
             )
         return None
     by_digest = {sha256_digest(fact): fact for fact in source_facts}
-    references = (
-        tuple(item.parsed_fact_digest for item in rule.components)
-        if rule.disposition == "derived"
-        else tuple(item.parsed_fact_digest for item in rule.absence_passages)
-    )
+    references = rule.source_references()
     if len(by_digest) != len(source_facts) or set(by_digest) != set(references):
         raise AccountingRoleError(
             "ACCOUNTING_ROLE_SOURCE_MISMATCH",
@@ -164,6 +253,48 @@ def evaluate_period_rule(
                 "ACCOUNTING_ROLE_SCOPE_MISMATCH",
                 "role source must match the consolidated issuer scope",
             )
+    if rule.disposition == "disclosed":
+        transcription = rule.disclosed_amount
+        assert transcription is not None
+        fact = by_digest[transcription.parsed_fact_digest]
+        scale_end = transcription.scale_start + len(transcription.scale_token)
+        unit_end = transcription.unit_start + len(transcription.unit_quote)
+        if (
+            fact.is_numeric
+            or rule.period.instant
+            or fact.period_start != rule.period.period_start
+            or fact.period_end != rule.period.period_end
+            or fact.instant is not None
+            or transcription.reported_unit != rules.unit
+            or fact.value[
+                transcription.quote_start : transcription.quote_start
+                + len(transcription.exact_quote)
+            ]
+            != transcription.exact_quote
+            or fact.value[transcription.scale_start : scale_end]
+            != transcription.scale_token
+            or fact.value[transcription.unit_start : unit_end]
+            != transcription.unit_quote
+            or re.search(r"[A-Za-z]", fact.value[scale_end : scale_end + 1])
+            or (
+                transcription.scale_start
+                and re.search(
+                    r"[A-Za-z]",
+                    fact.value[
+                        transcription.scale_start - 1 : transcription.scale_start
+                    ],
+                )
+            )
+        ):
+            raise AccountingRoleError(
+                "ACCOUNTING_DISCLOSED_AMOUNT_MISMATCH",
+                "disclosed transcription requires its exact original period, unit and spans",
+            )
+        with localcontext(Context(prec=34, rounding=ROUND_HALF_EVEN)):
+            value = Decimal(transcription.amount_token.replace(",", "")).scaleb(
+                transcription.scale
+            )
+        return Decimal(format(value, "f"))
     if rule.disposition == "confirmed_absent":
         for passage in rule.absence_passages:
             fact = by_digest[passage.parsed_fact_digest]

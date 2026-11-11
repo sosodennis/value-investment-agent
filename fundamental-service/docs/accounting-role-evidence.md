@@ -14,6 +14,22 @@ precision 34 with half-even rounding. It performs accounting normalization;
 forecast, tax, WACC, dilution and valuation formulas remain with the existing
 Fundamental composer/calculator.
 
+A `disclosed` duration transcribes one finite decimal literal from an exact
+nonnumeric parsed fact. `DisclosedAmountV1` retains Unicode code-point offsets
+for the exact quote, amount token, unit quote and scale token, plus reported
+precision, covered classes and the proposed complete-role scope. Supported
+scales are units, thousands, millions and billions. Transcription requires the
+same consolidated issuer and duration as the rule; comparative periods,
+dimensional disclosures and partial-role amounts remain unsupported. Reported
+precision survives candidate selection and canonical fact decoding. Existing
+rules omit the unset transcription field and keep their canonical bytes.
+
+Source membership and deterministic scaling establish transcription only. The
+independent mapping review must establish currency, period, scope, completeness
+and overlap. For example, a rounded RSU-only cost cannot automatically supply
+total stock-based compensation. A provisional transcription stays provisional;
+it grants no release, caller approval, absence assertion or numerical valuation.
+
 A `confirmed_absent` period supplies zero only with exact cited original
 nonnumeric disclosure for the same period. An exact quote establishes source
 membership, not its financial meaning. The mapping's independent semantic review

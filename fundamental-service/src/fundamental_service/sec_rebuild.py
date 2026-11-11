@@ -256,11 +256,7 @@ def _accounting_candidates(
             )
         if rule.disposition in {"unknown", "unsupported"}:
             continue
-        references = (
-            tuple(item.parsed_fact_digest for item in rule.components)
-            if rule.disposition == "derived"
-            else tuple(item.parsed_fact_digest for item in rule.absence_passages)
-        )
+        references = rule.source_references()
         try:
             source_facts = tuple(
                 sorted((by_digest[key] for key in set(references)), key=sha256_digest)
@@ -308,6 +304,9 @@ def _accounting_candidates(
                 value=value,
                 unit=rules.unit,
                 scale=0,
+                decimals=rule.disclosed_amount.reported_decimals
+                if rule.disclosed_amount is not None
+                else None,
                 currency=rules.currency,
                 period_type=PeriodType.INSTANT
                 if period.instant
