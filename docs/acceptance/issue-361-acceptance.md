@@ -404,3 +404,37 @@ Full observations remain outside Git; their source, parser, script, runtime and
 artifact digests are in the compact accounting checkpoint. This tests the
 remaining evidence gap directly: transcription support cannot supply an
 undisclosed or unreviewed financial role. Current CI at `1c9e14b7` passed.
+
+## Formal composer lease correction (#385)
+
+Implementation `ac47fc2c434521dcd8df7ebf57f5233ac5b140bb` corrects the existing
+composer's equity-bridge classification to the declared `lease-treatment-v1`.
+The old composer deducted operating lease balances even though operating lease
+costs remain in FCFF. For both models, increasing only those balances by 1,000
+incorrectly reduced equity by 1,000. The regression now leaves equity unchanged;
+increasing finance lease obligations by 100 still reduces equity by 100. All
+six missing lease-role cases still abstain, and operating lease observations
+remain in the input. Deduction provenance names only finance obligations.
+
+The corrected input identifies `fcff-forecast-composer-v2` in optional preparation
+provenance, bound to the input digest and caller approval. Direct caller inputs
+omit this provenance when unset. Existing artifacts retain their identities.
+Exact PostgreSQL regression: **619 service tests passed / 11 optional skips**,
+10 Agent client tests and 17 acceptance-tool tests passed. Ruff/format,
+ten-source mypy, architecture, contract generation and diff checks passed;
+contract generation left tracked files unchanged. CI passed all 12 executed
+jobs; the legacy release gate was skipped. Input:
+`dd6bdb17883aa2fa503673e5b2992eb3030e83386e46a3d03d774fd79583c3c5`;
+output: `f10dda7157193dba3a2cb055a893ece561d65a4e8abdb751cb3229b507b88cd6`.
+The owned tmpfs PostgreSQL project was removed; 62 baseline containers are
+unchanged. Before/after failures, commands, runtime and digests are retained in
+the compact accounting checkpoint.
+
+A separate same-input probe at this commit exposed [#386](https://github.com/sosodennis/value-investment-agent/issues/386):
+caller Decimal precision/rounding changes the calculator's output digest. One
+input produced three result digests. This remains a determinism blocker despite
+the passing existing regression suite. Fix numeric-context ownership and resolve
+the canonical/deployed precision-policy drift before claiming full replay
+acceptance. Real-source role/policy review and all 19 service gates remain
+incomplete; #361 and the blockers stay open, PR #370 stays draft and thresholds
+remain null.
