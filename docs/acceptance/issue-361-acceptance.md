@@ -92,6 +92,42 @@ does not satisfy any full-flow gate by itself; all 19
 `persistent-valuation-flow-v1` acceptance checks remain `not_run` until their
 complete behavior is exercised against the isolated service runtime.
 
+## Engineering checkpoint: source preparation and history canary
+
+Implementation `0fb1abe76fb10de5ee9ce40f30f4a94d68c15885` adds the one-shot
+`fundamental-prepare-source` command. It coordinates the existing acquisition,
+trusted candidate canary/publication/activation, #352 composer and caller-approved
+calculation. An acquired but unreleased snapshot yields `release_required`;
+prepared evidence yields `approval_required`. Permanent source refusals are
+retained as `blocked`; transient errors and authorization denials still propagate.
+Stored snapshots can resume through a trusted candidate without provider I/O.
+There is no server-owned valuation session, fabricated approval or new formula.
+
+The #375 release canary now validates all declared annual fact IDs and digests,
+source membership, availability and released mapping bindings. It retains the
+latest-fact canary and rejects invalid older periods, unknown amendments and
+conflicts. Both artifact stores expose publication receipts and reuse identical
+metadata/bytes with `wrote=false`; corrupt bytes are not replaced.
+
+[Exact checkpoint evidence](issue-361-preparation-checkpoint.json) records commands,
+exit codes, runtime pins and command-output hashes. Input digest:
+`426f8b1ff61511635d38caa7e156ec4eb6b7957ab8ebff6e6b83cb9cd530fb05`;
+check-output digest:
+`fb3aed3069a41e6a18789f8987312b24452c56b437d1004406f74db582131074`.
+Fundamental tests against the isolated PostgreSQL project passed 493 tests with
+11 optional parser/runtime skips. Acceptance-manifest/preflight tests passed 17;
+Ruff, changed formatting, four-source mypy, architecture guard and diff checks
+passed. PostgreSQL tests verify concurrent publication receipts, content mtime
+preservation, corruption refusal and preparation/calculation reuse after metadata
+restart, using synthetic fixtures.
+
+These checks do not establish real-filing numerical success or a complete service
+restart/backup/restore acceptance. Multi-filing composition and reviewed financial
+role coverage, real-source numerical success, service-backed repeat/recovery,
+independent review, CI and main merge verification remain required. #361 and #375
+remain open; all 19 full-flow gates remain unverified. The next implementation
+unit is real-source coverage and recovery, not threshold promotion.
+
 ## Research preservation and removal
 
 Baseline `59830e161c9300e44b2b7b54eea3e43567835bff` has tree
