@@ -277,3 +277,36 @@ process/file precedence, missing/invalid/placeholder contacts and unchanged
 configuration. No SEC request is needed to verify parsing. Existing HTTP200 and
 integrity evidence remains valid; this fix grants no mapping/release authority
 or history-threshold approval.
+
+Parsing-fix implementation: `26099487e3872cce6df4201d9530f73421a1a7b6`, on
+`codex/issue-390-sec-env-reading`, a normal descendant of preserved #395 head
+`7d9fb3de`. Exact clean-commit evidence is outside Git at the research root's
+`checkpoint-26099487/sec-contact/`:
+
+| Parsing-fix evidence | SHA-256 |
+| --- | --- |
+| Checkpoint report | `048adf9bfb36454db907e420daeb5b2a44f769df56e51e228f7deb3bdcd11cbc` |
+| Input | `e1a4974539428a4d5fcdc94c61abeed6fc635133bf66fb2078eda8c2e71e8d22` |
+| Output | `70452258985af1447c41695026119cd846c7868878f38c8bfefadf02392eda91` |
+
+The report retains the old-helper regression's expected failing exit1 and its
+`Audit` versus complete-header mismatch, the updated actual-helper regression's
+passing exit0, 63 passing research/configuration tests, Ruff check/format, mypy,
+architecture guard and diff check. It confirms that the real unquoted main
+configuration is returned in full without printing contact values. Two complete
+cache repetitions check all nine successful receipts while rejecting any new
+network call. All 35 existing source/receipt/integrity files preserve bytes,
+sizes and mtimes, with zero downloads and zero new source artifacts. Both `.env`
+files preserve contents and mtimes. Rewriting the checkpoint returns
+`wrote=false`. Exact command:
+
+```sh
+uv run --frozen --project fundamental-service python \
+  /Users/denniswong/Desktop/Project/value-investment-agent-issue-376-research-evidence/references/issue390-sec-contact-checkpoint.py \
+  --commit 26099487e3872cce6df4201d9530f73421a1a7b6
+```
+
+The checkpoint pins its executor, regression, updated/archived external scripts,
+source/configuration hashes, lock and Python runtime. No full service suite or
+Docker acceptance was rerun for this script-only fix; earlier library evidence
+remains explicitly bound to `743beac7`. No study outcome or threshold changed.
