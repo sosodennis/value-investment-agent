@@ -18,19 +18,26 @@ SENSITIVE_KEY_RE = re.compile(
 )
 STATUSES = {"WIP", "BLOCKED", "VERIFIED"}
 CHECK_STATUSES = {"pass", "fail", "not_run"}
-REPLAY_CHECKS = {
+VALUATION_FLOW_PROFILE = "persistent-valuation-flow-v1"
+VALUATION_FLOW_CHECKS = {
+    "source_acquisition",
+    "source_reuse",
+    "snapshot_persistence",
     "mapping",
-    "history_replay",
+    "preparation",
     "forecast",
-    "label",
-    "deterministic_replay",
+    "calculation",
+    "artifact_retrieval",
+    "restart_restore",
+    "deterministic_repeat",
     "failure_retention",
+    "concurrent_deduplication",
     "architecture",
     "ruff",
     "types",
     "diff",
     "service_acceptance",
-    "full_replay_repeat",
+    "full_flow_repeat",
     "review",
 }
 
@@ -289,6 +296,10 @@ def validate_manifest(
         errors.append("schema_version must be 1 or 2")
     if service_only and manifest.get("acceptance_scope") != "fundamental-service":
         errors.append("schema_version 2 requires acceptance_scope=fundamental-service")
+    if service_only and manifest.get("acceptance_profile") != VALUATION_FLOW_PROFILE:
+        errors.append(
+            f"schema_version 2 requires acceptance_profile={VALUATION_FLOW_PROFILE}"
+        )
     if not service_only and "acceptance_scope" in manifest:
         errors.append("schema_version 1 retains the app and browser acceptance scope")
 
@@ -392,10 +403,10 @@ def validate_manifest(
         names = [check.get("name") for check in checks if isinstance(check, dict)]
         if len(names) != len(set(str(name) for name in names)):
             errors.append("checks must have unique names")
-        missing = REPLAY_CHECKS - set(str(name) for name in names)
+        missing = VALUATION_FLOW_CHECKS - set(str(name) for name in names)
         if missing:
             errors.append(
-                f"missing history replay checks: {', '.join(sorted(missing))}"
+                f"missing persistent valuation flow checks: {', '.join(sorted(missing))}"
             )
 
     blockers = manifest.get("blockers", [])

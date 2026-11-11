@@ -1,146 +1,120 @@
 {
+  "acceptance_profile": "persistent-valuation-flow-v1",
   "acceptance_scope": "fundamental-service",
   "blockers": [
-    "https://github.com/sosodennis/value-investment-agent/issues/369",
-    "https://github.com/sosodennis/value-investment-agent/issues/371",
-    "Historical security identity, independent issuer/period mapping review and trusted canonical historical releases remain incomplete. Official v3.6.2 candidate is not yet certified.",
-    "https://github.com/sosodennis/value-investment-agent/issues/372"
+    "Complete source-to-valuation flow, real-source numerical success, persistence/restart/restore and service acceptance remain unverified under the revised scope.",
+    "Historical requests remain subject to #369/#371 source, mapping and policy coverage; no unsupported 2016 profile is approved.",
+    "Independent review, exact-implementation CI and merge-commit verification remain outstanding."
   ],
   "branch": "codex/issue-361-replay-evidence",
   "checks": [
     {
-      "command": "uv run --frozen --extra dev --project fundamental-service pytest fundamental-service/tests -q",
-      "commit": "9a757bcd2ea144c216d520b78e5271f4d4193b00",
-      "evidence": "docs/acceptance/issue-361-cohort-root-evidence-v1/checks/2d97d519bc67e6e4115f754cd746412272aa0cf489891edbb896605fd0127716.json.gz",
-      "exit_code": 0,
-      "input_digest": "982c9f33252c205e49229f4d85d68a3f20d0fb9d1a7f37d185779f2b82f77ff1",
-      "name": "mapping",
-      "output_digest": "5597eb59b0757b1dcba76255e21a59e44a9c5a6ce6f875a89120aa92176e79e0",
-      "status": "pass"
-    },
-    {
-      "command": "uv run --frozen --extra dev --project fundamental-service pytest fundamental-service/tests -q",
-      "commit": "9a757bcd2ea144c216d520b78e5271f4d4193b00",
-      "evidence": "docs/acceptance/issue-361-cohort-root-evidence-v1/checks/2d97d519bc67e6e4115f754cd746412272aa0cf489891edbb896605fd0127716.json.gz",
-      "exit_code": 0,
-      "input_digest": "982c9f33252c205e49229f4d85d68a3f20d0fb9d1a7f37d185779f2b82f77ff1",
-      "name": "history_replay",
-      "output_digest": "5597eb59b0757b1dcba76255e21a59e44a9c5a6ce6f875a89120aa92176e79e0",
-      "status": "pass"
-    },
-    {
-      "command": "uv run --frozen --extra dev --project fundamental-service pytest fundamental-service/tests -q",
-      "commit": "9a757bcd2ea144c216d520b78e5271f4d4193b00",
-      "evidence": "docs/acceptance/issue-361-cohort-root-evidence-v1/checks/2d97d519bc67e6e4115f754cd746412272aa0cf489891edbb896605fd0127716.json.gz",
-      "exit_code": 0,
-      "input_digest": "982c9f33252c205e49229f4d85d68a3f20d0fb9d1a7f37d185779f2b82f77ff1",
-      "name": "forecast",
-      "output_digest": "5597eb59b0757b1dcba76255e21a59e44a9c5a6ce6f875a89120aa92176e79e0",
-      "status": "pass"
-    },
-    {
-      "command": "uv run --frozen --extra dev --project fundamental-service pytest fundamental-service/tests -q",
-      "commit": "9a757bcd2ea144c216d520b78e5271f4d4193b00",
-      "evidence": "docs/acceptance/issue-361-cohort-root-evidence-v1/checks/2d97d519bc67e6e4115f754cd746412272aa0cf489891edbb896605fd0127716.json.gz",
-      "exit_code": 0,
-      "input_digest": "982c9f33252c205e49229f4d85d68a3f20d0fb9d1a7f37d185779f2b82f77ff1",
-      "name": "label",
-      "output_digest": "5597eb59b0757b1dcba76255e21a59e44a9c5a6ce6f875a89120aa92176e79e0",
-      "status": "pass"
-    },
-    {
-      "command": "uv run --frozen --extra dev --project fundamental-service pytest fundamental-service/tests -q",
-      "commit": "9a757bcd2ea144c216d520b78e5271f4d4193b00",
-      "evidence": "docs/acceptance/issue-361-cohort-root-evidence-v1/checks/2d97d519bc67e6e4115f754cd746412272aa0cf489891edbb896605fd0127716.json.gz",
-      "exit_code": 0,
-      "input_digest": "982c9f33252c205e49229f4d85d68a3f20d0fb9d1a7f37d185779f2b82f77ff1",
-      "name": "deterministic_replay",
-      "output_digest": "5597eb59b0757b1dcba76255e21a59e44a9c5a6ce6f875a89120aa92176e79e0",
-      "status": "pass"
-    },
-    {
-      "command": "uv run --frozen --extra dev --project fundamental-service pytest fundamental-service/tests -q",
-      "commit": "9a757bcd2ea144c216d520b78e5271f4d4193b00",
-      "evidence": "docs/acceptance/issue-361-cohort-root-evidence-v1/checks/2d97d519bc67e6e4115f754cd746412272aa0cf489891edbb896605fd0127716.json.gz",
-      "exit_code": 0,
-      "input_digest": "982c9f33252c205e49229f4d85d68a3f20d0fb9d1a7f37d185779f2b82f77ff1",
-      "name": "failure_retention",
-      "output_digest": "5597eb59b0757b1dcba76255e21a59e44a9c5a6ce6f875a89120aa92176e79e0",
-      "status": "pass"
-    },
-    {
-      "command": "python3 scripts/architecture_guard.py",
-      "commit": "9a757bcd2ea144c216d520b78e5271f4d4193b00",
-      "evidence": "docs/acceptance/issue-361-cohort-root-evidence-v1/checks/2d97d519bc67e6e4115f754cd746412272aa0cf489891edbb896605fd0127716.json.gz",
-      "exit_code": 0,
-      "input_digest": "3918cd85d77193be43127ffb59d046d10596865def9b89feff367e9f1fe4f976",
+      "command": "Not run for persistent-valuation-flow-v1; old research checks do not satisfy this scope.",
       "name": "architecture",
-      "output_digest": "96c6aef59bd5553b640bab3b1059a2449ab3bab48b6721d2a1e9ec5daa5a16c6",
-      "status": "pass"
-    },
-    {
-      "command": "uvx --from ruff==0.14.10 ruff check fundamental-service",
-      "commit": "9a757bcd2ea144c216d520b78e5271f4d4193b00",
-      "evidence": "docs/acceptance/issue-361-cohort-root-evidence-v1/checks/2d97d519bc67e6e4115f754cd746412272aa0cf489891edbb896605fd0127716.json.gz",
-      "exit_code": 0,
-      "input_digest": "97c81735d4769585e2b65eeb11e08d938a7d605f0e664297e0f3cc66dede6133",
-      "name": "ruff",
-      "output_digest": "3807eaa24103d0a127281b53a029d9b5820a4b1c33d56c2f1de39c64ad018665",
-      "status": "pass"
-    },
-    {
-      "command": "uv run --frozen --project fundamental-service --with mypy==1.19.1 mypy --no-incremental --follow-imports=silent --ignore-missing-imports fundamental-service/scripts/validate_fixed_history_originals.py fundamental-service/src/fundamental_service/app.py fundamental-service/src/fundamental_service/application/service.py fundamental-service/src/fundamental_service/arelle_parser.py fundamental-service/src/fundamental_service/contracts.py fundamental-service/src/fundamental_service/facts.py fundamental-service/src/fundamental_service/historical_dqc.py fundamental-service/src/fundamental_service/historical_dqc_plugin.py fundamental-service/src/fundamental_service/history_forecast_replay.py fundamental-service/src/fundamental_service/history_forecast_replay_cli.py fundamental-service/src/fundamental_service/history_mapping_audit.py fundamental-service/src/fundamental_service/history_mapping_proposals.py fundamental-service/src/fundamental_service/history_market_evidence.py fundamental-service/src/fundamental_service/history_original_validation.py fundamental-service/src/fundamental_service/history_policy_proposal.py fundamental-service/src/fundamental_service/history_replay.py fundamental-service/src/fundamental_service/history_replay_inputs.py fundamental-service/src/fundamental_service/history_review_signing.py fundamental-service/src/fundamental_service/ingestion.py fundamental-service/src/fundamental_service/interface/transport.py fundamental-service/src/fundamental_service/issuer_identity.py fundamental-service/src/fundamental_service/policies.py fundamental-service/src/fundamental_service/public_source.py fundamental-service/src/fundamental_service/sec_capture.py fundamental-service/src/fundamental_service/sec_integrity.py fundamental-service/src/fundamental_service/sec_source.py fundamental-service/src/fundamental_service/source_acquisition.py fundamental-service/src/fundamental_service/valuation_preparation.py",
-      "commit": "9a757bcd2ea144c216d520b78e5271f4d4193b00",
-      "evidence": "docs/acceptance/issue-361-cohort-root-evidence-v1/checks/2d97d519bc67e6e4115f754cd746412272aa0cf489891edbb896605fd0127716.json.gz",
-      "exit_code": 0,
-      "input_digest": "83bf7f423f6e65dee97830535a2fb0635397b7bd109c666f7b2a604dc9cb328d",
-      "name": "types",
-      "output_digest": "7368a736533870977dab202620b4498e1d2cbd3bc1384483f43f598c82084877",
-      "status": "pass"
-    },
-    {
-      "command": "git diff --check",
-      "commit": "9a757bcd2ea144c216d520b78e5271f4d4193b00",
-      "evidence": "docs/acceptance/issue-361-cohort-root-evidence-v1/checks/2d97d519bc67e6e4115f754cd746412272aa0cf489891edbb896605fd0127716.json.gz",
-      "exit_code": 0,
-      "input_digest": "06283730a5ed2db2fb2a772c8aefd60a828b187c294f55bf7b092b7d675a4af4",
-      "name": "diff",
-      "output_digest": "c99f0c3e6adf6366f6cb40cee2890c0e25bbfd1baed1be4ac7606b0485c0385c",
-      "status": "pass"
-    },
-    {
-      "command": "Historical source/mapping/identity/policy review and trusted releases remain incomplete. Readiness/preflight repeats are not full composer replay acceptance.",
-      "name": "full_replay_repeat",
       "status": "not_run"
     },
     {
-      "command": "Historical source/mapping/identity/policy review and trusted releases remain incomplete. Readiness/preflight repeats are not full composer replay acceptance.",
+      "command": "Not run for persistent-valuation-flow-v1; old research checks do not satisfy this scope.",
+      "name": "artifact_retrieval",
+      "status": "not_run"
+    },
+    {
+      "command": "Not run for persistent-valuation-flow-v1; old research checks do not satisfy this scope.",
+      "name": "calculation",
+      "status": "not_run"
+    },
+    {
+      "command": "Not run for persistent-valuation-flow-v1; old research checks do not satisfy this scope.",
+      "name": "concurrent_deduplication",
+      "status": "not_run"
+    },
+    {
+      "command": "Not run for persistent-valuation-flow-v1; old research checks do not satisfy this scope.",
+      "name": "deterministic_repeat",
+      "status": "not_run"
+    },
+    {
+      "command": "Not run for persistent-valuation-flow-v1; old research checks do not satisfy this scope.",
+      "name": "diff",
+      "status": "not_run"
+    },
+    {
+      "command": "Not run for persistent-valuation-flow-v1; old research checks do not satisfy this scope.",
+      "name": "failure_retention",
+      "status": "not_run"
+    },
+    {
+      "command": "Not run for persistent-valuation-flow-v1; old research checks do not satisfy this scope.",
+      "name": "forecast",
+      "status": "not_run"
+    },
+    {
+      "command": "Not run for persistent-valuation-flow-v1; old research checks do not satisfy this scope.",
+      "name": "full_flow_repeat",
+      "status": "not_run"
+    },
+    {
+      "command": "Not run for persistent-valuation-flow-v1; old research checks do not satisfy this scope.",
+      "name": "mapping",
+      "status": "not_run"
+    },
+    {
+      "command": "Not run for persistent-valuation-flow-v1; old research checks do not satisfy this scope.",
+      "name": "preparation",
+      "status": "not_run"
+    },
+    {
+      "command": "Not run for persistent-valuation-flow-v1; old research checks do not satisfy this scope.",
+      "name": "restart_restore",
+      "status": "not_run"
+    },
+    {
+      "command": "Not run for persistent-valuation-flow-v1; old research checks do not satisfy this scope.",
       "name": "review",
       "status": "not_run"
     },
     {
-      "command": "python3 scripts/acceptance_service_preflight.py --manifest .audit/issue-361-cohort-root-runtime/runtime.json --report-directory /tmp/issue361-cohort-root-service-preflight",
-      "commit": "9a757bcd2ea144c216d520b78e5271f4d4193b00",
-      "evidence": "docs/acceptance/issue-361-cohort-root-evidence-v1/service_preflight/ccf5492af2f4b7ce6b452d9c49bf7eae15ccfaf435274679f626f25b7635406f.json.gz",
-      "exit_code": 0,
-      "input_digest": "140db8cb83ef6871af0e5aae153a026589681f0a435508aebf6b85c0c150315a",
+      "command": "Not run for persistent-valuation-flow-v1; old research checks do not satisfy this scope.",
+      "name": "ruff",
+      "status": "not_run"
+    },
+    {
+      "command": "Not run for persistent-valuation-flow-v1; old research checks do not satisfy this scope.",
       "name": "service_acceptance",
-      "output_digest": "9c6c1d4ff0bc6e5bf3e9de3f2d4a7edf6b6cc528311fe8e49a864c33c3aa98cd",
-      "status": "pass"
+      "status": "not_run"
+    },
+    {
+      "command": "Not run for persistent-valuation-flow-v1; old research checks do not satisfy this scope.",
+      "name": "snapshot_persistence",
+      "status": "not_run"
+    },
+    {
+      "command": "Not run for persistent-valuation-flow-v1; old research checks do not satisfy this scope.",
+      "name": "source_acquisition",
+      "status": "not_run"
+    },
+    {
+      "command": "Not run for persistent-valuation-flow-v1; old research checks do not satisfy this scope.",
+      "name": "source_reuse",
+      "status": "not_run"
+    },
+    {
+      "command": "Not run for persistent-valuation-flow-v1; old research checks do not satisfy this scope.",
+      "name": "types",
+      "status": "not_run"
     }
   ],
-  "commit": "9a757bcd2ea144c216d520b78e5271f4d4193b00",
+  "commit": "59830e161c9300e44b2b7b54eea3e43567835bff",
   "issue": 361,
-  "latest_engineering_evidence": "docs/acceptance/issue-361-cohort-root-evidence.md",
-  "next_step": "Resolve source-specific historical identities, required role mappings and market-policy review in their owners; create trusted historical releases and execute full #352 composer replay twice. Engineering checks and readiness repeats are complete; both thresholds remain null.",
-  "original_diagnostic_evidence": "docs/acceptance/issue-361-marker62-evidence.md",
+  "latest_engineering_evidence": "docs/acceptance/issue-361-acceptance.md",
+  "next_step": "Implement and verify the complete supported source acquisition/reuse, snapshot persistence, automatic preparation, #352 calculation and artifact retrieval flow, including restart/restore and a repeated request. Revalidate the recorded runtime tuple before service acceptance.",
   "readiness": {
     "capabilities": {
       "identity_resolution_configured": true
     },
-    "contract_version": "internal.v1",
-    "status": "ready"
+    "status": "not_run"
   },
+  "research_archive": "docs/acceptance/issue-361-research-archive.json",
   "runtime": {
     "allowed_untracked_paths": [],
     "fundamental": {
@@ -200,7 +174,8 @@
     },
     "worktree": "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence"
   },
+  "runtime_revalidation_required": true,
   "schema_version": 2,
   "sec_identity_required": true,
-  "status": "BLOCKED"
+  "status": "WIP"
 }

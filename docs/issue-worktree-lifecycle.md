@@ -162,10 +162,15 @@ ACCEPTANCE_MANIFEST=docs/acceptance/issue-361-runtime.json \
 
 Service preflight reports use canonical JSON and content-addressed names. A
 repeat with the same tuple reuses existing bytes with `wrote=false`. Report
-writes use a temporary file and atomic rename. A VERIFIED #361 tuple requires
-passing mapping, history replay, forecast, label, deterministic replay, failure
-retention, architecture, lint, type, diff, service, full replay repeat and review
-checks, each bound to the exact implementation commit and input/output digests.
+writes use a temporary file and atomic rename. The revised #361 tuple declares
+`acceptance_profile: persistent-valuation-flow-v1`. A VERIFIED tuple requires
+passing source acquisition/reuse, snapshot persistence, mapping, preparation,
+forecast, calculation, artifact retrieval, restart/restore, deterministic repeat,
+failure retention, concurrent deduplication, architecture, lint, type, diff,
+service acceptance, full flow repeat and review checks, each bound to the exact
+implementation commit and input/output digests. Historical threshold research
+does not satisfy those checks; its evidence remains separate and unsupported
+history thresholds remain null.
 Later #361 evidence commits may change only that issue's acceptance Markdown
 and JSON artifacts. Implementation changes require a new tested commit.
 

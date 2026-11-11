@@ -7,7 +7,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parents[1]))
 
 from validate_acceptance_manifest import (
-    REPLAY_CHECKS,
+    VALUATION_FLOW_CHECKS,
+    VALUATION_FLOW_PROFILE,
     emit_preflight_env,
     validate_manifest,
 )
@@ -96,7 +97,12 @@ def test_emit_preflight_env_is_tab_delimited(capsys) -> None:
 
 def service_manifest():
     manifest = _manifest()
-    manifest.update(schema_version=2, acceptance_scope="fundamental-service", issue=361)
+    manifest.update(
+        schema_version=2,
+        acceptance_scope="fundamental-service",
+        acceptance_profile=VALUATION_FLOW_PROFILE,
+        issue=361,
+    )
     runtime = manifest["runtime"]
     del runtime["app"]
     del runtime["browser_session"]
@@ -131,7 +137,7 @@ def service_manifest():
     )
     manifest["checks"] = [
         {"name": name, "command": "pending", "status": "not_run"}
-        for name in sorted(REPLAY_CHECKS)
+        for name in sorted(VALUATION_FLOW_CHECKS)
     ]
     return manifest
 
@@ -170,15 +176,58 @@ def test_service_scope_requires_source_runtime_and_owned_resources() -> None:
         assert any(key in error for error in validate_manifest(manifest)), key
 
 
-def test_service_verification_requires_complete_replay_checks() -> None:
+def test_service_verification_requires_complete_valuation_flow_checks() -> None:
     manifest = service_manifest()
     manifest.update(status="VERIFIED", blockers=[])
     assert any("every check" in error for error in validate_manifest(manifest))
     manifest["checks"] = []
     assert any(
-        "missing history replay checks" in error
+        "missing persistent valuation flow checks" in error
         for error in validate_manifest(manifest)
     )
+
+
+def test_research_checks_cannot_verify_the_revised_delivery_scope() -> None:
+    manifest = service_manifest()
+    manifest.update(status="VERIFIED", blockers=[])
+    manifest["checks"] = [
+        {
+            "name": name,
+            "command": "old research check",
+            "status": "pass",
+            "commit": manifest["commit"],
+            "input_digest": "a" * 64,
+            "output_digest": "b" * 64,
+            "exit_code": 0,
+        }
+        for name in (
+            "mapping",
+            "history_replay",
+            "forecast",
+            "label",
+            "deterministic_replay",
+            "failure_retention",
+            "architecture",
+            "ruff",
+            "types",
+            "diff",
+            "service_acceptance",
+            "full_replay_repeat",
+            "review",
+        )
+    ]
+    errors = validate_manifest(manifest)
+    assert any("source_reuse" in error for error in errors)
+    assert any("restart_restore" in error for error in errors)
+    assert any("calculation" in error for error in errors)
+
+
+def test_service_scope_requires_its_declared_valuation_flow_profile() -> None:
+    manifest = service_manifest()
+    del manifest["acceptance_profile"]
+    assert any("acceptance_profile" in error for error in validate_manifest(manifest))
+    manifest["acceptance_profile"] = "historical-threshold-research"
+    assert any("acceptance_profile" in error for error in validate_manifest(manifest))
 
 
 def test_service_passing_checks_require_exact_commit_and_digests() -> None:
