@@ -682,3 +682,44 @@ Actual independent review, complete inventory, reviewed quote/policy and six
 scalar gaps remain unresolved. No real numerical or complete 19-gate acceptance
 is claimed; threshold stays null. Compact receipts and next steps are under
 `equity_parser_source_increment` in the existing accounting checkpoint.
+
+## Engineering checkpoint: trusted review signing command
+
+Implementation `c0b41bd60eef9d37fd64610533e4fc175be7a30d` adds
+`fundamental-sign-mapping-review`. It validates an existing independent review
+statement against its approved mapping, canonical fixture, retained evidence and
+deployment-trusted Ed25519 key. It preserves the signed review contract and
+publishes through the existing atomic immutable artifact store. Three separate
+CLI processes produce the same signed bytes/digest; subsequent runs return
+`wrote=false` and preserve artifact/index hashes and modification times. Wrong
+keys, mismatched or corrupt evidence, self-review, provisional mappings and
+inconsistent fixture/mapping digests refuse publication with redacted error codes.
+
+At this exact commit, **816 service/PostgreSQL tests / 11 optional runtime skips**,
+52 Agent boundary tests and 17 acceptance-tool tests pass, together with Ruff,
+formatting, 22-source mypy, architecture and diff checks. Check input digest:
+`13d5014746993061bbb94173189288efa18788b586cf4d147bada8f60ade9938`;
+output digest:
+`e135262eaab52e2c56114271bd688ca5307fa0921745f109a6100d683c4e1b8e`.
+[CI 43036330407](https://github.com/sosodennis/value-investment-agent/actions/runs/43036330407)
+passes all 12 executed jobs; the release gate is skipped. The dedicated tmpfs
+PostgreSQL project is removed; all 62 baseline container identities, images and
+start times are unchanged. Exact commands, pins and receipts are retained under
+`mapping_review_signer_increment` in the existing accounting checkpoint.
+
+That checkpoint also preserves the separate real-source readiness run at
+`74ea63f5c4fba44db8844895d94d808528e9d2e1`. Current role selection reproduces
+132 provisional facts from the retained Microsoft originals: 25 of 31 scalar
+roles have candidates, while six remain unknown. Both repeats return
+`wrote=false`, retain the same digests, make zero provider requests and leave
+95 retained source files unchanged. The original strict parser execution remains
+at `dea88ad4`; it is not relabeled as a newer parser run. The initial audit-harness
+JSON-validation mistake and its correction are retained separately from service
+behavior. Missing text/tag matches do not establish economic absence.
+
+The signer supplies no actual semantic review, policy approval, trusted release
+or caller approval. Complete real evidence for the six scalar roles and award/PSU
+inventory, obtain actual independent review and approved dated quote/policy, then
+perform real numerical repeat/restart/restore acceptance. Threshold stays null;
+no real numerical or complete 19-gate result is claimed. #361 and PR #370 remain
+open, with the PR draft, pending those gates and review/merge/main verification.
