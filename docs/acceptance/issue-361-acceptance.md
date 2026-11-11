@@ -21,8 +21,9 @@ No completed #351 through #355 acceptance is changed. #350 is outside scope.
 
 ## Current implementation and verification
 
-The latest implementation commit is `ed733e4ec5008feaf579706f927af0a6fa7e6ddd`.
-The preceding metadata checkpoint is `f79a29387f8a8f921f519e60af68ffc4433b1fcd`.
+The latest implementation commit is `e30d2e5068f49709c68e794dbb0be1d2c1d11a96`.
+It follows script-only integrity fix `5e45f306` and type correction `60ab6278`;
+all earlier WIP and checkpoint commits remain intact.
 Fetched `origin/main`, `52e84dfe5a0dae0c11d2e62fd9a58e885b6eadc9`, is already an
 ancestor. A normal `git merge --no-edit origin/main` reports `Already up to date.`
 The WIP and checkpoint chain remains intact.
@@ -50,15 +51,15 @@ old PR body. The current body states that #361 remains OPEN. The actual policy
 reproduces the old failure and passes with the corrected body. No validator,
 WIP/draft status, runtime manifest, or financial gate is changed. The checkpoint
 entry `source_review_ci_description_correction` retains both command results.
-The new head still requires CI verification.
+Later implementation and metadata CI runs pass; that old failure remains retained.
 
-Latest implementation `ed733e4e` retains annual-history conflicts as explicit
+Prior implementation `ed733e4e` retains annual-history conflicts as explicit
 abstention in the formal composer. Ten regressions fail before the correction,
 including a released cross-field period mismatch returning HTTP 500. They pass
 afterward. Exact-commit checks pass 1,128 Service/PostgreSQL tests, 52 Agent tests,
 17 acceptance-tool tests, Ruff, formatting, types, architecture, and diff checks;
-11 optional runtime checks skip. [Implementation CI](https://github.com/sosodennis/value-investment-agent/actions/runs/43098094595)
-remains queued, with no reported jobs.
+11 optional runtime checks skip. [Metadata CI](https://github.com/sosodennis/value-investment-agent/actions/runs/43099749410)
+passes all 12 executed jobs; the release job skips.
 
 An isolated synthetic service project, `value-investment-agent-361-history-conflict`
 (ports 18672/18673), passes six installed HTTP checks across repeat, restart,
@@ -73,6 +74,34 @@ all 63 baseline containers retain their IDs, images, and start times. Synthetic
 fixture signatures establish no actual financial review or caller approval.
 The checkpoint entry `history_conflict_abstention_increment` records exact
 commands, digests, runtime pins, retained harness failures, and source refusals.
+
+At exact `e30d2e50`, 1,149 Service/PostgreSQL tests, 52 Agent boundary tests,
+and 17 acceptance-tool tests pass. Eleven optional resource checks skip. Ruff,
+formatting, 43-source mypy, architecture, and diff checks pass.
+[Implementation CI](https://github.com/sosodennis/value-investment-agent/actions/runs/43104857470)
+passes all 12 executed jobs; the release job skips. Check input is
+`2ebf2ae905b9e795b613cc947747947bfe6471e56476e29825af26ad06a847e9`;
+output is `ba8950fea532f881b748faa41c08c8b37c7c98358a0d89bdf8c994c559750185`.
+
+The script-only integrity relation preserves the original LF when removal of
+the exact terminal Akamai script reproduces every archive byte (#405). An
+additional fresh-parser probe exposed official EDGAR's stale context/unit in
+DQC lease warning parameters (#406). A bounded supported logging hook now uses
+the warning's actual referenced sum fact. Numeric parameters, warning severity,
+official rule execution and source facts remain unchanged. The adapter hash
+participates in validation evidence and replay digests. Eleven new regression
+cases fail before correction; focused and full suites pass after correction.
+
+Both real NVE originals pass strict parsing, then two independent full fresh
+parser repeats reproduce replay, fact, snapshot, integrity and identity evidence
+digests with zero provider calls and `wrote=false`. Two retained-parser/mapping
+command repeats preserve all 93 evidence files' hashes and mtimes, create no
+new artifacts and make zero provider calls. The repeat verifier itself also
+returns `wrote=false`. Repeat input is
+`fd6d1d7429a0a8a9e6809512c68a1db3135e205179c357f3c70bb7e2564c4ce0`;
+output is `79d5c5524baf36be6e92e2ba8486a76cce66dd0601cbff77a4a8234c86f9f6b4`.
+These source checks use the existing regression PostgreSQL for engineering
+tests, start no new Compose resources, and do not establish numerical acceptance.
 
 These engineering results do not establish a reviewed real issuer valuation.
 The [runtime manifest](issue-361-runtime.json) remains WIP, stopped, not ready,
@@ -134,6 +163,33 @@ retains the same 22 naming findings plus one `IOerror` and 15 missing-reference
 findings; its 498 archive facts remain diagnostic. An earlier stdin/spawn launch
 failure is recorded separately as a harness error. No validation gate is waived
 and neither rejection publishes canonical facts.
+
+### NVE original-filing case
+
+CIK `0000724910`, cutoff `2025-04-01T00:00:00Z`. Originals
+`0001376474-23-000283` and `0001376474-24-000214` pass formal strict parsing
+with 499 and 519 facts. This additional service case replaces no #376 issuer.
+Its 36 accession-bound mapping proposals retain 75 provisional facts across
+18 of 31 required scalar roles. None is approved. Audit input is
+`e15f3a71a11215aea97a455f2ee703cb951be566c746f77475dd51c03beaca10`;
+output is `470c236d4c08f9bcaa46cfbffe830a13b35c9c37c1893c6afea098904f45dfdd`.
+
+The issuer's `RevenueFromContractWithCustomerIncludingAssessedTax` represents
+contract R&D revenue, not total revenue. FY2024 total `Revenues` is 29,804,179,
+comprising 586,116 contract R&D plus 29,218,063 product revenue. The audit
+retains this reconciliation and rejects the partial tag as a total mapping.
+The disclosure says no **material** contract assets/liabilities; it does not
+establish zero. Accrual/tax partition, remaining claims and complete award scope
+remain unresolved. The 4,181 unrecognized-compensation duration tag conflicts
+with its point-in-time narrative, and a 36,000 non-option tag appears in an
+option table; neither is silently relabeled.
+
+The original also separates 42,706,080 corporate bonds from cash. Its 9,842,796
+money funds are already included in cash. The current FCFF bridge lacks a
+non-operating-asset role required by the canonical target; this is recorded in
+[#381](https://github.com/sosodennis/value-investment-agent/issues/381#issuecomment-6807438390).
+Omitting the bonds or counting money funds twice cannot produce an acceptable
+NVE valuation. All source gaps remain retained; no numerical result is claimed.
 
 ### Dated market-input proposal
 
@@ -201,7 +257,10 @@ previous top-level entry. Its source-review entry,
 `dated_market_source_review_increment`, records source hashes, proposal and
 repeat digests, exact commands, retained failures, unverified gates, and next
 steps. The preceding implementation entry is
-`explicit_empty_award_inventory_increment`.
+`explicit_empty_award_inventory_increment`. The latest
+`sec_original_determinism_increment` appends exact #405/#406 implementation,
+fresh-parser failures and corrections, full checks, CI, source review and repeat
+evidence while preserving all 40 prior entries.
 
 Earlier evidence remains in the
 [scope](issue-361-scope-checkpoint.json),
@@ -229,5 +288,5 @@ Generated sources, mappings, proposals, diagnostics, and backups remain in ignor
 `.audit`. Do not reset, rebase, force-push, or discard the checkpoint chain. Do not
 restore `.tmp-issue355-sec-useragent-compose.yml` or clean another project.
 #361, unresolved blockers #369/#381/#394, and PR #370 remain open. Implemented
-normalization blocker #404 still needs delivery and final verification. Complete
+normalization blockers #404/#405/#406 still need delivery and main verification. Complete
 source scope and actual review precede numerical acceptance; thresholds stay null.
