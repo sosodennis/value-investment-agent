@@ -140,6 +140,7 @@ def validate_original_filing_identity(
         (fact.context_id, fact.period_start, fact.period_end, fact.dimensions)
         for fact in matching_symbols
     }
+    ticker_contexts = security_contexts
     if len(security_contexts) > 1:
         titles_by_context = {
             context: {
@@ -198,6 +199,22 @@ def validate_original_filing_identity(
             raise refuse(
                 "HISTORICAL_IDENTITY_MISSING", f"original filing lacks {concept}"
             )
+        scope_candidates = (
+            tuple(
+                fact
+                for fact in facts
+                if fact.concept == concept
+                and (
+                    fact.context_id,
+                    fact.period_start,
+                    fact.period_end,
+                    fact.dimensions,
+                )
+                in ticker_contexts
+            )
+            if concept in security_concepts
+            else candidates
+        )
         if any(
             not _DEI_NAMESPACE.fullmatch(fact.namespace_uri or "")
             or fact.entity_scheme != "http://www.sec.gov/CIK"
@@ -219,7 +236,7 @@ def validate_original_filing_identity(
             or fact.period_start is None
             or fact.period_end is None
             or fact.period_start > fact.period_end
-            for fact in candidates
+            for fact in scope_candidates
         ):
             raise refuse(
                 "HISTORICAL_IDENTITY_SCOPE_UNSUPPORTED",
@@ -231,7 +248,7 @@ def validate_original_filing_identity(
                 "HISTORICAL_IDENTITY_CONFLICT", f"original {concept} conflicts"
             )
         values[concept] = next(iter(unique))
-        periods.update(fact.period_end for fact in candidates)
+        periods.update(fact.period_end for fact in scope_candidates)
     try:
         report_end = date.fromisoformat(values["dei:DocumentPeriodEndDate"])
     except ValueError as error:

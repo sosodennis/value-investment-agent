@@ -165,6 +165,35 @@ def test_original_identity_pairs_reused_ticker_with_its_exact_security_title():
     _check_original((*actual, reused_symbol))
 
 
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"namespace_uri": "http://example.test/dei/2024"},
+        {"entity_scheme": "http://example.test/CIK"},
+        {"entity_identifier": "0000320194"},
+        {"dimensions": (("us-gaap:StatementBusinessSegmentsAxis", "issuer:USA"),)},
+        {"period_end": date(2025, 9, 28)},
+        {"period_start": None},
+        {"unit": "iso4217:USD"},
+        {"is_numeric": True},
+    ],
+)
+def test_reused_ticker_cannot_disambiguate_using_an_invalid_other_security(change):
+    facts = _class_scoped_original()
+    symbol = next(f for f in facts if f.concept == "dei:TradingSymbol")
+    note = facts[-1]
+    reused_symbol = symbol.model_copy(
+        update={"context_id": note.context_id, "dimensions": note.dimensions}
+    )
+    actual = tuple(
+        fact.model_copy(update=change) if fact.context_id == note.context_id else fact
+        for fact in (*facts, reused_symbol)
+    )
+    with pytest.raises(IdentityResolutionError) as error:
+        _check_original(actual)
+    assert error.value.code == "HISTORICAL_IDENTITY_SCOPE_UNSUPPORTED"
+
+
 def test_original_identity_rejects_multiple_complete_contexts_with_the_same_title():
     facts = _class_scoped_original()
     common = tuple(f for f in facts if f.context_id == "common-class")
