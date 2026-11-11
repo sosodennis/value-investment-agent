@@ -134,6 +134,33 @@ a conformance assertion defect. It is not a fresh execution of the historical
 rules or approval of their current parser integration, date applicability,
 financial mappings or any real filing. The historical owner #371 remains open.
 
+The study branch separately restores the owning parser's historical adapter
+from the preserved source commit. Explicit profiles bind the official v1.0.0
+or v3.6.2 package hash, namespaces and complete six/eleven-module inventory;
+modern parser defaults and profile identity stay unchanged. The offline worker
+retains incomplete-validation findings and original DQC severity before EDGAR
+releveling. Profile execution is distinct from rule date applicability and
+financial materiality. Ingestion/publication still rejects the historical
+completion marker until the historical release contract is reviewed and
+integrated; this parser increment does not approve or activate releases.
+
+`fundamental-service/tests/test_historical_dqc.py` includes a real-original
+boundary test for both profiles. Configure the `ISSUE376_HISTORICAL_DQC_DIR`,
+`ISSUE376_HISTORICAL_DQC_V3_DIR`, `ISSUE376_HISTORICAL_XML`,
+`ISSUE376_EDGAR_PLUGIN_DIR`, `ISSUE376_XULE_PLUGIN_DIR`,
+`ISSUE376_DQC_RULESET_PATH` and `ISSUE376_TAXONOMY_CACHE_DIR` paths to retained
+hash-checked resources outside Git, then run that test file with the locked
+Fundamental runtime. The retained source is CIK 0001539778, accession
+0001477932-16-007985, `acug-20150930.xml`, SHA-256
+`fc13b856abb859aab0c3e23deb20c1801054d9742ee7f7c8f1acf92c9e7040d1`.
+It yields 327 facts, including the namespace-qualified original identity, and
+retains blocking negative-PPE finding `DQC.US.0015.2098`. Both profiles repeat
+with the same semantic report digest. The test also rejects mutated rule
+packages, incorrect source hashes and the modern profile's unsupported
+historical taxonomy. Default CI checks the local boundaries; these configured
+real-source checks need the separately retained assets and must be recorded as
+executed, not inferred from skipped tests.
+
 ## Research protocol gap (#377)
 
 There are nine missing first-original labels and one 731-day horizon mismatch.
