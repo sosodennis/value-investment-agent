@@ -47,7 +47,11 @@ from ..data_releases import (
     DataReleaseVerificationV1,
     ReleaseResolutionCacheKeyV1,
 )
-from ..facts import CanonicalFactRepository, canonical_fact_digest
+from ..facts import (
+    CanonicalFactRepository,
+    canonical_fact_digest,
+    verify_accounting_role_evidence,
+)
 from ..fiscal_periods import resolve_fiscal_periods
 from ..governance import ModelInventory
 from ..history_composition import verify_history_components
@@ -224,6 +228,16 @@ def normalize_uncertainty_payload(raw: Mapping[str, object]) -> dict[str, object
 
 
 def _snapshot_error(error: SnapshotError) -> ServiceError:
+    if error.code in {
+        "ACCOUNTING_ROLE_MAPPING_MISMATCH",
+        "ACCOUNTING_ROLE_INTEGRITY_MISMATCH",
+    }:
+        return ServiceError(
+            error.code,
+            "accounting evidence conflicts with its released mapping or original",
+            status_code=409,
+            retryable=False,
+        )
     if error.code in {
         "SNAPSHOT_NOT_FOUND",
         "ARTIFACT_NOT_FOUND",
@@ -1130,6 +1144,14 @@ class FundamentalApplication:
                     retryable=False,
                 )
             mapping_version = next(iter(versions))
+            for fact in selection.facts:
+                assert fact.mapping_decision_id is not None
+                try:
+                    verify_accounting_role_evidence(
+                        fact, mapping_by_id[fact.mapping_decision_id], snapshot
+                    )
+                except SnapshotError as error:
+                    raise _snapshot_error(error) from error
         elif self.require_metadata:
             raise ServiceError(
                 "DATA_RELEASE_MAPPING_UNAVAILABLE",

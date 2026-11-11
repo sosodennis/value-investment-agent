@@ -19,7 +19,12 @@ from typing import Literal
 import asyncpg
 from pydantic import Field, model_validator
 
-from .contracts import SourceSnapshotV1, StrictModel
+from .contracts import CanonicalFactV1, SourceSnapshotV1, StrictModel
+from .facts import (
+    CanonicalMappingV1,
+    canonical_fact_digest,
+    verify_accounting_role_evidence,
+)
 from .history_composition import verify_history_components
 from .metadata import SCHEMA_VERSION, PostgresMetadataStore
 from .serialization import canonical_bytes, sha256_digest
@@ -301,6 +306,8 @@ def _verify_rows(root: Path, manifest: PersistenceBackupV1) -> None:
     objects = {item.path: item for item in manifest.objects}
     hashes = {item.digest for item in manifest.objects}
     snapshots = _BackupSnapshots()
+    accounting_facts: list[CanonicalFactV1] = []
+    mappings: dict[str, CanonicalMappingV1] = {}
 
     def require_content(content_hash: str, media_type: str) -> BackupFileV1:
         suffix = ".json" if media_type == "application/json" else ".bin"
@@ -334,6 +341,26 @@ def _verify_rows(root: Path, manifest: PersistenceBackupV1) -> None:
             elif table.name == "canonical_facts":
                 if json.loads(row["payload"])["source"]["content_hash"] not in hashes:
                     raise RecoveryError("canonical fact source is absent from backup")
+                fact = CanonicalFactV1.model_validate_json(row["payload"])
+                if (
+                    fact.fact_id != row["fact_id"]
+                    or canonical_fact_digest(fact) != row["fact_digest"]
+                ):
+                    raise RecoveryError(
+                        "canonical fact metadata digest is inconsistent"
+                    )
+                if fact.accounting_evidence is not None:
+                    accounting_facts.append(fact)
+            elif table.name == "mapping_decisions":
+                mapping = CanonicalMappingV1.model_validate_json(row["payload"])
+                if (
+                    mapping.decision_id != row["mapping_id"]
+                    or sha256_digest(mapping) != row["mapping_digest"]
+                ):
+                    raise RecoveryError(
+                        "canonical mapping metadata digest is inconsistent"
+                    )
+                mappings[mapping.decision_id] = mapping
     for snapshot in snapshots.snapshots.values():
         try:
             verify_history_components(snapshot, snapshots)
@@ -341,6 +368,27 @@ def _verify_rows(root: Path, manifest: PersistenceBackupV1) -> None:
             raise RecoveryError(
                 "backup history does not match its retained original snapshots"
             ) from error
+    for fact in accounting_facts:
+        role_mapping = mappings.get(fact.mapping_decision_id or "")
+        if role_mapping is None:
+            raise RecoveryError("computed accounting fact has no retained mapping")
+        bound = False
+        for snapshot in snapshots.snapshots.values():
+            if snapshot.identity.issuer_id != fact.issuer_id or not any(
+                source.content_hash == fact.source.content_hash
+                for source in snapshot.source_records
+            ):
+                continue
+            try:
+                verify_accounting_role_evidence(fact, role_mapping, snapshot)
+            except SnapshotError:
+                continue
+            bound = True
+            break
+        if not bound:
+            raise RecoveryError(
+                "computed accounting evidence has no matching original snapshot"
+            )
 
 
 def _receipt(manifest: PersistenceBackupV1, *, wrote: bool) -> RecoveryReceiptV1:

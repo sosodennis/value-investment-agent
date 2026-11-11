@@ -18,6 +18,7 @@ from pydantic import (
 
 from .historical_dqc import V1_PROFILE, V3_PROFILE
 from .serialization import is_digest, sha256_digest
+from .accounting_roles import AccountingRoleEvidenceV1
 
 _MANIFEST_STRINGS = TypeAdapter(tuple[str, ...])
 
@@ -885,9 +886,47 @@ class CanonicalFactV1(StrictModel):
     rejected_candidate_reasons: tuple[CandidateRejectionV1, ...] = ()
     point_in_time_policy: str | None = None
     selection_reason: str | None = None
+    accounting_evidence: AccountingRoleEvidenceV1 | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
 
     @model_validator(mode="after")
     def point_in_time_order(self) -> CanonicalFactV1:
+        evidence = self.accounting_evidence
+        if self.concept.startswith("computed:") and evidence is None:
+            raise ValueError("computed accounting roles require their source evidence")
+        if evidence is not None:
+            rules, period = evidence.rule_set, evidence.period_rule.period
+            if (
+                evidence.value is None
+                or self.value != evidence.value
+                or self.issuer_id != rules.issuer_id
+                or self.security_id != rules.security_id
+                or self.normalized_field != rules.normalized_field
+                or self.concept != f"computed:{rules.normalized_field}"
+                or self.unit != rules.unit
+                or self.currency != rules.currency
+                or self.period_start != period.period_start
+                or self.period_end != period.period_end
+                or self.instant != (period.period_end if period.instant else None)
+                or self.source.content_hash != rules.raw_content_hash
+                or self.source.accession_number != rules.accession_number
+                or self.source.available_at != self.available_at
+                or self.accession_number != rules.accession_number
+                or self.is_amendment
+                or self.available_at.date() < period.period_end
+                or self.context.concept_qname != self.concept
+                or self.context.unit_qname != self.unit
+                or self.context.dimensions
+                or self.context.consolidation_scope != "consolidated"
+                or self.context.start_date != period.period_start
+                or self.context.instant != self.instant
+                or self.context.end_date
+                != (None if period.instant else period.period_end)
+            ):
+                raise ValueError(
+                    "computed role fact differs from its source-bound accounting evidence"
+                )
         for earlier, later, name in (
             (self.available_at, self.captured_at, "available_at/captured_at"),
         ):

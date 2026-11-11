@@ -32,11 +32,12 @@ from .facts import (
     FilesystemCanonicalFactRepository,
     canonical_fact_digest,
     resolve_canonical_facts,
+    verify_accounting_role_evidence,
 )
 from .replay import ArtifactStore
 from .history_composition import verify_history_components
 from .serialization import canonical_bytes, sha256_digest
-from .snapshots import FilesystemSnapshotRepository
+from .snapshots import FilesystemSnapshotRepository, SnapshotError
 
 
 class ReleaseMappingReader(Protocol):
@@ -266,6 +267,13 @@ class DataReleaseCanaryRunner:
                     "DATA_RELEASE_MAPPING_FACT_MISMATCH",
                     f"release fact {fact.fact_id} does not match a released mapping",
                 )
+            try:
+                verify_accounting_role_evidence(fact, mapping, snapshot)
+            except SnapshotError as error:
+                raise DataReleaseError(
+                    "DATA_RELEASE_ACCOUNTING_ROLE_INVALID",
+                    "accounting role evidence differs from the released original",
+                ) from error
             key = (
                 fact.normalized_field,
                 fact.period_start,

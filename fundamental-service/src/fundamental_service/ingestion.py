@@ -613,6 +613,17 @@ class SecIngestionService:
         issues: list[IssueV1] = []
         first_selection = FactSelection(None, (), ())
         for index, mapping in enumerate(mappings):
+            if mapping.accounting_rules is not None:
+                for rule in mapping.accounting_rules.periods:
+                    if rule.disposition in {"unknown", "unsupported"}:
+                        issues.append(
+                            IssueV1(
+                                code=f"ACCOUNTING_ROLE_{rule.disposition.upper()}",
+                                severity=Severity.ERROR,
+                                message=f"{rule.period.period_end.isoformat()}: {rule.rationale}",
+                                field=mapping.normalized_field,
+                            )
+                        )
             candidates = parsed_facts_to_candidates(
                 report,
                 source=source_record,

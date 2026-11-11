@@ -56,6 +56,11 @@ re-read those components; a missing or changed original refuses the history.
 Repeating composition reuses the same snapshot without provider I/O. History
 sufficiency remains the formal #352 composer's decision.
 
+[Accounting role evidence](docs/accounting-role-evidence.md) distinguishes direct
+observations, source-bound accounting classifications, explicitly reviewed absence
+and unresolved roles. It preserves the original observations and existing release
+review/approval boundaries.
+
 The canonical JSON receipt contains an artifact reference and `wrote`. Read its
 metadata and bytes through the authenticated `/v1/artifacts/{artifact_id}` and
 `/v1/artifacts/{artifact_id}/content` endpoints. Identical evidence is reused with

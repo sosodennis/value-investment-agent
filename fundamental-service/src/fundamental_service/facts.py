@@ -22,11 +22,14 @@ from .contracts import (
     PeriodType,
     QualityStatus,
     Severity,
+    SecIntegrityEvidenceV1,
+    SecHistoryIntegrityEvidenceV1,
     SourceProvenanceV1,
     SourceSnapshotV1,
     XbrlContextV1,
 )
 from .serialization import canonical_bytes, sha256_digest
+from .accounting_roles import AccountingRoleEvidenceV1, AccountingRoleRuleSetV1
 from .snapshots import SnapshotError
 
 
@@ -200,9 +203,24 @@ class CanonicalMappingV1(BaseModel):
     reviewer: str | None = None
     reviewed_at: datetime | None = None
     status: Literal["approved", "provisional", "ambiguous", "rejected"]
+    accounting_rules: AccountingRoleRuleSetV1 | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
 
     @model_validator(mode="after")
     def extension_review(self) -> "CanonicalMappingV1":
+        if (
+            self.source_concept.startswith("computed:")
+            and self.accounting_rules is None
+        ):
+            raise ValueError("computed accounting roles require an explicit rule set")
+        if self.accounting_rules is not None and (
+            self.accounting_rules.normalized_field != self.normalized_field
+            or self.source_concept != f"computed:{self.normalized_field}"
+        ):
+            raise ValueError(
+                "accounting rules must identify their computed financial role"
+            )
         is_extension = (
             ":" in self.source_concept
             and not self.source_concept.startswith("us-gaap:")
@@ -218,6 +236,42 @@ class CanonicalMappingV1(BaseModel):
         if self.confidence == "unresolved" and self.status == "approved":
             raise ValueError("unresolved mappings cannot be approved")
         return self
+
+
+def verify_accounting_role_evidence(
+    fact: CanonicalFactV1,
+    mapping: CanonicalMappingV1,
+    snapshot: SourceSnapshotV1,
+) -> None:
+    evidence = fact.accounting_evidence
+    if evidence is None and mapping.accounting_rules is None:
+        return
+    if evidence is None or evidence.rule_set != mapping.accounting_rules:
+        raise SnapshotError(
+            "ACCOUNTING_ROLE_MAPPING_MISMATCH",
+            "computed accounting evidence differs from its released mapping",
+        )
+    integrity = snapshot.sec_integrity_evidence
+    originals = (
+        (integrity,)
+        if isinstance(integrity, SecIntegrityEvidenceV1)
+        else tuple(item.integrity for item in integrity.components)
+        if isinstance(integrity, SecHistoryIntegrityEvidenceV1)
+        else ()
+    )
+    rules = evidence.rule_set
+    if not any(
+        item.raw_content_hash == rules.raw_content_hash
+        and item.accession_number == rules.accession_number
+        and item.parser_input_hash == rules.parser_input_hash
+        and item.normalized_fact_digest == rules.parser_fact_digest
+        and item.quality_decision == "pass"
+        for item in originals
+    ):
+        raise SnapshotError(
+            "ACCOUNTING_ROLE_INTEGRITY_MISMATCH",
+            "computed accounting evidence differs from its validated original",
+        )
 
 
 class FactCandidateV1(BaseModel):
@@ -257,6 +311,9 @@ class FactCandidateV1(BaseModel):
     source: SourceProvenanceV1
     taxonomy_version: str = Field(min_length=1)
     mapping: CanonicalMappingV1 | None = None
+    accounting_evidence: AccountingRoleEvidenceV1 | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
 
     @model_validator(mode="after")
     def validate_period(self) -> "FactCandidateV1":
@@ -306,6 +363,7 @@ class FactCandidateV1(BaseModel):
         )
         return CanonicalFactV1(
             contract_version="fundamental.v1",
+            accounting_evidence=self.accounting_evidence,
             fact_id=self.candidate_id,
             issuer_id=self.issuer_id,
             security_id=self.security_id,
