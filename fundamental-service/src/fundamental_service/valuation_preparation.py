@@ -840,6 +840,50 @@ def _transition_filing_evidence(
 
 
 @using_valuation_context
+def compose_forecast_assumptions(
+    history: AnnualHistoryV1,
+    metrics: HistoricalMetricsV1,
+) -> ForecastAssumptionsV1:
+    """Compose the shared #352 operating assumptions without valuation claims."""
+
+    metric_by_name: dict[str, list[HistoricalMetricV1]] = {}
+    for metric in metrics.metrics:
+        metric_by_name.setdefault(metric.metric_id, []).append(metric)
+    growth = [item.value for item in metric_by_name.get("revenue_growth", ())]
+    margins = [item.value for item in metric_by_name.get("operating_margin", ())]
+    reinvestment = [item.value for item in metric_by_name.get("reinvestment_rate", ())]
+    if len(growth) < 2 or len(margins) < 3 or len(reinvestment) < 2:
+        raise PreparationError(
+            "FORECAST_HISTORY_INSUFFICIENT",
+            "forecast requires three margins and two growth/reinvestment periods",
+            missing=("forecast_history",),
+        )
+    latest_revenue = history.periods[-1].fact("revenue")
+    assert latest_revenue is not None and isinstance(latest_revenue.value, Decimal)
+    mean_growth = sum(growth, Decimal("0")) / Decimal(len(growth))
+    mean_margin = sum(margins[-3:], Decimal("0")) / Decimal(min(3, len(margins)))
+    mean_reinvestment = sum(reinvestment, Decimal("0")) / Decimal(len(reinvestment))
+    if not _MIN_REVENUE_GROWTH <= mean_growth <= _MAX_REVENUE_GROWTH:
+        raise PreparationError(
+            "FORECAST_GROWTH_OUT_OF_BOUNDS", "mean revenue growth exceeds policy bounds"
+        )
+    bounded_reinvestment = min(
+        _MAX_REINVESTMENT_RATE,
+        max(_MIN_REINVESTMENT_RATE, mean_reinvestment),
+    )
+    forecast_growth = tuple(
+        mean_growth * (Decimal(_FORECAST_PERIODS - index) / Decimal(_FORECAST_PERIODS))
+        for index in range(_FORECAST_PERIODS)
+    )
+    return ForecastAssumptionsV1(
+        base_revenue=latest_revenue.value,
+        revenue_growth=forecast_growth,
+        operating_margin=(mean_margin,) * _FORECAST_PERIODS,
+        reinvestment_rate=(bounded_reinvestment,) * _FORECAST_PERIODS,
+    )
+
+
+@using_valuation_context
 def prepare_automatic_valuation(
     facts: Iterable[CanonicalFactV1],
     *,
@@ -938,22 +982,15 @@ def prepare_automatic_valuation(
             facts=selected.facts,
             snapshot=snapshot,
         )
-    metric_by_name: dict[str, list[HistoricalMetricV1]] = {}
-    for metric in metrics.metrics:
-        metric_by_name.setdefault(metric.metric_id, []).append(metric)
-    growth = [item.value for item in metric_by_name.get("revenue_growth", ())]
-    margins = [item.value for item in metric_by_name.get("operating_margin", ())]
-    reinvestment = [item.value for item in metric_by_name.get("reinvestment_rate", ())]
-    if len(growth) < 2 or len(margins) < 3 or len(reinvestment) < 2:
+    try:
+        forecast = compose_forecast_assumptions(history, metrics)
+    except PreparationError as error:
         return _blocked_from_metrics(
             metrics.model_copy(
                 update={
                     "quality_status": QualityStatus.ABSTAIN,
-                    "issue_codes": (
-                        *metrics.issue_codes,
-                        "FORECAST_HISTORY_INSUFFICIENT",
-                    ),
-                    "missing_evidence": (*metrics.missing_evidence, "forecast_history"),
+                    "issue_codes": (*metrics.issue_codes, error.code),
+                    "missing_evidence": (*metrics.missing_evidence, *error.missing),
                 }
             ),
             profile=profile,
@@ -966,42 +1003,9 @@ def prepare_automatic_valuation(
         )
     latest_revenue = history.periods[-1].fact("revenue")
     assert latest_revenue is not None and isinstance(latest_revenue.value, Decimal)
-    mean_growth = sum(growth, Decimal("0")) / Decimal(len(growth))
-    mean_margin = sum(margins[-3:], Decimal("0")) / Decimal(min(3, len(margins)))
-    mean_reinvestment = sum(reinvestment, Decimal("0")) / Decimal(len(reinvestment))
-    if not _MIN_REVENUE_GROWTH <= mean_growth <= _MAX_REVENUE_GROWTH:
-        return _blocked_from_metrics(
-            metrics.model_copy(
-                update={
-                    "quality_status": QualityStatus.ABSTAIN,
-                    "issue_codes": (
-                        *metrics.issue_codes,
-                        "FORECAST_GROWTH_OUT_OF_BOUNDS",
-                    ),
-                }
-            ),
-            profile=profile,
-            model_id=model_id,
-            model_version=model_version,
-            policy_id=policy_id,
-            policy_version=policy_version,
-            facts=selected.facts,
-            snapshot=snapshot,
-        )
-    bounded_reinvestment = min(
-        _MAX_REINVESTMENT_RATE,
-        max(_MIN_REINVESTMENT_RATE, mean_reinvestment),
-    )
-    forecast_growth = tuple(
-        mean_growth * (Decimal(_FORECAST_PERIODS - index) / Decimal(_FORECAST_PERIODS))
-        for index in range(_FORECAST_PERIODS)
-    )
-    forecast = ForecastAssumptionsV1(
-        base_revenue=latest_revenue.value,
-        revenue_growth=forecast_growth,
-        operating_margin=(mean_margin,) * _FORECAST_PERIODS,
-        reinvestment_rate=(bounded_reinvestment,) * _FORECAST_PERIODS,
-    )
+    metric_by_name: dict[str, list[HistoricalMetricV1]] = {}
+    for metric in metrics.metrics:
+        metric_by_name.setdefault(metric.metric_id, []).append(metric)
     if market_policy is None:
         return _blocked_from_metrics(
             metrics.model_copy(
@@ -1026,6 +1030,13 @@ def prepare_automatic_valuation(
             status="requires_input",
         )
     try:
+        assert market_policy.risk_free_rate is not None
+        assert market_policy.beta is not None
+        assert market_policy.equity_risk_premium is not None
+        assert market_policy.pre_tax_cost_of_debt is not None
+        assert market_policy.debt_weight is not None
+        assert market_policy.equity_weight is not None
+        assert market_policy.terminal_growth is not None
         tax_metrics = metric_by_name["normalized_tax_rate"]
         tax_rate = sum((item.value for item in tax_metrics), Decimal("0")) / Decimal(
             len(tax_metrics)
@@ -1224,12 +1235,12 @@ def prepare_automatic_valuation(
                 policy_version=policy_version,
                 as_of=latest_fact_time(growth_facts),
             )
-            for index, value in enumerate(forecast_growth)
+            for index, value in enumerate(forecast.revenue_growth)
         ),
         *tuple(
             _assumption_evidence(
                 f"assumptions.forecast.operating_margin[{index}]",
-                mean_margin,
+                forecast.operating_margin[index],
                 "derived",
                 "mean(last_three historical operating_margin)",
                 facts=margin_facts,
@@ -1241,7 +1252,7 @@ def prepare_automatic_valuation(
         *tuple(
             _assumption_evidence(
                 f"assumptions.forecast.reinvestment_rate[{index}]",
-                bounded_reinvestment,
+                forecast.reinvestment_rate[index],
                 "derived",
                 "clamp(mean(historical reinvestment_rate), -1, 1)",
                 facts=reinvestment_facts,

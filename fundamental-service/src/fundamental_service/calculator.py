@@ -13,6 +13,7 @@ from .contracts import (
     ValuationInputV1,
 )
 from .numerical_policy import using_valuation_context
+from .operating_projection import OperatingProjectionError, project_operating_nodes
 from .serialization import sha256_digest
 
 
@@ -140,18 +141,14 @@ def calculate(
         raise CalculationRefusal(
             "DISCOUNT_RATE_INVALID", "WACC must exceed terminal growth and zero"
         )
-    if forecast.base_revenue is None or forecast.base_revenue <= 0:
-        raise CalculationRefusal(
-            "BASE_REVENUE_MISSING", "a positive base revenue fact is required"
+    try:
+        operating_nodes = project_operating_nodes(
+            forecast,
+            tax_rate=wacc.tax_rate,
+            historical_fact_ids=tuple(request.historical_facts),
         )
-    if not forecast.revenue_growth or not (
-        len(forecast.revenue_growth)
-        == len(forecast.operating_margin)
-        == len(forecast.reinvestment_rate)
-    ):
-        raise CalculationRefusal(
-            "FORECAST_INVALID", "forecast arrays must be non-empty and equal length"
-        )
+    except OperatingProjectionError as error:
+        raise CalculationRefusal(error.code, str(error)) from error
     nodes = [
         _node(
             "cost_of_equity",
@@ -175,53 +172,20 @@ def calculate(
             ("cost_of_equity", "after_tax_debt"),
         ),
     ]
-    revenue = forecast.base_revenue
-    nodes.append(
-        _node(
-            "base_revenue",
-            "historical revenue fact",
-            revenue,
-            "currency",
-            tuple(request.historical_facts),
-        )
-    )
+    nodes.append(operating_nodes[0])
     present_value = Decimal("0")
     last_fcff = Decimal("0")
-    for index, (revenue_growth, margin, reinvestment) in enumerate(
-        zip(
-            forecast.revenue_growth,
-            forecast.operating_margin,
-            forecast.reinvestment_rate,
-            strict=True,
-        ),
-        start=1,
-    ):
-        revenue *= Decimal("1") + revenue_growth
-        fcff = (
-            revenue
-            * margin
-            * (Decimal("1") - wacc.tax_rate)
-            * (Decimal("1") - reinvestment)
-        )
+    for index in range(1, len(forecast.revenue_growth) + 1):
+        revenue_node, fcff_node = operating_nodes[2 * index - 1 : 2 * index + 1]
+        fcff = fcff_node.value
+        assert fcff is not None
         discounted = fcff / ((Decimal("1") + wacc_value) ** index)
         present_value += discounted
         last_fcff = fcff
         nodes.extend(
             (
-                _node(
-                    f"revenue_{index}",
-                    "prior_revenue * (1 + growth)",
-                    revenue,
-                    "currency",
-                    (f"revenue_{index - 1}" if index > 1 else "base_revenue",),
-                ),
-                _node(
-                    f"fcff_{index}",
-                    "revenue * margin * (1 - tax_rate) * (1 - reinvestment_rate)",
-                    fcff,
-                    "currency",
-                    (f"revenue_{index}",),
-                ),
+                revenue_node,
+                fcff_node,
                 _node(
                     f"discounted_fcff_{index}",
                     "fcff / (1 + wacc)^period",
