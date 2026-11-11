@@ -6,13 +6,14 @@ from typing import Literal, Protocol
 
 from pydantic import Field
 
-from .contracts import CanonicalFactV1, QualityStatus, SourceSnapshotV1
+from .contracts import CanonicalFactV1, QualityStatus, SourceRole, SourceSnapshotV1
 from .data_releases import DataReleaseManifestV1
 from .equity_dilution import (
     CommonShareQuoteV1,
     DilutionError,
     DilutionModel,
     EquityAwardInventoryV1,
+    PerformanceStockAwardV1,
     TreasuryStockPolicyV1,
     _award_facts,
 )
@@ -80,7 +81,28 @@ def verify_dilution_fact_bindings(
             "DILUTION_INVENTORY_INCOMPLETE",
             "reviewed inventory must retain every released award observation",
         )
-    sources = {source.content_hash for source in snapshot.source_records}
+    sources = {
+        source.content_hash
+        for source in snapshot.source_records
+        if source.role is SourceRole.FILING
+        and source.available_at <= snapshot.valuation_timestamp
+    }
+    traces = (
+        evidence.inventory.coverage_evidence,
+        *(
+            award.condition_evidence
+            for award in evidence.inventory.instruments
+            if isinstance(award, PerformanceStockAwardV1)
+        ),
+    )
+    if any(
+        not trace.source_refs or not set(trace.source_refs) <= sources
+        for trace in traces
+    ):
+        raise DilutionError(
+            "DILUTION_REVIEW_SOURCE_MISMATCH",
+            "inventory coverage and award conditions must cite available original sources in the snapshot",
+        )
     for award in evidence.inventory.instruments:
         for index, fact in enumerate(_award_facts(award)):
             expected_role = (

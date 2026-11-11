@@ -21,7 +21,7 @@ from fundamental_service.equity_award_evidence import (
     load_release_dilution_evidence,
     verify_dilution_fact_bindings,
 )
-from fundamental_service.equity_dilution import DilutionError
+from fundamental_service.equity_dilution import DilutionError, PerformanceStockAwardV1
 from fundamental_service.serialization import canonical_bytes, sha256_digest
 from fundamental_service.valuation_preparation import prepare_automatic_valuation
 from test_preparation_runner import _fixture, _reviewed_candidate
@@ -362,3 +362,33 @@ def test_signed_release_retains_two_distinct_award_classes_without_scalar_collap
     assert prepared.equity_dilution.incremental_shares == Decimal(20)
     assert prepared.input.assumptions.capital_bridge.diluted_shares == Decimal(130)
     assert fixture.state.active is None
+
+
+@pytest.mark.parametrize("conditional", [False, True])
+def test_coverage_and_performance_conditions_cannot_cite_unknown_originals(
+    tmp_path, conditional
+):
+    fixture = _fixture(tmp_path)
+    evidence = fixture.dilution
+    inventory = evidence.inventory
+    unknown = inventory.coverage_evidence.model_copy(
+        update={"source_refs": ("f" * 64,)}
+    )
+    if conditional:
+        original = inventory.instruments[0]
+        award = PerformanceStockAwardV1(
+            instrument_id=original.instrument_id,
+            quantity=original.quantity,
+            unrecognized_compensation=original.unrecognized_compensation,
+            conditions_satisfied=True,
+            condition_evidence=unknown,
+        )
+        inventory = inventory.model_copy(update={"instruments": (award,)})
+    else:
+        inventory = inventory.model_copy(update={"coverage_evidence": unknown})
+    evidence = evidence.model_copy(update={"inventory": inventory})
+    with pytest.raises(DilutionError) as error:
+        verify_dilution_fact_bindings(
+            evidence, snapshot=fixture.snapshot, released_facts=fixture.facts.list()
+        )
+    assert error.value.code == "DILUTION_REVIEW_SOURCE_MISMATCH"
