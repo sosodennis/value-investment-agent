@@ -143,3 +143,64 @@ forecasts/first-original labels/errors/repeat. Do not substitute an issuer,
 invent missing amounts or equate signatures with accounting review. Formal
 completed cases remain0/100; `supported_history_threshold=null`. #376/#377/#383
 remain open until their actual acceptance and main verification are complete.
+
+## Follow-up: exact complete-submission comparison and signer readiness
+
+At clean documentation checkpoint `75051c360cfb6553d70bce6a39be663f66aeb37b`,
+three additional SEC complete-submission requests returned HTTP200. For each
+original accession, the original 10-K member has the exact declared filename,
+form and CIK/accession header identity, and its byte length matches the retained
+SEC index. The retained primary HTML differs from that exact original member
+only by one identical 108-byte JavaScript element. This explains the earlier size
+discrepancy through a complete byte comparison, rather than an allowance based on
+size. All raw responses and earlier reports remain unchanged. This diagnostic
+comparison does not add a production normalization policy or approve publication.
+
+| Original accession | Original HTML member SHA-256 | Indexed/member bytes |
+| --- | --- | --- |
+| `0001282637-15-000004` | `c5a6d4c2e7c2de87de376bda646a701665a5afe64917b4648305367d792ed7ec` | 2602537 |
+| `0001282637-16-000028` | `a042ad4126458653ef6ea1a18d29e5e32118854c6d7f8d77a68ade47860fa82b` | 2403515 |
+| `0001282637-17-000005` | `b1b3f1180d5a6d3eae7bf299f2dabe85b8abe035723d1cc40bcbe8e6e2b7fefb` | 2292197 |
+
+The exact command exits 0:
+
+```sh
+uv run --frozen --project fundamental-service python \
+  /Users/denniswong/Desktop/Project/value-investment-agent-issue-376-research-evidence/references/issue376-newmarket-html-integrity-investigation.py
+```
+
+Two complete repetitions disable urllib/socket network access. Both return the
+same report digest and `wrote=false`; zero requests and zero new source/comparison
+artifacts occur. All 47 retained source/comparison files preserve bytes, sizes and
+mtimes. Six simple changed/deleted-original-byte comparisons reject equality;
+these are diagnostic controls, not source-integrity release-canary tests.
+
+| External evidence | SHA-256 |
+| --- | --- |
+| Complete-submission comparison report | `4010904a415bb16b6d129b2492dc7efb2860dd2d450293641a68f5191b1bbd9c` |
+| Comparison input | `afbfa47c0250447532ed0a17fca22e249490192319f67e3f03904012860870df` |
+| Comparison output | `1f8bd4204fb44f53926728712f78788c2186be45aa032f1b8b72e85e398b8a6a` |
+| Two-repeat verification | `24bf14b633ce0705c7b0a54c2b392147ab02ab2faf0d7ab179fa6654aacdb461` |
+| Repeat input | `0f38b37621b2b7dfec1f13e4ebfa49eeb5762e124fcaa1da0bba7620f29445bb` |
+| Repeat output | `8d2871ff821fef910dddd7747c6af890b760e7722370a91c2f07019526e2f3c6` |
+| Existing-signer readiness report | `2e84fc818fddd5acef40f1327322cd75e9344a19ceda2986b28afb8aa9158d64` |
+| Readiness input | `3b8e2e45d17c7ceb870535630156c1b2070c4452d60b15df098d48711fa3a83f` |
+| Readiness output | `55211080b79699d70bbd99cce213b56b4be454587b57648446c9d8c4e79857eb` |
+
+The existing-signer readiness inventory validates all 36 proposal mappings across
+twelve roles and three originals with their retained mapping digests. All36are
+provisional, have no reviewer/time and remain ineligible for signing. The future
+label's twelve mappings stay separate from the origin's 24. No replacement signer,
+reviewer identity, unsigned approval statement, private key or trust root was
+created. Once actual accounting adjudication and independent review exist, use
+the existing project signer with its approved mapping, canonical fixture,
+retained artifact references and configured trusted reviewer key. A project
+signature cannot resolve unknown amounts or substitute for that review.
+
+[PR #397](https://github.com/sosodennis/value-investment-agent/pull/397) at
+`75051c360cfb6553d70bce6a39be663f66aeb37b` has twelve successful CI jobs and one
+explicit release-gate skip in
+[run 43043908885](https://github.com/sosodennis/value-investment-agent/actions/runs/43043908885).
+There is no independent GitHub review yet. These results bind that exact head;
+any later metadata head requires its own CI. Formal completed cases remain 0/100,
+all four semantic role gaps remain unresolved and the threshold remains null.
