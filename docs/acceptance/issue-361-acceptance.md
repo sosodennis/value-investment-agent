@@ -771,3 +771,41 @@ mapping review, trusted release and caller approval remain unresolved. No real
 numerical or full 19-gate completion is claimed; threshold stays null. Complete
 those evidence gates, real service acceptance and PR/main verification before
 closing #361 or its unresolved blockers.
+
+## Source completeness audit: mixed awards and registered securities
+
+At exact `a5897e7442c7e7d5560f042f7566aba1f7da5628`, the retained Microsoft
+annuals are supplemented by the dated original proxy
+[`0001193125-24-242883`](https://www.sec.gov/Archives/edgar/data/789019/000119312524242883/d858775ddef14a.htm),
+accepted `2024-10-24T20:31:13Z`, before the fixed valuation cutoff. Its June 30
+equity-plan table reports 88,596,698 securities, including SAs, PSAs at target
+performance and acquisition-related options. The $57.87 weighted-average exercise
+price excludes stock awards; the named-executive table uses maximum PSA payout
+assumptions. These disclosures cannot replace a complete per-class inventory or
+resolve performance conditions. The annual 88m nonvested observation is a
+different population; its difference from the proxy total is not an option count.
+
+Exhibit 4.26, extracted from the already retained FY2024 accession archive, lists
+Section 12 registered securities as of July 30 and authorized common/preferred
+shares. That date, registration scope and authorization do not establish complete
+economic claim absence at June 30. No absent value, approved mapping or new
+canonical fact is created. The original strict parser execution remains pinned
+to `dea88ad4`; neither supplemental document is represented as a new validated
+canonical accounting parser run.
+
+Audit input:
+`f3d22fb32e8bf106667fe2f42d86efaa1018887a9a265c853c985503a357cd96`;
+output:
+`2b02f7d438055d45ead3544bf61c1fe8d27adc8070e47b74dec34913b994b0b0`.
+Two independent complete audit repeats exit 0, return `wrote=false`, make zero
+provider requests and preserve hashes/mtimes of all 95 original files and 10
+supplemental/report files. Repeat report:
+`68d735bc37137b314921b6be05dc32bb722afdfc2c18c9686c3fbd1be871962d`.
+The scripts, original bytes and full discovery passages stay outside Git; the
+existing compact checkpoint retains commands, runtime pins and source digests.
+
+The source gap remains six scalar roles plus complete company-wide award
+classification/conditions, actual quote/policy and independent review. Resolve
+those evidence gaps before signing a release or attempting real numerical
+acceptance. Further parser or signing changes alone cannot establish missing
+economic disclosures. Threshold remains null; #361 and draft PR #370 stay open.
