@@ -26,8 +26,23 @@ validates these pins before source I/O. After original integrity, EFM/DQC and
 historical DEI validation, ingestion invokes the existing automatic mapping batch,
 retains every decision/certificate/refusal and normalizes accepted mappings with
 the existing fact functions. An incomplete acquisition remains abstained.
-This boundary is available to service orchestration; the automatic plan/command
-connection is the next increment tracked by #413. Manual command usage follows.
+The installed command accepts this mapping-free source request through
+`AutomaticSourcePreparationPlanV1`, protocol `automatic-source-preparation-v1`:
+
+```sh
+fundamental-prepare-source \
+  --plan automatic-source-plan.json --plan-digest <canonical-plan-sha256> \
+  --machine-private-key /run/secrets/mapping-evaluator.pem \
+  --runtime-source-revision <installed-source-commit> \
+  --actor <operator-id> --organization <authorized-organization>
+```
+
+Deployment trust roots must authorize the matching evaluator/key and executable
+policy. The independently supplied runtime revision must match the plan. Each
+original pins the complete model requirements; missing roles retain the complete
+mapping batch and keep preparation blocked. A repeat reads completed acquisitions
+without provider/parser I/O. Supported mappings are read from those immutable
+batches for release comparison, using the existing release and caller gates.
 
 `fundamental-prepare-source` coordinates source acquisition, trusted release
 activation and the existing automatic composer outside the serving API request
@@ -51,8 +66,9 @@ it uses existing SEC acquisition and retention; an already stored snapshot can b
 used with `--candidate <trusted-candidate.json>` without another acquisition.
 Candidate publication and activation require the configured organizations, release
 verification and trusted automatic mapping approval or retained human review.
-This command does not
-create review signatures or approve new mappings.
+The manual plan uses existing mapping decisions. Automatic plans evaluate new
+mappings through the deployment's trusted machine authority; release approval
+remains a separate operation.
 
 Reuse also checks the plan's mapping decision IDs, versions and financial roles
 against the immutable release, and each declared fact against the mapping pinned

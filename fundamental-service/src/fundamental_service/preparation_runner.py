@@ -8,9 +8,19 @@ import os
 import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Literal, Protocol
+from typing import Annotated, Generic, Literal, Protocol, TypeAlias, TypeVar
 
-from pydantic import Field, model_validator
+from pydantic import Field, TypeAdapter, model_validator
+
+from .automatic_mapping import AutomaticMappingDecisionV1
+from .automatic_mapping_batch import (
+    AutomaticMappingBatchDecisionV1,
+    AutomaticMappingBatchRequestV1,
+)
+from .automatic_source_mapping import (
+    AutomaticSecIngestionRequestV1,
+    AutomaticSourceMappingAuthority,
+)
 
 from .application import FundamentalApplication
 from .contracts import (
@@ -19,6 +29,7 @@ from .contracts import (
     QualityStatus,
     SecIngestionRequestV1,
     SecMappingReferenceV1,
+    SecSourceRequestV1,
     SnapshotResolutionRequestV1,
     SnapshotResolutionV1,
     SourceRole,
@@ -47,17 +58,19 @@ from .valuation_preparation import AutomaticValuationPreparationV1
 from .valuation_requirements import valuation_requirements_profile
 
 
-class SourcePreparationPlanV2(StrictModel):
-    """Explicit deployment input; mappings and source pins stay service-owned."""
+SourceRequestT = TypeVar("SourceRequestT", bound=SecSourceRequestV1)
 
-    protocol: Literal["source-preparation-v2"] = "source-preparation-v2"
+
+class _SourcePreparationPlan(StrictModel, Generic[SourceRequestT]):
+    """Common issuer, chronology and runtime constraints for source plans."""
+
     source_revision: str = Field(pattern=r"^[0-9a-f]{40}$")
     release_profile_id: str = Field(min_length=1)
     model_id: InitialModelId
-    ingestions: tuple[SecIngestionRequestV1, ...] = Field(min_length=1, max_length=6)
+    ingestions: tuple[SourceRequestT, ...] = Field(min_length=1, max_length=6)
 
     @model_validator(mode="after")
-    def requirements_match(self) -> SourcePreparationPlanV2:
+    def requirements_match(self) -> _SourcePreparationPlan[SourceRequestT]:
         profile = valuation_requirements_profile(self.model_id)
         required = set(profile.required_fact_fields)
         requested = {
@@ -89,12 +102,6 @@ class SourcePreparationPlanV2(StrictModel):
                 raise ValueError(
                     "source plan components must share issuer, date and runtime profile"
                 )
-        references: dict[str, SecMappingReferenceV1] = {}
-        for request in self.ingestions:
-            for reference in request.mappings:
-                previous = references.setdefault(reference.decision_id, reference)
-                if previous != reference:
-                    raise ValueError("source plan mapping references must be coherent")
         if len(self.ingestions) > 1:
             accessions = tuple(
                 request.filing.accession_number for request in self.ingestions
@@ -132,6 +139,60 @@ class SourcePreparationPlanV2(StrictModel):
         )
 
 
+class SourcePreparationPlanV2(_SourcePreparationPlan[SecIngestionRequestV1]):
+    """Explicit deployment input with pre-existing mapping decisions."""
+
+    protocol: Literal["source-preparation-v2"] = "source-preparation-v2"
+
+    @model_validator(mode="after")
+    def mapping_references_match(self) -> SourcePreparationPlanV2:
+        references: dict[str, SecMappingReferenceV1] = {}
+        for request in self.ingestions:
+            for reference in request.mappings:
+                previous = references.setdefault(reference.decision_id, reference)
+                if previous != reference:
+                    raise ValueError("source plan mapping references must be coherent")
+        return self
+
+
+class AutomaticSourcePreparationPlanV1(
+    _SourcePreparationPlan[AutomaticSecIngestionRequestV1]
+):
+    protocol: Literal["automatic-source-preparation-v1"] = (
+        "automatic-source-preparation-v1"
+    )
+
+    @model_validator(mode="after")
+    def automatic_pins_match(self) -> AutomaticSourcePreparationPlanV1:
+        first = self.ingestions[0]
+        for request in self.ingestions:
+            if (
+                request.source_revision != self.source_revision
+                or request.model_id != self.model_id
+                or any(
+                    getattr(request, field) != getattr(first, field)
+                    for field in (
+                        "evaluator_id",
+                        "mapping_policy_digest",
+                        "mapping_version",
+                        "model_version",
+                        "requirements_digest",
+                    )
+                )
+            ):
+                raise ValueError(
+                    "automatic source plan must pin one model, authority and policy"
+                )
+        return self
+
+
+SourcePreparationPlan: TypeAlias = Annotated[
+    SourcePreparationPlanV2 | AutomaticSourcePreparationPlanV1,
+    Field(discriminator="protocol"),
+]
+SOURCE_PREPARATION_PLAN = TypeAdapter(SourcePreparationPlan)
+
+
 class SourceAcquisitionOutcomeV1(StrictModel):
     request_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
     accession_number: str | None = None
@@ -140,6 +201,9 @@ class SourceAcquisitionOutcomeV1(StrictModel):
     manifest_digest: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
     issue_codes: tuple[str, ...] = ()
     missing_evidence: tuple[str, ...] = ()
+    mapping_evidence_ref: ArtifactRefV1 | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
 
     @model_validator(mode="after")
     def outcome_matches_evidence(self) -> SourceAcquisitionOutcomeV1:
@@ -185,7 +249,8 @@ class SourcePreparationEvidenceV1(StrictModel):
         if self.source_plan_ref is not None and (
             self.source_plan_ref.content_hash != self.plan_digest
             or self.source_plan_ref.media_type != "application/json"
-            or self.source_plan_ref.role != "source-preparation-plan-v2"
+            or self.source_plan_ref.role
+            not in {"source-preparation-plan-v2", "automatic-source-preparation-v1"}
         ):
             raise ValueError("source plan reference must bind the canonical input")
         if len({outcome.request_digest for outcome in self.source_outcomes}) != len(
@@ -258,7 +323,88 @@ class SourcePreparationRunner:
         self._artifacts = artifacts
         self._canary = canary
 
-    def _resolve(self, plan: SourcePreparationPlanV2) -> SnapshotResolutionV1 | None:
+    def _plan_mappings(
+        self, plan: SourcePreparationPlan
+    ) -> tuple[tuple[SecMappingReferenceV1, ...], ...] | None:
+        if isinstance(plan, SourcePreparationPlanV2):
+            return tuple(request.mappings for request in plan.ingestions)
+        if self._acquisition is None:
+            return None
+        groups = []
+        for request in plan.ingestions:
+            retained = self._acquisition.retained_acquisition(request)
+            if (
+                retained is None
+                or retained.quality_status is not QualityStatus.VERIFIED
+                or retained.mapping_evidence_ref is None
+            ):
+                return None
+            artifacts = self._application.artifact_store
+            record = artifacts.get(retained.mapping_evidence_ref)
+            if record.status != "valid" or record.retention != "evidence":
+                raise ValueError(
+                    "automatic preparation requires valid retained mapping evidence"
+                )
+            batch = AutomaticMappingBatchDecisionV1.model_validate_json(
+                artifacts.read(record.artifact_id)
+            )
+            batch_input = AutomaticMappingBatchRequestV1.model_validate_json(
+                artifacts.read("automatic-mapping-batch-input-" + batch.input_digest)
+            )
+            if (
+                sha256_digest(batch_input) != batch.input_digest
+                or batch_input.original.source.cik != request.cik
+                or batch_input.original.source.accession_number
+                != request.filing.accession_number
+                or batch_input.original.decision_at != request.valuation_timestamp
+                or batch_input.security_identity != request.identity
+                or batch_input.evaluator_id != request.evaluator_id
+                or batch_input.mapping_version != request.mapping_version
+                or batch_input.source_revision != batch.source_revision
+                or batch_input.model_version != batch.model_version
+                or batch_input.requirements != batch.requirements
+                or batch.source_revision != request.source_revision
+                or batch.policy_digest != request.mapping_policy_digest
+                or batch.model_version != request.model_version
+                or batch.requirements.digest != request.requirements_digest
+            ):
+                raise ValueError(
+                    "retained automatic batch differs from source plan pins"
+                )
+            references = []
+            for role in batch.roles:
+                if role.status != "approved":
+                    if role.normalized_field in request.required_fields:
+                        return None
+                    continue
+                assert role.decision is not None
+                decision = AutomaticMappingDecisionV1.model_validate_json(
+                    artifacts.read(role.decision.artifact_id)
+                )
+                if (
+                    sha256_digest(decision) != role.decision.content_hash
+                    or decision.mapping is None
+                    or decision.source_revision != request.source_revision
+                    or decision.evaluator_id != request.evaluator_id
+                    or decision.policy_digest != request.mapping_policy_digest
+                    or decision.mapping.mapping_version != request.mapping_version
+                    or decision.mapping.normalized_field != role.normalized_field
+                ):
+                    raise ValueError(
+                        "automatic mapping decision differs from its retained reference"
+                    )
+                mapping = decision.mapping
+                references.append(
+                    SecMappingReferenceV1(
+                        decision_id=mapping.decision_id,
+                        mapping_version=mapping.mapping_version,
+                        normalized_field=mapping.normalized_field,
+                    )
+                )
+            groups.append(tuple(references))
+        return tuple(groups)
+
+    def _resolve(self, plan: SourcePreparationPlan) -> SnapshotResolutionV1 | None:
         try:
             resolution = self._application.resolve_snapshot(plan.resolution_request())
         except ServiceError as error:
@@ -285,16 +431,15 @@ class SourcePreparationRunner:
         return resolution if self._matches_release(plan, snapshot, manifest) else None
 
     def _matches_release_mappings(
-        self, plan: SourcePreparationPlanV2, manifest: DataReleaseManifestV1
+        self, plan: SourcePreparationPlan, manifest: DataReleaseManifestV1
     ) -> bool:
         released = {
             item.mapping_id: item.mapping_digest for item in manifest.mapping_refs
         }
-        references = {
-            item.decision_id: item
-            for request in plan.ingestions
-            for item in request.mappings
-        }
+        groups = self._plan_mappings(plan)
+        if groups is None:
+            return False
+        references = {item.decision_id: item for group in groups for item in group}
         if not references.keys() <= released.keys():
             return False
         for key, reference in sorted(references.items()):
@@ -315,7 +460,7 @@ class SourcePreparationRunner:
 
     def _matches_release(
         self,
-        plan: SourcePreparationPlanV2,
+        plan: SourcePreparationPlan,
         snapshot: SourceSnapshotV1,
         manifest: DataReleaseManifestV1,
     ) -> bool:
@@ -332,10 +477,13 @@ class SourcePreparationRunner:
         facts = self._application.fact_repository
         if declared is None or facts is None:
             return False
+        groups = self._plan_mappings(plan)
+        if groups is None:
+            return False
         expected = {
             (request.filing.accession_number, item.normalized_field): item.decision_id
-            for request in plan.ingestions
-            for item in request.mappings
+            for request, group in zip(plan.ingestions, groups, strict=True)
+            for item in group
         }
         sources = {
             source.content_hash: source.accession_number
@@ -363,7 +511,7 @@ class SourcePreparationRunner:
 
     def _candidate_snapshot_available(
         self,
-        plan: SourcePreparationPlanV2,
+        plan: SourcePreparationPlan,
         candidate: DataReleaseCandidatePublishRequestV1,
     ) -> bool:
         for reference in candidate.manifest.snapshot_refs:
@@ -380,9 +528,7 @@ class SourcePreparationRunner:
         return False
 
     @staticmethod
-    def _matches_plan(
-        plan: SourcePreparationPlanV2, snapshot: SourceSnapshotV1
-    ) -> bool:
+    def _matches_plan(plan: SourcePreparationPlan, snapshot: SourceSnapshotV1) -> bool:
         first = plan.ingestions[0]
         if any(
             getattr(snapshot, field) != getattr(first, field)
@@ -415,7 +561,7 @@ class SourcePreparationRunner:
         actor_id: str,
         organization_id: str,
         correlation_id: str,
-        plan: SourcePreparationPlanV2,
+        plan: SourcePreparationPlan,
     ) -> None:
         config = self._application.config
         if (
@@ -492,7 +638,7 @@ class SourcePreparationRunner:
                 raise
 
     def _persist(
-        self, plan: SourcePreparationPlanV2, evidence: SourcePreparationEvidenceV1
+        self, plan: SourcePreparationPlan, evidence: SourcePreparationEvidenceV1
     ) -> ArtifactPublicationV1:
         publication = self._artifacts.put_with_receipt(
             f"source-preparation-plan:{plan.digest}", plan
@@ -504,7 +650,9 @@ class SourcePreparationRunner:
                     artifact_id=publication.artifact.artifact_id,
                     content_hash=publication.artifact.content_hash,
                     media_type=publication.artifact.media_type,
-                    role="source-preparation-plan-v2",
+                    role="source-preparation-plan-v2"
+                    if isinstance(plan, SourcePreparationPlanV2)
+                    else plan.protocol,
                 ),
             }
         )
@@ -523,6 +671,15 @@ class SourcePreparationRunner:
                 }
             )
         )
+        dependencies += tuple(
+            sorted(
+                {
+                    outcome.mapping_evidence_ref.content_hash
+                    for outcome in evidence.source_outcomes
+                    if outcome.mapping_evidence_ref is not None
+                }
+            )
+        )
         return self._artifacts.put_with_receipt(
             f"source-preparation:{sha256_digest(evidence)}",
             evidence,
@@ -531,7 +688,7 @@ class SourcePreparationRunner:
 
     def _acquire_sources(
         self,
-        plan: SourcePreparationPlanV2,
+        plan: SourcePreparationPlan,
         *,
         actor_id: str,
         organization_id: str,
@@ -591,15 +748,31 @@ class SourcePreparationRunner:
                     manifest_digest=acquired.manifest_digest,
                     issue_codes=tuple(sorted(set(acquired.issue_codes))),
                     missing_evidence=tuple(sorted(set(acquired.missing_evidence))),
+                    mapping_evidence_ref=self._mapping_evidence_ref(
+                        acquired.mapping_evidence_ref
+                    ),
                 )
                 if snapshot is not None:
                     snapshots.append(snapshot)
             outcomes.append(outcome)
         return tuple(snapshots), tuple(outcomes)
 
+    def _mapping_evidence_ref(self, artifact_id: str | None) -> ArtifactRefV1 | None:
+        if artifact_id is None:
+            return None
+        record = self._application.artifact_store.get(artifact_id)
+        if record.status != "valid" or record.retention != "evidence":
+            raise ValueError("source preparation requires valid mapping evidence")
+        return ArtifactRefV1(
+            artifact_id=record.artifact_id,
+            content_hash=record.content_hash,
+            media_type=record.media_type,
+            role="automatic-mapping-batch-decision-v1",
+        )
+
     def run(
         self,
-        plan: SourcePreparationPlanV2,
+        plan: SourcePreparationPlan,
         *,
         actor_id: str,
         organization_id: str,
@@ -614,6 +787,16 @@ class SourcePreparationRunner:
         if deadline_at.tzinfo is None or deadline_at <= received_at:
             raise ValueError("runner deadline must be an unexpired zoned timestamp")
         guard_caller_approval(approval, caller_id=actor_id, received_at=received_at)
+        if isinstance(plan, AutomaticSourcePreparationPlanV1):
+            if self._acquisition is None:
+                raise ServiceError(
+                    "SOURCE_ACQUISITION_UNAVAILABLE",
+                    "automatic source acquisition is not configured",
+                    status_code=503,
+                    retryable=False,
+                )
+            for request in plan.ingestions:
+                self._acquisition.retained_acquisition(request)
         if candidate is not None and (
             candidate.manifest.profile_id != plan.release_profile_id
             or candidate.verification.source_revision != plan.source_revision
@@ -847,7 +1030,7 @@ class SourcePreparationRunner:
 async def _run_command(args: argparse.Namespace) -> ArtifactPublicationV1:
     from .app import app
 
-    plan = SourcePreparationPlanV2.model_validate_json(args.plan.read_bytes())
+    plan = SOURCE_PREPARATION_PLAN.validate_json(args.plan.read_bytes())
     if plan.digest != args.plan_digest:
         raise ValueError("plan digest does not match the pinned input")
     candidate = (
@@ -878,6 +1061,37 @@ async def _run_command(args: argparse.Namespace) -> ArtifactPublicationV1:
                 artifact_reader=application.artifact_store,
                 trust_roots=DataReleaseTrustRootsV1.from_file(Path(trust_roots_file)),
             )
+        if isinstance(plan, AutomaticSourcePreparationPlanV1):
+            from cryptography.hazmat.primitives import serialization
+            from cryptography.hazmat.primitives.asymmetric.ed25519 import (
+                Ed25519PrivateKey,
+            )
+
+            if (
+                not trust_roots_file
+                or args.machine_private_key is None
+                or args.runtime_source_revision is None
+                or app.state.sec_acquisition is None
+            ):
+                raise ValueError(
+                    "automatic source preparation requires deployment trust, machine key, source revision and SEC runtime"
+                )
+            key = serialization.load_pem_private_key(
+                args.machine_private_key.read_bytes(), password=None
+            )
+            if not isinstance(key, Ed25519PrivateKey):
+                raise ValueError("automatic mapping requires an Ed25519 deployment key")
+            acquisition = app.state.sec_acquisition
+            acquisition.automatic_mapping_authority = AutomaticSourceMappingAuthority(
+                artifacts=application.artifact_store,
+                content=acquisition.content_store,
+                metadata=app.state.metadata_store,
+                trust_roots=DataReleaseTrustRootsV1.from_file(Path(trust_roots_file)),
+                private_key=key,
+                source_revision=args.runtime_source_revision,
+                taxonomy_cache_dir=acquisition.settings.taxonomy_cache_dir,
+                taxonomy_cache_sha256=acquisition.settings.taxonomy_cache_sha256,
+            )
         return SourcePreparationRunner(
             application=application,
             metadata=app.state.metadata_store,
@@ -901,6 +1115,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--plan-digest", required=True)
     parser.add_argument("--candidate", type=Path)
     parser.add_argument("--approval", type=Path)
+    parser.add_argument("--machine-private-key", type=Path)
+    parser.add_argument("--runtime-source-revision")
     parser.add_argument("--actor", required=True)
     parser.add_argument("--organization", required=True)
     parser.add_argument(

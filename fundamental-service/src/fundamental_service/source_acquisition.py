@@ -557,6 +557,15 @@ class SecAcquisitionUseCase:
             )
         return self.automatic_mapping_authority
 
+    def retained_acquisition(
+        self, request: SecIngestionRequestV1 | AutomaticSecIngestionRequestV1
+    ) -> SecIngestionResponseV1 | None:
+        """Read a completed exact-runtime acquisition without provider/parser I/O."""
+        payload = self._runtime_key_payload(request, self._validation_profile(request))
+        return self.metadata.get_sec_ingestion(
+            sha256_digest(payload), expected_acquisition_payload=payload
+        )
+
     def execute(
         self,
         request: SecIngestionRequestV1 | AutomaticSecIngestionRequestV1,
@@ -947,7 +956,7 @@ class SecAcquisitionUseCase:
             status = "abstain"
             quality = QualityStatus.ABSTAIN
         elif (
-            verified_fields != set(request.required_fields)
+            not set(request.required_fields) <= verified_fields
             or preparation.snapshot.coverage_status is not QualityStatus.VERIFIED
         ):
             status = "degraded"

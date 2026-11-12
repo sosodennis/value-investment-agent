@@ -624,6 +624,7 @@ def _partial_acquisition_fixture(tmp_path, *, empty=False, schema="msft-20240630
         settings=settings,
         provider=provider,
         ingestion=SimpleNamespace(prepare_filing=prepare_filing),
+        prepared=prepared,
     )
 
 
@@ -709,6 +710,51 @@ def test_canonical_acquisition_key_distinguishes_identity_cutoff_and_coverage():
         sha256_digest(use_case._canonical_key_payload(variant)) != key
         for variant in variants
     )
+
+
+def test_verified_supporting_facts_do_not_degrade_complete_required_coverage(tmp_path):
+    fixture = _partial_acquisition_fixture(tmp_path)
+    request = fixture.request.model_copy(
+        update={
+            "required_fields": ("revenue",),
+            "mappings": (fixture.request.mappings[0],),
+        }
+    )
+    required = fixture.facts[0].model_copy(update={"quality": QualityStatus.VERIFIED})
+    assert fixture.snapshot.coverage_status is QualityStatus.VERIFIED
+    fixture.prepared.facts = (
+        required,
+        required.model_copy(
+            update={"fact_id": "supporting-fact", "normalized_field": "cash"}
+        ),
+    )
+    metadata = SimpleNamespace(
+        get_mapping={m.decision_id: m for m in fixture.mappings}.__getitem__,
+        publish_sec_ingestion=lambda **kwargs: kwargs["result"],
+        publish_source_audit=lambda **kwargs: None,
+    )
+    use_case = SecAcquisitionUseCase(
+        adapter=fixture.provider,
+        ingestion=fixture.ingestion,
+        metadata=metadata,
+        content_store=fixture.content,
+        settings=fixture.settings,
+        authorized_organizations=frozenset({"org"}),
+    )
+    result = use_case._acquire_and_publish(
+        request,
+        acquisition_key="a" * 64,
+        key_payload={},
+        caller_principal="caller",
+        organization_id="org",
+        correlation_id="supporting-facts",
+        deadline_at=datetime.now(UTC) + timedelta(minutes=1),
+        validation_profile=_validation_profile(),
+    )
+    assert result.status == "created"
+    assert result.quality_status is QualityStatus.VERIFIED
+    assert not result.missing_evidence and not result.issue_codes
+    assert set(result.canonical_fact_ids) == {required.fact_id, "supporting-fact"}
 
 
 def test_runtime_acquisition_key_binds_validation_and_taxonomy_digests():

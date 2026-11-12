@@ -113,6 +113,33 @@ inventory remains missing evidence; do not manufacture zero-valued award facts.
 
 ## Automatic mapping approval
 
+For an empty-store source preparation, run `fundamental-prepare-source` with an
+`AutomaticSourcePreparationPlanV1` (`automatic-source-preparation-v1`). It pins
+one exact source revision, model and requirements profile, mapping policy and
+evaluator across one to six original annual requests. No manual mapping refs
+are accepted. Configure the normal PostgreSQL/content storage, authorized SEC
+organization, taxonomy/validation assets and data-release trust roots, then pass
+`--machine-private-key <Ed25519-PEM-path>` and
+`--runtime-source-revision <installed-commit>` as deployment inputs. Keep the
+private key outside source control and report artifacts.
+
+The authority/key, policy and revision must match before provider I/O. Existing
+acquisition locks and runtime keys own capture and reuse. Ingestion invokes the
+mapping batch only after original byte integrity, EFM/DQC and historical issuer
+identity validation, then publishes mappings through the current metadata store
+and facts through the existing normalizer. The source report retains the full
+batch decision reference and canonical plan. Missing/unsupported/conflicting
+roles remain blocked; no release or calculation is attempted. A report-write
+interruption can be retried against the completed acquisition without fetching
+or parsing again. Repeated identical reports return `wrote=false`.
+
+For a complete supported original, the runner checks the retained batch input,
+model, policy, evaluator, source and per-role decisions against the immutable
+release. `--candidate` still requires the independent release canary and
+authorization. `--approval` still requires the caller's decision for the exact
+prepared input. The command does not infer either approval from a machine
+mapping certificate. Existing `source-preparation-v2` manual plans remain valid.
+
 Supplied valuation approvals must identify the authenticated request subject.
 The calculation, policy-calculation and uncertainty HTTP endpoints reject another
 `caller_id` or a decision later than receipt before invoking the application.
