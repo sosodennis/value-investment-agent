@@ -170,8 +170,8 @@ class SecSicDamodaranIndustryCrosswalk:
         )
 
 
-def default_classification_crosswalks() -> (
-    tuple[ClassificationCrosswalkProviderPort, ...]
-):
+def default_classification_crosswalks() -> tuple[
+    ClassificationCrosswalkProviderPort, ...
+]:
     """Composition registry for supported source-to-industry crosswalks."""
     return (SecSicDamodaranIndustryCrosswalk(),)
