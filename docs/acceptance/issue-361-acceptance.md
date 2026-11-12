@@ -63,6 +63,35 @@ commands, output hashes, image/runtime pins and residual blockers are in the
 `693d5f5011b929499b6781c8cb8238e73e3e3647558def753c66bf10834af6f8` in the
 cumulative accounting checkpoint.
 
+## Market policy source and automatic approval boundary
+
+The old in-code `fcff-market-policy-2025-v1` is not source-backed approval. It
+hard-coded beta 1.1, ERP 5%, pre-tax debt cost 5%, debt/equity weights 20/80,
+and terminal growth 2%, then marked those values `approved_policy`. The only
+observed value was a FRED DGS10 rate of 4.6% for 2025-01-03. Those bootstrap
+records were effective since 1970, despite capture in 2026. They must not be
+selected for new or historical requests.
+
+The retained Tandy/2025 proposal contains candidates, not admitted market
+inputs:
+
+| Input | Retained candidate | Remaining evidence gate |
+| --- | --- | --- |
+| Risk-free rate | U.S. Treasury 10-year yield, 4.23%, 2025-03-31 | Reproduce official row and establish a point-in-time release/availability rule |
+| Beta | Damodaran U.S. Retail (Special Lines) unlevered beta, 1.0024856714394297, January 2025 | Reproduce archive/cell and establish industry selection, date availability, and source-use policy |
+| ERP | Damodaran United States ERP, 4.33%, January 2025 | Reproduce archive/cell and establish date availability and source-use policy |
+| Cost of debt | Tandy filing states CME Term SOFR + 210 bp; facility undrawn | Benchmark tenor/source, outstanding debt, and complete facility scope are unresolved |
+| Capital weights | None admitted | Require point-in-time security/quote and share count plus complete debt market value |
+| Terminal growth | None admitted | Historical macro vintage request failed; no ceiling or selected rate is available |
+
+The user authorized deterministic automatic policy approval. The service should
+approve only a version-pinned evaluator decision that can replay source bytes,
+selection, dates, and all required fields, then verify a trusted machine
+signature. A signature cannot bless a missing field or prove source rights by
+itself. Until the owning Fundamental policy evaluator and its complete evidence
+set pass those checks, no market policy is released and preparation remains
+`requires_input`/abstain. The fixed-history threshold stays null.
+
 ## Registered depreciation policy integration
 
 The ordinary merge `851cde947b6b0d7078f666f0018e8efa31034b1a` brings #410's

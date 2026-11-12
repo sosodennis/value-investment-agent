@@ -14,7 +14,9 @@ from fundamental_service.contracts import (
     TraceV1,
     UncertaintyV1,
 )
-from fundamental_service.policies import initial_policy_records
+from fundamental_service.policies import PolicyRecordV1, initial_policy_records
+from fundamental_service.serialization import sha256_digest
+from market_policy_fixtures import synthetic_market_inputs
 from fundamental_service.valuation_preparation import (
     ApprovedMarketPolicyInputsV1,
     ForwardReferenceProvenanceV1,
@@ -193,8 +195,8 @@ def _prepare(
         snapshot=snapshot,
         model_id=model_id,
         model_version=f"{model_id}-v2",
-        policy_id="fcff_dcf-us-gaap-public-v2",
-        policy_version="fcff_dcf-v2-quality-v1",
+        policy_id="fcff_dcf-us-gaap-public-v3",
+        policy_version="fcff_dcf-v2-quality-v2",
         data_release_manifest_digest=RELEASE_DIGEST,
         market_policy=market_policy,
         equity_dilution_evidence=dilution,
@@ -417,8 +419,10 @@ def test_prepared_input_runs_service_owned_monte_carlo_as_provisional():
     assert transition_report.quantile_contract["bear"] == "p05"
 
 
-def test_released_market_policy_prepares_without_caller_assumptions() -> None:
-    policy = initial_policy_records()[0]
+def test_synthetic_market_policy_prepares_without_caller_assumptions() -> None:
+    payload = initial_policy_records()[0].model_dump(exclude={"policy_digest"})
+    payload["market_inputs"] = synthetic_market_inputs()
+    policy = PolicyRecordV1(**payload, policy_digest=sha256_digest(payload))
     market_policy = _approved_market_policy(
         policy,
         valuation_timestamp=VALUATION_TIME,
@@ -434,7 +438,7 @@ def test_released_market_policy_prepares_without_caller_assumptions() -> None:
         if item.path == "assumptions.wacc.risk_free_rate"
     )
     assert risk_free.source_refs == (
-        "1cf8c2d38f773142b58b772bde5028d12f00dfd72bf37b40c2327e15d418ea28",
+        synthetic_market_inputs().evidence[0].content_hash,
     )
     assert risk_free.as_of == datetime(2025, 1, 3, tzinfo=UTC)
     assert risk_free.method == "approved_source"
@@ -446,6 +450,19 @@ def test_released_market_policy_prepares_without_caller_assumptions() -> None:
         ).method
         == "approved_policy"
     )
+
+
+@pytest.mark.parametrize("policy", initial_policy_records(), ids=lambda p: p.model_id)
+def test_initial_policy_cannot_prepare_even_after_capture_date(policy) -> None:
+    result = _prepare(
+        _facts(),
+        market_policy=_approved_market_policy(
+            policy, valuation_timestamp=datetime(2027, 1, 1, tzinfo=UTC)
+        ),
+    )
+    assert result.status == "requires_input"
+    assert result.input is None
+    assert "MARKET_POLICY_INPUTS_MISSING" in result.issue_codes
 
 
 def test_missing_market_policy_requires_input_without_default_values() -> None:

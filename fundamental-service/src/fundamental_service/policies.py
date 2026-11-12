@@ -18,7 +18,6 @@ from .contracts import (
     CapitalBridgeAssumptionsV1,
     EligibilityReportV1,
     ForecastAssumptionsV1,
-    MarketPolicyEvidenceV1,
     MarketPolicyInputsV1,
     ModelId,
     PolicyResolutionV1,
@@ -33,6 +32,15 @@ from .serialization import canonical_bytes, sha256_digest
 from .snapshots import SnapshotError
 
 AssumptionGroup = TypeVar("AssumptionGroup", bound=BaseModel)
+
+# Refs #369: immutable bootstrap records asserted approval without evidence.
+# Keep their bytes readable for audit/restore, but never authorize their use.
+_REVOKED_POLICY_DIGESTS = frozenset(
+    {
+        "7a29bfe009d13bc477ec50e893dfaa7691e5a1af8e684e83d4c9ec16de80980b",
+        "988d0abf08aea447e858b440abf0817f99f983373a16232d9bbafc6a53ef12d6",
+    }
+)
 
 
 class ModelSpecV1(BaseModel):
@@ -227,6 +235,11 @@ class PolicyRegistry:
             policy = self.policy(policy_id)
             if policy is None:
                 raise PolicyError("POLICY_NOT_FOUND", "policy release was not found")
+            if policy.policy_digest in _REVOKED_POLICY_DIGESTS:
+                raise PolicyError(
+                    "POLICY_REVOKED",
+                    "bootstrap market assumptions lack approval evidence (#369)",
+                )
             candidates = (policy,)
         else:
             candidates = tuple(
@@ -235,6 +248,7 @@ class PolicyRegistry:
                 if item.model_id == model_id
                 and item.model_version == model_version
                 and item.status == "active"
+                and item.policy_digest not in _REVOKED_POLICY_DIGESTS
                 and item.effective_at <= valuation_timestamp
                 and (
                     item.market_inputs is None
@@ -444,147 +458,6 @@ class FilesystemPolicyRepository:
         return tuple(policies)
 
 
-_FCFF_MARKET_POLICY_VERSION = "fcff-market-policy-2025-v1"
-_FCFF_MARKET_POLICY_AS_OF = datetime(2025, 1, 3, tzinfo=UTC)
-_FCFF_MARKET_POLICY_CAPTURED_AT = datetime(2026, 11, 3, tzinfo=UTC)
-_FRED_DGS10_FIXTURE_HASH = (
-    "1cf8c2d38f773142b58b772bde5028d12f00dfd72bf37b40c2327e15d418ea28"
-)
-
-
-def _market_policy_evidence(
-    role: str,
-    value: Decimal,
-    *,
-    method: Literal["observed_source", "approved_policy"],
-    source_id: str,
-    source_uri: str,
-    source_version: str,
-    terms_reference: str,
-    content_hash: str | None = None,
-    rationale: str,
-) -> MarketPolicyEvidenceV1:
-    if content_hash is None:
-        content_hash = sha256_digest(
-            {
-                "policy_version": _FCFF_MARKET_POLICY_VERSION,
-                "role": role,
-                "value": value,
-                "source_version": source_version,
-            }
-        )
-    return MarketPolicyEvidenceV1(
-        role=role,
-        method=method,
-        value=value,
-        source_id=source_id,
-        source_uri=source_uri,
-        content_hash=content_hash,
-        source_version=source_version,
-        terms_reference=terms_reference,
-        as_of=_FCFF_MARKET_POLICY_AS_OF,
-        available_at=_FCFF_MARKET_POLICY_AS_OF,
-        captured_at=_FCFF_MARKET_POLICY_CAPTURED_AT,
-        rationale=rationale,
-    )
-
-
-def _initial_market_inputs() -> MarketPolicyInputsV1:
-    policy_uri = (
-        f"in-repository://fundamental-service/policy/{_FCFF_MARKET_POLICY_VERSION}"
-    )
-    policy_terms = (
-        "fundamental-service/docs/fundamental-enterprise-grade-target-state.md#24.4.4"
-    )
-    evidence = (
-        _market_policy_evidence(
-            "risk_free_rate",
-            Decimal("0.046"),
-            method="observed_source",
-            source_id="fred-observations",
-            source_uri=(
-                "https://fred.stlouisfed.org/graph/fredgraph.csv"
-                "?id=DGS10&cosd=2025-01-03&coed=2025-01-03"
-            ),
-            source_version="DGS10@2025-01-03",
-            terms_reference="https://fred.stlouisfed.org/terms-of-use/",
-            content_hash=_FRED_DGS10_FIXTURE_HASH,
-            rationale="10-year U.S. Treasury par yield observed in the pinned FRED vintage",
-        ),
-        _market_policy_evidence(
-            "beta",
-            Decimal("1.1"),
-            method="approved_policy",
-            source_id="fundamental-market-policy",
-            source_uri=policy_uri,
-            source_version=_FCFF_MARKET_POLICY_VERSION,
-            terms_reference=policy_terms,
-            rationale="reviewed explicit beta assumption; not an issuer fact",
-        ),
-        _market_policy_evidence(
-            "equity_risk_premium",
-            Decimal("0.05"),
-            method="approved_policy",
-            source_id="fundamental-market-policy",
-            source_uri=policy_uri,
-            source_version=_FCFF_MARKET_POLICY_VERSION,
-            terms_reference=policy_terms,
-            rationale="reviewed explicit equity risk premium assumption",
-        ),
-        _market_policy_evidence(
-            "pre_tax_cost_of_debt",
-            Decimal("0.05"),
-            method="approved_policy",
-            source_id="fundamental-market-policy",
-            source_uri=policy_uri,
-            source_version=_FCFF_MARKET_POLICY_VERSION,
-            terms_reference=policy_terms,
-            rationale="reviewed marginal debt-cost assumption; trailing interest is diagnostic only",
-        ),
-        _market_policy_evidence(
-            "debt_weight",
-            Decimal("0.2"),
-            method="approved_policy",
-            source_id="fundamental-market-policy",
-            source_uri=policy_uri,
-            source_version=_FCFF_MARKET_POLICY_VERSION,
-            terms_reference=policy_terms,
-            rationale="reviewed capital-weight policy used when issuer market value is unavailable",
-        ),
-        _market_policy_evidence(
-            "equity_weight",
-            Decimal("0.8"),
-            method="approved_policy",
-            source_id="fundamental-market-policy",
-            source_uri=policy_uri,
-            source_version=_FCFF_MARKET_POLICY_VERSION,
-            terms_reference=policy_terms,
-            rationale="reviewed capital-weight policy used when issuer market value is unavailable",
-        ),
-        _market_policy_evidence(
-            "terminal_growth",
-            Decimal("0.02"),
-            method="approved_policy",
-            source_id="fundamental-market-policy",
-            source_uri=policy_uri,
-            source_version=_FCFF_MARKET_POLICY_VERSION,
-            terms_reference=policy_terms,
-            rationale="reviewed terminal-growth ceiling policy; must remain below discount rates",
-        ),
-    )
-    return MarketPolicyInputsV1(
-        policy_version=_FCFF_MARKET_POLICY_VERSION,
-        risk_free_rate=Decimal("0.046"),
-        beta=Decimal("1.1"),
-        equity_risk_premium=Decimal("0.05"),
-        pre_tax_cost_of_debt=Decimal("0.05"),
-        debt_weight=Decimal("0.2"),
-        equity_weight=Decimal("0.8"),
-        terminal_growth=Decimal("0.02"),
-        evidence=evidence,
-    )
-
-
 def initial_policy_records() -> tuple[PolicyRecordV1, ...]:
     return tuple(
         PolicyRecordV1.model_validate(
@@ -592,18 +465,18 @@ def initial_policy_records() -> tuple[PolicyRecordV1, ...]:
                 **(
                     payload := {
                         "contract_version": "fundamental.v1",
-                        "policy_id": f"{model_id}-us-gaap-public-v2",
-                        "policy_version": f"{model_version}-quality-v1",
+                        "policy_id": f"{model_id}-us-gaap-public-v3",
+                        "policy_version": f"{model_version}-quality-v2",
                         "profile_id": "us-gaap-public-v1",
                         "model_id": model_id,
                         "model_version": model_version,
                         "assumptions": None,
-                        "market_inputs": _initial_market_inputs(),
+                        "market_inputs": None,
                         "source_refs": (
                             "fundamental-service/docs/fundamental-enterprise-grade-target-state.md#24.4.3",
                         ),
-                        # The first released policy is effective for every supported
-                        # historical snapshot; later releases supersede it by version.
+                        # This seed supplies eligibility metadata only. Market
+                        # preparation requires separately admitted input evidence.
                         "effective_at": datetime(1970, 1, 1, tzinfo=UTC),
                         "status": "active",
                     }
