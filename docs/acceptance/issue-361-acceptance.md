@@ -1355,6 +1355,17 @@ restore `.tmp-issue355-sec-useragent-compose.yml` or clean another project.
 normalization blockers #404/#405/#406 still need delivery and main verification. Complete
 source scope and supported automatic mapping approval precede numerical acceptance; thresholds stay null.
 
+## Final provider-evidence digest — 89b71d08
+
+The current-head provider abstraction and review state are recorded in
+[issue-361-final-evidence-digest.json](issue-361-final-evidence-digest.json). It binds
+the exact commit, canonical input digest, provider ports, focused test output hashes,
+CI result, and the independent-review status. The digest explicitly classifies
+source-bound industry references as provisional, keeps the numerical flow abstained,
+and leaves `supported_history_threshold` null. It is a checkpoint for the completed
+source-admission increment, not evidence that the remaining real issuer valuation
+gates have passed.
+
 ## Treasury and ALFRED provider checkpoint
 
 Implementation `1619b07fa9f7fdfe9a09f2f1b5723443be324de5` adds two interchangeable
