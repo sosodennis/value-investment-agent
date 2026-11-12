@@ -8,6 +8,11 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from .contracts import MarketPolicyInputsV1, TraceV1
 from .macro_series import MacroSeriesVintageV1, select_macro_vintage
+from .market_reference_selection import (
+    IssuerMarketReferenceSelectionV1,
+    MarketReferenceSelectionError,
+    verify_market_reference_policy_evidence,
+)
 from .numerical_policy import using_valuation_context
 from .serialization import sha256_digest
 from .source_admission import SourceAdmissionV1
@@ -180,11 +185,27 @@ def verify_observed_market_inputs(
     admissions: tuple[SourceAdmissionV1, ...],
     valuation_at: datetime,
     currency: str,
+    reference_selection: IssuerMarketReferenceSelectionV1 | None = None,
 ) -> dict[str, TraceV1]:
     """Verify observed declarations; explicit normative policies stay distinct."""
     traces = {}
     for evidence in sorted(inputs.evidence, key=lambda x: x.role):
         if evidence.method != "observed_source":
+            continue
+        if evidence.role == "equity_risk_premium":
+            if reference_selection is None:
+                raise MarketSourceError(
+                    "MARKET_REFERENCE_PLAN_MISSING",
+                    "observed ERP requires a deployment-pinned issuer reference plan",
+                )
+            try:
+                traces.update(
+                    verify_market_reference_policy_evidence(
+                        (evidence,), selections=reference_selection.selections
+                    )
+                )
+            except MarketReferenceSelectionError as error:
+                raise MarketSourceError(error.code, str(error)) from error
             continue
         if evidence.role != "risk_free_rate":
             raise MarketSourceError(

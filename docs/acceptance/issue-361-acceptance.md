@@ -19,6 +19,137 @@ Eligible candidate-history valuations can be provisional. Missing, conflicting,
 unreviewed, future, or unsupported evidence must retain reasons and abstain.
 No completed #351 through #355 acceptance is changed. #350 is outside scope.
 
+## Terminal growth and issuer policy checkpoint
+
+Implementation `c853dbb875229bf28b19a23c2debfa245cf32385` derives an explicit
+stable-growth assumption from the lower of admitted nominal GDP CAGR and the
+long-term risk-free rate. Its canonical issuer/time plan is deployment-pinned;
+serving and the independent canary reproduce sources, policy and trace. Latest
+incomplete/stale/conflicting evidence refuses. This is a policy assumption,
+not observed issuer growth or a history threshold. Existing macro adapters and
+canonical vintages remain interchangeable; #352 owns valuation calculations.
+
+Implementation `8ba2a07498108b3bf50a553eba7f0a02d49e0c15` fixes the policy registry's
+missing issuer boundary. Preparation, calculation and canary select with actual
+valuation issuer context. Matching issuer policies precede generic policies;
+foreign policies cannot affect selection and same-scope ambiguity refuses.
+Issuer reference/terminal plans require a matching deployment-policy scope.
+Unscoped policy bytes and digests remain unchanged. The design gap and owning
+fix are tracked in [#369](https://github.com/sosodennis/value-investment-agent/issues/369#issuecomment-6827978011).
+
+Exact checks pass **1,821 Service/PostgreSQL tests**, Ruff/format, six-source mypy,
+architecture and diff checks. Eleven optional external SEC-resource skips and
+one intentional ZIP-fixture warning remain. Check input/output:
+`4bc01eb29a709e64d3704340d18756492a6719124b11ac310d11708cbc3fcf92` /
+`e06f839510c59f5f53956561f6867e99989b3c0a9ddad8697400740895202649`.
+[CI43250508391](https://github.com/sosodennis/value-investment-agent/actions/runs/43250508391)
+passes all12 executed jobs; the release gate is skipped.
+The preceding terminal-only commit passes1,814 tests and
+[CI43248445523](https://github.com/sosodennis/value-investment-agent/actions/runs/43248445523).
+
+The own18685/18686 image matches all93 installed Python/SQL sources. Synthetic
+source-bound preparation and independent canary agree;15 value/source/method/
+authority/foreign-policy refusal cases remain explicit. A coexisting foreign
+policy cannot change preparation or canary results. Second, two concurrent
+processes and post-service-restart runs retain packet input/output
+`9a5b428ae902f1edb0a87d5b270f0b5c521b972e55da5d5c6cd3b5a27509ef07` /
+`6a287b2bd4254153946b46645349d00ff79532487f9d3f663f90c363ca1d065c`,
+with evidence writes=0, report wrote=false and unchanged hashes/sizes/mtimes.
+Installed wrapper input/output:
+`2e9768feb2dfa5f0b70d71162debdc32e6aa0a53920572be37f831661f7811e5` /
+`0262a6a39f42674fc0a553703bbb043f1cbc2a46e3f3e79a6544c446c0a720ce`.
+All42 unrelated baseline containers are unchanged. Image:
+`sha256:3bfb0220f13b6f0ee51b06d738dbf00e109eeab6eb04c625aa218cb9b12bc561`.
+
+This is synthetic source/policy/issuer-isolation acceptance. SEC identity remains
+unconfigured in this stack and complete real numerical acceptance remains false.
+The existing [checkpoint](issue-361-source-admission-checkpoint.json) retains
+exact commands, runtime pins, both increment digests and failed audit attempts.
+Remaining: complete automatic issuer classification/beta/debt/capital policy,
+lawful quote and accounting/award scope, trusted complete release, authentic
+caller approval, numerical recovery and PR/main verification. Threshold stays
+null; #361/#369 OPEN; #370 draft.
+
+## Terminal policy and canary authority correction
+
+Implementation `0ccc17ca733cc0a7187da1c16014532d4643577d` fixes a reviewed
+canary gap. At prior evidence `f46c0c1b`, a missing terminal plan plus two
+same-issuer/same-effective-date policies produced a passing canary with no market
+checks because `POLICY_AMBIGUOUS` was swallowed. The retained counterexample
+input/output are
+`d98e4a2517cd648e196046763559737cf63dc0654e753a7747d53ac142090729` /
+`ea010ae649894e79f1da4a159442a1f6e58cac3097b9793ea6abb74ce823af91`.
+
+The canary now ignores only `POLICY_NOT_FOUND`; ambiguous/ineligible authority
+refuses, and policies scoped to another issuer are excluded before lookup.
+Regression tests also confirm preparation refuses on the same ambiguous/missing
+release. Exact validation passes **1,823 Service/PostgreSQL tests**, Ruff/format,
+six-source mypy, architecture and diff;11 optional SEC-resource skips and one
+intentional ZIP warning remain. CI43252528781 passes all12 executed jobs; the
+release gate remains skipped. [Compact checkpoint](issue-361-source-admission-checkpoint.json)
+contains exact commands, input/output digests and prior failure evidence.
+
+The own18685/18686 image matches all93 installed sources at this commit. The
+retained synthetic packet has19 explicit refusals. Second, concurrent, post-restart
+and missing-plan/ambiguous-authority executions have identical output digest,
+zero evidence writes, `wrote=false` and unchanged inventories;42 unrelated
+containers are unchanged. Installed wrapper input/output:
+`dfdb87d670decdd78d4800564ad219e695c038f6a7bff495bf21c9cbfe4fa904` /
+`53e5ae90eb5c7b6b51c6832245248293a882d059ce762f1df8d5132f88268026`.
+This is synthetic policy-boundary acceptance, not complete real numerical
+valuation. Threshold remains null; #361/#369 OPEN and #370 draft.
+
+## Issuer ERP source selection checkpoint
+
+Implementation `94fe0386268a12115a965a40a04081992151ae42` binds one canonical
+issuer/date reference plan to the effective deployment policy and signed release.
+Provider-neutral selection retains exact rows, source/vintage/selection digests,
+freshness and missing/conflicting evidence. Both serving and the independent
+release canary reproduce the observed ERP. Industry unlevered beta cannot become
+issuer equity beta. New providers reuse the existing ports and selectors; #352
+retains financial calculations. Issuer classification remains explicit policy
+authority, distinct from source-use admission.
+
+Exact checks pass **1,783 Service/PostgreSQL tests**, Ruff/format, six-source mypy,
+architecture and diff. Eleven optional SEC-resource skips and one expected ZIP
+fixture warning remain. Engineering input/output:
+`2ebb17c3a4650ed7adab308f8380d767256594d5d7b0939b23599aa0762044d9` /
+`5249d31a0153338adc35db70632c36e93b60c09a915dd1197d9ffddc688d52e0`.
+[CI43240814434](https://github.com/sosodennis/value-investment-agent/actions/runs/43240814434)
+passes all12 executed checks; release gate skipped.
+
+The own `value-investment-agent-361-capture-profiles` image matches all91
+installed Python/SQL sources. A synthetic signed release prepares the exact ERP;
+four altered-policy/missing-authority paths refuse. Second, two concurrent
+processes and post-service-restart runs retain output
+`88694fdb325aec85ba568e1ec95769e09eeea6dec8becffb7683f58934df52f7`
+for packet input
+`9e6a38b2de3f9542a2b9b79dbe12115b3b074609aa496a657577d78a3cd0a730`,
+with evidence writes=0, report wrote=false and unchanged file hashes/mtimes.
+Installed check input/output:
+`21c0419b9dc4349bbce1603301e9505146bebc6a9284b90b75ddd78530a3b0c9` /
+`b974ff0a9961ccfe4c747007a4805e94333b8bbcf246527253a0a1a51ffca71e`.
+All unrelated baseline containers are unchanged. Ports remain18685/18686.
+
+Retained harness corrections: the manual own-service recreation initially omitted
+host overrides and briefly bound18080, then restored18685 without replacing the
+PostgreSQL volume; fixture generation and the installed audit command initially
+missed their internal-contract PYTHONPATH. These are recorded as failed audit
+attempts; the accepted installed report uses the corrected runtime tuple.
+
+This is synthetic source/policy binding acceptance. SEC identity is unconfigured
+in this stack, and real numerical acceptance remains incomplete. Full automatic
+issuer/date policy, lawful quote, accounting/award evidence, trusted complete
+release, caller approval and numerical recovery remain required. The existing
+[source-admission checkpoint](issue-361-source-admission-checkpoint.json) records
+commands, runtime pins, digests, failures and next steps. Threshold stays null;
+#361/#369 remain OPEN and #370 stays draft.
+
+Parent review also reproduced #420's arbitrary executable-model version claim
+at head `54de24365061c6ad8760ea70a62029336cf2764d`. [Blocker #421](https://github.com/sosodennis/value-investment-agent/issues/421)
+retains the validated-request counterexample and digests. #420 remains unmerged
+pending its owning-layer correction; no parent edits were made in the child.
+
 ## Composite accounting integration checkpoint
 
 Ordinary merge `f45a1fad04377c7826e6d86dd4ab7cd139bf3aaa` integrates PR #414
@@ -43,9 +174,13 @@ unrelated baseline containers retain their identities, images and start times.
 The first harness attempt retained a file-permission refusal before publication;
 granting read access to the copied synthetic fixture corrected the harness only.
 
+CI at evidence head `f97d2dc57c05d0b91ebcc6f540fa6719cef14ce1` passes all
+12 executed jobs; the release gate is skipped:
+[run 43233376543](https://github.com/sosodennis/value-investment-agent/actions/runs/43233376543).
+
 This verifies integrated accounting boundaries. The image has no configured SEC
 identity resolution, and no complete real issuer release or numerical valuation
-is claimed. Parent CI, complete issuer/date financial policy, lawful quote,
+is claimed. Complete issuer/date financial policy, lawful quote,
 accounting/award completeness, authentic caller approval and numerical recovery
 remain required. #361/#415/#416 remain OPEN until main delivery, PR #370 remains
 draft, and `supported_history_threshold=null`. The compact
@@ -56,6 +191,21 @@ The [provider extension contract](../../fundamental-service/docs/operations-runb
 documents the existing injectable source ports. New providers reproduce common
 evidence contracts; transport, storage, selection and #352 formulas retain their
 existing owners. Generated originals and reports remain outside Git.
+
+The same production source path also admits a newly captured official 2026
+Treasury annual feed, source SHA-256
+`57cc8241f7a40ab01ec830d8112576dc44abfd145d9bbd47adc4a2c6914fde66`.
+At its actual capture cutoff `2026-11-12T14:08:50.732851Z`, the latest observed
+ten-year par yield is 4.98% on November 10. Availability starts at capture;
+an earlier cutoff refuses. Two host repeats download/write nothing. The installed
+89-source image reproduces the same selection digest
+`9d1d2cca7badd8bd041c82332acdca0d7e403931d33024cd3049126aaf2e35ba`
+before and after restart, with `wrote=false` and unchanged inventory on repeat.
+The installed replay input/output are
+`6ed09f01b08f260b5ccb35e0c7f0bdecf051d996bc142400193b22d3e4800f44` /
+`5f133b8e38311c1a538d801503f8103b027e8996aa9f545f103b23185bde29ef`.
+This is successful current-rate selection, not a 2025 historical source or a
+complete issuer market policy. No formula or source-time rule was changed.
 
 ## Observed market-rate binding checkpoint
 
@@ -223,7 +373,8 @@ records exact commands, digests, runtime pins and retained failures; raw source
 and generated reports stay outside Git. Complete automatic dated policy (#369),
 accounting/award evidence and #416, trusted release/caller approval and real
 numerical repeat/concurrency/restart/restore remain unfinished. #361/#369/#419
-remain OPEN, PR #370 draft, threshold null. #414 and #417 remain unintegrated.
+remain OPEN, PR #370 draft, threshold null. At this earlier checkpoint #414 and
+#417 were unintegrated; #414 is now integrated as recorded above.
 
 ## Free market-source and automatic approval checkpoint
 
@@ -1147,6 +1298,6 @@ and retained that response. Freshness and complete policy admission remain open.
 Read-only review of #414 head `b0630e65` found an accounting-class substitution:
 an ordinary-payables mapped role can claim current-debt exclusion coverage and
 produce an estimate without missing-evidence flags. Owning blocker #416 records
-the exact counterexample and digests. The child CI passes, but #414 remains
-unintegrated pending a source-bound role/class contract. No child files or
-resources were changed; these findings do not establish full numerical progress.
+the exact counterexample and digests. That review kept #414 unintegrated until the source-bound role/class fix.
+Ordinary merge `f45a1fad` now integrates the correction, as recorded above.
+Complete real numerical acceptance remains outstanding.

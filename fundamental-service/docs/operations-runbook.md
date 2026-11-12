@@ -83,6 +83,52 @@ Exercise a second provider through the shared path, plus source/identity/time
 mismatches, ambiguous registration, retained refusals and deterministic repeat
 and restart. The #352 composer/calculator continues to own valuation formulas.
 
+For issuer-specific country ERP selection, include one canonical
+`issuer_market_reference_plan` artifact in the signed release. The effective
+deployment policy must pin its content hash in `source_refs`; the plan's
+`policy_id`, issuer and valuation timestamp must match preparation. Each request
+names an exact metric, population, country/industry row and maximum source age.
+The selector consumes reproduced admissions, chooses the latest available
+vintage, and retains missing cells and conflicts. It never fills a missing
+latest row from an older table. Country/industry classification is explicit
+policy authority; source admission alone does not establish risk exposure.
+
+Serving and the independent release canary verify the same selected ERP value
+and original-source trace. The canary takes the same `PolicyRegistry` dependency;
+its CLI accepts `--policies-root` for the deployment-owned immutable registry.
+A plan without this authority refuses before activation. Canary evidence binds
+the effective policy digest and reproduced selection digest. Unlevered industry
+beta remains a reference, and country tax cannot replace the #352 composer's
+historical normalized tax. Complete beta, debt-cost, capital-weight and terminal
+policies still require their own evidence.
+
+Policies may carry an immutable `issuer_id` scope. Preparation, calculation and
+the independent canary pass the valuation issuer into `PolicyRegistry`; a
+matching eligible issuer policy takes precedence, foreign policies are ignored,
+and same-scope ambiguity refuses. A policy pinning an issuer market-reference
+or terminal-growth plan must carry that same issuer scope. Unscoped legacy
+policies omit the optional field from canonical serialization, preserving their
+existing content digests. Keep generic policies only for assumptions genuinely
+shared across issuers.
+
+For source-derived stable terminal growth, release one canonical
+`issuer_terminal_growth_plan` and pin its hash in the effective deployment
+policy's `source_refs`. The plan binds issuer, USD currency, valuation timestamp,
+GDP horizon, maximum annual-period age and the long-term rate-selection rule.
+The `nominal-gdp-riskfree-ceiling-v1` rule chooses the lower of the admitted
+nominal GDP CAGR and long-term risk-free rate. It uses the existing macro ports
+and GDP derivation, independently of the provider. The same observed risk-free
+value must be used by WACC; the #352 composer retains its growth/discount checks.
+
+This terminal value is an explicit policy assumption. Its evidence uses
+`approved_policy`, preserves original and selection/plan digests, and does not
+claim observed issuer growth or a supported history threshold. Both serving and
+the independent canary reproduce the plan and sources; changed values, traces,
+unapproved/missing plans and unavailable/stale/conflicting GDP or rates refuse.
+An incomplete latest GDP vintage cannot fall back to an older complete one.
+Use `terminal_growth_evidence(selection)` when constructing the immutable
+deployment policy; supplying a self-hashed value alone cannot satisfy this path.
+
 ## SEC ingestion contract
 
 `POST /v1/data/ingestions` is the authenticated, synchronous `fundamental.v1`

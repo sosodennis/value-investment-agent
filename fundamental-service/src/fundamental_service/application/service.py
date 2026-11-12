@@ -60,6 +60,10 @@ from ..market_reference import MarketReferenceProviderPort
 from ..source_admission import SourceAdmissionV1, SourceUsePolicyV1
 from ..source_admission_evidence import load_release_source_admissions
 from ..market_source_selection import MarketSourceError, verify_observed_market_inputs
+from ..market_reference_evidence import load_release_market_reference_selection
+from ..market_reference_selection import IssuerMarketReferenceSelectionV1
+from ..terminal_growth import TerminalGrowthSelectionV1
+from ..terminal_growth_evidence import load_release_terminal_growth_selection
 from ..fiscal_periods import resolve_fiscal_periods
 from ..governance import ModelInventory
 from ..history_composition import verify_history_components
@@ -156,6 +160,8 @@ def _approved_market_policy(
     valuation_timestamp: datetime | None = None,
     currency: str | None = None,
     source_admissions: tuple[SourceAdmissionV1, ...] = (),
+    reference_selection: IssuerMarketReferenceSelectionV1 | None = None,
+    terminal_selection: TerminalGrowthSelectionV1 | None = None,
 ) -> ApprovedMarketPolicyInputsV1 | None:
     """Translate a complete released market policy into preparation evidence."""
 
@@ -178,9 +184,12 @@ def _approved_market_policy(
             admissions=source_admissions,
             valuation_at=valuation_timestamp,
             currency=currency,
+            reference_selection=reference_selection,
         )
 
     def trace_for(role: str) -> TraceV1:
+        if role == "terminal_growth" and terminal_selection is not None:
+            return terminal_selection.trace
         if role in observed_traces:
             return observed_traces[role]
         evidence = next(
@@ -682,6 +691,7 @@ class FundamentalApplication:
                 model_version=value.model_version,
                 valuation_timestamp=value.valuation_context.valuation_timestamp,
                 policy_id=value.policy_id,
+                issuer_id=value.identity.issuer_id,
             )
             if (
                 value.provenance.policy_version is not None
@@ -718,6 +728,7 @@ class FundamentalApplication:
                 model_version=value.model_version,
                 valuation_timestamp=value.valuation_context.valuation_timestamp,
                 policy_id=value.policy_id,
+                issuer_id=value.identity.issuer_id,
             )
             return resolve_policy_overrides(request=value, policy=policy)
         except PolicyError as error:
@@ -1237,6 +1248,7 @@ class FundamentalApplication:
                     model_version=model_version,
                     valuation_timestamp=snapshot.valuation_timestamp,
                     policy_id=None,
+                    issuer_id=snapshot.identity.issuer_id,
                 )
             except PolicyError as error:
                 raise ServiceError(
@@ -1253,13 +1265,29 @@ class FundamentalApplication:
         )
         policy_version = policy.policy_version if policy is not None else "unresolved"
         try:
+            reference_selection = load_release_market_reference_selection(
+                self._data_release_manifest(request.data_release_manifest_digest),
+                snapshot=snapshot,
+                policy=policy,
+                admissions=source_admissions,
+                artifacts=self.artifact_store,
+            )
+            terminal_selection = load_release_terminal_growth_selection(
+                self._data_release_manifest(request.data_release_manifest_digest),
+                snapshot=snapshot,
+                policy=policy,
+                admissions=source_admissions,
+                artifacts=self.artifact_store,
+            )
             market_policy = _approved_market_policy(
                 policy,
                 valuation_timestamp=snapshot.valuation_timestamp,
                 currency=snapshot.identity.currency,
                 source_admissions=source_admissions,
+                reference_selection=reference_selection,
+                terminal_selection=terminal_selection,
             )
-        except MarketSourceError as error:
+        except (MarketSourceError, DataReleaseError, SnapshotError) as error:
             raise ServiceError(
                 error.code, str(error), status_code=422, retryable=False
             ) from error

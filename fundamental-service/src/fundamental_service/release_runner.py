@@ -53,6 +53,22 @@ from .equity_dilution import DilutionError, compute_treasury_stock_dilution
 from .quote_providers import QuoteSourceProviderPort
 from .macro_series import MacroSeriesProviderPort
 from .market_reference import MarketReferenceProviderPort
+from .market_reference_evidence import (
+    read_release_market_reference_plan,
+    load_release_market_reference_selection,
+)
+from .market_source_selection import MarketSourceError, verify_observed_market_inputs
+from .terminal_growth_evidence import (
+    read_release_terminal_growth_plan,
+    load_release_terminal_growth_selection,
+    requires_terminal_growth_plan,
+)
+from .policies import (
+    PolicyRegistry,
+    PolicyError,
+    FilesystemPolicyRepository,
+    initial_model_specs,
+)
 from .source_admission import SourceUsePolicyV1
 from .source_admission_evidence import load_release_source_admissions
 from .replay import ArtifactStore
@@ -107,6 +123,9 @@ class DataReleaseCanaryReportV1(BaseModel):
     checked_snapshot_ids: tuple[str, ...] = ()
     checked_fact_digests: tuple[str, ...] = ()
     checked_artifact_digests: tuple[str, ...] = ()
+    market_policy_checks: tuple[str, ...] = Field(
+        default=(), exclude_if=lambda value: not value
+    )
     canary_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
 
     @model_validator(mode="after")
@@ -119,6 +138,12 @@ class DataReleaseCanaryReportV1(BaseModel):
             "facts": self.checked_fact_digests,
             "artifacts": self.checked_artifact_digests,
         }
+        if self.market_policy_checks:
+            if self.market_policy_checks != tuple(
+                sorted(set(self.market_policy_checks))
+            ):
+                raise ValueError("market policy checks are not canonical")
+            payload["market_policy_checks"] = self.market_policy_checks
         if sha256_digest(payload) != self.canary_digest:
             raise ValueError("canary_digest does not match report evidence")
         return self
@@ -139,6 +164,7 @@ class DataReleaseCanaryRunner:
         macro_providers: tuple[MacroSeriesProviderPort, ...] = (),
         reference_providers: tuple[MarketReferenceProviderPort, ...] = (),
         source_use_policy: SourceUsePolicyV1 | None = None,
+        policy_registry: PolicyRegistry | None = None,
     ) -> None:
         self._snapshots = snapshot_repository
         self._facts = fact_repository
@@ -149,6 +175,7 @@ class DataReleaseCanaryRunner:
         self._macro_providers = macro_providers
         self._reference_providers = reference_providers
         self._source_use_policy = source_use_policy
+        self._policy_registry = policy_registry
 
     def validate(
         self,
@@ -159,13 +186,122 @@ class DataReleaseCanaryRunner:
         if isinstance(manifest, IssuerOperatingReleaseManifestV1):
             require_issuer_release_profile(manifest)
         self._verify_artifacts(manifest, verification)
-        load_release_source_admissions(
+        admissions = load_release_source_admissions(
             manifest,
             artifacts=self._artifacts,
             policy=self._source_use_policy,
             macro_providers=self._macro_providers,
             reference_providers=self._reference_providers,
         )
+        market_policy_checks = []
+        plan = read_release_market_reference_plan(manifest, artifacts=self._artifacts)
+        terminal_plan = read_release_terminal_growth_plan(
+            manifest, artifacts=self._artifacts
+        )
+        if terminal_plan is None and self._policy_registry is not None:
+            for candidate in self._policy_registry.policies():
+                if not requires_terminal_growth_plan(candidate):
+                    continue
+                for ref in manifest.snapshot_refs:
+                    snapshot = self._snapshots.get(ref.snapshot_id)
+                    if not isinstance(snapshot, SourceSnapshotV1):
+                        continue
+                    if candidate.issuer_id not in {
+                        None,
+                        snapshot.identity.issuer_id,
+                    }:
+                        continue
+                    try:
+                        effective = self._policy_registry.select_policy(
+                            model_id=candidate.model_id,
+                            model_version=candidate.model_version,
+                            valuation_timestamp=snapshot.valuation_timestamp,
+                            policy_id=None,
+                            issuer_id=snapshot.identity.issuer_id,
+                        )
+                    except PolicyError as error:
+                        if error.code == "POLICY_NOT_FOUND":
+                            continue
+                        raise DataReleaseError(error.code, str(error)) from error
+                    load_release_terminal_growth_selection(
+                        manifest,
+                        snapshot=snapshot,
+                        policy=effective,
+                        admissions=admissions,
+                        artifacts=self._artifacts,
+                    )
+        declared_plan = plan or terminal_plan
+        if declared_plan is not None:
+            if self._policy_registry is None:
+                raise DataReleaseError(
+                    "MARKET_REFERENCE_POLICY_UNAVAILABLE",
+                    "reference canary requires configured deployment policy authority",
+                )
+            declared_policy = self._policy_registry.policy(declared_plan.policy_id)
+            if declared_policy is None or declared_policy.market_inputs is None:
+                raise DataReleaseError(
+                    "MARKET_REFERENCE_POLICY_UNAVAILABLE",
+                    "reference canary requires a complete deployment market policy",
+                )
+            for ref in manifest.snapshot_refs:
+                snapshot = self._snapshots.get(ref.snapshot_id)
+                if not isinstance(snapshot, SourceSnapshotV1):
+                    raise DataReleaseError(
+                        "MARKET_REFERENCE_SNAPSHOT_SCOPE_UNSUPPORTED",
+                        "market reference plan requires a security valuation snapshot",
+                    )
+                try:
+                    policy = self._policy_registry.select_policy(
+                        model_id=declared_policy.model_id,
+                        model_version=declared_policy.model_version,
+                        valuation_timestamp=snapshot.valuation_timestamp,
+                        policy_id=None,
+                        issuer_id=snapshot.identity.issuer_id,
+                    )
+                    selection = load_release_market_reference_selection(
+                        manifest,
+                        snapshot=snapshot,
+                        policy=policy,
+                        admissions=admissions,
+                        artifacts=self._artifacts,
+                    )
+                    terminal_selection = load_release_terminal_growth_selection(
+                        manifest,
+                        snapshot=snapshot,
+                        policy=policy,
+                        admissions=admissions,
+                        artifacts=self._artifacts,
+                    )
+                    if policy.market_inputs is None:
+                        raise DataReleaseError(
+                            "MARKET_REFERENCE_POLICY_UNAVAILABLE",
+                            "effective reference policy has no complete market inputs",
+                        )
+                    verify_observed_market_inputs(
+                        policy.market_inputs,
+                        admissions=admissions,
+                        valuation_at=snapshot.valuation_timestamp,
+                        currency=snapshot.identity.currency,
+                        reference_selection=selection,
+                    )
+                    selection_pins = {}
+                    if selection is not None:
+                        selection_pins["reference_selection"] = selection.output_digest
+                    if terminal_selection is not None:
+                        selection_pins["terminal_selection"] = (
+                            terminal_selection.output_digest
+                        )
+                    market_policy_checks.append(
+                        sha256_digest(
+                            {
+                                "snapshot_id": snapshot.snapshot_id,
+                                "policy_digest": policy.policy_digest,
+                                **selection_pins,
+                            }
+                        )
+                    )
+                except (PolicyError, MarketSourceError) as error:
+                    raise DataReleaseError(error.code, str(error)) from error
         mappings = self._verify_mappings(manifest.mapping_refs)
         self._verify_automatic_mappings(manifest, verification, mappings)
         checked_snapshots, checked_facts = self._verify_snapshots_and_facts(
@@ -181,6 +317,10 @@ class DataReleaseCanaryRunner:
             "facts": checked_facts,
             "artifacts": self._artifact_digests(manifest, verification),
         }
+        if market_policy_checks:
+            canary_payload["market_policy_checks"] = tuple(
+                sorted(set(market_policy_checks))
+            )
         canary_digest = sha256_digest(canary_payload)
         report_payload = {
             "verification": verification,
@@ -189,6 +329,7 @@ class DataReleaseCanaryRunner:
             "checked_fact_digests": checked_facts,
             "checked_artifact_digests": canary_payload["artifacts"],
             "canary_digest": canary_digest,
+            "market_policy_checks": tuple(sorted(set(market_policy_checks))),
         }
         return DataReleaseCanaryReportV1.model_validate(report_payload)
 
@@ -720,6 +861,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--mappings-root", type=Path, required=True)
     parser.add_argument("--artifacts-root", type=Path, required=True)
     parser.add_argument("--trust-roots", type=Path, required=True)
+    parser.add_argument("--policies-root", type=Path)
     args = parser.parse_args(argv)
     try:
         manifest, verification = _load_candidate(args.candidate)
@@ -733,6 +875,12 @@ def main(argv: list[str] | None = None) -> int:
             macro_providers=default_macro_providers(),
             reference_providers=default_reference_providers(),
             source_use_policy=free_market_source_policy(),
+            policy_registry=PolicyRegistry(
+                repository=FilesystemPolicyRepository(args.policies_root),
+                models=initial_model_specs(),
+            )
+            if args.policies_root
+            else None,
         ).validate(manifest, verification)
     except (OSError, ValueError, DataReleaseError) as exc:
         print(f"data release canary failed: {exc}", file=sys.stderr)
