@@ -13,6 +13,7 @@ from fundamental_service.automatic_mapping import (
     AutomaticMappingDecisionV1,
     AutomaticMappingRequestV1,
     automatic_mapping_policy_digest,
+    automatic_mapping_proposal,
     evaluate_automatic_mapping,
     verify_automatic_mapping_replay,
 )
@@ -58,6 +59,7 @@ def case(
     proposal_changes=None,
     extra=(),
     normalize_revenue=True,
+    observation_concept="us-gaap:Revenues",
 ):
     bundle, _, evidence, roots, _ = fixture(tmp_path)
     original = bundle.sources[0].originals[0]
@@ -70,7 +72,7 @@ def case(
     if observation_changes:
         facts = tuple(
             fact.model_copy(update=observation_changes)
-            if fact.concept == "us-gaap:Revenues"
+            if fact.concept == observation_concept
             else fact
             for fact in facts
         )
@@ -183,6 +185,141 @@ def test_machine_approval_repeats_without_new_artifacts_or_human_review(
     assert (
         verify_automatic_mapping_replay(approval, mapping, artifacts=store) == request
     )
+
+
+def gross_balance_case(tmp_path, field, *, changes=None, extra=()):
+    proposal = automatic_mapping_proposal(
+        field, mapping_version="test-issuer-mapping-v1"
+    )
+    assert proposal is not None
+    return case(
+        tmp_path,
+        observation_concept="us-gaap:inventory",
+        observation_changes={"concept": proposal.source_concept, **(changes or {})},
+        proposal_changes=proposal.model_dump(),
+        extra=extra,
+    )
+
+
+@pytest.mark.parametrize("field", ("current_assets", "current_liabilities"))
+def test_gross_balance_approval_is_source_bound_and_reused_after_restart(
+    tmp_path, field
+):
+    request, store, roots, _ = gross_balance_case(tmp_path, field)
+    first = approve(request, store, roots)
+    decision = AutomaticMappingDecisionV1.model_validate_json(
+        store.read(first.decision_publication.artifact.artifact_id)
+    )
+    assert decision.status == "approved"
+    assert decision.policy_version == "source-bound-us-gaap-v6"
+    mapping = decision.mapping
+    scope = mapping.observation_scope
+    assert scope.issuer_id == request.original.source.cik
+    assert scope.accession_number == request.original.source.accession_number
+    assert scope.observation_digests == tuple(
+        sorted(
+            sha256_digest(f)
+            for f in request.original.report.facts
+            if f.concept == mapping.source_concept
+        )
+    )
+    candidates = parsed_facts_to_candidates(
+        request.original.report,
+        source=request.original.source,
+        issuer_id=request.original.source.cik,
+        normalized_field=field,
+        mapping=mapping,
+    )
+    assert len(candidates) == len(scope.observation_digests)
+    assert all(candidate.normalized_field == field for candidate in candidates)
+    assert {(candidate.instant, candidate.value) for candidate in candidates} == {
+        (fact.instant, Decimal(fact.value))
+        for fact in request.original.report.facts
+        if fact.concept == mapping.source_concept
+    }
+    approval = AutomaticMappingApprovalV1.model_validate_json(
+        store.read(first.approval_publication.artifact.artifact_id)
+    )
+    assert (
+        verify_automatic_mapping_replay(approval, mapping, artifacts=store) == request
+    )
+    before = inventory(store.root)
+    second = approve(request, ArtifactStore(store.root), roots)
+    assert second.input_digest == first.input_digest
+    assert second.output_digest == first.output_digest
+    assert not any(
+        receipt.wrote
+        for receipt in (
+            second.input_publication,
+            second.decision_publication,
+            second.approval_publication,
+        )
+    )
+    stale = roots.model_copy(
+        update={
+            "automatic_mapping_evaluators": {
+                EVALUATOR: roots.automatic_mapping_evaluators[EVALUATOR].model_copy(
+                    update={"policy_digest": "0" * 64}
+                )
+            }
+        }
+    )
+    with pytest.raises(DataReleaseError) as error:
+        approve(request, store, stale)
+    assert error.value.code == "MAPPING_AUTOMATIC_AUTHORITY_MISMATCH"
+    assert inventory(store.root) == before
+
+
+@pytest.mark.parametrize("field", ("current_assets", "current_liabilities"))
+@pytest.mark.parametrize(
+    "changes,reason",
+    (
+        ({"dimensions": (("axis", "member"),)}, "MAPPING_SCOPE_UNSUPPORTED"),
+        ({"unit": "iso4217:EUR"}, "MAPPING_UNIT_UNSUPPORTED"),
+        ({"entity_identifier": "999"}, "MAPPING_ISSUER_MISMATCH"),
+        ({"period_start": date(2025, 1, 1)}, "MAPPING_PERIOD_UNSUPPORTED"),
+        ({"instant": date(2026, 12, 31)}, "MAPPING_PERIOD_AFTER_ORIGINAL"),
+        ({"decimals": None}, "MAPPING_PRECISION_UNAVAILABLE"),
+    ),
+)
+def test_invalid_gross_balances_abstain_with_retained_observations(
+    tmp_path, field, changes, reason
+):
+    request, store, _, _ = gross_balance_case(tmp_path, field, changes=changes)
+    decision = evaluate(request, store)
+    assert decision.status == "abstain" and decision.mapping is None
+    assert "MAPPING_NO_ELIGIBLE_OBSERVATIONS" in decision.reason_codes
+    assert reason in {r.reason_code for r in decision.rejected_observations}
+
+
+@pytest.mark.parametrize("field", ("current_assets", "current_liabilities"))
+def test_missing_or_conflicting_gross_balances_cannot_receive_a_certificate(
+    tmp_path, field
+):
+    request, store, roots, _ = gross_balance_case(tmp_path, field)
+    observed = next(
+        f
+        for f in request.original.report.facts
+        if f.concept == request.proposal.source_concept
+    )
+    conflict = observed.model_copy(
+        update={"value": str(Decimal(observed.value) + 1), "context_id": "conflict"}
+    )
+    request, store, roots, _ = gross_balance_case(
+        tmp_path / "conflict", field, extra=(conflict,)
+    )
+    decision = evaluate(request, store)
+    assert decision.status == "abstain" and decision.mapping is None
+    assert "MAPPING_OBSERVATION_CONFLICT" in decision.reason_codes
+    assert approve(request, store, roots).approval_publication is None
+
+    request, store, roots, _ = case(
+        tmp_path / "missing", proposal_changes=request.proposal.model_dump()
+    )
+    missing = evaluate(request, store)
+    assert missing.status == "abstain" and missing.mapping is None
+    assert "MAPPING_NO_ELIGIBLE_OBSERVATIONS" in missing.reason_codes
+    assert approve(request, store, roots).approval_publication is None
 
 
 @pytest.mark.parametrize(
