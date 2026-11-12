@@ -44,8 +44,19 @@ from fundamental_service.replay import ArtifactStore
 from fundamental_service.snapshots import SnapshotError
 from fundamental_service.serialization import canonical_bytes, sha256_digest
 from fundamental_service.valuation_requirements import (
+    composite_working_capital_requirements_profile,
     operating_forecast_requirements_profile,
 )
+from fundamental_service.working_capital import (
+    CompositeWorkingCapitalInputV1,
+    InclusionScenariosV1,
+    WorkingCapitalExclusionV1,
+    WORKING_CAPITAL_FIELDS,
+    canonical_working_capital_inputs,
+    working_capital_policy_digest,
+)
+from decimal import Decimal
+from test_valuation_preparation import _fact
 from test_original_issuer import original, DECISION
 from test_operating_forecast import operating_facts, prepare
 from test_release_runner import _candidate
@@ -90,7 +101,7 @@ def resign(bundle, **changes):
     )
 
 
-def fixture(tmp_path):
+def fixture(tmp_path, *, composite=False):
     _, verification, _, _, _, _, roots = _candidate()
     report, source = original()
     evidence = Evidence()
@@ -126,6 +137,31 @@ def fixture(tmp_path):
         xule_plugin_sha256="1" * 64,
         dqc_ruleset_sha256="2" * 64,
     )
+    requirement = (
+        composite_working_capital_requirements_profile("fcff_dcf")
+        if composite
+        else operating_forecast_requirements_profile("fcff_dcf")
+    )
+    selected_facts = operating_facts()
+    if composite:
+        selected_facts = tuple(
+            f
+            for f in selected_facts
+            if f.normalized_field not in WORKING_CAPITAL_FIELDS
+        )
+        selected_facts += tuple(
+            _fact(field, year, value, instant=True)
+            for year in range(2021, 2026)
+            for field, value in (
+                ("current_assets", "100"),
+                ("current_liabilities", "40"),
+                ("cash_and_equivalents", "10"),
+                ("short_term_investments", "5"),
+                ("current_interest_bearing_debt", "5"),
+                ("current_operating_lease_liabilities", "2"),
+                ("current_finance_lease_liabilities", "1"),
+            )
+        )
     observations = tuple(
         ParsedXbrlFactV1(
             concept=f"us-gaap:{f.normalized_field}",
@@ -143,7 +179,7 @@ def fixture(tmp_path):
             consolidation_scope="consolidated",
             security_scope="unspecified",
         )
-        for f in operating_facts()
+        for f in selected_facts
     )
     markers = ("strict-sec-efm-profile-selected", "dqc-dqcrt-checks-completed")
     report = report.model_copy(
@@ -178,9 +214,7 @@ def fixture(tmp_path):
             reviewer="mapping-reviewer",
             reviewed_at=DECISION,
         )
-        for role in sorted(
-            operating_forecast_requirements_profile("fcff_dcf").required_fact_fields
-        )
+        for role in sorted({f.normalized_field for f in selected_facts})
     )
     facts = original_rebuilt_facts(view, {m.decision_id: m for m in mappings})
     integrity = _original(2025).sec_integrity_evidence.model_copy(
@@ -234,7 +268,6 @@ def fixture(tmp_path):
         )
         for m in mappings
     )
-    requirement = operating_forecast_requirements_profile("fcff_dcf")
     payload = {
         "protocol": "fundamental.issuer-operating-release.v1",
         "profile_id": "test-only-issuer-profile",
@@ -254,6 +287,73 @@ def fixture(tmp_path):
         "mapping_version": "test-issuer-mapping-v1",
         "requirements_profile_digest": requirement.digest,
     }
+    if composite:
+        inputs = []
+        for year in range(2021, 2026):
+            by_field = {
+                f.normalized_field: f
+                for f in facts
+                if f.instant and f.instant.year == year
+            }
+            inputs.append(
+                CompositeWorkingCapitalInputV1(
+                    policy_digest=working_capital_policy_digest(),
+                    mapping_version="test-issuer-mapping-v1",
+                    issuer_id=view.identity.issuer_id,
+                    accession_number=source.accession_number,
+                    source_hash=source.content_hash,
+                    period_end=by_field["current_assets"].period_end,
+                    current_assets_fact_id=by_field["current_assets"].fact_id,
+                    current_liabilities_fact_id=by_field["current_liabilities"].fact_id,
+                    exclusions=tuple(
+                        WorkingCapitalExclusionV1(
+                            account_class=field,
+                            side=side,
+                            state="reported",
+                            fact_id=by_field[field].fact_id,
+                            mapped_fact_role=field,
+                            covered_by_fact_id=by_field[parent].fact_id,
+                            covered_classes=(field,),
+                            rationale="Synthetic fixture explicitly classifies this reported balance.",
+                        )
+                        for field, side, parent in (
+                            ("cash_and_equivalents", "assets", "current_assets"),
+                            ("short_term_investments", "assets", "current_assets"),
+                            (
+                                "current_interest_bearing_debt",
+                                "liabilities",
+                                "current_liabilities",
+                            ),
+                            (
+                                "current_operating_lease_liabilities",
+                                "liabilities",
+                                "current_liabilities",
+                            ),
+                            (
+                                "current_finance_lease_liabilities",
+                                "liabilities",
+                                "current_liabilities",
+                            ),
+                        )
+                    ),
+                    asset_residual=InclusionScenariosV1(
+                        low=Decimal("0.4"),
+                        central=Decimal("0.6"),
+                        high=Decimal("0.8"),
+                        rationale="Synthetic asset residual classification assumption.",
+                    ),
+                    liability_residual=InclusionScenariosV1(
+                        low=Decimal("0.4"),
+                        central=Decimal("0.5"),
+                        high=Decimal("0.6"),
+                        rationale="Synthetic liability residual classification assumption.",
+                    ),
+                    perimeter_rationale="Synthetic totals and exclusions share one original filing perimeter.",
+                )
+            )
+        payload["working_capital_inputs"] = canonical_working_capital_inputs(
+            tuple(inputs)
+        )
     manifest = IssuerOperatingReleaseManifestV1(
         **payload, manifest_digest=sha256_digest(payload)
     )
@@ -332,6 +432,92 @@ def test_signed_publication_restart_and_forecast_repeat_use_shared_composer(tmp_
     assert inventory(store.root) == before
     with pytest.raises(ValidationError):
         DataReleaseManifestV1.model_validate_json(canonical_bytes(bundle.manifest))
+
+
+def test_signed_composite_release_rechecks_bound_policy_and_serves_provisional_forecast(
+    tmp_path,
+):
+    bundle, service, evidence, roots, store = fixture(tmp_path, composite=True)
+    first = service.publish(bundle)
+    before = inventory(store.root)
+    assert first.wrote is True
+    assert service.publish(bundle).wrote is False
+    result = service.prepare(
+        artifact_id=bundle.artifact_id,
+        expected_manifest_digest=bundle.manifest.manifest_digest,
+        snapshot_id=bundle.sources[0].snapshot_id,
+    )
+    restarted = IssuerOperatingReleaseService(
+        releases=ArtifactStore(store.root), evidence=evidence, trust_roots=roots
+    )
+    repeat = restarted.prepare(
+        artifact_id=bundle.artifact_id,
+        expected_manifest_digest=bundle.manifest.manifest_digest,
+        snapshot_id=bundle.sources[0].snapshot_id,
+    )
+    assert result.forecast.status == "prepared"
+    assert result.forecast.quality_status is QualityStatus.PROVISIONAL
+    assert result.forecast.supported_history_threshold is None
+    assert result.forecast.historical_metrics.working_capital_assessments
+    assert (
+        result.forecast.historical_metrics.working_capital_inputs
+        == bundle.manifest.working_capital_inputs
+    )
+    assert canonical_bytes(result) == canonical_bytes(repeat)
+    assert inventory(store.root) == before
+
+    altered = bundle.manifest.working_capital_inputs[0].model_copy(
+        update={"policy_digest": "0" * 64}
+    )
+    with pytest.raises(DataReleaseError) as error:
+        service.publish(
+            resign(
+                bundle,
+                working_capital_inputs=(
+                    altered,
+                    *bundle.manifest.working_capital_inputs[1:],
+                ),
+            )
+        )
+    assert error.value.code == "DATA_RELEASE_WORKING_CAPITAL_POLICY_MISMATCH"
+    assert inventory(store.root) == before
+
+
+@pytest.mark.parametrize("mutation", ("source_hash", "unbound"))
+def test_signed_composite_release_rejects_unbound_or_mismatched_inputs(
+    tmp_path, mutation
+):
+    bundle, service, _, _, store = fixture(tmp_path, composite=True)
+    policy_input = bundle.manifest.working_capital_inputs[0]
+    if mutation == "source_hash":
+        altered = policy_input.model_copy(update={"source_hash": "0" * 64})
+        code = "DATA_RELEASE_WORKING_CAPITAL_INVALID"
+    else:
+        altered = CompositeWorkingCapitalInputV1.model_validate(
+            policy_input.model_dump()
+            | {
+                "current_assets_fact_id": "undeclared-assets",
+                "exclusions": tuple(
+                    item.model_dump() | {"covered_by_fact_id": "undeclared-assets"}
+                    if item.side == "assets"
+                    else item.model_dump()
+                    for item in policy_input.exclusions
+                ),
+            }
+        )
+        code = "DATA_RELEASE_WORKING_CAPITAL_UNBOUND"
+    before = inventory(store.root)
+    with pytest.raises(DataReleaseError) as error:
+        service.publish(
+            resign(
+                bundle,
+                working_capital_inputs=canonical_working_capital_inputs(
+                    (altered, *bundle.manifest.working_capital_inputs[1:])
+                ),
+            )
+        )
+    assert error.value.code == code
+    assert inventory(store.root) == before
 
 
 @pytest.mark.parametrize(

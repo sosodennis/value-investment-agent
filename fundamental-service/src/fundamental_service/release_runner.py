@@ -63,6 +63,7 @@ from .issuer_release_evidence import (
     verify_original_bytes,
     verify_original_integrity,
 )
+from .working_capital import assess_composite_working_capital
 
 
 class ReleaseMappingReader(Protocol):
@@ -390,6 +391,7 @@ class DataReleaseCanaryRunner:
         snapshot_ids: list[str] = []
         fact_digests: list[str] = []
         declared_fields = set(manifest.required_fields)
+        checked_composite_inputs: set[str] = set()
         for reference in manifest.snapshot_refs:
             try:
                 snapshot = self._snapshots.get(reference.snapshot_id)
@@ -456,9 +458,30 @@ class DataReleaseCanaryRunner:
                         "issuer mappings require the pinned release version",
                     )
                 require_original_fact_membership(snapshot, history, mappings)
+                for policy_input in manifest.working_capital_inputs:
+                    if policy_input.issuer_id != snapshot.identity.issuer_id:
+                        continue
+                    if policy_input.current_assets_fact_id not in declared:
+                        continue
+                    assessment = assess_composite_working_capital(
+                        policy_input, history, snapshot=snapshot
+                    )
+                    if assessment.status != "estimated":
+                        raise DataReleaseError(
+                            "DATA_RELEASE_WORKING_CAPITAL_INVALID",
+                            ", ".join(assessment.missing_evidence),
+                        )
+                    checked_composite_inputs.add(sha256_digest(policy_input))
             allowed_supporting_fields = (
-                set()
-                if isinstance(snapshot, IssuerOperatingSourceV1)
+                {
+                    item.normalized_field
+                    for item in history
+                    if any(
+                        item.fact_id in policy_input.fact_ids
+                        for policy_input in manifest.working_capital_inputs
+                    )
+                }
+                if isinstance(manifest, IssuerOperatingReleaseManifestV1)
                 else set(AWARD_FACT_FIELDS)
             )
             if (
@@ -472,6 +495,15 @@ class DataReleaseCanaryRunner:
                 )
             snapshot_ids.append(snapshot.snapshot_id)
             fact_digests.extend(sorted(canonical_fact_digest(fact) for fact in history))
+        if isinstance(
+            manifest, IssuerOperatingReleaseManifestV1
+        ) and checked_composite_inputs != {
+            sha256_digest(item) for item in manifest.working_capital_inputs
+        }:
+            raise DataReleaseError(
+                "DATA_RELEASE_WORKING_CAPITAL_UNBOUND",
+                "every composite input must bind a release source and its mapped facts",
+            )
         return tuple(snapshot_ids), tuple(sorted(fact_digests))
 
     def _verify_declared_history(
