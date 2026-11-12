@@ -1088,6 +1088,7 @@ async def _run_command(args: argparse.Namespace) -> ArtifactPublicationV1:
                 macro_providers=application.macro_providers,
                 reference_providers=application.reference_providers,
                 source_use_policy=application.source_use_policy,
+                policy_registry=application.policy_registry,
             )
         if isinstance(plan, AutomaticSourcePreparationPlanV1):
             from cryptography.hazmat.primitives import serialization
