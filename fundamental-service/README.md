@@ -132,3 +132,9 @@ any incomplete acquisition keeps the report blocked and prevents history
 composition, release activation and calculation. Authorization, retryable and
 transport failures still propagate. Correlation IDs and created/reused transport
 status are excluded from this evidence, so cache reuse preserves report identity.
+
+New runner reports also retain `source_plan_ref`, an immutable artifact reference
+to the complete canonical source plan. Its content hash equals `plan_digest`.
+Read it through the existing artifact metadata/content endpoints to reconstruct
+the exact requests, including requests whose acquisition failed before publishing
+a snapshot. Identical runs reuse both the input plan and output report.

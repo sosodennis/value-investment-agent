@@ -92,6 +92,11 @@ def test_incomplete_original_retains_entire_plan_and_reuses_report(
     )
     first = _run(runner, plan)
     evidence = _reader(fixture, first)
+    assert evidence.source_plan_ref is not None
+    retained_plan = fixture.artifacts.read(evidence.source_plan_ref.artifact_id)
+    assert retained_plan == canonical_bytes(plan)
+    assert SourcePreparationPlanV2.model_validate_json(retained_plan) == plan
+    assert evidence.source_plan_ref.content_hash == evidence.plan_digest == plan.digest
     assert calls == [0, 1, 2]
     assert first.wrote is True
     assert evidence.status == "blocked"

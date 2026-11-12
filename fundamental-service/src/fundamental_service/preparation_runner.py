@@ -27,6 +27,7 @@ from .contracts import (
     ValuationEvidenceReadRequestV1,
 )
 from .data_releases import (
+    ArtifactRefV1,
     DataReleaseActivationRequestV1,
     DataReleaseCandidatePublishRequestV1,
     DataReleaseError,
@@ -160,6 +161,9 @@ class SourcePreparationEvidenceV1(StrictModel):
     protocol: Literal["source-preparation-v1"] = "source-preparation-v1"
     source_revision: str = Field(pattern=r"^[0-9a-f]{40}$")
     plan_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    source_plan_ref: ArtifactRefV1 | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
     status: Literal["approval_required", "blocked", "calculated", "release_required"]
     snapshot_id: str | None = None
     snapshot_manifest_digest: str | None = Field(
@@ -178,6 +182,12 @@ class SourcePreparationEvidenceV1(StrictModel):
 
     @model_validator(mode="after")
     def outcome_matches_evidence(self) -> SourcePreparationEvidenceV1:
+        if self.source_plan_ref is not None and (
+            self.source_plan_ref.content_hash != self.plan_digest
+            or self.source_plan_ref.media_type != "application/json"
+            or self.source_plan_ref.role != "source-preparation-plan-v2"
+        ):
+            raise ValueError("source plan reference must bind the canonical input")
         if len({outcome.request_digest for outcome in self.source_outcomes}) != len(
             self.source_outcomes
         ):
@@ -481,7 +491,23 @@ class SourcePreparationRunner:
             if current.manifest.manifest_digest != manifest.manifest_digest:
                 raise
 
-    def _persist(self, evidence: SourcePreparationEvidenceV1) -> ArtifactPublicationV1:
+    def _persist(
+        self, plan: SourcePreparationPlanV2, evidence: SourcePreparationEvidenceV1
+    ) -> ArtifactPublicationV1:
+        publication = self._artifacts.put_with_receipt(
+            f"source-preparation-plan:{plan.digest}", plan
+        )
+        evidence = SourcePreparationEvidenceV1.model_validate(
+            {
+                **evidence.model_dump(),
+                "source_plan_ref": ArtifactRefV1(
+                    artifact_id=publication.artifact.artifact_id,
+                    content_hash=publication.artifact.content_hash,
+                    media_type=publication.artifact.media_type,
+                    role="source-preparation-plan-v2",
+                ),
+            }
+        )
         dependencies: tuple[str, ...] = (evidence.plan_digest,)
         if evidence.snapshot_manifest_digest is not None:
             dependencies += (evidence.snapshot_manifest_digest,)
@@ -621,6 +647,7 @@ class SourcePreparationRunner:
                     if outcome.quality_status is not QualityStatus.VERIFIED
                 )
                 return self._persist(
+                    plan,
                     SourcePreparationEvidenceV1(
                         source_revision=plan.source_revision,
                         plan_digest=plan.digest,
@@ -646,7 +673,7 @@ class SourcePreparationRunner:
                             )
                         ),
                         source_outcomes=outcomes,
-                    )
+                    ),
                 )
             try:
                 snapshot = snapshots[0]
@@ -668,25 +695,27 @@ class SourcePreparationRunner:
                 if error.retryable or error.status_code != 422:
                     raise
                 return self._persist(
+                    plan,
                     SourcePreparationEvidenceV1(
                         source_revision=plan.source_revision,
                         plan_digest=plan.digest,
                         status="blocked",
                         issue_codes=(error.code,),
                         source_outcomes=outcomes,
-                    )
+                    ),
                 )
             except SnapshotError as error:
                 if error.retryable:
                     raise
                 return self._persist(
+                    plan,
                     SourcePreparationEvidenceV1(
                         source_revision=plan.source_revision,
                         plan_digest=plan.digest,
                         status="blocked",
                         issue_codes=(error.code,),
                         source_outcomes=outcomes,
-                    )
+                    ),
                 )
             if candidate is not None and snapshot.snapshot_id not in {
                 item.snapshot_id for item in candidate.manifest.snapshot_refs
@@ -695,6 +724,7 @@ class SourcePreparationRunner:
             resolution = self._resolve(plan)
             if candidate is None and resolution is None:
                 return self._persist(
+                    plan,
                     SourcePreparationEvidenceV1(
                         source_revision=plan.source_revision,
                         plan_digest=plan.digest,
@@ -702,7 +732,7 @@ class SourcePreparationRunner:
                         snapshot_id=snapshot.snapshot_id,
                         snapshot_manifest_digest=snapshot.manifest_digest,
                         issue_codes=("DATA_RELEASE_REQUIRED",),
-                    )
+                    ),
                 )
         if candidate is not None:
             self._activate(
@@ -736,6 +766,7 @@ class SourcePreparationRunner:
         )
         if preparation.status != "prepared" or preparation.input is None:
             return self._persist(
+                plan,
                 SourcePreparationEvidenceV1(
                     source_revision=plan.source_revision,
                     plan_digest=plan.digest,
@@ -746,10 +777,11 @@ class SourcePreparationRunner:
                     issue_codes=preparation.issue_codes,
                     missing_evidence=preparation.missing_evidence,
                     preparation=preparation,
-                )
+                ),
             )
         if approval is None:
             return self._persist(
+                plan,
                 SourcePreparationEvidenceV1(
                     source_revision=plan.source_revision,
                     plan_digest=plan.digest,
@@ -758,12 +790,13 @@ class SourcePreparationRunner:
                     snapshot_manifest_digest=snapshot_digest,
                     data_release_manifest_digest=resolution.data_release_manifest_digest,
                     preparation=preparation,
-                )
+                ),
             )
         if approval.input_digest != preparation.input.input_digest:
             raise ValueError("caller approval is bound to a different valuation input")
         if approval.decision != "approved":
             return self._persist(
+                plan,
                 SourcePreparationEvidenceV1(
                     source_revision=plan.source_revision,
                     plan_digest=plan.digest,
@@ -773,7 +806,7 @@ class SourcePreparationRunner:
                     data_release_manifest_digest=resolution.data_release_manifest_digest,
                     issue_codes=("CALLER_APPROVAL_REJECTED",),
                     preparation=preparation,
-                )
+                ),
             )
         calculation = self._application.calculate_valuation(
             preparation.input.model_copy(update={"caller_approval": approval}),
@@ -795,6 +828,7 @@ class SourcePreparationRunner:
             }
         )
         return self._persist(
+            plan,
             SourcePreparationEvidenceV1(
                 source_revision=plan.source_revision,
                 plan_digest=plan.digest,
@@ -806,7 +840,7 @@ class SourcePreparationRunner:
                 missing_evidence=preparation.missing_evidence,
                 preparation=preparation,
                 calculation=calculation,
-            )
+            ),
         )
 
 
