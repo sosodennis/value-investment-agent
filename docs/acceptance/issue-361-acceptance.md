@@ -51,6 +51,34 @@ digest from exact member paths and bytes. Blob/tree identities remain distinct.
 Tests exercise real directory hashing, release acceptance and unsafe, duplicate,
 unordered, symbolic-link, corrupt and mismatched evidence refusals.
 
+## Non-operating asset bridge checkpoint
+
+Exact implementation `e1bfd8a55d1df860bf758c048ef727b2ac2cfb96` adds an explicit, mandatory non-operating asset
+amount to the existing composer/calculator equity bridge. It preserves source,
+period and observation lineage, rejects overlapping cash/working-capital inputs,
+and versions both models to v2, requirements to v3, composer to v5 and calculator
+to v2. Missing amounts cannot default to zero. The current FCFF profile therefore
+requires 32 scalar roles; the earlier 17/31 NVE result below is historical.
+
+Validation passes **1,221 Service/PostgreSQL, 56 Agent and 17 acceptance-tool
+tests**, Ruff/format, 48 Service sources plus the Agent producer under mypy,
+both architecture guards and diff checks. Eleven optional resource tests skip;
+one warning constructs an intentionally duplicate ZIP.
+[CI](https://github.com/sosodennis/value-investment-agent/actions/runs/43128124087) passes all 12 executed jobs; release skips.
+Check input `988fad935a7b7faf02a988c056db7e183bce3139d4e16f5cc387ad3e1b4d70cd`; output `e662a444cf14546ba654cf9fea7ca1c0f8fa1c743d91411c46de20989dcfb486`.
+
+The prior `0196c084` run's immutable fixture-policy collision and type failures
+remain retained. The correction uses a model-versioned fixture policy and typed
+JSON/constructor boundaries without deleting rows or weakening immutability.
+All 42 prior accounting checkpoint entries remain intact (43 total).
+
+NVE's corporate bonds 42,706,080, cash 10,283,550, cash-included money funds
+9,842,796 and investment-interest receivables 460,627 still require a complete
+source-bound classification. No real asset aggregate, missing role, quote,
+policy or numerical valuation is approved by these engineering tests.
+Threshold remains null. The existing isolated PostgreSQL project on18665 stays
+healthy; no containers, networks or volumes were started or cleaned.
+
 ## Exact automatic mapping checkpoint
 
 Implementation `b8961d4f169444e6afff0aaae4732d9668cd5669` passes 1,196 Service/PostgreSQL, 52 Agent boundary
