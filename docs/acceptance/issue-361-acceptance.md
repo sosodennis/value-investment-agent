@@ -1404,3 +1404,47 @@ produce an estimate without missing-evidence flags. Owning blocker #416 records
 the exact counterexample and digests. That review kept #414 unintegrated until the source-bound role/class fix.
 Ordinary merge `f45a1fad` now integrates the correction, as recorded above.
 Complete real numerical acceptance remains outstanding.
+
+## Provider-neutral issuer industry crosswalk checkpoint — 9322a77b
+
+Implementation commits `3840dfb4b03bb678d32b7c0502169377d69a3675` and
+`9322a77b2bd22643dbb55540911e630f4df151f6` add a provider-neutral classification
+crosswalk port and an exact SEC SIC to Damodaran industry adapter. The crosswalk
+policy binds provider ID, source scheme, target taxonomy, mapping version, and
+manifest digest. Each result keeps issuer CIK, accession, report period,
+valuation time, original classification digest/source hash, rule identity,
+mapping digest, and stable unmapped/ambiguous/provider-mismatch refusals.
+
+The initial rule set contains 14 explicit computer hardware, semiconductor,
+software, and computer-services SIC mappings. Other codes remain unmapped. The
+mapped row is only a population proxy selection; it does not approve a market
+policy or assert that an issuer's business exactly matches an industry average.
+The Damodaran source page says its processed aggregate data is shared with no
+strings attached, while warning about input data errors and its industry
+definitions. The retained 2025 beta workbook digest is
+`cd3f0356e71588d974bb2cb16f5398aec576992e3dfe49e959e54d77c329d636`; the source
+is [Damodaran's data history and usage notes](https://pages.stern.nyu.edu/~adamodar/New_Home_Page/datahistory.html).
+Original workbook data remains in ignored `.audit` and is not added to this PR.
+
+Exact tested source commit: `9322a77b2bd22643dbb55540911e630f4df151f6`.
+For CIK `0000320193`, accession `0000320193-24-000123`, SIC `3571`, and valuation
+time `2025-01-01T00:00:00Z`, canonical mapping manifest/input/output digests are
+`82d5db2d68c67771006521a9ae029e011de4b03f0f32104e2aa44482bc30fda4`,
+`e76a50f4adcee969c5bd8a9b9ee8dd51abf82fac717b52fb9dd462e853dfafc0`, and
+`c346dc0c4de8ae8667a282edc22b6ae225e859d534395a9dfee566715103dd3d`. A repeated
+run with the same provider, policy, classification bytes, and runtime returned
+the identical output digest.
+
+Exact checks at the tested source commit: classification/crosswalk tests **24
+passed**; changed-file Ruff 0.3.0 check and format passed; MyPy passed for both
+new production modules; root and Fundamental Service architecture guards and
+`git diff --check` passed. The crosswalk is not yet wired into release creation
+or serving, and this increment does not generate country ERP, beta, debt cost,
+capital weights, terminal growth, or an automatic signed release. No full
+PostgreSQL, Docker, numerical valuation, quote-terms, independent review, or
+main-merge acceptance is claimed. The next implementation is a source-bound
+issuer/date market-policy evaluator that consumes this crosswalk and the
+existing interchangeable macro, reference, and quote provider ports. Until
+that integration and the remaining accounting, award, quote, caller-approval,
+and recovery gates pass, #361 stays open, PR #370 stays draft, and
+`supported_history_threshold` stays null.
