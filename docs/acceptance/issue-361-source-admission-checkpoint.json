@@ -1039,6 +1039,349 @@
   "source_use_policy_digest": "93bf736bc457852ca4072a7243773d6e01d5de4b35efc3f81d7cdfb0b9425290",
   "status": "PARTIAL_SOURCE_ADMISSION_ONLY",
   "supported_history_threshold": null,
+  "terminal_growth_and_issuer_scope_increment": {
+    "blocker": 369,
+    "changes": [
+      "Source-neutral nominal GDP/risk-free terminal assumption, deployment-pinned canonical plan and same-risk-free binding; serving and independent canary reproduce originals and trace.",
+      "Issuer-scoped immutable policy selection in preparation, calculation and canary; foreign policies excluded and same-scope ambiguity retained. Issuer reference/terminal plans require matching policy scope. Unscoped records preserve exact legacy digests."
+    ],
+    "checkpoints": [
+      {
+        "exact_commit": "c853dbb875229bf28b19a23c2debfa245cf32385",
+        "installed": {
+          "command": [
+            "python3",
+            ".audit/issue-361-terminal-growth/verify_image.py"
+          ],
+          "compose": {
+            "config_hash": "4c8dbf609d7782e8f63035f62fc5084d7efb0b3019002695901844d247028d4e",
+            "env_files": [],
+            "files": [
+              "compose/verification/docker-compose.issue280-operations.yml"
+            ],
+            "ports": {
+              "postgres": 18686,
+              "service": 18685
+            },
+            "project": "value-investment-agent-361-capture-profiles"
+          },
+          "exit_code": 0,
+          "identity_resolution_configured": false,
+          "image_id": "sha256:e9a5d0b0a1f74dccfb18971704ab2e2c359b8c07b6a979137a14f1ab49346988",
+          "input_digest": "0c6cca8c8b50f831a2d8ce06b511f081baa1a1c6fbc5fc463892a86c79b868e4",
+          "market_policy_checks": [
+            "25e0147d81e8ce97e9c558823ad6efc757e06186c92f38ec6f5a8b5a81a2c8a2"
+          ],
+          "output_digest": "de77d4f35bc543e5678128af098964863975219b5402bbbe397d6382953aaa51",
+          "packet_input_digest": "12c83b2a1d8640b461d614ab9ac15fd499b458a3b2143c7ede49cfa245e5baf3",
+          "repeat_concurrent_and_restart": {
+            "concurrent_processes": 2,
+            "evidence_writes": 0,
+            "inventory_first_digest": "26d34a1df14db7aa8bc2074ea3b15dba2da133189f8aa972eb067d695785831c",
+            "inventory_restart_digest": "26d34a1df14db7aa8bc2074ea3b15dba2da133189f8aa972eb067d695785831c",
+            "new_files_concurrent": 0,
+            "new_files_restart": 0,
+            "new_files_second": 0,
+            "report_wrote": false
+          },
+          "replay_output_digest": "db5aa776bbca94e67bc4987d245217f0f2f29bbaf2fd3740e276f9ec5db7d764",
+          "retained_refusals": 13,
+          "runtime": {
+            "arelle": "2.47.4",
+            "pydantic": "2.14.2",
+            "python": "3.12.16"
+          },
+          "selection_digest": "f78ab94dd7e63888a3947436aef8de3813ae4daa62bfbd47eea5dc38ce599394",
+          "source_count": 93,
+          "unrelated_baseline_containers_unchanged": 42
+        },
+        "verification": {
+          "command": [
+            "python3",
+            ".audit/issue-361-terminal-growth/verify_checkpoint.py"
+          ],
+          "commands": {
+            "architecture": {
+              "command": [
+                "python3",
+                "scripts/architecture_guard.py"
+              ],
+              "exit_code": 0,
+              "output_sha256": "6c8e024ff94859e9781de1f4a3201c70e338bc90774702d8ac83afc8a9a15ab9"
+            },
+            "diff": {
+              "command": [
+                "git",
+                "diff",
+                "--check",
+                "origin/main"
+              ],
+              "exit_code": 0,
+              "output_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            },
+            "format": {
+              "command": [
+                "uvx",
+                "--from",
+                "ruff==0.14.10",
+                "ruff",
+                "format",
+                "--check",
+                "fundamental-service/src/fundamental_service/application/service.py",
+                "fundamental-service/src/fundamental_service/release_runner.py",
+                "fundamental-service/src/fundamental_service/terminal_growth.py",
+                "fundamental-service/src/fundamental_service/terminal_growth_evidence.py",
+                "fundamental-service/tests/test_terminal_growth.py",
+                "fundamental-service/tests/test_terminal_growth_evidence.py"
+              ],
+              "exit_code": 0,
+              "output_sha256": "ef7d13d02214e98ca902b05257cdbe6a8e84f3b4714508efdc19766460b54209"
+            },
+            "mypy": {
+              "command": [
+                "uv",
+                "run",
+                "--frozen",
+                "--project",
+                "fundamental-service",
+                "--with",
+                "mypy==1.19.1",
+                "mypy",
+                "--no-incremental",
+                "--follow-imports=silent",
+                "--ignore-missing-imports",
+                "fundamental-service/src/fundamental_service/application/service.py",
+                "fundamental-service/src/fundamental_service/release_runner.py",
+                "fundamental-service/src/fundamental_service/terminal_growth.py",
+                "fundamental-service/src/fundamental_service/terminal_growth_evidence.py"
+              ],
+              "exit_code": 0,
+              "output_sha256": "71144743c83babea384888a735db0c4daba3d4d7b7942b6839984bd5c21b52bb"
+            },
+            "ruff": {
+              "command": [
+                "uvx",
+                "--from",
+                "ruff==0.14.10",
+                "ruff",
+                "check",
+                "fundamental-service"
+              ],
+              "exit_code": 0,
+              "output_sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18"
+            },
+            "service_postgres": {
+              "command": [
+                "uv",
+                "run",
+                "--frozen",
+                "--extra",
+                "dev",
+                "--project",
+                "fundamental-service",
+                "pytest",
+                "fundamental-service/tests",
+                "-ra"
+              ],
+              "exit_code": 0,
+              "output_sha256": "06abc1503b2989f5a5e5585e629e81f8ca1984c00548e2b7161e6304b0c2bea8"
+            }
+          },
+          "input_digest": "8302796b449718be912f3f6548bfbf33ed138f10b9ef05d4e755fd007366a014",
+          "output_digest": "206937022a3af6bd6488cf1e37b63d72a9467b709e6163ac2c61be2151fd8130",
+          "passed": 1814,
+          "skipped": 11,
+          "warning": "One expected duplicate-ZIP fixture warning"
+        }
+      },
+      {
+        "ci": {
+          "conclusion": "success",
+          "exact_commit": "8ba2a07498108b3bf50a553eba7f0a02d49e0c15",
+          "executed_passed": 12,
+          "receipt_sha256": "9eef8603801d9a0de659fd1233046537ba311b672f4c41f46e011dc90b128696",
+          "run": "https://github.com/sosodennis/value-investment-agent/actions/runs/43250508391",
+          "skipped": [
+            "fundamental-release-gate"
+          ]
+        },
+        "exact_commit": "8ba2a07498108b3bf50a553eba7f0a02d49e0c15",
+        "installed": {
+          "command": [
+            "python3",
+            ".audit/issue-361-terminal-growth/verify_scope_image.py"
+          ],
+          "compose": {
+            "config_hash": "4c8dbf609d7782e8f63035f62fc5084d7efb0b3019002695901844d247028d4e",
+            "env_files": [],
+            "files": [
+              "compose/verification/docker-compose.issue280-operations.yml"
+            ],
+            "ports": {
+              "postgres": 18686,
+              "service": 18685
+            },
+            "project": "value-investment-agent-361-capture-profiles"
+          },
+          "exit_code": 0,
+          "identity_resolution_configured": false,
+          "image_id": "sha256:3bfb0220f13b6f0ee51b06d738dbf00e109eeab6eb04c625aa218cb9b12bc561",
+          "input_digest": "2e9768feb2dfa5f0b70d71162debdc32e6aa0a53920572be37f831661f7811e5",
+          "market_policy_checks": [
+            "89773f50d51fe5bf6ae346edac9a630c5e5d42a8bda7ccea681df02966356aed"
+          ],
+          "output_digest": "0262a6a39f42674fc0a553703bbb043f1cbc2a46e3f3e79a6544c446c0a720ce",
+          "packet_input_digest": "9a5b428ae902f1edb0a87d5b270f0b5c521b972e55da5d5c6cd3b5a27509ef07",
+          "repeat_concurrent_and_restart": {
+            "concurrent_processes": 2,
+            "evidence_writes": 0,
+            "inventory_first_digest": "82241410a99ec0d941a9bfe7d17d570eed70c28a573af482a85758427ecc9d28",
+            "inventory_restart_digest": "82241410a99ec0d941a9bfe7d17d570eed70c28a573af482a85758427ecc9d28",
+            "new_files_concurrent": 0,
+            "new_files_restart": 0,
+            "new_files_second": 0,
+            "report_wrote": false
+          },
+          "replay_output_digest": "6a287b2bd4254153946b46645349d00ff79532487f9d3f663f90c363ca1d065c",
+          "retained_refusals": 15,
+          "runtime": {
+            "arelle": "2.47.4",
+            "pydantic": "2.14.2",
+            "python": "3.12.16"
+          },
+          "selection_digest": "f78ab94dd7e63888a3947436aef8de3813ae4daa62bfbd47eea5dc38ce599394",
+          "source_count": 93,
+          "unrelated_baseline_containers_unchanged": 42
+        },
+        "verification": {
+          "command": [
+            "python3",
+            ".audit/issue-361-terminal-growth/verify_checkpoint.py"
+          ],
+          "commands": {
+            "architecture": {
+              "command": [
+                "python3",
+                "scripts/architecture_guard.py"
+              ],
+              "exit_code": 0,
+              "output_sha256": "6c8e024ff94859e9781de1f4a3201c70e338bc90774702d8ac83afc8a9a15ab9"
+            },
+            "diff": {
+              "command": [
+                "git",
+                "diff",
+                "--check",
+                "origin/main"
+              ],
+              "exit_code": 0,
+              "output_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            },
+            "format": {
+              "command": [
+                "uvx",
+                "--from",
+                "ruff==0.14.10",
+                "ruff",
+                "format",
+                "--check",
+                "fundamental-service/src/fundamental_service/application/service.py",
+                "fundamental-service/src/fundamental_service/market_reference_evidence.py",
+                "fundamental-service/src/fundamental_service/policies.py",
+                "fundamental-service/src/fundamental_service/release_runner.py",
+                "fundamental-service/src/fundamental_service/terminal_growth.py",
+                "fundamental-service/src/fundamental_service/terminal_growth_evidence.py",
+                "fundamental-service/tests/test_historical_policy_selection.py",
+                "fundamental-service/tests/test_market_reference_evidence.py",
+                "fundamental-service/tests/test_terminal_growth.py",
+                "fundamental-service/tests/test_terminal_growth_evidence.py"
+              ],
+              "exit_code": 0,
+              "output_sha256": "5b9f70ad96522f492ef846065642c069b5627379aff2ab3f74acd2e3b9ecfe34"
+            },
+            "mypy": {
+              "command": [
+                "uv",
+                "run",
+                "--frozen",
+                "--project",
+                "fundamental-service",
+                "--with",
+                "mypy==1.19.1",
+                "mypy",
+                "--no-incremental",
+                "--follow-imports=silent",
+                "--ignore-missing-imports",
+                "fundamental-service/src/fundamental_service/application/service.py",
+                "fundamental-service/src/fundamental_service/market_reference_evidence.py",
+                "fundamental-service/src/fundamental_service/policies.py",
+                "fundamental-service/src/fundamental_service/release_runner.py",
+                "fundamental-service/src/fundamental_service/terminal_growth.py",
+                "fundamental-service/src/fundamental_service/terminal_growth_evidence.py"
+              ],
+              "exit_code": 0,
+              "output_sha256": "ab35ee42183d4d6d3ba483825ab037d18a5a15622d03be01d82220b1564851ff"
+            },
+            "ruff": {
+              "command": [
+                "uvx",
+                "--from",
+                "ruff==0.14.10",
+                "ruff",
+                "check",
+                "fundamental-service"
+              ],
+              "exit_code": 0,
+              "output_sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18"
+            },
+            "service_postgres": {
+              "command": [
+                "uv",
+                "run",
+                "--frozen",
+                "--extra",
+                "dev",
+                "--project",
+                "fundamental-service",
+                "pytest",
+                "fundamental-service/tests",
+                "-ra"
+              ],
+              "exit_code": 0,
+              "output_sha256": "7512ea0039ae2350a7728888e99c623e5962471c31a81aa48c52fd0bc2a9114e"
+            }
+          },
+          "input_digest": "4bc01eb29a709e64d3704340d18756492a6719124b11ac310d11708cbc3fcf92",
+          "output_digest": "e06f839510c59f5f53956561f6867e99989b3c0a9ddad8697400740895202649",
+          "passed": 1821,
+          "skipped": 11,
+          "warning": "One expected duplicate-ZIP fixture warning"
+        }
+      }
+    ],
+    "full_numerical_flow": false,
+    "issue": 361,
+    "provider_contracts": [
+      "MacroSeriesProviderPort",
+      "MacroSeriesVintageV1",
+      "MarketReferenceProviderPort",
+      "QuoteSourceProviderPort",
+      "PublicSourceCaptureProfilePort"
+    ],
+    "remaining": [
+      "Automatic issuer classification and complete beta/debt/capital policy from admitted evidence.",
+      "Lawful dated quote and complete original accounting/award scope.",
+      "Trusted complete release and authentic exact-input caller approval, real numerical repeat/concurrency/restart/empty-store restore.",
+      "Independent PR review, CI/main merge and merge-SHA verification, then owned-resource cleanup."
+    ],
+    "retained_failures": [
+      "Issuer-scope focused test initially expected plan-context refusal but policy-scope check ran first. Reordered checks in the owning loaders; 88 focused tests and full1821 suite then pass.",
+      "Ruff format was accidentally passed a Markdown runbook path and refused parsing it. Corrected to whole-service supported source discovery; all184 Python files pass.",
+      "An ignored container baseline is JSONL, not one JSON object; python -m json.tool rejects extra data. The accepted orchestrator parses each line explicitly."
+    ],
+    "scope": "Synthetic signed source/policy/issuer isolation acceptance. No complete real numerical flow or historical cohort claim.",
+    "supported_history_threshold": null
+  },
   "verification": {
     "commands": {
       "architecture": {

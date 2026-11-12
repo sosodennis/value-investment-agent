@@ -19,6 +19,57 @@ Eligible candidate-history valuations can be provisional. Missing, conflicting,
 unreviewed, future, or unsupported evidence must retain reasons and abstain.
 No completed #351 through #355 acceptance is changed. #350 is outside scope.
 
+## Terminal growth and issuer policy checkpoint
+
+Implementation `c853dbb875229bf28b19a23c2debfa245cf32385` derives an explicit
+stable-growth assumption from the lower of admitted nominal GDP CAGR and the
+long-term risk-free rate. Its canonical issuer/time plan is deployment-pinned;
+serving and the independent canary reproduce sources, policy and trace. Latest
+incomplete/stale/conflicting evidence refuses. This is a policy assumption,
+not observed issuer growth or a history threshold. Existing macro adapters and
+canonical vintages remain interchangeable; #352 owns valuation calculations.
+
+Implementation `8ba2a07498108b3bf50a553eba7f0a02d49e0c15` fixes the policy registry's
+missing issuer boundary. Preparation, calculation and canary select with actual
+valuation issuer context. Matching issuer policies precede generic policies;
+foreign policies cannot affect selection and same-scope ambiguity refuses.
+Issuer reference/terminal plans require a matching deployment-policy scope.
+Unscoped policy bytes and digests remain unchanged. The design gap and owning
+fix are tracked in [#369](https://github.com/sosodennis/value-investment-agent/issues/369#issuecomment-6827978011).
+
+Exact checks pass **1,821 Service/PostgreSQL tests**, Ruff/format, six-source mypy,
+architecture and diff checks. Eleven optional external SEC-resource skips and
+one intentional ZIP-fixture warning remain. Check input/output:
+`4bc01eb29a709e64d3704340d18756492a6719124b11ac310d11708cbc3fcf92` /
+`e06f839510c59f5f53956561f6867e99989b3c0a9ddad8697400740895202649`.
+[CI43250508391](https://github.com/sosodennis/value-investment-agent/actions/runs/43250508391)
+passes all12 executed jobs; the release gate is skipped.
+The preceding terminal-only commit passes1,814 tests and
+[CI43248445523](https://github.com/sosodennis/value-investment-agent/actions/runs/43248445523).
+
+The own18685/18686 image matches all93 installed Python/SQL sources. Synthetic
+source-bound preparation and independent canary agree;15 value/source/method/
+authority/foreign-policy refusal cases remain explicit. A coexisting foreign
+policy cannot change preparation or canary results. Second, two concurrent
+processes and post-service-restart runs retain packet input/output
+`9a5b428ae902f1edb0a87d5b270f0b5c521b972e55da5d5c6cd3b5a27509ef07` /
+`6a287b2bd4254153946b46645349d00ff79532487f9d3f663f90c363ca1d065c`,
+with evidence writes=0, report wrote=false and unchanged hashes/sizes/mtimes.
+Installed wrapper input/output:
+`2e9768feb2dfa5f0b70d71162debdc32e6aa0a53920572be37f831661f7811e5` /
+`0262a6a39f42674fc0a553703bbb043f1cbc2a46e3f3e79a6544c446c0a720ce`.
+All42 unrelated baseline containers are unchanged. Image:
+`sha256:3bfb0220f13b6f0ee51b06d738dbf00e109eeab6eb04c625aa218cb9b12bc561`.
+
+This is synthetic source/policy/issuer-isolation acceptance. SEC identity remains
+unconfigured in this stack and complete real numerical acceptance remains false.
+The existing [checkpoint](issue-361-source-admission-checkpoint.json) retains
+exact commands, runtime pins, both increment digests and failed audit attempts.
+Remaining: complete automatic issuer classification/beta/debt/capital policy,
+lawful quote and accounting/award scope, trusted complete release, authentic
+caller approval, numerical recovery and PR/main verification. Threshold stays
+null; #361/#369 OPEN; #370 draft.
+
 ## Issuer ERP source selection checkpoint
 
 Implementation `94fe0386268a12115a965a40a04081992151ae42` binds one canonical
