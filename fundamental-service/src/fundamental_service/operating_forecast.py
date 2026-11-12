@@ -6,6 +6,7 @@ mapping approval. Empirical replay must still use the verified release path.
 """
 
 from collections.abc import Iterable
+from dataclasses import replace
 from decimal import Decimal
 from typing import Literal
 
@@ -38,6 +39,10 @@ from .valuation_requirements import (
     select_released_facts,
 )
 
+HISTORY_WINDOW_POLICY: Literal["complete-trailing-annual-v1"] = (
+    "complete-trailing-annual-v1"
+)
+
 
 class OperatingForecastV1(StrictModel):
     """Provisional operating targets with complete input and metric lineage."""
@@ -65,6 +70,15 @@ class OperatingForecastV1(StrictModel):
     selected_fact_ids: tuple[str, ...]
     rejected_fact_ids: tuple[str, ...]
     fiscal_years: tuple[int, ...]
+    history_window_years: Literal[3, 4, 5] | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
+    history_window_policy: Literal["complete-trailing-annual-v1"] | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
+    excluded_history_fact_ids: tuple[str, ...] = Field(
+        default=(), exclude_if=lambda value: not value
+    )
     historical_metrics: HistoricalMetricsV1
     forecast: ForecastAssumptionsV1 | None
     tax_rate: Decimal | None
@@ -87,6 +101,20 @@ class OperatingForecastV1(StrictModel):
             QualityStatus.PROVISIONAL if prepared else QualityStatus.ABSTAIN
         ):
             raise ValueError("operating disposition must retain provisional quality")
+        if (self.history_window_years is None) != (self.history_window_policy is None):
+            raise ValueError("explicit history windows require their policy version")
+        if (
+            prepared
+            and self.history_window_years is not None
+            and (len(self.fiscal_years) != self.history_window_years)
+        ):
+            raise ValueError("prepared forecasts must use the exact requested history")
+        if self.excluded_history_fact_ids != tuple(
+            sorted(set(self.excluded_history_fact_ids) - set(self.selected_fact_ids))
+        ):
+            raise ValueError(
+                "excluded history facts must be distinct from selected facts"
+            )
         return self
 
 
@@ -101,6 +129,7 @@ def prepare_operating_forecast(
     policy_version: str,
     mapping_version: str,
     data_release_manifest_digest: str,
+    history_window_years: Literal[3, 4, 5] | None = None,
 ) -> OperatingForecastV1:
     """Compose the formal operating stage from already released canonical facts.
 
@@ -108,6 +137,11 @@ def prepare_operating_forecast(
     function performs no I/O, release verification, signing or quality promotion.
     """
 
+    if history_window_years is not None and (
+        not isinstance(history_window_years, int)
+        or history_window_years not in (3, 4, 5)
+    ):
+        raise ValueError("explicit operating history must be three, four or five years")
     return _prepare(
         tuple(facts),
         snapshot=snapshot,
@@ -117,6 +151,7 @@ def prepare_operating_forecast(
         policy_version=policy_version,
         mapping_version=mapping_version,
         data_release_manifest_digest=data_release_manifest_digest,
+        history_window_years=history_window_years,
     )
 
 
@@ -130,6 +165,7 @@ def _prepare(
     policy_version: str,
     mapping_version: str,
     data_release_manifest_digest: str,
+    history_window_years: Literal[3, 4, 5] | None,
 ) -> OperatingForecastV1:
     profile = operating_forecast_requirements_profile(model_id)
     selected = select_released_facts(
@@ -153,6 +189,14 @@ def _prepare(
             "policy_version": policy_version,
             "mapping_version": mapping_version,
             "data_release_manifest_digest": data_release_manifest_digest,
+            **(
+                {
+                    "history_window_years": history_window_years,
+                    "history_window_policy": HISTORY_WINDOW_POLICY,
+                }
+                if history_window_years is not None
+                else {}
+            ),
         }
     )
     metrics = HistoricalMetricsV1(
@@ -163,6 +207,8 @@ def _prepare(
         missing_evidence=selected.missing_fields,
     )
     fiscal_years: tuple[int, ...] = ()
+    selected_fact_ids = tuple(fact.fact_id for fact in selected.facts)
+    excluded_history_fact_ids: tuple[str, ...] = ()
     forecast = None
     tax_rate = None
     nodes: tuple[CalculationNodeV1, ...] = ()
@@ -220,6 +266,36 @@ def _prepare(
                 profile=profile,
             )
             fiscal_years = tuple(period.fiscal_year for period in history.periods)
+            if history_window_years is not None:
+                if len(history.periods) < history_window_years:
+                    raise PreparationError(
+                        "OPERATING_HISTORY_WINDOW_UNAVAILABLE",
+                        "the exact requested trailing history is incomplete",
+                        missing=tuple(
+                            f"{year}:{field}"
+                            for year, field in history.missing_fields
+                            if year
+                            in history.requested_fiscal_years[:history_window_years]
+                        ),
+                    )
+                history = replace(
+                    history, periods=history.periods[-history_window_years:]
+                )
+                fiscal_years = tuple(period.fiscal_year for period in history.periods)
+                used = {
+                    fact.fact_id
+                    for period in history.periods
+                    for fact in (*period.duration_facts, *period.instant_facts)
+                }
+                used.update(
+                    fact.fact_id
+                    for fact in selected.facts
+                    if fact.normalized_field == "filed_operating_evidence"
+                )
+                selected_fact_ids = tuple(sorted(used))
+                excluded_history_fact_ids = tuple(
+                    sorted({fact.fact_id for fact in selected.facts} - used)
+                )
             metrics = derive_historical_metrics(history)
             if metrics.quality_status is not QualityStatus.ABSTAIN:
                 forecast = compose_forecast_assumptions(history, metrics)
@@ -232,7 +308,7 @@ def _prepare(
                 nodes = project_operating_nodes(
                     forecast,
                     tax_rate=tax_rate,
-                    historical_fact_ids=tuple(fact.fact_id for fact in selected.facts),
+                    historical_fact_ids=selected_fact_ids,
                 )
         except (
             PreparationError,
@@ -265,9 +341,14 @@ def _prepare(
         quality_status=QualityStatus.PROVISIONAL if prepared else QualityStatus.ABSTAIN,
         issue_codes=tuple(dict.fromkeys((*selected.issue_codes, *metrics.issue_codes))),
         missing_evidence=tuple(sorted(set(metrics.missing_evidence))),
-        selected_fact_ids=tuple(fact.fact_id for fact in selected.facts),
+        selected_fact_ids=selected_fact_ids,
         rejected_fact_ids=selected.rejected_fact_ids,
         fiscal_years=fiscal_years,
+        history_window_years=history_window_years,
+        history_window_policy=HISTORY_WINDOW_POLICY
+        if history_window_years is not None
+        else None,
+        excluded_history_fact_ids=excluded_history_fact_ids,
         historical_metrics=metrics,
         forecast=forecast,
         tax_rate=tax_rate,

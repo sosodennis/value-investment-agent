@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import Field, model_validator
 
@@ -168,7 +169,12 @@ class IssuerOperatingReleaseService:
         )
 
     def prepare(
-        self, *, artifact_id: str, expected_manifest_digest: str, snapshot_id: str
+        self,
+        *,
+        artifact_id: str,
+        expected_manifest_digest: str,
+        snapshot_id: str,
+        history_window_years: Literal[3, 4, 5] | None = None,
     ) -> ReleasedOperatingForecastV1:
         bundle = IssuerOperatingReleaseBundleV1.model_validate_json(
             self._releases.read(artifact_id)
@@ -206,6 +212,7 @@ class IssuerOperatingReleaseService:
             policy_version=manifest.policy_version,
             mapping_version=manifest.mapping_version,
             data_release_manifest_digest=manifest.manifest_digest,
+            history_window_years=history_window_years,
         )
         return ReleasedOperatingForecastV1(
             manifest_digest=manifest.manifest_digest, canary=canary, forecast=forecast
