@@ -998,6 +998,49 @@ This target policy supersedes human-review requirements in older WACC implementa
 
 Even when every source check passes, the resulting valuation assumptions remain policy-approved assumptions with sensitivity evidence. Forecast and valuation calculations continue to use the formal #352 Fundamental Service composer.
 
+### Provider-neutral macro evidence
+
+`macro_series.MacroSeriesProviderPort` is the injected source boundary for macro
+vintages. `reproduce_macro_vintage` supplies an explicit canonical series ID to
+the port and checks series/provider identity and each original artifact's hash,
+version, URI, terms and capture time. The requested series is part of the
+provider call, so one adapter can support multiple series without caller-side
+provider switches. `MacroSeriesVintageV1` carries chronologically ordered
+observations with periods and units and source artifacts in canonical order;
+canonical serialization identifies the immutable vintage. Source adapters never
+choose a valuation formula, approve a market policy or write storage.
+
+`BeaNominalGdpVintageProvider` and `NewYorkFedSofrVintageProvider` implement the
+same port. BEA's bounded profile reads NIPA table 1.1.5 annual nominal USD GDP
+from a Q4 third-estimate archive and binds its published date to the official GDP
+release page. The archive directory can be dated after the news release. The
+profile therefore waits until the archive day has ended before allowing the full
+history, while rejecting date conflicts, incomplete/corrupt tables and unknown
+formats. The SOFR provider reproduces the existing single-date overnight profile
+and retains capture-time availability; it does not supply CME Term SOFR.
+
+Provider-neutral `select_macro_vintage` applies the valuation cutoff and rejects
+conflicting latest releases. `NominalGdpGrowthCeilingV1.derive` computes a nominal
+GDP CAGR from eleven consecutive annual observations over ten years in the
+existing fixed Decimal context. Its digest binds the selected vintage, policy
+version, cutoff and result. This produces a ceiling, not a terminal-growth
+assumption or market approval. The implementation does not yet wire a complete
+market-policy evaluator into preparation; the numerical flow remains blocked.
+
+Future providers implement the same port and canonical series identity, periods,
+units and availability evidence. They can reuse selection and the GDP ceiling
+policy without provider-specific branches in either policy or the #352 composer.
+Alternative-provider tests prove that GDP policy accepts the same canonical
+series from a second provider, rejects a provider that changes series/source
+identity, and is unaffected by source input order. SOFR and BEA also exercise
+the shared contract. HTTP capture, immutable content storage, source-use
+admission and release signing remain separate owning boundaries.
+
+This provider contract currently covers macro series only. Treasury rates,
+Damodaran reference tables, issuer quote vendors, and facility benchmark
+observations need equivalent provider adapters before they can be swapped at
+runtime. Do not imply those providers are configured by the macro abstraction.
+
 The first schemas use strict unknown-field rejection and no implicit defaults. Their minimum field groups are:
 
 | Artifact | Required V1 content |

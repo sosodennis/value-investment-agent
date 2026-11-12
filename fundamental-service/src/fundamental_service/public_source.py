@@ -59,6 +59,18 @@ PUBLIC_SOURCE_SPECS: tuple[PublicSourceSpec, ...] = (
         "https://apps.bea.gov/API/signup/",
     ),
     PublicSourceSpec(
+        "bea-gdp-release",
+        SourceRole.MACRO,
+        "https://www.bea.gov/news/",
+        "https://www.bea.gov/help/guidelines-for-citing-bea",
+    ),
+    PublicSourceSpec(
+        "bea-nipa-archive",
+        SourceRole.MACRO,
+        "https://apps.bea.gov/HistData/Files/Releases/GDP_and_PI/",
+        "https://www.bea.gov/help/guidelines-for-citing-bea",
+    ),
+    PublicSourceSpec(
         "bls-public-api",
         SourceRole.MACRO,
         "https://api.bls.gov/publicAPI/",
@@ -313,6 +325,17 @@ class PublicSourceAdapter:
                     "SOURCE_AVAILABILITY_UNVERIFIED",
                     "SOFR historical availability must use service capture time",
                 )
+        if source_id in {"bea-gdp-release", "bea-nipa-archive"}:
+            if parsed.query or parsed.fragment:
+                raise SnapshotError(
+                    "SOURCE_QUERY_INVALID",
+                    "BEA GDP captures require canonical query-free source URIs",
+                )
+            if available_at is not None or publication_at is not None:
+                raise SnapshotError(
+                    "SOURCE_AVAILABILITY_UNVERIFIED",
+                    "BEA publication availability must be reproduced from retained evidence",
+                )
         payload, status, media_type, retrieved_at = self._request(uri)
         if source_id == "new-york-fed-sofr":
             from .sofr_source import parse_new_york_fed_sofr
@@ -325,6 +348,10 @@ class PublicSourceAdapter:
             )
             # Historical API responses do not establish when a value was first
             # published. Treat it as available only from this retained capture.
+            available_at = retrieved_at
+        elif source_id in {"bea-gdp-release", "bea-nipa-archive"}:
+            # The parser can establish the historical release time from the
+            # paired original artifacts; transport capture alone cannot.
             available_at = retrieved_at
         if source_id == "alfred-vintage":
             vintage = parse_qs(parsed.query).get("vintage_date", ())
@@ -354,7 +381,11 @@ class PublicSourceAdapter:
                 "SOURCE_TIMESTAMP_TIMEZONE_REQUIRED",
                 "source timestamps require a timezone",
             )
-        if publication_at is None and source_id != "new-york-fed-sofr":
+        if publication_at is None and source_id not in {
+            "new-york-fed-sofr",
+            "bea-gdp-release",
+            "bea-nipa-archive",
+        }:
             publication_at = available_at
         if source_id in {"fred-observations", "alfred-vintage", "damodaran-reference"}:
             if not payload.strip():
@@ -377,7 +408,10 @@ class PublicSourceAdapter:
             http_status=status,
             available_at=available_at,
             captured_at=(
-                retrieved_at if source_id == "new-york-fed-sofr" else captured_at
+                retrieved_at
+                if source_id
+                in {"new-york-fed-sofr", "bea-gdp-release", "bea-nipa-archive"}
+                else captured_at
             ),
             publication_at=publication_at,
         )
