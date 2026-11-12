@@ -51,6 +51,37 @@ digest from exact member paths and bytes. Blob/tree identities remain distinct.
 Tests exercise real directory hashing, release acceptance and unsafe, duplicate,
 unordered, symbolic-link, corrupt and mismatched evidence refusals.
 
+## Complete automatic mapping batch checkpoint
+
+Exact implementation `7e3a24ce58f217f8e94285e5d8e7eaedd720f8fb` generates every
+service-owned role without a caller-selected proposal list. Each NVE original
+retains 32 scalar roles and three supporting award roles: 17 approvals and
+18 abstentions. Both originals therefore retain 70 decisions, including every
+unsupported accounting/award role. Approval certificates and child decisions
+are explicit batch dependencies; invalidating a certificate marks its batch
+report stale.
+
+Validation passes 1,235 Service/PostgreSQL, 56 Agent and 17 acceptance-tool tests,
+Ruff/format, 49 Service-source and Agent producer mypy, architecture and diff
+checks. Eleven optional resource tests skip; one duplicate-ZIP warning is
+intentional. [CI](https://github.com/sosodennis/value-investment-agent/actions/runs/43131785794)
+passes all 12 executed jobs; release skips.
+
+Two complete real batch runs reuse all artifacts, preserve 533 files' hashes,
+sizes and mtimes, and use zero provider/parser calls. Input
+`9d2eafd1fefba4d34d4f4f4892663946f936a3849f11c214577eacc26f3aaa20`;
+output `4a723161fa5c44710e64c955cbb6ed6287fb438eb4ff44eff9af52d1e850154d`.
+Empty-store recovery preserves 18 tables and 1,165 rows, with all 70 decisions
+reproduced. The second backup, restore, recomputation and report return
+unchanged. Recovery input
+`5fd23062e64dc150bf003a5a3346dff535c6223dfd40b25b3a5c54b7dfbb01cd`;
+output `7472790160c5de2bbab4787d3532e9afe4191ca57d93cc2264fef0aa904d311d`.
+
+The appended `automatic_mapping_batch_increment` preserves all 43 prior entries.
+This establishes mapping persistence and recovery, not complete accounting
+coverage or numerical valuation. No Docker resources were started or removed.
+Generated evidence stays outside Git; threshold remains null and PR #370 draft.
+
 ## Non-operating asset bridge checkpoint
 
 Exact implementation `e1bfd8a55d1df860bf758c048ef727b2ac2cfb96` adds an explicit, mandatory non-operating asset
