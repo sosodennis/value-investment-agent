@@ -60,6 +60,14 @@ records input/output digests and commands. Its changes are documentation,
 tooling and one annotation's layout; the installed SEC evidence above remains
 bound to `676a1b43`, with no new numerical acceptance claim.
 
+CI43304007015 at `cd6caec3` passes 2,013 Service/PostgreSQL tests (11 optional
+skips, one warning) but fails the full 94-source type gate: the industry-capital
+default was inferred as `str` instead of its required literal. Exact correction
+`64962b96ee12dfe2c27ce29a79a66e24a7569a9f` marks that immutable default `Final`.
+All 94 changed-source mypy checks, the 57 provider tests, full lint/format,
+architecture and diff pass. The same checkpoint retains the failed CI and the
+correction's separate input/output digests. Financial policy values are unchanged.
+
 ## Source-bound industry capital adoption
 
 Implementation `f52933472f09da8b4d45b14ada60895dcf8b37a7` adopts four selected
