@@ -18,6 +18,168 @@ is not a hidden runtime dependency. `supported_history_threshold` remains null.
 Eligible candidate-history valuations can be provisional. Missing, conflicting,
 unreviewed, future, or unsupported evidence must retain reasons and abstain.
 No completed #351 through #355 acceptance is changed. #350 is outside scope.
+GitHub #351 and #352 are CLOSED; #352's merged Fundamental Service composer is
+the runtime valuation owner, not a pending dependency.
+
+## Current installed SEC investment-scope checkpoint
+
+Exact implementation `815afbbecf15b5b1abf0ff248ecb0d04e8a7e288` classifies NVE's
+2024-original investment assets under `source-bound-us-gaap-v8`. Current bonds,
+noncurrent bonds and separately tagged investment interest total 52,063,514 at
+2023-03-31 and 43,166,707 at 2024-03-31. Money-market funds already in cash are
+excluded. The earlier original remains unsupported for this role. Existing
+accounting evaluation and replaceable source ports supply the result.
+
+The isolated SEC-enabled project `value-investment-agent-361-investment-scope`
+(19385/19386) matches all 110 installed Python/SQL files. It adds 39 approved
+mappings, 75 facts and two snapshots. All 39 signatures and exact retained-input
+policy reconstructions pass. Preparation remains **blocked**: the earlier
+original retains 13 missing roles and the later original 12. No release activates
+and no numerical calculation is claimed.
+
+Plan/output digests are
+`7cedcc71029014956730060fe15353ee19095e6dbad73ac164af1ccb83d9f615` /
+`1bb40f50ae7b0887768a0b1b886779ac0fa1dddd13ef57af4eae1ebddad08da7`.
+Ordinary, service-restart and empty-database-restore repeats return
+`wrote=false`, make zero SEC calls and preserve identical rows/content; repeat
+file modification times remain unchanged. The portable backup is outside Docker.
+All 75 baseline containers preserve their IDs, images and start times.
+
+Exact checks pass 2,036 Service/PostgreSQL tests (11 optional skips and one
+expected duplicate-ZIP warning), 95-source mypy, Service Ruff/format,
+Service/Agent architecture and diff checks.
+[CI 43314253700](https://github.com/sosodennis/value-investment-agent/actions/runs/43314253700)
+passes all 12 executed jobs; release gate skipped. The compact checkpoint's
+`nve_investment_scope_increment` retains commands, digests, runtime pins and
+failed attempts, including an exit137 mapping-verification attempt followed by
+a successful unchanged retry. Previous checkpoint payloads are preserved.
+
+Linked blocker #381 also records the preparation gate's confusion between
+original-source integrity and per-original model completeness. Both retained
+source snapshots pass integrity; acquisition abstains for missing model roles.
+The owning fix must compose admitted originals before aggregate model assessment
+while retaining every original outcome. Complete accounting/awards, eligible
+market/quote, trusted release, authentic caller approval and real numerical
+acceptance remain outstanding. Threshold stays null; #361 is open and #370 draft.
+
+## Prior installed SEC operating-scope checkpoint
+
+Exact implementation `702faecb58da5c18d84685965f0889f24796a4ea` adds NVE
+original-bound operating depreciation and cash capex under automatic policy
+`source-bound-us-gaap-v7`. The 2023 cash-flow aggregate includes securities
+amortization; the original fixed-asset note separately supplies operating
+depreciation. The selector binds each CIK/accession, raw hash, complete parsed
+fact digest and period. It retains incompatible aggregate observations.
+No financial formula, source-provider interface or absence claim changes.
+
+The isolated SEC-enabled project `value-investment-agent-361-nve-scope`
+(19285/19286) matches all 109 installed Python/SQL files. Its fixed two-original
+plan publishes 38 new approved mappings, 73 canonical facts and two snapshots;
+all 38 approvals pass signature verification and exact-input policy reconstruction.
+The result remains **blocked**, retaining 13 missing roles and SEC/DQC diagnostics.
+There are no release activations or numerical calculations.
+
+Plan/output digests are
+`5787660e8624e004cdad309b857bb8929a798642ae57a9bc0a73ce4be60c3dc9` /
+`7f94b3a58bd5f88c003f60866d7c3e4eed23514ea7a4e68b5cb6988e50bc4182`.
+Ordinary, post-service-restart and empty-database-restore repeats all return
+`wrote=false` with zero SEC requests. Original and restored database rows and
+content hashes/sizes agree; each repeat preserves file modification times.
+The portable backup is retained outside Docker. All 73 baseline containers
+preserve their IDs, images and start times.
+
+Exact checks pass 2,021 Service/PostgreSQL tests (11 optional skips and one
+intentional duplicate-ZIP warning), 198 focused cases (one optional skip),
+all 94 changed-source mypy checks, Service Ruff/format, architecture and diff.
+[CI 43308445891](https://github.com/sosodennis/value-investment-agent/actions/runs/43308445891)
+passes all 12 executed jobs; the release gate is skipped. The
+`nve_operating_scope_increment` in the [compact checkpoint](issue-361-sec-preparation-checkpoint.json)
+retains commands, digests, runtime pins, missing roles and failed harness attempts.
+Prior checkpoint entries remain intact. Full originals, scripts, logs and backup
+bytes stay outside Git. Complete accounting/award/market evidence, trusted release,
+authentic caller approval and real numerical acceptance remain outstanding.
+The threshold stays null; #361 stays open and #370 stays draft.
+
+## Prior installed SEC automatic preparation checkpoint
+
+At `676a1b43e1d1be9f846954c4f553648f929199a7`, the isolated SEC-enabled
+service automatically assessed both fixed NVE originals through the existing
+preparation command. It retained 34 approved mapping records, 65 canonical facts,
+two snapshots and every unsupported role. The result is **blocked**, with 15
+missing roles and SEC/DQC diagnostics. No release was activated and no numerical
+valuation was calculated. D&A and cash capex still require original-specific
+continuing-operations classification; identical concept names cannot supply it.
+
+Plan/output digests are
+`d7601f77513ed64df443c0987f1a99fb849c1bcebac36edd382173213fab59ab` /
+`bf0fa53125f1ce3258ea905d722e2dafeb99acdd053a5e7c72609852afd91ae9`.
+The ordinary repeat and a further repeat that forbids SEC provider I/O return
+the same artifact with `wrote=false`. All database rows and content file
+hashes/sizes/mtimes remain unchanged. The guarded repeat makes zero SEC calls.
+All 109 installed Python/SQL sources match this commit; 46 unrelated containers
+retain their image/start identity. The focused suite passes 194 tests with three
+optional skips, and the architecture guard passes.
+
+[Compact checkpoint](issue-361-sec-preparation-checkpoint.json) records exact
+commands, source/snapshot/mapping identities, runtime pins, digests and failed
+harness attempts. Originals and full generated reports remain outside Git.
+This verifies retained automatic preparation and reuse, including abstentions;
+complete accounting/award evidence, market policy, trusted release, authentic
+caller approval and numerical recovery acceptance remain outstanding. The
+history threshold remains null; #361 stays open and #370 stays draft.
+
+Provider extension is documented in the Service's
+[source guide](../../fundamental-service/docs/market-input-providers.md).
+Exact `2b3b39271392e4f0c884268815d5301cec3dac81` also fixes the local Ruff
+0.3.0/CI 0.14.10 formatter conflict under linked blocker #422 by scoping the CI
+pin to Fundamental Service. Both hook paths, 57 provider/crosswalk tests, full
+Service lint/format (212 files), changed-source mypy, architecture and diff
+checks pass. [Exact check evidence](issue-361-provider-contract-checkpoint.json)
+records input/output digests and commands. Its changes are documentation,
+tooling and one annotation's layout; the installed SEC evidence above remains
+bound to `676a1b43`, with no new numerical acceptance claim.
+
+CI43304007015 at `cd6caec3` passes 2,013 Service/PostgreSQL tests (11 optional
+skips, one warning) but fails the full 94-source type gate: the industry-capital
+default was inferred as `str` instead of its required literal. Exact correction
+`64962b96ee12dfe2c27ce29a79a66e24a7569a9f` marks that immutable default `Final`.
+All 94 changed-source mypy checks, the 57 provider tests, full lint/format,
+architecture and diff pass. The same checkpoint retains the failed CI and the
+correction's separate input/output digests. Financial policy values are unchanged.
+
+## Source-bound industry capital adoption
+
+Implementation `f52933472f09da8b4d45b14ada60895dcf8b37a7` adopts four selected
+industry references under an explicit USD proxy rule pinned by the issuer/time
+deployment policy. Beta and borrowing cost retain their industry meanings;
+published debt/equity weights normalize only within a1e-12 representation
+tolerance under the existing numerical context. Interchangeable providers feed
+the same rule. Serving and the independent canary reproduce values and source
+traces before the official composer; no valuation formula changes.
+
+Exact validation passes **1,943 Service/PostgreSQL tests**, Ruff/format,
+22-source mypy, architecture and diff checks;11 optional external SEC-resource
+skips and one intentional ZIP warning remain. Focused source/policy/release
+coverage passes127 cases. Check input/output:
+`d9c1db6eedc3c4952d9fe2fe8e0db81479862236ebde0b82dc0f04af803b15de` /
+`d5fae2442435caeec6e392384624ef7e367de8eb41795740837cd7b3fae6e840`.
+
+The own18685/18686 image matches all100 installed Python/SQL sources. Actual
+NYU aggregate originals pass through a signed **synthetic issuer release**,
+independent canary and formal composer;10 altered-source/policy/authority cases
+refuse. Second, two concurrent processes and post-service-restart executions
+write zero artifacts, preserve identical digests and leave file hashes/sizes/
+mtimes unchanged. All42 unrelated containers remain unchanged. Installed wrapper
+input/output:
+`1156c8a07abdaa6e524f40d4a7423cf0ed64ce765bdc976afaabe346a917b83d` /
+`dfcf04bd22062d010fcb90fb16a535bc2c8c1719076caa7e4e64872dedd170f9`.
+
+Issuer classification and complete automatic market-policy generation, lawful
+quote, real accounting/award completeness and actual numerical recovery still
+remain. The source stack has no SEC identity configuration. These checks do not
+establish complete real valuation acceptance; threshold stays null and #370
+stays draft. The existing checkpoint retains exact commands and runtime pins;
+all raw/generated evidence remains outside Git.
 
 ## Interchangeable industry capital sources
 
@@ -1321,6 +1483,17 @@ restore `.tmp-issue355-sec-useragent-compose.yml` or clean another project.
 normalization blockers #404/#405/#406 still need delivery and main verification. Complete
 source scope and supported automatic mapping approval precede numerical acceptance; thresholds stay null.
 
+## Final provider-evidence digest — 89b71d08
+
+The current-head provider abstraction and review state are recorded in
+[issue-361-final-evidence-digest.json](issue-361-final-evidence-digest.json). It binds
+the exact commit, canonical input digest, provider ports, focused test output hashes,
+CI result, and the independent-review status. The digest explicitly classifies
+source-bound industry references as provisional, keeps the numerical flow abstained,
+and leaves `supported_history_threshold` null. It is a checkpoint for the completed
+source-admission increment, not evidence that the remaining real issuer valuation
+gates have passed.
+
 ## Treasury and ALFRED provider checkpoint
 
 Implementation `1619b07fa9f7fdfe9a09f2f1b5723443be324de5` adds two interchangeable
@@ -1359,3 +1532,106 @@ produce an estimate without missing-evidence flags. Owning blocker #416 records
 the exact counterexample and digests. That review kept #414 unintegrated until the source-bound role/class fix.
 Ordinary merge `f45a1fad` now integrates the correction, as recorded above.
 Complete real numerical acceptance remains outstanding.
+
+## Provider-neutral issuer industry crosswalk checkpoint — 9322a77b
+
+Implementation commits `3840dfb4b03bb678d32b7c0502169377d69a3675` and
+`9322a77b2bd22643dbb55540911e630f4df151f6` add a provider-neutral classification
+crosswalk port and an exact SEC SIC to Damodaran industry adapter. The crosswalk
+policy binds provider ID, source scheme, target taxonomy, mapping version, and
+manifest digest. Each result keeps issuer CIK, accession, report period,
+valuation time, original classification digest/source hash, rule identity,
+mapping digest, and stable unmapped/ambiguous/provider-mismatch refusals.
+
+The initial rule set contains 14 explicit computer hardware, semiconductor,
+software, and computer-services SIC mappings. Other codes remain unmapped. The
+mapped row is only a population proxy selection; it does not approve a market
+policy or assert that an issuer's business exactly matches an industry average.
+The Damodaran source page says its processed aggregate data is shared with no
+strings attached, while warning about input data errors and its industry
+definitions. The retained 2025 beta workbook digest is
+`cd3f0356e71588d974bb2cb16f5398aec576992e3dfe49e959e54d77c329d636`; the source
+is [Damodaran's data history and usage notes](https://pages.stern.nyu.edu/~adamodar/New_Home_Page/datahistory.html).
+Original workbook data remains in ignored `.audit` and is not added to this PR.
+
+Exact tested source commit: `9322a77b2bd22643dbb55540911e630f4df151f6`.
+For CIK `0000320193`, accession `0000320193-24-000123`, SIC `3571`, and valuation
+time `2025-01-01T00:00:00Z`, canonical mapping manifest/input/output digests are
+`82d5db2d68c67771006521a9ae029e011de4b03f0f32104e2aa44482bc30fda4`,
+`e76a50f4adcee969c5bd8a9b9ee8dd51abf82fac717b52fb9dd462e853dfafc0`, and
+`c346dc0c4de8ae8667a282edc22b6ae225e859d534395a9dfee566715103dd3d`. A repeated
+run with the same provider, policy, classification bytes, and runtime returned
+the identical output digest.
+
+Exact checks at the tested source commit: classification/crosswalk tests **24
+passed**; changed-file Ruff 0.3.0 check and format passed; MyPy passed for both
+new production modules; root and Fundamental Service architecture guards and
+`git diff --check` passed. The crosswalk is not yet wired into release creation
+or serving, and this increment does not generate country ERP, beta, debt cost,
+capital weights, terminal growth, or an automatic signed release. No full
+PostgreSQL, Docker, numerical valuation, quote-terms, independent review, or
+main-merge acceptance is claimed. The next implementation is a source-bound
+issuer/date market-policy evaluator that consumes this crosswalk and the
+existing interchangeable macro, reference, and quote provider ports. Until
+that integration and the remaining accounting, award, quote, caller-approval,
+and recovery gates pass, #361 stays open, PR #370 stays draft, and
+`supported_history_threshold` stays null.
+
+## Provider-neutral SEC original capture checkpoint
+
+The acquisition boundary now uses `SecSourceCapturePort`, with
+`SecEdgarSourceAdapter` as the SEC implementation. A selected accession retains
+the filing index, full-submission `.txt`, primary document, XBRL archive and
+selected DTS members as separate content-addressed evidence. The `.txt` is
+provenance and recovery evidence; the formal parser still consumes the selected
+XBRL inputs through the existing ingestion service. The retained adapter keys
+original bytes by CIK, accession and exact URI, so a retry or restart reuses the
+same bytes without another provider request or artifact rewrite. Annual history
+composition verifies and retains this optional accession-bound source while
+still requiring its unique primary XBRL and archive pair.
+
+Focused source, capture, acquisition, ingestion and history tests pass 160 cases
+with 2 optional skips. The full Fundamental Service suite passes 1,946 tests
+with 69 optional skips and 1 expected duplicate-ZIP fixture warning. These
+checks prove source substitution and capture idempotency at the boundary; they
+do not approve issuer mappings, market policy, accounting scope, or
+`supported_history_threshold`. The exact tested commit and command digests are
+recorded by the follow-up checkpoint commit.
+
+## Admitted original composition checkpoint — 3cbabac3
+
+Implementation `3cbabac3c44138855cd79a0d0cf0ce18d10dcd04` composes independently
+admitted original snapshots before assessing aggregate model requirements.
+Per-original gaps and SEC/DQC diagnostics remain in the retained source outcomes.
+The formal requirements selector now receives the exact plan's sources/mappings.
+No provider interface, financial formula, source admission or absence rule changes.
+
+The isolated SEC-enabled project `value-investment-agent-361-composition-scope`
+(19485/19486, network `10.231.62.0/28`) matches all110 installed Python/SQL files.
+The two fixed NVE originals produce39 approved mappings,75 facts, two original
+snapshots and one composed history snapshot. All39 trusted signatures and
+retained-input policy reconstructions pass. Composition resolves the latest
+non-operating-asset requirement, while retaining12 missing required roles and
+`VALUATION_REQUIRED_FACTS_MISSING`. No release activates; numerical valuation
+remains **abstain**, eligible valuations remain **provisional**, and history
+sufficiency remains **underpowered** with `supported_history_threshold=null`.
+
+Plan/output digests are
+`b35e745ee142e165f275c8d5b98b711b61e20a3181e602e10361adeab0c8a249` /
+`033fb0e2df6e3156cc0e3b15bae334d3e79ed5379ea61fb6ea0065fd101cc9d1`.
+Ordinary, service-restart and empty-database-restore repeats return identical
+artifacts with `wrote=false` and zero SEC provider calls. Complete database rows
+and content hash/size/mtime inventories are unchanged; restore reproduces rows
+and bytes, then preserves its own mtimes on repeat. A verified portable backup
+is retained outside Docker. All77 baseline containers retain identity/image/start.
+
+Exact checks pass2050 Service/PostgreSQL cases (11 optional skips and one expected
+duplicate-ZIP fixture warning),95-source MyPy, full Service Ruff/format, both
+architecture guards and diff. [CI43318783471](https://github.com/sosodennis/value-investment-agent/actions/runs/43318783471)
+passes all12 executed jobs; the release gate is skipped. The
+`nve_composition_increment` in [the existing checkpoint](issue-361-sec-preparation-checkpoint.json)
+records commands, digests, runtime pins, remaining gates and the corrected audit
+baseline-schema failure. Generated originals/reports/backups remain outside Git.
+Complete accounting/awards, dated market-policy/quote, trusted release, exact
+caller approval, real numerical recovery acceptance, independent review and
+merge/main verification remain outstanding. Keep #361 open and PR#370 draft.

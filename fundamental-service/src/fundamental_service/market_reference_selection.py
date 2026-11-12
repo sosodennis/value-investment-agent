@@ -110,6 +110,9 @@ class IssuerMarketReferencePlanV1(ReferenceSelectionModel):
     issuer_id: str = Field(min_length=1)
     policy_id: str = Field(min_length=1)
     valuation_at: datetime
+    industry_capital_policy: Literal["usd-industry-capital-proxy-v1"] | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
     selections: tuple[MarketReferenceSelectionPolicyV1, ...] = Field(min_length=1)
 
     @field_validator("valuation_at")

@@ -164,6 +164,90 @@ The existing signed mapping replay reproduces the selection after restart.
 This guards the release boundary; NEWMARKET 2013 continuing capex and the first
 complete empirical forecast/label/error case remain unresolved.
 
+### Registered NVE operating D&A and cash capex
+
+Automatic policy `source-bound-us-gaap-v7` adds only CIK `0000724910` originals
+[`0001376474-23-000283`](https://www.sec.gov/Archives/edgar/data/724910/000137647423000283/nvec-20230331.htm)
+and
+[`0001376474-24-000214`](https://www.sec.gov/Archives/edgar/data/724910/000137647424000214/nvec-20240331.htm).
+Both selectors bind the raw source hash and complete parsed fact multiset.
+This is a module edit to the existing accounting policy; provider acquisition,
+storage, financial formulas and public contracts retain their existing owners.
+
+The fixed-assets policy explicitly covers machinery/equipment depreciation and
+leasehold-improvement amortization. The complete statements and operating note
+classify those fixed assets within NVE's single operating business. The registered
+operating D&A source is `us-gaap:Depreciation`, rather than a general alias for
+the cash-flow `DepreciationDepletionAndAmortization` aggregate:
+
+| Original | Annual periods | Operating fixed-asset D&A | Cash-flow D&A aggregate |
+| --- | --- | --- | --- |
+| 2023 | FY2022 / FY2023 | USD214,877 / USD196,738 | USD424,981 / USD257,606 |
+| 2024 | FY2023 / FY2024 | USD196,738 / USD308,147 | USD196,738 / USD308,147 |
+
+The 2024 cash-flow statement separately reports securities premium/discount
+amortization, including USD60,868 in FY2023. The earlier original included that
+amount in its FY2023 aggregate. This explains the comparative classification
+difference; the evaluator uses the contemporaneous fixed-asset note directly.
+It never derives an earlier amount from a future filing or infers an unreported
+FY2022 component from the aggregate difference. Every original aggregate remains
+in the report and the ordered rejection evidence. Matching numbers in a later
+column do not make the concepts interchangeable. An aggregate proposal for
+these registered originals abstains with `MAPPING_DA_CONCEPT_SCOPE_UNREVIEWED`.
+
+The same complete originals classify the cash-flow PPE purchases as operating
+fixed-asset investment: FY2022/FY2023 in the 2023 original and FY2023/FY2024 in
+the 2024 original. This scope is specific to these original statements, fixed
+assets policy and business disclosure; a single-segment tag or lack of a
+discontinued-operations tag cannot authorize another original. Amounts, units,
+periods and original reported precision are always read from source facts.
+
+Automatic batch proposals now receive the original so they can choose its
+registered direct concept. The existing signed mapping replay rechecks the same
+registration. Unregistered or changed sources still abstain. These partial
+classifications assert no missing balance, claim/award absence, complete release,
+market policy, numerical valuation or history sufficiency. NVE remains an
+additional service case; it does not replace a fixed replay-cohort member.
+
+### Registered NVE non-operating investment assets
+
+Automatic policy `source-bound-us-gaap-v8` extends only the 2024 NVE original
+above. Its marketable-securities note explicitly puts money-market funds in
+cash, corporate bonds in current/noncurrent marketable securities and accrued
+investment-interest receivables in prepaid/other assets. The complete balance
+sheet separates those investments from trade receivables, inventory, operating
+fixed assets, operating leases and deferred taxes. The registered classification
+consumes these three consolidated instant components:
+
+| Original's instant | Current corporate bonds | Noncurrent corporate bonds | Investment interest receivable | Non-operating assets |
+| --- | --- | --- | --- | --- |
+| 2023-03-31 | USD15,513,095 | USD36,125,047 | USD425,372 | USD52,063,514 |
+| 2024-03-31 | USD11,917,779 | USD30,788,301 | USD460,627 | USD43,166,707 |
+
+The first two source concepts are `us-gaap:MarketableSecuritiesCurrent` and
+`us-gaap:MarketableSecuritiesNoncurrent`. The third is the original extension
+`fil:MarketableSecuritiesAccruedInterestReceivable`, bound to namespace
+`http://nve.com/20240331` by the complete parsed-fact digest. Amounts come from
+original facts, never a hard-coded amount table. The existing `derived`
+accounting-role contract retains every component, period, unit, namespace,
+reported precision and source reference. Its ordinary component evaluator
+computes the sum; the existing formal composer/calculator consumes the role.
+
+The available-for-sale aggregate includes money-market funds already counted
+in cash and cannot substitute for this role. Omitting the investment-interest
+receivable would also omit a non-operating asset. Neither that aggregate nor
+cash enters the component sum. The earlier 2023 original has no equivalent
+complete tagged-interest scope and receives no registration from this change;
+the comparative interest amount in the 2024 original is available only when
+that original was available. No earlier decision can use it retroactively.
+
+The selection requires the exact CIK/accession, raw hash, complete fact multiset
+and registered instants. Missing, conflicting, nonfinite, negative, wrong-unit,
+wrong-issuer or imprecise components refuse. Equivalent duplicates select the
+same fact regardless of input order. Signed approval and release replay repeat
+the classification. No source adapter, provider port, public schema, valuation
+formula, absence/award claim or history threshold changes.
+
 A `disclosed` duration transcribes one finite decimal literal from an exact
 nonnumeric parsed fact. `DisclosedAmountV1` retains Unicode code-point offsets
 for the exact quote, amount token, unit quote and scale token, plus reported
@@ -238,3 +322,48 @@ including its accounting rules. Numerical valuation still requires the existing
 The Agent's fact projection preserves the JSON evidence as service-owned data;
 it evaluates no accounting or valuation rules. No Agent/UI workflow changes are
 part of this contract addition.
+
+### Registered NVE noncontrolling equity
+
+Automatic policy `source-bound-us-gaap-v9` registers the same complete NVE 2023
+and 2024 originals for their reported noncontrolling-equity carrying amount.
+The [2023](https://xbrl.fasb.org/us-gaap/2023/elts/us-gaap-doc-2023.xml) and
+[2024](https://xbrl.fasb.org/us-gaap/2024/elts/us-gaap-doc-2024.xml) FASB taxonomy
+definitions distinguish these consolidated instant concepts:
+
+- `StockholdersEquity`: equity attributable to the parent, excluding temporary
+  equity and equity attributable to noncontrolling interests.
+- `StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest`:
+  equity attributable to the parent and noncontrolling interests, excluding
+  temporary equity.
+
+The retained taxonomy-document digests are
+`288ed00809b3f84f62ee82c93db6f063d4db09bdc4ee6d1654207a1865ded5e7` (2023) and
+`96b321b294493af54253a45e3694e85d501857cb4029ba2529089ad9d7880872` (2024).
+These documents explain accounting meaning; they supply no issuer amount or
+history-threshold ground truth. Source originals remain outside Git.
+
+The two complete audited statements present the equity components and total,
+without a separate temporary-equity claim outside this pair. Registration pins
+CIK/accession, raw original hash, full parsed-fact digest and the balance-sheet
+instants. The 2023 original supports March31 2022/2023; the 2024 original supports
+March31 2023/2024. Parent and inclusive total report USD64,565,129 / USD67,079,502 /
+USD65,568,517 at the respective instants. The existing accounting evaluator
+subtracts reported parent equity from reported inclusive equity. The result is
+zero at the reported unit precision, with both source observations retained.
+This is a derived carrying amount, not a `confirmed_absent` assertion or a
+claim that a missing tag means zero.
+
+This classification is limited to these full original scopes. The two taxonomy
+concepts alone cannot resolve temporary/redeemable noncontrolling claims for
+another issuer. A changed or unregistered original refuses. Matching requires
+USD, the same US GAAP namespace, consolidated issuer scope, an eligible instant,
+nonnegative finite values and unit-or-finer reported precision. Missing or
+conflicting components, rounded thousands, a total below the parent amount, or
+future periods refuse. Equivalent duplicates select deterministically.
+
+Automatic proposal, signed approval and retained-input canary reconstruction use
+the same rule through the existing provider-neutral parser/fact contracts. No
+provider request, valuation formula, financial selector, public schema or agent
+implementation changes. The remaining accounting/award/market gaps still block
+complete numerical valuation; supported-history thresholds stay null.

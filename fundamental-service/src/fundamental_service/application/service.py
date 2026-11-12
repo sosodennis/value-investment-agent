@@ -61,9 +61,14 @@ from ..source_admission import SourceAdmissionV1, SourceUsePolicyV1
 from ..source_admission_evidence import load_release_source_admissions
 from ..market_source_selection import MarketSourceError, verify_observed_market_inputs
 from ..market_reference_evidence import load_release_market_reference_selection
-from ..market_reference_selection import IssuerMarketReferenceSelectionV1
+from ..automatic_market_policy_evidence import load_release_automatic_market_policy
+from ..market_reference_selection import (
+    IssuerMarketReferenceSelectionV1,
+    MarketReferenceSelectionError,
+)
 from ..terminal_growth import TerminalGrowthSelectionV1
 from ..terminal_growth_evidence import load_release_terminal_growth_selection
+from ..industry_capital import verify_industry_capital_policy
 from ..fiscal_periods import resolve_fiscal_periods
 from ..governance import ModelInventory
 from ..history_composition import verify_history_components
@@ -173,6 +178,12 @@ def _approved_market_policy(
     ):
         return None
     observed_traces: dict[str, TraceV1] = {}
+    try:
+        industry_traces = verify_industry_capital_policy(
+            market_inputs, reference_selection
+        )
+    except MarketReferenceSelectionError as error:
+        raise MarketSourceError(error.code, str(error)) from error
     if any(item.method == "observed_source" for item in market_inputs.evidence):
         if valuation_timestamp is None or currency is None:
             raise MarketSourceError(
@@ -190,6 +201,8 @@ def _approved_market_policy(
     def trace_for(role: str) -> TraceV1:
         if role == "terminal_growth" and terminal_selection is not None:
             return terminal_selection.trace
+        if role in industry_traces:
+            return industry_traces[role]
         if role in observed_traces:
             return observed_traces[role]
         evidence = next(
@@ -1265,6 +1278,13 @@ class FundamentalApplication:
         )
         policy_version = policy.policy_version if policy is not None else "unresolved"
         try:
+            load_release_automatic_market_policy(
+                self._data_release_manifest(request.data_release_manifest_digest),
+                snapshot=snapshot,
+                policy=policy,
+                admissions=source_admissions,
+                artifacts=self.artifact_store,
+            )
             reference_selection = load_release_market_reference_selection(
                 self._data_release_manifest(request.data_release_manifest_digest),
                 snapshot=snapshot,

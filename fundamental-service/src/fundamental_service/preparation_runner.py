@@ -23,10 +23,12 @@ from .automatic_source_mapping import (
 )
 
 from .application import FundamentalApplication
+from .annual_history import AnnualHistoryError, resolve_annual_history
 from .contracts import (
     CallerApprovalEnvelopeV1,
     InitialModelId,
     QualityStatus,
+    SecIntegrityEvidenceV1,
     SecIngestionRequestV1,
     SecMappingReferenceV1,
     SecSourceRequestV1,
@@ -55,7 +57,10 @@ from .serialization import canonical_bytes, sha256_digest
 from .source_acquisition import SecAcquisitionUseCase
 from .snapshots import SnapshotError
 from .valuation_preparation import AutomaticValuationPreparationV1
-from .valuation_requirements import valuation_requirements_profile
+from .valuation_requirements import (
+    select_released_facts,
+    valuation_requirements_profile,
+)
 
 
 SourceRequestT = TypeVar("SourceRequestT", bound=SecSourceRequestV1)
@@ -201,6 +206,9 @@ class SourceAcquisitionOutcomeV1(StrictModel):
     manifest_digest: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
     issue_codes: tuple[str, ...] = ()
     missing_evidence: tuple[str, ...] = ()
+    source_coverage_status: QualityStatus | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
     mapping_evidence_ref: ArtifactRefV1 | None = Field(
         default=None, exclude_if=lambda value: value is None
     )
@@ -215,10 +223,25 @@ class SourceAcquisitionOutcomeV1(StrictModel):
             raise ValueError("failed acquisition requires issues without a snapshot")
         if self.quality_status is QualityStatus.VERIFIED and self.snapshot_id is None:
             raise ValueError("verified acquisition requires a stored snapshot")
+        if self.source_coverage_status is not None and self.snapshot_id is None:
+            raise ValueError("source coverage requires a stored snapshot")
+        if (
+            self.quality_status is QualityStatus.VERIFIED
+            and self.source_coverage_status is not None
+            and self.source_coverage_status is not QualityStatus.VERIFIED
+        ):
+            raise ValueError("verified acquisition requires verified source coverage")
         for values in (self.issue_codes, self.missing_evidence):
             if values != tuple(sorted(set(values))):
                 raise ValueError("acquisition diagnostics must be canonical")
         return self
+
+
+class SourcePreparationAcquisitionsV1(StrictModel):
+    plan_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    source_outcomes: tuple[SourceAcquisitionOutcomeV1, ...] = Field(
+        min_length=1, max_length=6
+    )
 
 
 class SourcePreparationEvidenceV1(StrictModel):
@@ -259,9 +282,10 @@ class SourcePreparationEvidenceV1(StrictModel):
             raise ValueError("source outcomes must retain distinct requests")
         if self.status != "blocked" and any(
             outcome.quality_status is not QualityStatus.VERIFIED
+            and outcome.source_coverage_status is not QualityStatus.VERIFIED
             for outcome in self.source_outcomes
         ):
-            raise ValueError("incomplete acquisitions require a blocked outcome")
+            raise ValueError("unavailable source integrity requires a blocked outcome")
         if (self.snapshot_id is None) != (self.snapshot_manifest_digest is None):
             raise ValueError("snapshot identity and digest must be paired")
         if self.preparation is not None and (
@@ -335,8 +359,14 @@ class SourcePreparationRunner:
             retained = self._acquisition.retained_acquisition(request)
             if (
                 retained is None
-                or retained.quality_status is not QualityStatus.VERIFIED
+                or retained.snapshot_id is None
                 or retained.mapping_evidence_ref is None
+            ):
+                return None
+            snapshot = self._application.snapshot(retained.snapshot_id)
+            if (
+                snapshot.manifest_digest != retained.manifest_digest
+                or snapshot.coverage_status is not QualityStatus.VERIFIED
             ):
                 return None
             artifacts = self._application.artifact_store
@@ -374,8 +404,6 @@ class SourcePreparationRunner:
             references = []
             for role in batch.roles:
                 if role.status != "approved":
-                    if role.normalized_field in request.required_fields:
-                        return None
                     continue
                 assert role.decision is not None
                 decision = AutomaticMappingDecisionV1.model_validate_json(
@@ -637,12 +665,41 @@ class SourcePreparationRunner:
             if current.manifest.manifest_digest != manifest.manifest_digest:
                 raise
 
+    def _retained_outcomes(
+        self, plan: SourcePreparationPlan
+    ) -> tuple[SourceAcquisitionOutcomeV1, ...]:
+        acquisitions_id = f"source-preparation-acquisitions:{plan.digest}"
+        try:
+            record = self._application.artifact_store.get(acquisitions_id)
+        except SnapshotError as error:
+            if error.code != "ARTIFACT_NOT_FOUND":
+                raise
+            return ()
+        if record.status != "valid" or record.retention != "evidence":
+            raise ValueError("retained acquisitions require valid evidence")
+        retained = SourcePreparationAcquisitionsV1.model_validate_json(
+            self._application.artifact_store.read(acquisitions_id)
+        )
+        if retained.plan_digest != plan.digest or tuple(
+            outcome.request_digest for outcome in retained.source_outcomes
+        ) != tuple(sha256_digest(request) for request in plan.ingestions):
+            raise ValueError("retained acquisitions differ from source plan")
+        return retained.source_outcomes
+
     def _persist(
         self, plan: SourcePreparationPlan, evidence: SourcePreparationEvidenceV1
     ) -> ArtifactPublicationV1:
         publication = self._artifacts.put_with_receipt(
             f"source-preparation-plan:{plan.digest}", plan
         )
+        if evidence.source_outcomes:
+            self._artifacts.put_with_receipt(
+                f"source-preparation-acquisitions:{plan.digest}",
+                SourcePreparationAcquisitionsV1(
+                    plan_digest=plan.digest, source_outcomes=evidence.source_outcomes
+                ),
+                (plan.digest,),
+            )
         evidence = SourcePreparationEvidenceV1.model_validate(
             {
                 **evidence.model_dump(),
@@ -714,12 +771,19 @@ class SourcePreparationRunner:
                     audit_reuse=False,
                 )
                 snapshot = None
-                if acquired.quality_status is QualityStatus.VERIFIED:
+                if acquired.quality_status is QualityStatus.VERIFIED or (
+                    len(plan.ingestions) > 1 and acquired.snapshot_id is not None
+                ):
                     if acquired.snapshot_id is None:
                         raise ValueError(
                             "verified acquisition must identify a stored snapshot"
                         )
                     snapshot = self._application.snapshot(acquired.snapshot_id)
+                    if snapshot.manifest_digest != acquired.manifest_digest:
+                        raise SnapshotError(
+                            "ACQUIRED_SNAPSHOT_MISMATCH",
+                            "acquisition differs from its retained snapshot",
+                        )
             except ServiceError as error:
                 if error.retryable or error.status_code != 422:
                     raise
@@ -749,14 +813,81 @@ class SourcePreparationRunner:
                     manifest_digest=acquired.manifest_digest,
                     issue_codes=tuple(sorted(set(acquired.issue_codes))),
                     missing_evidence=tuple(sorted(set(acquired.missing_evidence))),
+                    source_coverage_status=(
+                        snapshot.coverage_status if snapshot is not None else None
+                    ),
                     mapping_evidence_ref=self._mapping_evidence_ref(
                         acquired.mapping_evidence_ref
                     ),
                 )
-                if snapshot is not None:
+                if snapshot is not None and (
+                    acquired.quality_status is QualityStatus.VERIFIED
+                    or (
+                        snapshot.coverage_status is QualityStatus.VERIFIED
+                        and isinstance(
+                            snapshot.sec_integrity_evidence, SecIntegrityEvidenceV1
+                        )
+                        and snapshot.sec_integrity_evidence.quality_decision == "pass"
+                    )
+                ):
                     snapshots.append(snapshot)
             outcomes.append(outcome)
         return tuple(snapshots), tuple(outcomes)
+
+    def _assess_history_requirements(
+        self, plan: SourcePreparationPlan, snapshot: SourceSnapshotV1
+    ) -> tuple[tuple[str, ...], tuple[str, ...]]:
+        facts = self._application.fact_repository
+        if facts is None:
+            raise ValueError("history assessment requires a canonical fact repository")
+        groups = self._plan_mappings(plan)
+        if groups is None:
+            raise SnapshotError(
+                "HISTORY_MAPPING_EVIDENCE_UNAVAILABLE",
+                "history assessment requires retained plan mappings",
+            )
+        mappings = {
+            (request.filing.accession_number, item.normalized_field): item.decision_id
+            for request, group in zip(plan.ingestions, groups, strict=True)
+            for item in group
+        }
+        sources = {
+            source.content_hash: source.accession_number
+            for source in snapshot.source_records
+            if source.role is SourceRole.FILING
+        }
+        profile = valuation_requirements_profile(plan.model_id)
+        selected = select_released_facts(
+            (
+                fact
+                for fact in facts.list()
+                if fact.source.content_hash in sources
+                and fact.mapping_decision_id is not None
+                and fact.mapping_decision_id
+                == mappings.get(
+                    (sources[fact.source.content_hash], fact.normalized_field)
+                )
+            ),
+            profile=profile,
+            snapshot=snapshot,
+            valuation_timestamp=snapshot.valuation_timestamp,
+        )
+        if selected.missing_fields:
+            return selected.issue_codes, selected.missing_fields
+        try:
+            history = resolve_annual_history(
+                selected.facts,
+                snapshot=snapshot,
+                valuation_timestamp=snapshot.valuation_timestamp,
+                profile=profile,
+            )
+        except AnnualHistoryError as error:
+            return (error.code,), ()
+        if history.quality is QualityStatus.ABSTAIN:
+            return history.issue_codes, tuple(
+                f"{year}:{field}" for year, field in history.missing_fields
+            )
+        return (), ()
 
     def _mapping_evidence_ref(self, artifact_id: str | None) -> ArtifactRefV1 | None:
         if artifact_id is None:
@@ -798,6 +929,7 @@ class SourcePreparationRunner:
                 )
             for request in plan.ingestions:
                 self._acquisition.retained_acquisition(request)
+        outcomes = self._retained_outcomes(plan)
         if candidate is not None and (
             candidate.manifest.profile_id != plan.release_profile_id
             or candidate.verification.source_revision != plan.source_revision
@@ -821,9 +953,12 @@ class SourcePreparationRunner:
                 correlation_id=correlation_id,
                 deadline_at=deadline_at,
             )
-            if any(
+            incomplete = any(
                 outcome.quality_status is not QualityStatus.VERIFIED
                 for outcome in outcomes
+            )
+            if incomplete and (
+                len(plan.ingestions) == 1 or len(snapshots) != len(outcomes)
             ):
                 first_incomplete = next(
                     outcome
@@ -875,6 +1010,22 @@ class SourcePreparationRunner:
                             0
                         ].fiscal_period_selector,
                     )
+                if len(snapshots) > 1:
+                    issues, missing = self._assess_history_requirements(plan, snapshot)
+                    if issues:
+                        return self._persist(
+                            plan,
+                            SourcePreparationEvidenceV1(
+                                source_revision=plan.source_revision,
+                                plan_digest=plan.digest,
+                                status="blocked",
+                                snapshot_id=snapshot.snapshot_id,
+                                snapshot_manifest_digest=snapshot.manifest_digest,
+                                issue_codes=issues,
+                                missing_evidence=missing,
+                                source_outcomes=outcomes,
+                            ),
+                        )
             except ServiceError as error:
                 if error.retryable or error.status_code != 422:
                     raise
@@ -916,6 +1067,7 @@ class SourcePreparationRunner:
                         snapshot_id=snapshot.snapshot_id,
                         snapshot_manifest_digest=snapshot.manifest_digest,
                         issue_codes=("DATA_RELEASE_REQUIRED",),
+                        source_outcomes=outcomes,
                     ),
                 )
         if candidate is not None:
@@ -962,6 +1114,7 @@ class SourcePreparationRunner:
                     snapshot_manifest_digest=snapshot_digest,
                     data_release_manifest_digest=resolution.data_release_manifest_digest,
                     issue_codes=(error.code,),
+                    source_outcomes=outcomes,
                 ),
             )
         if preparation.status != "prepared" or preparation.input is None:
@@ -976,6 +1129,7 @@ class SourcePreparationRunner:
                     data_release_manifest_digest=resolution.data_release_manifest_digest,
                     issue_codes=preparation.issue_codes,
                     missing_evidence=preparation.missing_evidence,
+                    source_outcomes=outcomes,
                     preparation=preparation,
                 ),
             )
@@ -989,6 +1143,7 @@ class SourcePreparationRunner:
                     snapshot_id=resolution.snapshot_id,
                     snapshot_manifest_digest=snapshot_digest,
                     data_release_manifest_digest=resolution.data_release_manifest_digest,
+                    source_outcomes=outcomes,
                     preparation=preparation,
                 ),
             )
@@ -1005,6 +1160,7 @@ class SourcePreparationRunner:
                     snapshot_manifest_digest=snapshot_digest,
                     data_release_manifest_digest=resolution.data_release_manifest_digest,
                     issue_codes=("CALLER_APPROVAL_REJECTED",),
+                    source_outcomes=outcomes,
                     preparation=preparation,
                 ),
             )
@@ -1038,6 +1194,7 @@ class SourcePreparationRunner:
                 data_release_manifest_digest=resolution.data_release_manifest_digest,
                 issue_codes=preparation.issue_codes,
                 missing_evidence=preparation.missing_evidence,
+                source_outcomes=outcomes,
                 preparation=preparation,
                 calculation=calculation,
             ),

@@ -88,6 +88,70 @@ def test_restart_after_capture_reuses_exact_original_and_writes_nothing(
     assert len(ArtifactStore(tmp_path / "receipts")._records) == 1
 
 
+def test_restart_reuses_original_filing_submission_without_download_or_rewrite(
+    tmp_path: Path,
+):
+    provider = _Provider(media_type="text/plain")
+    adapter = _adapter(tmp_path, provider)
+    kwargs = {
+        "cik": "0001539778",
+        "accession_number": _scope().accession_number,
+        "filed_at": AT,
+        "accepted_at": AT,
+        "filing_date": AT.date(),
+    }
+    first = adapter.capture_filing_submission(**kwargs)
+    before = {
+        path: (path.read_bytes(), path.stat().st_mtime_ns)
+        for path in tmp_path.rglob("*")
+        if path.is_file()
+    }
+
+    second = _adapter(tmp_path, provider).capture_filing_submission(**kwargs)
+
+    after = {
+        path: (path.read_bytes(), path.stat().st_mtime_ns)
+        for path in tmp_path.rglob("*")
+        if path.is_file()
+    }
+    assert second == first
+    assert len(provider.calls) == 1
+    assert after == before
+    assert len(ArtifactStore(tmp_path / "receipts")._records) == 2
+
+
+def test_capture_accepts_transport_without_concrete_adapter_inheritance(tmp_path):
+    class AlternateTransport:
+        policy = SecRequestPolicy(user_agent="transport-test test@example.com")
+
+        def __init__(self):
+            self.calls = []
+
+        def _request(self, uri, *, deadline_at=None):
+            self.calls.append(uri)
+            return _SecResponse(
+                content=b"<SEC-DOCUMENT>original</SEC-DOCUMENT>",
+                http_status=200,
+                media_type="text/plain",
+                available_at=AT,
+                response_headers=(),
+                declared_size=None,
+            )
+
+    provider = AlternateTransport()
+    kwargs = {
+        "cik": _scope().cik,
+        "accession_number": _scope().accession_number,
+        "filed_at": AT,
+    }
+    first = _adapter(tmp_path, provider).capture_filing_submission(**kwargs)
+    second = _adapter(tmp_path, provider).capture_filing_submission(**kwargs)
+
+    assert first == second
+    assert first.content == b"<SEC-DOCUMENT>original</SEC-DOCUMENT>"
+    assert provider.calls == [first.uri]
+
+
 @pytest.mark.parametrize(
     "changes",
     [
@@ -269,6 +333,7 @@ def test_acquisition_retries_after_parser_failure_reuse_all_original_responses(
             )
 
     capture_times = []
+    submission_sources = []
 
     def blocked_parser(**kwargs):
         adapter = kwargs["source_adapter"]
@@ -284,6 +349,7 @@ def test_acquisition_retries_after_parser_failure_reuse_all_original_responses(
             filename=f"{accession}-xbrl.zip",
             filed_at=kwargs["filed_at"],
         )
+        submission_sources.append(kwargs["submission_source"])
         capture_times.append(kwargs["captured_at"])
         raise SnapshotError("PARSER_VALIDATION_BLOCKED", "original blocking finding")
 
@@ -312,10 +378,13 @@ def test_acquisition_retries_after_parser_failure_reuse_all_original_responses(
                 validation_profile=_validation_profile(),
             )
         assert failure.value.code == "PARSER_VALIDATION_BLOCKED"
-    assert len(provider.calls) == (4 if pinned else 5)
-    assert len(set(provider.calls)) == 4
+    assert len(provider.calls) == (5 if pinned else 6)
+    assert len(set(provider.calls)) == 5
     assert capture_times[0] == capture_times[1] == provider.response.available_at
-    assert len(ArtifactStore(tmp_path / "receipts")._records) == (7 if pinned else 6)
+    assert submission_sources[0] == submission_sources[1]
+    assert submission_sources[0].source_id == "sec-filing-submission"
+    assert submission_sources[0].uri.endswith(f"/{accession}.txt")
+    assert len(ArtifactStore(tmp_path / "receipts")._records) == (9 if pinned else 8)
 
 
 def _filing_uri(scope=None):

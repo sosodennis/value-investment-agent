@@ -47,7 +47,7 @@ from .original_issuer import OriginalOperatingSourceV1, evaluate_original_issuer
 from .replay import ArtifactRecordV1
 from .sec_integrity import assess_filing_response, extract_referenced_graphics
 from .sec_rebuild import parsed_facts_to_candidates, select_canonical_fact
-from .sec_source import SecEdgarSourceAdapter, sec_source_register
+from .sec_source import SecSourceCapturePort, sec_source_register
 from .serialization import sha256_digest
 from .snapshots import (
     CapturedSource,
@@ -217,7 +217,7 @@ class SecIngestionService:
     def __init__(
         self,
         *,
-        source_adapter: SecEdgarSourceAdapter,
+        source_adapter: SecSourceCapturePort,
         content_store: ContentAddressedStore,
         snapshot_repository: SnapshotRepository,
         audit_store: IngestionAuditStore,
@@ -252,11 +252,12 @@ class SecIngestionService:
         mappings: tuple[CanonicalMappingV1, ...],
         mapping_resolver: IngestionMappingResolverPort | None = None,
         reference_sources: tuple[CapturedSource, ...] = (),
+        submission_source: CapturedSource | None = None,
         accepted_at: datetime | None = None,
         deadline_at: datetime | None = None,
         dts_filenames: tuple[str, ...] = (),
         profile: ArelleValidationProfileV1 | None = None,
-        source_adapter: SecEdgarSourceAdapter | None = None,
+        source_adapter: SecSourceCapturePort | None = None,
         form: str = "10-K",
         is_amendment: bool = False,
         amends_accession: str | None = None,
@@ -294,6 +295,26 @@ class SecIngestionService:
                 "SEC_VALIDATION_REQUIRED",
                 "SEC ingestion requires the pinned sec-efm-dqc profile",
             )
+        if submission_source is not None:
+            submission_uri = (
+                f"https://www.sec.gov/Archives/edgar/data/{int(cik)}/"
+                f"{accession_number.replace('-', '')}/{accession_number}.txt"
+            )
+            if (
+                submission_source.source_id != "sec-filing-submission"
+                or submission_source.role is not SourceRole.FILING
+                or submission_source.uri != submission_uri
+                or submission_source.accession_number != accession_number
+                or submission_source.form != form
+                or submission_source.is_amendment != is_amendment
+                or submission_source.available_at != (accepted_at or filed_at)
+                or submission_source.filed_at != filed_at
+                or not 200 <= submission_source.http_status < 300
+            ):
+                raise SnapshotError(
+                    "SEC_SUBMISSION_SOURCE_MISMATCH",
+                    "full-submission source is not bound to the selected filing",
+                )
         index_source = next(
             (
                 item
@@ -364,7 +385,13 @@ class SecIngestionService:
             )
             for filename in dts_filenames
         )
-        evidence_sources = (index_source, source, archive_source, *dts_sources)
+        evidence_sources = (
+            index_source,
+            source,
+            archive_source,
+            *((submission_source,) if submission_source is not None else ()),
+            *dts_sources,
+        )
         captured_sources = tuple(
             SecCapturedSourceEvidenceV1(
                 source_id=item.source_id,
@@ -658,7 +685,14 @@ class SecIngestionService:
         other_sources = tuple(
             item for item in reference_sources if item.source_id != "sec-filing-index"
         )
-        sources = (*other_sources, index_source, source, archive_source, *dts_sources)
+        sources = (
+            *other_sources,
+            index_source,
+            source,
+            archive_source,
+            *((submission_source,) if submission_source is not None else ()),
+            *dts_sources,
+        )
         snapshot = self.builder.prepare(
             identity=identity,
             valuation_timestamp=valuation_timestamp,

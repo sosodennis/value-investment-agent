@@ -1,6 +1,7 @@
 import hashlib
 import json
 import os
+from dataclasses import replace
 from datetime import date, datetime, timezone
 from email.message import Message
 from io import BytesIO
@@ -15,7 +16,12 @@ from fundamental_service.arelle_parser import (
     ParsedXbrlFactV1,
     _directory_hash,
 )
-from fundamental_service.contracts import IdentityV1, Severity, SecIntegrityEvidenceV1
+from fundamental_service.contracts import (
+    IdentityV1,
+    SecIntegrityEvidenceV1,
+    Severity,
+    SourceRole,
+)
 from fundamental_service.historical_dqc import V1_PROFILE, V3_PROFILE
 from fundamental_service.facts import (
     CanonicalMappingV1,
@@ -25,6 +31,7 @@ from fundamental_service.ingestion import SecIngestionService, _read_sec_xbrl_ar
 from fundamental_service.replay import ArtifactStore
 from fundamental_service.sec_source import SecEdgarSourceAdapter, SecRequestPolicy
 from fundamental_service.snapshots import (
+    CapturedSource,
     FilesystemContentStore,
     FilesystemSnapshotRepository,
     SnapshotError,
@@ -287,11 +294,50 @@ def test_sec_ingestion_connects_adapter_snapshot_parser_and_fact_selection(
             update={"status": "provisional", "confidence": "unresolved"}
         ),
     )
+    preparation_args["submission_source"] = CapturedSource(
+        source_id="sec-filing-submission",
+        uri=(
+            "https://www.sec.gov/Archives/edgar/data/320193/"
+            "000032019324000123/0000320193-24-000123.txt"
+        ),
+        role=SourceRole.FILING,
+        content=b"original EDGAR full-submission text",
+        media_type="text/plain",
+        http_status=200,
+        available_at=ingestion_args["filed_at"],
+        captured_at=ingestion_args["captured_at"],
+        publication_at=ingestion_args["filed_at"],
+        filed_at=ingestion_args["filed_at"],
+        accession_number="0000320193-24-000123",
+        form="10-K",
+        filing_version="0000320193-24-000123",
+        received_size=len(b"original EDGAR full-submission text"),
+    )
+    mismatched_submission_args = {
+        **preparation_args,
+        "submission_source": replace(
+            preparation_args["submission_source"],
+            accession_number="0000320193-24-999999",
+        ),
+    }
+    with pytest.raises(SnapshotError) as mismatch:
+        service.prepare_filing(**mismatched_submission_args)
+    assert mismatch.value.code == "SEC_SUBMISSION_SOURCE_MISMATCH"
     prepared = service.prepare_filing(**preparation_args)
     assert prepared.facts and all(
         fact.quality.value == "provisional" for fact in prepared.facts
     )
     assert not tuple(snapshot_repository.root.glob("*.json"))
+    submission_record = next(
+        record
+        for record in prepared.snapshot.source_records
+        if record.source_id == "sec-filing-submission"
+    )
+    assert submission_record.uri.endswith("/0000320193-24-000123.txt")
+    assert (
+        submission_record.content_hash
+        == hashlib.sha256(b"original EDGAR full-submission text").hexdigest()
+    )
     result = service.ingest_filing(**ingestion_args)
     assert result.snapshot.snapshot_id
     assert (

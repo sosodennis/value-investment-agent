@@ -38,6 +38,11 @@ def _verify_original(
         for source in component.source_records
         if source.source_id == "sec-filing-archive"
     )
+    submission_sources = tuple(
+        source
+        for source in component.source_records
+        if source.source_id == "sec-filing-submission"
+    )
     if (
         not isinstance(integrity, SecIntegrityEvidenceV1)
         or integrity.quality_decision != "pass"
@@ -45,9 +50,11 @@ def _verify_original(
         or component.valuation_timestamp > valuation_timestamp
         or len(filing_sources) != 1
         or len(archive_sources) != 1
+        or len(submission_sources) > 1
         or any(
             source.role is SourceRole.FILING
-            and source.source_id not in {"sec-filing", "sec-filing-archive"}
+            and source.source_id
+            not in {"sec-filing", "sec-filing-archive", "sec-filing-submission"}
             for source in component.source_records
         )
         or any(
@@ -93,6 +100,23 @@ def _verify_original(
             "HISTORY_ORIGINAL_INTEGRITY_MISMATCH",
             "original archive is not bound to its own integrity evidence",
         )
+    if submission_sources:
+        submission = submission_sources[0]
+        submission_prefix = integrity.primary_document_uri.rsplit("/", 1)[0] + "/"
+        if (
+            submission.role is not SourceRole.FILING
+            or submission.accession_number != integrity.accession_number
+            or submission.uri != f"{submission_prefix}{integrity.accession_number}.txt"
+            or submission.available_at != source.available_at
+            or submission.filed_at != source.filed_at
+            or submission.form != source.form
+            or submission.is_amendment != source.is_amendment
+            or not 200 <= submission.http_status < 300
+        ):
+            raise SnapshotError(
+                "HISTORY_ORIGINAL_INTEGRITY_MISMATCH",
+                "original full submission is not bound to its filing",
+            )
     return integrity
 
 

@@ -207,7 +207,9 @@ def approve_mapping_batch(
         | set(request.requirements.supporting_fact_fields)
     ):
         proposal = automatic_mapping_proposal(
-            role, mapping_version=request.mapping_version
+            role,
+            mapping_version=request.mapping_version,
+            original=request.original,
         )
         if proposal is None:
             roles.append(

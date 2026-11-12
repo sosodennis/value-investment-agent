@@ -259,6 +259,66 @@ def test_filing_resource_capture_preserves_dts_role_and_metadata():
     assert source.taxonomy_manifest_id == "manifest-v1"
 
 
+def test_filing_submission_capture_is_accession_bound_and_preserves_original_bytes():
+    payload = b"<SEC-DOCUMENT>0000320193-24-000123.txt</SEC-DOCUMENT>"
+    calls = []
+
+    def opener(request, timeout):
+        calls.append(request.full_url)
+        response = FakeResponse(payload)
+        response.headers.replace_header("Content-Type", "text/plain")
+        return response
+
+    adapter = SecEdgarSourceAdapter(
+        SecRequestPolicy(
+            user_agent="value-agent test@example.com", min_interval_seconds=0
+        ),
+        opener=opener,
+        sleep=lambda _seconds: None,
+    )
+    filed_at = datetime(2024, 11, 1, 10, 1, 36, tzinfo=timezone.utc)
+    accepted_at = datetime(2024, 11, 1, 10, 2, 5, tzinfo=timezone.utc)
+    source = adapter.capture_filing_submission(
+        cik="0000320193",
+        accession_number="0000320193-24-000123",
+        filed_at=filed_at,
+        accepted_at=accepted_at,
+        filing_date=filed_at.date(),
+    )
+
+    assert source.source_id == "sec-filing-submission"
+    assert source.role is SourceRole.FILING
+    assert source.uri == (
+        "https://www.sec.gov/Archives/edgar/data/320193/"
+        "000032019324000123/0000320193-24-000123.txt"
+    )
+    assert source.content == payload
+    assert source.media_type == "text/plain"
+    assert source.accession_number == "0000320193-24-000123"
+    assert source.available_at == accepted_at
+    assert source.filed_at == filed_at
+    assert source.received_size == len(payload)
+    assert calls == [source.uri]
+
+
+@pytest.mark.parametrize("accession_number", ["not-an-accession"])
+def test_filing_submission_capture_rejects_malformed_accession_before_io(
+    accession_number,
+):
+    calls = []
+    adapter = SecEdgarSourceAdapter(
+        SecRequestPolicy(user_agent="value-agent test@example.com"),
+        opener=lambda *_args, **_kwargs: calls.append(True),
+    )
+    with pytest.raises(ValueError, match="accession number"):
+        adapter.capture_filing_submission(
+            cik="0000320193",
+            accession_number=accession_number,
+            filed_at=datetime(2024, 11, 1, tzinfo=timezone.utc),
+        )
+    assert calls == []
+
+
 def test_filing_archive_capture_is_accession_bound_and_preserves_provenance():
     adapter = SecEdgarSourceAdapter(
         SecRequestPolicy(

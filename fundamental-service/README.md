@@ -8,6 +8,10 @@ Runtime startup, health, auth, deadline, budget, recovery, and Compose checks
 are documented in the [operations runbook](docs/operations-runbook.md), which
 remains subordinate to the target state.
 
+See [market inputs and replaceable sources](docs/market-input-providers.md) for
+the current parameter sources, provider ports, composition points and the
+distinction between source admission and financial-policy approval.
+
 Production deployments must set `FUNDAMENTAL_MODEL_TRUST_ROOTS_FILE` to a
 read-only deployment-owned JSON file containing verifier IDs, workflow
 identities, raw Ed25519 public keys, exact source revisions, and verification

@@ -24,6 +24,11 @@ from .contracts import (
     SourceRecordV1,
 )
 from .automatic_mapping import verify_automatic_mapping_replay
+from .automatic_market_policy_evidence import (
+    AUTOMATIC_MARKET_POLICY_ROLE,
+    load_release_automatic_market_policy,
+    requires_automatic_market_policy,
+)
 from .data_releases import (
     DataReleaseError,
     AutomaticMappingApprovalV1,
@@ -53,6 +58,7 @@ from .equity_dilution import DilutionError, compute_treasury_stock_dilution
 from .quote_providers import QuoteSourceProviderPort
 from .macro_series import MacroSeriesProviderPort
 from .market_reference import MarketReferenceProviderPort
+from .industry_capital import requires_industry_capital_plan
 from .market_reference_evidence import (
     read_release_market_reference_plan,
     load_release_market_reference_selection,
@@ -198,9 +204,20 @@ class DataReleaseCanaryRunner:
         terminal_plan = read_release_terminal_growth_plan(
             manifest, artifacts=self._artifacts
         )
-        if terminal_plan is None and self._policy_registry is not None:
+        automatic_policy_declared = any(
+            ref.role == AUTOMATIC_MARKET_POLICY_ROLE for ref in manifest.artifact_refs
+        )
+        if (
+            terminal_plan is None or plan is None
+        ) and self._policy_registry is not None:
             for candidate in self._policy_registry.policies():
-                if not requires_terminal_growth_plan(candidate):
+                if not (
+                    terminal_plan is None
+                    and requires_terminal_growth_plan(candidate)
+                    or plan is None
+                    and requires_industry_capital_plan(candidate.market_inputs)
+                    or requires_automatic_market_policy(candidate)
+                ):
                     continue
                 for ref in manifest.snapshot_refs:
                     snapshot = self._snapshots.get(ref.snapshot_id)
@@ -223,6 +240,14 @@ class DataReleaseCanaryRunner:
                         if error.code == "POLICY_NOT_FOUND":
                             continue
                         raise DataReleaseError(error.code, str(error)) from error
+                    load_release_automatic_market_policy(
+                        manifest,
+                        snapshot=snapshot,
+                        policy=effective,
+                        admissions=admissions,
+                        artifacts=self._artifacts,
+                        expected_source_revision=verification.source_revision,
+                    )
                     load_release_terminal_growth_selection(
                         manifest,
                         snapshot=snapshot,
@@ -230,8 +255,20 @@ class DataReleaseCanaryRunner:
                         admissions=admissions,
                         artifacts=self._artifacts,
                     )
+                    load_release_market_reference_selection(
+                        manifest,
+                        snapshot=snapshot,
+                        policy=effective,
+                        admissions=admissions,
+                        artifacts=self._artifacts,
+                    )
         declared_plan = plan or terminal_plan
-        if declared_plan is not None:
+        if declared_plan is not None or automatic_policy_declared:
+            if declared_plan is None:
+                raise DataReleaseError(
+                    "AUTOMATIC_MARKET_POLICY_CONTEXT_MISMATCH",
+                    "automatic market-policy evidence requires its selection plans",
+                )
             if self._policy_registry is None:
                 raise DataReleaseError(
                     "MARKET_REFERENCE_POLICY_UNAVAILABLE",
@@ -257,6 +294,14 @@ class DataReleaseCanaryRunner:
                         valuation_timestamp=snapshot.valuation_timestamp,
                         policy_id=None,
                         issuer_id=snapshot.identity.issuer_id,
+                    )
+                    automatic_policy = load_release_automatic_market_policy(
+                        manifest,
+                        snapshot=snapshot,
+                        policy=policy,
+                        admissions=admissions,
+                        artifacts=self._artifacts,
+                        expected_source_revision=verification.source_revision,
                     )
                     selection = load_release_market_reference_selection(
                         manifest,
@@ -285,6 +330,10 @@ class DataReleaseCanaryRunner:
                         reference_selection=selection,
                     )
                     selection_pins = {}
+                    if automatic_policy is not None:
+                        selection_pins["automatic_market_policy"] = (
+                            automatic_policy.decision.output_digest
+                        )
                     if selection is not None:
                         selection_pins["reference_selection"] = selection.output_digest
                     if terminal_selection is not None:

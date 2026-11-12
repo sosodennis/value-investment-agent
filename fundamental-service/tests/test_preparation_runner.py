@@ -1332,7 +1332,23 @@ def test_multi_original_plan_covers_model_with_partial_per_filing_roles(tmp_path
     )
 
 
-def test_multi_original_plan_acquires_composes_then_reuses_trusted_history(tmp_path):
+@pytest.mark.parametrize(
+    "partial_case",
+    [
+        "complete",
+        "earlier_capital_gap",
+        "aggregate_capital_gap",
+        "future_capital_fact",
+        "foreign_mapping",
+        "annual_gap",
+        "annual_conflict",
+        "source_integrity",
+        "snapshot_digest",
+    ],
+)
+def test_multi_original_plan_acquires_composes_then_reuses_trusted_history(
+    tmp_path, partial_case
+):
     fixture = _fixture(tmp_path, released=False)
     originals = tuple(_original(year) for year in (2023, 2025))
     first_request = fixture.plan.ingestions[0]
@@ -1387,6 +1403,41 @@ def test_multi_original_plan_acquires_composes_then_reuses_trusted_history(tmp_p
                 }
             )
         )
+    if partial_case == "aggregate_capital_gap":
+        facts = [f for f in facts if f.normalized_field != "non_operating_assets"]
+    elif partial_case in {"future_capital_fact", "foreign_mapping"}:
+        facts = [
+            fact.model_copy(
+                update={"available_at": VALUATION_TIME + timedelta(days=1)}
+                if partial_case == "future_capital_fact"
+                else {"mapping_decision_id": "another-plan-mapping"}
+            )
+            if fact.normalized_field == "non_operating_assets"
+            else fact
+            for fact in facts
+        ]
+    elif partial_case == "annual_gap":
+        facts = [
+            f
+            for f in facts
+            if not (f.normalized_field == "revenue" and f.period_end.year == 2024)
+        ]
+    elif partial_case == "annual_conflict":
+        conflict = next(
+            f
+            for f in facts
+            if f.normalized_field == "revenue" and f.period_end.year == 2024
+        )
+        facts.append(
+            conflict.model_copy(
+                update={"fact_id": "conflicting-revenue", "value": conflict.value + 1}
+            )
+        )
+    if partial_case == "source_integrity":
+        originals = (
+            _changed(originals[0], coverage_status=QualityStatus.PROVISIONAL),
+            originals[1],
+        )
     fact_repository = FilesystemCanonicalFactRepository(tmp_path / "history-facts")
     for fact in facts:
         fact_repository.publish(fact)
@@ -1404,14 +1455,23 @@ def test_multi_original_plan_acquires_composes_then_reuses_trusted_history(tmp_p
             == request.filing.accession_number
         )
         fixture.snapshots.publish(original)
+        incomplete = partial_case != "complete" and original == originals[0]
         return SecIngestionResponseV1(
             contract_version="fundamental.v1",
-            status="created",
+            status="abstain" if incomplete else "created",
             identity=original.identity,
             valuation_timestamp=VALUATION_TIME,
             snapshot_id=original.snapshot_id,
-            manifest_digest=original.manifest_digest,
-            quality_status=QualityStatus.VERIFIED,
+            manifest_digest=(
+                "0" * 64
+                if incomplete and partial_case == "snapshot_digest"
+                else original.manifest_digest
+            ),
+            quality_status=QualityStatus.ABSTAIN
+            if incomplete
+            else QualityStatus.VERIFIED,
+            issue_codes=("REQUIRED_FACTS_UNAVAILABLE",) if incomplete else (),
+            missing_evidence=("non_operating_assets",) if incomplete else (),
             parser_version="2.47.4",
             validation_profile_id="sec-efm-us-dqc-v31.0.3",
             validation_profile_digest="e" * 64,
@@ -1421,8 +1481,36 @@ def test_multi_original_plan_acquires_composes_then_reuses_trusted_history(tmp_p
         )
 
     runner = _runner(fixture, acquisition=SimpleNamespace(execute=execute))
-    first = _reader(fixture, _run(runner, plan))
+    publication = _run(runner, plan)
+    first = _reader(fixture, publication)
+    assert len(first.source_outcomes) == 2
+    if partial_case not in {"complete", "earlier_capital_gap"}:
+        assert first.status == "blocked"
+        expected_issue = {
+            "aggregate_capital_gap": "VALUATION_REQUIRED_FACTS_MISSING",
+            "future_capital_fact": "VALUATION_REQUIRED_FACTS_MISSING",
+            "foreign_mapping": "VALUATION_REQUIRED_FACTS_MISSING",
+            "annual_gap": "HISTORY_MINIMUM_PERIODS_UNAVAILABLE",
+            "annual_conflict": "HISTORY_FACT_CONFLICT",
+            "source_integrity": "REQUIRED_FACTS_UNAVAILABLE",
+            "snapshot_digest": "ACQUIRED_SNAPSHOT_MISMATCH",
+        }[partial_case]
+        assert expected_issue in first.issue_codes
+        before = {
+            p: (p.read_bytes(), p.stat().st_mtime_ns)
+            for p in tmp_path.rglob("*")
+            if p.is_file()
+        }
+        assert _run(runner, plan) == publication.model_copy(update={"wrote": False})
+        assert before == {p: (p.read_bytes(), p.stat().st_mtime_ns) for p in before}
+        assert fixture.state.active is None
+        return
     assert first.status == "release_required"
+    if partial_case == "earlier_capital_gap":
+        assert first.source_outcomes[0].quality_status is QualityStatus.ABSTAIN
+        assert first.source_outcomes[0].source_coverage_status is QualityStatus.VERIFIED
+        assert first.source_outcomes[0].missing_evidence == ("non_operating_assets",)
+        assert first.missing_evidence == ()
     history = fixture.snapshots.get(first.snapshot_id)
     fixture.snapshot = history
     award_facts = {
@@ -1448,7 +1536,6 @@ def test_multi_original_plan_acquires_composes_then_reuses_trusted_history(tmp_p
             "instruments": (award,),
         }
     )
-    from datetime import timedelta
     from zoneinfo import ZoneInfo
 
     from fundamental_service.quote_sources import select_nasdaq_historical_close
@@ -1520,6 +1607,7 @@ def test_multi_original_plan_acquires_composes_then_reuses_trusted_history(tmp_p
         candidate=candidate,
     )
     assert _reader(fixture, approved).status == "approval_required"
+    assert _reader(fixture, approved).source_outcomes == first.source_outcomes
     assert tuple(calls) == calls_before
     preparation = _reader(fixture, approved).preparation
     approval = CallerApprovalEnvelopeV1(
@@ -1530,6 +1618,7 @@ def test_multi_original_plan_acquires_composes_then_reuses_trusted_history(tmp_p
     )
     calculated = _run(_runner(fixture), plan, approval=approval)
     assert _reader(fixture, calculated).calculation.base.per_share_value > 0
+    assert _reader(fixture, calculated).source_outcomes == first.source_outcomes
     assert _run(_runner(fixture), plan, approval=approval).wrote is False
     assert tuple(calls) == calls_before
     altered = _changed(originals[0], policy_version="tampered")

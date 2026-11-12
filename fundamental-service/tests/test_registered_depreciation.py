@@ -10,13 +10,224 @@ from fundamental_service.arelle_parser import fact_semantic_digest
 from fundamental_service.automatic_mapping import (
     AutomaticMappingApprovalV1,
     AutomaticMappingDecisionV1,
+    automatic_mapping_proposal,
     verify_automatic_mapping_replay,
 )
+from fundamental_service.automatic_mapping_batch import AutomaticMappingBatchRequestV1
+from fundamental_service.automatic_mapping_runner import approve_mapping_batch
 from fundamental_service.replay import ArtifactStore
 from fundamental_service.sec_rebuild import parsed_facts_to_candidates
 from fundamental_service.serialization import sha256_digest
-from test_automatic_mapping import approve, case, evaluate
+from fundamental_service.valuation_requirements import valuation_requirements_profile
+from test_automatic_mapping import approve, case, evaluate, MACHINE_KEY
+from test_automatic_mapping_batch import read_decision
 from test_issuer_operating_release import inventory
+
+
+def operating_depreciation_case(tmp_path, monkeypatch):
+    template, _, _, _ = case(tmp_path / "template")
+    base = next(
+        f for f in template.original.report.facts if f.concept == "us-gaap:Revenues"
+    )
+    facts = tuple(
+        base.model_copy(
+            update={
+                "concept": concept,
+                "context_id": f"operating-{year}",
+                "value": value,
+                "period_start": date(year, 1, 1),
+                "period_end": date(year, 12, 31),
+            }
+        )
+        for year, concept, value in (
+            (2024, policy.DEPRECIATION, "257606"),
+            (2024, policy.FIXED_ASSET_DEPRECIATION, "196738"),
+            (2025, policy.DEPRECIATION, "308147"),
+            (2025, policy.FIXED_ASSET_DEPRECIATION, "308147"),
+        )
+    )
+    request, store, roots, bundle = case(
+        tmp_path / "actual",
+        extra=facts,
+        proposal_changes={
+            "source_concept": policy.DEPRECIATION,
+            "normalized_field": "depreciation_and_amortization",
+        },
+    )
+    source = request.original.source
+    monkeypatch.setattr(
+        policy,
+        "_ORIGINALS",
+        {
+            (source.cik, source.accession_number): policy.OriginalClassification(
+                source.content_hash,
+                fact_semantic_digest(request.original.report),
+                (2024, 2025),
+                (),
+                policy.FIXED_ASSET_DEPRECIATION,
+            )
+        },
+    )
+    return request, store, roots, bundle
+
+
+def test_bound_operating_concept_excludes_the_cash_flow_aggregate(
+    tmp_path, monkeypatch
+):
+    request, store, roots, _ = operating_depreciation_case(tmp_path, monkeypatch)
+    proposal = automatic_mapping_proposal(
+        "depreciation_and_amortization",
+        mapping_version=request.proposal.mapping_version,
+        original=request.original,
+    )
+    assert proposal.source_concept == policy.FIXED_ASSET_DEPRECIATION
+    request = request.model_copy(update={"proposal": proposal})
+    receipt = approve(request, store, roots)
+    decision = AutomaticMappingDecisionV1.model_validate_json(
+        store.read(receipt.decision_publication.artifact.artifact_id)
+    )
+    assert decision.status == "approved"
+    assert len(decision.rejected_observations) == 2
+    assert {r.reason_code for r in decision.rejected_observations} == {
+        "MAPPING_DA_DIFFERENT_ACCOUNTING_SCOPE"
+    }
+    candidates = parsed_facts_to_candidates(
+        request.original.report,
+        source=request.original.source,
+        issuer_id=request.original.source.cik,
+        normalized_field="depreciation_and_amortization",
+        mapping=decision.mapping,
+    )
+    assert {f.period_end.year: f.value for f in candidates} == {
+        2024: Decimal("196738"),
+        2025: Decimal("308147"),
+    }
+    before = inventory(store.root)
+    repeat = approve(request, store, roots)
+    assert (repeat.input_digest, repeat.output_digest) == (
+        receipt.input_digest,
+        receipt.output_digest,
+    )
+    assert not any(
+        p.wrote
+        for p in (
+            repeat.input_publication,
+            repeat.decision_publication,
+            repeat.approval_publication,
+        )
+    )
+    approval = AutomaticMappingApprovalV1.model_validate_json(
+        store.read(receipt.approval_publication.artifact.artifact_id)
+    )
+    assert (
+        verify_automatic_mapping_replay(
+            approval, decision.mapping, artifacts=ArtifactStore(store.root)
+        )
+        == request
+    )
+    assert inventory(store.root) == before
+
+
+def test_bound_operating_scope_refuses_aggregate_even_when_one_period_agrees(
+    tmp_path, monkeypatch
+):
+    request, store, _, _ = operating_depreciation_case(tmp_path, monkeypatch)
+    result = evaluate(request, store)
+    assert result.status == "abstain" and result.mapping is None
+    assert "MAPPING_DA_CONCEPT_SCOPE_UNREVIEWED" in result.reason_codes
+    assert len(result.rejected_observations) == 2
+
+
+def test_batch_uses_the_original_bound_concept_and_keeps_other_missing_roles(
+    tmp_path, monkeypatch
+):
+    request, store, roots, _ = operating_depreciation_case(tmp_path, monkeypatch)
+    batch = AutomaticMappingBatchRequestV1(
+        **request.model_dump(exclude={"protocol", "proposal"}),
+        mapping_version=request.proposal.mapping_version,
+        model_version="fcff_dcf-v2",
+        requirements=valuation_requirements_profile("fcff_dcf"),
+    )
+    receipt = approve_mapping_batch(
+        batch, artifacts=store, trust_roots=roots, private_key=MACHINE_KEY
+    )
+    roles = {r.normalized_field: r for r in read_decision(receipt, store).roles}
+    assert roles["depreciation_and_amortization"].status == "approved"
+    child = AutomaticMappingDecisionV1.model_validate_json(
+        store.read(roles["depreciation_and_amortization"].decision.artifact_id)
+    )
+    assert child.mapping.source_concept == policy.FIXED_ASSET_DEPRECIATION
+    assert roles["non_operating_assets"].status == "abstain"
+    assert roles["non_operating_assets"].approval is None
+    assert batch.requirements.supported_history_threshold is None
+
+
+@pytest.mark.parametrize("change", ("source", "amount", "period", "precision"))
+def test_operating_proposal_does_not_inherit_a_changed_original(
+    tmp_path, monkeypatch, change
+):
+    request, store, _, _ = operating_depreciation_case(tmp_path, monkeypatch)
+    original = request.original
+    if change == "source":
+        original = original.model_copy(
+            update={
+                "source": original.source.model_copy(update={"content_hash": "f" * 64})
+            }
+        )
+    else:
+        facts = list(original.report.facts)
+        index = next(
+            i
+            for i, f in enumerate(facts)
+            if f.concept == policy.FIXED_ASSET_DEPRECIATION
+        )
+        facts[index] = facts[index].model_copy(
+            update={
+                "amount": {"value": "196739"},
+                "period": {"period_end": date(2023, 12, 31)},
+                "precision": {"decimals": "-6"},
+            }[change]
+        )
+        original = original.model_copy(
+            update={
+                "report": original.report.model_copy(update={"facts": tuple(facts)})
+            }
+        )
+    proposal = automatic_mapping_proposal(
+        "depreciation_and_amortization",
+        mapping_version=request.proposal.mapping_version,
+        original=original,
+    )
+    assert proposal.source_concept == policy.DEPRECIATION
+    result = evaluate(
+        request.model_copy(update={"original": original, "proposal": proposal}), store
+    )
+    assert result.status == "abstain" and result.mapping is None
+
+
+def test_operating_scope_and_rejections_do_not_depend_on_fact_order(
+    tmp_path, monkeypatch
+):
+    request, store, _, _ = operating_depreciation_case(tmp_path, monkeypatch)
+    proposal = automatic_mapping_proposal(
+        "depreciation_and_amortization",
+        mapping_version=request.proposal.mapping_version,
+        original=request.original,
+    )
+    request = request.model_copy(update={"proposal": proposal})
+    first = evaluate(request, store)
+    original = request.original.model_copy(
+        update={
+            "report": request.original.report.model_copy(
+                update={"facts": tuple(reversed(request.original.report.facts))}
+            )
+        }
+    )
+    second = evaluate(request.model_copy(update={"original": original}), store)
+    assert first.status == second.status == "approved"
+    assert first.mapping == second.mapping
+    assert first.rejected_observations == second.rejected_observations
+    assert first.eligible_observation_digests == second.eligible_observation_digests
 
 
 def depreciation_case(tmp_path, monkeypatch, *, adjusted=True):

@@ -555,7 +555,641 @@
     "supported_history_threshold": null
   },
   "full_numerical_flow": false,
-  "implementation_commit": "9d234fae218b16cd55817f153b13f192192c1e88",
+  "implementation_commit": "f52933472f09da8b4d45b14ada60895dcf8b37a7",
+  "industry_capital_adoption_increment": {
+    "change": "Deterministic USD industry capital proxy adoption through deployment-pinned issuer/time plan; existing interchangeable reference port feeds serving, independent release canary and official composer without duplicate valuation formulas. Published debt/equity weights normalize only within 1e-12 representation tolerance. Absent plans, changed value/source/method and foreign issuer/time/currency refuse.",
+    "evidence_scope": "Actual public NYU originals with a synthetic issuer/accounting/quote/release fixture prove source-bound policy adoption, canary and composer behavior. They do not establish real issuer industry classification, a complete real release, numerical acceptance or a history threshold.",
+    "exact_commit": "f52933472f09da8b4d45b14ada60895dcf8b37a7",
+    "focused": {
+      "command": "uv run --frozen --extra dev --project fundamental-service pytest fundamental-service/tests/test_industry_capital_source.py fundamental-service/tests/test_industry_capital_policy.py fundamental-service/tests/test_industry_capital_release.py fundamental-service/tests/test_market_reference_selection.py fundamental-service/tests/test_market_reference_evidence.py fundamental-service/tests/test_terminal_growth_evidence.py fundamental-service/tests/test_source_admission_evidence.py -q --tb=short",
+      "exit_code": 0,
+      "passed": 127
+    },
+    "full_numerical_flow": false,
+    "installed_image": {
+      "adoption_digest": "bdfd46df2ff4261708afe19d2e083b92a6dc591d51b456cce6394ec1d773e5fb",
+      "command": "python3 .audit/issue-361-industry-capital/verify_adoption_image.py",
+      "command_results": [
+        {
+          "command": [
+            "docker",
+            "ps",
+            "-q"
+          ],
+          "exit_code": 0,
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stdout_sha256": "c2893f86272c1a6e0b56a32f459d316f346500f62e20a696a794432daeeb08a9"
+        },
+        {
+          "command": [
+            "docker",
+            "inspect",
+            "--format",
+            "[{{json .Id}},{{json .Image}},{{json .State.StartedAt}},{{json (index .Config.Labels \"com.docker.compose.project\")}}]",
+            "25e6329fb3e6",
+            "61f13f3fd9bc",
+            "5c64db17c286",
+            "2b809cdc2ce2",
+            "5be1286b9627",
+            "ad355e02e5f7",
+            "66629bae2780",
+            "7bc0230e97c7",
+            "47092284968d",
+            "e521ffe41407",
+            "4170c70d3485",
+            "553ddd5d724a",
+            "a336504e2083",
+            "a5d2facf35c4",
+            "f607a43c3025",
+            "5102d7e76da9",
+            "3756ad77cec2",
+            "b43f1fde1dd7",
+            "bfc760af6516",
+            "fdd811d513d9",
+            "2d7d426e131f",
+            "2a8b2d1f07f2",
+            "019e94543abb",
+            "271ec5d5703d",
+            "33b224e8d1e2",
+            "2ab4871d678f",
+            "5dafa8127ae1",
+            "7cef876d5caf",
+            "3cfda10018df",
+            "a21dbbfbc9b9",
+            "1eb653d87a93",
+            "6871db07cba4",
+            "afe40b17bc43",
+            "38bd2400e9f5",
+            "6cdee7c1e99f",
+            "f940acc6e029",
+            "6e7d37ec0745",
+            "648da44e34dc",
+            "7e769a9a0576",
+            "63026d6782b0",
+            "a528ee4bd138",
+            "1bc4a95411a5",
+            "33bb7797b554",
+            "506b87b41b9a"
+          ],
+          "exit_code": 0,
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stdout_sha256": "43b77bc99a5cfafea9ecff147a272ded0a16cad9e17c9440f8e764271dc26497"
+        },
+        {
+          "command": [
+            "docker",
+            "compose",
+            "-p",
+            "value-investment-agent-361-capture-profiles",
+            "-f",
+            "compose/verification/docker-compose.issue280-operations.yml",
+            "config",
+            "--quiet"
+          ],
+          "exit_code": 0,
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "command": [
+            "docker",
+            "compose",
+            "-p",
+            "value-investment-agent-361-capture-profiles",
+            "-f",
+            "compose/verification/docker-compose.issue280-operations.yml",
+            "config",
+            "--hash",
+            "fundamental-service"
+          ],
+          "exit_code": 0,
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stdout_sha256": "1d3b0f7358605dc33caa6853347e983dff5a571e3febcc49fc867b991f1216cb"
+        },
+        {
+          "command": [
+            "docker",
+            "inspect",
+            "--format",
+            "{\"image\":{{json .Image}},\"project\":{{json (index .Config.Labels \"com.docker.compose.project\")}},\"config_hash\":{{json (index .Config.Labels \"com.docker.compose.config-hash\")}}}",
+            "value-investment-agent-361-capture-profiles-fundamental-service-1"
+          ],
+          "exit_code": 0,
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stdout_sha256": "a333d90112332d44eeb1c5345db57e96c02ebb2b50a586c10c773e36ec768c5d"
+        },
+        {
+          "command": [
+            "docker",
+            "compose",
+            "-p",
+            "value-investment-agent-361-capture-profiles",
+            "-f",
+            "compose/verification/docker-compose.issue280-operations.yml",
+            "port",
+            "fundamental-service",
+            "8080"
+          ],
+          "exit_code": 0,
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stdout_sha256": "c94bcdc01656b6885ba48ddc956bbb35f287de2d41b0105a4efdf4bbcf73608e"
+        },
+        {
+          "command": [
+            "docker",
+            "compose",
+            "-p",
+            "value-investment-agent-361-capture-profiles",
+            "-f",
+            "compose/verification/docker-compose.issue280-operations.yml",
+            "port",
+            "fundamental-postgres",
+            "5432"
+          ],
+          "exit_code": 0,
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stdout_sha256": "08bb2eacaa21bff43547e3a6bad73c03e3d645a44e07dddd7ecd1a2a120c0705"
+        },
+        {
+          "command": [
+            "docker",
+            "exec",
+            "value-investment-agent-361-capture-profiles-fundamental-service-1",
+            "python",
+            "-c",
+            "import hashlib,json; from pathlib import Path; root=Path('/app/src'); print(json.dumps({str(p.relative_to(root)):hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted((root/'fundamental_service').rglob('*')) if p.is_file() and p.suffix in ('.py','.sql')}))"
+          ],
+          "exit_code": 0,
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stdout_sha256": "083f02ccaa685c7af412e51977d37bc8aa4295f084d59c25967b6318fa4c5477"
+        },
+        {
+          "command": [
+            "docker",
+            "cp",
+            "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/.audit/issue-361-industry-capital/replay_adoption_installed.py",
+            "value-investment-agent-361-capture-profiles-fundamental-service-1:/tmp/issue361-capital-replay.py"
+          ],
+          "exit_code": 0,
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "command": [
+            "docker",
+            "cp",
+            "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/.audit/issue-361-industry-capital/a7625abf61ab7e2b20bf840965b39ca679b8d06455b063630d40294f74f184d4.adoption-packet.json",
+            "value-investment-agent-361-capture-profiles-fundamental-service-1:/tmp/issue361-capital-packet.json"
+          ],
+          "exit_code": 0,
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "command": [
+            "docker",
+            "exec",
+            "--user",
+            "0",
+            "value-investment-agent-361-capture-profiles-fundamental-service-1",
+            "chmod",
+            "0644",
+            "/tmp/issue361-capital-packet.json",
+            "/tmp/issue361-capital-replay.py"
+          ],
+          "exit_code": 0,
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "command": [
+            "docker",
+            "exec",
+            "value-investment-agent-361-capture-profiles-fundamental-service-1",
+            "python",
+            "-c",
+            "import hashlib,json; from pathlib import Path; root=Path('/var/lib/fundamental'); print(json.dumps({str(p.relative_to(root)):{'sha256':hashlib.sha256(p.read_bytes()).hexdigest(),'size':p.stat().st_size,'mtime_ns':p.stat().st_mtime_ns} for p in sorted(root.rglob('*')) if p.is_file()},sort_keys=True))"
+          ],
+          "exit_code": 0,
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stdout_sha256": "cd1637342f25a714dabd92e34712031e8d9e590855b685101043d9339d822d70"
+        },
+        {
+          "command": [
+            "docker",
+            "exec",
+            "-e",
+            "PYTHONHASHSEED=0",
+            "-e",
+            "PYTHONPATH=/app",
+            "value-investment-agent-361-capture-profiles-fundamental-service-1",
+            "python",
+            "/tmp/issue361-capital-replay.py",
+            "/tmp/issue361-capital-packet.json",
+            "/var/lib/fundamental/industry-adoption-f5293347"
+          ],
+          "exit_code": 0,
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stdout_sha256": "3fd5c94af42cc791d653a8844c51512a97fe13c147ea10e5ab4ec51d16c469a7"
+        },
+        {
+          "command": [
+            "docker",
+            "exec",
+            "value-investment-agent-361-capture-profiles-fundamental-service-1",
+            "python",
+            "-c",
+            "import hashlib,json; from pathlib import Path; root=Path('/var/lib/fundamental'); print(json.dumps({str(p.relative_to(root)):{'sha256':hashlib.sha256(p.read_bytes()).hexdigest(),'size':p.stat().st_size,'mtime_ns':p.stat().st_mtime_ns} for p in sorted(root.rglob('*')) if p.is_file()},sort_keys=True))"
+          ],
+          "exit_code": 0,
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stdout_sha256": "95db5cae518502278b32ae13f2b20497e5c1b12131ee7c29008e10e5f8944cf1"
+        },
+        {
+          "command": [
+            "docker",
+            "exec",
+            "-e",
+            "PYTHONHASHSEED=0",
+            "-e",
+            "PYTHONPATH=/app",
+            "value-investment-agent-361-capture-profiles-fundamental-service-1",
+            "python",
+            "/tmp/issue361-capital-replay.py",
+            "/tmp/issue361-capital-packet.json",
+            "/var/lib/fundamental/industry-adoption-f5293347"
+          ],
+          "exit_code": 0,
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stdout_sha256": "bcc73597915547f33eb14fe2289493767a540ab5d5d63beccab4f77957cb1f3a"
+        },
+        {
+          "command": [
+            "docker",
+            "exec",
+            "value-investment-agent-361-capture-profiles-fundamental-service-1",
+            "python",
+            "-c",
+            "import hashlib,json; from pathlib import Path; root=Path('/var/lib/fundamental'); print(json.dumps({str(p.relative_to(root)):{'sha256':hashlib.sha256(p.read_bytes()).hexdigest(),'size':p.stat().st_size,'mtime_ns':p.stat().st_mtime_ns} for p in sorted(root.rglob('*')) if p.is_file()},sort_keys=True))"
+          ],
+          "exit_code": 0,
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stdout_sha256": "95db5cae518502278b32ae13f2b20497e5c1b12131ee7c29008e10e5f8944cf1"
+        },
+        {
+          "command": [
+            "docker",
+            "exec",
+            "-e",
+            "PYTHONHASHSEED=0",
+            "-e",
+            "PYTHONPATH=/app",
+            "value-investment-agent-361-capture-profiles-fundamental-service-1",
+            "python",
+            "/tmp/issue361-capital-replay.py",
+            "/tmp/issue361-capital-packet.json",
+            "/var/lib/fundamental/industry-adoption-f5293347"
+          ],
+          "exit_code": 0,
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stdout_sha256": "bcc73597915547f33eb14fe2289493767a540ab5d5d63beccab4f77957cb1f3a"
+        },
+        {
+          "command": [
+            "docker",
+            "exec",
+            "-e",
+            "PYTHONHASHSEED=0",
+            "-e",
+            "PYTHONPATH=/app",
+            "value-investment-agent-361-capture-profiles-fundamental-service-1",
+            "python",
+            "/tmp/issue361-capital-replay.py",
+            "/tmp/issue361-capital-packet.json",
+            "/var/lib/fundamental/industry-adoption-f5293347"
+          ],
+          "exit_code": 0,
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stdout_sha256": "bcc73597915547f33eb14fe2289493767a540ab5d5d63beccab4f77957cb1f3a"
+        },
+        {
+          "command": [
+            "docker",
+            "exec",
+            "value-investment-agent-361-capture-profiles-fundamental-service-1",
+            "python",
+            "-c",
+            "import hashlib,json; from pathlib import Path; root=Path('/var/lib/fundamental'); print(json.dumps({str(p.relative_to(root)):{'sha256':hashlib.sha256(p.read_bytes()).hexdigest(),'size':p.stat().st_size,'mtime_ns':p.stat().st_mtime_ns} for p in sorted(root.rglob('*')) if p.is_file()},sort_keys=True))"
+          ],
+          "exit_code": 0,
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stdout_sha256": "95db5cae518502278b32ae13f2b20497e5c1b12131ee7c29008e10e5f8944cf1"
+        },
+        {
+          "command": [
+            "docker",
+            "compose",
+            "-p",
+            "value-investment-agent-361-capture-profiles",
+            "-f",
+            "compose/verification/docker-compose.issue280-operations.yml",
+            "restart",
+            "fundamental-service"
+          ],
+          "exit_code": 0,
+          "stderr_sha256": "989400a6c2ee1c34bb074e55ae22edd5133de5ea7481555536f3266eba099edf",
+          "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "command": [
+            "docker",
+            "exec",
+            "-e",
+            "PYTHONHASHSEED=0",
+            "-e",
+            "PYTHONPATH=/app",
+            "value-investment-agent-361-capture-profiles-fundamental-service-1",
+            "python",
+            "/tmp/issue361-capital-replay.py",
+            "/tmp/issue361-capital-packet.json",
+            "/var/lib/fundamental/industry-adoption-f5293347"
+          ],
+          "exit_code": 0,
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stdout_sha256": "bcc73597915547f33eb14fe2289493767a540ab5d5d63beccab4f77957cb1f3a"
+        },
+        {
+          "command": [
+            "docker",
+            "exec",
+            "value-investment-agent-361-capture-profiles-fundamental-service-1",
+            "python",
+            "-c",
+            "import hashlib,json; from pathlib import Path; root=Path('/var/lib/fundamental'); print(json.dumps({str(p.relative_to(root)):{'sha256':hashlib.sha256(p.read_bytes()).hexdigest(),'size':p.stat().st_size,'mtime_ns':p.stat().st_mtime_ns} for p in sorted(root.rglob('*')) if p.is_file()},sort_keys=True))"
+          ],
+          "exit_code": 0,
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stdout_sha256": "95db5cae518502278b32ae13f2b20497e5c1b12131ee7c29008e10e5f8944cf1"
+        },
+        {
+          "command": [
+            "docker",
+            "ps",
+            "-q"
+          ],
+          "exit_code": 0,
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stdout_sha256": "c2893f86272c1a6e0b56a32f459d316f346500f62e20a696a794432daeeb08a9"
+        },
+        {
+          "command": [
+            "docker",
+            "inspect",
+            "--format",
+            "[{{json .Id}},{{json .Image}},{{json .State.StartedAt}},{{json (index .Config.Labels \"com.docker.compose.project\")}}]",
+            "25e6329fb3e6",
+            "61f13f3fd9bc",
+            "5c64db17c286",
+            "2b809cdc2ce2",
+            "5be1286b9627",
+            "ad355e02e5f7",
+            "66629bae2780",
+            "7bc0230e97c7",
+            "47092284968d",
+            "e521ffe41407",
+            "4170c70d3485",
+            "553ddd5d724a",
+            "a336504e2083",
+            "a5d2facf35c4",
+            "f607a43c3025",
+            "5102d7e76da9",
+            "3756ad77cec2",
+            "b43f1fde1dd7",
+            "bfc760af6516",
+            "fdd811d513d9",
+            "2d7d426e131f",
+            "2a8b2d1f07f2",
+            "019e94543abb",
+            "271ec5d5703d",
+            "33b224e8d1e2",
+            "2ab4871d678f",
+            "5dafa8127ae1",
+            "7cef876d5caf",
+            "3cfda10018df",
+            "a21dbbfbc9b9",
+            "1eb653d87a93",
+            "6871db07cba4",
+            "afe40b17bc43",
+            "38bd2400e9f5",
+            "6cdee7c1e99f",
+            "f940acc6e029",
+            "6e7d37ec0745",
+            "648da44e34dc",
+            "7e769a9a0576",
+            "63026d6782b0",
+            "a528ee4bd138",
+            "1bc4a95411a5",
+            "33bb7797b554",
+            "506b87b41b9a"
+          ],
+          "exit_code": 0,
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stdout_sha256": "102aee4afc3f8c79738e1e586118d0451cf3125fffdd30604c410b8b99cdb998"
+        }
+      ],
+      "compose": {
+        "config_hash": "4c8dbf609d7782e8f63035f62fc5084d7efb0b3019002695901844d247028d4e",
+        "env_files": [],
+        "files": [
+          "compose/verification/docker-compose.issue280-operations.yml"
+        ],
+        "ports": {
+          "postgres": 18686,
+          "service": 18685
+        },
+        "project": "value-investment-agent-361-capture-profiles"
+      },
+      "exit_code": 0,
+      "file_inventories_unchanged": true,
+      "identity_resolution_configured": false,
+      "image_id": "sha256:d51305d71a8df0f72efcaa123fb528d450bdad8b909062110c6b41a47df6e041",
+      "input_digest": "1156c8a07abdaa6e524f40d4a7423cf0ed64ce765bdc976afaabe346a917b83d",
+      "output_digest": "dfcf04bd22062d010fcb90fb16a535bc2c8c1719076caa7e4e64872dedd170f9",
+      "packet_sha256": "a7625abf61ab7e2b20bf840965b39ca679b8d06455b063630d40294f74f184d4",
+      "provider_downloads": 0,
+      "repeat_concurrent_restart_artifact_writes": 0,
+      "repeat_concurrent_restart_wrote": false,
+      "replay_input_digest": "e21d77b4868b6acbb9dada5c4c01bf565be440a50af1f304ca2bdd3b06b63c98",
+      "replay_output_digest": "0394ec32f4c0bbe545ab201d300104457e91e0c107825a1644543c2d9f23b17c",
+      "retained_serving_canary_refusals": 10,
+      "runtime": {
+        "arelle-release": "2.47.4",
+        "pydantic": "2.14.2",
+        "python": "3.12.16",
+        "xlrd": "2.0.2"
+      },
+      "selection_digest": "6083a8c04a2eaf57be6f3fe40e8571c9ef33c14b5b116bc3dc9f2d7475bd1cca",
+      "source_count": 100,
+      "unrelated_baseline_containers_unchanged": 42
+    },
+    "issue": 361,
+    "owning_blocker": 369,
+    "remaining": [
+      "Automatic original-bound issuer industry/country classification and complete issuer/date market policy generation remain required. Explicit source-bound industry capital adoption is implemented; industry proxies remain assumptions, not issuer observations.",
+      "Lawful dated quote and complete real accounting/award evidence, trusted complete release, authentic exact-input caller approval and actual numerical repeat/concurrency/restart/empty-store restore.",
+      "Independent review, CI, main merge and merge-SHA verification before issue closure and cleanup."
+    ],
+    "retained_failures": [
+      "Initial 14 release cases failed because synthetic source-use rule IDs were unordered; the fixture now uses canonical order.",
+      "A test initially referenced a nonexistent per-assumption trace field; assertions now inspect the public source_refs/as_of contract and reproduce the exact adopted trace.",
+      "The first host installed-runner invocation omitted the shared-contract PYTHONPATH and failed import before execution; the corrected command and installed image run pass."
+    ],
+    "supported_history_threshold": null,
+    "verification": {
+      "command": "uv run --frozen --project fundamental-service python .audit/issue-361-terminal-growth/verify_checkpoint.py",
+      "commands": {
+        "architecture": {
+          "command": [
+            "python3",
+            "scripts/architecture_guard.py"
+          ],
+          "exit_code": 0,
+          "output_sha256": "6c8e024ff94859e9781de1f4a3201c70e338bc90774702d8ac83afc8a9a15ab9"
+        },
+        "diff": {
+          "command": [
+            "git",
+            "diff",
+            "--check",
+            "origin/main"
+          ],
+          "exit_code": 0,
+          "output_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "format": {
+          "command": [
+            "uvx",
+            "--from",
+            "ruff==0.14.10",
+            "ruff",
+            "format",
+            "--check",
+            "fundamental-service/src/fundamental_service/annual_history.py",
+            "fundamental-service/src/fundamental_service/application/service.py",
+            "fundamental-service/src/fundamental_service/calculator.py",
+            "fundamental-service/src/fundamental_service/damodaran_source.py",
+            "fundamental-service/src/fundamental_service/free_source_policy.py",
+            "fundamental-service/src/fundamental_service/industry_capital.py",
+            "fundamental-service/src/fundamental_service/market_reference.py",
+            "fundamental-service/src/fundamental_service/market_reference_evidence.py",
+            "fundamental-service/src/fundamental_service/market_reference_selection.py",
+            "fundamental-service/src/fundamental_service/operating_comparison_runner.py",
+            "fundamental-service/src/fundamental_service/operating_forecast.py",
+            "fundamental-service/src/fundamental_service/operating_label_contracts.py",
+            "fundamental-service/src/fundamental_service/operating_labels.py",
+            "fundamental-service/src/fundamental_service/operating_projection.py",
+            "fundamental-service/src/fundamental_service/operating_scenario_contracts.py",
+            "fundamental-service/src/fundamental_service/operating_scenario_runner.py",
+            "fundamental-service/src/fundamental_service/operating_scenarios.py",
+            "fundamental-service/src/fundamental_service/policies.py",
+            "fundamental-service/src/fundamental_service/release_runner.py",
+            "fundamental-service/src/fundamental_service/terminal_growth.py",
+            "fundamental-service/src/fundamental_service/terminal_growth_evidence.py",
+            "fundamental-service/src/fundamental_service/valuation_preparation.py",
+            "fundamental-service/tests/reference_source_fixtures.py",
+            "fundamental-service/tests/test_historical_policy_selection.py",
+            "fundamental-service/tests/test_industry_capital_policy.py",
+            "fundamental-service/tests/test_industry_capital_release.py",
+            "fundamental-service/tests/test_industry_capital_source.py",
+            "fundamental-service/tests/test_market_reference_evidence.py",
+            "fundamental-service/tests/test_operating_forecast.py",
+            "fundamental-service/tests/test_operating_labels.py",
+            "fundamental-service/tests/test_operating_model_binding.py",
+            "fundamental-service/tests/test_operating_scenarios.py",
+            "fundamental-service/tests/test_source_admission.py",
+            "fundamental-service/tests/test_terminal_growth.py",
+            "fundamental-service/tests/test_terminal_growth_evidence.py"
+          ],
+          "exit_code": 0,
+          "output_sha256": "3e8c2dbca935b383c59c039636d312f0fa02f46e79ad8aca0b66c972c27bad86"
+        },
+        "mypy": {
+          "command": [
+            "uv",
+            "run",
+            "--frozen",
+            "--project",
+            "fundamental-service",
+            "--with",
+            "mypy==1.19.1",
+            "mypy",
+            "--no-incremental",
+            "--follow-imports=silent",
+            "--ignore-missing-imports",
+            "fundamental-service/src/fundamental_service/annual_history.py",
+            "fundamental-service/src/fundamental_service/application/service.py",
+            "fundamental-service/src/fundamental_service/calculator.py",
+            "fundamental-service/src/fundamental_service/damodaran_source.py",
+            "fundamental-service/src/fundamental_service/free_source_policy.py",
+            "fundamental-service/src/fundamental_service/industry_capital.py",
+            "fundamental-service/src/fundamental_service/market_reference.py",
+            "fundamental-service/src/fundamental_service/market_reference_evidence.py",
+            "fundamental-service/src/fundamental_service/market_reference_selection.py",
+            "fundamental-service/src/fundamental_service/operating_comparison_runner.py",
+            "fundamental-service/src/fundamental_service/operating_forecast.py",
+            "fundamental-service/src/fundamental_service/operating_label_contracts.py",
+            "fundamental-service/src/fundamental_service/operating_labels.py",
+            "fundamental-service/src/fundamental_service/operating_projection.py",
+            "fundamental-service/src/fundamental_service/operating_scenario_contracts.py",
+            "fundamental-service/src/fundamental_service/operating_scenario_runner.py",
+            "fundamental-service/src/fundamental_service/operating_scenarios.py",
+            "fundamental-service/src/fundamental_service/policies.py",
+            "fundamental-service/src/fundamental_service/release_runner.py",
+            "fundamental-service/src/fundamental_service/terminal_growth.py",
+            "fundamental-service/src/fundamental_service/terminal_growth_evidence.py",
+            "fundamental-service/src/fundamental_service/valuation_preparation.py"
+          ],
+          "exit_code": 0,
+          "output_sha256": "5ca59a2361304496c36048048a43aa6f41eb23e74111d16719b962637888fc08"
+        },
+        "ruff": {
+          "command": [
+            "uvx",
+            "--from",
+            "ruff==0.14.10",
+            "ruff",
+            "check",
+            "fundamental-service"
+          ],
+          "exit_code": 0,
+          "output_sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18"
+        },
+        "service_postgres": {
+          "command": [
+            "uv",
+            "run",
+            "--frozen",
+            "--extra",
+            "dev",
+            "--project",
+            "fundamental-service",
+            "pytest",
+            "fundamental-service/tests",
+            "-ra"
+          ],
+          "exit_code": 0,
+          "output_sha256": "811954f528d83caa85c7a229fc3e60fd25859ef0ecef017a17628ba14eaa6829"
+        }
+      },
+      "exit_code": 0,
+      "expected_duplicate_zip_warnings": 1,
+      "input_digest": "d9c1db6eedc3c4952d9fe2fe8e0db81479862236ebde0b82dc0f04af803b15de",
+      "mypy_sources": 22,
+      "optional_external_sec_resource_skips": 11,
+      "output_digest": "d5fae2442435caeec6e392384624ef7e367de8eb41795740837cd7b3fae6e840",
+      "service_postgres_passed": 1943
+    }
+  },
   "industry_capital_increment": {
     "change": "Extend the existing interchangeable reference port with four explicit industry capital metrics and a bounded Damodaran XLS adapter. Shared selectors contain no provider names; a second JSON provider exercises the same contract. Source-use policy v2 grants aggregate use only.",
     "checks": {
@@ -1799,9 +2433,9 @@
   },
   "pull_request": 370,
   "remaining": [
-    "Executable issuer classification and full automatic beta/debt/capital-weight/bounded-terminal policy join from admitted evidence.",
-    "Lawful dated quote and complete original accounting/award scope; trusted complete release and authentic caller approval.",
-    "Real numerical repeat/concurrency/restart/empty-store restore, independent review/CI, main merge and merge-SHA verification."
+    "Automatic original-bound issuer industry/country classification and complete issuer/date market policy generation remain required. Explicit source-bound industry capital adoption is implemented; industry proxies remain assumptions, not issuer observations.",
+    "Lawful dated quote and complete real accounting/award evidence, trusted complete release, authentic exact-input caller approval and actual numerical repeat/concurrency/restart/empty-store restore.",
+    "Independent review, CI, main merge and merge-SHA verification before issue closure and cleanup."
   ],
   "repeat": {
     "admitted": 7,

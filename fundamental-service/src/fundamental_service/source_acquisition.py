@@ -45,7 +45,12 @@ from .issuer_identity import (
 from .metadata import PostgresArtifactStore, PostgresContentStore, PostgresMetadataStore
 from .operations import ServiceError
 from .sec_capture import RetainedSecSourceAdapter, SecCaptureScopeV1, SecCaptureStore
-from .sec_source import SecEdgarSourceAdapter, SecRequestPolicy, SecSourceError
+from .sec_source import (
+    SecEdgarSourceAdapter,
+    SecRequestPolicy,
+    SecSourceCapturePort,
+    SecSourceError,
+)
 from .serialization import sha256_digest
 from .snapshots import (
     CapturedSource,
@@ -212,7 +217,7 @@ class SecIdentityResolutionUseCase:
     def __init__(
         self,
         *,
-        adapter: SecEdgarSourceAdapter,
+        adapter: SecSourceCapturePort,
         metadata: PostgresMetadataStore,
         content_store: ContentAddressedStore,
         authorized_organizations: frozenset[str],
@@ -452,7 +457,7 @@ class SecAcquisitionUseCase:
     def __init__(
         self,
         *,
-        adapter: SecEdgarSourceAdapter,
+        adapter: SecSourceCapturePort,
         ingestion: SecIngestionService,
         metadata: PostgresMetadataStore,
         content_store: ContentAddressedStore,
@@ -843,6 +848,17 @@ class SecAcquisitionUseCase:
             accession_number=filing.accession_number,
             deadline_at=deadline_at,
         )
+        submission_source = adapter.capture_filing_submission(
+            cik=request.cik,
+            accession_number=filing.accession_number,
+            filed_at=filing.accepted_at,
+            accepted_at=filing.accepted_at,
+            filing_date=filing.filing_date,
+            form=filing.form,
+            is_amendment=filing.is_amendment,
+            amendment_scope="unknown" if filing.is_amendment else None,
+            deadline_at=deadline_at,
+        )
         index_source = replace(
             index_source,
             available_at=filing.accepted_at,
@@ -915,6 +931,7 @@ class SecAcquisitionUseCase:
             mappings=mappings,
             mapping_resolver=mapping_resolver,
             reference_sources=(submissions_source, index_source),
+            submission_source=submission_source,
             dts_filenames=dts_filenames,
             profile=validation_profile,
             form=filing.form,

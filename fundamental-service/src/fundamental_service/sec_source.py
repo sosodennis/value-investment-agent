@@ -79,6 +79,119 @@ class _SecResponse:
     declared_size: int | None
 
 
+class SecRequestTransportPort(Protocol):
+    """HTTP implementation injected beneath SEC URL and response policies."""
+
+    policy: SecRequestPolicy
+
+    def _request(
+        self, uri: str, *, deadline_at: datetime | None = None
+    ) -> _SecResponse: ...
+
+
+class SecSourceCapturePort(SecRequestTransportPort, Protocol):
+    """SEC evidence capture surface consumed by acquisition and ingestion."""
+
+    policy: SecRequestPolicy
+
+    def capture_company_facts(
+        self,
+        cik: str,
+        *,
+        captured_at: datetime | None = None,
+        deadline_at: datetime | None = None,
+    ) -> CapturedSource: ...
+
+    def capture_company_tickers(
+        self, *, deadline_at: datetime | None = None
+    ) -> CapturedSource: ...
+
+    def capture_submissions(
+        self,
+        cik: str,
+        *,
+        captured_at: datetime | None = None,
+        deadline_at: datetime | None = None,
+    ) -> CapturedSource: ...
+
+    def capture_filing_index(
+        self,
+        *,
+        cik: str,
+        accession_number: str,
+        deadline_at: datetime | None = None,
+        filed_at: datetime | None = None,
+        captured_at: datetime | None = None,
+    ) -> CapturedSource: ...
+
+    def capture_filing_submission(
+        self,
+        *,
+        cik: str,
+        accession_number: str,
+        filed_at: datetime,
+        captured_at: datetime | None = None,
+        form: str = "10-K",
+        is_amendment: bool = False,
+        amends_accession: str | None = None,
+        amendment_scope: str | None = None,
+        accepted_at: datetime | None = None,
+        filing_date: date | None = None,
+        deadline_at: datetime | None = None,
+    ) -> CapturedSource: ...
+
+    def capture_filing(
+        self,
+        *,
+        cik: str,
+        accession_number: str,
+        primary_document: str,
+        filed_at: datetime,
+        captured_at: datetime | None = None,
+        form: str = "10-K",
+        is_amendment: bool = False,
+        amends_accession: str | None = None,
+        amendment_scope: str | None = None,
+        accepted_at: datetime | None = None,
+        filing_date: date | None = None,
+        deadline_at: datetime | None = None,
+    ) -> CapturedSource: ...
+
+    def capture_filing_archive(
+        self,
+        *,
+        cik: str,
+        accession_number: str,
+        filed_at: datetime,
+        filename: str | None = None,
+        captured_at: datetime | None = None,
+        form: str = "10-K",
+        is_amendment: bool = False,
+        amends_accession: str | None = None,
+        amendment_scope: str | None = None,
+        accepted_at: datetime | None = None,
+        deadline_at: datetime | None = None,
+    ) -> CapturedSource: ...
+
+    def capture_filing_resource(
+        self,
+        *,
+        cik: str,
+        accession_number: str,
+        filename: str,
+        role: SourceRole = SourceRole.TAXONOMY,
+        filed_at: datetime | None = None,
+        filing_date: date | None = None,
+        taxonomy_manifest_id: str | None = None,
+        form: str = "XBRL-DTS",
+        is_amendment: bool = False,
+        amends_accession: str | None = None,
+        amendment_scope: str | None = None,
+        captured_at: datetime | None = None,
+        deadline_at: datetime | None = None,
+    ) -> CapturedSource: ...
+
+
 class _NoRedirectHandler(HTTPRedirectHandler):
     """Keep provider redirects visible to the SEC allowlist boundary."""
 
@@ -117,6 +230,9 @@ def sec_source_register() -> SourceRegister:
                 "sec-filing-index", SourceRole.REFERENCE, SEC_TERMS, "indefinite"
             ),
             LegalSource("sec-filing", SourceRole.FILING, SEC_TERMS, "indefinite"),
+            LegalSource(
+                "sec-filing-submission", SourceRole.FILING, SEC_TERMS, "indefinite"
+            ),
             LegalSource(
                 "sec-filing-archive", SourceRole.FILING, SEC_TERMS, "indefinite"
             ),
@@ -506,6 +622,60 @@ class SecEdgarSourceAdapter:
             media_type=response.media_type or "text/html",
             http_status=response.http_status,
             available_at=accepted_at or filed_at,
+            captured_at=captured_at or response.available_at,
+            publication_at=filed_at,
+            filed_at=filed_at,
+            filing_date=filing_date,
+            accession_number=accession_number,
+            form=form,
+            filing_version=accession_number,
+            is_amendment=is_amendment,
+            amends_accession=amends_accession,
+            amendment_scope=amendment_scope,
+            response_headers=response.response_headers,
+            declared_size=response.declared_size,
+            received_size=len(response.content),
+        )
+
+    def capture_filing_submission(
+        self,
+        *,
+        cik: str,
+        accession_number: str,
+        filed_at: datetime,
+        captured_at: datetime | None = None,
+        form: str = "10-K",
+        is_amendment: bool = False,
+        amends_accession: str | None = None,
+        amendment_scope: str | None = None,
+        accepted_at: datetime | None = None,
+        filing_date: date | None = None,
+        deadline_at: datetime | None = None,
+    ) -> CapturedSource:
+        """Capture the accession-bound EDGAR full-submission text response."""
+        normalized = cik.strip().lstrip("0") or "0"
+        accession_path = accession_number.replace("-", "")
+        if not normalized.isdigit() or len(normalized) > 10:
+            raise ValueError("CIK must be numeric and at most ten digits")
+        if not accession_path.isdigit() or len(accession_path) != 18:
+            raise ValueError("accession number must be in SEC accession format")
+        if not re.fullmatch(r"\d{10}-\d{2}-\d{6}", accession_number):
+            raise ValueError("accession number must be in SEC accession format")
+        filename = f"{accession_number}.txt"
+        uri = (
+            f"https://www.sec.gov/Archives/edgar/data/{int(normalized)}/"
+            f"{accession_path}/{filename}"
+        )
+        response = self._request(uri, deadline_at=deadline_at)
+        available_at = accepted_at or filed_at
+        return CapturedSource(
+            source_id="sec-filing-submission",
+            uri=uri,
+            role=SourceRole.FILING,
+            content=response.content,
+            media_type=response.media_type or "text/plain",
+            http_status=response.http_status,
+            available_at=available_at,
             captured_at=captured_at or response.available_at,
             publication_at=filed_at,
             filed_at=filed_at,

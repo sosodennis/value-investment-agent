@@ -8,6 +8,7 @@ from fundamental_service.contracts import QualityStatus
 from fundamental_service.operations import ServiceError
 from fundamental_service.preparation_runner import (
     SourceAcquisitionOutcomeV1,
+    SourcePreparationAcquisitionsV1,
     SourcePreparationPlanV2,
 )
 from fundamental_service.serialization import canonical_bytes, sha256_digest
@@ -211,4 +212,56 @@ def test_outcome_rejects_incomplete_or_unordered_evidence(changes):
                 "issue_codes": ("SOURCE_INVALID",),
                 **changes,
             }
+        )
+
+
+@pytest.mark.parametrize("failure", ["invalidated", "plan", "request", "bytes"])
+def test_retained_outcome_corruption_refuses_before_resolution(
+    tmp_path, monkeypatch, failure
+):
+    fixture = _fixture(tmp_path)
+    plan = fixture.plan
+    outcomes = (
+        SourceAcquisitionOutcomeV1(
+            request_digest=(
+                "0" * 64 if failure == "request" else sha256_digest(plan.ingestions[0])
+            ),
+            quality_status=None,
+            issue_codes=("SOURCE_INVALID",),
+        ),
+    )
+    artifact_id = f"source-preparation-acquisitions:{plan.digest}"
+    publication = fixture.artifacts.put_with_receipt(
+        artifact_id,
+        SourcePreparationAcquisitionsV1(
+            plan_digest="0" * 64 if failure == "plan" else plan.digest,
+            source_outcomes=outcomes,
+        ),
+    )
+    if failure == "invalidated":
+        fixture.artifacts.invalidate(artifact_id)
+    elif failure == "bytes":
+        record = publication.artifact
+        path = fixture.artifacts._artifact_path(record.content_hash, record.media_type)
+        path.write_bytes(b"{}")
+
+    def forbidden(*args, **kwargs):
+        pytest.fail("invalid retained outcomes must refuse before release resolution")
+
+    monkeypatch.setattr(
+        "fundamental_service.preparation_runner.SourcePreparationRunner._resolve",
+        forbidden,
+    )
+    with pytest.raises((ValueError, SnapshotError)):
+        _run(_runner(fixture), plan)
+
+
+def test_source_coverage_cannot_launder_verified_acquisition_quality():
+    with pytest.raises(ValueError, match="verified source coverage"):
+        SourceAcquisitionOutcomeV1(
+            request_digest="a" * 64,
+            quality_status=QualityStatus.VERIFIED,
+            snapshot_id="source",
+            manifest_digest="b" * 64,
+            source_coverage_status=QualityStatus.PROVISIONAL,
         )

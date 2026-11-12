@@ -24,6 +24,7 @@ from .original_issuer import OriginalIssuerEvidenceV1
 from .serialization import sha256_digest
 
 DEPRECIATION = "us-gaap:DepreciationDepletionAndAmortization"
+FIXED_ASSET_DEPRECIATION = "us-gaap:Depreciation"
 ADJUSTED_DEPRECIATION = "registered:ContinuingDepreciationAndAmortization"
 POLICY = "newmarket-original-continuing-depreciation-v1"
 
@@ -34,6 +35,7 @@ class OriginalClassification:
     fact_digest: str
     continuing_years: tuple[int, ...]
     discontinued_years: tuple[int, ...]
+    direct_concept: str = DEPRECIATION
 
 
 # The source audit and scope rationale are in docs/accounting-role-evidence.md.
@@ -57,7 +59,33 @@ _ORIGINALS = {
         (2014, 2015, 2016),
         (),
     ),
+    ("0000724910", "0001376474-23-000283"): OriginalClassification(
+        "26d95888105590690531f4b3c4da8ca910e6aa4e315f6372ed51c55459b0b05c",
+        "1ce5d69c3a2b560110b3cfffba644b15125475ce3531a99bdc5a5f5fd35ef90e",
+        (2022, 2023),
+        (),
+        FIXED_ASSET_DEPRECIATION,
+    ),
+    ("0000724910", "0001376474-24-000214"): OriginalClassification(
+        "e337d87718577db631e61f5495c3c8f96304c0552161cb5054305967394c9dc6",
+        "21c4ebca39e56c934edded6065b4ac78a0f451de96a540afe5d49726c53b01c1",
+        (2023, 2024),
+        (),
+        FIXED_ASSET_DEPRECIATION,
+    ),
 }
+
+
+def registered_depreciation_concept(original: OriginalIssuerEvidenceV1) -> str:
+    """Choose a proposal from a matched original; selection still rechecks it."""
+    entry = _ORIGINALS.get((original.source.cik, original.source.accession_number))
+    if (
+        entry is not None
+        and original.source.content_hash == entry.source_hash
+        and fact_semantic_digest(original.report) == entry.fact_digest
+    ):
+        return entry.direct_concept
+    return DEPRECIATION
 
 
 @dataclass(frozen=True)
@@ -72,6 +100,7 @@ def select_registered_depreciation(
     original: OriginalIssuerEvidenceV1,
     *,
     adjusted: bool,
+    source_concept: str = DEPRECIATION,
     security_id: str | None = None,
 ) -> DepreciationSelection:
     """Reproduce only the registered source classification, never infer absence."""
@@ -83,19 +112,35 @@ def select_registered_depreciation(
         return DepreciationSelection(reason_codes=("MAPPING_DA_SOURCE_MISMATCH",))
     totals = tuple(
         f
-        for f in original.report.facts
+        for f in sorted(original.report.facts, key=sha256_digest)
         if f.concept == DEPRECIATION and not f.dimensions and f.is_numeric
     )
+    if not adjusted and source_concept != entry.direct_concept:
+        return DepreciationSelection(
+            rejected=tuple(
+                (f, "MAPPING_DA_OPERATING_SCOPE_UNRESOLVED") for f in totals
+            ),
+            reason_codes=("MAPPING_DA_CONCEPT_SCOPE_UNREVIEWED",),
+        )
     rejected = tuple(
         (f, "MAPPING_DA_DISCONTINUED_ADJUSTMENT_REQUIRED")
         for f in totals
         if f.period_end is not None and f.period_end.year in entry.discontinued_years
     )
     if not adjusted:
+        direct = tuple(
+            f
+            for f in sorted(original.report.facts, key=sha256_digest)
+            if f.concept == entry.direct_concept and not f.dimensions and f.is_numeric
+        )
+        if entry.direct_concept != DEPRECIATION:
+            rejected = tuple(
+                (f, "MAPPING_DA_DIFFERENT_ACCOUNTING_SCOPE") for f in totals
+            )
         return DepreciationSelection(
             selected=tuple(
                 f
-                for f in totals
+                for f in direct
                 if f.period_end is not None
                 and f.period_end.year in entry.continuing_years
             ),
