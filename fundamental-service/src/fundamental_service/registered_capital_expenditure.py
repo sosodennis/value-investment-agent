@@ -35,6 +35,16 @@ _ORIGINALS = {
         "67ab534c782b3412c77d57cdc2e6dd42a2809924488d85ea6d975a0d09c706a1",
         (2014, 2015, 2016),
     ),
+    ("0000724910", "0001376474-23-000283"): OriginalCapitalExpenditureScope(
+        "26d95888105590690531f4b3c4da8ca910e6aa4e315f6372ed51c55459b0b05c",
+        "1ce5d69c3a2b560110b3cfffba644b15125475ce3531a99bdc5a5f5fd35ef90e",
+        (2022, 2023),
+    ),
+    ("0000724910", "0001376474-24-000214"): OriginalCapitalExpenditureScope(
+        "e337d87718577db631e61f5495c3c8f96304c0552161cb5054305967394c9dc6",
+        "21c4ebca39e56c934edded6065b4ac78a0f451de96a540afe5d49726c53b01c1",
+        (2023, 2024),
+    ),
 }
 
 

@@ -34,13 +34,15 @@ from .registered_capital_expenditure import (
 from .registered_depreciation import (
     ADJUSTED_DEPRECIATION,
     DEPRECIATION,
+    FIXED_ASSET_DEPRECIATION,
+    registered_depreciation_concept,
     select_registered_depreciation,
 )
 from .serialization import sha256_digest
 from .taxonomy_evidence import require_original_taxonomy
 
 AUTOMATIC_MAPPING_INPUT_ROLE = "automatic-mapping-input-v1"
-AUTOMATIC_MAPPING_POLICY: Literal["source-bound-us-gaap-v6"] = "source-bound-us-gaap-v6"
+AUTOMATIC_MAPPING_POLICY: Literal["source-bound-us-gaap-v7"] = "source-bound-us-gaap-v7"
 _GAAP_NAMESPACE = re.compile(
     r"http://(?:fasb\.org|xbrl\.us)/us-gaap/\d{4}(?:-\d{2}-\d{2})?"
 )
@@ -169,7 +171,10 @@ class AutomaticMappingRequestV1(AutomaticMappingSourceV1):
 
 
 def automatic_mapping_proposal(
-    normalized_field: str, *, mapping_version: str
+    normalized_field: str,
+    *,
+    mapping_version: str,
+    original: OriginalIssuerEvidenceV1 | None = None,
 ) -> CanonicalMappingV1 | None:
     """Create only proposals supported by the service's executable rule table."""
     rule = _RULES.get(normalized_field)
@@ -180,6 +185,8 @@ def automatic_mapping_proposal(
     if not disclosed:
         assert rule is not None
         concept = rule.concept
+    if normalized_field == "depreciation_and_amortization" and original is not None:
+        concept = registered_depreciation_concept(original)
     payload = {
         "contract_version": "fundamental.v1",
         "source_concept": concept,
@@ -205,7 +212,7 @@ class AutomaticMappingDecisionV1(ReleaseModel):
     input_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
     source_revision: str = Field(pattern=r"^[0-9a-f]{40}$")
     evaluator_id: str = Field(min_length=1)
-    policy_version: Literal["source-bound-us-gaap-v6"] = AUTOMATIC_MAPPING_POLICY
+    policy_version: Literal["source-bound-us-gaap-v7"] = AUTOMATIC_MAPPING_POLICY
     policy_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
     status: Literal["approved", "abstain"]
     reason_codes: tuple[str, ...]
@@ -332,7 +339,8 @@ def evaluate_automatic_mapping(
     )
     depreciation = (
         proposal.normalized_field == "depreciation_and_amortization"
-        and proposal.source_concept in {DEPRECIATION, ADJUSTED_DEPRECIATION}
+        and proposal.source_concept
+        in {DEPRECIATION, ADJUSTED_DEPRECIATION, FIXED_ASSET_DEPRECIATION}
     )
     capital_expenditure = (
         proposal.normalized_field == "capital_expenditure"
@@ -343,6 +351,7 @@ def evaluate_automatic_mapping(
     if (
         (
             not computed
+            and not depreciation
             and (rule is None or proposal.source_concept not in rule.concepts)
         )
         or proposal.accounting_rules is not None
@@ -375,6 +384,7 @@ def evaluate_automatic_mapping(
         classification = select_registered_depreciation(
             original,
             adjusted=adjusted,
+            source_concept=proposal.source_concept,
             security_id=(
                 request.security_identity.security_id
                 if request.security_identity is not None

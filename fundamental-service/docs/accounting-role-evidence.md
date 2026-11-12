@@ -164,6 +164,51 @@ The existing signed mapping replay reproduces the selection after restart.
 This guards the release boundary; NEWMARKET 2013 continuing capex and the first
 complete empirical forecast/label/error case remain unresolved.
 
+### Registered NVE operating D&A and cash capex
+
+Automatic policy `source-bound-us-gaap-v7` adds only CIK `0000724910` originals
+[`0001376474-23-000283`](https://www.sec.gov/Archives/edgar/data/724910/000137647423000283/nvec-20230331.htm)
+and
+[`0001376474-24-000214`](https://www.sec.gov/Archives/edgar/data/724910/000137647424000214/nvec-20240331.htm).
+Both selectors bind the raw source hash and complete parsed fact multiset.
+This is a module edit to the existing accounting policy; provider acquisition,
+storage, financial formulas and public contracts retain their existing owners.
+
+The fixed-assets policy explicitly covers machinery/equipment depreciation and
+leasehold-improvement amortization. The complete statements and operating note
+classify those fixed assets within NVE's single operating business. The registered
+operating D&A source is `us-gaap:Depreciation`, rather than a general alias for
+the cash-flow `DepreciationDepletionAndAmortization` aggregate:
+
+| Original | Annual periods | Operating fixed-asset D&A | Cash-flow D&A aggregate |
+| --- | --- | --- | --- |
+| 2023 | FY2022 / FY2023 | USD214,877 / USD196,738 | USD424,981 / USD257,606 |
+| 2024 | FY2023 / FY2024 | USD196,738 / USD308,147 | USD196,738 / USD308,147 |
+
+The 2024 cash-flow statement separately reports securities premium/discount
+amortization, including USD60,868 in FY2023. The earlier original included that
+amount in its FY2023 aggregate. This explains the comparative classification
+difference; the evaluator uses the contemporaneous fixed-asset note directly.
+It never derives an earlier amount from a future filing or infers an unreported
+FY2022 component from the aggregate difference. Every original aggregate remains
+in the report and the ordered rejection evidence. Matching numbers in a later
+column do not make the concepts interchangeable. An aggregate proposal for
+these registered originals abstains with `MAPPING_DA_CONCEPT_SCOPE_UNREVIEWED`.
+
+The same complete originals classify the cash-flow PPE purchases as operating
+fixed-asset investment: FY2022/FY2023 in the 2023 original and FY2023/FY2024 in
+the 2024 original. This scope is specific to these original statements, fixed
+assets policy and business disclosure; a single-segment tag or lack of a
+discontinued-operations tag cannot authorize another original. Amounts, units,
+periods and original reported precision are always read from source facts.
+
+Automatic batch proposals now receive the original so they can choose its
+registered direct concept. The existing signed mapping replay rechecks the same
+registration. Unregistered or changed sources still abstain. These partial
+classifications assert no missing balance, claim/award absence, complete release,
+market policy, numerical valuation or history sufficiency. NVE remains an
+additional service case; it does not replace a fixed replay-cohort member.
+
 A `disclosed` duration transcribes one finite decimal literal from an exact
 nonnumeric parsed fact. `DisclosedAmountV1` retains Unicode code-point offsets
 for the exact quote, amount token, unit quote and scale token, plus reported
