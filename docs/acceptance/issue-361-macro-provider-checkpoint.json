@@ -1,0 +1,181 @@
+{
+  "acceptance": {
+    "full_market_policy_admitted": false,
+    "full_numerical_flow": false,
+    "supported_history_threshold": null
+  },
+  "blockers": [369, 381, 394],
+  "commands": {
+    "architecture_guard": {
+      "command": "python3 scripts/architecture_guard.py",
+      "exit_code": 0
+    },
+    "compose_config": {
+      "command": "FUNDAMENTAL_SERVICE_HOST_PORT=18683 FUNDAMENTAL_POSTGRES_HOST_PORT=18684 COMPOSE_PROJECT_NAME=value-investment-agent-361-macro-providers docker compose -f compose/verification/docker-compose.issue280-operations.yml config --quiet",
+      "exit_code": 0
+    },
+    "diff_check": {
+      "command": "git diff --check",
+      "exit_code": 0
+    },
+    "focused_tests": {
+      "command": "uv run --frozen --extra dev --project fundamental-service pytest -q fundamental-service/tests/test_macro_series.py fundamental-service/tests/test_bea_source.py fundamental-service/tests/test_sofr_source.py fundamental-service/tests/test_public_source.py",
+      "exit_code": 0,
+      "result": "65 passed"
+    },
+    "full_fundamental_service_tests": {
+      "command": "FUNDAMENTAL_TEST_DATABASE_URL=postgresql+asyncpg://fundamental:fundamental@127.0.0.1:18665/issue361_test PYTHONHASHSEED=0 uv run --frozen --extra dev --project fundamental-service pytest fundamental-service/tests -ra",
+      "exit_code": 0,
+      "result": "1513 passed, 11 skipped, 1 intentional duplicate-ZIP fixture warning"
+    },
+    "mypy": {
+      "command": "uv run --frozen --project fundamental-service --with mypy==1.19.1 mypy --no-incremental --follow-imports=silent --ignore-missing-imports fundamental-service/src/fundamental_service/macro_series.py fundamental-service/src/fundamental_service/bea_source.py fundamental-service/src/fundamental_service/sofr_source.py fundamental-service/src/fundamental_service/public_source.py",
+      "exit_code": 0
+    },
+    "macro_replay_first": {
+      "command": "uv run --frozen --project fundamental-service python .audit/issue-361-market-policy/replay_macro_sources.py",
+      "exit_code": 0
+    },
+    "macro_replay_second": {
+      "command": "uv run --frozen --project fundamental-service python .audit/issue-361-market-policy/replay_macro_sources.py",
+      "exit_code": 0
+    },
+    "post_restart_readiness_retry": {
+      "command": "curl -fsS http://127.0.0.1:18683/readyz",
+      "exit_code": 0
+    },
+    "readiness_during_restart_startup": {
+      "command": "curl -fsS http://127.0.0.1:18683/readyz",
+      "exit_code": 56,
+      "result": "connection reset while container was health: starting; subsequent retry passed"
+    },
+    "ruff": {
+      "command": "uvx --from ruff==0.14.10 ruff check fundamental-service/src/fundamental_service/macro_series.py fundamental-service/src/fundamental_service/bea_source.py fundamental-service/src/fundamental_service/sofr_source.py fundamental-service/src/fundamental_service/public_source.py fundamental-service/tests/test_macro_series.py fundamental-service/tests/test_bea_source.py fundamental-service/tests/test_public_source.py",
+      "exit_code": 0
+    },
+    "ruff_format": {
+      "command": "uvx --from ruff==0.14.10 ruff format --check fundamental-service/src/fundamental_service/macro_series.py fundamental-service/src/fundamental_service/bea_source.py fundamental-service/src/fundamental_service/sofr_source.py fundamental-service/src/fundamental_service/public_source.py fundamental-service/tests/test_macro_series.py fundamental-service/tests/test_bea_source.py fundamental-service/tests/test_public_source.py",
+      "exit_code": 0
+    },
+    "service_restart_readiness": {
+      "command": "curl -fsS http://127.0.0.1:18683/readyz",
+      "exit_code": 0,
+      "result": "passed after restart; the immediate first probe during startup had returned connection reset"
+    },
+    "service_source_replay": {
+      "command": "docker exec -e PYTHONPATH=/app/src value-investment-agent-361-macro-providers-fundamental-service-1 python /tmp/issue361-verify-macro-provider.py",
+      "exit_code": 0,
+      "result": "same 96-observation BEA vintage digest as host"
+    },
+    "service_start": {
+      "command": "FUNDAMENTAL_SERVICE_HOST_PORT=18683 FUNDAMENTAL_POSTGRES_HOST_PORT=18684 COMPOSE_PROJECT_NAME=value-investment-agent-361-macro-providers docker compose -p value-investment-agent-361-macro-providers -f compose/verification/docker-compose.issue280-operations.yml up -d --build",
+      "exit_code": 0
+    },
+    "service_restart": {
+      "command": "docker compose -p value-investment-agent-361-macro-providers -f compose/verification/docker-compose.issue280-operations.yml restart fundamental-service",
+      "exit_code": 0
+    },
+    "worktree_commit_check": {
+      "command": "git show --check --oneline --stat HEAD",
+      "exit_code": 0
+    }
+  },
+  "compose": {
+    "configuration": "compose/verification/docker-compose.issue280-operations.yml",
+    "fundamental_service_url": "http://127.0.0.1:18683",
+    "host_ports": {
+      "fundamental_postgres": 18684,
+      "fundamental_service": 18683
+    },
+    "image_id": "sha256:15bde94beb3adea296e5a906dd1eeb36c7709a204a34e0c91123ee0a5cadadb0",
+    "network": "value-investment-agent-361-macro-providers_default",
+    "project": "value-investment-agent-361-macro-providers",
+    "readyz": {
+      "capabilities": {
+        "identity_resolution_configured": false
+      },
+      "contract_version": "internal.v1",
+      "status": "ready"
+    },
+    "services": {
+      "fundamental-postgres": "healthy",
+      "fundamental-service": "healthy"
+    },
+    "volumes": [
+      "value-investment-agent-361-macro-providers_fundamental-postgres-data",
+      "value-investment-agent-361-macro-providers_fundamental-service-data"
+    ]
+  },
+  "exact_commit": "811452624ba37f9fe50aa7868db8da98ab642e67",
+  "implementation_commit": "811452624ba37f9fe50aa7868db8da98ab642e67",
+  "input_digest": "b302dcfb46fc94fbab10502cde044ffcdb43c4cc0c7db06a2f53ef94d6646889",
+  "inputs": {
+    "macro_replay_script_sha256": "5712453ef431fdb87d3c92de8631ca29f0290805644a00f9cf3b4a045778f2b5",
+    "runtime_lock_sha256": "98335af7aa12ea08b8089c871fd87c8d670477f55dbc205661a6f261554347bc",
+    "source_receipt_digests": [
+      "aafdb1c82ca2227c4335b601dc6eb128d3eae29f232b5f543849d2f66db5b165",
+      "ab21b103bb5a136f0b14e241da0f72263fca6235c1dd6a9b31348135d1aea73e",
+      "dcdddab4a4e8f20ca2b9ad40a35146fe2d6b4c267aeda8b2466182591a5e89e6"
+    ],
+    "source_sha256": [
+      "f76c9406d9ec29120ba2ab9501ec7c5c7747fd6943cab32042c635dbaee85842",
+      "53b2edda97655fe25aa7332856dc9de46ed1994d3d10c9126b97503d2ef12cb3",
+      "7d65cefd3597f20da125eff8824e82cd2d031e8fe54ec5e4f465f0318b788dea"
+    ]
+  },
+  "macro_evidence": {
+    "alternative_provider_contract_tests": "passed",
+    "bea_gdp": {
+      "available_at": "2025-03-29T04:00:00Z",
+      "cagr_2014_2024": "0.0518273583383322793155411870614886097823519071276",
+      "ceiling_digest": "d631e2608f49363e16867ba49bc20b58190f654865d059a7c250b2558d71f0c6",
+      "observations": 96,
+      "vintage_digest": "c842670138e27a025fdcb8417b62bafb1f3fb16ef3e6ec6bda9cd0f102630423"
+    },
+    "replay_failures": [
+      {
+        "case": "gdp-before-archive-available",
+        "classification": "unavailable"
+      },
+      {
+        "case": "retrospective-sofr-before-capture",
+        "classification": "unavailable"
+      }
+    ],
+    "sofr_vintage_digest": "8404b8002bc4e63ce35abe8d509a7aa2029a840e65ee05d79b0b348bd799c907"
+  },
+  "output_digest": "34d0cbd1e554bd537298d8ed51da26a4eb0ead7bed78194e173999247463dd1d",
+  "replay_repeats": [
+    {
+      "artifact_wrote": {
+        "input": true,
+        "output": true,
+        "retained_source_bytes": false
+      },
+      "input_digest": "b302dcfb46fc94fbab10502cde044ffcdb43c4cc0c7db06a2f53ef94d6646889",
+      "output_digest": "34d0cbd1e554bd537298d8ed51da26a4eb0ead7bed78194e173999247463dd1d",
+      "provider_calls": 0
+    },
+    {
+      "artifact_wrote": {
+        "input": false,
+        "output": false,
+        "retained_source_bytes": false
+      },
+      "input_digest": "b302dcfb46fc94fbab10502cde044ffcdb43c4cc0c7db06a2f53ef94d6646889",
+      "output_digest": "34d0cbd1e554bd537298d8ed51da26a4eb0ead7bed78194e173999247463dd1d",
+      "provider_calls": 0
+    }
+  ],
+  "runtime": {
+    "python": "3.11.15",
+    "uv_lock_sha256": "98335af7aa12ea08b8089c871fd87c8d670477f55dbc205661a6f261554347bc",
+    "worktree": "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence",
+    "branch": "codex/issue-361-replay-evidence",
+    "postgres_test_project": "value-investment-agent-361-flow-tests",
+    "postgres_test_host_port": 18665
+  },
+  "scope": "provider-neutral BEA nominal-GDP and New York Fed overnight-SOFR vintages; not complete valuation",
+  "status": "partial-source-provider-increment",
+  "threshold": null
+}
