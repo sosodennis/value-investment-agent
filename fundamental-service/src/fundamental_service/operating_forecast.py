@@ -24,7 +24,11 @@ from .contracts import (
 )
 from .numerical_policy import VALUATION_NUMERICAL_POLICY, using_valuation_context
 from .original_issuer import IssuerOperatingSourceV1
-from .operating_projection import OperatingProjectionError, project_operating_nodes
+from .operating_projection import (
+    OperatingProjectionError,
+    project_operating_nodes,
+    resolve_operating_model,
+)
 from .serialization import sha256_digest
 from .valuation_preparation import (
     FORECAST_COMPOSER_VERSION,
@@ -35,8 +39,13 @@ from .valuation_preparation import (
     derive_historical_metrics,
 )
 from .valuation_requirements import (
+    composite_working_capital_requirements_profile,
     operating_forecast_requirements_profile,
     select_released_facts,
+)
+from .working_capital import (
+    CompositeWorkingCapitalInputV1,
+    canonical_working_capital_inputs,
 )
 
 HISTORY_WINDOW_POLICY: Literal["complete-trailing-annual-v1"] = (
@@ -130,6 +139,7 @@ def prepare_operating_forecast(
     mapping_version: str,
     data_release_manifest_digest: str,
     history_window_years: Literal[3, 4, 5] | None = None,
+    working_capital_inputs: tuple[CompositeWorkingCapitalInputV1, ...] = (),
 ) -> OperatingForecastV1:
     """Compose the formal operating stage from already released canonical facts.
 
@@ -137,6 +147,7 @@ def prepare_operating_forecast(
     function performs no I/O, release verification, signing or quality promotion.
     """
 
+    resolve_operating_model(model_id, model_version)
     if history_window_years is not None and (
         not isinstance(history_window_years, int)
         or history_window_years not in (3, 4, 5)
@@ -152,6 +163,7 @@ def prepare_operating_forecast(
         mapping_version=mapping_version,
         data_release_manifest_digest=data_release_manifest_digest,
         history_window_years=history_window_years,
+        working_capital_inputs=canonical_working_capital_inputs(working_capital_inputs),
     )
 
 
@@ -166,13 +178,21 @@ def _prepare(
     mapping_version: str,
     data_release_manifest_digest: str,
     history_window_years: Literal[3, 4, 5] | None,
+    working_capital_inputs: tuple[CompositeWorkingCapitalInputV1, ...],
 ) -> OperatingForecastV1:
-    profile = operating_forecast_requirements_profile(model_id)
+    profile = (
+        composite_working_capital_requirements_profile(model_id)
+        if working_capital_inputs
+        else operating_forecast_requirements_profile(model_id)
+    )
     selected = select_released_facts(
         facts,
         profile=profile,
         snapshot=snapshot,
         valuation_timestamp=snapshot.valuation_timestamp,
+        additional_fact_ids=tuple(
+            fact_id for item in working_capital_inputs for fact_id in item.fact_ids
+        ),
     )
     input_digest = sha256_digest(
         {
@@ -190,6 +210,11 @@ def _prepare(
             "mapping_version": mapping_version,
             "data_release_manifest_digest": data_release_manifest_digest,
             **(
+                {"working_capital_inputs": working_capital_inputs}
+                if working_capital_inputs
+                else {}
+            ),
+            **(
                 {
                     "history_window_years": history_window_years,
                     "history_window_policy": HISTORY_WINDOW_POLICY,
@@ -205,6 +230,7 @@ def _prepare(
         quality_status=QualityStatus.ABSTAIN,
         issue_codes=selected.issue_codes,
         missing_evidence=selected.missing_fields,
+        working_capital_inputs=working_capital_inputs,
     )
     fiscal_years: tuple[int, ...] = ()
     selected_fact_ids = tuple(fact.fact_id for fact in selected.facts)
@@ -214,11 +240,25 @@ def _prepare(
     nodes: tuple[CalculationNodeV1, ...] = ()
     if not selected.missing_fields:
         try:
+            if any(
+                item.mapping_version != mapping_version
+                for item in working_capital_inputs
+            ):
+                raise PreparationError(
+                    "WORKING_CAPITAL_MAPPING_VERSION_MISMATCH",
+                    "composite inputs must pin the released mapping version",
+                )
             if len({fact.fact_id for fact in facts}) != len(facts):
                 raise PreparationError(
                     "OPERATING_FACT_ID_DUPLICATE", "input fact IDs must be unique"
                 )
             for fact in selected.facts:
+                if fact.fact_id in {
+                    fact_id
+                    for item in working_capital_inputs
+                    for fact_id in item.fact_ids
+                }:
+                    continue
                 if isinstance(snapshot, IssuerOperatingSourceV1):
                     source = next(
                         source
@@ -264,6 +304,7 @@ def _prepare(
                 snapshot=snapshot,
                 valuation_timestamp=snapshot.valuation_timestamp,
                 profile=profile,
+                working_capital_inputs=working_capital_inputs,
             )
             fiscal_years = tuple(period.fiscal_year for period in history.periods)
             if history_window_years is not None:
@@ -297,6 +338,10 @@ def _prepare(
                     sorted({fact.fact_id for fact in selected.facts} - used)
                 )
             metrics = derive_historical_metrics(history)
+            if working_capital_inputs:
+                metrics = metrics.model_copy(
+                    update={"working_capital_inputs": working_capital_inputs}
+                )
             if metrics.quality_status is not QualityStatus.ABSTAIN:
                 forecast = compose_forecast_assumptions(history, metrics)
                 taxes = tuple(

@@ -15,10 +15,10 @@ from fundamental_service.bea_source import (
 from fundamental_service.macro_series import (
     MacroSeriesProviderPort,
     NominalGdpGrowthCeilingV1,
-    RetainedMacroSourceV1,
     reproduce_macro_vintage,
 )
 from fundamental_service.snapshots import SnapshotError
+from fundamental_service.source_evidence import RetainedSourceV1
 
 CAPTURED_AT = datetime(2026, 11, 12, 9, tzinfo=UTC)
 WORKBOOK_URI = (
@@ -97,9 +97,9 @@ def _release(*, release_day: str = "Thursday, March 27, 2025") -> bytes:
 
 def _sources(
     workbook: bytes | None = None, release: bytes | None = None
-) -> tuple[RetainedMacroSourceV1, RetainedMacroSourceV1]:
+) -> tuple[RetainedSourceV1, RetainedSourceV1]:
     return (
-        RetainedMacroSourceV1(
+        RetainedSourceV1(
             source_id="bea-nipa-archive",
             uri=WORKBOOK_URI,
             source_version=BEA_GDP_PROFILE,
@@ -107,7 +107,7 @@ def _sources(
             content=_workbook() if workbook is None else workbook,
             captured_at=CAPTURED_AT,
         ),
-        RetainedMacroSourceV1(
+        RetainedSourceV1(
             source_id="bea-gdp-release",
             uri=RELEASE_URI,
             source_version=BEA_GDP_PROFILE,

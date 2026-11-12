@@ -131,6 +131,9 @@ class PolicyRecordV1(BaseModel):
     profile_id: str = Field(min_length=1)
     model_id: ModelId
     model_version: str = Field(min_length=1)
+    issuer_id: str | None = Field(
+        default=None, min_length=1, exclude_if=lambda value: value is None
+    )
     assumptions: AssumptionsV1 | None
     market_inputs: MarketPolicyInputsV1 | None = None
     source_refs: tuple[str, ...] = Field(min_length=1)
@@ -224,6 +227,7 @@ class PolicyRegistry:
         model_version: str,
         valuation_timestamp: datetime,
         policy_id: str | None,
+        issuer_id: str | None = None,
     ) -> PolicyRecordV1:
         model = self.model(model_id, model_version)
         if model is None:
@@ -249,6 +253,7 @@ class PolicyRegistry:
                 and item.model_version == model_version
                 and item.status == "active"
                 and item.policy_digest not in _REVOKED_POLICY_DIGESTS
+                and (item.issuer_id is None or item.issuer_id == issuer_id)
                 and item.effective_at <= valuation_timestamp
                 and (
                     item.market_inputs is None
@@ -259,6 +264,11 @@ class PolicyRegistry:
                 )
             )
             if candidates:
+                issuer_scoped = tuple(
+                    item for item in candidates if item.issuer_id is not None
+                )
+                if issuer_scoped:
+                    candidates = issuer_scoped
                 latest = max(item.effective_at for item in candidates)
                 candidates = tuple(
                     item for item in candidates if item.effective_at == latest
@@ -267,6 +277,16 @@ class PolicyRegistry:
             code = "POLICY_NOT_FOUND" if not candidates else "POLICY_AMBIGUOUS"
             raise PolicyError(code, "no unique effective policy release is available")
         policy = candidates[0]
+        if policy.issuer_id is not None and issuer_id is None:
+            raise PolicyError(
+                "POLICY_ISSUER_REQUIRED",
+                "issuer-scoped policy requires valuation issuer context",
+            )
+        if policy.issuer_id is not None and policy.issuer_id != issuer_id:
+            raise PolicyError(
+                "POLICY_ISSUER_MISMATCH",
+                "issuer-scoped policy does not cover the valuation issuer",
+            )
         if policy.model_id != model_id or policy.model_version != model_version:
             raise PolicyError(
                 "POLICY_MODEL_MISMATCH",

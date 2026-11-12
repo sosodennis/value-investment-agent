@@ -36,7 +36,7 @@ from fundamental_service.policies import (
     initial_policy_records,
     resolve_policy,
 )
-from fundamental_service.public_source import PUBLIC_SOURCE_SPECS
+from fundamental_service.public_source_catalog import PUBLIC_SOURCE_SPECS
 from fundamental_service.sec_source import SEC_TERMS
 from fundamental_service.serialization import sha256_digest
 from fundamental_service.testsupport import make_valuation

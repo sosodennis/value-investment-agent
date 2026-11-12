@@ -5,11 +5,11 @@ from decimal import Decimal
 import pytest
 from fundamental_service.macro_series import (
     MacroSeriesProviderPort,
-    RetainedMacroSourceV1,
     reproduce_macro_vintage,
     select_macro_vintage,
 )
 from fundamental_service.snapshots import SnapshotError
+from fundamental_service.source_evidence import RetainedSourceV1
 from fundamental_service.treasury_source import (
     ALFRED_SOURCE,
     ALFRED_TERMS,
@@ -24,8 +24,8 @@ from fundamental_service.treasury_source import (
 from treasury_source_fixtures import ALFRED_CSV, ALFRED_URI, TREASURY_URI, TREASURY_XML
 
 
-def source(alfred: bool) -> RetainedMacroSourceV1:
-    return RetainedMacroSourceV1(
+def source(alfred: bool) -> RetainedSourceV1:
+    return RetainedSourceV1(
         source_id=ALFRED_SOURCE if alfred else TREASURY_SOURCE,
         uri=ALFRED_URI if alfred else TREASURY_URI,
         source_version=ALFRED_TREASURY_PROFILE if alfred else TREASURY_PROFILE,

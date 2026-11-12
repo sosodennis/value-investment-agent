@@ -55,6 +55,15 @@ from ..facts import (
 from ..equity_award_evidence import load_release_dilution_evidence
 from ..equity_dilution import DilutionError
 from ..quote_providers import QuoteSourceProviderPort
+from ..macro_series import MacroSeriesProviderPort
+from ..market_reference import MarketReferenceProviderPort
+from ..source_admission import SourceAdmissionV1, SourceUsePolicyV1
+from ..source_admission_evidence import load_release_source_admissions
+from ..market_source_selection import MarketSourceError, verify_observed_market_inputs
+from ..market_reference_evidence import load_release_market_reference_selection
+from ..market_reference_selection import IssuerMarketReferenceSelectionV1
+from ..terminal_growth import TerminalGrowthSelectionV1
+from ..terminal_growth_evidence import load_release_terminal_growth_selection
 from ..fiscal_periods import resolve_fiscal_periods
 from ..governance import ModelInventory
 from ..history_composition import verify_history_components
@@ -149,6 +158,10 @@ def _approved_market_policy(
     policy: PolicyRecordV1 | None,
     *,
     valuation_timestamp: datetime | None = None,
+    currency: str | None = None,
+    source_admissions: tuple[SourceAdmissionV1, ...] = (),
+    reference_selection: IssuerMarketReferenceSelectionV1 | None = None,
+    terminal_selection: TerminalGrowthSelectionV1 | None = None,
 ) -> ApprovedMarketPolicyInputsV1 | None:
     """Translate a complete released market policy into preparation evidence."""
 
@@ -159,8 +172,26 @@ def _approved_market_policy(
         item.available_at > valuation_timestamp for item in market_inputs.evidence
     ):
         return None
+    observed_traces: dict[str, TraceV1] = {}
+    if any(item.method == "observed_source" for item in market_inputs.evidence):
+        if valuation_timestamp is None or currency is None:
+            raise MarketSourceError(
+                "MARKET_RATE_CONTEXT_MISSING",
+                "observed market inputs require valuation time and currency",
+            )
+        observed_traces = verify_observed_market_inputs(
+            market_inputs,
+            admissions=source_admissions,
+            valuation_at=valuation_timestamp,
+            currency=currency,
+            reference_selection=reference_selection,
+        )
 
     def trace_for(role: str) -> TraceV1:
+        if role == "terminal_growth" and terminal_selection is not None:
+            return terminal_selection.trace
+        if role in observed_traces:
+            return observed_traces[role]
         evidence = next(
             (item for item in market_inputs.evidence if item.role == role), None
         )
@@ -337,6 +368,9 @@ class FundamentalApplication:
     policy_registry: PolicyRegistry | None = None
     model_inventory: ModelInventory | None = None
     quote_providers: tuple[QuoteSourceProviderPort, ...] = ()
+    macro_providers: tuple[MacroSeriesProviderPort, ...] = ()
+    reference_providers: tuple[MarketReferenceProviderPort, ...] = ()
+    source_use_policy: SourceUsePolicyV1 | None = None
     release_cache: CacheLifecycle = dataclass_field(
         default_factory=lambda: CacheLifecycle(max_entries=256),
         repr=False,
@@ -657,6 +691,7 @@ class FundamentalApplication:
                 model_version=value.model_version,
                 valuation_timestamp=value.valuation_context.valuation_timestamp,
                 policy_id=value.policy_id,
+                issuer_id=value.identity.issuer_id,
             )
             if (
                 value.provenance.policy_version is not None
@@ -693,6 +728,7 @@ class FundamentalApplication:
                 model_version=value.model_version,
                 valuation_timestamp=value.valuation_context.valuation_timestamp,
                 policy_id=value.policy_id,
+                issuer_id=value.identity.issuer_id,
             )
             return resolve_policy_overrides(request=value, policy=policy)
         except PolicyError as error:
@@ -1188,6 +1224,21 @@ class FundamentalApplication:
 
         evidence = self.read_valuation_evidence(request)
         snapshot = self.snapshot(request.snapshot_id)
+        try:
+            source_admissions = load_release_source_admissions(
+                self._data_release_manifest(request.data_release_manifest_digest),
+                artifacts=self.artifact_store,
+                policy=self.source_use_policy,
+                macro_providers=self.macro_providers,
+                reference_providers=self.reference_providers,
+            )
+        except (DataReleaseError, SnapshotError, ValueError) as error:
+            raise ServiceError(
+                getattr(error, "code", "SOURCE_ADMISSION_INVALID"),
+                str(error),
+                status_code=422,
+                retryable=False,
+            ) from error
         model_version = f"{request.model_id}-v2"
         policy = None
         if self.policy_registry is not None:
@@ -1197,6 +1248,7 @@ class FundamentalApplication:
                     model_version=model_version,
                     valuation_timestamp=snapshot.valuation_timestamp,
                     policy_id=None,
+                    issuer_id=snapshot.identity.issuer_id,
                 )
             except PolicyError as error:
                 raise ServiceError(
@@ -1212,10 +1264,33 @@ class FundamentalApplication:
             else (f"{request.model_id}-us-gaap-public-v3")
         )
         policy_version = policy.policy_version if policy is not None else "unresolved"
-        market_policy = _approved_market_policy(
-            policy,
-            valuation_timestamp=snapshot.valuation_timestamp,
-        )
+        try:
+            reference_selection = load_release_market_reference_selection(
+                self._data_release_manifest(request.data_release_manifest_digest),
+                snapshot=snapshot,
+                policy=policy,
+                admissions=source_admissions,
+                artifacts=self.artifact_store,
+            )
+            terminal_selection = load_release_terminal_growth_selection(
+                self._data_release_manifest(request.data_release_manifest_digest),
+                snapshot=snapshot,
+                policy=policy,
+                admissions=source_admissions,
+                artifacts=self.artifact_store,
+            )
+            market_policy = _approved_market_policy(
+                policy,
+                valuation_timestamp=snapshot.valuation_timestamp,
+                currency=snapshot.identity.currency,
+                source_admissions=source_admissions,
+                reference_selection=reference_selection,
+                terminal_selection=terminal_selection,
+            )
+        except (MarketSourceError, DataReleaseError, SnapshotError) as error:
+            raise ServiceError(
+                error.code, str(error), status_code=422, retryable=False
+            ) from error
         try:
             dilution = load_release_dilution_evidence(
                 self._data_release_manifest(request.data_release_manifest_digest),

@@ -17,6 +17,12 @@ from .valuation_requirements import (
     ValuationRequirementsProfileV1,
     require_operating_source_profile,
 )
+from .working_capital import (
+    CompositeWorkingCapitalAssessmentV1,
+    CompositeWorkingCapitalInputV1,
+    WORKING_CAPITAL_INPUT_POLICY,
+    assess_composite_working_capital,
+)
 
 _MIN_ANNUAL_DAYS = 300
 _MAX_ANNUAL_DAYS = 380
@@ -35,6 +41,7 @@ class AnnualHistoryPeriodV1:
     period_end: date
     duration_facts: tuple[CanonicalFactV1, ...]
     instant_facts: tuple[CanonicalFactV1, ...]
+    working_capital: CompositeWorkingCapitalAssessmentV1 | None = None
 
     def fact(self, normalized_field: str) -> CanonicalFactV1 | None:
         return next(
@@ -57,6 +64,23 @@ class AnnualHistoryV1:
     quality: QualityStatus
     issue_codes: tuple[str, ...]
     supported_history_threshold: int | None = None
+    working_capital_assessments: tuple[CompositeWorkingCapitalAssessmentV1, ...] = ()
+
+
+@dataclass(frozen=True)
+class EstimatedOperatingInputsV1:
+    """Research-only inputs; source facts keep their original reported values.
+
+    This internal metric input grants no source, mapping or release approval.
+    The scenario owner validates allocations and retains their assumptions.
+    """
+
+    fiscal_year: int
+    capital_expenditure: Decimal
+    operating_working_capital: Decimal
+    capex_facts: tuple[CanonicalFactV1, ...]
+    working_capital_facts: tuple[CanonicalFactV1, ...]
+    assumption_digest: str
 
 
 def resolve_annual_history(
@@ -65,6 +89,7 @@ def resolve_annual_history(
     snapshot: SourceSnapshotV1 | IssuerOperatingSourceV1,
     valuation_timestamp: datetime,
     profile: ValuationRequirementsProfileV1,
+    working_capital_inputs: tuple[CompositeWorkingCapitalInputV1, ...] = (),
 ) -> AnnualHistoryV1:
     """Resolve the profile's annual periods without choosing conflicting facts.
 
@@ -75,15 +100,34 @@ def resolve_annual_history(
     if valuation_timestamp.tzinfo is None or valuation_timestamp.utcoffset() is None:
         raise ValueError("valuation_timestamp must include a timezone")
     require_operating_source_profile(snapshot, profile)
+    supplied_facts = tuple(facts)
+    aggregate_policy = profile.profile_version == WORKING_CAPITAL_INPUT_POLICY
+    if working_capital_inputs and not aggregate_policy:
+        raise AnnualHistoryError(
+            "WORKING_CAPITAL_INPUT_POLICY_MISMATCH",
+            "composite inputs require their explicit versioned requirements profile",
+        )
+    by_date = {item.period_end: item for item in working_capital_inputs}
+    if len(by_date) != len(working_capital_inputs):
+        raise AnnualHistoryError(
+            "WORKING_CAPITAL_PERIOD_DUPLICATE",
+            "one composite input per instant is required",
+        )
+    assessments: list[CompositeWorkingCapitalAssessmentV1] = []
 
     duration_fields = profile.annual_duration_fields
     instant_fields = profile.annual_instant_fields
     source_records = {record.content_hash: record for record in snapshot.source_records}
     requested_fields = set(duration_fields + instant_fields)
+    policy_fact_ids = {
+        fact_id for item in working_capital_inputs for fact_id in item.fact_ids
+    }
     eligible = tuple(
         fact
-        for fact in facts
-        if fact.normalized_field in requested_fields
+        for fact in supplied_facts
+        if (
+            fact.normalized_field in requested_fields or fact.fact_id in policy_fact_ids
+        )
         and fact_matches_operating_identity(fact, snapshot)
         and fact.source.content_hash in source_records
         and fact.available_at <= valuation_timestamp
@@ -152,6 +196,21 @@ def resolve_annual_history(
             )
         period_start, period_end = next(iter(period_shapes))
         assert period_start is not None
+        assessment = None
+        if aggregate_policy:
+            policy_input = by_date.get(period_end)
+            if policy_input is None:
+                missing_fields.append((fiscal_year, "working_capital_policy_input"))
+                continue
+            assessment = assess_composite_working_capital(
+                policy_input, supplied_facts, snapshot=snapshot
+            )
+            assessments.append(assessment)
+            if assessment.status == "abstained":
+                missing_fields.extend(
+                    (fiscal_year, reason) for reason in assessment.missing_evidence
+                )
+                continue
         selected_instant: dict[str, CanonicalFactV1] = {}
         for field in instant_fields:
             candidates = tuple(
@@ -181,7 +240,12 @@ def resolve_annual_history(
             period_start=period_start,
             period_end=period_end,
             duration_facts=tuple(selected_duration[field] for field in duration_fields),
-            instant_facts=tuple(selected_instant[field] for field in instant_fields),
+            instant_facts=tuple(
+                selected_instant[field]
+                for field in instant_fields
+                if field in selected_instant
+            ),
+            working_capital=assessment,
         )
         complete_by_year[fiscal_year] = period
 
@@ -204,9 +268,12 @@ def resolve_annual_history(
             quality=QualityStatus.ABSTAIN,
             issue_codes=("HISTORY_MINIMUM_PERIODS_UNAVAILABLE",),
             supported_history_threshold=profile.supported_history_threshold,
+            working_capital_assessments=tuple(assessments),
         )
 
     issue_codes = ["HISTORY_THRESHOLD_UNVALIDATED"]
+    if aggregate_policy:
+        issue_codes.append("WORKING_CAPITAL_INPUT_ESTIMATED")
     if missing_fields:
         issue_codes.append("HISTORY_WINDOW_PARTIALLY_UNAVAILABLE")
     return AnnualHistoryV1(
@@ -218,6 +285,7 @@ def resolve_annual_history(
         quality=QualityStatus.PROVISIONAL,
         issue_codes=tuple(issue_codes),
         supported_history_threshold=profile.supported_history_threshold,
+        working_capital_assessments=tuple(assessments),
     )
 
 

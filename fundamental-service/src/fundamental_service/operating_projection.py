@@ -3,13 +3,41 @@
 from decimal import Decimal
 
 from .contracts import CalculationNodeV1, ForecastAssumptionsV1, TraceV1
-from .numerical_policy import using_valuation_context
+from .numerical_policy import VALUATION_NUMERICAL_POLICY, using_valuation_context
+from .policies import ModelSpecV1, initial_model_specs
+
+OPERATING_FORMULA_GRAPH = "calculator-v2-fcff"
 
 
 class OperatingProjectionError(ValueError):
     def __init__(self, code: str, message: str) -> None:
         super().__init__(message)
         self.code = code
+
+
+def resolve_operating_model(model_id: str, model_version: str) -> ModelSpecV1:
+    """Bind a requested version to the specification of this executable graph."""
+    spec = next(
+        (item for item in initial_model_specs() if item.model_id == model_id), None
+    )
+    if spec is None:
+        raise OperatingProjectionError(
+            "MODEL_UNSUPPORTED", f"model {model_id} has no executable operating graph"
+        )
+    if model_version != spec.model_version:
+        raise OperatingProjectionError(
+            "MODEL_VERSION_UNSUPPORTED",
+            f"model {model_id} requires executable version {spec.model_version}",
+        )
+    if (
+        spec.formula_graph != OPERATING_FORMULA_GRAPH
+        or spec.numerical_policy != VALUATION_NUMERICAL_POLICY
+    ):
+        raise OperatingProjectionError(
+            "MODEL_SPEC_EXECUTION_MISMATCH",
+            "model specification differs from the executable operating graph",
+        )
+    return spec
 
 
 @using_valuation_context

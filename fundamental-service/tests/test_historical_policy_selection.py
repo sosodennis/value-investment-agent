@@ -19,11 +19,19 @@ def _at(year: int) -> datetime:
     return datetime(year, 1, 1, tzinfo=UTC)
 
 
-def _policy(name: str, *, effective_year: int, available_year: int) -> PolicyRecordV1:
+def _policy(
+    name: str,
+    *,
+    effective_year: int,
+    available_year: int,
+    issuer_id: str | None = None,
+) -> PolicyRecordV1:
     payload = initial_policy_records()[0].model_dump(mode="python")
     payload["policy_id"] = name
     payload["policy_version"] = name
     payload["effective_at"] = _at(effective_year)
+    if issuer_id is not None:
+        payload["issuer_id"] = issuer_id
     payload["market_inputs"] = synthetic_market_inputs().model_dump(mode="python")
     market = payload["market_inputs"]
     market["policy_version"] = name
@@ -37,13 +45,17 @@ def _policy(name: str, *, effective_year: int, available_year: int) -> PolicyRec
 
 
 def _select(
-    registry: PolicyRegistry, *, policy_id: str | None = None
+    registry: PolicyRegistry,
+    *,
+    policy_id: str | None = None,
+    issuer_id: str | None = None,
 ) -> PolicyRecordV1:
     return registry.select_policy(
         model_id="fcff_dcf",
         model_version="fcff_dcf-v2",
         valuation_timestamp=_at(2016),
         policy_id=policy_id,
+        issuer_id=issuer_id,
     )
 
 
@@ -129,3 +141,83 @@ def test_recomputed_policy_digest_changes_when_source_evidence_changes() -> None
     )
     changed = PolicyRecordV1.model_validate(payload)
     assert changed.policy_digest != policy.policy_digest
+
+
+def test_issuer_policy_precedes_generic_policy_without_leaking_between_issuers():
+    generic = _policy("fixture-generic", effective_year=2015, available_year=2015)
+    issuer_a = _policy(
+        "fixture-issuer-a",
+        effective_year=2014,
+        available_year=2014,
+        issuer_id="issuer-a",
+    )
+    issuer_b = _policy(
+        "fixture-issuer-b",
+        effective_year=2016,
+        available_year=2016,
+        issuer_id="issuer-b",
+    )
+    registry = PolicyRegistry(initial_model_specs(), (generic, issuer_a, issuer_b))
+
+    assert _select(registry, issuer_id="issuer-a") == issuer_a
+    assert _select(registry, issuer_id="issuer-b") == issuer_b
+    assert _select(registry) == generic
+    assert _select(registry, issuer_id="issuer-c") == generic
+
+
+def test_pinned_issuer_policy_requires_matching_issuer_context():
+    issuer_a = _policy(
+        "fixture-issuer-a",
+        effective_year=2015,
+        available_year=2015,
+        issuer_id="issuer-a",
+    )
+    registry = PolicyRegistry(initial_model_specs(), (issuer_a,))
+
+    for issuer_id, code in (
+        (None, "POLICY_ISSUER_REQUIRED"),
+        ("issuer-b", "POLICY_ISSUER_MISMATCH"),
+    ):
+        with pytest.raises(PolicyError) as error:
+            _select(registry, policy_id=issuer_a.policy_id, issuer_id=issuer_id)
+        assert error.value.code == code
+
+    with pytest.raises(PolicyError) as error:
+        _select(registry, issuer_id="issuer-b")
+    assert error.value.code == "POLICY_NOT_FOUND"
+
+
+def test_same_issuer_effective_policy_ambiguity_is_not_hidden_by_other_issuers():
+    first = _policy(
+        "fixture-issuer-a-first",
+        effective_year=2015,
+        available_year=2015,
+        issuer_id="issuer-a",
+    )
+    second = _policy(
+        "fixture-issuer-a-second",
+        effective_year=2015,
+        available_year=2015,
+        issuer_id="issuer-a",
+    )
+    unrelated = _policy(
+        "fixture-issuer-b",
+        effective_year=2015,
+        available_year=2015,
+        issuer_id="issuer-b",
+    )
+    registry = PolicyRegistry(initial_model_specs(), (first, second, unrelated))
+
+    with pytest.raises(PolicyError) as error:
+        _select(registry, issuer_id="issuer-a")
+    assert error.value.code == "POLICY_AMBIGUOUS"
+    assert _select(registry, issuer_id="issuer-b") == unrelated
+
+
+def test_unscoped_policy_keeps_legacy_digest_bytes():
+    policy = initial_policy_records()[0]
+    assert policy.issuer_id is None
+    assert "issuer_id" not in policy.model_dump(exclude={"policy_digest"})
+    assert sha256_digest(policy.model_dump(exclude={"policy_digest"})) == (
+        policy.policy_digest
+    )

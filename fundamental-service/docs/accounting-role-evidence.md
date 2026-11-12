@@ -93,9 +93,10 @@ absence assertion, trusted release or verified forecast.
 
 `registered_depreciation.py` proposes the bounded policy
 `newmarket-original-continuing-depreciation-v1`, under automatic policy
-`source-bound-us-gaap-v4`. This version also carries forward #408's historical
+`source-bound-us-gaap-v6`. This version also carries forward #408's historical
 total `SalesRevenueNet` support and cross-concept conflict refusals, together
-with the current security-bound stock-compensation policy. It registers CIK `0001282637` originals
+with #376's direct consolidated current-assets/current-liabilities totals and
+the current security-bound stock-compensation policy. It registers CIK `0001282637` originals
 `0001282637-15-000004`, `0001282637-16-000028` and
 `0001282637-17-000005` by both retained source SHA-256 and the complete parsed
 fact multiset digest. The registry pins classifications, never numeric amounts.
@@ -135,6 +136,33 @@ certificates demonstrate execution of the proposed versioned policy; they do
 not establish complete working-capital/capex coverage, a full issuer release,
 forecast accuracy or a supported history threshold.
 
+
+### Registered continuing cash-capex scope
+
+Under automatic policy `source-bound-us-gaap-v6`, cash purchases of PPE require
+an original-specific continuing-operations classification in
+`registered_capital_expenditure.py`. A consolidated annual QName establishes
+cash-purchase shape; it does not establish that discontinued operations are
+excluded. This closes the automatic-mapping gap recorded in #415.
+
+The three NEWMARKET originals above are pinned by raw source hash and complete
+parsed fact multiset. The original discontinued-operations note states that
+cash flows combine continuing and discontinued activity. The disposal occurred
+in 2013. Only the post-disposal periods (2014 in the 2014 original; 2014/2015 in
+the 2015 original; 2014/2015/2016 in the label original) are classified here.
+2012/2013 aggregate purchases retain
+`MAPPING_CAPEX_CONTINUING_SCOPE_UNRESOLVED` and cannot enter the approved
+observation scope. No amount is replaced, and no precise continuing capex is
+inferred from the equality of segment asset additions and cash purchases.
+
+Unregistered originals abstain with `MAPPING_CAPEX_SCOPE_UNREVIEWED`; a changed
+fact set abstains with `MAPPING_CAPEX_SOURCE_MISMATCH`. Existing issuer, unit,
+annual period, precision, consolidation, original integrity and availability
+checks still apply. Other issuers need their own supported scope classification;
+a source-shaped tag or missing discontinued tag cannot inherit this one.
+The existing signed mapping replay reproduces the selection after restart.
+This guards the release boundary; NEWMARKET 2013 continuing capex and the first
+complete empirical forecast/label/error case remain unresolved.
 
 A `disclosed` duration transcribes one finite decimal literal from an exact
 nonnumeric parsed fact. `DisclosedAmountV1` retains Unicode code-point offsets

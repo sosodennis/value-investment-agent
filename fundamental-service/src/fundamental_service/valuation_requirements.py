@@ -20,6 +20,7 @@ from .contracts import (
 from .serialization import sha256_digest
 from .equity_award_evidence import AWARD_FACT_FIELDS
 from .original_issuer import IssuerOperatingSourceV1, fact_matches_operating_identity
+from .working_capital import WORKING_CAPITAL_INPUT_POLICY
 
 
 class ValuationRequirementsProfileV1(StrictModel):
@@ -97,6 +98,7 @@ def select_released_facts(
     profile: ValuationRequirementsProfileV1,
     snapshot: SourceSnapshotV1 | IssuerOperatingSourceV1,
     valuation_timestamp: datetime,
+    additional_fact_ids: tuple[str, ...] = (),
 ) -> ReleasedFactSelectionV1:
     """Select every eligible candidate for the profile without caller mappings."""
 
@@ -107,8 +109,11 @@ def select_released_facts(
     rejected: list[str] = []
     for fact in facts:
         if (
-            fact.normalized_field
-            not in (*required_fields, *profile.supporting_fact_fields)
+            (
+                fact.normalized_field
+                not in (*required_fields, *profile.supporting_fact_fields)
+                and fact.fact_id not in additional_fact_ids
+            )
             or not fact_matches_operating_identity(fact, snapshot)
             or fact.source.content_hash not in source_hashes
             or fact.available_at > valuation_timestamp
@@ -152,8 +157,9 @@ def require_operating_source_profile(
     snapshot: SourceSnapshotV1 | IssuerOperatingSourceV1,
     profile: ValuationRequirementsProfileV1,
 ) -> None:
-    if isinstance(snapshot, IssuerOperatingSourceV1) and profile != (
-        operating_forecast_requirements_profile(profile.model_id)
+    if isinstance(snapshot, IssuerOperatingSourceV1) and profile not in (
+        operating_forecast_requirements_profile(profile.model_id),
+        composite_working_capital_requirements_profile(profile.model_id),
     ):
         raise ValueError("issuer-only evidence requires the exact operating profile")
 
@@ -274,11 +280,34 @@ def operating_forecast_requirements_profile(
     )
 
 
+def composite_working_capital_requirements_profile(
+    model_id: str,
+    *,
+    operating_only: bool = True,
+) -> ValuationRequirementsProfileV1:
+    """Explicit alternate input policy; never reinterpret an existing release."""
+
+    exact = (
+        operating_forecast_requirements_profile(model_id)
+        if operating_only
+        else valuation_requirements_profile(model_id)
+    )
+    return ValuationRequirementsProfileV1.model_validate(
+        {
+            **exact.model_dump(),
+            "profile_id": f"{exact.profile_id}-{WORKING_CAPITAL_INPUT_POLICY}",
+            "profile_version": WORKING_CAPITAL_INPUT_POLICY,
+            "annual_instant_fields": ("current_assets", "current_liabilities"),
+        }
+    )
+
+
 __all__ = [
     "ReleasedFactSelectionV1",
     "UnsupportedValuationModel",
     "ValuationRequirementsProfileV1",
     "operating_forecast_requirements_profile",
+    "composite_working_capital_requirements_profile",
     "select_released_facts",
     "valuation_requirements_profile",
 ]

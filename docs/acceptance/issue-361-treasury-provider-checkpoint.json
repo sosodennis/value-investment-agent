@@ -8,7 +8,76 @@
   },
   "artifact_policy": "Raw originals, normalized observations, logs and reports remain in ignored .audit or the issue-owned persistent volume. Canonical publication uses temporary file plus atomic rename and reuses identical existing bytes.",
   "change": "Interchangeable Treasury XML and ALFRED DGS10 adapters implement MacroSeriesProviderPort; source capture refuses caller timestamp overrides before I/O.",
-  "checkpoint_digest": "df0300dfecf8c3278165bdcbaf02e2f951f606d39f5cf0e54da563f805829031",
+  "checkpoint_digest": "e231dfc60d4e150008bc114b16baca640c9eb6a04fa68de2bd91134dac3af990",
+  "ci": {
+    "evidence": {
+      "conclusion": "success",
+      "head_sha": "79f9aaa75cc9cf0ecd1ae8f755bce43d60d6714e",
+      "release_gate": "skipped",
+      "run_id": 43204292072
+    },
+    "implementation": {
+      "conclusion": "success",
+      "executed_jobs": 12,
+      "head_sha": "1619b07fa9f7fdfe9a09f2f1b5723443be324de5",
+      "release_gate": "skipped",
+      "run_id": 43203440980
+    }
+  },
+  "dependency_review": {
+    "blocking_issue": 416,
+    "child_files_modified": false,
+    "ci": "12 executed jobs pass; release gate skipped",
+    "classification_evidence_approved": false,
+    "counterexample": "Caller-declared operating_current_payables accepted as current_interest_bearing_debt exclusion coverage; estimated 35.0 with no missing evidence.",
+    "head_sha": "b0630e659062f6c03e7165e917d516ce85a92323",
+    "input_digest": "23de759a5cf034f7adcfa9cb6d2e8301c0e4ddbdc3a468dfca2d38b973ea29f8",
+    "integrated": false,
+    "output_digest": "fb0e5df14bf59c059c7cc4ea3dfcbdef1648ce08ca026f0406aaf96fe0fca7f3",
+    "pull_request": 414
+  },
+  "eligible_historical_source": {
+    "command": [
+      "uv",
+      "run",
+      "--frozen",
+      "--project",
+      "fundamental-service",
+      "python",
+      ".audit/issue-361-treasury-provider/capture_eligible_vintage.py"
+    ],
+    "complete_market_policy_approved": false,
+    "exact_commit": "79f9aaa75cc9cf0ecd1ae8f755bce43d60d6714e",
+    "exit_code": 0,
+    "external_report_digest": "28d5943876b8679effa02e64536996e193c5056083652035cf10f3bce6864d2c",
+    "full_numerical_flow": false,
+    "inventory_after_digest": "d0d37bf627011d28a551e7a9be9957302b8b52a3cad68ef693de4b24f13c64eb",
+    "inventory_before_digest": "d0d37bf627011d28a551e7a9be9957302b8b52a3cad68ef693de4b24f13c64eb",
+    "new_files": 0,
+    "protocol": "issue-361-eligible-alfred-source-repeat-v1",
+    "retained_prior_failure": {
+      "code": "ALFRED_SOURCE_INVALID",
+      "reason": "publisher returned full-history rows outside requested range; retained and rejected rather than silently filtered",
+      "request": "cosd=2025-03-28&coed=2025-03-28&vintage_date=2025-03-30",
+      "source_hash": "569f0543a1f28967706e711e6a228e5d51aa0593d89d5ac216db8048ee37188d"
+    },
+    "source_replay": {
+      "available_at": "2025-03-31T04:00:00Z",
+      "content_sha256": "67ddb51fd472391d490a25887e24764e06fc305feca60f1ae393ddc6d968f29b",
+      "exact_commit": "79f9aaa75cc9cf0ecd1ae8f755bce43d60d6714e",
+      "http_status": "200",
+      "input_digest": "2392951c6853864a1b22f8c2a24c8d0732c5e09d643489a56667167a76bfa901",
+      "latest_observation_date": "2025-03-27",
+      "observations": 4,
+      "output_digest": "58b9b7f31c4941b20348aae7a683793560488116f2f181eeedac2d41c850484f",
+      "provider_calls": 0,
+      "value": "4.38",
+      "wrote": false
+    },
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stdout_sha256": "2a71bc9cecf176fe0e007befb41cf30fbd70454493470a7ad7b0651373f32684",
+    "supported_history_threshold": null
+  },
   "engineering": {
     "all_passed": true,
     "commands": {

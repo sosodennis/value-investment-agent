@@ -213,6 +213,12 @@ class IssuerOperatingReleaseService:
             mapping_version=manifest.mapping_version,
             data_release_manifest_digest=manifest.manifest_digest,
             history_window_years=history_window_years,
+            working_capital_inputs=tuple(
+                item
+                for item in manifest.working_capital_inputs
+                if item.issuer_id == source.identity.issuer_id
+                and item.current_assets_fact_id in members
+            ),
         )
         return ReleasedOperatingForecastV1(
             manifest_digest=manifest.manifest_digest, canary=canary, forecast=forecast
