@@ -5,7 +5,7 @@
   "acceptance_scope": "fundamental-service",
   "acceptance_profile": "persistent-valuation-flow-v1",
   "branch": "codex/issue-376-aggregate-noncash-working-capital",
-  "commit": "a3d454932a485b02b5f636680a3cac0aa1849ab1",
+  "commit": "ed5511037379dc9733a6d430eb7dd37a803e2421",
   "sec_identity_required": true,
   "runtime_revalidation_required": true,
   "blockers": [
@@ -36,12 +36,12 @@
       "container_port": 8080,
       "published_port": 18973,
       "published_host": "0.0.0.0",
-      "image_id": "sha256:a551ac55269f469ada77d0a7fdbd81225ea5057cc74c253bea61c4631fb7a1b8",
+      "image_id": "sha256:701d396089ff6c499b773f722f0ad2a8bde9caac7014563caa112936ad5c5090",
       "source": {
         "repository_path": "fundamental-service/src/fundamental_service",
         "container_path": "/app/src/fundamental_service",
-        "file_count": 74,
-        "sha256": "2af183158f31826647cea555faff7b27328dd5931ee181ef4a101904edfe4b1e"
+        "file_count": 75,
+        "sha256": "b1b00f6ae245b5e3e0fec9eacbfaf692541e56e65cf525b399250bb22cc61dbf"
       },
       "runtime_pins": {
         "arelle-release": "2.47.4",
@@ -82,91 +82,91 @@
       "name": "source_reuse",
       "status": "pass",
       "command": "All retained original source bytes unchanged; no download or parser call.",
-      "commit": "a3d454932a485b02b5f636680a3cac0aa1849ab1",
+      "commit": "ed5511037379dc9733a6d430eb7dd37a803e2421",
       "exit_code": 0,
-      "input_digest": "47cf90826432b829e06778142719d555dff74399827c1d84328b9bb790c3a266",
-      "output_digest": "51100e9e30e769ad4283413faf72336d28385f164226fc0ad8b61449c8c059b2"
+      "input_digest": "384628cdc173a677c35cccdaa5468db28e79448dba821aa41d2af03d0d9c1322",
+      "output_digest": "ac22ff8a76c39735197af6800bea200649ec808fb60a0fa4d391906d3685f4cf"
     },
     {
       "name": "snapshot_persistence",
       "status": "pass",
       "command": "PostgreSQL metadata and automatic mapping persistence/recovery: 24 passed; own project test database.",
-      "commit": "a3d454932a485b02b5f636680a3cac0aa1849ab1",
+      "commit": "ed5511037379dc9733a6d430eb7dd37a803e2421",
       "exit_code": 0,
-      "input_digest": "22d2adcfd7f9c5a36166868bfb6c6e82c6a54122b80b02869e936129d5621dff",
-      "output_digest": "19e2b249c128109d28557c57f8048c33b5960d65a36161f6ce3650295d98ccc5"
+      "input_digest": "17de9f423e0b5610249564b0eb97c3e3f1551bb280a4f1f1066a86f872ea5be2",
+      "output_digest": "74fd41cdb11b9b52e68415f9ee5303e151fb649c5400a3e6b363b41449ccf225"
     },
     {
       "name": "mapping",
       "status": "pass",
       "command": "60 real NEWMARKET mapping decisions: 35 approved, 25 abstain; 87 provisional candidates, with three unresolved cash-capex observations retained as rejections. No complete issuer release.",
-      "commit": "a3d454932a485b02b5f636680a3cac0aa1849ab1",
+      "commit": "ed5511037379dc9733a6d430eb7dd37a803e2421",
       "exit_code": 0,
-      "input_digest": "47cf90826432b829e06778142719d555dff74399827c1d84328b9bb790c3a266",
-      "output_digest": "51100e9e30e769ad4283413faf72336d28385f164226fc0ad8b61449c8c059b2"
+      "input_digest": "384628cdc173a677c35cccdaa5468db28e79448dba821aa41d2af03d0d9c1322",
+      "output_digest": "ac22ff8a76c39735197af6800bea200649ec808fb60a0fa4d391906d3685f4cf"
     },
     {
       "name": "preparation",
       "status": "pass",
-      "command": "Full Fundamental suite: 1498 passed, 69 explicit skips. Synthetic owner/contract cases cover preparation; no real empirical completion is claimed.",
-      "commit": "a3d454932a485b02b5f636680a3cac0aa1849ab1",
+      "command": "Full Fundamental suite: 1502 passed, 69 explicit skips. Synthetic owner/contract cases cover preparation; no real empirical completion is claimed.",
+      "commit": "ed5511037379dc9733a6d430eb7dd37a803e2421",
       "exit_code": 0,
-      "input_digest": "d27596ce1654c2f57c349b892af9abe6e404b26c58ec8fbc604e2899ec1c2e7b",
-      "output_digest": "fec5919e2dc5439e3a63033697f150eccfb6224c76d8cdb760084d5d385d46e3"
+      "input_digest": "14f73452c9dc9df515eeef0095a40a3dfb8cb5ff45ef85f1f0b233eff7659787",
+      "output_digest": "6b7663ea49d8e60e5a725697e917846dd3ab6b75e0fc72e962c2821d933acc03"
     },
     {
       "name": "forecast",
       "status": "pass",
-      "command": "Full Fundamental suite: 1498 passed, 69 explicit skips. Synthetic owner/contract cases cover forecast; no real empirical completion is claimed.",
-      "commit": "a3d454932a485b02b5f636680a3cac0aa1849ab1",
+      "command": "Full Fundamental suite: 1502 passed, 69 explicit skips. Synthetic owner/contract cases cover forecast; no real empirical completion is claimed.",
+      "commit": "ed5511037379dc9733a6d430eb7dd37a803e2421",
       "exit_code": 0,
-      "input_digest": "d27596ce1654c2f57c349b892af9abe6e404b26c58ec8fbc604e2899ec1c2e7b",
-      "output_digest": "fec5919e2dc5439e3a63033697f150eccfb6224c76d8cdb760084d5d385d46e3"
+      "input_digest": "14f73452c9dc9df515eeef0095a40a3dfb8cb5ff45ef85f1f0b233eff7659787",
+      "output_digest": "6b7663ea49d8e60e5a725697e917846dd3ab6b75e0fc72e962c2821d933acc03"
     },
     {
       "name": "calculation",
       "status": "pass",
-      "command": "Full Fundamental suite: 1498 passed, 69 explicit skips. Synthetic owner/contract cases cover calculation; no real empirical completion is claimed.",
-      "commit": "a3d454932a485b02b5f636680a3cac0aa1849ab1",
+      "command": "Full Fundamental suite: 1502 passed, 69 explicit skips. Synthetic owner/contract cases cover calculation; no real empirical completion is claimed.",
+      "commit": "ed5511037379dc9733a6d430eb7dd37a803e2421",
       "exit_code": 0,
-      "input_digest": "d27596ce1654c2f57c349b892af9abe6e404b26c58ec8fbc604e2899ec1c2e7b",
-      "output_digest": "fec5919e2dc5439e3a63033697f150eccfb6224c76d8cdb760084d5d385d46e3"
+      "input_digest": "14f73452c9dc9df515eeef0095a40a3dfb8cb5ff45ef85f1f0b233eff7659787",
+      "output_digest": "6b7663ea49d8e60e5a725697e917846dd3ab6b75e0fc72e962c2821d933acc03"
     },
     {
       "name": "artifact_retrieval",
       "status": "pass",
-      "command": "Full Fundamental suite: 1498 passed, 69 explicit skips. Synthetic owner/contract cases cover artifact_retrieval; no real empirical completion is claimed.",
-      "commit": "a3d454932a485b02b5f636680a3cac0aa1849ab1",
+      "command": "Full Fundamental suite: 1502 passed, 69 explicit skips. Synthetic owner/contract cases cover artifact_retrieval; no real empirical completion is claimed.",
+      "commit": "ed5511037379dc9733a6d430eb7dd37a803e2421",
       "exit_code": 0,
-      "input_digest": "d27596ce1654c2f57c349b892af9abe6e404b26c58ec8fbc604e2899ec1c2e7b",
-      "output_digest": "fec5919e2dc5439e3a63033697f150eccfb6224c76d8cdb760084d5d385d46e3"
+      "input_digest": "14f73452c9dc9df515eeef0095a40a3dfb8cb5ff45ef85f1f0b233eff7659787",
+      "output_digest": "6b7663ea49d8e60e5a725697e917846dd3ab6b75e0fc72e962c2821d933acc03"
     },
     {
       "name": "restart_restore",
       "status": "pass",
-      "command": "Full Fundamental suite: 1498 passed, 69 explicit skips. Synthetic owner/contract cases cover restart_restore; no real empirical completion is claimed.",
-      "commit": "a3d454932a485b02b5f636680a3cac0aa1849ab1",
+      "command": "Full Fundamental suite: 1502 passed, 69 explicit skips. Synthetic owner/contract cases cover restart_restore; no real empirical completion is claimed.",
+      "commit": "ed5511037379dc9733a6d430eb7dd37a803e2421",
       "exit_code": 0,
-      "input_digest": "d27596ce1654c2f57c349b892af9abe6e404b26c58ec8fbc604e2899ec1c2e7b",
-      "output_digest": "fec5919e2dc5439e3a63033697f150eccfb6224c76d8cdb760084d5d385d46e3"
+      "input_digest": "14f73452c9dc9df515eeef0095a40a3dfb8cb5ff45ef85f1f0b233eff7659787",
+      "output_digest": "6b7663ea49d8e60e5a725697e917846dd3ab6b75e0fc72e962c2821d933acc03"
     },
     {
       "name": "failure_retention",
       "status": "pass",
-      "command": "Full Fundamental suite: 1498 passed, 69 explicit skips. Synthetic owner/contract cases cover failure_retention; no real empirical completion is claimed.",
-      "commit": "a3d454932a485b02b5f636680a3cac0aa1849ab1",
+      "command": "Full Fundamental suite: 1502 passed, 69 explicit skips. Synthetic owner/contract cases cover failure_retention; no real empirical completion is claimed.",
+      "commit": "ed5511037379dc9733a6d430eb7dd37a803e2421",
       "exit_code": 0,
-      "input_digest": "d27596ce1654c2f57c349b892af9abe6e404b26c58ec8fbc604e2899ec1c2e7b",
-      "output_digest": "fec5919e2dc5439e3a63033697f150eccfb6224c76d8cdb760084d5d385d46e3"
+      "input_digest": "14f73452c9dc9df515eeef0095a40a3dfb8cb5ff45ef85f1f0b233eff7659787",
+      "output_digest": "6b7663ea49d8e60e5a725697e917846dd3ab6b75e0fc72e962c2821d933acc03"
     },
     {
       "name": "deterministic_repeat",
       "status": "pass",
       "command": "Repeated real mapping reports have identical canonical input/output digests, zero new files/publications, wrote=false, unchanged hashes/sizes/mtimes. Full forecast/label replay not performed.",
-      "commit": "a3d454932a485b02b5f636680a3cac0aa1849ab1",
+      "commit": "ed5511037379dc9733a6d430eb7dd37a803e2421",
       "exit_code": 0,
-      "input_digest": "47cf90826432b829e06778142719d555dff74399827c1d84328b9bb790c3a266",
-      "output_digest": "51100e9e30e769ad4283413faf72336d28385f164226fc0ad8b61449c8c059b2"
+      "input_digest": "384628cdc173a677c35cccdaa5468db28e79448dba821aa41d2af03d0d9c1322",
+      "output_digest": "ac22ff8a76c39735197af6800bea200649ec808fb60a0fa4d391906d3685f4cf"
     },
     {
       "name": "concurrent_deduplication",
@@ -177,64 +177,64 @@
       "name": "architecture",
       "status": "pass",
       "command": "python3 scripts/architecture_guard.py (exit 0)",
-      "commit": "a3d454932a485b02b5f636680a3cac0aa1849ab1",
+      "commit": "ed5511037379dc9733a6d430eb7dd37a803e2421",
       "exit_code": 0,
-      "input_digest": "4956a1052bfe19315657865dc1aece73d1d57e33df27fe42c1d73b5fa4107ad2",
+      "input_digest": "b048999ae4e012c09220465192c4f7684d29c8e036dc8c17a52138bad96491c4",
       "output_digest": "2d486ae4c24aadb214f3580f7794c044ef455f95d35bea7504b03f0711c6141e"
     },
     {
       "name": "service_architecture",
       "status": "pass",
       "command": "uv run --frozen --project fundamental-service python -m fundamental_service.architecture_guard (exit 0)",
-      "commit": "a3d454932a485b02b5f636680a3cac0aa1849ab1",
+      "commit": "ed5511037379dc9733a6d430eb7dd37a803e2421",
       "exit_code": 0,
-      "input_digest": "3a0a53baff625501275568151688e9f81a97c2a1b9aa31bcc4ddcf9ca9aaecd7",
+      "input_digest": "7a029c0b74ad2f660c4e83605c91800534f31038b9647bb8e9d5f7684cc1ef8e",
       "output_digest": "834bd866d4de57d467f58d46ba410997908d107c3e81e4e8857b94199e1ea5c3"
     },
     {
       "name": "ruff",
       "status": "pass",
       "command": "uvx --from ruff==0.14.10 ruff check fundamental-service (exit 0)",
-      "commit": "a3d454932a485b02b5f636680a3cac0aa1849ab1",
+      "commit": "ed5511037379dc9733a6d430eb7dd37a803e2421",
       "exit_code": 0,
-      "input_digest": "4c045a366932e6240c549503f91c74c2b18c7e823ba560ae048efe122dbd2ef9",
+      "input_digest": "dedf84bc3ab2a2a3ca461e6240514251aad78c73992b94d211a6cba27e54b210",
       "output_digest": "6e686c7d66c129309a3cad69a801b4a4f04dbb808ea29f591fbc5b9c710ca127"
     },
     {
       "name": "format",
       "status": "pass",
       "command": "uvx --from ruff==0.14.10 ruff format --check fundamental-service/src/fundamental_service/annual_history.py fundamental-service/src/fundamental_service/automatic_mapping.py fundamental-service/src/fundamental_service/data_releases.py fundamental-service/src/fundamental_service/issuer_operating_release.py fundamental-service/src/fundamental_service/issuer_release_evidence.py fundamental-service/src/fundamental_service/operating_forecast.py fundamental-service/src/fundamental_service/registered_capital_expenditure.py fundamental-service/src/fundamental_service/release_runner.py fundamental-service/src/fundamental_service/valuation_preparation.py fundamental-service/src/fundamental_service/valuation_requirements.py fundamental-service/src/fundamental_service/working_capital.py fundamental-service/tests/test_automatic_mapping.py fundamental-service/tests/test_issuer_operating_release.py fundamental-service/tests/test_registered_capital_expenditure.py fundamental-service/tests/test_working_capital.py (exit 0)",
-      "commit": "a3d454932a485b02b5f636680a3cac0aa1849ab1",
+      "commit": "ed5511037379dc9733a6d430eb7dd37a803e2421",
       "exit_code": 0,
-      "input_digest": "fa23be0befccf3ba7a8b4f658786cd4168db8e885a54b53c0f200c7861fbf503",
+      "input_digest": "668be5636a48386b062ddaf5cbed54f475a5942793d5c0d4a87bc4408bb184af",
       "output_digest": "fca841126135aff68eae81dc970ea6ab96c5840cc86c3292e99e50def4d19693"
     },
     {
       "name": "types",
       "status": "pass",
       "command": "uv run --frozen --project fundamental-service --with mypy==1.19.1 mypy --no-incremental --follow-imports=silent --ignore-missing-imports fundamental-service/src/fundamental_service/annual_history.py fundamental-service/src/fundamental_service/automatic_mapping.py fundamental-service/src/fundamental_service/data_releases.py fundamental-service/src/fundamental_service/issuer_operating_release.py fundamental-service/src/fundamental_service/issuer_release_evidence.py fundamental-service/src/fundamental_service/operating_forecast.py fundamental-service/src/fundamental_service/registered_capital_expenditure.py fundamental-service/src/fundamental_service/release_runner.py fundamental-service/src/fundamental_service/valuation_preparation.py fundamental-service/src/fundamental_service/valuation_requirements.py fundamental-service/src/fundamental_service/working_capital.py (exit 0)",
-      "commit": "a3d454932a485b02b5f636680a3cac0aa1849ab1",
+      "commit": "ed5511037379dc9733a6d430eb7dd37a803e2421",
       "exit_code": 0,
-      "input_digest": "7a3d29e7216e09367952a67600bbe9933b5a11c908b27f092a28d28893381f9b",
+      "input_digest": "3d16d64dee2eb1d0f6a91858caf04803cdf4764b63e3733b4b451b1420f27d7a",
       "output_digest": "a103823ce16c3eb9654d240723dd738b7d465a4ecf872b7917a20bc94988165b"
     },
     {
       "name": "diff",
       "status": "pass",
       "command": "git diff --check (exit 0)",
-      "commit": "a3d454932a485b02b5f636680a3cac0aa1849ab1",
+      "commit": "ed5511037379dc9733a6d430eb7dd37a803e2421",
       "exit_code": 0,
-      "input_digest": "6443f801e728bb2c1f29cf5eaee7ecd1edf0b2d317db205e88123b9f4a897729",
+      "input_digest": "0ab32fdc23fecb2f55c822d4d35f016c8255c52c3a594a6cca1c178471c6a551",
       "output_digest": "834bd866d4de57d467f58d46ba410997908d107c3e81e4e8857b94199e1ea5c3"
     },
     {
       "name": "service_acceptance",
       "status": "pass",
-      "command": "Own project Compose config valid; PostgreSQL/Fundamental healthy; 74 installed Python source files equal exact commit; /readyz ready and SEC identity configured.",
-      "commit": "a3d454932a485b02b5f636680a3cac0aa1849ab1",
+      "command": "Own project Compose config valid; PostgreSQL/Fundamental healthy; 75 installed Python source files equal exact commit; /readyz ready and SEC identity configured.",
+      "commit": "ed5511037379dc9733a6d430eb7dd37a803e2421",
       "exit_code": 0,
-      "input_digest": "f787eab325511701691167c5c7fb0e46cf2ebb56706d2fa732ab4bc7b639b796",
-      "output_digest": "49ad10fadfc7828ca35cce9da20d7df55bce0aed284e6625bcca6a1f6315efc7"
+      "input_digest": "ad981ccbcb6f986129f1a0556fdb86175a6ffca191ce3122fd5a490cb4e6b582",
+      "output_digest": "d7d2c9decff1bee2b73158286c6e29f7b2e333d43d9db2a1eaad88fcc9ae3e1e"
     },
     {
       "name": "full_flow_repeat",
