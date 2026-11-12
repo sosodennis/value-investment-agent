@@ -217,6 +217,84 @@ def test_missing_or_duplicate_archive_refuses_history(tmp_path, archive_count):
     assert len(tuple(repository.root.iterdir())) == 2
 
 
+def test_bound_full_submission_evidence_is_retained_in_history(tmp_path):
+    repository, originals = _repository(tmp_path)
+    original = originals[1]
+    filing = original.source_records[0]
+    submission = filing.model_copy(
+        update={
+            "source_id": "sec-filing-submission",
+            "uri": filing.uri.rsplit("/", 1)[0] + f"/{filing.accession_number}.txt",
+            "media_type": "text/plain",
+            "content_hash": "a" * 64,
+            "parser_input_hash": None,
+            "received_size": 54,
+        }
+    )
+    with_submission = _changed(
+        original,
+        source_records=tuple(
+            sorted(
+                (*original.source_records, submission),
+                key=lambda source: (source.source_id, source.uri, source.content_hash),
+            )
+        ),
+    )
+    repository = FilesystemSnapshotRepository(tmp_path / "with-submission")
+    repository.publish(originals[0])
+    repository.publish(with_submission)
+
+    history = _compose(repository, (originals[0], with_submission))
+
+    retained = tuple(
+        source
+        for source in history.source_records
+        if source.source_id == "sec-filing-submission"
+    )
+    assert retained == (submission,)
+    assert verify_history_components(history, repository) == (
+        repository.get(originals[0].snapshot_id),
+        with_submission,
+    )
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"uri": "https://www.sec.gov/unrelated.txt"},
+        {"accession_number": "0000000001-25-999999"},
+        {"role": SourceRole.REFERENCE},
+        {"available_at": datetime(2020, 1, 1, tzinfo=UTC)},
+        {"filed_at": datetime(2020, 1, 1, tzinfo=UTC)},
+        {"form": "10-K/A"},
+        {"is_amendment": True, "amendment_scope": "unknown"},
+        {"http_status": 404},
+    ],
+)
+def test_unbound_submission_refuses_history_without_publishing(tmp_path, changes):
+    repository, originals = _repository(tmp_path)
+    original = originals[1]
+    filing = original.source_records[0]
+    submission = filing.model_copy(
+        update={
+            "source_id": "sec-filing-submission",
+            "uri": filing.uri.rsplit("/", 1)[0] + f"/{filing.accession_number}.txt",
+            **changes,
+        }
+    )
+    changed = _changed(original, source_records=(*original.source_records, submission))
+    repository = FilesystemSnapshotRepository(tmp_path / "unbound-submission")
+    repository.publish(originals[0])
+    repository.publish(changed)
+    before = {path: path.read_bytes() for path in repository.root.iterdir()}
+
+    with pytest.raises(SnapshotError) as failure:
+        _compose(repository, (originals[0], changed))
+
+    assert failure.value.code == "HISTORY_ORIGINAL_INTEGRITY_MISMATCH"
+    assert {path: path.read_bytes() for path in repository.root.iterdir()} == before
+
+
 @pytest.mark.parametrize(
     "change",
     [

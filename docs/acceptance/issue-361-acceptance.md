@@ -18,6 +18,8 @@ is not a hidden runtime dependency. `supported_history_threshold` remains null.
 Eligible candidate-history valuations can be provisional. Missing, conflicting,
 unreviewed, future, or unsupported evidence must retain reasons and abstain.
 No completed #351 through #355 acceptance is changed. #350 is outside scope.
+GitHub #351 and #352 are CLOSED; #352's merged Fundamental Service composer is
+the runtime valuation owner, not a pending dependency.
 
 ## Source-bound industry capital adoption
 
@@ -1448,3 +1450,24 @@ existing interchangeable macro, reference, and quote provider ports. Until
 that integration and the remaining accounting, award, quote, caller-approval,
 and recovery gates pass, #361 stays open, PR #370 stays draft, and
 `supported_history_threshold` stays null.
+
+## Provider-neutral SEC original capture checkpoint
+
+The acquisition boundary now uses `SecSourceCapturePort`, with
+`SecEdgarSourceAdapter` as the SEC implementation. A selected accession retains
+the filing index, full-submission `.txt`, primary document, XBRL archive and
+selected DTS members as separate content-addressed evidence. The `.txt` is
+provenance and recovery evidence; the formal parser still consumes the selected
+XBRL inputs through the existing ingestion service. The retained adapter keys
+original bytes by CIK, accession and exact URI, so a retry or restart reuses the
+same bytes without another provider request or artifact rewrite. Annual history
+composition verifies and retains this optional accession-bound source while
+still requiring its unique primary XBRL and archive pair.
+
+Focused source, capture, acquisition, ingestion and history tests pass 160 cases
+with 2 optional skips. The full Fundamental Service suite passes 1,946 tests
+with 69 optional skips and 1 expected duplicate-ZIP fixture warning. These
+checks prove source substitution and capture idempotency at the boundary; they
+do not approve issuer mappings, market policy, accounting scope, or
+`supported_history_threshold`. The exact tested commit and command digests are
+recorded by the follow-up checkpoint commit.

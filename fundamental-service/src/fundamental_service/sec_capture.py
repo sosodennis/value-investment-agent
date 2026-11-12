@@ -13,7 +13,12 @@ from pydantic import AwareDatetime, Field
 
 from .contracts import StrictModel
 from .replay import ArtifactRecordV1
-from .sec_source import SecEdgarSourceAdapter, SecSourceError, _SecResponse
+from .sec_source import (
+    SecEdgarSourceAdapter,
+    SecSourceError,
+    SecRequestTransportPort,
+    _SecResponse,
+)
 from .serialization import sha256_digest
 from .snapshots import ContentAddressedStore, SnapshotError
 
@@ -71,7 +76,7 @@ class RetainedSecSourceAdapter(SecEdgarSourceAdapter):
 
     def __init__(
         self,
-        delegate: SecEdgarSourceAdapter,
+        delegate: SecRequestTransportPort,
         *,
         scope: SecCaptureScopeV1,
         receipts: SecCaptureStore,

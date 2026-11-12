@@ -6,7 +6,9 @@ The service stores exact response bytes by content hash and an immutable canonic
 
 A retry or process restart reads the applicable receipt and verifies its identity, URI, artifact state, content hash and byte length. Valid receipts produce no content/artifact writes. Corrupt or missing retained bytes fail closed instead of silently fetching replacement bytes. Partial upstream response failures do not produce a successful receipt; a later attempt may retry provider I/O. The original bytes and shared receipt are committed before the decision receipt, so a crash in between reuses the retained response without another provider request. Content-addressed storage prevents duplicate retained evidence.
 
-`SecAcquisitionUseCase` passes the retained adapter into the existing ingestion service for the index, original entrypoint and accession ZIP. For an unpinned latest-filing request, SEC submissions are read first to select an accession; the adapter is installed after that selection and before index/package acquisition. The request-local adapter avoids mutating shared ingestion state. Stable original receipt times determine the acquisition capture time. A later parser or mapping rejection therefore retains the same raw evidence for another attempt. The runtime factory uses the existing PostgreSQL content/artifact stores; it does not need new volumes, migrations or credentials.
+`SecAcquisitionUseCase` passes the provider-neutral retained capture port into the existing ingestion service for the accession index, full-submission `.txt`, original entrypoint and accession ZIP. The `.txt` is accession-bound provenance and recovery evidence; the formal parser still consumes the selected XBRL inputs through the existing ingestion service. For an unpinned latest-filing request, SEC submissions are read first to select an accession; the retained port is installed after that selection and before index/package acquisition. The request-local port avoids mutating shared ingestion state. Stable original receipt times determine the acquisition capture time. A later parser or mapping rejection therefore retains the same raw evidence for another attempt. The runtime factory uses the existing PostgreSQL content/artifact stores; it does not need new volumes, migrations or credentials.
+
+Acquisition and ingestion depend on `SecSourceCapturePort`; the concrete `SecEdgarSourceAdapter` is one implementation. A different SEC capture provider can implement that contract without changing snapshot composition, mapping, parser, or valuation code. Damodaran, Treasury, BEA, quotes, and classification each use their existing domain-specific provider ports, so adding one of those providers does not require a branch in the evaluator or composer.
 
 This change does not approve mappings, establish historical security identity, publish failed snapshots or bypass regulatory validation. The separate [original-filing identity contract](issue361-historical-identity.md) avoids present-day ticker membership only when original DEI security evidence can be checked; complete2016 cover-page support remains an open #371 gap. Original sample diagnostics use an explicitly nonpublishable CIK-bound identity and do not establish a canonical replay. Full fixed-cohort replay and thresholds remain unapproved. Full acquisition `execute()` still records per-attempt operational audits; this source-reuse evidence does not establish idempotency of those rows.
 
@@ -48,8 +50,12 @@ selection gap tracked by #402 and does not establish financial completeness.
 History composition requires exactly one `sec-filing` and one
 `sec-filing-archive` per independently verified original. Both retain their
 filing role. The archive must match that original's integrity URI, hash, received
-size and accession, and its primary's availability and filing times. Amendments,
-failed HTTP responses and extra, duplicate or missing filing sources refuse
+size and accession, and its primary's availability and filing times. The
+accession-bound `sec-filing-submission` is optional for older snapshots and may
+occur at most once; when present, its accession `.txt` URI, form, amendment
+flag, availability, and filing date must match the primary. Amendments, failed
+HTTP responses and other extra, duplicate or missing filing sources refuse
 composition. The aggregate retains all original source records and rechecks its
-components against the immutable repository on read. This corrects #403 without
-changing facts, granting mapping approval or establishing history sufficiency.
+components against the immutable repository on read. This updates #403's source
+allowlist without changing facts, granting mapping approval or establishing
+history sufficiency.
