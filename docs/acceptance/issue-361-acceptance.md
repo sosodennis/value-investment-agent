@@ -19,6 +19,41 @@ Eligible candidate-history valuations can be provisional. Missing, conflicting,
 unreviewed, future, or unsupported evidence must retain reasons and abstain.
 No completed #351 through #355 acceptance is changed. #350 is outside scope.
 
+## Canonical source-plan retention checkpoint
+
+Exact implementation `7a981fdbc6dd5caef721e4d404741abb1c8fb9c0` retains the
+canonical source plan alongside every new report. Reports validate and link its
+digest, JSON media type and role, including when no acquisition request succeeded.
+Existing report bytes remain unchanged. All 49 preceding checkpoint entries and
+all WIP commits remain intact.
+
+Exact checks pass **1,338 Service/PostgreSQL, 56 Agent boundary and 17 acceptance
+tool tests**, Ruff/format, mypy, architecture and diff. Eleven optional resource
+skips and one intentional duplicate-ZIP warning remain. [CI](https://github.com/sosodennis/value-investment-agent/actions/runs/43154030237)
+passes all 12 executed jobs; release skips. Engineering input
+`f6eeaa3f4112a043a87694ac69f369034f646bd1ac04ca0fdd49e224bb84d9d0`;
+output `f992386a7909babff8abe85ab019ffda291f893ab3b111aad28277617a59c9ff`.
+
+Installed project `value-investment-agent-361-plan-retention`, ports 18678/18679,
+uses image `sha256:8a2652f43300ab68ae32194764726de03cdcb87a41b7357faa66dee168db71b3`.
+All 68 installed files match the exact commit. Thirteen synthetic acquisition
+scenarios retain every original and the authenticated HTTP artifact endpoints
+return the exact canonical input bytes. Full repeat, PostgreSQL/service restart
+and empty-store restore preserve result digest
+`d1054cf3505bd0f99c8c97398ec054362240f6c84ea593f6933a1c2e22404ffa`,
+with `wrote=false` and no new repeat rows/content. Installed input
+`0302955a84d6ebb086dbe9963093a614ad25a93ce0501ac02fcddee108ab0453`.
+The verified portable backup retains 18 tables, 55 rows and 15 content objects
+outside Docker. Only this project's two containers, network and two volumes were
+removed; all 38 baseline containers remain unchanged.
+
+The report input is `c0b9923a1af23958df442416e71240781cac7a0c313022274ad903fd324dbb22`;
+output `aa4903266296fe8acf2607145c8dc2cc543180966477b25b10fd6ee81dd03c00`.
+Generated evidence remains outside Git. This is scoped runner/input-retention
+acceptance; complete real numerical acceptance remains outstanding. Next is the
+service-owned empty-store automatic mapping bootstrap tracked by [#413](https://github.com/sosodennis/value-investment-agent/issues/413).
+Keep #361 OPEN, PR #370 draft and `supported_history_threshold=null`.
+
 ## Complete source failure-retention checkpoint
 
 Exact implementation `d4d30a9fd3f1077e830bccf4ab0c8ef0fbd9188e` fixes
