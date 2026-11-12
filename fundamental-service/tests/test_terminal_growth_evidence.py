@@ -204,6 +204,8 @@ def test_rehashed_policy_cannot_change_source_bound_terminal_assumption(
         ("issuer", "POLICY_NOT_FOUND"),
         ("authority", "MARKET_REFERENCE_POLICY_UNAVAILABLE"),
         ("missing", "TERMINAL_PLAN_MISSING"),
+        ("missing_ambiguous", "POLICY_AMBIGUOUS"),
+        ("missing_foreign", "TERMINAL_PLAN_MISSING"),
     ],
 )
 def test_independent_canary_uses_the_same_effective_terminal_policy(
@@ -213,7 +215,7 @@ def test_independent_canary_uses_the_same_effective_terminal_policy(
     candidate, canary = _reviewed_candidate(fixture)
     fixture.manifest = candidate.manifest
     manifest, plan, selection, admissions, policy, application = _bound(fixture)
-    if change == "missing":
+    if change in {"missing", "missing_ambiguous", "missing_foreign"}:
         payload = manifest.model_dump(exclude={"manifest_digest"})
         payload["artifact_refs"] = tuple(
             x for x in manifest.artifact_refs if x.role != TERMINAL_GROWTH_PLAN_ROLE
@@ -221,12 +223,13 @@ def test_independent_canary_uses_the_same_effective_terminal_policy(
         manifest = DataReleaseManifestV1(
             **payload, manifest_digest=sha256_digest(payload)
         )
-        missing_app = replace(
-            application, metadata_store=replace_metadata(fixture, manifest)
-        )
-        with pytest.raises(ServiceError) as error:
-            missing_app.prepare_valuation(_request(fixture, manifest))
-        assert error.value.code == code
+        if change == "missing":
+            missing_app = replace(
+                application, metadata_store=replace_metadata(fixture, manifest)
+            )
+            with pytest.raises(ServiceError) as error:
+                missing_app.prepare_valuation(_request(fixture, manifest))
+            assert error.value.code == code
     payload = candidate.verification.model_dump(
         exclude={"signature", "verification_digest"}
     )
@@ -235,6 +238,22 @@ def test_independent_canary_uses_the_same_effective_terminal_policy(
         payload, Ed25519PrivateKey.from_private_bytes(b"verifier-key".ljust(32, b"0"))
     )
     registry = application.policy_registry
+    if change in {"missing_ambiguous", "missing_foreign"}:
+        payload = policy.model_dump(exclude={"policy_digest"})
+        payload["policy_id"] = "second-equal-policy"
+        if change == "missing_foreign":
+            payload["issuer_id"] = "different-issuer"
+            payload["model_version"] = "unimplemented-v999"
+        second = PolicyRecordV1(**payload, policy_digest=sha256_digest(payload))
+        registry = PolicyRegistry(initial_model_specs(), (second, policy))
+        missing_app = replace(
+            application,
+            metadata_store=replace_metadata(fixture, manifest),
+            policy_registry=registry,
+        )
+        with pytest.raises(ServiceError) as error:
+            missing_app.prepare_valuation(_request(fixture, manifest))
+        assert error.value.code == code
     if change in {"changed", "issuer"}:
         payload = policy.model_dump(exclude={"policy_digest"})
         if change == "issuer":

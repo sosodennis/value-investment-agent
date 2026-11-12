@@ -206,6 +206,11 @@ class DataReleaseCanaryRunner:
                     snapshot = self._snapshots.get(ref.snapshot_id)
                     if not isinstance(snapshot, SourceSnapshotV1):
                         continue
+                    if candidate.issuer_id not in {
+                        None,
+                        snapshot.identity.issuer_id,
+                    }:
+                        continue
                     try:
                         effective = self._policy_registry.select_policy(
                             model_id=candidate.model_id,
@@ -214,8 +219,10 @@ class DataReleaseCanaryRunner:
                             policy_id=None,
                             issuer_id=snapshot.identity.issuer_id,
                         )
-                    except PolicyError:
-                        continue
+                    except PolicyError as error:
+                        if error.code == "POLICY_NOT_FOUND":
+                            continue
+                        raise DataReleaseError(error.code, str(error)) from error
                     load_release_terminal_growth_selection(
                         manifest,
                         snapshot=snapshot,
