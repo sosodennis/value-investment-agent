@@ -8,7 +8,7 @@ existing reference selectors remain the owners of those responsibilities.
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Literal
+from typing import Final, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -24,7 +24,7 @@ from .serialization import sha256_digest
 from .snapshots import SnapshotError
 
 DEFAULT_ISSUER_REFERENCE_PLAN_POLICY = "issuer-reference-plan-v1"
-DEFAULT_INDUSTRY_CAPITAL_POLICY = "usd-industry-capital-proxy-v1"
+DEFAULT_INDUSTRY_CAPITAL_POLICY: Final = "usd-industry-capital-proxy-v1"
 DEFAULT_COUNTRY_METRICS: tuple[ReferenceMetric, ...] = ("country.equity_risk_premium",)
 DEFAULT_INDUSTRY_METRICS: tuple[ReferenceMetric, ...] = (
     "industry.equity_beta",
