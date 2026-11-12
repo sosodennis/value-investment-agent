@@ -11,6 +11,7 @@ from fundamental_service.public_source import (
     fundamental_source_register,
 )
 from fundamental_service.snapshots import SnapshotError
+from treasury_source_fixtures import ALFRED_CSV, ALFRED_URI, TREASURY_URI, TREASURY_XML
 
 
 class FakeResponse:
@@ -42,7 +43,11 @@ def test_all_declared_free_sources_have_allowlisted_capture_contract():
                 b'"percentRate":4.33,"revisionIndicator":""}]}',
                 "application/json",
             )
-        if "api.bls.gov" in request.full_url or "home.treasury.gov" in request.full_url:
+        if "home.treasury.gov" in request.full_url:
+            return FakeResponse(TREASURY_XML, "application/xml")
+        if "alfred.stlouisfed.org" in request.full_url:
+            return FakeResponse(ALFRED_CSV)
+        if "api.bls.gov" in request.full_url:
             return FakeResponse(json.dumps({"data": []}).encode(), "application/json")
         return FakeResponse(b"observation,value\n2025-01-01,1\n")
 
@@ -55,7 +60,9 @@ def test_all_declared_free_sources_have_allowlisted_capture_contract():
     for spec in PUBLIC_SOURCE_SPECS:
         uri = spec.uri_prefix
         if spec.source_id == "alfred-vintage":
-            uri += "?id=DGS10&vintage_date=2025-01-03"
+            uri = ALFRED_URI
+        if spec.source_id == "treasury-yields":
+            uri = TREASURY_URI
         if spec.source_id == "new-york-fed-sofr":
             uri += "?startDate=2025-01-03&endDate=2025-01-03"
         source = adapter.capture(
@@ -64,7 +71,13 @@ def test_all_declared_free_sources_have_allowlisted_capture_contract():
             available_at=(
                 None
                 if spec.source_id
-                in {"new-york-fed-sofr", "bea-gdp-release", "bea-nipa-archive"}
+                in {
+                    "new-york-fed-sofr",
+                    "bea-gdp-release",
+                    "bea-nipa-archive",
+                    "treasury-yields",
+                    "alfred-vintage",
+                }
                 else datetime(2025, 1, 3, tzinfo=timezone.utc)
             ),
         )
@@ -309,6 +322,98 @@ def test_alfred_requires_vintage_date():
             available_at=datetime(2025, 1, 3, tzinfo=timezone.utc),
         )
     assert error.value.code == "SOURCE_VINTAGE_REQUIRED"
+
+
+@pytest.mark.parametrize("source_id", ("treasury-yields", "alfred-vintage"))
+@pytest.mark.parametrize("timestamp", ("available_at", "publication_at", "captured_at"))
+def test_treasury_capture_refuses_caller_timestamp_before_network(source_id, timestamp):
+    calls = []
+    uri = (
+        "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/"
+        "pages/xml?data=daily_treasury_yield_curve&field_tdr_date_value=2025"
+        if source_id == "treasury-yields"
+        else "https://alfred.stlouisfed.org/graph/alfredgraph.csv"
+        "?id=DGS10&cosd=2025-03-28&coed=2025-03-31&vintage_date=2025-03-31"
+    )
+    adapter = PublicSourceAdapter(
+        user_agent="value-agent test@example.com",
+        opener=lambda *_args, **_kwargs: calls.append(True),
+    )
+    with pytest.raises(SnapshotError) as error:
+        adapter.capture(
+            source_id, uri, **{timestamp: datetime(2025, 3, 31, tzinfo=timezone.utc)}
+        )
+    assert error.value.code == "SOURCE_AVAILABILITY_UNVERIFIED"
+    assert calls == []
+
+
+@pytest.mark.parametrize(
+    "source_id,uri",
+    (
+        ("treasury-yields", TREASURY_URI.replace("=2025", "=25")),
+        (
+            "treasury-yields",
+            TREASURY_URI.replace(
+                "daily_treasury_yield_curve", "daily_treasury_real_yield_curve"
+            ),
+        ),
+        ("treasury-yields", TREASURY_URI + "&field_tdr_date_value=2024"),
+        ("treasury-yields", TREASURY_URI + "#ignored"),
+        ("alfred-vintage", ALFRED_URI.replace("DGS10", "DGS2")),
+        ("alfred-vintage", ALFRED_URI.replace("cosd=2025-03-28", "cosd=2025-04-01")),
+        (
+            "alfred-vintage",
+            ALFRED_URI.replace("vintage_date=2025-03-31", "vintage_date=2025-03-27"),
+        ),
+        ("alfred-vintage", ALFRED_URI + "&vintage_date=2025-03-31"),
+        ("alfred-vintage", ALFRED_URI.replace("coed=2025-03-31&", "")),
+        ("alfred-vintage", ALFRED_URI + "&unbound=1"),
+    ),
+)
+def test_treasury_source_queries_are_validated_before_network(source_id, uri):
+    calls = []
+    adapter = PublicSourceAdapter(
+        user_agent="value-agent test@example.com",
+        opener=lambda *_args, **_kwargs: calls.append(True),
+    )
+    with pytest.raises(SnapshotError) as error:
+        adapter.capture(source_id, uri)
+    assert error.value.code == "SOURCE_QUERY_INVALID"
+    assert calls == []
+
+
+@pytest.mark.parametrize("alfred", (False, True))
+def test_treasury_capture_uses_proven_availability_without_inventing_publication(
+    alfred,
+):
+    adapter = PublicSourceAdapter(
+        user_agent="value-agent test@example.com",
+        opener=lambda *_args, **_kwargs: FakeResponse(
+            ALFRED_CSV if alfred else TREASURY_XML,
+            "text/csv" if alfred else "application/xml",
+        ),
+    )
+    source = adapter.capture(
+        "alfred-vintage" if alfred else "treasury-yields",
+        ALFRED_URI if alfred else TREASURY_URI,
+    )
+    assert source.captured_at is not None
+    assert source.publication_at is None
+    assert source.available_at == (
+        datetime(2025, 4, 1, 4, tzinfo=timezone.utc) if alfred else source.captured_at
+    )
+
+
+def test_alfred_capture_rejects_payload_from_a_different_vintage():
+    adapter = PublicSourceAdapter(
+        user_agent="value-agent test@example.com",
+        opener=lambda *_args, **_kwargs: FakeResponse(
+            ALFRED_CSV.replace(b"20250331", b"20250401")
+        ),
+    )
+    with pytest.raises(SnapshotError) as error:
+        adapter.capture("alfred-vintage", ALFRED_URI)
+    assert error.value.code == "ALFRED_SOURCE_INVALID"
 
 
 def test_captured_macro_and_vintage_fixtures_have_stable_hashes():

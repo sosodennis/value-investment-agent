@@ -336,6 +336,21 @@ class PublicSourceAdapter:
                     "SOURCE_AVAILABILITY_UNVERIFIED",
                     "BEA publication availability must be reproduced from retained evidence",
                 )
+        if source_id in {"treasury-yields", "alfred-vintage"}:
+            from .treasury_source import alfred_treasury_request, treasury_request_year
+
+            if source_id == "treasury-yields":
+                treasury_request_year(uri)
+            else:
+                alfred_treasury_request(uri)
+            if any(
+                value is not None
+                for value in (available_at, publication_at, captured_at)
+            ):
+                raise SnapshotError(
+                    "SOURCE_AVAILABILITY_UNVERIFIED",
+                    "Treasury source timestamps must be reproduced from service capture and evidence",
+                )
         payload, status, media_type, retrieved_at = self._request(uri)
         if source_id == "new-york-fed-sofr":
             from .sofr_source import parse_new_york_fed_sofr
@@ -353,22 +368,42 @@ class PublicSourceAdapter:
             # The parser can establish the historical release time from the
             # paired original artifacts; transport capture alone cannot.
             available_at = retrieved_at
-        if source_id == "alfred-vintage":
-            vintage = parse_qs(parsed.query).get("vintage_date", ())
-            if len(vintage) != 1:
-                raise SnapshotError(
-                    "SOURCE_VINTAGE_REQUIRED",
-                    "ALFRED capture requires exactly one vintage_date query parameter",
-                )
-            if available_at is None:
-                try:
-                    available_at = datetime.fromisoformat(vintage[0]).replace(
-                        tzinfo=timezone.utc
-                    )
-                except ValueError as error:
-                    raise SnapshotError(
-                        "SOURCE_VINTAGE_INVALID", "ALFRED vintage_date is invalid"
-                    ) from error
+        elif source_id in {"treasury-yields", "alfred-vintage"}:
+            from .macro_series import (
+                MacroSeriesProviderPort,
+                RetainedMacroSourceV1,
+                reproduce_macro_vintage,
+            )
+            from .treasury_source import (
+                ALFRED_TREASURY_PROFILE,
+                TREASURY_PROFILE,
+                TREASURY_SERIES,
+                AlfredTreasuryVintageProvider,
+                TreasuryParYieldVintageProvider,
+            )
+
+            provider: MacroSeriesProviderPort
+            if source_id == "treasury-yields":
+                provider = TreasuryParYieldVintageProvider()
+                profile = TREASURY_PROFILE
+            else:
+                provider = AlfredTreasuryVintageProvider()
+                profile = ALFRED_TREASURY_PROFILE
+            vintage = reproduce_macro_vintage(
+                provider,
+                series_id=TREASURY_SERIES,
+                sources=(
+                    RetainedMacroSourceV1(
+                        source_id=source_id,
+                        uri=uri,
+                        source_version=profile,
+                        terms_reference=spec.terms_reference,
+                        content=payload,
+                        captured_at=retrieved_at,
+                    ),
+                ),
+            )
+            available_at = vintage.available_at
         if available_at is None:
             raise SnapshotError(
                 "SOURCE_AVAILABILITY_REQUIRED",
@@ -385,6 +420,8 @@ class PublicSourceAdapter:
             "new-york-fed-sofr",
             "bea-gdp-release",
             "bea-nipa-archive",
+            "treasury-yields",
+            "alfred-vintage",
         }:
             publication_at = available_at
         if source_id in {"fred-observations", "alfred-vintage", "damodaran-reference"}:
@@ -410,7 +447,13 @@ class PublicSourceAdapter:
             captured_at=(
                 retrieved_at
                 if source_id
-                in {"new-york-fed-sofr", "bea-gdp-release", "bea-nipa-archive"}
+                in {
+                    "new-york-fed-sofr",
+                    "bea-gdp-release",
+                    "bea-nipa-archive",
+                    "treasury-yields",
+                    "alfred-vintage",
+                }
                 else captured_at
             ),
             publication_at=publication_at,
