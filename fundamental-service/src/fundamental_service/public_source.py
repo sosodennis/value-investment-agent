@@ -2,186 +2,30 @@
 
 from __future__ import annotations
 
-import json
 import time
 from collections.abc import Callable
 from contextlib import AbstractContextManager
-from dataclasses import dataclass
-from datetime import date, datetime, timezone
+from datetime import datetime, timezone
 from email.message import Message
 from email.utils import parsedate_to_datetime
 from typing import Protocol
 from urllib.error import HTTPError, URLError
-from urllib.parse import parse_qs, urlsplit
+from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 
-from .contracts import SourceRole
 from .snapshots import CapturedSource, LegalSource, SnapshotError, SourceRegister
-from .source_evidence import RetainedSourceV1
+from .source_capture import (
+    PublicSourceRegistration,
+    SourceCaptureRequest,
+    SourceCaptureResponse,
+)
+from .public_source_catalog import default_public_source_registrations
 
 
 class PublicResponsePort(Protocol):
     headers: Message
 
     def read(self) -> bytes: ...
-
-
-@dataclass(frozen=True)
-class PublicSourceSpec:
-    source_id: str
-    role: SourceRole
-    uri_prefix: str
-    terms_reference: str
-
-
-PUBLIC_SOURCE_SPECS: tuple[PublicSourceSpec, ...] = (
-    PublicSourceSpec(
-        "treasury-yields",
-        SourceRole.MACRO,
-        "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/",
-        "https://fiscaldata.treasury.gov/terms-of-use/",
-    ),
-    PublicSourceSpec(
-        "fred-observations",
-        SourceRole.MACRO,
-        "https://fred.stlouisfed.org/graph/fredgraph.csv",
-        "https://fred.stlouisfed.org/terms-of-use/",
-    ),
-    PublicSourceSpec(
-        "alfred-vintage",
-        SourceRole.MACRO,
-        "https://alfred.stlouisfed.org/graph/alfredgraph.csv",
-        "https://fred.stlouisfed.org/terms-of-use/",
-    ),
-    PublicSourceSpec(
-        "bea-public-dataset",
-        SourceRole.MACRO,
-        "https://apps.bea.gov/",
-        "https://apps.bea.gov/API/signup/",
-    ),
-    PublicSourceSpec(
-        "bea-gdp-release",
-        SourceRole.MACRO,
-        "https://www.bea.gov/news/",
-        "https://www.bea.gov/help/guidelines-for-citing-bea",
-    ),
-    PublicSourceSpec(
-        "bea-nipa-archive",
-        SourceRole.MACRO,
-        "https://apps.bea.gov/HistData/Files/Releases/GDP_and_PI/",
-        "https://www.bea.gov/help/guidelines-for-citing-bea",
-    ),
-    PublicSourceSpec(
-        "bls-public-api",
-        SourceRole.MACRO,
-        "https://api.bls.gov/publicAPI/",
-        "https://www.bls.gov/developers/",
-    ),
-    PublicSourceSpec(
-        "federal-reserve-h15",
-        SourceRole.MACRO,
-        "https://www.federalreserve.gov/datadownload/",
-        "https://www.federalreserve.gov/data.htm",
-    ),
-    PublicSourceSpec(
-        "new-york-fed-sofr",
-        SourceRole.MACRO,
-        "https://markets.newyorkfed.org/api/rates/secured/sofr/search.json",
-        "https://www.newyorkfed.org/privacy/termsofuse",
-    ),
-    PublicSourceSpec(
-        "federal-reserve-policy",
-        SourceRole.REFERENCE,
-        "https://www.federalreserve.gov/newsevents/pressreleases/",
-        "https://www.federalreserve.gov/disclaimer.htm",
-    ),
-    PublicSourceSpec(
-        "damodaran-archive-index",
-        SourceRole.REFERENCE,
-        "https://pages.stern.nyu.edu/~adamodar/New_Home_Page/dataarchived.html",
-        "https://pages.stern.nyu.edu/~adamodar/New_Home_Page/datafile/",
-    ),
-    PublicSourceSpec(
-        "fdic-bankfind",
-        SourceRole.REFERENCE,
-        "https://banks.data.fdic.gov/api/",
-        "https://banks.data.fdic.gov/docs/",
-    ),
-    PublicSourceSpec(
-        "ffiec-cdr",
-        SourceRole.REFERENCE,
-        "https://cdr.ffiec.gov/public/",
-        "https://www.ffiec.gov/",
-    ),
-    PublicSourceSpec(
-        "damodaran-reference",
-        SourceRole.REFERENCE,
-        "https://pages.stern.nyu.edu/~adamodar/pc/",
-        "https://pages.stern.nyu.edu/~adamodar/New_Home_Page/datafile/",
-    ),
-    # Post-cutover family sources.  Registration records the lawful public
-    # boundary even while a family remains exploratory and cannot calculate.
-    PublicSourceSpec(
-        "naic-statutory-filings",
-        SourceRole.REFERENCE,
-        "https://content.naic.org/",
-        "https://content.naic.org/insurance-topics/financial-data-repository",
-    ),
-    PublicSourceSpec(
-        "nareit-definitions",
-        SourceRole.REFERENCE,
-        "https://www.reit.com/",
-        "https://www.reit.com/terms-of-use",
-    ),
-    PublicSourceSpec(
-        "ferc-public-data",
-        SourceRole.REFERENCE,
-        "https://www.ferc.gov/",
-        "https://www.ferc.gov/terms-use",
-    ),
-    PublicSourceSpec(
-        "state-utility-orders",
-        SourceRole.REFERENCE,
-        "https://www.naruc.org/",
-        "https://www.naruc.org/about-naruc/",
-    ),
-    PublicSourceSpec(
-        "eia-open-data",
-        SourceRole.REFERENCE,
-        "https://api.eia.gov/",
-        "https://www.eia.gov/about/copyrights_reuse.php",
-    ),
-    PublicSourceSpec(
-        "usgs-commodity-statistics",
-        SourceRole.REFERENCE,
-        "https://www.usgs.gov/centers/national-minerals-information-center/",
-        "https://www.usgs.gov/information-policies",
-    ),
-    PublicSourceSpec(
-        "usda-nass-quickstats",
-        SourceRole.REFERENCE,
-        "https://quickstats.nass.usda.gov/api/",
-        "https://www.nass.usda.gov/About_NASS/",
-    ),
-    PublicSourceSpec(
-        "fda-drugs",
-        SourceRole.REFERENCE,
-        "https://www.accessdata.fda.gov/",
-        "https://www.fda.gov/about-fda/website-policies",
-    ),
-    PublicSourceSpec(
-        "clinicaltrials-api",
-        SourceRole.REFERENCE,
-        "https://clinicaltrials.gov/data-api/api/",
-        "https://clinicaltrials.gov/about-site/terms-conditions",
-    ),
-    PublicSourceSpec(
-        "ifrs-taxonomy",
-        SourceRole.TAXONOMY,
-        "https://www.ifrs.org/issued-standards/ifrs-taxonomy/",
-        "https://www.ifrs.org/legal/terms-and-conditions/",
-    ),
-)
 
 
 def public_source_register() -> SourceRegister:
@@ -195,7 +39,7 @@ def public_source_register() -> SourceRegister:
                 spec.terms_reference,
                 "indefinite",
             )
-            for spec in PUBLIC_SOURCE_SPECS
+            for spec in (item.spec for item in default_public_source_registrations())
         )
     )
 
@@ -211,7 +55,7 @@ def fundamental_source_register() -> SourceRegister:
             spec.terms_reference,
             "indefinite",
         )
-        for spec in PUBLIC_SOURCE_SPECS
+        for spec in (item.spec for item in default_public_source_registrations())
     )
     sec_entries = sec_source_register()
     return SourceRegister(sec_entries.entries + entries)
@@ -240,6 +84,7 @@ class PublicSourceAdapter:
         *,
         user_agent: str,
         source_register: SourceRegister | None = None,
+        registrations: tuple[PublicSourceRegistration, ...] | None = None,
         max_attempts: int = 3,
         min_interval_seconds: float = 0.11,
         timeout_seconds: float = 30.0,
@@ -253,14 +98,31 @@ class PublicSourceAdapter:
         if max_attempts < 1 or min_interval_seconds < 0 or timeout_seconds <= 0:
             raise ValueError("invalid public source request policy")
         self.user_agent = user_agent
-        self.source_register = source_register or public_source_register()
+        entries = (
+            default_public_source_registrations()
+            if registrations is None
+            else registrations
+        )
+        self._registrations = {item.spec.source_id: item for item in entries}
+        if len(self._registrations) != len(entries):
+            raise ValueError("public source registrations repeat a source identity")
+        self.source_register = source_register or SourceRegister(
+            tuple(
+                LegalSource(
+                    item.spec.source_id,
+                    item.spec.role,
+                    item.spec.terms_reference,
+                    "indefinite",
+                )
+                for item in entries
+            )
+        )
         self.max_attempts = max_attempts
         self.min_interval_seconds = min_interval_seconds
         self.timeout_seconds = timeout_seconds
         self._opener = opener
         self._sleep = sleep
         self._last_request_at: float | None = None
-        self._specs = {spec.source_id: spec for spec in PUBLIC_SOURCE_SPECS}
 
     def capture(
         self,
@@ -271,17 +133,25 @@ class PublicSourceAdapter:
         publication_at: datetime | None = None,
         captured_at: datetime | None = None,
     ) -> CapturedSource:
-        spec = self._specs.get(source_id)
-        if spec is None:
+        registration = self._registrations.get(source_id)
+        if registration is None:
             raise SnapshotError(
                 "SOURCE_NOT_REGISTERED", f"source {source_id} is not registered"
             )
-        self.source_register.require(source_id)
+        spec, profile = registration.spec, registration.profile
+        registered = self.source_register.require(source_id)
+        if (
+            registered.role != spec.role
+            or registered.terms_reference != spec.terms_reference
+        ):
+            raise SnapshotError(
+                "SOURCE_REGISTRATION_MISMATCH", "capture source and register disagree"
+            )
         parsed = urlsplit(uri)
         prefix = urlsplit(spec.uri_prefix)
         path_allowed = (
             parsed.path == prefix.path
-            if source_id in {"fred-observations", "alfred-vintage", "new-york-fed-sofr"}
+            if spec.path_match == "exact"
             else parsed.path.startswith(prefix.path)
         )
         if (
@@ -296,161 +166,51 @@ class PublicSourceAdapter:
                 "SOURCE_URI_NOT_ALLOWED",
                 f"URI is outside the registered {source_id} endpoint",
             )
-        if source_id == "new-york-fed-sofr":
-            try:
-                query = parse_qs(
-                    parsed.query, keep_blank_values=True, strict_parsing=True
-                )
-                start_value = query["startDate"][0]
-                end_value = query["endDate"][0]
-                start_date = date.fromisoformat(start_value)
-                end_date = date.fromisoformat(end_value)
-            except (KeyError, ValueError, IndexError) as error:
-                raise SnapshotError(
-                    "SOURCE_QUERY_INVALID",
-                    "New York Fed SOFR requests require one ordered ISO date range",
-                ) from error
-            if (
-                set(query) != {"startDate", "endDate"}
-                or any(len(values) != 1 for values in query.values())
-                or start_value != start_date.isoformat()
-                or end_value != end_date.isoformat()
-                or start_date != end_date
+        request = SourceCaptureRequest(
+            source_id=source_id,
+            uri=uri,
+            terms_reference=spec.terms_reference,
+            available_at=available_at,
+            publication_at=publication_at,
+            captured_at=captured_at,
+        )
+        for timestamp in (available_at, publication_at, captured_at):
+            if timestamp is not None and (
+                timestamp.tzinfo is None or timestamp.utcoffset() is None
             ):
                 raise SnapshotError(
-                    "SOURCE_QUERY_INVALID",
-                    "New York Fed SOFR capture requires one canonical ISO date",
+                    "SOURCE_TIMESTAMP_TIMEZONE_REQUIRED",
+                    "source timestamps require a timezone",
                 )
-            if available_at is not None or publication_at is not None:
-                raise SnapshotError(
-                    "SOURCE_AVAILABILITY_UNVERIFIED",
-                    "SOFR historical availability must use service capture time",
-                )
-        if source_id in {"bea-gdp-release", "bea-nipa-archive"}:
-            if parsed.query or parsed.fragment:
-                raise SnapshotError(
-                    "SOURCE_QUERY_INVALID",
-                    "BEA GDP captures require canonical query-free source URIs",
-                )
-            if available_at is not None or publication_at is not None:
-                raise SnapshotError(
-                    "SOURCE_AVAILABILITY_UNVERIFIED",
-                    "BEA publication availability must be reproduced from retained evidence",
-                )
-        if source_id in {"treasury-yields", "alfred-vintage"}:
-            from .treasury_source import alfred_treasury_request, treasury_request_year
-
-            if source_id == "treasury-yields":
-                treasury_request_year(uri)
-            else:
-                alfred_treasury_request(uri)
-            if any(
-                value is not None
-                for value in (available_at, publication_at, captured_at)
-            ):
-                raise SnapshotError(
-                    "SOURCE_AVAILABILITY_UNVERIFIED",
-                    "Treasury source timestamps must be reproduced from service capture and evidence",
-                )
-        if source_id == "damodaran-reference":
-            from .damodaran_source import damodaran_reference_profile
-
-            damodaran_reference_profile(uri)
-            if any(
-                value is not None
-                for value in (available_at, publication_at, captured_at)
-            ):
-                raise SnapshotError(
-                    "SOURCE_AVAILABILITY_UNVERIFIED",
-                    "reference workbook availability must use its retained capture time",
-                )
+        profile.validate_request(request)
         payload, status, media_type, retrieved_at = self._request(uri)
-        if source_id == "new-york-fed-sofr":
-            from .sofr_source import parse_new_york_fed_sofr
-
-            parse_new_york_fed_sofr(
-                payload,
-                source_uri=uri,
-                effective_date=start_date,
-                captured_at=retrieved_at,
-            )
-            # Historical API responses do not establish when a value was first
-            # published. Treat it as available only from this retained capture.
-            available_at = retrieved_at
-        elif source_id in {"bea-gdp-release", "bea-nipa-archive"}:
-            # The parser can establish the historical release time from the
-            # paired original artifacts; transport capture alone cannot.
-            available_at = retrieved_at
-        elif source_id in {"treasury-yields", "alfred-vintage"}:
-            from .macro_series import (
-                MacroSeriesProviderPort,
-                reproduce_macro_vintage,
-            )
-            from .treasury_source import (
-                ALFRED_TREASURY_PROFILE,
-                TREASURY_PROFILE,
-                TREASURY_SERIES,
-                AlfredTreasuryVintageProvider,
-                TreasuryParYieldVintageProvider,
-            )
-
-            provider: MacroSeriesProviderPort
-            if source_id == "treasury-yields":
-                provider = TreasuryParYieldVintageProvider()
-                profile = TREASURY_PROFILE
-            else:
-                provider = AlfredTreasuryVintageProvider()
-                profile = ALFRED_TREASURY_PROFILE
-            vintage = reproduce_macro_vintage(
-                provider,
-                series_id=TREASURY_SERIES,
-                sources=(
-                    RetainedSourceV1(
-                        source_id=source_id,
-                        uri=uri,
-                        source_version=profile,
-                        terms_reference=spec.terms_reference,
-                        content=payload,
-                        captured_at=retrieved_at,
-                    ),
-                ),
-            )
-            available_at = vintage.available_at
-        elif source_id == "damodaran-reference":
-            available_at = retrieved_at
-        if available_at is None:
+        timing = profile.resolve_capture(
+            request, SourceCaptureResponse(payload, media_type, retrieved_at)
+        )
+        for timestamp in (
+            timing.available_at,
+            timing.publication_at,
+            timing.captured_at,
+        ):
+            if timestamp is not None and (
+                timestamp.tzinfo is None or timestamp.utcoffset() is None
+            ):
+                raise SnapshotError(
+                    "SOURCE_TIMESTAMP_TIMEZONE_REQUIRED",
+                    "source timestamps require a timezone",
+                )
+        if timing.captured_at is not None and timing.captured_at > retrieved_at:
             raise SnapshotError(
-                "SOURCE_AVAILABILITY_REQUIRED",
-                f"{source_id} capture requires publisher availability metadata",
+                "SOURCE_CAPTURE_TIME_MISMATCH",
+                "capture time exceeds service retrieval time",
             )
-        if available_at.tzinfo is None or (
-            publication_at is not None and publication_at.tzinfo is None
+        if timing.available_at > (timing.captured_at or retrieved_at) or (
+            timing.publication_at is not None
+            and timing.publication_at > timing.available_at
         ):
             raise SnapshotError(
-                "SOURCE_TIMESTAMP_TIMEZONE_REQUIRED",
-                "source timestamps require a timezone",
+                "SOURCE_TIMESTAMP_ORDER_INVALID", "source timestamps are inconsistent"
             )
-        if publication_at is None and source_id not in {
-            "new-york-fed-sofr",
-            "bea-gdp-release",
-            "bea-nipa-archive",
-            "treasury-yields",
-            "alfred-vintage",
-            "damodaran-reference",
-        }:
-            publication_at = available_at
-        if source_id in {"fred-observations", "alfred-vintage", "damodaran-reference"}:
-            if not payload.strip():
-                raise SnapshotError(
-                    "SOURCE_PAYLOAD_INVALID", "public source returned empty bytes"
-                )
-        elif "json" in media_type:
-            try:
-                json.loads(payload)
-            except json.JSONDecodeError as error:
-                raise SnapshotError(
-                    "SOURCE_PAYLOAD_INVALID", "public source JSON is invalid"
-                ) from error
         return CapturedSource(
             source_id=source_id,
             uri=uri,
@@ -458,21 +218,9 @@ class PublicSourceAdapter:
             content=payload,
             media_type=media_type or "application/octet-stream",
             http_status=status,
-            available_at=available_at,
-            captured_at=(
-                retrieved_at
-                if source_id
-                in {
-                    "new-york-fed-sofr",
-                    "bea-gdp-release",
-                    "bea-nipa-archive",
-                    "treasury-yields",
-                    "alfred-vintage",
-                    "damodaran-reference",
-                }
-                else captured_at
-            ),
-            publication_at=publication_at,
+            available_at=timing.available_at,
+            captured_at=timing.captured_at,
+            publication_at=timing.publication_at,
         )
 
     def _request(self, uri: str) -> tuple[bytes, int, str, datetime]:

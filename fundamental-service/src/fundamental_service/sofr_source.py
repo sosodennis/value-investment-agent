@@ -70,6 +70,27 @@ def _unique_members(pairs: list[tuple[str, object]]) -> dict[str, object]:
     return result
 
 
+def sofr_request_date(source_uri: str) -> date:
+    """Validate the exact single-date source query before capture or reproduction."""
+    uri = urlsplit(source_uri)
+    query = parse_qs(uri.query, keep_blank_values=True, strict_parsing=True)
+    try:
+        requested = date.fromisoformat(query["startDate"][0])
+    except (KeyError, IndexError) as error:
+        raise ValueError("SOFR source date is missing") from error
+    if (
+        uri.scheme != "https"
+        or uri.netloc != "markets.newyorkfed.org"
+        or uri.path != _SOFR_ENDPOINT
+        or uri.fragment
+        or set(query) != {"startDate", "endDate"}
+        or query["startDate"] != [requested.isoformat()]
+        or query["endDate"] != [requested.isoformat()]
+    ):
+        raise ValueError("SOFR source requires one canonical ISO date")
+    return requested
+
+
 def parse_new_york_fed_sofr(
     raw: bytes,
     *,
@@ -79,21 +100,11 @@ def parse_new_york_fed_sofr(
 ) -> SofrObservationV1:
     """Reproduce one daily overnight SOFR row without inferring historical availability."""
     try:
-        uri = urlsplit(source_uri)
-        query = parse_qs(uri.query, keep_blank_values=True, strict_parsing=True)
-        requested = effective_date.isoformat()
         if (
             len(raw) > 1024 * 1024
             or captured_at.tzinfo is None
             or captured_at.utcoffset() is None
-            or uri.scheme != "https"
-            or uri.netloc != "markets.newyorkfed.org"
-            or uri.path != _SOFR_ENDPOINT
-            or uri.fragment
-            or set(query) != {"startDate", "endDate"}
-            or any(len(values) != 1 for values in query.values())
-            or query["startDate"] != [requested]
-            or query["endDate"] != [requested]
+            or sofr_request_date(source_uri) != effective_date
             or effective_date
             >= captured_at.astimezone(ZoneInfo("America/New_York")).date()
         ):
@@ -153,9 +164,8 @@ class NewYorkFedSofrVintageProvider:
                 "SOFR_SOURCE_INVALID", "SOFR source profile does not match"
             )
         try:
-            query = parse_qs(urlsplit(source.uri).query)
-            effective_date = date.fromisoformat(query["startDate"][0])
-        except (KeyError, ValueError, IndexError) as error:
+            effective_date = sofr_request_date(source.uri)
+        except ValueError as error:
             raise SnapshotError(
                 "SOFR_SOURCE_INVALID", "SOFR source date is invalid"
             ) from error

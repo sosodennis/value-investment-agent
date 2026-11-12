@@ -1,16 +1,32 @@
 import hashlib
 import json
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
+from decimal import Decimal
 from email.message import Message
 from pathlib import Path
 
 import pytest
 from fundamental_service.public_source import (
-    PUBLIC_SOURCE_SPECS,
     PublicSourceAdapter,
     fundamental_source_register,
 )
-from fundamental_service.snapshots import SnapshotError
+from fundamental_service.public_source_catalog import PUBLIC_SOURCE_SPECS
+from fundamental_service.source_capture import (
+    ProvidedAvailabilityCaptureProfile,
+    PublicSourceRegistration,
+    PublicSourceSpec,
+    ReproducedMacroCaptureProfile,
+    SourceCaptureTimes,
+)
+from fundamental_service.contracts import SourceRole
+from fundamental_service.macro_series import (
+    MacroObservationV1,
+    MacroSeriesProviderPort,
+    MacroSeriesVintageV1,
+    reproduce_macro_vintage,
+)
+from fundamental_service.snapshots import LegalSource, SnapshotError, SourceRegister
+from fundamental_service.source_evidence import RetainedSourceV1, SourceArtifactV1
 from treasury_source_fixtures import ALFRED_CSV, ALFRED_URI, TREASURY_URI, TREASURY_XML
 
 
@@ -30,6 +46,257 @@ class FakeResponse:
 
     def __exit__(self, *_args):
         return False
+
+
+class AlternativeRateProvider:
+    provider_id = "alternative-rate-provider"
+
+    def supports(self, series_id):
+        return series_id == "test.policy_rate"
+
+    def reproduce_vintage(self, *, series_id, sources):
+        source = sources[0]
+        period, raw_value = source.content.decode("ascii").strip().split(",")
+        observed_on = date.fromisoformat(period)
+        digest = hashlib.sha256(source.content).hexdigest()
+        artifact = SourceArtifactV1(
+            source_id=source.source_id,
+            uri=source.uri,
+            source_version=source.source_version,
+            terms_reference=source.terms_reference,
+            captured_at=source.captured_at,
+            content_sha256=digest,
+        )
+        return MacroSeriesVintageV1.build(
+            provider_id=self.provider_id,
+            series_id=series_id,
+            frequency="daily",
+            unit="percent",
+            source_version="alternative-rate-v1",
+            available_at=source.captured_at,
+            captured_at=source.captured_at,
+            artifacts=(artifact,),
+            observations=(
+                MacroObservationV1(
+                    series_id=series_id,
+                    period_start=observed_on,
+                    period_end=observed_on,
+                    value=Decimal(raw_value),
+                    unit="percent",
+                    source_sha256=digest,
+                ),
+            ),
+        )
+
+
+@pytest.mark.parametrize("raw_value", ("3.5", "4.125"))
+def test_alternative_provider_registers_without_transport_changes(raw_value):
+    provider: MacroSeriesProviderPort = AlternativeRateProvider()
+    spec = PublicSourceSpec(
+        source_id="alternative-rate",
+        role=SourceRole.MACRO,
+        uri_prefix="https://rates.example.test/v1/",
+        terms_reference="https://rates.example.test/terms",
+    )
+    registration = PublicSourceRegistration(
+        spec,
+        ReproducedMacroCaptureProfile(
+            provider=provider,
+            series_id="test.policy_rate",
+            source_version="alternative-rate-v1",
+            validate_uri=lambda uri: None,
+        ),
+    )
+    source = PublicSourceAdapter(
+        user_agent="value-agent test@example.com",
+        registrations=(registration,),
+        opener=lambda *_args, **_kwargs: FakeResponse(
+            f"2025-01-01,{raw_value}\n".encode("ascii"), "text/plain"
+        ),
+        min_interval_seconds=0,
+    ).capture("alternative-rate", "https://rates.example.test/v1/today")
+    vintage = reproduce_macro_vintage(
+        provider,
+        series_id="test.policy_rate",
+        sources=(
+            RetainedSourceV1(
+                source_id=source.source_id,
+                uri=source.uri,
+                source_version="alternative-rate-v1",
+                terms_reference=spec.terms_reference,
+                content=source.content,
+                captured_at=source.captured_at,
+            ),
+        ),
+    )
+    assert vintage.provider_id == provider.provider_id
+    assert vintage.observations[0].value == Decimal(raw_value)
+    assert (
+        vintage.observations[0].source_sha256
+        == hashlib.sha256(source.content).hexdigest()
+    )
+    assert source.available_at == source.captured_at
+
+
+def test_registered_source_requires_one_matching_injected_profile_before_io():
+    calls = []
+    registration = PublicSourceRegistration(
+        PublicSourceSpec(
+            source_id="alternative-rate",
+            role=SourceRole.MACRO,
+            uri_prefix="https://rates.example.test/v1/",
+            terms_reference="https://rates.example.test/terms",
+        ),
+        ReproducedMacroCaptureProfile(
+            provider=AlternativeRateProvider(),
+            series_id="test.policy_rate",
+            source_version="alternative-rate-v1",
+            validate_uri=lambda _uri: None,
+        ),
+    )
+    adapter = PublicSourceAdapter(
+        user_agent="value-agent test@example.com",
+        registrations=(registration,),
+        opener=lambda *_args, **_kwargs: calls.append(True),
+    )
+    with pytest.raises(SnapshotError) as error:
+        adapter.capture(
+            "alternative-rate",
+            "https://other.example.test/v1/today",
+        )
+    assert error.value.code == "SOURCE_URI_NOT_ALLOWED"
+    assert calls == []
+
+
+def test_empty_registrations_do_not_load_default_sources():
+    calls = []
+    adapter = PublicSourceAdapter(
+        user_agent="value-agent test@example.com",
+        registrations=(),
+        opener=lambda *_args, **_kwargs: calls.append(True),
+    )
+    with pytest.raises(SnapshotError) as error:
+        adapter.capture("treasury-yields", TREASURY_URI)
+    assert error.value.code == "SOURCE_NOT_REGISTERED"
+    assert calls == []
+
+
+def test_duplicate_source_registration_fails_configuration():
+    registration = PublicSourceRegistration(
+        PUBLIC_SOURCE_SPECS[0], ProvidedAvailabilityCaptureProfile()
+    )
+    with pytest.raises(ValueError, match="repeat a source identity"):
+        PublicSourceAdapter(
+            user_agent="value-agent test@example.com",
+            registrations=(registration, registration),
+        )
+
+
+@pytest.mark.parametrize("mismatch", ("role", "terms_reference"))
+def test_capture_registration_must_match_legal_register_before_io(mismatch):
+    spec = PUBLIC_SOURCE_SPECS[0]
+    calls = []
+    legal = LegalSource(
+        spec.source_id,
+        SourceRole.REFERENCE if mismatch == "role" else spec.role,
+        "https://terms.example.test/"
+        if mismatch == "terms_reference"
+        else spec.terms_reference,
+        "indefinite",
+    )
+    adapter = PublicSourceAdapter(
+        user_agent="value-agent test@example.com",
+        source_register=SourceRegister((legal,)),
+        registrations=(
+            PublicSourceRegistration(spec, ProvidedAvailabilityCaptureProfile()),
+        ),
+        opener=lambda *_args, **_kwargs: calls.append(True),
+    )
+    with pytest.raises(SnapshotError) as error:
+        adapter.capture(spec.source_id, TREASURY_URI)
+    assert error.value.code == "SOURCE_REGISTRATION_MISMATCH"
+    assert calls == []
+
+
+def test_unsupported_injected_macro_series_fails_before_io():
+    calls = []
+    spec = PUBLIC_SOURCE_SPECS[0]
+    adapter = PublicSourceAdapter(
+        user_agent="value-agent test@example.com",
+        registrations=(
+            PublicSourceRegistration(
+                spec,
+                ReproducedMacroCaptureProfile(
+                    AlternativeRateProvider(),
+                    "test.unsupported_rate",
+                    "alternative-rate-v1",
+                    lambda _uri: None,
+                ),
+            ),
+        ),
+        opener=lambda *_args, **_kwargs: calls.append(True),
+    )
+    with pytest.raises(SnapshotError) as error:
+        adapter.capture(spec.source_id, TREASURY_URI)
+    assert error.value.code == "SOURCE_PROFILE_UNSUPPORTED"
+    assert calls == []
+
+
+@pytest.mark.parametrize("timestamp", ("available_at", "publication_at", "captured_at"))
+def test_naive_caller_timestamps_fail_before_io(timestamp):
+    calls = []
+    adapter = PublicSourceAdapter(
+        user_agent="value-agent test@example.com",
+        opener=lambda *_args, **_kwargs: calls.append(True),
+    )
+    with pytest.raises(SnapshotError) as error:
+        adapter.capture(
+            "fred-observations",
+            "https://fred.stlouisfed.org/graph/fredgraph.csv",
+            **{timestamp: datetime(2025, 1, 1)},
+        )
+    assert error.value.code == "SOURCE_TIMESTAMP_TIMEZONE_REQUIRED"
+    assert calls == []
+
+
+@pytest.mark.parametrize(
+    ("invalid_time", "expected_code"),
+    (
+        ("naive", "SOURCE_TIMESTAMP_TIMEZONE_REQUIRED"),
+        ("capture_future", "SOURCE_CAPTURE_TIME_MISMATCH"),
+        ("available_future", "SOURCE_TIMESTAMP_ORDER_INVALID"),
+        ("publication_future", "SOURCE_TIMESTAMP_ORDER_INVALID"),
+    ),
+)
+def test_transport_rejects_inconsistent_injected_profile_times(
+    invalid_time, expected_code
+):
+    class InvalidTimeProfile:
+        def validate_request(self, request):
+            pass
+
+        def resolve_capture(self, request, response):
+            now = response.retrieved_at
+            later = now + timedelta(days=1)
+            return SourceCaptureTimes(
+                now.replace(tzinfo=None)
+                if invalid_time == "naive"
+                else later
+                if invalid_time == "available_future"
+                else now,
+                later if invalid_time == "publication_future" else None,
+                later if invalid_time == "capture_future" else now,
+            )
+
+    spec = PUBLIC_SOURCE_SPECS[0]
+    adapter = PublicSourceAdapter(
+        user_agent="value-agent test@example.com",
+        registrations=(PublicSourceRegistration(spec, InvalidTimeProfile()),),
+        opener=lambda *_args, **_kwargs: FakeResponse(b"retained source bytes"),
+    )
+    with pytest.raises(SnapshotError) as error:
+        adapter.capture(spec.source_id, TREASURY_URI)
+    assert error.value.code == expected_code
 
 
 def test_all_declared_free_sources_have_allowlisted_capture_contract():
