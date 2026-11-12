@@ -132,6 +132,11 @@ batch decision reference and canonical plan. Missing/unsupported/conflicting
 roles remain blocked; no release or calculation is attempted. A report-write
 interruption can be retried against the completed acquisition without fetching
 or parsing again. Repeated identical reports return `wrote=false`.
+The source command requests read-only reuse of a completed acquisition, after
+the same authority, organization, taxonomy and acquisition-lock checks. It adds
+no duplicate source-audit row for that completed result. New acquisitions and
+refusals remain audited. HTTP ingestion keeps its default per-request reuse
+audit, independently of command artifact identity.
 
 For a complete supported original, the runner checks the retained batch input,
 model, policy, evaluator, source and per-role decisions against the immutable

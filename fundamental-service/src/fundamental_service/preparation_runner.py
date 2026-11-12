@@ -711,6 +711,7 @@ class SourcePreparationRunner:
                     organization_id=organization_id,
                     correlation_id=correlation_id,
                     deadline_at=deadline_at,
+                    audit_reuse=False,
                 )
                 snapshot = None
                 if acquired.quality_status is QualityStatus.VERIFIED:
@@ -1028,14 +1029,12 @@ class SourcePreparationRunner:
 
 
 async def _run_command(args: argparse.Namespace) -> ArtifactPublicationV1:
-    # Console scripts start with their bin directory on sys.path.  The image
-    # deliberately installs the shared internal contract under /app/src,
-    # while local source runs use the repository checkout.  Establish both
-    # supported roots before importing the composition root so the CLI has the
-    # same boundary imports as the API process, regardless of its cwd.
-    for root in (Path(__file__).resolve().parents[2], Path.cwd()):
+    package_root = Path(__file__).resolve().parents[2]
+    for root in (package_root, package_root.parent / "finance-agent-core"):
         root_string = str(root)
-        if root.is_dir() and root_string not in sys.path:
+        if (
+            root / "src/shared/internal_services"
+        ).is_dir() and root_string not in sys.path:
             sys.path.insert(0, root_string)
     from .app import app
 

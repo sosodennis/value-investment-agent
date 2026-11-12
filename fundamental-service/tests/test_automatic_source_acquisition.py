@@ -255,6 +255,39 @@ def test_empty_store_acquires_parses_maps_and_reuses_without_provider_or_parser(
     assert before == inventory(artifacts.root)
 
 
+def test_command_reuse_is_read_only_without_weakening_authorization_or_api_audit(
+    tmp_path, monkeypatch
+):
+    from fundamental_service.operations import ServiceError
+
+    request, use_case, state, metadata, _ = acquisition_case(tmp_path, monkeypatch)
+    original = acquire(request, use_case)
+    audits = tuple(metadata.audits)
+    calls = state.provider_calls, state.parser_calls
+
+    def execute(organization="org", **kwargs):
+        return use_case.execute(
+            request,
+            caller_principal="caller",
+            organization_id=organization,
+            correlation_id="read-only-command",
+            deadline_at=datetime.now(UTC) + timedelta(minutes=1),
+            **kwargs,
+        )
+
+    repeated = execute(audit_reuse=False)
+    assert repeated.reused and repeated.snapshot_id == original.snapshot_id
+    assert tuple(metadata.audits) == audits
+    with pytest.raises(ServiceError, match="not authorized"):
+        execute("unauthorized", audit_reuse=False)
+    assert len(metadata.audits) == len(audits) + 1
+    assert metadata.audits[-1]["outcome"] == "INGESTION_NOT_AUTHORIZED"
+    execute()
+    assert len(metadata.audits) == len(audits) + 2
+    assert metadata.audits[-1]["outcome"] == "reused"
+    assert calls == (state.provider_calls, state.parser_calls)
+
+
 @pytest.mark.parametrize("mode", ["wrong_identity", "no_regulatory_evidence"])
 def test_original_validation_refusal_never_creates_mappings(
     tmp_path, monkeypatch, mode

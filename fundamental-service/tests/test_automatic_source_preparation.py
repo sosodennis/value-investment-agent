@@ -2,6 +2,9 @@
 
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
+from pathlib import Path
+import subprocess
+import sys
 
 import pytest
 from pydantic import ValidationError
@@ -100,11 +103,13 @@ def test_mapping_free_plan_retains_full_blocked_result_and_reuses_everything(
     assert "non_operating_assets" in outcome.missing_evidence
     assert metadata.mappings and len(metadata.acquisitions) == 1
     before = inventory(artifacts.root)
+    audits = tuple(metadata.audits)
     calls = state.provider_calls, state.parser_calls
     second = run(runner, plan)
     assert second.artifact == first.artifact and not second.wrote
     assert calls == (state.provider_calls, state.parser_calls)
     assert before == inventory(artifacts.root)
+    assert tuple(metadata.audits) == audits
 
 
 @pytest.mark.parametrize(
@@ -173,6 +178,34 @@ def test_automatic_runtime_mismatch_refuses_before_source_io(tmp_path, monkeypat
         run(runner, plan)
     assert state.provider_calls == state.parser_calls == 0
     assert not metadata.acquisitions and not metadata.mappings
+
+
+def test_installed_cli_resolves_shared_contract_from_an_unrelated_directory(
+    tmp_path, monkeypatch
+):
+    plan, *_ = runner_case(tmp_path, monkeypatch)
+    path = tmp_path / "plan.json"
+    path.write_bytes(canonical_bytes(plan))
+    process = subprocess.run(
+        [
+            str(Path(sys.executable).parent / "fundamental-prepare-source"),
+            "--plan",
+            str(path),
+            "--plan-digest",
+            "b" * 64,
+            "--actor",
+            "caller",
+            "--organization",
+            "org",
+        ],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert process.returncode == 2
+    assert "plan digest does not match" in process.stderr
+    assert "ModuleNotFoundError" not in process.stderr
 
 
 def test_report_interruption_reuses_completed_automatic_acquisition(

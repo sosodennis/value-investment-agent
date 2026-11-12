@@ -574,6 +574,7 @@ class SecAcquisitionUseCase:
         organization_id: str,
         correlation_id: str,
         deadline_at: datetime,
+        audit_reuse: bool = True,
     ) -> SecIngestionResponseV1:
         validation_profile = self._validation_profile(request)
         key_payload = self._runtime_key_payload(request, validation_profile)
@@ -634,16 +635,19 @@ class SecAcquisitionUseCase:
                 expected_acquisition_payload=key_payload,
             )
             if existing is not None:
-                self.metadata.publish_source_audit(
-                    acquisition_key=acquisition_key,
-                    caller_principal=caller_principal,
-                    organization_id=organization_id,
-                    correlation_id=correlation_id,
-                    source_hashes=tuple(
-                        sorted(item.content_hash for item in existing.source_evidence)
-                    ),
-                    outcome="reused",
-                )
+                if audit_reuse:
+                    self.metadata.publish_source_audit(
+                        acquisition_key=acquisition_key,
+                        caller_principal=caller_principal,
+                        organization_id=organization_id,
+                        correlation_id=correlation_id,
+                        source_hashes=tuple(
+                            sorted(
+                                item.content_hash for item in existing.source_evidence
+                            )
+                        ),
+                        outcome="reused",
+                    )
                 return existing.model_copy(
                     update={
                         "status": "reused",
