@@ -17,6 +17,7 @@ from urllib.request import Request, urlopen
 
 from .contracts import SourceRole
 from .snapshots import CapturedSource, LegalSource, SnapshotError, SourceRegister
+from .source_evidence import RetainedSourceV1
 
 
 class PublicResponsePort(Protocol):
@@ -351,6 +352,18 @@ class PublicSourceAdapter:
                     "SOURCE_AVAILABILITY_UNVERIFIED",
                     "Treasury source timestamps must be reproduced from service capture and evidence",
                 )
+        if source_id == "damodaran-reference":
+            from .damodaran_source import damodaran_reference_profile
+
+            damodaran_reference_profile(uri)
+            if any(
+                value is not None
+                for value in (available_at, publication_at, captured_at)
+            ):
+                raise SnapshotError(
+                    "SOURCE_AVAILABILITY_UNVERIFIED",
+                    "reference workbook availability must use its retained capture time",
+                )
         payload, status, media_type, retrieved_at = self._request(uri)
         if source_id == "new-york-fed-sofr":
             from .sofr_source import parse_new_york_fed_sofr
@@ -371,7 +384,6 @@ class PublicSourceAdapter:
         elif source_id in {"treasury-yields", "alfred-vintage"}:
             from .macro_series import (
                 MacroSeriesProviderPort,
-                RetainedMacroSourceV1,
                 reproduce_macro_vintage,
             )
             from .treasury_source import (
@@ -393,7 +405,7 @@ class PublicSourceAdapter:
                 provider,
                 series_id=TREASURY_SERIES,
                 sources=(
-                    RetainedMacroSourceV1(
+                    RetainedSourceV1(
                         source_id=source_id,
                         uri=uri,
                         source_version=profile,
@@ -404,6 +416,8 @@ class PublicSourceAdapter:
                 ),
             )
             available_at = vintage.available_at
+        elif source_id == "damodaran-reference":
+            available_at = retrieved_at
         if available_at is None:
             raise SnapshotError(
                 "SOURCE_AVAILABILITY_REQUIRED",
@@ -422,6 +436,7 @@ class PublicSourceAdapter:
             "bea-nipa-archive",
             "treasury-yields",
             "alfred-vintage",
+            "damodaran-reference",
         }:
             publication_at = available_at
         if source_id in {"fred-observations", "alfred-vintage", "damodaran-reference"}:
@@ -453,6 +468,7 @@ class PublicSourceAdapter:
                     "bea-nipa-archive",
                     "treasury-yields",
                     "alfred-vintage",
+                    "damodaran-reference",
                 }
                 else captured_at
             ),

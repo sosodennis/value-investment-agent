@@ -65,6 +65,8 @@ def test_all_declared_free_sources_have_allowlisted_capture_contract():
             uri = TREASURY_URI
         if spec.source_id == "new-york-fed-sofr":
             uri += "?startDate=2025-01-03&endDate=2025-01-03"
+        if spec.source_id == "damodaran-reference":
+            uri += "archives/betas24.xls"
         source = adapter.capture(
             spec.source_id,
             uri,
@@ -77,6 +79,7 @@ def test_all_declared_free_sources_have_allowlisted_capture_contract():
                     "bea-nipa-archive",
                     "treasury-yields",
                     "alfred-vintage",
+                    "damodaran-reference",
                 }
                 else datetime(2025, 1, 3, tzinfo=timezone.utc)
             ),
@@ -437,3 +440,33 @@ def test_captured_macro_and_vintage_fixtures_have_stable_hashes():
         payload = (fixture_root / path).read_bytes()
         assert hashlib.sha256(payload).hexdigest() == record["sha256"]
         assert record["http_status"] == 200
+
+
+@pytest.mark.parametrize("timestamp", ["available_at", "publication_at", "captured_at"])
+def test_reference_capture_rejects_caller_timestamp_overrides_before_network(timestamp):
+    calls = []
+    adapter = PublicSourceAdapter(
+        user_agent="value-agent test@example.com",
+        opener=lambda *_args, **_kwargs: calls.append(True),
+    )
+    with pytest.raises(SnapshotError) as error:
+        adapter.capture(
+            "damodaran-reference",
+            "https://pages.stern.nyu.edu/~adamodar/pc/archives/betas24.xls",
+            **{timestamp: datetime(2025, 1, 1, tzinfo=timezone.utc)},
+        )
+    assert error.value.code == "SOURCE_AVAILABILITY_UNVERIFIED"
+    assert calls == []
+
+
+def test_reference_capture_uses_actual_capture_without_claiming_publication():
+    adapter = PublicSourceAdapter(
+        user_agent="value-agent test@example.com",
+        opener=lambda *_args, **_kwargs: FakeResponse(b"retained binary original"),
+    )
+    source = adapter.capture(
+        "damodaran-reference",
+        "https://pages.stern.nyu.edu/~adamodar/pc/archives/betas24.xls",
+    )
+    assert source.available_at == source.captured_at
+    assert source.publication_at is None

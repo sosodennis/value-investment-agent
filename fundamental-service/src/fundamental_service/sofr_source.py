@@ -15,10 +15,9 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from .macro_series import (
     MacroObservationV1,
     MacroSeriesVintageV1,
-    MacroSourceArtifactV1,
-    RetainedMacroSourceV1,
 )
 from .snapshots import SnapshotError
+from .source_evidence import RetainedSourceV1, SourceArtifactV1
 
 NEW_YORK_FED_SOFR_SOURCE = "new-york-fed-sofr"
 NEW_YORK_FED_SOFR_PROFILE = "new-york-fed-markets-api-sofr-v1"
@@ -138,7 +137,7 @@ class NewYorkFedSofrVintageProvider:
         return series_id == "us.sofr_overnight"
 
     def reproduce_vintage(
-        self, *, series_id: str, sources: tuple[RetainedMacroSourceV1, ...]
+        self, *, series_id: str, sources: tuple[RetainedSourceV1, ...]
     ) -> MacroSeriesVintageV1:
         if not self.supports(series_id) or len(sources) != 1:
             raise SnapshotError(
@@ -175,7 +174,7 @@ class NewYorkFedSofrVintageProvider:
             available_at=observation.available_at,
             captured_at=source.captured_at,
             artifacts=(
-                MacroSourceArtifactV1(
+                SourceArtifactV1(
                     source_id=source.source_id,
                     uri=source.uri,
                     source_version=source.source_version,
