@@ -20,7 +20,7 @@ from .data_releases import DataReleaseError, DataReleaseManifestV1
 from .issuer_market_policy_plan import IssuerMarketReferencePlanDecisionV1
 from .market_reference_evidence import read_release_market_reference_plan
 from .policies import PolicyRecordV1
-from .serialization import canonical_bytes
+from .serialization import canonical_bytes, sha256_digest
 from .snapshots import SnapshotError
 from .source_admission import SourceAdmissionV1
 from .source_admission_evidence import AdmissionArtifactReader
@@ -61,6 +61,12 @@ def build_automatic_market_policy_evidence(
     )
 
 
+def requires_automatic_market_policy(policy: PolicyRecordV1 | None) -> bool:
+    return policy is not None and any(
+        ref.startswith(AUTOMATIC_MARKET_POLICY_REF_PREFIX) for ref in policy.source_refs
+    )
+
+
 def load_release_automatic_market_policy(
     manifest: DataReleaseManifestV1,
     *,
@@ -68,6 +74,7 @@ def load_release_automatic_market_policy(
     policy: PolicyRecordV1 | None,
     admissions: tuple[SourceAdmissionV1, ...],
     artifacts: AdmissionArtifactReader,
+    expected_source_revision: str | None = None,
 ) -> AutomaticMarketPolicyEvidenceV1 | None:
     """Verify the declared assembly without granting new policy authority."""
     refs = tuple(
@@ -75,11 +82,8 @@ def load_release_automatic_market_policy(
         for ref in manifest.artifact_refs
         if ref.role == AUTOMATIC_MARKET_POLICY_ROLE
     )
-    required = policy is not None and any(
-        ref.startswith(AUTOMATIC_MARKET_POLICY_REF_PREFIX) for ref in policy.source_refs
-    )
     if not refs:
-        if required:
+        if requires_automatic_market_policy(policy):
             raise DataReleaseError(
                 "AUTOMATIC_MARKET_POLICY_EVIDENCE_MISSING",
                 "automatic deployment policy requires its released decision",
@@ -116,12 +120,25 @@ def load_release_automatic_market_policy(
         policy is None
         or AUTOMATIC_MARKET_POLICY_REF_PREFIX + ref.content_hash
         not in policy.source_refs
+        or sum(
+            item.startswith(AUTOMATIC_MARKET_POLICY_REF_PREFIX)
+            for item in policy.source_refs
+        )
+        != 1
     ):
         raise DataReleaseError(
             "AUTOMATIC_MARKET_POLICY_UNAPPROVED",
             "deployment policy must authorize the exact automatic decision",
         )
     decision = evidence.decision
+    if (
+        expected_source_revision is not None
+        and evidence.source_revision != expected_source_revision
+    ):
+        raise DataReleaseError(
+            "AUTOMATIC_MARKET_POLICY_REVISION_MISMATCH",
+            "automatic market-policy revision differs from release verification",
+        )
     plan = read_release_market_reference_plan(manifest, artifacts=artifacts)
     terminal_plan = read_release_terminal_growth_plan(manifest, artifacts=artifacts)
     if (
@@ -138,6 +155,14 @@ def load_release_automatic_market_policy(
         raise DataReleaseError(
             "AUTOMATIC_MARKET_POLICY_CONTEXT_MISMATCH",
             "automatic policy differs from the issuer, date or released plans",
+        )
+    if (
+        sha256_digest(plan) not in policy.source_refs
+        or sha256_digest(terminal_plan) not in policy.source_refs
+    ):
+        raise DataReleaseError(
+            "AUTOMATIC_MARKET_POLICY_PLAN_UNAPPROVED",
+            "deployment policy must authorize both exact selection plans",
         )
     try:
         evaluate_automatic_market_policy(

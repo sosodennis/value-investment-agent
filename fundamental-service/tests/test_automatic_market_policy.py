@@ -132,11 +132,11 @@ class AlternateReferenceProvider:
         )
 
 
-def _plan_decision(at: datetime = AT):
+def _plan_decision(at: datetime = AT, *, issuer_id="0000320193"):
     classification = reproduce_issuer_classification(
         SecSubmissionClassificationProvider(),
-        request=request(valuation_at=at),
-        sources=(sec_submission(),),
+        request=request(valuation_at=at, issuer_id=issuer_id),
+        sources=(sec_submission(cik=issuer_id),),
     )
     country_provider = SecStateCountryCrosswalk()
     country = apply_country_crosswalk(
@@ -171,7 +171,7 @@ def _plan_decision(at: datetime = AT):
     )
 
 
-def _reference_admissions(at: datetime):
+def _reference_inputs(at: datetime):
     provider = AlternateReferenceProvider()
     source = RetainedSourceV1(
         source_id="synthetic-alternate-reference",
@@ -215,8 +215,7 @@ def _reference_admissions(at: datetime):
         rules=rules,
     )
     return tuple(
-        admit_reference_source(
-            provider,
+        dict(
             metric=metric,
             sources=(source,),
             terms=(terms,),
@@ -224,6 +223,13 @@ def _reference_admissions(at: datetime):
             policy=policy,
         )
         for metric in sorted(provider.values)
+    )
+
+
+def _reference_admissions(at: datetime):
+    return tuple(
+        admit_reference_source(AlternateReferenceProvider(), **item)
+        for item in _reference_inputs(at)
     )
 
 

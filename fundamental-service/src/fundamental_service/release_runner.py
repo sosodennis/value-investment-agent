@@ -27,6 +27,7 @@ from .automatic_mapping import verify_automatic_mapping_replay
 from .automatic_market_policy_evidence import (
     AUTOMATIC_MARKET_POLICY_ROLE,
     load_release_automatic_market_policy,
+    requires_automatic_market_policy,
 )
 from .data_releases import (
     DataReleaseError,
@@ -215,6 +216,7 @@ class DataReleaseCanaryRunner:
                     and requires_terminal_growth_plan(candidate)
                     or plan is None
                     and requires_industry_capital_plan(candidate.market_inputs)
+                    or requires_automatic_market_policy(candidate)
                 ):
                     continue
                 for ref in manifest.snapshot_refs:
@@ -244,6 +246,7 @@ class DataReleaseCanaryRunner:
                         policy=effective,
                         admissions=admissions,
                         artifacts=self._artifacts,
+                        expected_source_revision=verification.source_revision,
                     )
                     load_release_terminal_growth_selection(
                         manifest,
@@ -298,6 +301,7 @@ class DataReleaseCanaryRunner:
                         policy=policy,
                         admissions=admissions,
                         artifacts=self._artifacts,
+                        expected_source_revision=verification.source_revision,
                     )
                     selection = load_release_market_reference_selection(
                         manifest,
