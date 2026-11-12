@@ -1,0 +1,249 @@
+{
+  "artifact_policy": "Retained originals and generated reports remain outside Git. Existing immutable artifact storage owns publication; repeated source artifacts are reused without rewrite.",
+  "ci": {
+    "conclusion": "success",
+    "exact_commit": "9d234fae218b16cd55817f153b13f192192c1e88",
+    "executed_passed": 12,
+    "receipt_digest": "924b900de5cbbd44506f2c1c1b1b86248389a1bee9006ffc9226f84312718fb4",
+    "run": 43218086138,
+    "skipped": [
+      "fundamental-release-gate"
+    ]
+  },
+  "contracts": [
+    "MacroSeriesProviderPort",
+    "MarketReferenceProviderPort",
+    "SourceUsePolicyV1",
+    "SourceAdmissionV1"
+  ],
+  "full_numerical_flow": false,
+  "implementation_commit": "9d234fae218b16cd55817f153b13f192192c1e88",
+  "installed_image": {
+    "command": "python3 .audit/issue-361-source-admission/verify_image.py",
+    "compose": {
+      "config_hash": "b8aad112c7ed085a96f21281211419f8ec08423bb1ff150252608560ddb48cfe",
+      "env_files": [],
+      "files": [
+        "compose/verification/docker-compose.issue280-operations.yml"
+      ],
+      "ports": {
+        "fundamental_postgres": 18684,
+        "fundamental_service": 18683
+      },
+      "project": "value-investment-agent-361-macro-providers"
+    },
+    "exit_code": 0,
+    "identity_resolution_configured": false,
+    "image_id": "sha256:6ead2eb689b4c8280831ff79da706daadc4440303c354bafae60a4c49f6b62ad",
+    "input_digest": "bc5ac7b8edf117dc76dab9103ae6b52596d21286cd1e2510117c12e25008a47b",
+    "new_files_after_restart": 0,
+    "new_files_second": 0,
+    "output_digest": "bb732470b74b4e57a9947bdcdb8746c4eb40e45d68be842c643ac80657bb8ed6",
+    "repeat_and_restart_wrote": false,
+    "replay_input_digest": "f95f8dcf0b061cadf0967e3aeb1393d81d911ec4568e6e50cb23a409ae6487d1",
+    "replay_output_digest": "791bc888b04affd20666ba5072c0750cb02894a8bbcbb0f307afef75839e2f42",
+    "runtime": {
+      "arelle": "2.47.4",
+      "pydantic": "2.14.2",
+      "python": "3.12.16",
+      "xlrd": "2.0.2"
+    },
+    "source_count": 84,
+    "unrelated_baseline_containers_unchanged": 40
+  },
+  "issue": 361,
+  "pull_request": 370,
+  "remaining": [
+    "Provider-neutral capture registration; the transport still imports concrete parsing/query/time rules.",
+    "Complete issuer/date financial-policy join, lawful quote and exact contracted debt benchmark.",
+    "Accounting/award completeness, trusted complete release, authentic caller approval, real numerical repeat/restart/restore, review/CI and main verification."
+  ],
+  "repeat": {
+    "admitted": 7,
+    "command": "python3 .audit/issue-361-source-admission/verify_repeat.py",
+    "exit_code": 0,
+    "input_digest": "e0c2d5ed3631be33f07a8d41290299e79c3d3165fa02184620b21b907f84a5eb",
+    "inventory_unchanged": true,
+    "output_digest": "be3b252ef7f4f142cbf7dc67f82a7a046aa4eb44a90b1f0fe75158c4c7dd3fbd",
+    "process_hash_seeds": [
+      "0",
+      "871",
+      "19",
+      "53"
+    ],
+    "provider_downloads": 0,
+    "refused": 10,
+    "repeated_artifact_writes": 0,
+    "repeated_provider_calls": 0,
+    "replay_input_digest": "bfd2decddae580ec04a2e9c53d0dbbf1be7ad4d19555ef5add0c4c359db0011e",
+    "replay_output_digest": "0c9f205d5d63c176460485df6dce5338360c42f3aa82957e54e540abe8213949",
+    "wrote": false
+  },
+  "retained_audit_failures": [
+    "A preliminary runner supplied a nonexistent revision; retain its excluded artifacts and correction. Accepted wrappers obtain and validate the actual Git HEAD.",
+    "An installed audit helper used the host lock path; retain the original failure and correction. Production sources were unchanged.",
+    "Official source-use lookups that returned 404, redirect-to-404 or timed out remain unapproved."
+  ],
+  "retained_refusals": {
+    "current/alfred/us.treasury_par_yield_10y": [
+      "SOURCE_USE_POLICY_MISSING"
+    ],
+    "failure/corrupt-original": [
+      "REFERENCE_SOURCE_INVALID",
+      "SOURCE_REPRODUCTION_FAILED"
+    ],
+    "failure/missing-terms": [
+      "SOURCE_USE_TERMS_MISSING"
+    ],
+    "failure/raw-redistribution": [
+      "SOURCE_USE_PURPOSE_UNSUPPORTED"
+    ],
+    "historical/alfred/us.treasury_par_yield_10y": [
+      "SOURCE_USE_POLICY_MISSING"
+    ],
+    "historical/damodaran-public-aggregates/country.equity_risk_premium": [
+      "SOURCE_NOT_AVAILABLE_AT_VALUATION"
+    ],
+    "historical/damodaran-public-aggregates/country.tax_rate": [
+      "SOURCE_NOT_AVAILABLE_AT_VALUATION"
+    ],
+    "historical/damodaran-public-aggregates/industry.unlevered_beta": [
+      "SOURCE_NOT_AVAILABLE_AT_VALUATION"
+    ],
+    "historical/new-york-fed/us.sofr_overnight": [
+      "SOURCE_NOT_AVAILABLE_AT_VALUATION"
+    ],
+    "historical/us-treasury/us.treasury_par_yield_10y": [
+      "SOURCE_NOT_AVAILABLE_AT_VALUATION"
+    ]
+  },
+  "retained_source_manifest_digest": "9d5ac0d531ba38a036e2402dee56dab063b205dae0e7e485d6628038ea8bd5bc",
+  "source_use_policy_digest": "93bf736bc457852ca4072a7243773d6e01d5de4b35efc3f81d7cdfb0b9425290",
+  "status": "PARTIAL_SOURCE_ADMISSION_ONLY",
+  "supported_history_threshold": null,
+  "verification": {
+    "commands": {
+      "architecture": {
+        "command": [
+          "python3",
+          "scripts/architecture_guard.py"
+        ],
+        "exit_code": 0,
+        "output_sha256": "6c8e024ff94859e9781de1f4a3201c70e338bc90774702d8ac83afc8a9a15ab9"
+      },
+      "diff": {
+        "command": [
+          "git",
+          "diff",
+          "--check",
+          "origin/main"
+        ],
+        "exit_code": 0,
+        "output_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "focused": {
+        "command": [
+          "uv",
+          "run",
+          "--frozen",
+          "--extra",
+          "dev",
+          "--project",
+          "fundamental-service",
+          "pytest",
+          "-q",
+          "fundamental-service/tests/test_source_admission.py",
+          "fundamental-service/tests/test_source_admission_evidence.py",
+          "fundamental-service/tests/test_market_reference.py",
+          "fundamental-service/tests/test_damodaran_source.py",
+          "fundamental-service/tests/test_release_runner.py",
+          "fundamental-service/tests/test_valuation_preparation_integration.py",
+          "fundamental-service/tests/test_quote_sources.py"
+        ],
+        "exit_code": 0,
+        "output_sha256": "533cd20be676b9186bddc5625041f940c2a857d2fe7a34a6de4952dc0ba8494d"
+      },
+      "format": {
+        "command": [
+          "uvx",
+          "--from",
+          "ruff==0.14.10",
+          "ruff",
+          "format",
+          "--check",
+          "fundamental-service/src/fundamental_service/app.py",
+          "fundamental-service/src/fundamental_service/application/service.py",
+          "fundamental-service/src/fundamental_service/free_source_policy.py",
+          "fundamental-service/src/fundamental_service/preparation_runner.py",
+          "fundamental-service/src/fundamental_service/release_runner.py",
+          "fundamental-service/src/fundamental_service/source_admission.py",
+          "fundamental-service/src/fundamental_service/source_admission_evidence.py",
+          "fundamental-service/tests/test_source_admission.py",
+          "fundamental-service/tests/test_source_admission_evidence.py"
+        ],
+        "exit_code": 0,
+        "output_sha256": "2ce9758b9f8abd876ec3e76c589e099e8b05377b1e7ea2331e81ee80f07bdff8"
+      },
+      "mypy": {
+        "command": [
+          "uv",
+          "run",
+          "--frozen",
+          "--project",
+          "fundamental-service",
+          "--with",
+          "mypy==1.19.1",
+          "mypy",
+          "--no-incremental",
+          "--follow-imports=silent",
+          "--ignore-missing-imports",
+          "fundamental-service/src/fundamental_service/app.py",
+          "fundamental-service/src/fundamental_service/application/service.py",
+          "fundamental-service/src/fundamental_service/free_source_policy.py",
+          "fundamental-service/src/fundamental_service/preparation_runner.py",
+          "fundamental-service/src/fundamental_service/release_runner.py",
+          "fundamental-service/src/fundamental_service/source_admission.py",
+          "fundamental-service/src/fundamental_service/source_admission_evidence.py"
+        ],
+        "exit_code": 0,
+        "output_sha256": "050c52a2b0c61e8b681ef5c485e0bc03340b8d55148e0acef27d744c8be42033"
+      },
+      "ruff": {
+        "command": [
+          "uvx",
+          "--from",
+          "ruff==0.14.10",
+          "ruff",
+          "check",
+          "fundamental-service"
+        ],
+        "exit_code": 0,
+        "output_sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18"
+      },
+      "service_postgres": {
+        "command": [
+          "uv",
+          "run",
+          "--frozen",
+          "--extra",
+          "dev",
+          "--project",
+          "fundamental-service",
+          "pytest",
+          "fundamental-service/tests",
+          "-ra"
+        ],
+        "exit_code": 0,
+        "output_sha256": "5c2be6908150ea9571e927ff29e59141939afda2bd04cf761358d40319697797"
+      }
+    },
+    "input_digest": "fed401483d1356cd1306808865ec0de5b07ab5d05f01984ceea4c5db0599a76a",
+    "output_digest": "b8f9b0bee307f835c412fec339165cb3d2a9a348ff16b2ba94573857a68206c3",
+    "tests": {
+      "expected_warnings": 1,
+      "focused_passed": 104,
+      "optional_resource_skips": 11,
+      "service_postgres_passed": 1658
+    }
+  }
+}

@@ -19,6 +19,38 @@ Eligible candidate-history valuations can be provisional. Missing, conflicting,
 unreviewed, future, or unsupported evidence must retain reasons and abstain.
 No completed #351 through #355 acceptance is changed. #350 is outside scope.
 
+## Source admission checkpoint
+
+Exact implementation `9d234fae218b16cd55817f153b13f192192c1e88` passes
+**1,658 Service/PostgreSQL and 104 focused tests**, Ruff/format, seven-source
+mypy, architecture and diff checks. Eleven optional SEC-resource skips and one
+expected duplicate-ZIP warning remain. [CI 43218086138](https://github.com/sosodennis/value-investment-agent/actions/runs/43218086138)
+passes all 12 executed jobs; release gate skipped.
+
+Source admission reproduces retained macro/reference bytes through injected
+ports and a trusted source-use catalog. Release and serving share reproduction.
+The real-source pack retains 17 decisions: seven admitted and ten refused,
+including unknown ALFRED permission, future data, missing terms, corrupt bytes
+and unsupported redistribution. This is source-use approval, not approval of an
+issuer's seven market inputs or a complete valuation.
+
+Repeat and concurrent processes preserve output
+`0c9f205d5d63c176460485df6dce5338360c42f3aa82957e54e540abe8213949`,
+with zero repeated downloads/provider calls/artifact writes and unchanged file
+hashes, sizes and mtimes. The installed image matches all 84 sources; repeat and
+service restart preserve output
+`791bc888b04affd20666ba5072c0750cb02894a8bbcbb0f307afef75839e2f42`
+with `wrote=false`. Forty unrelated baseline containers are unchanged. The
+adapter stack has no SEC identity configuration and does not establish full
+numerical acceptance. [Compact evidence](issue-361-source-admission-checkpoint.json)
+records commands, digests, runtime pins and retained audit-helper failures.
+Raw sources and generated reports remain outside Git.
+
+Next, remove concrete source parsing/query/time branches from public capture
+through an injectable profile contract; then complete the issuer/date financial
+policy join and the outstanding numerical/recovery/review gates. #361/#369
+remain OPEN, PR #370 draft, and `supported_history_threshold=null`.
+
 ## Interchangeable reference provider checkpoint
 
 Provider implementation `30dc58404cbe5a46348ec20748bb855c5a12f958` and
