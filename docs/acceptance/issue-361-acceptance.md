@@ -19,6 +19,61 @@ Eligible candidate-history valuations can be provisional. Missing, conflicting,
 unreviewed, future, or unsupported evidence must retain reasons and abstain.
 No completed #351 through #355 acceptance is changed. #350 is outside scope.
 
+## Free market-source and automatic approval checkpoint
+
+`e5076f8d4dbbb7233826dc64f2eebf9a823c4dc0` removes unsupported bootstrap
+market inputs and rejects the exact retained unsafe policy digests, including
+explicit pins and restored databases. Existing records remain readable.
+
+`c65f621d560767ff8f4a6b8837eaf0838eee49fc` and
+`bf8a2d2ef22356959c287854696db2dc77729ff8` add the official New York Fed
+overnight SOFR source profile. Capture verifies an exact single-date response
+through the same deterministic parser used for reproduction. Decimal values,
+revision marker, source hash and actual capture availability are retained;
+unknown historical publication time stays unknown. Invalid, duplicate,
+mixed-date and incomplete observations are rejected. Overnight SOFR cannot be
+presented as the contracted CME Term SOFR benchmark.
+
+Exact validation at `bf8a2d2ef22356959c287854696db2dc77729ff8` passes **1,475
+Fundamental/PostgreSQL tests and 27 focused source tests**, Ruff/format,
+changed-source mypy, architecture guard and diff checks. Eleven optional SEC
+runtime-resource tests skip; one duplicate-ZIP fixture warning is intentional.
+Input digest `58cf39260774c61e10e3a361ad42b39559438ffa3bbd1db5d88f2bdca3672655`;
+output digest `bb14c55af950d6df70e6e75dde128d8363915bc89937f62b9069fcbc44fcff74`.
+PostgreSQL uses the isolated `value-investment-agent-361-flow-tests` project,
+host port 18665. This increment creates or removes no Docker resources.
+
+Two independent processes reproduce the retained official SOFR row. The second
+returns `wrote=false` for source, input and output; all five files retain their
+hashes and mtimes, with zero network calls. Replay input
+`275dae95e7028f479240284e24523a6b9ee27be4dd704f4362ad5bcb57421a1b`;
+output `7ac51ab15a2f9d97bfad5d94cfc2811417e90dfcba934033af93d2c51dd93e5f`.
+This verifies source reproduction and persistence, not numerical valuation.
+
+The reliable free-source plan is Treasury for risk-free rates, Damodaran's
+published U.S. industry beta/ERP aggregates, SEC for issuer debt/shares/facility
+terms, New York Fed for an exact overnight benchmark when applicable, and
+BEA/ALFRED release vintages for the GDP ceiling. Damodaran's full usage page
+explicitly permits published processed data; commercial upstream suppliers do
+not alone disqualify the published aggregates. Underlying company-level data
+must not be redistributed. Its archived default spreads are an additional
+candidate for a separately governed synthetic borrowing-cost assumption, not
+an actual facility rate. Alpha Vantage's full daily history is premium; the CME
+page explicitly refuses scraping. Neither restriction is bypassed.
+
+The automatic market-policy target is now explicit in the service architecture
+document. Its complete evaluator remains unimplemented; no full market policy
+is admitted. Remaining: complete issuer accounting/award evidence (#381/#394),
+lawful dated equity quote, reproducible debt-cost policy and GDP vintage
+(#369), trusted complete release/caller approval and numerical full-flow
+repeat/restart/restore, independent review/CI and main verification. Keep #361
+OPEN, PR #370 draft and `supported_history_threshold=null`.
+
+Commands, runtime pins, source URLs/hashes, refusals and repeat receipts are in
+[the market-source checkpoint](issue-361-market-source-checkpoint.json), digest
+`99b87104265648f1d5e40cd442fce8ae2609dc5b125dcb37e58bc276f4e4a2bb`.
+Generated provider bytes, discovery captures and research remain in `.audit`.
+
 ## Signed quote source binding checkpoint
 
 Implementation `8807f0b4978531ee211146eeb8aad9b40042f4aa` adds one bounded

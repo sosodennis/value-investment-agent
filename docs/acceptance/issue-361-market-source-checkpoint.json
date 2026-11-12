@@ -1,0 +1,282 @@
+{
+  "acceptance": {
+    "automatic_market_evaluator_complete": false,
+    "full_market_policy_admitted": false,
+    "full_numerical_flow": false,
+    "issue_state": "OPEN",
+    "pull_request_draft": true,
+    "supported_history_threshold": null
+  },
+  "blocker": 369,
+  "checkpoint_digest": "99b87104265648f1d5e40cd442fce8ae2609dc5b125dcb37e58bc276f4e4a2bb",
+  "exact_validation": {
+    "all_passed": true,
+    "commands": {
+      "architecture": {
+        "command": [
+          "python3",
+          "scripts/architecture_guard.py"
+        ],
+        "exit_code": 0,
+        "log_wrote": true,
+        "output_sha256": "6c8e024ff94859e9781de1f4a3201c70e338bc90774702d8ac83afc8a9a15ab9"
+      },
+      "diff": {
+        "command": [
+          "git",
+          "diff",
+          "--check",
+          "origin/main"
+        ],
+        "exit_code": 0,
+        "log_wrote": true,
+        "output_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "format": {
+        "command": [
+          "uvx",
+          "--from",
+          "ruff==0.14.10",
+          "ruff",
+          "format",
+          "--check",
+          "fundamental-service/src/fundamental_service/public_source.py",
+          "fundamental-service/src/fundamental_service/sofr_source.py",
+          "fundamental-service/tests/test_public_source.py",
+          "fundamental-service/tests/test_sofr_source.py"
+        ],
+        "exit_code": 0,
+        "log_wrote": true,
+        "output_sha256": "177f260a5645724013185e4b140c7045cc39e56c0c97b120f5cb23599f85f0de"
+      },
+      "ruff": {
+        "command": [
+          "uvx",
+          "--from",
+          "ruff==0.14.10",
+          "ruff",
+          "check",
+          "fundamental-service/src/fundamental_service/public_source.py",
+          "fundamental-service/src/fundamental_service/sofr_source.py",
+          "fundamental-service/tests/test_public_source.py",
+          "fundamental-service/tests/test_sofr_source.py"
+        ],
+        "exit_code": 0,
+        "log_wrote": true,
+        "output_sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18"
+      },
+      "service_postgres": {
+        "command": [
+          "uv",
+          "run",
+          "--frozen",
+          "--extra",
+          "dev",
+          "--project",
+          "fundamental-service",
+          "pytest",
+          "fundamental-service/tests",
+          "-ra"
+        ],
+        "exit_code": 0,
+        "log_wrote": true,
+        "output_sha256": "5c58cc7e71a3cf43717f3e7268b8185d68b8e4a0c30cc659b755f741a181ce97"
+      },
+      "sofr_focused": {
+        "command": [
+          "uv",
+          "run",
+          "--frozen",
+          "--extra",
+          "dev",
+          "--project",
+          "fundamental-service",
+          "pytest",
+          "-q",
+          "fundamental-service/tests/test_public_source.py",
+          "fundamental-service/tests/test_sofr_source.py"
+        ],
+        "exit_code": 0,
+        "log_wrote": true,
+        "output_sha256": "6b07b5e878b6a15e9b8af1aaf75d4afa7c28a8c12dbb1f5282b285be5f8cdd59"
+      },
+      "sofr_retained_source": {
+        "command": [
+          "uv",
+          "run",
+          "--frozen",
+          "--project",
+          "fundamental-service",
+          "python",
+          "-c",
+          "import json,sys; from datetime import date,datetime; from pathlib import Path; from fundamental_service.sofr_source import parse_new_york_fed_sofr; receipt=json.loads(Path('/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/.audit/issue-361-market-policy/research/nyfed-sofr-march28/receipt.json').read_bytes()); raw=Path('/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/.audit/issue-361-market-policy/research/nyfed-sofr-march28/body.bin').read_bytes(); result=parse_new_york_fed_sofr(raw, source_uri='https://markets.newyorkfed.org/api/rates/secured/sofr/search.json?startDate=2025-03-28&endDate=2025-03-28', effective_date=date(2025,3,28), captured_at=datetime.fromisoformat(receipt['captured_at'])); print(json.dumps(result.model_dump(mode='json'), sort_keys=True, separators=(',',':'))); assert str(result.percent_rate)=='4.34'"
+        ],
+        "exit_code": 0,
+        "log_wrote": true,
+        "output_sha256": "29231cf9dcf12b2780789d425b9f462968f6c8b849d178b77cbd07760f44e73e"
+      },
+      "types": {
+        "command": [
+          "uv",
+          "run",
+          "--frozen",
+          "--project",
+          "fundamental-service",
+          "--with",
+          "mypy==1.19.1",
+          "mypy",
+          "--no-incremental",
+          "--follow-imports=silent",
+          "--ignore-missing-imports",
+          "fundamental-service/src/fundamental_service/public_source.py",
+          "fundamental-service/src/fundamental_service/sofr_source.py"
+        ],
+        "exit_code": 0,
+        "log_wrote": true,
+        "output_sha256": "f9b031e5c45aa702cd4fef028d465551cb20a2c4698e0913c7b00766b20ac4d8"
+      }
+    },
+    "exact_commit": "bf8a2d2ef22356959c287854696db2dc77729ff8",
+    "input_digest": "58cf39260774c61e10e3a361ad42b39559438ffa3bbd1db5d88f2bdca3672655",
+    "output_digest": "bb14c55af950d6df70e6e75dde128d8363915bc89937f62b9069fcbc44fcff74",
+    "runtime": {
+      "postgres_host_port": 18665,
+      "postgres_project": "value-investment-agent-361-flow-tests",
+      "python": "3.11.15",
+      "python_hash_seed": "0",
+      "uv_lock_sha256": "98335af7aa12ea08b8089c871fd87c8d670477f55dbc205661a6f261554347bc"
+    },
+    "service_summary": "1475 passed, 11 external SEC runtime-resource skips, 1 intentional duplicate-ZIP fixture warning",
+    "source_summary": "27 passed"
+  },
+  "implementation_commits": [
+    "e5076f8d4dbbb7233826dc64f2eebf9a823c4dc0",
+    "c65f621d560767ff8f4a6b8837eaf0838eee49fc",
+    "bf8a2d2ef22356959c287854696db2dc77729ff8"
+  ],
+  "issue": 361,
+  "protocol": "issue-361-free-market-source-checkpoint-v1",
+  "pull_request": 370,
+  "remaining": [
+    "Build complete deterministic source-bound market input evaluator and trusted approval consumption in Fundamental Service.",
+    "Resolve issuer accounting/award scope (#381/#394), lawful dated quote, debt-cost method and GDP-vintage inputs (#369).",
+    "Run installed real numerical full flow/repeat/restart/restore, independent review and CI; merge and verify main merge SHA before issue closure or owned-resource cleanup."
+  ],
+  "retained_source_repeat": {
+    "command": [
+      "uv",
+      "run",
+      "--frozen",
+      "--project",
+      "fundamental-service",
+      "python",
+      ".audit/issue-361-market-policy/replay_sofr_source.py"
+    ],
+    "exact_commit": "bf8a2d2ef22356959c287854696db2dc77729ff8",
+    "exit_code": 0,
+    "file_count": 5,
+    "file_hashes_and_mtimes_unchanged": true,
+    "input_digest": "275dae95e7028f479240284e24523a6b9ee27be4dd704f4362ad5bcb57421a1b",
+    "output_digest": "7ac51ab15a2f9d97bfad5d94cfc2811417e90dfcba934033af93d2c51dd93e5f",
+    "provider_calls": 0,
+    "report_digest": "447a1a5964b1cde45fdd94d40a0f450c94fb19048ecad2d2a1658baa1040534f",
+    "second_publication_wrote": {
+      "input": false,
+      "output": false,
+      "source": false
+    }
+  },
+  "source_decisions": {
+    "alpha_vantage": "Full daily historical output is premium; exclude as a free historical quote source.",
+    "bea": "Official archive landing page returned 200 but alone contains no admitted ten-year historical GDP series. A period-complete archived release must still be acquired and parsed.",
+    "cme": "403 response explicitly prohibits automated scraping of this page. No circumvention or overnight substitution.",
+    "nyfed": "Capture/parser accepts exact daily overnight SOFR only. Preserve revision marker and source hash. Historical API responses prove availability at capture only; no past publication timestamp is inferred.",
+    "nyu_published_aggregates": "Publisher datahistory usage rules explicitly permit use of published processed aggregates. Commercial upstream data does not by itself disqualify published beta/ERP. Preserve attribution, source version and SIC mapping; do not redistribute underlying company records.",
+    "synthetic_spreads": "Public archived bondspreads24.xlsx is a candidate for model-based marginal borrowing cost under a separately versioned and tested policy; it is not an actual facility rate or admitted policy."
+  },
+  "source_discovery": {
+    "alpha-daily": {
+      "captured_at": "2026-11-12T08:02:34.427676+00:00",
+      "content_digest": "6873955941727123a9da16245ebc4d5c8911b3e714feecdfebe344aa5e54a899",
+      "effective_url": "https://www.alphavantage.co/documentation/#daily",
+      "http_status": "200",
+      "requested_url": "https://www.alphavantage.co/documentation/#daily"
+    },
+    "bea-archive-official": {
+      "captured_at": "2026-11-12T08:16:31.171019+00:00",
+      "content_digest": "1c2d53bb199db3c47cc53a33eed8ac8934f6f0c94619c341e127fdacd8182650",
+      "effective_url": "https://apps.bea.gov/histdata/histChildLevels.html?HMI=2",
+      "http_status": "200",
+      "requested_url": "https://apps.bea.gov/histdatacore/histChildLevels.html?HMI=2"
+    },
+    "cme-term-sofr": {
+      "captured_at": "2026-11-12T08:02:30.674294+00:00",
+      "content_digest": "eecde3fafbde4090c30e610a7ed4b8d877f8351c0490e4189574890e8a5a4f7e",
+      "effective_url": "https://www.cmegroup.com/market-data/cme-group-benchmark-administration/term-sofr.html",
+      "http_status": "403",
+      "requested_url": "https://www.cmegroup.com/market-data/cme-group-benchmark-administration/term-sofr.html"
+    },
+    "nyfed-reference-methodology": {
+      "captured_at": "2026-11-12T08:04:29.530698+00:00",
+      "content_digest": "b6f6780f44c3a188883b407cfdf60d25a0808374b9febe71033385b252f8e6ac",
+      "effective_url": "https://www.newyorkfed.org/markets/reference-rates/additional-information-about-reference-rates",
+      "http_status": "200",
+      "requested_url": "https://www.newyorkfed.org/markets/reference-rates/additional-information-about-reference-rates"
+    },
+    "nyfed-sofr-march28": {
+      "captured_at": "2026-11-12T08:16:31.718379+00:00",
+      "content_digest": "7d65cefd3597f20da125eff8824e82cd2d031e8fe54ec5e4f465f0318b788dea",
+      "effective_url": "https://markets.newyorkfed.org/api/rates/secured/sofr/search.json?startDate=2025-03-28&endDate=2025-03-28",
+      "http_status": "200",
+      "requested_url": "https://markets.newyorkfed.org/api/rates/secured/sofr/search.json?startDate=2025-03-28&endDate=2025-03-28"
+    },
+    "nyfed-terms-official": {
+      "captured_at": "2026-11-12T08:04:29.433847+00:00",
+      "content_digest": "f62b7231044ae9934ff088a9c3ff62fc7ad9340ab2c96fa811fc085218f64ea0",
+      "effective_url": "https://www.newyorkfed.org/privacy/termsofuse",
+      "http_status": "200",
+      "requested_url": "https://www.newyorkfed.org/privacy/termsofuse"
+    },
+    "nyu-archives": {
+      "captured_at": "2026-11-12T08:02:29.645653+00:00",
+      "content_digest": "995d814c4463124a9f247aedaa0183fc38b54871d5e3276eb0362bbaf639b3e0",
+      "effective_url": "https://pages.stern.nyu.edu/~adamodar/New_Home_Page/dataarchived.html",
+      "http_status": "200",
+      "requested_url": "https://pages.stern.nyu.edu/~adamodar/New_Home_Page/dataarchived.html"
+    },
+    "nyu-bondspreads-2025": {
+      "captured_at": "2026-11-12T08:44:42.704955+00:00",
+      "content_digest": "a18acd8d3d53efc8b726223bf73b3467b00632e4f8702fbcbfb7ec2f731d9892",
+      "effective_url": "https://pages.stern.nyu.edu/~adamodar/pc/archives/bondspreads24.xlsx",
+      "http_status": "200",
+      "requested_url": "https://pages.stern.nyu.edu/~adamodar/pc/archives/bondspreads24.xlsx"
+    },
+    "nyu-history": {
+      "captured_at": "2026-11-12T08:04:29.975056+00:00",
+      "content_digest": "6d8ccb3d77715d951c8fa1ccf76654396fbf4f4bbcf8cb87487ac26656bb04aa",
+      "effective_url": "https://pages.stern.nyu.edu/~adamodar/New_Home_Page/datahistory.html",
+      "http_status": "200",
+      "requested_url": "https://pages.stern.nyu.edu/~adamodar/New_Home_Page/datahistory.html"
+    },
+    "treasury-methodology-official": {
+      "captured_at": "2026-11-12T08:16:29.410868+00:00",
+      "content_digest": "37f343cf956b0efc44fc769122013bd337ae2971f3462939f98720cf5ba8beba",
+      "effective_url": "https://home.treasury.gov/policy-issues/financing-the-government/interest-rate-statistics/treasury-yield-curve-methodology",
+      "http_status": "200",
+      "requested_url": "https://home.treasury.gov/policy-issues/financing-the-government/interest-rate-statistics/treasury-yield-curve-methodology"
+    },
+    "treasury-xml-2025": {
+      "captured_at": "2026-11-12T08:16:29.838964+00:00",
+      "content_digest": "f95a1a5ae0c32fbd33817ef5650c17c5e05f4a9176538a81f4c718b0b6cbc183",
+      "effective_url": "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/pages/xml?data=daily_treasury_yield_curve&field_tdr_date_value=2025",
+      "http_status": "200",
+      "requested_url": "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/pages/xml?data=daily_treasury_yield_curve&field_tdr_date_value=2025"
+    }
+  },
+  "unsafe_policy_revocation": {
+    "all_passed": true,
+    "exact_commit": "e5076f8d4dbbb7233826dc64f2eebf9a823c4dc0",
+    "input_digest": "b0bb6391d29647f0871d467aabc74d9bd839a4e072385356efa9da75ffbdbaac",
+    "output_digest": "b01b59d0fdf823509c4b47d1cae9b0664add5cdfc1075308c2af6abe2f4dbdfc"
+  }
+}
