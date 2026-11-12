@@ -24,7 +24,11 @@ from .contracts import (
 )
 from .numerical_policy import VALUATION_NUMERICAL_POLICY, using_valuation_context
 from .original_issuer import IssuerOperatingSourceV1
-from .operating_projection import OperatingProjectionError, project_operating_nodes
+from .operating_projection import (
+    OperatingProjectionError,
+    project_operating_nodes,
+    resolve_operating_model,
+)
 from .serialization import sha256_digest
 from .valuation_preparation import (
     FORECAST_COMPOSER_VERSION,
@@ -143,6 +147,7 @@ def prepare_operating_forecast(
     function performs no I/O, release verification, signing or quality promotion.
     """
 
+    resolve_operating_model(model_id, model_version)
     if history_window_years is not None and (
         not isinstance(history_window_years, int)
         or history_window_years not in (3, 4, 5)

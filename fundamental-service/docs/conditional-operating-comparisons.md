@@ -5,6 +5,14 @@ capital classifications unresolved. The owner-approved #418 research path
 retains explicit allocations beside the exact study. It grants no mapping,
 release, market-policy or history-threshold approval.
 
+Declared model versions must resolve to the initial model specifications and
+match the executable FCFF formula graph and numerical policy. Validation and
+execution both enforce this binding, including requests passed directly to the
+publication functions. Unknown versions and swapped model/version pairs fail
+before any forecast or artifact is produced. Scenario replay output v2 records
+each resolved model specification's digest; it never echoes an arbitrary caller
+version. The operating-target and full-calculation paths use the same resolver.
+
 `OperatingComparisonRequestV1` freezes an existing decision request and a separate
 label observation set. The label uses the first subsequent original annual
 filing in the pinned chronological inventory, including its prior-year

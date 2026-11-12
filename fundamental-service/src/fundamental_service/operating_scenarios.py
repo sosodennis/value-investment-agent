@@ -25,7 +25,11 @@ from .contracts import (
 )
 from .facts import canonical_fact_digest
 from .numerical_policy import using_valuation_context
-from .operating_projection import OperatingProjectionError, project_operating_nodes
+from .operating_projection import (
+    OperatingProjectionError,
+    project_operating_nodes,
+    resolve_operating_model,
+)
 from .original_issuer import (
     fact_matches_original_source,
     fact_matches_operating_identity,
@@ -352,6 +356,13 @@ def replay_operating_scenarios(
     request: OperatingScenarioRequestV1,
 ) -> OperatingScenarioReplayV1:
     """Evaluate every scenario with #352; hypothetical values stay research-only."""
+    models: tuple[InitialModelId, ...] = ("fcff_dcf", "transition_fcff_dcf")
+    if set(request.model_versions) != set(models):
+        raise ValueError("both formal model versions must be pinned")
+    model_specs = {
+        model_id: resolve_operating_model(model_id, request.model_versions[model_id])
+        for model_id in models
+    }
     request = request.model_copy(
         update={
             "facts": tuple(
@@ -368,7 +379,6 @@ def replay_operating_scenarios(
     except (PreparationError, SnapshotError, AnnualHistoryError) as error:
         source_error = error
     results = []
-    models: tuple[InitialModelId, ...] = ("fcff_dcf", "transition_fcff_dcf")
     for scenario in request.scenarios:
         for model_id in models:
             inputs: list[ScenarioPeriodInputsV1] = []
@@ -435,7 +445,8 @@ def replay_operating_scenarios(
                 OperatingScenarioResultV1(
                     scenario_id=scenario.scenario_id,
                     model_id=model_id,
-                    model_version=request.model_versions[model_id],
+                    model_version=model_specs[model_id].model_version,
+                    model_spec_digest=sha256_digest(model_specs[model_id]),
                     status="provisional_scenario" if nodes else "abstained",
                     issue_codes=tuple(
                         dict.fromkeys(

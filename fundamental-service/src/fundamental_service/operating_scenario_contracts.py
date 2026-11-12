@@ -15,6 +15,7 @@ from .contracts import (
 )
 from .facts import CanonicalMappingV1
 from .numerical_policy import VALUATION_NUMERICAL_POLICY, using_valuation_context
+from .operating_projection import resolve_operating_model
 from .original_issuer import IssuerOperatingSourceV1
 from .serialization import sha256_digest
 from .valuation_preparation import FORECAST_COMPOSER_VERSION, HistoricalMetricsV1
@@ -172,10 +173,10 @@ class OperatingScenarioRequestV1(ScenarioObservationSetV1):
             raise ValueError(
                 "scenario policy digest differs from the executable policy"
             )
-        if set(self.model_versions) != {"fcff_dcf", "transition_fcff_dcf"} or any(
-            not version for version in self.model_versions.values()
-        ):
+        if set(self.model_versions) != {"fcff_dcf", "transition_fcff_dcf"}:
             raise ValueError("both formal model versions must be pinned")
+        for model_id, version in self.model_versions.items():
+            resolve_operating_model(model_id, version)
         if self.unresolved_classes != UNRESOLVED_CLASSES:
             raise ValueError("unknown classification categories cannot be dropped")
         if any(
@@ -228,6 +229,7 @@ class OperatingScenarioResultV1(StrictModel):
     scenario_id: str
     model_id: InitialModelId
     model_version: str
+    model_spec_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
     status: Literal["provisional_scenario", "abstained"]
     issue_codes: tuple[str, ...]
     missing_evidence: tuple[str, ...]
@@ -240,8 +242,8 @@ class OperatingScenarioResultV1(StrictModel):
 
 
 class OperatingScenarioReplayV1(StrictModel):
-    contract_version: Literal["fundamental.operating-scenario-replay.v1"] = (
-        "fundamental.operating-scenario-replay.v1"
+    contract_version: Literal["fundamental.operating-scenario-replay.v2"] = (
+        "fundamental.operating-scenario-replay.v2"
     )
     evidence_status: Literal["unreviewed_source_scenario"] = (
         "unreviewed_source_scenario"
