@@ -2,6 +2,7 @@
   "protocol": "issue-361-final-evidence-digest-v1",
   "issue": 361,
   "exact_commit": "89b71d082a3bae618231753c6536cadd8de6aeee",
+  "checkpoint_commit": "626cef48",
   "branch": "codex/issue-361-replay-evidence",
   "input_digest": "79df732b94cf51007204ba6c8ca33e6c9e6f4cb7df3ed90e06d060778f1f352b",
   "provider_ports": [
@@ -179,5 +180,5 @@
     "Obtain a trusted release and exact-input caller approval, then run real numerical repeat/concurrency/restart/restore acceptance.",
     "Obtain independent review, merge PR #370, verify the merge SHA on main, and only then close #361 and clean issue-owned resources."
   ],
-  "content_digest": "299f8fab4c0b4d80d6ad844610b0ea2232a9c96fd85c48e02f7b5342bb4b299d"
+  "content_digest": "3b27c9c777ee8854d50ff1cb00ce10900ee883d20083edba6a13189958a686c4"
 }
