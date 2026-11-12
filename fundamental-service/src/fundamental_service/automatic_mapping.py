@@ -38,11 +38,15 @@ from .registered_depreciation import (
     registered_depreciation_concept,
     select_registered_depreciation,
 )
+from .registered_non_operating_assets import (
+    NON_OPERATING_ASSETS,
+    select_registered_non_operating_assets,
+)
 from .serialization import sha256_digest
 from .taxonomy_evidence import require_original_taxonomy
 
 AUTOMATIC_MAPPING_INPUT_ROLE = "automatic-mapping-input-v1"
-AUTOMATIC_MAPPING_POLICY: Literal["source-bound-us-gaap-v7"] = "source-bound-us-gaap-v7"
+AUTOMATIC_MAPPING_POLICY: Literal["source-bound-us-gaap-v8"] = "source-bound-us-gaap-v8"
 _GAAP_NAMESPACE = re.compile(
     r"http://(?:fasb\.org|xbrl\.us)/us-gaap/\d{4}(?:-\d{2}-\d{2})?"
 )
@@ -128,6 +132,7 @@ def automatic_mapping_policy_digest() -> str:
                     "automatic_mapping_disclosures.py",
                     "registered_depreciation.py",
                     "registered_capital_expenditure.py",
+                    "registered_non_operating_assets.py",
                     "accounting_roles.py",
                     "arelle_parser.py",
                     "facts.py",
@@ -179,10 +184,18 @@ def automatic_mapping_proposal(
     """Create only proposals supported by the service's executable rule table."""
     rule = _RULES.get(normalized_field)
     disclosed = normalized_field == "stock_based_compensation"
-    if rule is None and not disclosed:
+    investment_assets = normalized_field == "non_operating_assets"
+    if investment_assets and (
+        original is None
+        or select_registered_non_operating_assets(original).rules is None
+    ):
         return None
-    concept = STOCK_COMPENSATION_DISCLOSURE
-    if not disclosed:
+    if rule is None and not disclosed and not investment_assets:
+        return None
+    concept = (
+        NON_OPERATING_ASSETS if investment_assets else STOCK_COMPENSATION_DISCLOSURE
+    )
+    if not disclosed and not investment_assets:
         assert rule is not None
         concept = rule.concept
     if normalized_field == "depreciation_and_amortization" and original is not None:
@@ -212,7 +225,7 @@ class AutomaticMappingDecisionV1(ReleaseModel):
     input_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
     source_revision: str = Field(pattern=r"^[0-9a-f]{40}$")
     evaluator_id: str = Field(min_length=1)
-    policy_version: Literal["source-bound-us-gaap-v7"] = AUTOMATIC_MAPPING_POLICY
+    policy_version: Literal["source-bound-us-gaap-v8"] = AUTOMATIC_MAPPING_POLICY
     policy_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
     status: Literal["approved", "abstain"]
     reason_codes: tuple[str, ...]
@@ -347,7 +360,11 @@ def evaluate_automatic_mapping(
         and proposal.source_concept == CAPITAL_EXPENDITURE
     )
     adjusted = depreciation and proposal.source_concept == ADJUSTED_DEPRECIATION
-    computed = disclosed or adjusted
+    investment_assets = (
+        proposal.normalized_field == "non_operating_assets"
+        and proposal.source_concept == NON_OPERATING_ASSETS
+    )
+    computed = disclosed or adjusted or investment_assets
     if (
         (
             not computed
@@ -362,6 +379,18 @@ def evaluate_automatic_mapping(
     selected: list[ParsedXbrlFactV1] = []
     rejected: list[MappingObservationRejectionV1] = []
     accounting_rules = None
+    if investment_assets:
+        assets = select_registered_non_operating_assets(
+            original,
+            security_id=(
+                request.security_identity.security_id
+                if request.security_identity is not None
+                else None
+            ),
+        )
+        reasons.update(assets.reason_codes)
+        selected.extend(assets.selected)
+        accounting_rules = assets.rules
     if disclosed:
         disclosure = select_stock_compensation_disclosure(
             original,
@@ -441,6 +470,7 @@ def evaluate_automatic_mapping(
             disclosed
             or depreciation
             or capital_expenditure
+            or investment_assets
             or fact.concept != proposal.source_concept
         ):
             continue
@@ -514,11 +544,14 @@ def evaluate_automatic_mapping(
             "observation_scope": scope,
         }
         if computed:
+            anchor = DEPRECIATION
+            if disclosed:
+                anchor = STOCK_COMPENSATION_DISCLOSURE
+            elif investment_assets:
+                anchor = NON_OPERATING_ASSETS
             payload.update(
                 {
-                    "anchor_concept": STOCK_COMPENSATION_DISCLOSURE
-                    if disclosed
-                    else DEPRECIATION,
+                    "anchor_concept": anchor,
                     "accounting_rules": accounting_rules,
                 }
             )

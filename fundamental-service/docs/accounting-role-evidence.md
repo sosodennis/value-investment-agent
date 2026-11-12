@@ -209,6 +209,45 @@ classifications assert no missing balance, claim/award absence, complete release
 market policy, numerical valuation or history sufficiency. NVE remains an
 additional service case; it does not replace a fixed replay-cohort member.
 
+### Registered NVE non-operating investment assets
+
+Automatic policy `source-bound-us-gaap-v8` extends only the 2024 NVE original
+above. Its marketable-securities note explicitly puts money-market funds in
+cash, corporate bonds in current/noncurrent marketable securities and accrued
+investment-interest receivables in prepaid/other assets. The complete balance
+sheet separates those investments from trade receivables, inventory, operating
+fixed assets, operating leases and deferred taxes. The registered classification
+consumes these three consolidated instant components:
+
+| Original's instant | Current corporate bonds | Noncurrent corporate bonds | Investment interest receivable | Non-operating assets |
+| --- | --- | --- | --- | --- |
+| 2023-03-31 | USD15,513,095 | USD36,125,047 | USD425,372 | USD52,063,514 |
+| 2024-03-31 | USD11,917,779 | USD30,788,301 | USD460,627 | USD43,166,707 |
+
+The first two source concepts are `us-gaap:MarketableSecuritiesCurrent` and
+`us-gaap:MarketableSecuritiesNoncurrent`. The third is the original extension
+`fil:MarketableSecuritiesAccruedInterestReceivable`, bound to namespace
+`http://nve.com/20240331` by the complete parsed-fact digest. Amounts come from
+original facts, never a hard-coded amount table. The existing `derived`
+accounting-role contract retains every component, period, unit, namespace,
+reported precision and source reference. Its ordinary component evaluator
+computes the sum; the existing formal composer/calculator consumes the role.
+
+The available-for-sale aggregate includes money-market funds already counted
+in cash and cannot substitute for this role. Omitting the investment-interest
+receivable would also omit a non-operating asset. Neither that aggregate nor
+cash enters the component sum. The earlier 2023 original has no equivalent
+complete tagged-interest scope and receives no registration from this change;
+the comparative interest amount in the 2024 original is available only when
+that original was available. No earlier decision can use it retroactively.
+
+The selection requires the exact CIK/accession, raw hash, complete fact multiset
+and registered instants. Missing, conflicting, nonfinite, negative, wrong-unit,
+wrong-issuer or imprecise components refuse. Equivalent duplicates select the
+same fact regardless of input order. Signed approval and release replay repeat
+the classification. No source adapter, provider port, public schema, valuation
+formula, absence/award claim or history threshold changes.
+
 A `disclosed` duration transcribes one finite decimal literal from an exact
 nonnumeric parsed fact. `DisclosedAmountV1` retains Unicode code-point offsets
 for the exact quote, amount token, unit quote and scale token, plus reported
