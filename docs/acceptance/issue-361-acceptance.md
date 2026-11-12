@@ -19,6 +19,54 @@ Eligible candidate-history valuations can be provisional. Missing, conflicting,
 unreviewed, future, or unsupported evidence must retain reasons and abstain.
 No completed #351 through #355 acceptance is changed. #350 is outside scope.
 
+## Automatic source bootstrap checkpoint
+
+Exact implementation `f1634cf17ea135a84f25caa564fdd72ca1329921` adds a
+mapping-free `AutomaticSourcePreparationPlanV1`. The installed CLI validates SEC
+original integrity, issuer identity and EFM/DQC evidence before invoking the
+existing deterministic automatic-mapping batch. Every role decision and
+abstention is retained. Completed source-command reuse is read-only; ordinary
+HTTP reuse keeps its access audit. Financial formulas remain in #352.
+
+Exact checks pass **1,369 Service/PostgreSQL, 56 Agent boundary and 17 acceptance
+tool tests**, Ruff/format, mypy, architecture guards and diff. Eleven optional
+resource skips and the intentional duplicate-ZIP warning remain. [CI](https://github.com/sosodennis/value-investment-agent/actions/runs/43159426817)
+passes all 12 executed jobs; release skips. Engineering input
+`4122658b07ebda2c8768fd72bc91b5c75b28d3b0bd9ec611c947ffc54c6d05d8`;
+output `87472337b72e2a76a8159ee7a0eeca28a9da4b08d769cecc4e72ab88c4de013e`.
+
+Isolated project `value-investment-agent-361-auto-bootstrap-v3`, ports
+18682/18683, uses image
+`sha256:edc3d7aad36e8f4ec0440a19d9bd2695f0fc6bd897af6842420db5a1c6ff8caf`.
+All 70 installed package files match the exact commit. Only eight retained SEC
+response receipts and source bytes were transferred into an otherwise empty
+store; no mappings, facts or snapshots were seeded. The actual installed CLI,
+Arelle/EFM/DQC, automatic policy and PostgreSQL adapters process NVE originals
+`0001376474-23-000283` and `0001376474-24-000214`. Each retains 35 mapping-role
+decisions and 69 canonical facts. Fourteen required roles remain missing per
+original, so the outcome correctly remains `blocked` / `abstain`.
+
+The complete repeat returns `wrote=false`, zero new rows/files and identical
+result digest `d2df6db9858fecc8eaf99a1ce80ddae1d06c8e5ede3e9dd1e25105981c06d79c`.
+Restart and empty-store restore reproduce that digest. Installed input
+`2b00f770f3aad50c7620237f24c9d9a05f8c69ef54b708c6c495585505d499ed`;
+output `8b2e7807c6634e2fdc2657aca342dfda3a66c0d42f45506dcf859597a62c2b55`.
+The verified portable backup preserves 18 tables, 528 rows and 156 content
+objects with digest
+`a4277a6138437908c11796159d50b9f697419302f9b88d87048535fa59de86b1`.
+Only the owned project containers/network/volumes were removed after backup;
+all 38 original baseline containers remain unchanged. The earlier installed
+CLI/import and duplicate-audit failures remain retained with their corrections.
+
+`automatic_source_bootstrap_increment` preserves all 50 prior checkpoint entries.
+Its input is `e34e22efef30716b162f5b25e21e5c16cbaa70fa8b8c0fbf53d71d89cdc61d5b`;
+output `5bde43419092cfa3c2e5c5ae35087fd3f0983e3f566e7f2d81efe396ec544f08`.
+This resolves #413's implementation gap; main delivery/verification remains
+pending. Complete accounting/award evidence (#381/#394), dated market policy
+(#369), trusted complete release, authentic caller approval and real numerical
+19-gate acceptance remain outstanding. Keep #361/#413 open, PR #370 draft and
+`supported_history_threshold=null`.
+
 ## Canonical source-plan retention checkpoint
 
 Exact implementation `7a981fdbc6dd5caef721e4d404741abb1c8fb9c0` retains the
@@ -50,8 +98,8 @@ removed; all 38 baseline containers remain unchanged.
 The report input is `c0b9923a1af23958df442416e71240781cac7a0c313022274ad903fd324dbb22`;
 output `aa4903266296fe8acf2607145c8dc2cc543180966477b25b10fd6ee81dd03c00`.
 Generated evidence remains outside Git. This is scoped runner/input-retention
-acceptance; complete real numerical acceptance remains outstanding. Next is the
-service-owned empty-store automatic mapping bootstrap tracked by [#413](https://github.com/sosodennis/value-investment-agent/issues/413).
+acceptance. The automatic source bootstrap checkpoint above supersedes its
+then-outstanding #413 implementation gap; complete numerical acceptance remains outstanding.
 Keep #361 OPEN, PR #370 draft and `supported_history_threshold=null`.
 
 ## Complete source failure-retention checkpoint
@@ -90,9 +138,8 @@ all 38 baseline containers retain identity, image and start time.
 `complete_source_failure_retention_increment` preserves all 48 preceding entries
 and records the fixture/harness failures and corrections. This is installed runner
 failure-retention acceptance with synthetic acquisitions and real durable adapters.
-Complete real SEC numerical acceptance remains outstanding. The empty-store
-acquisition-to-automatic-mapping bootstrap still needs service orchestration;
-current source plans require pre-created mapping refs. Keep #361/#412 OPEN,
+Complete real SEC numerical acceptance remains outstanding. The automatic source
+bootstrap checkpoint above supersedes the historical pre-created-mapping dependency. Keep #361/#412 OPEN,
 PR #370 draft and `supported_history_threshold=null`.
 
 ## Authenticated caller approval checkpoint
