@@ -1,5 +1,6 @@
 """Signed security releases carry the same estimated inputs to canary and composer."""
 
+import hashlib
 from pathlib import Path
 
 import pytest
@@ -46,6 +47,22 @@ from test_working_capital import MAPPING_VERSION, _composite_history, _fact_for
 def _valuation_fixture(tmp_path: Path):
     fixture = _fixture(tmp_path)
     snapshot, operating, inputs = _composite_history()
+    source_bytes = b'{"fixture":"synthetic composite original, not issuer evidence"}'
+    source_hash = hashlib.sha256(source_bytes).hexdigest()
+    payload = snapshot.model_dump(exclude={"manifest_digest"})
+    payload["source_records"] = tuple(
+        source.model_copy(update={"content_hash": source_hash})
+        for source in snapshot.source_records
+    )
+    snapshot = type(snapshot)(
+        **payload,
+        manifest_digest=sha256_digest(
+            {key: value for key, value in payload.items() if key != "snapshot_id"}
+        ),
+    )
+    inputs = tuple(
+        item.model_copy(update={"source_hash": source_hash}) for item in inputs
+    )
     by_id = {fact.fact_id: fact for fact in operating}
     for fact in _facts():
         if fact.normalized_field in WORKING_CAPITAL_FIELDS or fact.fact_id in by_id:
@@ -57,7 +74,19 @@ def _valuation_fixture(tmp_path: Path):
             instant=fact.instant is not None,
         )
     dilution = award_evidence(snapshot)
-    facts = (*by_id.values(), *dilution.facts)
+    facts = (
+        *(
+            fact.model_copy(
+                update={
+                    "source": fact.source.model_copy(
+                        update={"content_hash": source_hash}
+                    )
+                }
+            )
+            for fact in by_id.values()
+        ),
+        *dilution.facts,
+    )
     fixture.snapshot = snapshot
     fixture.snapshots = FilesystemSnapshotRepository(tmp_path / "composite-snapshots")
     fixture.snapshots.publish(snapshot)
@@ -118,6 +147,7 @@ def _valuation_fixture(tmp_path: Path):
     )
     fixture.inputs = policy.inputs
     fixture.stored = facts
+    fixture.source_bytes = source_bytes
     return fixture
 
 
