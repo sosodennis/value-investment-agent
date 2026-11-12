@@ -36,7 +36,7 @@ from .serialization import sha256_digest
 from .taxonomy_evidence import require_original_taxonomy
 
 AUTOMATIC_MAPPING_INPUT_ROLE = "automatic-mapping-input-v1"
-AUTOMATIC_MAPPING_POLICY: Literal["source-bound-us-gaap-v4"] = "source-bound-us-gaap-v4"
+AUTOMATIC_MAPPING_POLICY: Literal["source-bound-us-gaap-v5"] = "source-bound-us-gaap-v5"
 _GAAP_NAMESPACE = re.compile(
     r"http://(?:fasb\.org|xbrl\.us)/us-gaap/\d{4}(?:-\d{2}-\d{2})?"
 )
@@ -89,6 +89,8 @@ _RULES = {
     "operating_current_receivables": DirectMappingRule(
         "us-gaap:AccountsReceivableNetCurrent", "instant"
     ),
+    "current_assets": DirectMappingRule("us-gaap:AssetsCurrent", "instant"),
+    "current_liabilities": DirectMappingRule("us-gaap:LiabilitiesCurrent", "instant"),
     "inventory": DirectMappingRule("us-gaap:InventoryNet", "instant"),
     "operating_current_payables": DirectMappingRule(
         "us-gaap:AccountsPayableCurrent", "instant"
@@ -200,7 +202,7 @@ class AutomaticMappingDecisionV1(ReleaseModel):
     input_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
     source_revision: str = Field(pattern=r"^[0-9a-f]{40}$")
     evaluator_id: str = Field(min_length=1)
-    policy_version: Literal["source-bound-us-gaap-v4"] = AUTOMATIC_MAPPING_POLICY
+    policy_version: Literal["source-bound-us-gaap-v5"] = AUTOMATIC_MAPPING_POLICY
     policy_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
     status: Literal["approved", "abstain"]
     reason_codes: tuple[str, ...]

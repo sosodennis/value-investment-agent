@@ -153,8 +153,10 @@ approval; `fundamental-prepare-source` requires approval of its exact prepared
 input before calculation and applies the same actor/time check before source or
 release access. Approval remains outside persisted public calculation evidence.
 
-Mapping approval uses Fundamental Service's `source-bound-us-gaap-v3` policy.
-It handles a narrow table of direct role/QName combinations and the bounded
+Mapping approval uses Fundamental Service's `source-bound-us-gaap-v5` policy.
+It handles a narrow table of direct role/QName combinations, including
+consolidated current-assets/current-liabilities totals for the composite
+working-capital profile, and the bounded
 annual stock-compensation disclosure below. Missing balances, unsupported
 computed partitions, awards, aggregate D&A conflicts and financial assumptions
 retain abstentions until a supported policy and evidence cover them. AI
@@ -320,7 +322,8 @@ The canonical receipt reports input/output digests and `wrote`; repeats preserve
 all artifact bytes and publication identities. Batch reports depend on every
 referenced child decision and approval digest.
 
-Policy `source-bound-us-gaap-v3` supports one bounded accounting disclosure case:
+Policy `source-bound-us-gaap-v5` carries forward the bounded accounting
+disclosure case:
 an annual consolidated USD share-compensation text fact containing the exact
 sentence `Stock-based compensation expense was $<integer> in fiscal <year>
 and $<integer> in fiscal <prior-year>.` The current year must equal that original

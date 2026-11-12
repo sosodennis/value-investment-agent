@@ -4,6 +4,13 @@ This Fundamental Service input policy is implemented for evaluation. It does not
 
 The exact six-component working-capital path remains available. The separate `composite-noncash-working-capital-v1` requirements profile uses reviewed gross current assets and liabilities, with explicit source-bound exclusions and residual operating-fraction assumptions. FCFF continues through the existing #352 composer and calculator.
 
+Automatic mapping policy `source-bound-us-gaap-v5` supports direct original
+`us-gaap:AssetsCurrent` and `us-gaap:LiabilitiesCurrent` observations. Each
+approval binds the consolidated USD instant observations to the original issuer,
+accession and parsed source. The machine authority must trust the new policy
+digest; an earlier policy certificate cannot authorize it. These gross-total
+approvals do not classify residual balances or supply exclusions or assumptions.
+
 For each period, `CompositeWorkingCapitalInputV1` pins the policy digest, mapping version, issuer, period, original accession, source hash, gross-total fact IDs and exclusions. Required exclusions cover cash, short-term investments, current interest-bearing debt, and current operating- and finance-lease liabilities. Each exclusion identifies its gross parent, the actual mapped fact role, and the classes covered. A combined reported amount may cover several classes but is subtracted only once. Confirmed absence requires a mapped zero fact with confirmed-absence accounting evidence. Unknown required exclusions abstain; a missing tag never means zero.
 
 ```text

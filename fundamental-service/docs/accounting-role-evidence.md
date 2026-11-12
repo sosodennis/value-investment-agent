@@ -93,9 +93,10 @@ absence assertion, trusted release or verified forecast.
 
 `registered_depreciation.py` proposes the bounded policy
 `newmarket-original-continuing-depreciation-v1`, under automatic policy
-`source-bound-us-gaap-v4`. This version also carries forward #408's historical
+`source-bound-us-gaap-v5`. This version also carries forward #408's historical
 total `SalesRevenueNet` support and cross-concept conflict refusals, together
-with the current security-bound stock-compensation policy. It registers CIK `0001282637` originals
+with #376's direct consolidated current-assets/current-liabilities totals and
+the current security-bound stock-compensation policy. It registers CIK `0001282637` originals
 `0001282637-15-000004`, `0001282637-16-000028` and
 `0001282637-17-000005` by both retained source SHA-256 and the complete parsed
 fact multiset digest. The registry pins classifications, never numeric amounts.
