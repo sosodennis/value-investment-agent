@@ -12,6 +12,7 @@ from fundamental_service.policies import (
     initial_policy_records,
 )
 from fundamental_service.serialization import sha256_digest
+from market_policy_fixtures import synthetic_market_inputs
 
 
 def _at(year: int) -> datetime:
@@ -23,6 +24,7 @@ def _policy(name: str, *, effective_year: int, available_year: int) -> PolicyRec
     payload["policy_id"] = name
     payload["policy_version"] = name
     payload["effective_at"] = _at(effective_year)
+    payload["market_inputs"] = synthetic_market_inputs().model_dump(mode="python")
     market = payload["market_inputs"]
     market["policy_version"] = name
     for item in market["evidence"]:
@@ -102,6 +104,7 @@ def test_equal_effective_eligible_policies_require_an_explicit_pin() -> None:
 
 def test_legacy_digest_cannot_leave_market_evidence_unbound() -> None:
     payload = initial_policy_records()[0].model_dump(mode="python")
+    payload["market_inputs"] = synthetic_market_inputs().model_dump(mode="python")
     payload["policy_digest"] = sha256_digest(
         {
             key: value
@@ -116,7 +119,7 @@ def test_legacy_digest_cannot_leave_market_evidence_unbound() -> None:
 
 
 def test_recomputed_policy_digest_changes_when_source_evidence_changes() -> None:
-    policy = initial_policy_records()[0]
+    policy = _policy("fixture-digest", effective_year=2015, available_year=2015)
     payload = policy.model_dump(mode="python")
     payload["market_inputs"]["evidence"][0]["content_hash"] = "a" * 64
     with pytest.raises(ValueError, match="policy_digest"):

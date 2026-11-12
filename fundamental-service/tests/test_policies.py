@@ -40,6 +40,7 @@ from fundamental_service.public_source import PUBLIC_SOURCE_SPECS
 from fundamental_service.sec_source import SEC_TERMS
 from fundamental_service.serialization import sha256_digest
 from fundamental_service.testsupport import make_valuation
+from market_policy_fixtures import synthetic_market_inputs
 
 
 def policy() -> PolicyRecordV1:
@@ -69,67 +70,21 @@ def test_only_two_initial_models_and_no_legacy_fallback():
     }
 
 
-def test_initial_fcff_policies_expose_dated_market_inputs_without_forecast_defaults():
-    policies = {item.model_id: item for item in initial_policy_records()}
-
-    assert policies["fcff_dcf"].assumptions is None
-    inputs = policies["fcff_dcf"].market_inputs
-    assert inputs is not None
-    assert inputs.policy_version == "fcff-market-policy-2025-v1"
-    assert inputs.capital_weight_basis == "approved_policy"
-    assert inputs.risk_free_rate == Decimal("0.046")
-    assert {item.role for item in inputs.evidence} == {
-        "risk_free_rate",
-        "beta",
-        "equity_risk_premium",
-        "pre_tax_cost_of_debt",
-        "debt_weight",
-        "equity_weight",
-        "terminal_growth",
-    }
-    assert all(
-        item.as_of.isoformat() == "2025-01-03T00:00:00+00:00"
-        for item in inputs.evidence
-    )
-    assert next(
-        item for item in inputs.evidence if item.role == "risk_free_rate"
-    ).source_id == ("fred-observations")
-    assert (
-        next(item for item in inputs.evidence if item.role == "risk_free_rate").method
-        == "observed_source"
-    )
-    assert {
-        item.method
-        for item in inputs.evidence
-        if item.role in {"debt_weight", "equity_weight"}
-    } == {"approved_policy"}
-    assert (
-        _approved_market_policy(
-            policies["fcff_dcf"],
-            valuation_timestamp=datetime(2024, 12, 31, tzinfo=timezone.utc),
+@pytest.mark.parametrize("policy", initial_policy_records(), ids=lambda p: p.model_id)
+def test_initial_policies_do_not_invent_approved_market_inputs(policy):
+    assert policy.assumptions is None
+    assert policy.market_inputs is None
+    for year in (2016, 2025, 2026, 2027):
+        assert (
+            _approved_market_policy(
+                policy, valuation_timestamp=datetime(year, 1, 1, tzinfo=timezone.utc)
+            )
+            is None
         )
-        is None
-    )
-    assert (
-        _approved_market_policy(
-            policies["fcff_dcf"],
-            valuation_timestamp=datetime(2025, 1, 2, tzinfo=timezone.utc),
-        )
-        is None
-    )
-    assert (
-        _approved_market_policy(
-            policies["fcff_dcf"],
-            valuation_timestamp=datetime(2026, 1, 1, tzinfo=timezone.utc),
-        )
-        is not None
-    )
 
 
 def test_market_observed_weight_basis_rejects_policy_weight_evidence():
-    inputs = initial_policy_records()[0].market_inputs
-    assert inputs is not None
-    payload = inputs.model_dump(mode="python")
+    payload = synthetic_market_inputs().model_dump(mode="python")
     payload["capital_weight_basis"] = "market_observed"
     with pytest.raises(ValueError, match="market-observed capital weights"):
         MarketPolicyInputsV1(**payload)

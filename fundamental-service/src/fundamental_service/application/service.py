@@ -1207,7 +1207,7 @@ class FundamentalApplication:
         policy_id = (
             policy.policy_id
             if policy is not None
-            else (f"{request.model_id}-us-gaap-public-v2")
+            else (f"{request.model_id}-us-gaap-public-v3")
         )
         policy_version = policy.policy_version if policy is not None else "unresolved"
         market_policy = _approved_market_policy(

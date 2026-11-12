@@ -19,6 +19,7 @@ def test_http_prepare_composes_complete_release_and_policy_inputs(tmp_path: Path
         artifact_store=fixture.artifacts,
         metadata_store=fixture.metadata,
         config=fixture.application.config,
+        policy_registry=fixture.application.policy_registry,
     )
 
     client = TestClient(app)
@@ -81,6 +82,7 @@ def test_http_prepare_preserves_released_history_conflict_as_abstention(tmp_path
         artifact_store=fixture.artifacts,
         metadata_store=fixture.metadata,
         config=fixture.application.config,
+        policy_registry=fixture.application.policy_registry,
     )
     payload = make_internal_envelope(
         {

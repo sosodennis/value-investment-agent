@@ -36,6 +36,12 @@ def test_all_declared_free_sources_have_allowlisted_capture_contract():
 
     def opener(request, timeout):
         requests.append(request.full_url)
+        if "markets.newyorkfed.org" in request.full_url:
+            return FakeResponse(
+                b'{"refRates":[{"effectiveDate":"2025-01-03","type":"SOFR",'
+                b'"percentRate":4.33,"revisionIndicator":""}]}',
+                "application/json",
+            )
         if "api.bls.gov" in request.full_url or "home.treasury.gov" in request.full_url:
             return FakeResponse(json.dumps({"data": []}).encode(), "application/json")
         return FakeResponse(b"observation,value\n2025-01-01,1\n")
@@ -50,13 +56,22 @@ def test_all_declared_free_sources_have_allowlisted_capture_contract():
         uri = spec.uri_prefix
         if spec.source_id == "alfred-vintage":
             uri += "?id=DGS10&vintage_date=2025-01-03"
+        if spec.source_id == "new-york-fed-sofr":
+            uri += "?startDate=2025-01-03&endDate=2025-01-03"
         source = adapter.capture(
             spec.source_id,
             uri,
-            available_at=datetime(2025, 1, 3, tzinfo=timezone.utc),
+            available_at=(
+                None
+                if spec.source_id == "new-york-fed-sofr"
+                else datetime(2025, 1, 3, tzinfo=timezone.utc)
+            ),
         )
         assert source.source_id == spec.source_id
         assert source.role == spec.role
+        if spec.source_id == "new-york-fed-sofr":
+            assert source.available_at == source.captured_at
+            assert source.publication_at is None
     assert len(requests) == len(PUBLIC_SOURCE_SPECS)
     assert (
         fundamental_source_register().require("sec-companyfacts").source_id
@@ -113,6 +128,95 @@ def test_public_source_rejects_custom_port_before_network():
         )
     assert error.value.code == "SOURCE_URI_NOT_ALLOWED"
     assert calls == []
+
+
+@pytest.mark.parametrize(
+    "uri",
+    (
+        "https://markets.newyorkfed.org/api/rates/secured/sofr/search.json.evil?startDate=2025-01-03&endDate=2025-01-03",
+        "https://markets.newyorkfed.org/api/rates/secured/sofr/search.json?startDate=2025-02-01&endDate=2025-01-03",
+        "https://markets.newyorkfed.org/api/rates/secured/sofr/search.json?startDate=2025-01-01&endDate=2025-01-03",
+        "https://markets.newyorkfed.org/api/rates/secured/sofr/search.json?startDate=2025-99-03&endDate=2025-99-03",
+        "https://markets.newyorkfed.org/api/rates/secured/sofr/search.json?startDate=2025-01-03&endDate=2025-01-03&foo=bar",
+    ),
+)
+def test_sofr_source_rejects_unbound_or_invalid_query_before_network(uri: str):
+    calls = []
+    adapter = PublicSourceAdapter(
+        user_agent="value-agent test@example.com",
+        opener=lambda *_args, **_kwargs: calls.append(True),
+    )
+    with pytest.raises(SnapshotError):
+        adapter.capture("new-york-fed-sofr", uri)
+    assert calls == []
+
+
+def test_sofr_source_refuses_caller_backdated_availability():
+    calls = []
+    adapter = PublicSourceAdapter(
+        user_agent="value-agent test@example.com",
+        opener=lambda *_args, **_kwargs: calls.append(True),
+        min_interval_seconds=0,
+    )
+    with pytest.raises(SnapshotError) as error:
+        adapter.capture(
+            "new-york-fed-sofr",
+            "https://markets.newyorkfed.org/api/rates/secured/sofr/search.json?startDate=2025-01-03&endDate=2025-01-03",
+            available_at=datetime(2025, 1, 3, tzinfo=timezone.utc),
+        )
+    assert error.value.code == "SOURCE_AVAILABILITY_UNVERIFIED"
+    assert calls == []
+
+
+def test_sofr_source_refuses_unverified_publication_timestamp():
+    calls = []
+    adapter = PublicSourceAdapter(
+        user_agent="value-agent test@example.com",
+        opener=lambda *_args, **_kwargs: calls.append(True),
+        min_interval_seconds=0,
+    )
+    with pytest.raises(SnapshotError) as error:
+        adapter.capture(
+            "new-york-fed-sofr",
+            "https://markets.newyorkfed.org/api/rates/secured/sofr/search.json?startDate=2025-01-03&endDate=2025-01-03",
+            publication_at=datetime(2025, 1, 3, tzinfo=timezone.utc),
+        )
+    assert error.value.code == "SOURCE_AVAILABILITY_UNVERIFIED"
+    assert calls == []
+
+
+def test_sofr_capture_records_retrieval_time_without_claiming_publication_time():
+    adapter = PublicSourceAdapter(
+        user_agent="value-agent test@example.com",
+        opener=lambda *_args, **_kwargs: FakeResponse(
+            b'{"refRates":[{"effectiveDate":"2025-01-03","type":"SOFR",'
+            b'"percentRate":4.33,"revisionIndicator":""}]}',
+            "application/json",
+        ),
+        min_interval_seconds=0,
+    )
+    source = adapter.capture(
+        "new-york-fed-sofr",
+        "https://markets.newyorkfed.org/api/rates/secured/sofr/search.json?startDate=2025-01-03&endDate=2025-01-03",
+    )
+    assert source.available_at == source.captured_at
+    assert source.publication_at is None
+
+
+def test_sofr_capture_refuses_invalid_observation_before_returning_a_source():
+    adapter = PublicSourceAdapter(
+        user_agent="value-agent test@example.com",
+        opener=lambda *_args, **_kwargs: FakeResponse(
+            b'{"refRates":[]}', "application/json"
+        ),
+        min_interval_seconds=0,
+    )
+    with pytest.raises(SnapshotError) as error:
+        adapter.capture(
+            "new-york-fed-sofr",
+            "https://markets.newyorkfed.org/api/rates/secured/sofr/search.json?startDate=2025-01-03&endDate=2025-01-03",
+        )
+    assert error.value.code == "SOFR_SOURCE_INVALID"
 
 
 @pytest.mark.parametrize(

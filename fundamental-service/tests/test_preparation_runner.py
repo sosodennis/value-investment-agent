@@ -68,6 +68,7 @@ from test_release_runner import _candidate
 from test_history_composition import _changed, _original
 from test_valuation_preparation import _facts
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from market_policy_fixtures import synthetic_policy_registry
 
 
 REVISION = "1" * 40
@@ -256,6 +257,7 @@ def _fixture(
         artifact_store=artifacts,
         metadata_store=metadata,
         config=config,
+        policy_registry=synthetic_policy_registry(),
     ).state.application
     return SimpleNamespace(
         plan=plan,
@@ -909,6 +911,7 @@ def test_incomplete_acquisition_stays_blocked_and_reuses_evidence_after_restore(
             artifact_store=artifacts,
             metadata_store=metadata,
             config=OperationsConfig.testing(),
+            policy_registry=synthetic_policy_registry(),
         ).state.application
         acquisition = SecAcquisitionUseCase(
             adapter=fixture.provider,
@@ -1058,6 +1061,7 @@ def test_preparation_and_calculation_reuse_postgres_artifacts_after_restart_and_
             artifact_store=artifacts,
             metadata_store=metadata,
             config=fixture.application.config,
+            policy_registry=synthetic_policy_registry(),
         ).state.application
         runner = SourcePreparationRunner(
             application=application,

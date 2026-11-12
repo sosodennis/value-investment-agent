@@ -417,8 +417,8 @@ source/input/output digests with the recorded evidence. A successful copy alone
 does not establish full-flow acceptance.
 
 The current FCFF models are `fcff_dcf-v2` and `transition_fcff_dcf-v2`, with
-policy IDs `fcff_dcf-us-gaap-public-v2` and
-`transition_fcff_dcf-us-gaap-public-v2`. The graph is `calculator-v2`; requirements
+policy IDs `fcff_dcf-us-gaap-public-v3` and
+`transition_fcff_dcf-us-gaap-public-v3`. The graph is `calculator-v2`; requirements
 profiles `fcff-valuation-requirements-v3` and
 `transition-fcff-valuation-requirements-v3` add required `non_operating_assets`.
 Supply a complete classified amount excluding cash and operating working capital
@@ -430,6 +430,16 @@ overlap with cash/working capital; these checks do not infer complete semantics.
 Existing artifacts and policies remain retained under their original identities.
 Old model versions are refused by the current graph. Prepare the new model input
 and obtain its exact caller approval before calculation.
+
+The v3 initial policies supply eligibility metadata with no default assumptions
+or market inputs. The earlier v2 bootstrap market inputs asserted approval
+without actual evidence (#369). Their exact policy digests are revoked during
+selection, including explicit pins; retain their original bytes and rows for
+audit/backup. Startup adds new policy IDs and does not rewrite old immutable
+records. Without separately admitted market evidence the formal composer returns
+`requires_input` / `MARKET_POLICY_INPUTS_MISSING`. Automatic policy approval must
+reproduce source/selection/time evidence before signing; generating a signature
+cannot substitute for that evaluation.
 
 Automatic FCFF inputs identify `fcff-forecast-composer-v5` in
 `provenance.preparation_version`, which participates in the input digest and
