@@ -117,7 +117,10 @@ from ..valuation_preparation import (
 )
 from ..valuation_requirements import (
     select_released_facts,
-    valuation_requirements_profile,
+)
+from ..valuation_release_inputs import (
+    valuation_release_requirements,
+    valuation_release_working_capital_inputs,
 )
 
 
@@ -1090,7 +1093,12 @@ class FundamentalApplication:
             )
         snapshot = self.snapshot(request.snapshot_id)
         manifest = self._data_release_manifest(request.data_release_manifest_digest)
-        profile = valuation_requirements_profile(request.model_id)
+        try:
+            profile = valuation_release_requirements(manifest, request.model_id)
+        except DataReleaseError as error:
+            raise ServiceError(
+                error.code, str(error), status_code=422, retryable=False
+            ) from error
         declared_snapshot = next(
             (
                 reference
@@ -1109,6 +1117,15 @@ class FundamentalApplication:
                 status_code=409,
                 retryable=False,
             )
+
+        try:
+            working_capital_inputs = valuation_release_working_capital_inputs(
+                manifest, snapshot
+            )
+        except DataReleaseError as error:
+            raise ServiceError(
+                error.code, str(error), status_code=422, retryable=False
+            ) from error
 
         facts = []
         declared_digests = {
@@ -1141,6 +1158,9 @@ class FundamentalApplication:
             profile=profile,
             snapshot=snapshot,
             valuation_timestamp=snapshot.valuation_timestamp,
+            additional_fact_ids=tuple(
+                fact_id for item in working_capital_inputs for fact_id in item.fact_ids
+            ),
         )
         missing = set(selection.missing_fields)
         issue_codes = list(selection.issue_codes)
@@ -1237,6 +1257,21 @@ class FundamentalApplication:
 
         evidence = self.read_valuation_evidence(request)
         snapshot = self.snapshot(request.snapshot_id)
+        manifest = self._data_release_manifest(request.data_release_manifest_digest)
+        working_capital_inputs = valuation_release_working_capital_inputs(
+            manifest, snapshot
+        )
+        declared_input_policy = manifest.valuation_working_capital_policy
+        if (
+            declared_input_policy is not None
+            and evidence.mapping_version != declared_input_policy.mapping_version
+        ):
+            raise ServiceError(
+                "DATA_RELEASE_MAPPING_VERSION_MISMATCH",
+                "valuation working-capital inputs require the release mapping version",
+                status_code=422,
+                retryable=False,
+            )
         try:
             source_admissions = load_release_source_admissions(
                 self._data_release_manifest(request.data_release_manifest_digest),
@@ -1339,6 +1374,7 @@ class FundamentalApplication:
             market_policy=market_policy,
             mapping_version=evidence.mapping_version or "sec-canonical-mapping-v1",
             equity_dilution_evidence=dilution,
+            working_capital_inputs=working_capital_inputs,
         )
 
     def apply_manual_override(

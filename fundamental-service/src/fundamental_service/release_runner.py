@@ -91,6 +91,10 @@ from .issuer_release_evidence import (
     verify_original_integrity,
 )
 from .working_capital import assess_composite_working_capital
+from .valuation_release_inputs import (
+    valuation_release_requirements,
+    valuation_release_working_capital_inputs,
+)
 
 
 class ReleaseMappingReader(Protocol):
@@ -191,6 +195,10 @@ class DataReleaseCanaryRunner:
         verify_data_release_candidate(manifest, verification, self._trust_roots)
         if isinstance(manifest, IssuerOperatingReleaseManifestV1):
             require_issuer_release_profile(manifest)
+        if manifest.valuation_working_capital_policy is not None:
+            valuation_release_requirements(
+                manifest, manifest.valuation_working_capital_policy.model_id
+            )
         self._verify_artifacts(manifest, verification)
         admissions = load_release_source_admissions(
             manifest,
@@ -603,6 +611,22 @@ class DataReleaseCanaryRunner:
         fact_digests: list[str] = []
         declared_fields = set(manifest.required_fields)
         checked_composite_inputs: set[str] = set()
+        valuation_input_policy = manifest.valuation_working_capital_policy
+        all_composite_inputs = (
+            manifest.working_capital_inputs
+            if isinstance(manifest, IssuerOperatingReleaseManifestV1)
+            else valuation_input_policy.inputs
+            if valuation_input_policy is not None
+            else ()
+        )
+        if valuation_input_policy is not None and any(
+            mapping.mapping_version != valuation_input_policy.mapping_version
+            for mapping in mappings.values()
+        ):
+            raise DataReleaseError(
+                "DATA_RELEASE_MAPPING_VERSION_MISMATCH",
+                "valuation input policy requires the pinned release mapping version",
+            )
         for reference in manifest.snapshot_refs:
             try:
                 snapshot = self._snapshots.get(reference.snapshot_id)
@@ -669,32 +693,36 @@ class DataReleaseCanaryRunner:
                         "issuer mappings require the pinned release version",
                     )
                 require_original_fact_membership(snapshot, history, mappings)
-                for policy_input in manifest.working_capital_inputs:
-                    if policy_input.issuer_id != snapshot.identity.issuer_id:
-                        continue
-                    if policy_input.current_assets_fact_id not in declared:
-                        continue
-                    assessment = assess_composite_working_capital(
-                        policy_input, history, snapshot=snapshot
-                    )
-                    if assessment.status != "estimated":
-                        raise DataReleaseError(
-                            "DATA_RELEASE_WORKING_CAPITAL_INVALID",
-                            ", ".join(assessment.missing_evidence),
-                        )
-                    checked_composite_inputs.add(sha256_digest(policy_input))
-            allowed_supporting_fields = (
-                {
-                    item.normalized_field
-                    for item in history
-                    if any(
-                        item.fact_id in policy_input.fact_ids
-                        for policy_input in manifest.working_capital_inputs
-                    )
-                }
-                if isinstance(manifest, IssuerOperatingReleaseManifestV1)
-                else set(AWARD_FACT_FIELDS)
+            snapshot_composite_inputs = (
+                tuple(
+                    item
+                    for item in all_composite_inputs
+                    if item.issuer_id == snapshot.identity.issuer_id
+                    and item.current_assets_fact_id in declared
+                )
+                if isinstance(snapshot, IssuerOperatingSourceV1)
+                else valuation_release_working_capital_inputs(manifest, snapshot)
             )
+            for policy_input in snapshot_composite_inputs:
+                assessment = assess_composite_working_capital(
+                    policy_input, history, snapshot=snapshot
+                )
+                if assessment.status != "estimated":
+                    raise DataReleaseError(
+                        "DATA_RELEASE_WORKING_CAPITAL_INVALID",
+                        ", ".join(assessment.missing_evidence),
+                    )
+                checked_composite_inputs.add(sha256_digest(policy_input))
+            allowed_supporting_fields = {
+                item.normalized_field
+                for item in history
+                if any(
+                    item.fact_id in policy_input.fact_ids
+                    for policy_input in snapshot_composite_inputs
+                )
+            }
+            if not isinstance(manifest, IssuerOperatingReleaseManifestV1):
+                allowed_supporting_fields.update(AWARD_FACT_FIELDS)
             if (
                 not declared_fields
                 <= {item.normalized_field for item in history}
@@ -706,10 +734,8 @@ class DataReleaseCanaryRunner:
                 )
             snapshot_ids.append(snapshot.snapshot_id)
             fact_digests.extend(sorted(canonical_fact_digest(fact) for fact in history))
-        if isinstance(
-            manifest, IssuerOperatingReleaseManifestV1
-        ) and checked_composite_inputs != {
-            sha256_digest(item) for item in manifest.working_capital_inputs
+        if checked_composite_inputs != {
+            sha256_digest(item) for item in all_composite_inputs
         }:
             raise DataReleaseError(
                 "DATA_RELEASE_WORKING_CAPITAL_UNBOUND",

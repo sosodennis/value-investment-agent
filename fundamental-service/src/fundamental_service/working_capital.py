@@ -14,6 +14,7 @@ from pydantic import Field, model_validator
 
 from .contracts import (
     CanonicalFactV1,
+    InitialModelId,
     PeriodType,
     QualityStatus,
     SourceRole,
@@ -243,6 +244,30 @@ def canonical_working_capital_inputs(
             key=lambda item: (item.period_end, item.source_hash, sha256_digest(item)),
         )
     )
+
+
+class ValuationWorkingCapitalPolicyV1(StrictModel):
+    """Explicit release input policy for a full security valuation model."""
+
+    protocol: Literal["valuation-working-capital-policy-v1"] = (
+        "valuation-working-capital-policy-v1"
+    )
+    model_id: InitialModelId
+    model_version: str = Field(min_length=1)
+    requirements_profile_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    mapping_version: str = Field(min_length=1)
+    inputs: tuple[CompositeWorkingCapitalInputV1, ...] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def canonical_source_inputs(self) -> ValuationWorkingCapitalPolicyV1:
+        if self.inputs != canonical_working_capital_inputs(self.inputs):
+            raise ValueError("valuation working-capital inputs must be canonical")
+        periods = {(item.issuer_id, item.period_end) for item in self.inputs}
+        if len(periods) != len(self.inputs):
+            raise ValueError("valuation working-capital issuer periods must be unique")
+        if any(item.mapping_version != self.mapping_version for item in self.inputs):
+            raise ValueError("valuation working-capital inputs must pin one mapping")
+        return self
 
 
 @using_valuation_context

@@ -19,6 +19,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from .serialization import canonical_bytes, sha256_digest
 from .working_capital import (
     CompositeWorkingCapitalInputV1,
+    ValuationWorkingCapitalPolicyV1,
     canonical_working_capital_inputs,
 )
 
@@ -91,6 +92,9 @@ class DataReleaseManifestV1(ReleaseModel):
     quality_profile_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
     required_fields: tuple[str, ...] = Field(min_length=1)
     artifact_refs: tuple[ArtifactRefV1, ...] = Field(min_length=1)
+    valuation_working_capital_policy: ValuationWorkingCapitalPolicyV1 | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
     manifest_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
 
     @field_validator("created_at")
@@ -134,6 +138,10 @@ class IssuerOperatingReleaseManifestV1(DataReleaseManifestV1):
 
     @model_validator(mode="after")
     def composite_policy_matches_requirements(self) -> IssuerOperatingReleaseManifestV1:
+        if self.valuation_working_capital_policy is not None:
+            raise ValueError(
+                "issuer operating releases require their operating input policy"
+            )
         if self.working_capital_inputs != canonical_working_capital_inputs(
             self.working_capital_inputs
         ):

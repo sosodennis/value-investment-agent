@@ -25,6 +25,30 @@ The assessment retains canonical facts including units, scale, original concepts
 
 Call `prepare_operating_forecast(..., working_capital_inputs=inputs)` for either operating model, or `prepare_automatic_valuation(..., working_capital_inputs=inputs)` for full valuation. Omit these inputs to retain the exact profile. Full valuation still requires the existing market-policy, capital-bridge and dilution evidence; aggregate working capital does not replace those gates.
 
+## Signed security releases
+
+A full security release can declare `valuation_working_capital_policy` using
+`ValuationWorkingCapitalPolicyV1`. It pins the supported model ID/version,
+full valuation requirements-profile digest, mapping version and canonical
+source-bound inputs. `required_fields` must exactly match
+`composite_working_capital_requirements_profile(model_id, operating_only=False)`.
+Include every input's gross and exclusion fact ID/digest in the corresponding
+snapshot reference, with its approved mapping in `mapping_refs`.
+
+The independent release canary assesses every declared input against those
+facts and the original snapshot. Wrong model/profile/mapping pins, missing or
+foreign facts, unbound inputs and unknown required exclusions refuse release.
+Serving selects the same pinned profile and supporting facts and passes the
+inputs to the official composer. Estimated inputs retain their source evidence,
+residual assumptions, deterministic sensitivity and provisional quality.
+
+An omitted policy preserves ordinary release serialization and digests. Issuer
+operating releases continue to use their existing `working_capital_inputs` field
+and cannot also declare the security policy. Source preparation must explicitly
+compile this policy before it can use the composite full valuation profile;
+this release contract alone does not provide missing issuer evidence or enable
+a numerical automatic source plan.
+
 Estimated history and forecasts remain provisional. `supported_history_threshold` remains null. This increment does not resolve NEWMARKET 2013 continuing-capex scope or establish a trusted NEWMARKET release, first-subsequent label, forecast error, or complete fixed-cohort replay. Freeze the #377 evaluation protocol before using outcomes to select a history threshold; any estimated label must be identified as an estimate under this input-policy version.
 
 V2 replaces the pre-integration V1 evaluation policy to resolve #416. Its digest includes the executable role/class/side relation. Existing V1 inputs and certificates cannot authorize V2; regenerate and review inputs under the new version. The original facts and retained evidence are not rewritten.
