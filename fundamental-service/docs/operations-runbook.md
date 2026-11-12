@@ -49,6 +49,40 @@ principal organization and membership, correlation ID, and absolute deadline.
 Error responses use the shared `InternalErrorResponse`; they never include
 credentials, provider responses, filesystem paths, or raw filing content.
 
+## Add a market data provider
+
+Source acquisition, source reproduction and financial selection have separate
+contracts. Implement the appropriate provider port for a new publisher:
+
+| Evidence | Port | Canonical result |
+| --- | --- | --- |
+| GDP, benchmark rates or other macro series | `MacroSeriesProviderPort` | `MacroSeriesVintageV1` |
+| Published country or industry tables | `MarketReferenceProviderPort` | `MarketReferenceVintageV1` |
+| Common-share quote | `QuoteSourceProviderPort` | `CommonShareQuoteV1` |
+| Public HTTP request and capture timing | `PublicSourceCaptureProfilePort` | `SourceCaptureTimes` |
+
+Providers reproduce retained bytes through pure methods. Preserve source
+identity, original units/precision, period, publication/availability/capture
+times, terms and content digests. The public HTTP adapter owns transport,
+allowlists and retries; immutable storage owns artifact publication and reuse.
+
+Register the capture profile in `public_source_catalog.py`, and inject the
+provider into the release canary and serving composition. The default macro and
+reference implementations are assembled in `free_source_policy.py`. Add a
+versioned source-use rule with retained terms evidence for each intended use.
+Registration and parsing do not approve an issuer's financial assumptions.
+
+Shared selectors consume canonical evidence. For example,
+`market_source_selection.py` selects the rate by series, currency, availability,
+units and freshness, without branching on a publisher or endpoint. A second
+provider for the same metric reuses that selector. A different economic metric
+requires its own identity and an explicit selection policy: overnight SOFR,
+Term SOFR and a Treasury auction yield are distinct inputs.
+
+Exercise a second provider through the shared path, plus source/identity/time
+mismatches, ambiguous registration, retained refusals and deterministic repeat
+and restart. The #352 composer/calculator continues to own valuation formulas.
+
 ## SEC ingestion contract
 
 `POST /v1/data/ingestions` is the authenticated, synchronous `fundamental.v1`

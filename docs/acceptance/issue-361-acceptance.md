@@ -19,6 +19,44 @@ Eligible candidate-history valuations can be provisional. Missing, conflicting,
 unreviewed, future, or unsupported evidence must retain reasons and abstain.
 No completed #351 through #355 acceptance is changed. #350 is outside scope.
 
+## Composite accounting integration checkpoint
+
+Ordinary merge `f45a1fad04377c7826e6d86dd4ab7cd139bf3aaa` integrates PR #414
+head `57b69dca8bbe113d8da71af0771f3d4bd922f535` after parent review of the
+role/class/side relation, source normalization, release canary and #352 composer
+paths. All WIP commits are preserved. Exact checks pass **1,759 Service/PostgreSQL
+tests**, Ruff, format, eleven-source mypy, architecture and diff checks. Eleven
+optional external SEC-resource tests skip; the duplicate-ZIP warning remains.
+Engineering input/output:
+`685917a16c7591a610f70c2af97fb1d9341844fcab1f564180d9741e73d8a3ab` /
+`d7eabda1b78a84a140a08a67f023486f5aa07b76c1985960aa4fecfa70bd5c42`.
+
+The isolated `value-investment-agent-361-capture-profiles` image matches all
+89 installed Python/SQL sources at that merge SHA. A synthetic signed composite
+release prepares a provisional forecast; five semantic substitutions and two
+signed release substitutions refuse. Repeat and post-service-restart runs retain
+output `e4307a8303c6929004adac4e871f1e07b18d5474d3660a36d33ba59b2ec9b35d`
+for input `4ae1584ff64e4643c26490fa5c72f7b05a97916a11ad11b965cf38a85919132b`,
+with release/report `wrote=false`, zero new files and unchanged hashes/mtimes.
+Real-source admission and market-rate refusals also repeat unchanged. All 42
+unrelated baseline containers retain their identities, images and start times.
+The first harness attempt retained a file-permission refusal before publication;
+granting read access to the copied synthetic fixture corrected the harness only.
+
+This verifies integrated accounting boundaries. The image has no configured SEC
+identity resolution, and no complete real issuer release or numerical valuation
+is claimed. Parent CI, complete issuer/date financial policy, lawful quote,
+accounting/award completeness, authentic caller approval and numerical recovery
+remain required. #361/#415/#416 remain OPEN until main delivery, PR #370 remains
+draft, and `supported_history_threshold=null`. The compact
+[source-admission checkpoint](issue-361-source-admission-checkpoint.json) retains
+commands, exact SHA, source/runtime pins, digests and remaining work.
+
+The [provider extension contract](../../fundamental-service/docs/operations-runbook.md#add-a-market-data-provider)
+documents the existing injectable source ports. New providers reproduce common
+evidence contracts; transport, storage, selection and #352 formulas retain their
+existing owners. Generated originals and reports remain outside Git.
+
 ## Observed market-rate binding checkpoint
 
 Implementation `a2d5ef13f6b6dcfde75d34d052ae2ea0d032a09d` consumes the canonical

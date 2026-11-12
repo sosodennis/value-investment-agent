@@ -222,6 +222,242 @@
       "fundamental-release-gate"
     ]
   },
+  "composite_integration_increment": {
+    "change": "Ordinary merge after parent source/canary/composer review. Bind exclusion canonical role to exact accounting classes and balance-sheet side; preserve unresolved cash-capex refusals and explicit estimated working-capital scenarios.",
+    "exact_commit": "f45a1fad04377c7826e6d86dd4ab7cd139bf3aaa",
+    "full_numerical_flow": false,
+    "installed_image": {
+      "command": "python3 .audit/issue-361-composite-integration/verify_image.py",
+      "compose": {
+        "config_hash": "4c8dbf609d7782e8f63035f62fc5084d7efb0b3019002695901844d247028d4e",
+        "env_files": [],
+        "files": [
+          "compose/verification/docker-compose.issue280-operations.yml"
+        ],
+        "ports": {
+          "fundamental_postgres": 18686,
+          "fundamental_service": 18685
+        },
+        "project": "value-investment-agent-361-capture-profiles"
+      },
+      "composite_replays": [
+        {
+          "assessment_refusals": 5,
+          "implementation_commit": "f45a1fad04377c7826e6d86dd4ab7cd139bf3aaa",
+          "input_digest": "4ae1584ff64e4643c26490fa5c72f7b05a97916a11ad11b965cf38a85919132b",
+          "output_digest": "e4307a8303c6929004adac4e871f1e07b18d5474d3660a36d33ba59b2ec9b35d",
+          "pins": {
+            "arelle-release": "2.47.4",
+            "pydantic": "2.14.2",
+            "python": "3.12.16"
+          },
+          "release_wrote": true,
+          "report_wrote": true,
+          "retained_release_files": 3,
+          "signed_release_refusals": 2
+        },
+        {
+          "assessment_refusals": 5,
+          "implementation_commit": "f45a1fad04377c7826e6d86dd4ab7cd139bf3aaa",
+          "input_digest": "4ae1584ff64e4643c26490fa5c72f7b05a97916a11ad11b965cf38a85919132b",
+          "output_digest": "e4307a8303c6929004adac4e871f1e07b18d5474d3660a36d33ba59b2ec9b35d",
+          "pins": {
+            "arelle-release": "2.47.4",
+            "pydantic": "2.14.2",
+            "python": "3.12.16"
+          },
+          "release_wrote": false,
+          "report_wrote": false,
+          "retained_release_files": 3,
+          "signed_release_refusals": 2
+        },
+        {
+          "assessment_refusals": 5,
+          "implementation_commit": "f45a1fad04377c7826e6d86dd4ab7cd139bf3aaa",
+          "input_digest": "4ae1584ff64e4643c26490fa5c72f7b05a97916a11ad11b965cf38a85919132b",
+          "output_digest": "e4307a8303c6929004adac4e871f1e07b18d5474d3660a36d33ba59b2ec9b35d",
+          "pins": {
+            "arelle-release": "2.47.4",
+            "pydantic": "2.14.2",
+            "python": "3.12.16"
+          },
+          "release_wrote": false,
+          "report_wrote": false,
+          "retained_release_files": 3,
+          "signed_release_refusals": 2
+        }
+      ],
+      "exit_code": 0,
+      "identity_resolution_configured": false,
+      "image_id": "sha256:dc3005207fcc7ef070a54dba1d18c2c8f7420f8d807fc66a98a55709c4197d89",
+      "input_digest": "10f639a962682e5442f53d952e919a6d541fbce939c72a73da836917a9b25800",
+      "inventory_restart_digest": "9144267b8005fdcef5b81fbdc9fb45dc7ebc060454796d0ece512b02471a338f",
+      "inventory_second_digest": "9144267b8005fdcef5b81fbdc9fb45dc7ebc060454796d0ece512b02471a338f",
+      "new_files_after_restart": 0,
+      "new_files_second": 0,
+      "output_digest": "fa6a9b443c3fb77ca6ee1fd281aa0ca191deca677c2dbfe33cc75db3cfa690f4",
+      "rate_refusal_replay": {
+        "artifact_writes": 0,
+        "input_digest": "991bf2f73c5787090a0276411dcfc5794844fdc001a4a97d0a5e25da23a8091f",
+        "output_digest": "5c4adb937cb79945002b53b854b2a545e3a0407496315eab645f2d9f5bc27617",
+        "provider_downloads": 0,
+        "selection_calls": 0,
+        "wrote": false
+      },
+      "runtime": {
+        "arelle": "2.47.4",
+        "pydantic": "2.14.2",
+        "python": "3.12.16",
+        "xlrd": "2.0.2"
+      },
+      "source_count": 89,
+      "source_replay": {
+        "admission_count": 17,
+        "admitted_count": 7,
+        "artifact_writes": 0,
+        "input_digest": "ad0479468af3fe68ad9934b2527fbf56c413cc0609be35e227f6d1097e0816fe",
+        "output_digest": "50a25c76710b60b9173408059923d068bf54a552d7dbf2ae392b0b39abcbedf1",
+        "provider_calls": 0,
+        "provider_downloads": 0,
+        "refusal_count": 10,
+        "wrote": false
+      },
+      "unrelated_baseline_containers_unchanged": 42
+    },
+    "integrated_head": "57b69dca8bbe113d8da71af0771f3d4bd922f535",
+    "issue": 361,
+    "provider_extension_contract": "fundamental-service/docs/operations-runbook.md#add-a-market-data-provider",
+    "refs": [
+      376,
+      414,
+      415,
+      416
+    ],
+    "remaining": [
+      "Parent exact-head CI and integration recording; issues stay open until main delivery.",
+      "Complete issuer/date financial policy and lawful dated quote; actual issuer accounting/award evidence and trusted complete release.",
+      "Authentic exact-input caller approval; real numerical repeat/concurrency/restart/empty-store restore.",
+      "Independent PR370 review, main merge and merge-SHA validation before closure and own-resource cleanup."
+    ],
+    "retained_failures": [
+      "Copied synthetic input retained mode0600 in the image, so the nonroot replay process refused before release publication. The harness now grants0644 on that one copied public test fixture; product checks and host input bytes are unchanged."
+    ],
+    "supported_history_threshold": null,
+    "verification": {
+      "command": "python3 .audit/issue-361-composite-integration/verify_checkpoint.py",
+      "commands": {
+        "architecture": {
+          "command": [
+            "python3",
+            "scripts/architecture_guard.py"
+          ],
+          "exit_code": 0,
+          "output_sha256": "6c8e024ff94859e9781de1f4a3201c70e338bc90774702d8ac83afc8a9a15ab9"
+        },
+        "diff": {
+          "command": [
+            "git",
+            "diff",
+            "--check",
+            "origin/main"
+          ],
+          "exit_code": 0,
+          "output_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "format": {
+          "command": [
+            "uvx",
+            "--from",
+            "ruff==0.14.10",
+            "ruff",
+            "format",
+            "--check",
+            "fundamental-service/src/fundamental_service/annual_history.py",
+            "fundamental-service/src/fundamental_service/automatic_mapping.py",
+            "fundamental-service/src/fundamental_service/data_releases.py",
+            "fundamental-service/src/fundamental_service/issuer_operating_release.py",
+            "fundamental-service/src/fundamental_service/issuer_release_evidence.py",
+            "fundamental-service/src/fundamental_service/operating_forecast.py",
+            "fundamental-service/src/fundamental_service/registered_capital_expenditure.py",
+            "fundamental-service/src/fundamental_service/release_runner.py",
+            "fundamental-service/src/fundamental_service/valuation_preparation.py",
+            "fundamental-service/src/fundamental_service/valuation_requirements.py",
+            "fundamental-service/src/fundamental_service/working_capital.py",
+            "fundamental-service/tests/test_automatic_mapping.py",
+            "fundamental-service/tests/test_issuer_operating_release.py",
+            "fundamental-service/tests/test_registered_capital_expenditure.py",
+            "fundamental-service/tests/test_working_capital.py",
+            "fundamental-service/tests/test_working_capital_coverage.py"
+          ],
+          "exit_code": 0,
+          "output_sha256": "7ff2df5e4a19c344d6ea2dfc25c25d2370159894cbac570f392753b22180e09c"
+        },
+        "mypy": {
+          "command": [
+            "uv",
+            "run",
+            "--frozen",
+            "--project",
+            "fundamental-service",
+            "--with",
+            "mypy==1.19.1",
+            "mypy",
+            "--no-incremental",
+            "--follow-imports=silent",
+            "--ignore-missing-imports",
+            "fundamental-service/src/fundamental_service/annual_history.py",
+            "fundamental-service/src/fundamental_service/automatic_mapping.py",
+            "fundamental-service/src/fundamental_service/data_releases.py",
+            "fundamental-service/src/fundamental_service/issuer_operating_release.py",
+            "fundamental-service/src/fundamental_service/issuer_release_evidence.py",
+            "fundamental-service/src/fundamental_service/operating_forecast.py",
+            "fundamental-service/src/fundamental_service/registered_capital_expenditure.py",
+            "fundamental-service/src/fundamental_service/release_runner.py",
+            "fundamental-service/src/fundamental_service/valuation_preparation.py",
+            "fundamental-service/src/fundamental_service/valuation_requirements.py",
+            "fundamental-service/src/fundamental_service/working_capital.py"
+          ],
+          "exit_code": 0,
+          "output_sha256": "049f51b850512be193c74d3fbb731e25fbc6374a66560d8ec0d6569d79c88ea6"
+        },
+        "ruff": {
+          "command": [
+            "uvx",
+            "--from",
+            "ruff==0.14.10",
+            "ruff",
+            "check",
+            "fundamental-service"
+          ],
+          "exit_code": 0,
+          "output_sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18"
+        },
+        "service_postgres": {
+          "command": [
+            "uv",
+            "run",
+            "--frozen",
+            "--extra",
+            "dev",
+            "--project",
+            "fundamental-service",
+            "pytest",
+            "fundamental-service/tests",
+            "-ra"
+          ],
+          "exit_code": 0,
+          "output_sha256": "43ea6749e64d4539efd6aa51ba188066691e54db94a295ab554da37bdfc1bf03"
+        }
+      },
+      "exit_code": 0,
+      "input_digest": "685917a16c7591a610f70c2af97fb1d9341844fcab1f564180d9741e73d8a3ab",
+      "intentional_duplicate_zip_warning": 1,
+      "optional_sec_resource_skips": 11,
+      "output_digest": "d7eabda1b78a84a140a08a67f023486f5aa07b76c1985960aa4fecfa70bd5c42",
+      "service_postgres_passed": 1759,
+      "type_checked_source_count": 11
+    }
+  },
   "contracts": [
     "MacroSeriesProviderPort",
     "MarketReferenceProviderPort",
