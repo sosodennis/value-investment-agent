@@ -1,7 +1,7 @@
 # Issue 418: source-bound operating scenarios
 
-Status: WIP, implementation and local acceptance complete; independent review
-remains pending. Refs #418, #376 and #377. This increment adds the owner-approved
+Status: WIP, conditional labels and comparison acceptance complete; independent
+review and serial integration remain pending. Refs #418, #376 and #377. This increment adds the owner-approved
 scenario study alongside the exact study. It does not complete #376, approve
 an accounting mapping, authenticate a release, or promote a history threshold.
 The original exact-path abstentions and all 100 issuers / 589 targets remain.
@@ -96,14 +96,14 @@ service is not evidence of reviewed source mappings or a completed empirical stu
 
 - Independent review, followed by integration/main verification.
 - Transition filed operating evidence remains a separate source/review gate.
-- First eligible original label and conditional scenario comparison need their
-  own explicit label scope; exact labels/errors are still unavailable.
+- Conditional labels/comparison now have a frozen scope and passing replay.
+  Exact labels/errors and reviewed classification evidence remain unavailable.
 - #377 protocol proposal is not approved. Freeze/review error, precision and
   within-issuer history comparison rules before using outcomes for threshold
   selection; then expand the unchanged 100-issuer cohort.
 - `supported_history_threshold=null`; complete exact study cases remain 0/100.
 
-## Exact implementation evidence
+## Earlier forecast-only evidence
 
 Implementation `0c686d18c22af54f53379a646191114b157f923d` passes 1,590 tests
 against an isolated PostgreSQL database, with 11 explicit optional SEC-resource
@@ -141,3 +141,91 @@ forecasts across its five 2013-capex assumptions. Reinvestment lineage consumes
 [#415](https://github.com/sosodennis/value-investment-agent/issues/415#issuecomment-6823019276),
 not an exemption from its current release contract. Scenario count cannot be
 used as independent sample count or forecast-error evidence.
+
+
+## Conditional labels and comparison: current checkpoint
+
+Implementation `20722aa2ecdce183cfc17cbf55adad501bc87ec0` extends the frozen
+forecast with a separate first-original label partition and paired comparison.
+The design was recorded [before outcomes](https://github.com/sosodennis/value-investment-agent/issues/418#issuecomment-6825987895).
+[Usage and basis](../../fundamental-service/docs/conditional-operating-comparisons.md)
+explain the allocation, same-filing comparative and normalization rules.
+[The current compact checkpoint](issue-418-conditional-checkpoint.json) preserves
+exact commands, commit, digests, runtime, successful checks and retained failures.
+The earlier checkpoint remains the historical forecast-only receipt.
+
+The first label original is `0001282637-17-000005`, available
+`2017-02-15T14:59:50Z`, for 2016-12-31. It provides 30 retained observations,
+including 2015 comparative balances. That later filing reports 2015 current
+assets of USD768,392,000; the original forecast retains its origin balance of
+USD774,767,000. The retained normalized SEC submissions snapshot has 20 annual
+filings and confirms this accession as the first subsequent original in the
+fixed case. This cross-check does not claim fresh acquisition or raw response
+reconstruction. Source audit `90b567152cbdf7d7202ce6b627e89de389ba0c39a1b8ed8a38590c4212c762ca`
+retains the separate source-byte/binding/mapper checks.
+
+Labels reuse `derive_historical_metrics.realized_fcff`. Identical constant asset
+and liability fractions pair decision and label scenarios; all five explicit
+2016 continuing-capex fractions remain. Label baseline2015 capex is explicitly
+100%, although it is not consumed by realized2016 FCFF. The existing origin
+assumption of full continuing2014/2015 capex remains conditional and unreviewed.
+A joint residual never proves that missing debt, investment or lease amounts
+are zero. No scenario winner is selected.
+
+| Conditional result | Count / status |
+| --- | --- |
+| Conditional labels | 125 provisional; 30 source observations retained |
+| FCFF comparisons | 625 provisional conditional comparisons; zero refusals |
+| Transition comparisons | 625 abstentions with `TRANSITION_EVIDENCE_MISSING` |
+| Independent issuers | One with conditional comparisons; zero with Transition comparisons |
+| Sampled conditional realized FCFF | USD159.28m–363.30m |
+| Sampled signed difference (forecast minus conditional realized) | USD−182.55m to +24.60m |
+| Sampled absolute difference | USD1.12m–182.55m |
+| Normalized signed difference / origin base revenue | −8.53% to +1.15% |
+| Exact study / threshold | 0/100; `supported_history_threshold=null` |
+
+These are sampled conditional comparisons, not exact forecast errors,
+confidence intervals or global bounds. Scenario counts do not increase the
+independent issuer count. #377's method review and #415/#416 evidence remain
+separate. The numerical spread reveals sensitivity to unresolved assumptions;
+it supplies no history-threshold approval.
+
+Pinned input: `c4b5b12bf6924fe225f4a75a14fbba2c52bb48b633269042679a029a86ea0df8`.
+Label input: `93439231481e2cf677be33d0b4539320a96849bda41d0dbef6403a83c3054707`.
+Scope: `663957b3a7a93ff38337ebdc5d81efe53427e47925a0777cb61c75b689f30ecf`.
+Label policy: `120ba70ec804dc4df70353dc7c3c5cff9997b5f0470e38a52d458cd514e83f08`.
+Comparison output: `0ceff1ee6e77a98638a0a76fc5ae804fac9459c6b372ec08cf265970071d49eb`.
+Frozen forecast output remains
+`ffdc58976027a7b1d0429edf44242ddb8e4e9389c1a99d35935600e93fd60811`.
+
+Two fresh desktop processes reused all six input/mapping/forecast/label/comparison/
+report artifacts on the second complete execution with `wrote=false`, unchanged
+bytes/sizes/mtimes, identical classifications/order/statistics and zero network
+requests. The installed image matched all 92 Service Python files. Container
+repeats and service restart retained the same semantic output and all artifacts;
+container execution report `3b6e0084707f715b8defd12cfba8abed16ad1d0cc6ef613f286735dadb12c870`
+differs from desktop report
+`9d2ebe0b91319bbeaa80d8bb00220c38b9d3bf27508b0a240f3c0fd821d44179`
+because runtime/command pins differ.
+
+The isolated project `value-investment-agent-418-conditional-labels` used
+ports28419/25419, one network and two disposable volumes. HTTP readiness and
+1,790 Service/PostgreSQL tests passed; 11 optional SEC-resource tests skipped
+explicitly, with one expected duplicate-ZIP warning. Ruff, format, six-source
+mypy, both architecture guards and diff passed at the exact implementation.
+[CI43237022208](https://github.com/sosodennis/value-investment-agent/actions/runs/43237022208)
+passed all12 applicable jobs; release gate skipped. HTTP readiness had SEC
+identity resolution disabled: this is installed offline-module acceptance,
+not SEC ingestion, trusted release, or complete enterprise valuation acceptance.
+
+Only this disposable project's containers/image/network/volumes were removed.
+All69 pre-existing container IDs, image IDs and start times equal their initial
+baseline. An external cleanup-helper syntax failure occurred before mutation;
+its exit1 receipt is preserved alongside the corrected exit0 result. External
+driver versions and raw command outputs remain content addressed outside Git at
+`/Users/denniswong/Desktop/Project/value-investment-agent-issue-418-scenario-evidence/conditional-delivery-20722aa2`.
+
+Independent engineering review and serial parent integration have been requested
+from the main chat. Keep PR420 draft and #418/#376/#377 open until the relevant
+review, integration and main-delivery criteria pass. No accounting signature or
+mapping-quality promotion is claimed by this checkpoint.
