@@ -18,7 +18,7 @@ from .equity_dilution import (
     _award_facts,
 )
 from .facts import canonical_fact_digest
-from .quote_sources import verify_quote_source
+from .quote_providers import QuoteSourceProviderPort, reproduce_quote_source
 from .serialization import canonical_bytes, sha256_digest
 
 EQUITY_DILUTION_ARTIFACT_ROLE: Literal["equity-dilution-evidence-v1"] = (
@@ -135,6 +135,7 @@ def load_release_dilution_evidence(
     snapshot: SourceSnapshotV1,
     artifacts: DilutionArtifactReader,
     released_facts: Iterable[CanonicalFactV1],
+    quote_providers: tuple[QuoteSourceProviderPort, ...],
 ) -> EquityDilutionEvidenceV1 | None:
     """Read immutable signed-release artifacts; never obtain external evidence."""
     matches = []
@@ -189,5 +190,5 @@ def load_release_dilution_evidence(
             "DILUTION_QUOTE_SOURCE_MISMATCH",
             "quote source bytes differ from the reviewed evidence",
         )
-    verify_quote_source(evidence.quote, raw_quote)
+    reproduce_quote_source(evidence.quote, raw_quote, providers=quote_providers)
     return evidence

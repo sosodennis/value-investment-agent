@@ -43,6 +43,8 @@ from .data_releases import (
     DataReleaseTrustRootsV1,
 )
 from .facts import CanonicalFactRepository
+from .quote_providers import QuoteSourceProviderPort
+from .quote_sources import default_quote_providers
 from .governance import ModelInventory
 from .interface.transport import (
     EmptyOperationInputV1,
@@ -163,6 +165,7 @@ def create_app(
     model_inventory: ModelInventory | None = None,
     sec_acquisition: SecAcquisitionUseCase | None = None,
     identity_resolution: SecIdentityResolutionUseCase | None = None,
+    quote_providers: tuple[QuoteSourceProviderPort, ...] | None = None,
 ) -> FastAPI:
     """Assemble transport, application use cases, and runtime resources."""
 
@@ -196,6 +199,9 @@ def create_app(
         require_metadata=require_metadata,
         policy_registry=policy_registry,
         model_inventory=model_inventory,
+        quote_providers=(
+            default_quote_providers() if quote_providers is None else quote_providers
+        ),
     )
 
     @asynccontextmanager

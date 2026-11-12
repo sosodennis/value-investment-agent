@@ -1,4 +1,5 @@
 from datetime import UTC, date, datetime
+from decimal import Decimal
 from hashlib import sha256
 
 import pytest
@@ -11,6 +12,8 @@ from fundamental_service.quote_sources import (
     select_nasdaq_historical_close,
     verify_quote_source,
 )
+from fundamental_service.quote_providers import reproduce_quote_source
+from quote_provider_fixtures import SyntheticQuoteProvider
 from fundamental_service.serialization import canonical_bytes
 
 ISSUER = "0000789019"
@@ -199,3 +202,50 @@ def test_capture_timestamp_must_include_timezone():
         )
 
     assert error.value.code == "DILUTION_QUOTE_SOURCE_INVALID"
+
+
+def test_second_provider_reproduces_a_quote_in_its_own_source_format():
+    raw = canonical_bytes({"price": "123.45", "currency": "USD"})
+    quote = _select(date(2026, 11, 12), canonical_bytes(_payload(date(2026, 11, 12))))
+    quote = quote.model_copy(
+        update={
+            "price": Decimal("123.45"),
+            "source_id": "synthetic-quote-vendor",
+            "source_version": "synthetic-v1",
+            "terms_reference": "synthetic-test-only",
+            "source_uri": "https://example.test/quotes/MSFT/2026-11-12",
+            "content_hash": sha256(raw).hexdigest(),
+        }
+    )
+    quote = type(quote).model_validate(quote.model_dump())
+    reproduce_quote_source(quote, raw, providers=(SyntheticQuoteProvider(),))
+
+    for altered in (
+        {"price": 124},
+        {"currency": "EUR"},
+        {"content_hash": "0" * 64},
+    ):
+        with pytest.raises(DilutionError):
+            reproduce_quote_source(
+                quote.model_copy(update=altered),
+                raw,
+                providers=(SyntheticQuoteProvider(),),
+            )
+
+
+def test_missing_or_ambiguous_provider_never_uses_an_implicit_fallback():
+    day = date(2026, 11, 12)
+    raw = canonical_bytes(_payload(day))
+    quote = _select(day, raw)
+    from fundamental_service.quote_sources import NasdaqHistoricalCloseProvider
+
+    for providers, expected in (
+        ((), "DILUTION_QUOTE_SOURCE_PROFILE_UNSUPPORTED"),
+        (
+            (NasdaqHistoricalCloseProvider(), NasdaqHistoricalCloseProvider()),
+            "DILUTION_QUOTE_SOURCE_PROFILE_AMBIGUOUS",
+        ),
+    ):
+        with pytest.raises(DilutionError) as error:
+            reproduce_quote_source(quote, raw, providers=providers)
+        assert error.value.code == expected

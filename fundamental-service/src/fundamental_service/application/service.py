@@ -54,6 +54,7 @@ from ..facts import (
 )
 from ..equity_award_evidence import load_release_dilution_evidence
 from ..equity_dilution import DilutionError
+from ..quote_providers import QuoteSourceProviderPort
 from ..fiscal_periods import resolve_fiscal_periods
 from ..governance import ModelInventory
 from ..history_composition import verify_history_components
@@ -335,6 +336,7 @@ class FundamentalApplication:
     require_metadata: bool = False
     policy_registry: PolicyRegistry | None = None
     model_inventory: ModelInventory | None = None
+    quote_providers: tuple[QuoteSourceProviderPort, ...] = ()
     release_cache: CacheLifecycle = dataclass_field(
         default_factory=lambda: CacheLifecycle(max_entries=256),
         repr=False,
@@ -1220,6 +1222,7 @@ class FundamentalApplication:
                 snapshot=snapshot,
                 artifacts=self.artifact_store,
                 released_facts=evidence.facts,
+                quote_providers=self.quote_providers,
             )
         except (DilutionError, SnapshotError, ValueError) as error:
             raise ServiceError(
