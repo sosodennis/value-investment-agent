@@ -777,12 +777,46 @@ def test_approval_is_bound_to_prepared_input_and_rejection_never_calculates(tmp_
             fixture.plan,
             approval=approval.model_copy(update={"input_digest": "f" * 64}),
         )
-    with pytest.raises(ValueError, match="identity"):
+    with pytest.raises(ServiceError, match="authenticated subject"):
         _run(
             runner,
             fixture.plan,
             approval=approval.model_copy(update={"caller_id": "other"}),
         )
+
+
+@pytest.mark.parametrize("invalid", ["caller", "future"])
+def test_unbound_approval_refuses_before_source_or_release_access(
+    tmp_path, monkeypatch, invalid
+):
+    fixture = _fixture(tmp_path)
+    runner = _runner(fixture)
+    reached = []
+
+    def resolve(*args):
+        reached.append("resolve")
+        raise AssertionError("invalid approval reached stored source resolution")
+
+    monkeypatch.setattr(runner, "_resolve", resolve)
+    approval = CallerApprovalEnvelopeV1(
+        input_digest="a" * 64,
+        decision="approved",
+        caller_id="someone-else" if invalid == "caller" else "operator",
+        decided_at=datetime.now(UTC) + timedelta(days=1)
+        if invalid == "future"
+        else VALUATION_TIME,
+    )
+    with pytest.raises(ServiceError) as error:
+        _run(runner, fixture.plan, approval=approval)
+
+    assert error.value.code == (
+        "CALLER_APPROVAL_IDENTITY_MISMATCH"
+        if invalid == "caller"
+        else "CALLER_APPROVAL_NOT_YET_DECIDED"
+    )
+    assert error.value.status_code == 403
+    assert error.value.retryable is False
+    assert reached == []
 
 
 def test_approved_preparation_calculates_and_repeat_is_unchanged(tmp_path):

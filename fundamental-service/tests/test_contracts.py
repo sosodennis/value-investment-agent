@@ -100,6 +100,20 @@ def test_digest_is_stable_and_approval_binds_to_exact_input():
     assert approved.caller_approval is not None
 
 
+def test_caller_approval_requires_an_unambiguous_decision_time():
+    payload = {
+        "input_digest": "a" * 64,
+        "decision": "approved",
+        "caller_id": "caller",
+        "decided_at": datetime(2026, 1, 1, 12),
+    }
+    with pytest.raises(ValidationError, match="decided_at must include a timezone"):
+        CallerApprovalEnvelopeV1.model_validate(payload)
+    payload["decided_at"] = datetime.fromisoformat("2026-01-01T12:00:00+08:00")
+    approval = CallerApprovalEnvelopeV1.model_validate(payload)
+    assert approval.decided_at.utcoffset().total_seconds() == 8 * 3600
+
+
 def test_preparation_version_is_bound_to_input_digest_and_roundtrips():
     caller_input = valuation().with_digest()
     assert "preparation_version" not in caller_input.provenance.model_dump()

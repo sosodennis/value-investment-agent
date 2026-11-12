@@ -69,6 +69,7 @@ from .operations import (
     ServiceError,
     correlation_id,
     guard_body_size,
+    guard_caller_approval,
 )
 from .policies import (
     MetadataModelRepository,
@@ -834,6 +835,11 @@ def create_app(
     )
     async def calculate_valuation(request: Request) -> JSONResponse:
         value = decode_input(request, ValuationInputV1)
+        guard_caller_approval(
+            value.caller_approval,
+            caller_id=request.state.context.principal.subject_id,
+            received_at=datetime.now(UTC),
+        )
         result = application.calculate_valuation(
             value, correlation_id=request.state.correlation_id
         )
@@ -862,6 +868,11 @@ def create_app(
     )
     async def calculate_with_policy(request: Request) -> JSONResponse:
         value = decode_input(request, PolicyValuationInputV1)
+        guard_caller_approval(
+            value.caller_approval,
+            caller_id=request.state.context.principal.subject_id,
+            received_at=datetime.now(UTC),
+        )
         result = application.calculate_with_policy(
             value, correlation_id=request.state.correlation_id
         )
@@ -876,6 +887,11 @@ def create_app(
     async def uncertainty_valuation(request: Request) -> JSONResponse:
         value = UncertaintyRequestV1.model_validate_json(
             json.dumps(normalize_uncertainty_payload(request.state.operation_input))
+        )
+        guard_caller_approval(
+            value.caller_approval,
+            caller_id=request.state.context.principal.subject_id,
+            received_at=datetime.now(UTC),
         )
         return success_response(request, application.uncertainty_valuation(value))
 

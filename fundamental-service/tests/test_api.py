@@ -3,7 +3,7 @@ import hashlib
 import json
 import socket
 import urllib.request
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
@@ -915,7 +915,7 @@ def test_rejected_caller_approval_never_executes_calculation():
     payload["caller_approval"] = {
         "input_digest": valuation.input_digest,
         "decision": "rejected",
-        "caller_id": "test-agent",
+        "caller_id": "subject-test",
         "decided_at": datetime.now(UTC).isoformat(),
     }
     response = TestClient(
@@ -928,6 +928,60 @@ def test_rejected_caller_approval_never_executes_calculation():
 
     assert response.status_code == 422
     assert response.json()["error"]["code"] == "CALLER_APPROVAL_REJECTED"
+
+
+@pytest.mark.parametrize(
+    "route,method",
+    [
+        ("calculate", "calculate_valuation"),
+        ("calculate-with-policy", "calculate_with_policy"),
+        ("uncertainty", "uncertainty_valuation"),
+    ],
+)
+@pytest.mark.parametrize("decision", ["approved", "rejected"])
+@pytest.mark.parametrize("invalid", ["caller", "future"])
+def test_calculation_rejects_unbound_approval_before_application_execution(
+    monkeypatch, route, method, decision, invalid
+):
+    reached = []
+
+    def execute(*args, **kwargs):
+        reached.append(method)
+        raise AssertionError("invalid approval reached calculation")
+
+    monkeypatch.setattr(FundamentalApplication, method, execute)
+    valuation = _bind_initial_policy(make_valuation())
+    if route == "uncertainty":
+        valuation = _with_uncertainty_digest(valuation.model_dump(mode="json"))
+    payload = valuation.model_dump(mode="json")
+    payload["caller_approval"] = {
+        "input_digest": valuation.input_digest,
+        "decision": decision,
+        "caller_id": "someone-else" if invalid == "caller" else "subject-test",
+        "decided_at": (
+            datetime.now(UTC) + timedelta(days=1)
+            if invalid == "future"
+            else datetime.now(UTC)
+        ).isoformat(),
+    }
+    response = TestClient(create_app()).post(
+        f"/v1/valuation/{route}",
+        headers=auth_headers(),
+        json=make_internal_envelope(payload),
+    )
+
+    assert response.status_code == 403, response.text
+    assert response.json()["error"] == {
+        "code": "CALLER_APPROVAL_IDENTITY_MISMATCH"
+        if invalid == "caller"
+        else "CALLER_APPROVAL_NOT_YET_DECIDED",
+        "message": "caller approval must match the authenticated subject"
+        if invalid == "caller"
+        else "caller approval cannot be decided after receipt",
+        "retryable": False,
+        "retry_after_ms": None,
+    }
+    assert reached == []
 
 
 def test_policy_calculation_rejects_unsupported_model_family():
@@ -1197,7 +1251,7 @@ def test_uncertainty_approval_digest_covers_sampling_and_scenario_controls():
     payload["caller_approval"] = {
         "input_digest": request.input_digest,
         "decision": "approved",
-        "caller_id": "test-agent",
+        "caller_id": "subject-test",
         "decided_at": datetime.now(UTC).isoformat(),
     }
     response = TestClient(
@@ -1263,7 +1317,7 @@ def test_calculate_executes_explicit_monte_carlo_controls_with_optional_approval
             "caller_approval": CallerApprovalEnvelopeV1(
                 input_digest=valuation.input_digest,
                 decision="approved",
-                caller_id="test-agent",
+                caller_id="subject-test",
                 decided_at=datetime.now(UTC),
             )
         }
@@ -1308,7 +1362,7 @@ def test_calculate_returns_version_bound_replayable_evidence():
             "caller_approval": CallerApprovalEnvelopeV1(
                 input_digest=validation.input_digest,
                 decision="approved",
-                caller_id="test-agent",
+                caller_id="subject-test",
                 decided_at=datetime.now(UTC),
             )
         }
@@ -1376,7 +1430,7 @@ def test_uncertainty_accepts_the_validated_request_and_same_caller_approval():
     payload["caller_approval"] = {
         "input_digest": request.input_digest,
         "decision": "approved",
-        "caller_id": "test-agent",
+        "caller_id": "subject-test",
         "decided_at": datetime.now(UTC).isoformat(),
     }
     response = TestClient(

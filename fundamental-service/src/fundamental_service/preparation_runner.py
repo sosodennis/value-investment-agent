@@ -34,7 +34,7 @@ from .data_releases import (
     DataReleaseTrustRootsV1,
 )
 from .facts import CanonicalMappingV1, canonical_fact_digest
-from .operations import ServiceError
+from .operations import ServiceError, guard_caller_approval
 from .history_composition import compose_original_history
 from .release_runner import DataReleaseCanaryRunner
 from .replay import ArtifactPublicationV1
@@ -469,8 +469,10 @@ class SourcePreparationRunner:
     ) -> ArtifactPublicationV1:
         if not actor_id.strip() or not organization_id.strip():
             raise ValueError("runner requires an actor and organization")
-        if deadline_at.tzinfo is None or deadline_at <= datetime.now(UTC):
+        received_at = datetime.now(UTC)
+        if deadline_at.tzinfo is None or deadline_at <= received_at:
             raise ValueError("runner deadline must be an unexpired zoned timestamp")
+        guard_caller_approval(approval, caller_id=actor_id, received_at=received_at)
         if candidate is not None and (
             candidate.manifest.profile_id != plan.release_profile_id
             or candidate.verification.source_revision != plan.source_revision
@@ -634,8 +636,6 @@ class SourcePreparationRunner:
             )
         if approval.input_digest != preparation.input.input_digest:
             raise ValueError("caller approval is bound to a different valuation input")
-        if approval.caller_id != actor_id:
-            raise ValueError("caller approval identity does not match the actor")
         if approval.decision != "approved":
             return self._persist(
                 SourcePreparationEvidenceV1(

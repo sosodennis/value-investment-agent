@@ -113,6 +113,14 @@ inventory remains missing evidence; do not manufacture zero-valued award facts.
 
 ## Automatic mapping approval
 
+Supplied valuation approvals must identify the authenticated request subject.
+The calculation, policy-calculation and uncertainty HTTP endpoints reject another
+`caller_id` or a decision later than receipt before invoking the application.
+`decided_at` must include a timezone. Direct calculation retains optional
+approval; `fundamental-prepare-source` requires approval of its exact prepared
+input before calculation and applies the same actor/time check before source or
+release access. Approval remains outside persisted public calculation evidence.
+
 Mapping approval uses Fundamental Service's `source-bound-us-gaap-v3` policy.
 It handles a narrow table of direct role/QName combinations and the bounded
 annual stock-compensation disclosure below. Missing balances, unsupported

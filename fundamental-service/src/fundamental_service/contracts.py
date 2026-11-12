@@ -1512,6 +1512,13 @@ class CallerApprovalEnvelopeV1(StrictModel):
     caller_id: str = Field(min_length=1)
     decided_at: datetime
 
+    @field_validator("decided_at")
+    @classmethod
+    def decision_has_timezone(cls, value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("decided_at must include a timezone")
+        return value
+
 
 class ValuationInputV1(StrictModel):
     model_config = ConfigDict(json_schema_extra=_valuation_input_json_schema)
