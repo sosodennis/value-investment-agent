@@ -10,14 +10,22 @@ from pathlib import Path
 from cryptography.exceptions import UnsupportedAlgorithm
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-from pydantic import Field
+from pydantic import Field, TypeAdapter
 from sqlalchemy.exc import SQLAlchemyError
 
 from .automatic_mapping import (
     AUTOMATIC_MAPPING_INPUT_ROLE,
+    AutomaticMappingDecisionV1,
     AutomaticMappingRequestV1,
+    AutomaticMappingSourceV1,
     automatic_mapping_policy_digest,
+    automatic_mapping_proposal,
     evaluate_automatic_mapping,
+)
+from .automatic_mapping_batch import (
+    AutomaticMappingBatchDecisionV1,
+    AutomaticMappingBatchRequestV1,
+    AutomaticMappingRoleDecisionV1,
 )
 from .command_artifacts import EvidenceArtifactStore, command_artifacts
 from .data_releases import (
@@ -42,13 +50,12 @@ class AutomaticMappingReceiptV1(ReleaseModel):
     approval_publication: ArtifactPublicationV1 | None
 
 
-def approve_mapping(
-    request: AutomaticMappingRequestV1,
+def _require_machine_identity(
+    request: AutomaticMappingSourceV1,
     *,
-    artifacts: EvidenceArtifactStore,
     trust_roots: DataReleaseTrustRootsV1,
     private_key: Ed25519PrivateKey,
-) -> AutomaticMappingReceiptV1:
+) -> None:
     evaluator = trust_roots.automatic_mapping_evaluators.get(request.evaluator_id)
     if (
         evaluator is None
@@ -60,6 +67,16 @@ def approve_mapping(
             "MAPPING_AUTOMATIC_AUTHORITY_MISMATCH",
             "machine key and executable policy must match deployment trust roots",
         )
+
+
+def approve_mapping(
+    request: AutomaticMappingRequestV1,
+    *,
+    artifacts: EvidenceArtifactStore,
+    trust_roots: DataReleaseTrustRootsV1,
+    private_key: Ed25519PrivateKey,
+) -> AutomaticMappingReceiptV1:
+    _require_machine_identity(request, trust_roots=trust_roots, private_key=private_key)
     contents = {}
     for ref in request.evidence_refs:
         try:
@@ -136,6 +153,145 @@ def approve_mapping(
     )
 
 
+class AutomaticMappingBatchReceiptV1(ReleaseModel):
+    source_revision: str = Field(pattern=r"^[0-9a-f]{40}$")
+    input_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    output_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    input_publication: ArtifactPublicationV1
+    decision_publication: ArtifactPublicationV1
+    mapping_receipts: tuple[AutomaticMappingReceiptV1, ...]
+    wrote: bool
+
+
+def _artifact_ref(publication: ArtifactPublicationV1, role: str) -> ArtifactRefV1:
+    return ArtifactRefV1(
+        artifact_id=publication.artifact.artifact_id,
+        content_hash=publication.artifact.content_hash,
+        media_type=publication.artifact.media_type,
+        role=role,
+    )
+
+
+def approve_mapping_batch(
+    request: AutomaticMappingBatchRequestV1,
+    *,
+    artifacts: EvidenceArtifactStore,
+    trust_roots: DataReleaseTrustRootsV1,
+    private_key: Ed25519PrivateKey,
+) -> AutomaticMappingBatchReceiptV1:
+    """Propose known roles and retain every unsupported/missing-role decision."""
+    _require_machine_identity(request, trust_roots=trust_roots, private_key=private_key)
+    input_digest = sha256_digest(request)
+    input_publication = artifacts.put_with_receipt(
+        "automatic-mapping-batch-input-" + input_digest,
+        request,
+        dependency_hashes=tuple(
+            sorted({ref.content_hash for ref in request.evidence_refs})
+        ),
+    )
+    roles, receipts = [], []
+    for role in sorted(
+        set(request.requirements.required_fact_fields)
+        | set(request.requirements.supporting_fact_fields)
+    ):
+        proposal = automatic_mapping_proposal(
+            role, mapping_version=request.mapping_version
+        )
+        if proposal is None:
+            roles.append(
+                AutomaticMappingRoleDecisionV1(
+                    normalized_field=role,
+                    status="abstain",
+                    reason_codes=("MAPPING_AUTOMATIC_RULE_UNSUPPORTED",),
+                    decision=None,
+                    approval=None,
+                )
+            )
+            continue
+        single = AutomaticMappingRequestV1(
+            source_revision=request.source_revision,
+            evaluator_id=request.evaluator_id,
+            original=request.original,
+            integrity=request.integrity,
+            evidence_refs=request.evidence_refs,
+            proposal=proposal,
+        )
+        receipt = approve_mapping(
+            single,
+            artifacts=artifacts,
+            trust_roots=trust_roots,
+            private_key=private_key,
+        )
+        decision = AutomaticMappingDecisionV1.model_validate_json(
+            artifacts.read(receipt.decision_publication.artifact.artifact_id)
+        )
+        if sha256_digest(decision) != receipt.output_digest:
+            raise DataReleaseError(
+                "MAPPING_AUTOMATIC_DECISION_HASH_MISMATCH",
+                "retained mapping decision differs from its published digest",
+            )
+        receipts.append(receipt)
+        roles.append(
+            AutomaticMappingRoleDecisionV1(
+                normalized_field=role,
+                status=decision.status,
+                reason_codes=decision.reason_codes,
+                decision=_artifact_ref(
+                    receipt.decision_publication, "automatic-mapping-decision-v1"
+                ),
+                approval=(
+                    _artifact_ref(
+                        receipt.approval_publication, "automatic-mapping-approval-v1"
+                    )
+                    if receipt.approval_publication is not None
+                    else None
+                ),
+            )
+        )
+    batch_decision = AutomaticMappingBatchDecisionV1(
+        input_digest=input_digest,
+        source_revision=request.source_revision,
+        policy_digest=automatic_mapping_policy_digest(),
+        model_version=request.model_version,
+        requirements=request.requirements,
+        roles=tuple(roles),
+    )
+    output_digest = sha256_digest(batch_decision)
+    decision_publication = artifacts.put_with_receipt(
+        "automatic-mapping-batch-decision-" + output_digest,
+        batch_decision,
+        dependency_hashes=tuple(
+            sorted(
+                {
+                    input_digest,
+                    batch_decision.policy_digest,
+                    request.requirements.digest,
+                    *(r.output_digest for r in receipts),
+                }
+            )
+        ),
+    )
+    publications = [input_publication, decision_publication]
+    for receipt in receipts:
+        publications.extend((receipt.input_publication, receipt.decision_publication))
+        if receipt.approval_publication is not None:
+            publications.append(receipt.approval_publication)
+    return AutomaticMappingBatchReceiptV1(
+        source_revision=request.source_revision,
+        input_digest=input_digest,
+        output_digest=output_digest,
+        input_publication=input_publication,
+        decision_publication=decision_publication,
+        mapping_receipts=tuple(receipts),
+        wrote=any(publication.wrote for publication in publications),
+    )
+
+
+_COMMAND_REQUEST = TypeAdapter[
+    AutomaticMappingRequestV1 | AutomaticMappingBatchRequestV1
+](AutomaticMappingRequestV1 | AutomaticMappingBatchRequestV1)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--request", type=Path)
@@ -152,17 +308,21 @@ def main(argv: list[str] | None = None) -> int:
     ):
         parser.error("--request, --trust-roots and --private-key are required")
     try:
-        request = AutomaticMappingRequestV1.model_validate_json(
-            args.request.read_bytes()
-        )
+        request = _COMMAND_REQUEST.validate_json(args.request.read_bytes())
         roots = DataReleaseTrustRootsV1.from_file(args.trust_roots)
         key = serialization.load_pem_private_key(args.private_key.read_bytes(), None)
         if not isinstance(key, Ed25519PrivateKey):
             raise ValueError("machine approvals require an Ed25519 key")
         with command_artifacts(args.artifacts_root) as artifacts:
-            receipt = approve_mapping(
-                request, artifacts=artifacts, trust_roots=roots, private_key=key
-            )
+            receipt: AutomaticMappingBatchReceiptV1 | AutomaticMappingReceiptV1
+            if isinstance(request, AutomaticMappingBatchRequestV1):
+                receipt = approve_mapping_batch(
+                    request, artifacts=artifacts, trust_roots=roots, private_key=key
+                )
+            else:
+                receipt = approve_mapping(
+                    request, artifacts=artifacts, trust_roots=roots, private_key=key
+                )
     except (DataReleaseError, SnapshotError) as error:
         print(canonical_bytes({"error_code": error.code}).decode(), file=sys.stderr)
         return 2

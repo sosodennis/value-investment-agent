@@ -120,6 +120,26 @@ assumptions require other supported evidence. AI verification is future scope.
 Human reviews remain readable historical records; they are no longer required
 for new automatic mappings.
 
+For a complete model mapping pass, use an `AutomaticMappingBatchRequestV1`
+with protocol `fundamental.automatic-mapping-batch-input.v1`. Supply the retained
+original/integrity/source references, exact source revision, evaluator ID,
+mapping version, current model version, and the complete
+`valuation_requirements_profile(model_id)` as `requirements`. The service rejects
+a caller-modified profile, an old model version or a promoted history threshold.
+Use the same command and storage configuration below. No per-role proposals
+are needed: the service's existing rule table creates supported proposals.
+
+The batch retains every required and supporting SEC role once in sorted order.
+A known rule with no eligible observation keeps its decision and missing reason;
+an unsupported classification keeps an explicit abstention without inventing a
+concept, fact, zero or certificate. Market assumptions remain separately listed
+in the pinned profile and receive no SEC mapping approval. The batch decision
+references the exact child decisions and certificates. Its content digest excludes
+write receipts, so complete repeats preserve the report bytes and return aggregate
+`wrote=false`. Partial writes can be resumed through the existing immutable stores.
+Mapping coverage alone does not establish complete periods, a trusted release,
+valuation readiness or caller approval.
+
 Create an `AutomaticMappingRequestV1` from retained original issuer evidence,
 its matching SEC integrity record, a provisional mapping proposal and ordered
 source artifact references. Retain the raw filing, parser input, SEC index,

@@ -117,23 +117,46 @@ def automatic_mapping_policy_digest() -> str:
     )
 
 
-class AutomaticMappingRequestV1(ReleaseModel):
-    protocol: Literal["fundamental.automatic-mapping-input.v1"] = (
-        "fundamental.automatic-mapping-input.v1"
-    )
+class AutomaticMappingSourceV1(ReleaseModel):
     source_revision: str = Field(pattern=r"^[0-9a-f]{40}$")
     evaluator_id: str = Field(min_length=1)
     original: OriginalIssuerEvidenceV1
     integrity: SecIntegrityEvidenceV1
-    proposal: CanonicalMappingV1
     evidence_refs: tuple[ArtifactRefV1, ...] = Field(min_length=1)
 
     @model_validator(mode="after")
-    def evidence_is_canonical(self) -> AutomaticMappingRequestV1:
+    def evidence_is_canonical(self) -> AutomaticMappingSourceV1:
         ids = tuple(ref.artifact_id for ref in self.evidence_refs)
         if ids != tuple(sorted(set(ids))):
             raise ValueError("automatic mapping evidence must be ordered and unique")
         return self
+
+
+class AutomaticMappingRequestV1(AutomaticMappingSourceV1):
+    protocol: Literal["fundamental.automatic-mapping-input.v1"] = (
+        "fundamental.automatic-mapping-input.v1"
+    )
+    proposal: CanonicalMappingV1
+
+
+def automatic_mapping_proposal(
+    normalized_field: str, *, mapping_version: str
+) -> CanonicalMappingV1 | None:
+    """Create only proposals supported by the service's executable rule table."""
+    rule = _RULES.get(normalized_field)
+    if rule is None:
+        return None
+    payload = {
+        "contract_version": "fundamental.v1",
+        "source_concept": rule.concept,
+        "normalized_field": normalized_field,
+        "mapping_version": mapping_version,
+        "confidence": "unresolved",
+        "status": "provisional",
+    }
+    return CanonicalMappingV1.model_validate(
+        {**payload, "decision_id": "automatic-proposal-" + sha256_digest(payload)}
+    )
 
 
 class MappingObservationRejectionV1(ReleaseModel):
