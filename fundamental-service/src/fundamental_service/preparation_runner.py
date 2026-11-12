@@ -131,6 +131,31 @@ class SourcePreparationPlanV2(StrictModel):
         )
 
 
+class SourceAcquisitionOutcomeV1(StrictModel):
+    request_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    accession_number: str | None = None
+    quality_status: QualityStatus | None
+    snapshot_id: str | None = None
+    manifest_digest: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    issue_codes: tuple[str, ...] = ()
+    missing_evidence: tuple[str, ...] = ()
+
+    @model_validator(mode="after")
+    def outcome_matches_evidence(self) -> SourceAcquisitionOutcomeV1:
+        if (self.snapshot_id is None) != (self.manifest_digest is None):
+            raise ValueError("acquisition snapshot identity and digest must be paired")
+        if self.quality_status is None and (
+            not self.issue_codes or self.snapshot_id is not None
+        ):
+            raise ValueError("failed acquisition requires issues without a snapshot")
+        if self.quality_status is QualityStatus.VERIFIED and self.snapshot_id is None:
+            raise ValueError("verified acquisition requires a stored snapshot")
+        for values in (self.issue_codes, self.missing_evidence):
+            if values != tuple(sorted(set(values))):
+                raise ValueError("acquisition diagnostics must be canonical")
+        return self
+
+
 class SourcePreparationEvidenceV1(StrictModel):
     protocol: Literal["source-preparation-v1"] = "source-preparation-v1"
     source_revision: str = Field(pattern=r"^[0-9a-f]{40}$")
@@ -145,11 +170,23 @@ class SourcePreparationEvidenceV1(StrictModel):
     )
     issue_codes: tuple[str, ...] = ()
     missing_evidence: tuple[str, ...] = ()
+    source_outcomes: tuple[SourceAcquisitionOutcomeV1, ...] = Field(
+        default=(), max_length=6, exclude_if=lambda value: not value
+    )
     preparation: AutomaticValuationPreparationV1 | None = None
     calculation: UncertaintyReportV1 | None = None
 
     @model_validator(mode="after")
     def outcome_matches_evidence(self) -> SourcePreparationEvidenceV1:
+        if len({outcome.request_digest for outcome in self.source_outcomes}) != len(
+            self.source_outcomes
+        ):
+            raise ValueError("source outcomes must retain distinct requests")
+        if self.status != "blocked" and any(
+            outcome.quality_status is not QualityStatus.VERIFIED
+            for outcome in self.source_outcomes
+        ):
+            raise ValueError("incomplete acquisitions require a blocked outcome")
         if (self.snapshot_id is None) != (self.snapshot_manifest_digest is None):
             raise ValueError("snapshot identity and digest must be paired")
         if self.preparation is not None and (
@@ -450,11 +487,89 @@ class SourcePreparationRunner:
             dependencies += (evidence.snapshot_manifest_digest,)
         if evidence.data_release_manifest_digest is not None:
             dependencies += (evidence.data_release_manifest_digest,)
+        dependencies += tuple(
+            sorted(
+                {
+                    digest
+                    for outcome in evidence.source_outcomes
+                    for digest in (outcome.request_digest, outcome.manifest_digest)
+                    if digest is not None
+                }
+            )
+        )
         return self._artifacts.put_with_receipt(
             f"source-preparation:{sha256_digest(evidence)}",
             evidence,
             dependencies,
         )
+
+    def _acquire_sources(
+        self,
+        plan: SourcePreparationPlanV2,
+        *,
+        actor_id: str,
+        organization_id: str,
+        correlation_id: str,
+        deadline_at: datetime,
+    ) -> tuple[tuple[SourceSnapshotV1, ...], tuple[SourceAcquisitionOutcomeV1, ...]]:
+        if self._acquisition is None:
+            raise ServiceError(
+                "SOURCE_ACQUISITION_UNAVAILABLE",
+                "SEC acquisition is not configured for this runner",
+                status_code=503,
+                retryable=False,
+            )
+        snapshots, outcomes = [], []
+        for request in plan.ingestions:
+            try:
+                acquired = self._acquisition.execute(
+                    request,
+                    caller_principal=actor_id,
+                    organization_id=organization_id,
+                    correlation_id=correlation_id,
+                    deadline_at=deadline_at,
+                )
+                snapshot = None
+                if acquired.quality_status is QualityStatus.VERIFIED:
+                    if acquired.snapshot_id is None:
+                        raise ValueError(
+                            "verified acquisition must identify a stored snapshot"
+                        )
+                    snapshot = self._application.snapshot(acquired.snapshot_id)
+            except ServiceError as error:
+                if error.retryable or error.status_code != 422:
+                    raise
+                outcome = SourceAcquisitionOutcomeV1(
+                    request_digest=sha256_digest(request),
+                    accession_number=request.filing.accession_number,
+                    quality_status=None,
+                    issue_codes=(error.code,),
+                    missing_evidence=tuple(sorted(request.required_fields)),
+                )
+            except SnapshotError as error:
+                if error.retryable:
+                    raise
+                outcome = SourceAcquisitionOutcomeV1(
+                    request_digest=sha256_digest(request),
+                    accession_number=request.filing.accession_number,
+                    quality_status=None,
+                    issue_codes=(error.code,),
+                    missing_evidence=tuple(sorted(request.required_fields)),
+                )
+            else:
+                outcome = SourceAcquisitionOutcomeV1(
+                    request_digest=sha256_digest(request),
+                    accession_number=request.filing.accession_number,
+                    quality_status=acquired.quality_status,
+                    snapshot_id=acquired.snapshot_id,
+                    manifest_digest=acquired.manifest_digest,
+                    issue_codes=tuple(sorted(set(acquired.issue_codes))),
+                    missing_evidence=tuple(sorted(set(acquired.missing_evidence))),
+                )
+                if snapshot is not None:
+                    snapshots.append(snapshot)
+            outcomes.append(outcome)
+        return tuple(snapshots), tuple(outcomes)
 
     def run(
         self,
@@ -489,42 +604,51 @@ class SourcePreparationRunner:
             candidate is not None
             and self._candidate_snapshot_available(plan, candidate)
         ):
-            if self._acquisition is None:
-                raise ServiceError(
-                    "SOURCE_ACQUISITION_UNAVAILABLE",
-                    "SEC acquisition is not configured for this runner",
-                    status_code=503,
-                    retryable=False,
+            snapshots, outcomes = self._acquire_sources(
+                plan,
+                actor_id=actor_id,
+                organization_id=organization_id,
+                correlation_id=correlation_id,
+                deadline_at=deadline_at,
+            )
+            if any(
+                outcome.quality_status is not QualityStatus.VERIFIED
+                for outcome in outcomes
+            ):
+                first_incomplete = next(
+                    outcome
+                    for outcome in outcomes
+                    if outcome.quality_status is not QualityStatus.VERIFIED
+                )
+                return self._persist(
+                    SourcePreparationEvidenceV1(
+                        source_revision=plan.source_revision,
+                        plan_digest=plan.digest,
+                        status="blocked",
+                        snapshot_id=first_incomplete.snapshot_id,
+                        snapshot_manifest_digest=first_incomplete.manifest_digest,
+                        issue_codes=tuple(
+                            sorted(
+                                {
+                                    code
+                                    for outcome in outcomes
+                                    for code in outcome.issue_codes
+                                }
+                            )
+                        ),
+                        missing_evidence=tuple(
+                            sorted(
+                                {
+                                    field
+                                    for outcome in outcomes
+                                    for field in outcome.missing_evidence
+                                }
+                            )
+                        ),
+                        source_outcomes=outcomes,
+                    )
                 )
             try:
-                snapshots = []
-                for request in plan.ingestions:
-                    acquired = self._acquisition.execute(
-                        request,
-                        caller_principal=actor_id,
-                        organization_id=organization_id,
-                        correlation_id=correlation_id,
-                        deadline_at=deadline_at,
-                    )
-                    if acquired.quality_status is not QualityStatus.VERIFIED:
-                        return self._persist(
-                            SourcePreparationEvidenceV1(
-                                source_revision=plan.source_revision,
-                                plan_digest=plan.digest,
-                                status="blocked",
-                                snapshot_id=acquired.snapshot_id,
-                                snapshot_manifest_digest=acquired.manifest_digest,
-                                issue_codes=tuple(sorted(set(acquired.issue_codes))),
-                                missing_evidence=tuple(
-                                    sorted(set(acquired.missing_evidence))
-                                ),
-                            )
-                        )
-                    if acquired.snapshot_id is None:
-                        raise ValueError(
-                            "verified acquisition must identify a stored snapshot"
-                        )
-                    snapshots.append(self._application.snapshot(acquired.snapshot_id))
                 snapshot = snapshots[0]
                 if len(snapshots) > 1:
                     repository = self._application.snapshot_repository
@@ -549,6 +673,7 @@ class SourcePreparationRunner:
                         plan_digest=plan.digest,
                         status="blocked",
                         issue_codes=(error.code,),
+                        source_outcomes=outcomes,
                     )
                 )
             except SnapshotError as error:
@@ -560,6 +685,7 @@ class SourcePreparationRunner:
                         plan_digest=plan.digest,
                         status="blocked",
                         issue_codes=(error.code,),
+                        source_outcomes=outcomes,
                     )
                 )
             if candidate is not None and snapshot.snapshot_id not in {

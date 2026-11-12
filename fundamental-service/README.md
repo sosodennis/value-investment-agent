@@ -123,3 +123,12 @@ The isolated container uses
 `value-investment-agent-270-integration`. It owns a project-scoped named volume
 for snapshots, content, and released artifacts and does not start the unrelated
 repository-wide stack.
+
+Incomplete source plans retain a canonical `source_outcomes` entry for every
+requested original, in plan order. Each entry binds the request digest and
+accession to its snapshot/digest, quality and missing-evidence diagnostics.
+Nonretryable source/evidence refusals allow remaining originals to be assessed;
+any incomplete acquisition keeps the report blocked and prevents history
+composition, release activation and calculation. Authorization, retryable and
+transport failures still propagate. Correlation IDs and created/reused transport
+status are excluded from this evidence, so cache reuse preserves report identity.
