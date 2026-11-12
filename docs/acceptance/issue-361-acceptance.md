@@ -19,6 +19,30 @@ Eligible candidate-history valuations can be provisional. Missing, conflicting,
 unreviewed, future, or unsupported evidence must retain reasons and abstain.
 No completed #351 through #355 acceptance is changed. #350 is outside scope.
 
+## Registered depreciation policy integration
+
+The ordinary merge `851cde947b6b0d7078f666f0018e8efa31034b1a` brings #410's
+registered continuing-depreciation policy (`5ae158804f178325aec29756d5a51ec17f3b9a38`)
+onto this issue branch and preserves the existing WIP/checkpoint history. The
+policy binds continuing D&A to exact registered original/fact multisets and
+keeps discontinued D&A excluded. Its current registry covers NEWMARKET source
+periods only; it does not approve or complete D&A mappings for Tandy, NVE, or
+another issuer.
+
+On exact HEAD `851cde947b6b0d7078f666f0018e8efa31034b1a`, the focused D&A/mapping
+suite passes **88 tests** and the full Fundamental Service suite passes **1,369
+tests, 68 skipped**, with one intentional duplicate-ZIP warning. [CI](https://github.com/sosodennis/value-investment-agent/actions/runs/43162410728)
+passes all 12 executed jobs; the release gate is skipped. Input digest
+`ef5430ccb0cdfc9817e225a5bd0207c1c8c4044c75ebe065b3eac68ec7a1f723`; output
+digest `6aaa7da7bdf442a1293881a3d1bc49a7ed4ba5c3977a1898261f4a5ad2e9191e`.
+Command output hashes and the locked runtime digest are retained in the
+`registered_depreciation_merge_increment` checkpoint entry.
+
+This verifies code integration only. No Tandy/NVE numerical case, market quote,
+source-complete release, authentic exact-input approval, or installed 19-gate
+flow is established by this checkpoint. `supported_history_threshold` remains
+null.
+
 ## Automatic source bootstrap checkpoint
 
 Exact implementation `f1634cf17ea135a84f25caa564fdd72ca1329921` adds a
