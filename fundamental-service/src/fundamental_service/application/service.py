@@ -62,6 +62,8 @@ from ..source_admission_evidence import load_release_source_admissions
 from ..market_source_selection import MarketSourceError, verify_observed_market_inputs
 from ..market_reference_evidence import load_release_market_reference_selection
 from ..market_reference_selection import IssuerMarketReferenceSelectionV1
+from ..terminal_growth import TerminalGrowthSelectionV1
+from ..terminal_growth_evidence import load_release_terminal_growth_selection
 from ..fiscal_periods import resolve_fiscal_periods
 from ..governance import ModelInventory
 from ..history_composition import verify_history_components
@@ -159,6 +161,7 @@ def _approved_market_policy(
     currency: str | None = None,
     source_admissions: tuple[SourceAdmissionV1, ...] = (),
     reference_selection: IssuerMarketReferenceSelectionV1 | None = None,
+    terminal_selection: TerminalGrowthSelectionV1 | None = None,
 ) -> ApprovedMarketPolicyInputsV1 | None:
     """Translate a complete released market policy into preparation evidence."""
 
@@ -185,6 +188,8 @@ def _approved_market_policy(
         )
 
     def trace_for(role: str) -> TraceV1:
+        if role == "terminal_growth" and terminal_selection is not None:
+            return terminal_selection.trace
         if role in observed_traces:
             return observed_traces[role]
         evidence = next(
@@ -1264,12 +1269,20 @@ class FundamentalApplication:
                 admissions=source_admissions,
                 artifacts=self.artifact_store,
             )
+            terminal_selection = load_release_terminal_growth_selection(
+                self._data_release_manifest(request.data_release_manifest_digest),
+                snapshot=snapshot,
+                policy=policy,
+                admissions=source_admissions,
+                artifacts=self.artifact_store,
+            )
             market_policy = _approved_market_policy(
                 policy,
                 valuation_timestamp=snapshot.valuation_timestamp,
                 currency=snapshot.identity.currency,
                 source_admissions=source_admissions,
                 reference_selection=reference_selection,
+                terminal_selection=terminal_selection,
             )
         except (MarketSourceError, DataReleaseError, SnapshotError) as error:
             raise ServiceError(

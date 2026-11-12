@@ -102,6 +102,24 @@ beta remains a reference, and country tax cannot replace the #352 composer's
 historical normalized tax. Complete beta, debt-cost, capital-weight and terminal
 policies still require their own evidence.
 
+For source-derived stable terminal growth, release one canonical
+`issuer_terminal_growth_plan` and pin its hash in the effective deployment
+policy's `source_refs`. The plan binds issuer, USD currency, valuation timestamp,
+GDP horizon, maximum annual-period age and the long-term rate-selection rule.
+The `nominal-gdp-riskfree-ceiling-v1` rule chooses the lower of the admitted
+nominal GDP CAGR and long-term risk-free rate. It uses the existing macro ports
+and GDP derivation, independently of the provider. The same observed risk-free
+value must be used by WACC; the #352 composer retains its growth/discount checks.
+
+This terminal value is an explicit policy assumption. Its evidence uses
+`approved_policy`, preserves original and selection/plan digests, and does not
+claim observed issuer growth or a supported history threshold. Both serving and
+the independent canary reproduce the plan and sources; changed values, traces,
+unapproved/missing plans and unavailable/stale/conflicting GDP or rates refuse.
+An incomplete latest GDP vintage cannot fall back to an older complete one.
+Use `terminal_growth_evidence(selection)` when constructing the immutable
+deployment policy; supplying a self-hashed value alone cannot satisfy this path.
+
 ## SEC ingestion contract
 
 `POST /v1/data/ingestions` is the authenticated, synchronous `fundamental.v1`

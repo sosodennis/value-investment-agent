@@ -58,6 +58,11 @@ from .market_reference_evidence import (
     load_release_market_reference_selection,
 )
 from .market_source_selection import MarketSourceError, verify_observed_market_inputs
+from .terminal_growth_evidence import (
+    read_release_terminal_growth_plan,
+    load_release_terminal_growth_selection,
+    requires_terminal_growth_plan,
+)
 from .policies import (
     PolicyRegistry,
     PolicyError,
@@ -190,13 +195,41 @@ class DataReleaseCanaryRunner:
         )
         market_policy_checks = []
         plan = read_release_market_reference_plan(manifest, artifacts=self._artifacts)
-        if plan is not None:
+        terminal_plan = read_release_terminal_growth_plan(
+            manifest, artifacts=self._artifacts
+        )
+        if terminal_plan is None and self._policy_registry is not None:
+            for candidate in self._policy_registry.policies():
+                if not requires_terminal_growth_plan(candidate):
+                    continue
+                for ref in manifest.snapshot_refs:
+                    snapshot = self._snapshots.get(ref.snapshot_id)
+                    if not isinstance(snapshot, SourceSnapshotV1):
+                        continue
+                    try:
+                        effective = self._policy_registry.select_policy(
+                            model_id=candidate.model_id,
+                            model_version=candidate.model_version,
+                            valuation_timestamp=snapshot.valuation_timestamp,
+                            policy_id=None,
+                        )
+                    except PolicyError:
+                        continue
+                    load_release_terminal_growth_selection(
+                        manifest,
+                        snapshot=snapshot,
+                        policy=effective,
+                        admissions=admissions,
+                        artifacts=self._artifacts,
+                    )
+        declared_plan = plan or terminal_plan
+        if declared_plan is not None:
             if self._policy_registry is None:
                 raise DataReleaseError(
                     "MARKET_REFERENCE_POLICY_UNAVAILABLE",
                     "reference canary requires configured deployment policy authority",
                 )
-            declared_policy = self._policy_registry.policy(plan.policy_id)
+            declared_policy = self._policy_registry.policy(declared_plan.policy_id)
             if declared_policy is None or declared_policy.market_inputs is None:
                 raise DataReleaseError(
                     "MARKET_REFERENCE_POLICY_UNAVAILABLE",
@@ -223,6 +256,13 @@ class DataReleaseCanaryRunner:
                         admissions=admissions,
                         artifacts=self._artifacts,
                     )
+                    terminal_selection = load_release_terminal_growth_selection(
+                        manifest,
+                        snapshot=snapshot,
+                        policy=policy,
+                        admissions=admissions,
+                        artifacts=self._artifacts,
+                    )
                     if policy.market_inputs is None:
                         raise DataReleaseError(
                             "MARKET_REFERENCE_POLICY_UNAVAILABLE",
@@ -235,13 +275,19 @@ class DataReleaseCanaryRunner:
                         currency=snapshot.identity.currency,
                         reference_selection=selection,
                     )
-                    assert selection is not None
+                    selection_pins = {}
+                    if selection is not None:
+                        selection_pins["reference_selection"] = selection.output_digest
+                    if terminal_selection is not None:
+                        selection_pins["terminal_selection"] = (
+                            terminal_selection.output_digest
+                        )
                     market_policy_checks.append(
                         sha256_digest(
                             {
                                 "snapshot_id": snapshot.snapshot_id,
                                 "policy_digest": policy.policy_digest,
-                                "reference_selection": selection.output_digest,
+                                **selection_pins,
                             }
                         )
                     )
