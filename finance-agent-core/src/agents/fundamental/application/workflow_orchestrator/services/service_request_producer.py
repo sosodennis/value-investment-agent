@@ -31,8 +31,8 @@ _MODEL_BY_SELECTION = {
     "dcf_growth": "transition_fcff_dcf",
 }
 _MODEL_VERSION = {
-    "fcff_dcf": "fcff_dcf-v1",
-    "transition_fcff_dcf": "transition_fcff_dcf-v1",
+    "fcff_dcf": "fcff_dcf-v2",
+    "transition_fcff_dcf": "transition_fcff_dcf-v2",
 }
 _ANNUAL_DURATION_FIELDS = (
     "revenue",
@@ -59,6 +59,7 @@ _ANNUAL_INSTANT_FIELDS = (
 )
 _POINT_IN_TIME_FACT_FIELDS = (
     "cash_and_equivalents",
+    "non_operating_assets",
     "current_interest_bearing_debt",
     "long_term_interest_bearing_debt",
     "current_operating_lease_liabilities",

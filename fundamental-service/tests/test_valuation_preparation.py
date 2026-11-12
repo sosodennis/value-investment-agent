@@ -101,6 +101,7 @@ def _facts() -> tuple:
     )
     point_fields = (
         "cash_and_equivalents",
+        "non_operating_assets",
         "current_interest_bearing_debt",
         "long_term_interest_bearing_debt",
         "current_operating_lease_liabilities",
@@ -191,9 +192,9 @@ def _prepare(
         (*facts, *dilution.facts),
         snapshot=snapshot,
         model_id=model_id,
-        model_version=f"{model_id}-v1",
-        policy_id="fcff_dcf-us-gaap-public-v1",
-        policy_version="fcff_dcf-v1-quality-v1",
+        model_version=f"{model_id}-v2",
+        policy_id="fcff_dcf-us-gaap-public-v2",
+        policy_version="fcff_dcf-v2-quality-v1",
         data_release_manifest_digest=RELEASE_DIGEST,
         market_policy=market_policy,
         equity_dilution_evidence=dilution,
@@ -321,7 +322,7 @@ def test_operating_lease_balances_are_disclosed_without_an_equity_deduction(mode
     assert results[0].intrinsic_value == results[1].intrinsic_value
     assert results[0].per_share_value == results[1].per_share_value
     assert changed.input.assumptions.capital_bridge.lease_liabilities == Decimal("20")
-    assert changed.input.provenance.preparation_version == "fcff-forecast-composer-v4"
+    assert changed.input.provenance.preparation_version == "fcff-forecast-composer-v5"
     lease_evidence = next(
         item
         for item in changed.assumptions_evidence

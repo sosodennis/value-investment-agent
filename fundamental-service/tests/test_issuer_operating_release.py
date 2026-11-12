@@ -248,7 +248,7 @@ def fixture(tmp_path):
         "required_fields": requirement.required_fact_fields,
         "artifact_refs": (raw_ref, index_ref, archive_ref, integrity_ref, review_ref),
         "model_id": "fcff_dcf",
-        "model_version": "fcff_dcf-v1",
+        "model_version": "fcff_dcf-v2",
         "policy_id": "test-only-policy",
         "policy_version": "test-only-policy-v1",
         "mapping_version": "test-issuer-mapping-v1",

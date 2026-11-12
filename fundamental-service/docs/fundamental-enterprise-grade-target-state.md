@@ -1190,6 +1190,39 @@ The binding decisions for the initial service release are recorded in section 24
 
 Ownership is fixed as follows: contracts and canonical facts remain under the Fundamental service until another service has a demonstrated need for a shared contract; mapping approval belongs to the Fundamental data domain and uses a versioned deterministic policy, a separately identified trusted machine key, and source-bound observation scopes; supported automatic decisions must be reproduced by the read-only release canary; unsupported, missing and conflicting evidence abstains; retained independent human reviews remain valid historical evidence but are not a mandatory mapping gate; the independent challenger must be maintained separately from production calculation code and reviewed by someone other than the model implementer; raw snapshots remain immutable while any valuation or calibration artifact references them, and unreferenced failed/preparation snapshots may be removed after 90 days. Source-specific terms take precedence over this retention rule.
 
+### 25.10 Non-operating assets in the FCFF bridge
+
+The current `fcff_dcf-v2` and `transition_fcff_dcf-v2` models use
+`calculator-v2` and `fcff-forecast-composer-v5`. Requirements profiles v3 add
+the required instant role `non_operating_assets`; the full FCFF profile has
+32 scalar roles and transition FCFF additionally requires filed operating
+evidence. No history threshold is promoted by this change.
+
+`non_operating_assets` means the complete classified amount outside both cash
+and operating working capital. It is a required, finite, nonnegative currency
+amount; it has no zero default. Formal preparation selects a verified,
+release-bound fact at the cash balance date and from the same original. The
+assumption retains its fact ID, source hash, policy and date. Unknown scope,
+missing facts, future evidence and conflicting values abstain.
+
+Preparation rejects reuse of a positive cash or working-capital observation,
+including observations retained inside a computed accounting role. An explicit
+negative cash component in an approved total-minus-cash classification is an
+exclusion rather than a second positive asset. Structural overlap checks do not
+establish semantic completeness: the mapping policy must establish all included
+and excluded asset classes, investment receivables, and any cash-included funds
+from original evidence. The current direct automatic mapping policy has no rule
+that approves a complete non-operating asset role; it retains abstention.
+
+The existing calculator adds this amount once after operating enterprise value.
+The independent challenger and conservation check include the same declared
+bridge term. New model and policy identities prevent prior approvals from
+authorizing the changed inputs. Retained records are not rewritten; old model
+versions cannot be executed as the current graph. Synthetic bridge amounts and
+zero assumptions in engineering fixtures do not approve an actual issuer's
+classification or absence. #381 and #361 require real-source completion and
+independent review before closure.
+
 ## 26. Isolated service architecture decision
 
 ### 26.1 Decision

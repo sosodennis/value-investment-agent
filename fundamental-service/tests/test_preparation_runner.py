@@ -3,7 +3,7 @@ import hashlib
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from datetime import UTC, date, datetime, timedelta
-from decimal import Context, Inexact, ROUND_DOWN, localcontext
+from decimal import Context, Decimal, Inexact, ROUND_DOWN, localcontext
 from pathlib import Path
 from types import SimpleNamespace
 from uuid import uuid4
@@ -437,7 +437,7 @@ def test_released_source_uses_formal_composer_and_reuses_artifact_after_restart(
     assert prepared.status == "approval_required"
     assert prepared.preparation.status == "prepared"
     assert prepared.preparation.input.provenance.preparation_version == (
-        "fcff-forecast-composer-v4"
+        "fcff-forecast-composer-v5"
     )
     assert prepared.preparation.input.assumptions.capital_bridge.lease_liabilities == (
         20
@@ -1093,6 +1093,11 @@ def test_preparation_and_calculation_reuse_postgres_artifacts_after_restart_and_
         assert evidence.status == "calculated"
         assert evidence.calculation.base.per_share_value > 0
         assert evidence.calculation.base.quality_status is QualityStatus.PROVISIONAL
+        assert (
+            evidence.preparation.input.assumptions.capital_bridge.non_operating_assets
+            == Decimal(10)
+        )
+        assert evidence.calculation.base.model_version == "fcff_dcf-v2"
         assert evidence.preparation.equity_dilution.incremental_shares == (
             0 if empty_awards else 10
         )

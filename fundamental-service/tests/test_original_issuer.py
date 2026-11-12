@@ -443,7 +443,7 @@ def test_issuer_source_cannot_be_used_with_full_valuation_profile():
             issuer_facts(),
             snapshot=source,
             model_id="fcff_dcf",
-            model_version="fcff_dcf-v1",
+            model_version="fcff_dcf-v2",
             policy_id="fcff-policy",
             policy_version="policy-v1",
             data_release_manifest_digest="d" * 64,

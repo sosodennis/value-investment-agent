@@ -69,9 +69,9 @@ def prepare(
         **{
             "snapshot": snapshot(),
             "model_id": model_id,
-            "model_version": f"{model_id}-v1",
-            "policy_id": "fcff_dcf-us-gaap-public-v1",
-            "policy_version": "fcff_dcf-v1-quality-v1",
+            "model_version": f"{model_id}-v2",
+            "policy_id": "fcff_dcf-us-gaap-public-v2",
+            "policy_version": "fcff_dcf-v2-quality-v1",
             "mapping_version": "sec-canonical-mapping-v1",
             "data_release_manifest_digest": RELEASE_DIGEST,
             **changes,
@@ -147,7 +147,7 @@ def test_repeat_order_and_decimal_context_cannot_change_operating_identity(trapp
     (
         {"mapping_version": "reviewed-mapping-v2"},
         {"policy_version": "operating-policy-v2"},
-        {"model_version": "fcff_dcf-v2"},
+        {"model_version": "fcff_dcf-v3"},
         {"data_release_manifest_digest": "e" * 64},
     ),
 )
@@ -302,7 +302,7 @@ def test_operating_contract_cannot_promote_quality_or_threshold():
         with pytest.raises(ValidationError):
             OperatingForecastV1.model_validate_json(json.dumps(payload))
     full = valuation_requirements_profile("fcff_dcf")
-    assert len(full.required_fact_fields) == 31
+    assert len(full.required_fact_fields) == 32
     assert full.market_policy_input_roles
 
 
@@ -343,36 +343,44 @@ def test_unbound_source_and_future_snapshot_source_cannot_supply_missing_role():
 
 
 @pytest.mark.parametrize(
-    "case,expected",
+    "case,expected_status,expected_issue",
     (
         (
             "complete",
-            "e7c3c23657851c4db7b19fd2c66eb72a7aa1916c633a757dc1f17d5b00aa9bfa",
+            "prepared",
+            "HISTORY_THRESHOLD_UNVALIDATED",
         ),
         (
             "no_market",
-            "760537c1c06783a3023fda1c1c78618f8af354c1c2689d607efe3560b1ca088f",
+            "requires_input",
+            "MARKET_POLICY_INPUTS_MISSING",
         ),
         (
             "missing_capital",
-            "822ba8a3a7c07aebbf0fe3563b2186e54b1f0ebdc3636e43bf9f4daa10d69790",
+            "abstained",
+            "VALUATION_REQUIRED_FACTS_MISSING",
         ),
         (
             "missing_annual",
-            "c713acf339b6f91219eada4e8b767093cbae43cbbb05b2aad0525e6ba82fa2a6",
+            "abstained",
+            "VALUATION_REQUIRED_FACTS_MISSING",
         ),
         (
             "insufficient_history",
-            "973c6d397634ee2e6dadda4b959cf5154f0c63e639e5c7de2a6097678bcaa6fb",
+            "abstained",
+            "HISTORY_MINIMUM_PERIODS_UNAVAILABLE",
         ),
         (
             "transition_no_evidence",
-            "bf99cc66b92b06aa9044c5189d47247f66f718ee0ce45da816c59a2adc252896",
+            "abstained",
+            "VALUATION_REQUIRED_FACTS_MISSING",
         ),
     ),
 )
-def test_full_valuation_preparation_matches_pre_extraction_digest(case, expected):
-    """Baselines evaluated from f1b91656 before importing the shared stage."""
+def test_full_valuation_preparation_retains_failures_and_replays_current_version(
+    case, expected_status, expected_issue
+):
+    """Model v2 adds an explicit asset role; prior v1 identities are historical."""
 
     facts = _facts()
     if case in {"missing_capital", "missing_annual"}:
@@ -391,4 +399,14 @@ def test_full_valuation_preparation_matches_pre_extraction_digest(case, expected
         if case == "transition_no_evidence"
         else "fcff_dcf",
     )
-    assert result.preparation_digest == expected
+    assert result.status == expected_status
+    assert expected_issue in result.issue_codes
+    repeated = _prepare(
+        tuple(reversed(facts)),
+        market_policy=None if case == "no_market" else _market_policy(),
+        model_id="transition_fcff_dcf"
+        if case == "transition_no_evidence"
+        else "fcff_dcf",
+    )
+    assert canonical_bytes(repeated) == canonical_bytes(result)
+    assert result.model_version.endswith("-v2")

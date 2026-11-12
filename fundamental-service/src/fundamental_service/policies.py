@@ -592,7 +592,7 @@ def initial_policy_records() -> tuple[PolicyRecordV1, ...]:
                 **(
                     payload := {
                         "contract_version": "fundamental.v1",
-                        "policy_id": f"{model_id}-us-gaap-public-v1",
+                        "policy_id": f"{model_id}-us-gaap-public-v2",
                         "policy_version": f"{model_version}-quality-v1",
                         "profile_id": "us-gaap-public-v1",
                         "model_id": model_id,
@@ -612,8 +612,8 @@ def initial_policy_records() -> tuple[PolicyRecordV1, ...]:
             }
         )
         for model_id, model_version in (
-            ("fcff_dcf", "fcff_dcf-v1"),
-            ("transition_fcff_dcf", "transition_fcff_dcf-v1"),
+            ("fcff_dcf", "fcff_dcf-v2"),
+            ("transition_fcff_dcf", "transition_fcff_dcf-v2"),
         )
     )
 
@@ -999,7 +999,7 @@ def initial_model_specs() -> tuple[ModelSpecV1, ...]:
         "accounting_bases": ("us-gaap",),
         "required_evidence": ("issuer-filings", "capital-bridge", "golden-cohort"),
         "assumption_policy": "policy-v1-explicit-caller-assumptions",
-        "formula_graph": "calculator-v1-fcff",
+        "formula_graph": "calculator-v2-fcff",
         "numerical_policy": VALUATION_NUMERICAL_POLICY,
         "eligibility_policy": "quality-policy-v1",
         "abstention_policy": "abstain-on-missing-or-unverified-evidence-v1",
@@ -1017,7 +1017,7 @@ def initial_model_specs() -> tuple[ModelSpecV1, ...]:
         ),
         "source_register": ("sec-companyfacts", "sec-filing", "treasury-yields"),
         "capital_bridge_policy": (
-            "enterprise-value-plus-cash-minus-debt-and-dilution-v1"
+            "enterprise-value-plus-cash-and-nonoperating-assets-minus-claims-v2"
         ),
         "golden_cohort": "fundamental-engineering-cohort-v1",
         "challenger": "independent-verification-v1",
@@ -1033,12 +1033,12 @@ def initial_model_specs() -> tuple[ModelSpecV1, ...]:
     }
     return (
         ModelSpecV1.model_validate(
-            {"model_id": "fcff_dcf", "model_version": "fcff_dcf-v1", **common}
+            {"model_id": "fcff_dcf", "model_version": "fcff_dcf-v2", **common}
         ),
         ModelSpecV1.model_validate(
             {
                 "model_id": "transition_fcff_dcf",
-                "model_version": "transition_fcff_dcf-v1",
+                "model_version": "transition_fcff_dcf-v2",
                 "required_fields": (*required_fields, "filed_operating_evidence"),
                 "supported_archetypes": ("high_growth_non_financial",),
                 **{

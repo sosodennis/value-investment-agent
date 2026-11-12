@@ -386,7 +386,7 @@ def _policy_with_assumptions(assumptions) -> PolicyRecordV1:
         "policy_version": "fcff-policy-version-1",
         "profile_id": "us-gaap-public-v1",
         "model_id": "fcff_dcf",
-        "model_version": "fcff_dcf-v1",
+        "model_version": "fcff_dcf-v2",
         "assumptions": assumptions,
         "source_refs": ("public-policy-fixture",),
         "effective_at": datetime(1970, 1, 1, tzinfo=UTC),
@@ -557,13 +557,13 @@ def test_policy_read_returns_exact_version_and_unknown_policy_is_not_found():
     client = TestClient(create_app())
     response = client.request(
         "GET",
-        "/v1/policies/fcff_dcf-us-gaap-public-v1",
+        "/v1/policies/fcff_dcf-us-gaap-public-v2",
         headers=auth_headers(),
         json=make_internal_envelope({}),
     )
     assert response.status_code == 200
-    assert response.json()["result"]["policy_id"] == "fcff_dcf-us-gaap-public-v1"
-    assert response.json()["result"]["policy_version"] == "fcff_dcf-v1-quality-v1"
+    assert response.json()["result"]["policy_id"] == "fcff_dcf-us-gaap-public-v2"
+    assert response.json()["result"]["policy_version"] == "fcff_dcf-v2-quality-v1"
     operation = client.app.openapi()["paths"]["/v1/policies/{policy_id}"]["get"]
     assert "requestBody" in operation
     assert "PolicyRecordV1" in str(operation["responses"]["200"])
@@ -747,7 +747,7 @@ def test_policy_calculation_missing_release_and_unresolved_assumptions_are_stabl
 
     unsupported = base.model_dump(mode="json")
     unsupported["assumptions"] = {"terminal_growth": "0.02"}
-    unsupported["policy_id"] = "fcff_dcf-us-gaap-public-v1"
+    unsupported["policy_id"] = "fcff_dcf-us-gaap-public-v2"
     incomplete_validation = client.post(
         "/v1/valuation/validate-with-policy",
         headers=auth_headers(),
@@ -1032,7 +1032,7 @@ def test_policy_lookup_without_registry_is_retryable_unavailable():
 def test_new_internal_routes_reject_missing_or_invalid_signed_context():
     client = TestClient(create_app())
     missing_context = client.get(
-        "/v1/policies/fcff_dcf-us-gaap-public-v1",
+        "/v1/policies/fcff_dcf-us-gaap-public-v2",
         headers=auth_headers(),
     )
     assert missing_context.status_code == 400
@@ -1042,7 +1042,7 @@ def test_new_internal_routes_reject_missing_or_invalid_signed_context():
     invalid_context["context"]["signature"] = "0" * 64
     response = client.request(
         "GET",
-        "/v1/policies/fcff_dcf-us-gaap-public-v1",
+        "/v1/policies/fcff_dcf-us-gaap-public-v2",
         headers=auth_headers(),
         json=invalid_context,
     )
@@ -1765,7 +1765,7 @@ def test_valuation_evidence_read_uses_profile_roles_and_abstains_on_missing_fact
     assert result["facts"][0]["fact_id"] == fact.fact_id
     assert "cash_and_equivalents" in result["missing_fields"]
     assert "DATA_RELEASE_FIELDS_UNAVAILABLE" in result["issue_codes"]
-    assert result["profile_id"] == "fcff-valuation-requirements-v2"
+    assert result["profile_id"] == "fcff-valuation-requirements-v3"
 
     preparation = TestClient(app).post(
         "/v1/valuation/prepare",

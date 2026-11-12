@@ -185,6 +185,7 @@ _ANNUAL_INSTANT_FIELDS = (
 
 _POINT_IN_TIME_FACT_FIELDS = (
     "cash_and_equivalents",
+    "non_operating_assets",
     "current_interest_bearing_debt",
     "long_term_interest_bearing_debt",
     "current_operating_lease_liabilities",
@@ -210,8 +211,8 @@ _MARKET_POLICY_INPUT_ROLES = (
 
 _PROFILES = {
     "fcff_dcf": ValuationRequirementsProfileV1(
-        profile_id="fcff-valuation-requirements-v2",
-        profile_version="fcff-valuation-requirements-v2",
+        profile_id="fcff-valuation-requirements-v3",
+        profile_version="fcff-valuation-requirements-v3",
         model_id="fcff_dcf",
         annual_duration_fields=_ANNUAL_DURATION_FIELDS,
         annual_instant_fields=_ANNUAL_INSTANT_FIELDS,
@@ -220,8 +221,8 @@ _PROFILES = {
         supporting_fact_fields=AWARD_FACT_FIELDS,
     ),
     "transition_fcff_dcf": ValuationRequirementsProfileV1(
-        profile_id="transition-fcff-valuation-requirements-v2",
-        profile_version="transition-fcff-valuation-requirements-v2",
+        profile_id="transition-fcff-valuation-requirements-v3",
+        profile_version="transition-fcff-valuation-requirements-v3",
         model_id="transition_fcff_dcf",
         annual_duration_fields=_ANNUAL_DURATION_FIELDS,
         annual_instant_fields=_ANNUAL_INSTANT_FIELDS,

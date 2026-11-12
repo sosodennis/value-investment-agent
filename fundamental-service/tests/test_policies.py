@@ -51,7 +51,7 @@ def policy() -> PolicyRecordV1:
         "policy_version": "policy-v1",
         "profile_id": "us-gaap-public-v1",
         "model_id": "fcff_dcf",
-        "model_version": "fcff_dcf-v1",
+        "model_version": "fcff_dcf-v2",
         "assumptions": base,
         "source_refs": ("public-policy",),
         "effective_at": datetime(2026, 1, 1, tzinfo=timezone.utc),

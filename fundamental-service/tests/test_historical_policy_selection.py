@@ -39,7 +39,7 @@ def _select(
 ) -> PolicyRecordV1:
     return registry.select_policy(
         model_id="fcff_dcf",
-        model_version="fcff_dcf-v1",
+        model_version="fcff_dcf-v2",
         valuation_timestamp=_at(2016),
         policy_id=policy_id,
     )

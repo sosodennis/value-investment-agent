@@ -1186,7 +1186,7 @@ class FundamentalApplication:
 
         evidence = self.read_valuation_evidence(request)
         snapshot = self.snapshot(request.snapshot_id)
-        model_version = f"{request.model_id}-v1"
+        model_version = f"{request.model_id}-v2"
         policy = None
         if self.policy_registry is not None:
             try:
@@ -1207,7 +1207,7 @@ class FundamentalApplication:
         policy_id = (
             policy.policy_id
             if policy is not None
-            else (f"{request.model_id}-us-gaap-public-v1")
+            else (f"{request.model_id}-us-gaap-public-v2")
         )
         policy_version = policy.policy_version if policy is not None else "unresolved"
         market_policy = _approved_market_policy(

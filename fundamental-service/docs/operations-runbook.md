@@ -302,7 +302,22 @@ valuation artifact, and rerun its pinned preparation/calculation. Compare all
 source/input/output digests with the recorded evidence. A successful copy alone
 does not establish full-flow acceptance.
 
-Automatic FCFF inputs identify `fcff-forecast-composer-v4` in
+The current FCFF models are `fcff_dcf-v2` and `transition_fcff_dcf-v2`, with
+policy IDs `fcff_dcf-us-gaap-public-v2` and
+`transition_fcff_dcf-us-gaap-public-v2`. The graph is `calculator-v2`; requirements
+profiles `fcff-valuation-requirements-v3` and
+`transition-fcff-valuation-requirements-v3` add required `non_operating_assets`.
+Supply a complete classified amount excluding cash and operating working capital
+from the same original and instant as cash. Missing scope remains missing;
+never seed a zero to make an old release usable. The direct automatic mapper
+does not approve this aggregate role. Preserve its abstention until an owning
+classification policy is supported. Preparation rejects positive observation
+overlap with cash/working capital; these checks do not infer complete semantics.
+Existing artifacts and policies remain retained under their original identities.
+Old model versions are refused by the current graph. Prepare the new model input
+and obtain its exact caller approval before calculation.
+
+Automatic FCFF inputs identify `fcff-forecast-composer-v5` in
 `provenance.preparation_version`, which participates in the input digest and
 caller approval. This composer implements the declared `lease-treatment-v1`:
 only current/noncurrent finance lease obligations enter the equity-bridge lease
@@ -313,7 +328,7 @@ Existing artifacts and approvals retain their original identities; prepare and
 approve the corrected input before calculating it. Unknown lease roles still
 abstain, and history thresholds remain unset.
 
-Composer v4 retains the isolation of historical metrics, automatic preparation, manual
+Composer v5 retains the isolation of historical metrics, automatic preparation, manual
 overrides and uncertainty estimation from caller/thread Decimal state. Calculator
 and uncertainty execution use the declared `decimal-50-end-of-year-v1` policy:
 50 digits, HALF_EVEN, exponent bounds -999999 to 999999, clamp 0, and traps for
@@ -322,12 +337,12 @@ fresh local context, restores caller settings/flags even on refusal, and never
 changes the importing thread's context. Same-runtime result bytes under the
 previous intended 50-digit context remain unchanged for the same calculator inputs.
 The preparation version changes the prepared input identity, so existing approvals
-cannot authorize a newly prepared v4 input. The prior target-table precision34 was inconsistent with the released
+cannot authorize a newly prepared input. The prior target-table precision34 was inconsistent with the released
 model inventory; moving to 34 requires a separately versioned numerical/model
 policy and replay evidence. Stored artifacts are never rewritten.
 
-Requirements profiles `fcff-valuation-requirements-v2` and
-`transition-fcff-valuation-requirements-v2` replace the precomputed numeric
+Earlier requirements profiles `fcff-valuation-requirements-v2` and
+`transition-fcff-valuation-requirements-v2` replaced the precomputed numeric
 `dilutive_instruments` input with a release-bound award inventory. Raw observations
 use `equity_award_quantity`, `equity_award_unrecognized_compensation`, and, for
 options, `equity_award_exercise_price`. Each class retains its original facts and

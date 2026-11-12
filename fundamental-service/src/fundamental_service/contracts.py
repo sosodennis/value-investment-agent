@@ -1191,6 +1191,10 @@ class WaccAssumptionsV1(StrictModel):
 
 class CapitalBridgeAssumptionsV1(StrictModel):
     cash: Decimal
+    non_operating_assets: Decimal = Field(
+        ge=0,
+        description="Complete non-operating assets excluding cash and operating working capital",
+    )
     debt: Decimal
     preferred_stock: Decimal
     lease_liabilities: Decimal
@@ -1609,6 +1613,7 @@ class WaccAssumptionOverridesV1(StrictModel):
 
 class CapitalBridgeAssumptionOverridesV1(StrictModel):
     cash: Decimal | None = None
+    non_operating_assets: Decimal | None = Field(default=None, ge=0)
     debt: Decimal | None = None
     preferred_stock: Decimal | None = None
     lease_liabilities: Decimal | None = None

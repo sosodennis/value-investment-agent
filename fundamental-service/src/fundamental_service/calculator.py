@@ -110,6 +110,10 @@ def calculate(
             "MODEL_UNSUPPORTED",
             f"model {request.model_id} is not released for the current profile",
         )
+    if request.model_version != f"{request.model_id}-v2":
+        raise CalculationRefusal(
+            "MODEL_VERSION_UNSUPPORTED", "the current FCFF graph requires model v2"
+        )
     quality_status = request.quality.status
     if quality_status is not QualityStatus.VERIFIED and not (
         allow_provisional and quality_status is QualityStatus.PROVISIONAL
@@ -212,6 +216,7 @@ def calculate(
     equity = (
         enterprise
         + bridge.cash
+        + bridge.non_operating_assets
         - bridge.debt
         - bridge.preferred_stock
         - bridge.lease_liabilities
@@ -242,7 +247,7 @@ def calculate(
             ),
             _node(
                 "equity_value",
-                "enterprise_value + cash - debt - preferred - leases - NCI",
+                "enterprise_value + cash + non_operating_assets - debt - preferred - leases - NCI",
                 equity,
                 "currency",
                 ("enterprise_value",),
@@ -269,7 +274,7 @@ def calculate(
     input_digest = expected_input_digest
     result = CalculationArtifactV1(
         contract_version="fundamental.v1",
-        calculation_version="calculator-v1",
+        calculation_version="calculator-v2",
         calculation_status=CalculationStatus.COMPLETED,
         quality_status=quality_status,
         input_digest=input_digest,

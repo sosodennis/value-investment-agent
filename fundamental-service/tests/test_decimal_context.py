@@ -77,7 +77,7 @@ def test_calculation_preserves_released_bytes_and_caller_context(caller_context)
     with localcontext(Context(prec=50, rounding=ROUND_HALF_EVEN)):
         expected = calculate(request)
     assert expected.result_hash == (
-        "113911627cf76c090aeffe0a4c3731cb915def7391ae768493343906dc7a38a1"
+        "6eeb91bfa3f8c98569cf5d8c1a2fa1045af0b66c42dcfa23fb490bb905954012"
     )
     with localcontext(caller_context) as context:
         before = _state(context)

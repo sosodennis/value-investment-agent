@@ -146,7 +146,7 @@ class _Client:
                     "data_release_manifest_digest"
                 ],
                 "source_selection_policy": "pit-v1",
-                "coverage_profile": "fcff-valuation-requirements-v2",
+                "coverage_profile": "fcff-valuation-requirements-v3",
             },
             "historical_facts": list(self.ingestion["canonical_fact_ids"]),
             "assumptions": {
@@ -164,8 +164,8 @@ class _Client:
                 "policy_version": "sec-public-pit-v1",
             },
             "model_id": input_payload["model_id"],
-            "model_version": "fcff_dcf-v1",
-            "policy_id": "fcff_dcf-us-gaap-public-v1",
+            "model_version": "fcff_dcf-v2",
+            "policy_id": "fcff_dcf-us-gaap-public-v2",
             "input_digest": None,
         }
         self.calls.append(("prepare_valuation", dict(input_payload)))
@@ -174,11 +174,11 @@ class _Client:
                 "contract_version": "fundamental.v1",
                 "status": "prepared",
                 "model_id": input_payload["model_id"],
-                "model_version": "fcff_dcf-v1",
-                "profile_id": "fcff-valuation-requirements-v2",
+                "model_version": "fcff_dcf-v2",
+                "profile_id": "fcff-valuation-requirements-v3",
                 "profile_digest": "d" * 64,
-                "policy_id": "fcff_dcf-us-gaap-public-v1",
-                "policy_version": "fcff_dcf-v1-quality-v1",
+                "policy_id": "fcff_dcf-us-gaap-public-v2",
+                "policy_version": "fcff_dcf-v2-quality-v1",
                 "quality_status": "provisional",
                 "issue_codes": ["HISTORY_THRESHOLD_UNVALIDATED"],
                 "missing_evidence": [],
@@ -260,8 +260,8 @@ def _request() -> dict[str, object]:
             "policy_version": "sec-public-pit-v1",
         },
         "model_id": "fcff_dcf",
-        "model_version": "fcff_dcf-v1",
-        "policy_id": "fcff_dcf-us-gaap-public-v1",
+        "model_version": "fcff_dcf-v2",
+        "policy_id": "fcff_dcf-us-gaap-public-v2",
     }
 
 
@@ -312,6 +312,7 @@ async def test_producer_resolves_identity_then_ingests_and_pins_request() -> Non
         "accrued_operating_liabilities",
         "deferred_revenue",
         "cash_and_equivalents",
+        "non_operating_assets",
         "current_interest_bearing_debt",
         "long_term_interest_bearing_debt",
         "current_operating_lease_liabilities",
@@ -354,8 +355,8 @@ async def test_producer_enriches_compact_caller_request_without_inventing_inputs
         "service-owned fixture assumptions"
     )
     assert prepared.valuation_request["model_id"] == "fcff_dcf"
-    assert prepared.valuation_request["model_version"] == "fcff_dcf-v1"
-    assert prepared.valuation_request["policy_id"] == "fcff_dcf-us-gaap-public-v1"
+    assert prepared.valuation_request["model_version"] == "fcff_dcf-v2"
+    assert prepared.valuation_request["policy_id"] == "fcff_dcf-us-gaap-public-v2"
     assert prepared.valuation_request["quality"] == {"status": "provisional"}
     assert prepared.valuation_request["provenance"] == {
         "snapshot_id": "snapshot-aapl-1",
@@ -371,7 +372,7 @@ async def test_producer_enriches_compact_caller_request_without_inventing_inputs
         "data_snapshot_id": "snapshot-aapl-1",
         "data_release_manifest_digest": "b" * 64,
         "source_selection_policy": "pit-v1",
-        "coverage_profile": "fcff-valuation-requirements-v2",
+        "coverage_profile": "fcff-valuation-requirements-v3",
     }
     assert [operation for operation, _ in client.calls] == [
         "resolve_identity",
@@ -436,7 +437,7 @@ async def test_transition_request_adds_filed_evidence_to_complete_profile() -> N
 
     ingestion_payload = client.calls[1][1]
     assert ingestion_payload["required_fields"][-1] == "filed_operating_evidence"
-    assert len(ingestion_payload["required_fields"]) == 32
+    assert len(ingestion_payload["required_fields"]) == 33
 
 
 @pytest.mark.asyncio
@@ -556,6 +557,7 @@ async def test_facts_only_projection_uses_base_evidence_for_growth_model() -> No
         "accrued_operating_liabilities",
         "deferred_revenue",
         "cash_and_equivalents",
+        "non_operating_assets",
         "current_interest_bearing_debt",
         "long_term_interest_bearing_debt",
         "current_operating_lease_liabilities",

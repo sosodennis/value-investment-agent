@@ -56,7 +56,7 @@ def _prepare(fixture, evidence):
         fixture.facts.list(),
         snapshot=fixture.snapshot,
         model_id="fcff_dcf",
-        model_version="fcff_dcf-v1",
+        model_version="fcff_dcf-v2",
         policy_id="synthetic-v1",
         policy_version="synthetic-v1",
         data_release_manifest_digest=fixture.manifest.manifest_digest,

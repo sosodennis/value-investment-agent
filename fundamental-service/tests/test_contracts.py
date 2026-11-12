@@ -40,6 +40,7 @@ def assumptions() -> AssumptionsV1:
         terminal_growth=Decimal("0.02"),
         capital_bridge=CapitalBridgeAssumptionsV1(
             cash=Decimal("10"),
+            non_operating_assets=Decimal("0"),
             debt=Decimal("5"),
             preferred_stock=Decimal("0"),
             lease_liabilities=Decimal("0"),
@@ -79,7 +80,7 @@ def valuation() -> ValuationInputV1:
             "taxonomy_version": "taxonomy-v1",
         },
         model_id="fcff_dcf",
-        model_version="fcff_dcf-v1",
+        model_version="fcff_dcf-v2",
     )
 
 

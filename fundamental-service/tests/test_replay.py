@@ -28,7 +28,7 @@ def test_offline_replay_matches_and_reports_first_difference(tmp_path: Path):
     expected = calculate(request)
     report = replay_calculation(request, expected)
     assert report.status == "match"
-    changed = request.model_copy(update={"model_version": "fcff_dcf-v2"}).with_digest()
+    changed = request.model_copy(update={"model_version": "fcff_dcf-v3"}).with_digest()
     mismatch = replay_calculation(changed, expected)
     assert mismatch.status == "mismatch"
     assert mismatch.first_difference
@@ -190,7 +190,7 @@ def test_release_manifest_is_stable_and_pins_dependencies():
         runtime_version="python-3.11",
         parser_version="parser-1",
         taxonomy_version="taxonomy-1",
-        model_version="fcff_dcf-v1",
+        model_version="fcff_dcf-v2",
         policy_version="policy-1",
         calculation_version="calculator-v1",
         source_content_hashes=("a" * 64,),

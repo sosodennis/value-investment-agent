@@ -113,6 +113,10 @@ def independent_calculate(request: ValuationInputV1) -> IndependentResult:
         raise VerificationRefusal(
             "MODEL_UNSUPPORTED", "model is outside the V1 profile"
         )
+    if request.model_version != f"{request.model_id}-v2":
+        raise VerificationRefusal(
+            "MODEL_VERSION_UNSUPPORTED", "the current FCFF graph requires model v2"
+        )
     if request.model_id == "transition_fcff_dcf" and (
         "filed_operating_evidence" not in request.historical_facts
     ):
@@ -267,6 +271,7 @@ def independent_calculate(request: ValuationInputV1) -> IndependentResult:
         equity = (
             enterprise
             + bridge.cash
+            + bridge.non_operating_assets
             - bridge.debt
             - bridge.preferred_stock
             - bridge.lease_liabilities
@@ -290,7 +295,7 @@ def independent_calculate(request: ValuationInputV1) -> IndependentResult:
                 ),
                 _node(
                     "equity_value",
-                    "enterprise_value + cash - debt - preferred - leases - NCI",
+                    "enterprise_value + cash + non_operating_assets - debt - preferred - leases - NCI",
                     equity,
                     "currency",
                     ("enterprise_value",),
@@ -408,6 +413,7 @@ def invariant_findings(
     expected_equity = (
         values["enterprise_value"].value
         + bridge.cash
+        + bridge.non_operating_assets
         - bridge.debt
         - bridge.preferred_stock
         - bridge.lease_liabilities
