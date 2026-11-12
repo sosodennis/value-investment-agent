@@ -19,6 +19,40 @@ Eligible candidate-history valuations can be provisional. Missing, conflicting,
 unreviewed, future, or unsupported evidence must retain reasons and abstain.
 No completed #351 through #355 acceptance is changed. #350 is outside scope.
 
+## Source-bound industry capital adoption
+
+Implementation `f52933472f09da8b4d45b14ada60895dcf8b37a7` adopts four selected
+industry references under an explicit USD proxy rule pinned by the issuer/time
+deployment policy. Beta and borrowing cost retain their industry meanings;
+published debt/equity weights normalize only within a1e-12 representation
+tolerance under the existing numerical context. Interchangeable providers feed
+the same rule. Serving and the independent canary reproduce values and source
+traces before the official composer; no valuation formula changes.
+
+Exact validation passes **1,943 Service/PostgreSQL tests**, Ruff/format,
+22-source mypy, architecture and diff checks;11 optional external SEC-resource
+skips and one intentional ZIP warning remain. Focused source/policy/release
+coverage passes127 cases. Check input/output:
+`d9c1db6eedc3c4952d9fe2fe8e0db81479862236ebde0b82dc0f04af803b15de` /
+`d5fae2442435caeec6e392384624ef7e367de8eb41795740837cd7b3fae6e840`.
+
+The own18685/18686 image matches all100 installed Python/SQL sources. Actual
+NYU aggregate originals pass through a signed **synthetic issuer release**,
+independent canary and formal composer;10 altered-source/policy/authority cases
+refuse. Second, two concurrent processes and post-service-restart executions
+write zero artifacts, preserve identical digests and leave file hashes/sizes/
+mtimes unchanged. All42 unrelated containers remain unchanged. Installed wrapper
+input/output:
+`1156c8a07abdaa6e524f40d4a7423cf0ed64ce765bdc976afaabe346a917b83d` /
+`dfcf04bd22062d010fcb90fb16a535bc2c8c1719076caa7e4e64872dedd170f9`.
+
+Issuer classification and complete automatic market-policy generation, lawful
+quote, real accounting/award completeness and actual numerical recovery still
+remain. The source stack has no SEC identity configuration. These checks do not
+establish complete real valuation acceptance; threshold stays null and #370
+stays draft. The existing checkpoint retains exact commands and runtime pins;
+all raw/generated evidence remains outside Git.
+
 ## Interchangeable industry capital sources
 
 Implementation `40e61e493e42d2a05abe242990ea9d767323c5c6` adds industry equity
