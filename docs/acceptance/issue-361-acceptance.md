@@ -1679,3 +1679,53 @@ precision/parser-binding failures; production evidence gates were unchanged.
 Complete remaining accounting/awards, dated market-policy/quote, trusted release,
 exact caller approval, numerical recovery acceptance, independent review and
 merge/main validation remain outstanding. Keep #361 open and PR#370 draft.
+
+## Registered noncurrent liability reconciliation
+
+Implementation `e0679ee1286041d2f9859995c67fbd9350027282` registers the same
+two fixed NVE originals under `source-bound-us-gaap-v10`. The complete unnetted
+noncurrent liability partition equals total liabilities minus current
+liabilities minus noncurrent operating lease liabilities. Only an exactly zero
+residual supplies long-term interest-bearing debt and finance lease carrying
+amounts. Positive and negative residuals refuse allocation. All three original
+observations, contexts, periods, units, precision and source/mapping bindings
+remain in each derived fact. This establishes neither current debt nor annual
+finance lease expense. The provider ports and #352 valuation formulas are
+unchanged.
+
+At that exact commit, **2,091 Service/PostgreSQL tests** pass, with11 optional
+skips and one expected duplicate-ZIP warning. All97 changed production sources
+pass mypy; full Service Ruff/format, both architecture guards and diff checks
+pass. [CI43327372972](https://github.com/sosodennis/value-investment-agent/actions/runs/43327372972)
+passes all12 executed jobs; the release gate is skipped.
+
+The isolated SEC-enabled composition project matches all112 installed
+Python/SQL files. Preparation produces45 approved mappings,87 facts, two
+original snapshots and one composed snapshot. All45 trusted signatures and
+exact retained-input policy reconstructions pass. Previous checkpoints remain
+intact; totals are236 mappings,454 facts and15 snapshots. Required-role gaps
+decrease from11 to9. No release activates and numerical valuation remains
+**abstain**. Eligible valuations stay **provisional**, history sufficiency stays
+**underpowered**, and `supported_history_threshold=null`.
+
+Plan/output digests:
+`fcbb34f0afe2af1ac663823402fe1dad07be5a5d8894d9bcc1c9654d3921d45a` /
+`27ab071c0eb535699ad55c9fbaf13e5aab55e8429585897109c1b70721b65765`.
+Ordinary, service-restart and empty-store-restore repeats return the same
+artifact, `wrote=false`, zero SEC calls, and unchanged rows/hash/size/mtime.
+Portable backup
+`da52334db72bafb2e42bf021a74ddc2382841b83d0c61c0c60012a330b1ecc4f`
+and previous backups stay outside Docker. All77 unrelated baseline containers
+preserve ID/image/start. The atomic checkpoint writer also repeats unchanged.
+
+`nve_noncurrent_liability_increment` in the existing SEC preparation checkpoint
+records source/model/policy/runtime pins, exact commands, input/output digests
+and the corrected audit-harness issuer/security source mismatch. The production
+converter correctly refused that mismatched audit input; no evidence gate was
+relaxed. Generated originals, reports and backups remain outside Git.
+
+Remaining: complete accounting/award evidence, eligible dated market policy and
+quote, trusted release, authentic exact-input caller approval, real numerical
+repeat/concurrency/restart/restore, independent review/CI and merge/main
+verification. Keep #361 and its unresolved blockers open, PR#370 draft, and the
+canonical full-flow acceptance gates unverified.
