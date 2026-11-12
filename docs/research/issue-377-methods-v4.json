@@ -1,0 +1,109 @@
+{
+  "schema_version": "issue-377-executable-methods-v4",
+  "method_version": "fixed100-paired-percentile-bootstrap-v1",
+  "status": "reviewable_methods_not_approved_promotion_policy",
+  "analysis_scope": "exploratory_method_validation",
+  "known_outcome_inspection": "NEWMARKET_conditional_labels_and_errors_seen_before_v4_exact_cohort_losses_not_measured",
+  "fixed_manifest_digest": "448f496b10e51a2ed351a7a37deb36e0d4b9672c1fbc5ed3b0b845c8cd54da3a",
+  "selected_issuers": 100,
+  "filing_targets": 589,
+  "maximum_eligible_label_pairs": 90,
+  "legacy_minimum_complete_pairs": 100,
+  "legacy_gate_changed": false,
+  "models": [
+    "fcff_dcf",
+    "transition_fcff_dcf"
+  ],
+  "targets": [
+    "next_annual_revenue",
+    "next_annual_undiscounted_fcff"
+  ],
+  "history_years": [
+    3,
+    4,
+    5
+  ],
+  "hypotheses": {
+    "family_size": 32,
+    "mean_mase": 12,
+    "model_minus_naive": 12,
+    "shorter_minus_five": 8,
+    "common_cases": "same_issuer_origin_target_label_mapping_input_policy_model_version_scale_and_naive_error_all_three_arms"
+  },
+  "loss_observation_boundary": {
+    "signed_error": "forecast_minus_original_target_in_USD",
+    "naive_absolute_error": "absolute_last_preorigin_target_minus_original_target_in_USD",
+    "scale": "mean_absolute_one_step_naive_difference_of_three_common_preorigin_target_values",
+    "zero_missing_scale": "retain_raw_errors_unscorable_scaled_loss_no_epsilon",
+    "accounting_formula": "existing_Fundamental_352_only_not_implemented_here",
+    "comparison_key": "digest_of_common_issuer_origin_first_original_label_accession_source_mapping_model_composer_numerical_policy_and_input_policy_versions_excludes_history_arm_forecast_digest",
+    "evidence_digests": "separate_arm_specific_release_forecast_label_scale_source_artifacts",
+    "authority": "input_declarations_and_digests_do_not_authenticate_releases"
+  },
+  "labels": {
+    "exact_original": "eligible_for_declared_exact_descriptive_statistics",
+    "conditional_scenario": "retain_cell_exclude_from_exact_statistics_never_count_as_extra_issuer",
+    "missing_original_or_horizon_mismatch": "cannot_supply_scored_losses",
+    "first_subsequent": "unchanged_fixed_original_manifest_no_replacement"
+  },
+  "primary_policy": "one_declared_policy_per_model_target_shared_across_cases_no_policy_search_authority",
+  "bootstrap": {
+    "independent_unit": "issuer",
+    "replicates": 100000,
+    "alpha": "0.05",
+    "family_hypotheses": 32,
+    "tail_probability": "0.05/(2*32)",
+    "method": "paired_percentile_nominal_Bonferroni",
+    "seed": "SHA256_canonical_protocol_digest_panel_digest_model_target_sorted_common_issuers_integer_big_endian",
+    "rng": "CPython_random.Random_MT19937_integer_seed_randrange",
+    "aggregation": "math.fsum_equal_issuer_weights_float64",
+    "quantile": "sorted_linear_interpolation_at_(B-1)*p",
+    "decimal_context_precision": 34,
+    "insufficient": "n_less_than_2_no_interval",
+    "degenerate": "constant_component_no_interval_no_zero_width_precision_claim",
+    "half_width": "maximum_of_mean_minus_lower_and_upper_minus_mean",
+    "coverage_guaranteed": false,
+    "limitations": [
+      "finite_sample_percentile_bootstrap_is_approximate_not_distribution_free",
+      "heavy_tails_and_sparse_samples_can_invalidate_nominal_coverage",
+      "Monte_Carlo_tail_quantiles_not_exact_confidence_bounds",
+      "cannot_use_observed_precision_as_retrospective_power"
+    ]
+  },
+  "missingness": {
+    "coverage_denominator": 100,
+    "error_denominators": "per_arm_raw_exact_per_arm_positive_scale_and_common_3_4_5",
+    "assumption": "no_MAR_or_survival_generalization",
+    "nonnegative_loss": "all_selected_lower_equals_observed_common_loss_sum_divided_by_100_upper_unbounded_when_any_missing",
+    "paired_contrast": "both_sides_unbounded_when_any_missing",
+    "interpretation": "all_selected_identification_bounds_not_confidence_intervals"
+  },
+  "proposed_future_confirmatory_review": {
+    "numerical_limits_source": "issue-377-protocol-proposal-v3.json_unapproved",
+    "precision_based_gate": "candidate_review_only_replace_infeasible_100_complete_pairs_by_predeclared_simultaneous_precision_and_missingness_scope_justification_not_an_arbitrary_lower_n",
+    "coverage_claim": "fixed_eligible_common_subset_only_not_all100_or_three_year_only_issuers",
+    "prospective_power_claim": false,
+    "required_before_confirmatory_run": [
+      "independent_method_and_business_margin_review",
+      "approved_primary_input_policy_per_model_target",
+      "explicit_review_of_infeasible_legacy_gate_replacement",
+      "finite_sample_interval_adequacy_or_separately_frozen_pilot_design",
+      "authenticated_release_bound_panel_generator_and_lineage",
+      "future_methods_changes_cannot_select_favorable_seen_outcomes"
+    ]
+  },
+  "promotion_enabled": false,
+  "supported_history_threshold": null,
+  "method_sources": [
+    {
+      "url": "https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.bootstrap.html",
+      "sha256": "681a10622e6fa1520fea015ed884e53272ca26d8be1029ab536059d926a52477",
+      "supports": "paired_resampling_percentile_definition_and_degeneracy_limitations_not_margin_or_guaranteed_coverage"
+    },
+    {
+      "url": "https://github.com/robjhyndman/fpp3_slides/blob/5db37d7198d34267bd098d65179390cae75e0d80/5-8-evaluating_point.Rmd",
+      "sha256": "8b84356f8c90d1557451ac12e19bcd3c18d6b43a6ba363c03e5e0144ebbb4dc5",
+      "supports": "training_only_scale_and_MAPE_limitations_not_numeric_promotion_limits"
+    }
+  ]
+}

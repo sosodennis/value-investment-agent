@@ -1,6 +1,10 @@
 # Fixed-cohort operating forecast study proposal (#377)
 
 Status: **proposal requiring review**, before any real study forecast/label error.
+This records the proposal's original state. Subsequently inspected NEWMARKET
+conditional outcomes are exploratory; see the
+[v4 executable methods](issue-377-executable-methods.md). They do not retroactively
+make v3 or v4 an approved prospective study.
 The numerical choices below are proposed research claims, not approved policy.
 The [machine-readable proposal](issue-377-protocol-proposal-v3.json) cannot enable
 promotion. `supported_history_threshold` remains null. No complete real issuer
