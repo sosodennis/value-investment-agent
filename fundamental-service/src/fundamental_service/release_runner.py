@@ -53,6 +53,7 @@ from .equity_dilution import DilutionError, compute_treasury_stock_dilution
 from .quote_providers import QuoteSourceProviderPort
 from .macro_series import MacroSeriesProviderPort
 from .market_reference import MarketReferenceProviderPort
+from .industry_capital import requires_industry_capital_plan
 from .market_reference_evidence import (
     read_release_market_reference_plan,
     load_release_market_reference_selection,
@@ -198,9 +199,16 @@ class DataReleaseCanaryRunner:
         terminal_plan = read_release_terminal_growth_plan(
             manifest, artifacts=self._artifacts
         )
-        if terminal_plan is None and self._policy_registry is not None:
+        if (
+            terminal_plan is None or plan is None
+        ) and self._policy_registry is not None:
             for candidate in self._policy_registry.policies():
-                if not requires_terminal_growth_plan(candidate):
+                if not (
+                    terminal_plan is None
+                    and requires_terminal_growth_plan(candidate)
+                    or plan is None
+                    and requires_industry_capital_plan(candidate.market_inputs)
+                ):
                     continue
                 for ref in manifest.snapshot_refs:
                     snapshot = self._snapshots.get(ref.snapshot_id)
@@ -224,6 +232,13 @@ class DataReleaseCanaryRunner:
                             continue
                         raise DataReleaseError(error.code, str(error)) from error
                     load_release_terminal_growth_selection(
+                        manifest,
+                        snapshot=snapshot,
+                        policy=effective,
+                        admissions=admissions,
+                        artifacts=self._artifacts,
+                    )
+                    load_release_market_reference_selection(
                         manifest,
                         snapshot=snapshot,
                         policy=effective,

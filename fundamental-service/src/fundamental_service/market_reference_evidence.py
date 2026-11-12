@@ -10,6 +10,11 @@ from .market_reference_selection import (
     select_issuer_market_references,
 )
 from .policies import PolicyRecordV1
+from .industry_capital import (
+    requires_industry_capital_plan,
+    verify_industry_capital_policy,
+)
+from .market_reference_selection import MarketReferenceSelectionError
 from .serialization import canonical_bytes
 from .source_admission import SourceAdmissionV1
 from .source_admission_evidence import AdmissionArtifactReader
@@ -72,6 +77,11 @@ def load_release_market_reference_selection(
     """
     plan = read_release_market_reference_plan(manifest, artifacts=artifacts)
     if plan is None:
+        if policy is not None and requires_industry_capital_plan(policy.market_inputs):
+            raise DataReleaseError(
+                "INDUSTRY_CAPITAL_PLAN_MISSING",
+                "source-derived industry capital policy requires its released plan",
+            )
         return None
     ref = next(
         ref for ref in manifest.artifact_refs if ref.role == MARKET_REFERENCE_PLAN_ROLE
@@ -98,6 +108,11 @@ def load_release_market_reference_selection(
             "MARKET_REFERENCE_POLICY_ISSUER_MISMATCH",
             "deployment policy must have the issuer reference plan scope",
         )
+    if plan.industry_capital_policy is not None and snapshot.identity.currency != "USD":
+        raise DataReleaseError(
+            "INDUSTRY_CAPITAL_CURRENCY_UNSUPPORTED",
+            "the industry capital proxy rule is explicitly scoped to USD",
+        )
     selection = select_issuer_market_references(plan, admissions=admissions)
     if selection.status != "selected":
         raise DataReleaseError(
@@ -105,4 +120,9 @@ def load_release_market_reference_selection(
             "issuer reference selection retains unresolved source requirements: "
             + ", ".join(selection.issue_codes),
         )
+    if policy.market_inputs is not None:
+        try:
+            verify_industry_capital_policy(policy.market_inputs, selection)
+        except MarketReferenceSelectionError as error:
+            raise DataReleaseError(error.code, str(error)) from error
     return selection
