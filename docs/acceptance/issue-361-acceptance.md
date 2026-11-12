@@ -19,6 +19,62 @@ Eligible candidate-history valuations can be provisional. Missing, conflicting,
 unreviewed, future, or unsupported evidence must retain reasons and abstain.
 No completed #351 through #355 acceptance is changed. #350 is outside scope.
 
+## Automatic original-bound security checkpoint
+
+Exact implementation `8ff612d63266be71e45f3ae6f5f488063c8129ac` adds optional
+`security_identity` to the automatic mapping input. Policy
+`source-bound-us-gaap-v3` checks the exact original's DEI issuer, annual period,
+historical ticker and paired share class through the existing identity validator.
+Only a successful check creates security-bound accounting disclosure rules.
+Absent identity preserves issuer-only input bytes; missing/conflicting identity
+abstains. No current ticker lookup, network call, formula or release gate changes.
+
+Exact checks pass **1,302 Service/PostgreSQL, 56 Agent boundary and 17 acceptance
+tests**, Ruff/format, 50 Service-source and Agent producer mypy, both architecture
+guards and diff checks. Eleven optional resource tests skip; one duplicate-ZIP
+warning is intentional. [CI](https://github.com/sosodennis/value-investment-agent/actions/runs/43140734078)
+passes all 12 executed jobs; release skips. Engineering input
+`aa41f11759f3e2b74da8828221eae4a5c43b0357fd9f8341b1d39adca80569f7`;
+output `05a9fd504c5e45d39f749497d11a3b097e5343b147726e1fc97fe78b953e7f02`.
+
+Both NVE originals retain **70 decisions: 36 approved and 34 abstained**, with
+one independent issuer. SBC accounting rules bind original-derived `NVEC` and
+reproduce USD 59,657 / 141,936 through the existing evaluator. The complete second
+run creates zero publications, returns `wrote=false`, makes zero provider/parser
+calls and preserves all 757 content-file hashes, sizes and mtimes. Mapping input
+`9e7081e4bf9b968fc66fd0c7b9eee55ef6dfdec4deae41c75a4c0b34e219ce7a`;
+output `0a281d2f508104596cbb572081524826c93a721d264e765ba372b315b486862f`.
+Empty-store restore preserves 18 tables / 1,613 rows and all decisions; repeated
+backup, restore, recomputation and reporting are unchanged.
+
+Installed project `value-investment-agent-361-auto-security` used ports
+18672/18673 and image
+`sha256:0aa694f8e92bf3255f24bdee2871811736e931e3346baf81e38727233983ec42`.
+All 68 installed package files equal the implementation; Python 3.12.16,
+Arelle 2.47.4 and Pydantic 2.14.2 are pinned in the report. Formal CLI reuse and
+authenticated HTTP metadata/content retrieval pass. PostgreSQL/service restarts
+reproduce identical stdout bytes and zero publications. Installed input
+`3d777606f80ddffb2ac128d557a67aea1c4ca27e9c05263eaf06a67d95d4d448`;
+output `21ee684b0b1b779667fe3d1c6cab1b200a19fab00722e85dc8bb7129388f09f6`.
+
+The 20 normal model/policy startup records match the formal inventory; the other
+16 tables and all 757 objects equal the source backup. Repeated installed export
+returns `wrote=false` with digest
+`78be41963cce4244f9de23834f6d924c20ea535a93e56e52b0733b418a6e8e08`.
+All 776 portable backup files (18 tables / 1,633 rows) were checked outside Docker
+before removing only this disposable project's two containers, one network and
+two volumes. All 38 baseline containers retain identity, image and start time.
+
+`automatic_security_binding_increment` preserves all 45 prior checkpoint entries
+and records the initial fixture and harness failures. The fixture now places
+conflicting DEI titles in the same paired context. The harness verifies the
+actual UID/GID 10001/10001 of `USER fundamental` and selects exact digest-named
+logs. No production validator was relaxed. Generated evidence remains outside
+Git. Complete accounting/award coverage, admitted market inputs, trusted release,
+authentic caller approval and real numerical 19-gate acceptance remain pending.
+Unknown evidence still abstains; candidate history remains provisional/abstained,
+threshold remains null, #361 OPEN and PR #370 draft.
+
 ## Automatic annual disclosure checkpoint
 
 Exact implementation `91f75bb8d6b0e8868bc200afe738c101c44f588d` extends automatic
