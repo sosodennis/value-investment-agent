@@ -17,6 +17,10 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import (
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from .serialization import canonical_bytes, sha256_digest
+from .working_capital import (
+    CompositeWorkingCapitalInputV1,
+    canonical_working_capital_inputs,
+)
 
 DATA_RELEASE_CAPABILITY = "data-release-activation-v1"
 REQUIRED_DATA_RELEASE_GATES = frozenset(
@@ -124,6 +128,29 @@ class IssuerOperatingReleaseManifestV1(DataReleaseManifestV1):
     policy_version: str = Field(min_length=1)
     mapping_version: str = Field(min_length=1)
     requirements_profile_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    working_capital_inputs: tuple[CompositeWorkingCapitalInputV1, ...] = Field(
+        default=(), exclude_if=lambda value: not value
+    )
+
+    @model_validator(mode="after")
+    def composite_policy_matches_requirements(self) -> IssuerOperatingReleaseManifestV1:
+        if self.working_capital_inputs != canonical_working_capital_inputs(
+            self.working_capital_inputs
+        ):
+            raise ValueError("composite working-capital inputs must be canonical")
+        periods = {
+            (item.issuer_id, item.period_end) for item in self.working_capital_inputs
+        }
+        if len(periods) != len(self.working_capital_inputs):
+            raise ValueError("composite working-capital issuer periods must be unique")
+        if self.working_capital_inputs and any(
+            item.mapping_version != self.mapping_version
+            for item in self.working_capital_inputs
+        ):
+            raise ValueError(
+                "composite working-capital inputs must pin the release mapping"
+            )
+        return self
 
 
 class MappingReviewStatementV1(ReleaseModel):

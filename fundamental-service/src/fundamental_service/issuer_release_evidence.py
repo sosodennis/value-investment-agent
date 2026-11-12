@@ -19,15 +19,35 @@ from .regulatory_validation import require_sec_validation_evidence
 from .sec_rebuild import parsed_facts_to_candidates
 from .sec_integrity import assess_filing_response
 from .serialization import sha256_digest
-from .valuation_requirements import operating_forecast_requirements_profile
+from .valuation_requirements import (
+    operating_forecast_requirements_profile,
+    composite_working_capital_requirements_profile,
+)
 from .snapshots import SnapshotError
+from .working_capital import working_capital_policy_digest
 
 
 def require_issuer_release_profile(manifest: IssuerOperatingReleaseManifestV1) -> None:
-    profile = operating_forecast_requirements_profile(manifest.model_id)
+    if any(
+        item.policy_digest != working_capital_policy_digest()
+        for item in manifest.working_capital_inputs
+    ):
+        raise DataReleaseError(
+            "DATA_RELEASE_WORKING_CAPITAL_POLICY_MISMATCH",
+            "composite inputs require the installed versioned accounting policy digest",
+        )
+    profile = (
+        composite_working_capital_requirements_profile(manifest.model_id)
+        if manifest.working_capital_inputs
+        else operating_forecast_requirements_profile(manifest.model_id)
+    )
     if (
         manifest.required_fields != profile.required_fact_fields
         or manifest.requirements_profile_digest != profile.digest
+        or any(
+            item.mapping_version != manifest.mapping_version
+            for item in manifest.working_capital_inputs
+        )
     ):
         raise DataReleaseError(
             "DATA_RELEASE_OPERATING_PROFILE_MISMATCH",

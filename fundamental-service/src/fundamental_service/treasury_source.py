@@ -15,10 +15,9 @@ from zoneinfo import ZoneInfo
 from .macro_series import (
     MacroObservationV1,
     MacroSeriesVintageV1,
-    MacroSourceArtifactV1,
-    RetainedMacroSourceV1,
 )
 from .snapshots import SnapshotError
+from .source_evidence import RetainedSourceV1, SourceArtifactV1
 
 TREASURY_SERIES = "us.treasury_par_yield_10y"
 TREASURY_SOURCE = "treasury-yields"
@@ -102,7 +101,7 @@ def alfred_treasury_request(uri: str) -> tuple[date, date, date]:
         ) from error
 
 
-def _capture_time(source: RetainedMacroSourceV1) -> datetime:
+def _capture_time(source: RetainedSourceV1) -> datetime:
     captured = source.captured_at
     if captured.tzinfo is None or captured.utcoffset() is None:
         raise ValueError("source capture time requires a timezone")
@@ -119,7 +118,7 @@ def _rate(value: str) -> Decimal:
 
 
 def _vintage(
-    source: RetainedMacroSourceV1,
+    source: RetainedSourceV1,
     *,
     provider_id: str,
     available_at: datetime,
@@ -135,7 +134,7 @@ def _vintage(
         available_at=available_at,
         captured_at=source.captured_at,
         artifacts=(
-            MacroSourceArtifactV1(
+            SourceArtifactV1(
                 source_id=source.source_id,
                 uri=source.uri,
                 source_version=source.source_version,
@@ -167,7 +166,7 @@ class TreasuryParYieldVintageProvider:
         return series_id == TREASURY_SERIES
 
     def reproduce_vintage(
-        self, *, series_id: str, sources: tuple[RetainedMacroSourceV1, ...]
+        self, *, series_id: str, sources: tuple[RetainedSourceV1, ...]
     ) -> MacroSeriesVintageV1:
         try:
             if not self.supports(series_id) or len(sources) != 1:
@@ -236,7 +235,7 @@ class AlfredTreasuryVintageProvider:
         return series_id == TREASURY_SERIES
 
     def reproduce_vintage(
-        self, *, series_id: str, sources: tuple[RetainedMacroSourceV1, ...]
+        self, *, series_id: str, sources: tuple[RetainedSourceV1, ...]
     ) -> MacroSeriesVintageV1:
         try:
             if not self.supports(series_id) or len(sources) != 1:

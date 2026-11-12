@@ -49,6 +49,40 @@ principal organization and membership, correlation ID, and absolute deadline.
 Error responses use the shared `InternalErrorResponse`; they never include
 credentials, provider responses, filesystem paths, or raw filing content.
 
+## Add a market data provider
+
+Source acquisition, source reproduction and financial selection have separate
+contracts. Implement the appropriate provider port for a new publisher:
+
+| Evidence | Port | Canonical result |
+| --- | --- | --- |
+| GDP, benchmark rates or other macro series | `MacroSeriesProviderPort` | `MacroSeriesVintageV1` |
+| Published country or industry tables | `MarketReferenceProviderPort` | `MarketReferenceVintageV1` |
+| Common-share quote | `QuoteSourceProviderPort` | `CommonShareQuoteV1` |
+| Public HTTP request and capture timing | `PublicSourceCaptureProfilePort` | `SourceCaptureTimes` |
+
+Providers reproduce retained bytes through pure methods. Preserve source
+identity, original units/precision, period, publication/availability/capture
+times, terms and content digests. The public HTTP adapter owns transport,
+allowlists and retries; immutable storage owns artifact publication and reuse.
+
+Register the capture profile in `public_source_catalog.py`, and inject the
+provider into the release canary and serving composition. The default macro and
+reference implementations are assembled in `free_source_policy.py`. Add a
+versioned source-use rule with retained terms evidence for each intended use.
+Registration and parsing do not approve an issuer's financial assumptions.
+
+Shared selectors consume canonical evidence. For example,
+`market_source_selection.py` selects the rate by series, currency, availability,
+units and freshness, without branching on a publisher or endpoint. A second
+provider for the same metric reuses that selector. A different economic metric
+requires its own identity and an explicit selection policy: overnight SOFR,
+Term SOFR and a Treasury auction yield are distinct inputs.
+
+Exercise a second provider through the shared path, plus source/identity/time
+mismatches, ambiguous registration, retained refusals and deterministic repeat
+and restart. The #352 composer/calculator continues to own valuation formulas.
+
 ## SEC ingestion contract
 
 `POST /v1/data/ingestions` is the authenticated, synchronous `fundamental.v1`
@@ -153,8 +187,10 @@ approval; `fundamental-prepare-source` requires approval of its exact prepared
 input before calculation and applies the same actor/time check before source or
 release access. Approval remains outside persisted public calculation evidence.
 
-Mapping approval uses Fundamental Service's `source-bound-us-gaap-v3` policy.
-It handles a narrow table of direct role/QName combinations and the bounded
+Mapping approval uses Fundamental Service's `source-bound-us-gaap-v6` policy.
+It handles a narrow table of direct role/QName combinations, including
+consolidated current-assets/current-liabilities totals for the composite
+working-capital profile, and the bounded
 annual stock-compensation disclosure below. Missing balances, unsupported
 computed partitions, awards, aggregate D&A conflicts and financial assumptions
 retain abstentions until a supported policy and evidence cover them. AI
@@ -320,7 +356,8 @@ The canonical receipt reports input/output digests and `wrote`; repeats preserve
 all artifact bytes and publication identities. Batch reports depend on every
 referenced child decision and approval digest.
 
-Policy `source-bound-us-gaap-v3` supports one bounded accounting disclosure case:
+Policy `source-bound-us-gaap-v6` carries forward the bounded accounting
+disclosure case:
 an annual consolidated USD share-compensation text fact containing the exact
 sentence `Stock-based compensation expense was $<integer> in fiscal <year>
 and $<integer> in fiscal <prior-year>.` The current year must equal that original
@@ -342,6 +379,14 @@ preserves issuer-only input bytes and rules; such rules cannot be consumed as
 security-bound evidence. Neither mode proves complete economic share classes,
 award coverage, market policy or release readiness. Record and trust the new
 executable policy digest before running this version.
+
+This version also requires a registered, source/period-bound continuing scope
+for cash capex. NEWMARKET's mixed 2012/2013 cash-flow totals remain rejected;
+the later registered continuing periods retain their original amounts. Other
+originals return `MAPPING_CAPEX_SCOPE_UNREVIEWED` until classified. Treat this as
+missing accounting evidence, not a parser or signing error. Review the retained
+original and add a versioned classification in the owning Service policy; do
+not force an approval or reuse an earlier automatic policy certificate.
 
 The release canary reproduces the policy evaluation and accounting facts before
 accepting machine approval. Unsupported classifications and absence claims still

@@ -19,6 +19,212 @@ Eligible candidate-history valuations can be provisional. Missing, conflicting,
 unreviewed, future, or unsupported evidence must retain reasons and abstain.
 No completed #351 through #355 acceptance is changed. #350 is outside scope.
 
+## Composite accounting integration checkpoint
+
+Ordinary merge `f45a1fad04377c7826e6d86dd4ab7cd139bf3aaa` integrates PR #414
+head `57b69dca8bbe113d8da71af0771f3d4bd922f535` after parent review of the
+role/class/side relation, source normalization, release canary and #352 composer
+paths. All WIP commits are preserved. Exact checks pass **1,759 Service/PostgreSQL
+tests**, Ruff, format, eleven-source mypy, architecture and diff checks. Eleven
+optional external SEC-resource tests skip; the duplicate-ZIP warning remains.
+Engineering input/output:
+`685917a16c7591a610f70c2af97fb1d9341844fcab1f564180d9741e73d8a3ab` /
+`d7eabda1b78a84a140a08a67f023486f5aa07b76c1985960aa4fecfa70bd5c42`.
+
+The isolated `value-investment-agent-361-capture-profiles` image matches all
+89 installed Python/SQL sources at that merge SHA. A synthetic signed composite
+release prepares a provisional forecast; five semantic substitutions and two
+signed release substitutions refuse. Repeat and post-service-restart runs retain
+output `e4307a8303c6929004adac4e871f1e07b18d5474d3660a36d33ba59b2ec9b35d`
+for input `4ae1584ff64e4643c26490fa5c72f7b05a97916a11ad11b965cf38a85919132b`,
+with release/report `wrote=false`, zero new files and unchanged hashes/mtimes.
+Real-source admission and market-rate refusals also repeat unchanged. All 42
+unrelated baseline containers retain their identities, images and start times.
+The first harness attempt retained a file-permission refusal before publication;
+granting read access to the copied synthetic fixture corrected the harness only.
+
+This verifies integrated accounting boundaries. The image has no configured SEC
+identity resolution, and no complete real issuer release or numerical valuation
+is claimed. Parent CI, complete issuer/date financial policy, lawful quote,
+accounting/award completeness, authentic caller approval and numerical recovery
+remain required. #361/#415/#416 remain OPEN until main delivery, PR #370 remains
+draft, and `supported_history_threshold=null`. The compact
+[source-admission checkpoint](issue-361-source-admission-checkpoint.json) retains
+commands, exact SHA, source/runtime pins, digests and remaining work.
+
+The [provider extension contract](../../fundamental-service/docs/operations-runbook.md#add-a-market-data-provider)
+documents the existing injectable source ports. New providers reproduce common
+evidence contracts; transport, storage, selection and #352 formulas retain their
+existing owners. Generated originals and reports remain outside Git.
+
+## Observed market-rate binding checkpoint
+
+Implementation `a2d5ef13f6b6dcfde75d34d052ae2ea0d032a09d` consumes the canonical
+values returned by the existing release source-admission loader before formal
+#352 preparation. A provider-neutral daily-rate selector applies a versioned
+currency, latest-vintage/day and freshness rule. It checks the declared value,
+original source identity/hash/version/terms and all timestamps against that
+selection. The trace retains original, admission, vintage, observation and
+selection digests. A rehashed policy cannot replace the observed rate. An
+unconfigured observed role refuses; an unlevered industry beta is not relabeled
+as an observed equity beta.
+
+The initial USD Treasury rule permits at most seven calendar days of observation
+age and converts published percent to fraction. This is an explicit selection
+assumption, not a history-sufficiency threshold. Existing normative-policy
+authority is unchanged. Synthetic policy-only fixtures now identify their
+assumptions as policies rather than claim nonexistent observed source evidence.
+Deterministic, nonretryable422 preparation refusals also produce retained blocked
+runner artifacts; repeats reuse their identity without rewrite. Transient and
+authorization errors retain their established error paths.
+
+Exact checks pass **1,708 Service/PostgreSQL tests**, Ruff, format, changed-source
+mypy, architecture and diff. Eleven optional SEC-resource tests skip; one
+intentional duplicate-ZIP fixture warning remains. Check input/output digests:
+`f13480ebfe2bd03122d9cd6948312aaf51c64ad870b3d78254ab8e0517aac3da` /
+`160f6bfdefcbe34b1890702ea2b00c8c009bea3cce40bde48ad54cda843f5701`.
+[CI 43228651969](https://github.com/sosodennis/value-investment-agent/actions/runs/43228651969)
+passes all 12 executed jobs; the release gate is skipped.
+
+The isolated `value-investment-agent-361-capture-profiles` image matches all
+87 installed source files. Its retained real-source packet has 17 admission
+decisions and 10 source refusals. At the **2025-04-01** historical cutoff, the rate
+selector refuses unavailable source evidence. At the packet's current cutoff,
+it refuses stale observations. The resulting refusal report repeats after service
+restart with zero downloads, source/selector calls or artifact writes, unchanged
+inventory hashes/mtimes and output digest
+`b05cf344ac05f27e1d3be0b27957ef86abe56d1bb65a7ddaf7058d36bf3d5f2e`.
+All 44 unrelated baseline containers keep their identity, image and start time.
+This checks real-source refusal persistence; SEC identity remains unconfigured
+in that image and complete numerical acceptance remains false. It does not test
+the fixed2016 research cohort, which belongs to #376/#377.
+
+The existing [source-admission checkpoint](issue-361-source-admission-checkpoint.json)
+records commands, exact commit, source/runtime pins, input/output digests,
+counterexamples, limitations and remaining work. Complete issuer/date financial
+policy, lawful quote, accounting/award evidence, trusted release, real numerical
+recovery and independent review remain required. #361/#369 remain OPEN, PR #370
+draft, and `supported_history_threshold=null`. No generated source/report enters Git.
+
+## Injectable source capture checkpoint
+
+Implementation `93dff37246ce91dd4e7370ddd158470fed5a4f3b`, with request-boundary
+correction `e4c3ad7c01bd7a844123ce3919afd7fab6c67aa2`, removes provider branches
+from public HTTP capture. `PublicSourceCaptureProfilePort` validates requests and
+reproduces capture timing; a composition catalog registers concrete providers.
+A second provider parses retained bytes through the same transport and macro
+contracts. Malformed endpoints, missing queries, unsupported series, registration
+conflicts and inconsistent timestamps retain typed refusals. #352 math is unchanged.
+
+At the exact correction SHA, **1,676 Service/PostgreSQL and 269 focused tests**
+pass, with Ruff/format, five-source mypy, architecture and diff checks. Eleven
+optional SEC-resource tests skip and one duplicate-ZIP warning is intentional.
+Engineering input `9b1967f9726a08721f216deeaa35dca488755f673d7cf2925c0d3aaebc1fcec1`,
+output `62fd69014a10e4fa97648cf3cb688e69dce0d057f5ceb9fab2aef46c8479885a`.
+[Exact CI 43224609066](https://github.com/sosodennis/value-investment-agent/actions/runs/43224609066)
+passes all 12 executed jobs; the release gate is skipped.
+
+Two independent and two concurrent source replays reuse artifacts without calls,
+downloads or writes. The isolated `value-investment-agent-361-capture-profiles`
+image matches all 86 installed sources and preserves output
+`2c3e1ce191fb03382c7921a4d700f26db18cf9993a5eb2d42f17dfcc54920d93`
+through repeat and service restart, with `wrote=false` and unchanged inventories.
+Forty-two unrelated baseline containers remain unchanged. Runtime ports are
+18685/18686; SEC identity is unconfigured in this source-only stack.
+[The existing compact checkpoint](issue-361-source-admission-checkpoint.json)
+retains exact commands, digests, source/runtime pins and failures in its
+`capture_profiles_increment`; generated reports/originals remain outside Git.
+
+Complete issuer/date policy, accounting/award evidence, trusted release, caller
+approval and the actual numerical/recovery/review gates remain required. This
+checkpoint completes capture substitution; it does not approve market assumptions.
+#361/#369 remain OPEN, PR #370 draft, and `supported_history_threshold=null`.
+
+## Source admission checkpoint
+
+Exact implementation `9d234fae218b16cd55817f153b13f192192c1e88` passes
+**1,658 Service/PostgreSQL and 104 focused tests**, Ruff/format, seven-source
+mypy, architecture and diff checks. Eleven optional SEC-resource skips and one
+expected duplicate-ZIP warning remain. [CI 43218086138](https://github.com/sosodennis/value-investment-agent/actions/runs/43218086138)
+passes all 12 executed jobs; release gate skipped.
+
+Source admission reproduces retained macro/reference bytes through injected
+ports and a trusted source-use catalog. Release and serving share reproduction.
+The real-source pack retains 17 decisions: seven admitted and ten refused,
+including unknown ALFRED permission, future data, missing terms, corrupt bytes
+and unsupported redistribution. This is source-use approval, not approval of an
+issuer's seven market inputs or a complete valuation.
+
+Repeat and concurrent processes preserve output
+`0c9f205d5d63c176460485df6dce5338360c42f3aa82957e54e540abe8213949`,
+with zero repeated downloads/provider calls/artifact writes and unchanged file
+hashes, sizes and mtimes. The installed image matches all 84 sources; repeat and
+service restart preserve output
+`791bc888b04affd20666ba5072c0750cb02894a8bbcbb0f307afef75839e2f42`
+with `wrote=false`. Forty unrelated baseline containers are unchanged. The
+adapter stack has no SEC identity configuration and does not establish full
+numerical acceptance. [Compact evidence](issue-361-source-admission-checkpoint.json)
+records commands, digests, runtime pins and retained audit-helper failures.
+Raw sources and generated reports remain outside Git.
+
+The subsequent injectable capture checkpoint above completes the capture-profile
+work identified here. The issuer/date financial policy join and the outstanding
+numerical/recovery/review gates remain required. #361/#369 remain OPEN, PR #370
+draft, and `supported_history_threshold=null`.
+
+## Interchangeable reference provider checkpoint
+
+Provider implementation `30dc58404cbe5a46348ec20748bb855c5a12f958` and
+owning guard correction `0b294393fdbadd41a37e721643735f74dab177f5` add
+`MarketReferenceProviderPort` for country/industry reference tables. The existing
+macro providers and new reference providers share `RetainedSourceV1` and
+`SourceArtifactV1`; every caller migrated without compatibility aliases. No
+financial formula or issuer-policy approval moves into a source adapter.
+
+The Damodaran provider retains original beta/ERP/tax table identities, exact
+binary64 or OOXML numeric encodings, displayed precision, cell locators and
+published formula caches/shared-formula metadata. It never evaluates a formula.
+BIFF values explicitly remain opaque published caches. Country tax context says
+“Looked up for 2023”; workbook update is January 2025. Neither establishes a
+current issuer tax mix. Availability uses actual retained capture; caller
+availability/publication/capture overrides fail before HTTP.
+
+At exact correction SHA, **1,623 Service/PostgreSQL tests and 160 focused source
+tests pass**, with Ruff/format, ten-source mypy, root architecture guard and diff.
+Eleven optional SEC-resource tests skip and one duplicate-ZIP warning is
+intentional. Engineering input
+`916517a23ccecdb0d50ace421a6361ae26bb805a41a6f7cfe02c7177751e82e3`, output
+`668ed23284424672ac0b6cd3ac0418981b254d9260daa4cbe751b497de0ba7da`.
+[Exact correction CI 43211471636](https://github.com/sosodennis/value-investment-agent/actions/runs/43211471636)
+passes all 12 executed jobs; release gate skipped.
+The earlier failing full run remains evidence: the service architecture guard
+scanned third-party `.venv` code. #419 restricts it to owned source roots and
+adds rejection tests for all roots/import aliases; no decoding exception is hidden.
+
+Real retained originals reproduce **96 beta rows, 158 ERP rows and 158 tax rows**;
+one ERP aggregate remains explicitly missing. Two fresh processes with different
+hash seeds preserve output
+`04daf1b4a46a61067c46738bb966b659fbfa19ee93395b7758ae370c134b3a15`.
+The second has zero provider calls/downloads/writes/new files and unchanged
+hashes, sizes and mtimes. Original corrupt-source and future-vintage failures
+remain retained.
+
+The issue-owned `value-investment-agent-361-macro-providers` stack (18683/18684)
+installs all 81 source files exactly at the correction SHA. Image
+`sha256:e06713d2ab13e429cf46d1117298a9d6908dc31d6f30e8282e81cbe18d50ed6b`
+repeats and restarts with output
+`89e3e47fc515f666cdfa0ba08ac2f093a4f9496fbf7fb9b884e2bfeccbbe61fd`;
+repeat and restart write zero files and make zero provider calls. Forty unrelated
+baseline containers remain unchanged. SEC identity resolution is disabled in
+this adapter stack: it proves source persistence, not complete numerical acceptance.
+
+[Reference provider evidence](issue-361-reference-provider-checkpoint.json)
+records exact commands, digests, runtime pins and retained failures; raw source
+and generated reports stay outside Git. Complete automatic dated policy (#369),
+accounting/award evidence and #416, trusted release/caller approval and real
+numerical repeat/concurrency/restart/restore remain unfinished. #361/#369/#419
+remain OPEN, PR #370 draft, threshold null. #414 and #417 remain unintegrated.
+
 ## Free market-source and automatic approval checkpoint
 
 `e5076f8d4dbbb7233826dc64f2eebf9a823c4dc0` removes unsupported bootstrap

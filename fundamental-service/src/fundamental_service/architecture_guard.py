@@ -16,19 +16,26 @@ LEGACY_AUTH_MARKERS = (
 
 
 def check(root: Path | None = None) -> list[str]:
-    package_root = root or Path(__file__).resolve().parents[1]
+    package_root = root or Path(__file__).resolve().parents[2]
     failures: list[str] = []
-    for path in package_root.rglob("*.py"):
+    paths = sorted(
+        path
+        for directory in ("src", "tests", "scripts")
+        for path in (package_root / directory).rglob("*.py")
+    )
+    for path in paths:
         source = path.read_text(encoding="utf-8")
         tree = ast.parse(source, filename=str(path))
         for node in ast.walk(tree):
-            name = None
             if isinstance(node, ast.Import):
-                name = node.names[0].name
+                names = tuple(alias.name for alias in node.names)
             elif isinstance(node, ast.ImportFrom) and node.module:
-                name = node.module
-            if name and name.startswith(FORBIDDEN_PREFIXES):
-                failures.append(f"{path}: forbidden import {name}")
+                names = (node.module,)
+            else:
+                continue
+            for name in names:
+                if name.startswith(FORBIDDEN_PREFIXES):
+                    failures.append(f"{path}: forbidden import {name}")
         for marker in LEGACY_AUTH_MARKERS:
             if marker in source:
                 failures.append(f"{path}: legacy authentication marker {marker}")

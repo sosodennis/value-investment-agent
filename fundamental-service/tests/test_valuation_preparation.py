@@ -441,7 +441,7 @@ def test_synthetic_market_policy_prepares_without_caller_assumptions() -> None:
         synthetic_market_inputs().evidence[0].content_hash,
     )
     assert risk_free.as_of == datetime(2025, 1, 3, tzinfo=UTC)
-    assert risk_free.method == "approved_source"
+    assert risk_free.method == "approved_policy"
     assert (
         next(
             item

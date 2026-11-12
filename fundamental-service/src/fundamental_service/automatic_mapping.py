@@ -27,6 +27,10 @@ from .facts import CanonicalMappingV1, MappingObservationScopeV1
 from .issuer_release_evidence import verify_original_bytes, verify_original_integrity
 from .issuer_identity import IdentityResolutionError, validate_original_filing_identity
 from .original_issuer import OriginalIssuerEvidenceV1
+from .registered_capital_expenditure import (
+    CAPITAL_EXPENDITURE,
+    select_registered_capital_expenditure,
+)
 from .registered_depreciation import (
     ADJUSTED_DEPRECIATION,
     DEPRECIATION,
@@ -36,7 +40,7 @@ from .serialization import sha256_digest
 from .taxonomy_evidence import require_original_taxonomy
 
 AUTOMATIC_MAPPING_INPUT_ROLE = "automatic-mapping-input-v1"
-AUTOMATIC_MAPPING_POLICY: Literal["source-bound-us-gaap-v4"] = "source-bound-us-gaap-v4"
+AUTOMATIC_MAPPING_POLICY: Literal["source-bound-us-gaap-v6"] = "source-bound-us-gaap-v6"
 _GAAP_NAMESPACE = re.compile(
     r"http://(?:fasb\.org|xbrl\.us)/us-gaap/\d{4}(?:-\d{2}-\d{2})?"
 )
@@ -55,7 +59,7 @@ class DirectMappingRule:
 
 
 # Partial revenue tags, absence claims, arbitrary computed partitions and awards
-# have no direct rule. Aggregate D&A additionally requires its registered scope.
+# have no direct rule. Aggregate D&A and cash capex require registered scope.
 # Every rule change changes the policy digest.
 _RULES = {
     "revenue": DirectMappingRule(
@@ -72,9 +76,7 @@ _RULES = {
         "us-gaap:IncomeTaxExpenseBenefit", "annual"
     ),
     "net_income": DirectMappingRule("us-gaap:NetIncomeLoss", "annual"),
-    "capital_expenditure": DirectMappingRule(
-        "us-gaap:PaymentsToAcquirePropertyPlantAndEquipment", "annual"
-    ),
+    "capital_expenditure": DirectMappingRule(CAPITAL_EXPENDITURE, "annual"),
     "operating_lease_cost": DirectMappingRule("us-gaap:OperatingLeaseCost", "annual"),
     "basic_weighted_average_shares": DirectMappingRule(
         "us-gaap:WeightedAverageNumberOfSharesOutstandingBasic",
@@ -89,6 +91,8 @@ _RULES = {
     "operating_current_receivables": DirectMappingRule(
         "us-gaap:AccountsReceivableNetCurrent", "instant"
     ),
+    "current_assets": DirectMappingRule("us-gaap:AssetsCurrent", "instant"),
+    "current_liabilities": DirectMappingRule("us-gaap:LiabilitiesCurrent", "instant"),
     "inventory": DirectMappingRule("us-gaap:InventoryNet", "instant"),
     "operating_current_payables": DirectMappingRule(
         "us-gaap:AccountsPayableCurrent", "instant"
@@ -121,6 +125,7 @@ def automatic_mapping_policy_digest() -> str:
                     "automatic_mapping.py",
                     "automatic_mapping_disclosures.py",
                     "registered_depreciation.py",
+                    "registered_capital_expenditure.py",
                     "accounting_roles.py",
                     "arelle_parser.py",
                     "facts.py",
@@ -200,7 +205,7 @@ class AutomaticMappingDecisionV1(ReleaseModel):
     input_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
     source_revision: str = Field(pattern=r"^[0-9a-f]{40}$")
     evaluator_id: str = Field(min_length=1)
-    policy_version: Literal["source-bound-us-gaap-v4"] = AUTOMATIC_MAPPING_POLICY
+    policy_version: Literal["source-bound-us-gaap-v6"] = AUTOMATIC_MAPPING_POLICY
     policy_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
     status: Literal["approved", "abstain"]
     reason_codes: tuple[str, ...]
@@ -329,6 +334,10 @@ def evaluate_automatic_mapping(
         proposal.normalized_field == "depreciation_and_amortization"
         and proposal.source_concept in {DEPRECIATION, ADJUSTED_DEPRECIATION}
     )
+    capital_expenditure = (
+        proposal.normalized_field == "capital_expenditure"
+        and proposal.source_concept == CAPITAL_EXPENDITURE
+    )
     adjusted = depreciation and proposal.source_concept == ADJUSTED_DEPRECIATION
     computed = disclosed or adjusted
     if (
@@ -396,8 +405,34 @@ def evaluate_automatic_mapping(
             )
             for fact, reason in classification.rejected
         )
+    if capital_expenditure:
+        capex = select_registered_capital_expenditure(original)
+        reasons.update(capex.reason_codes)
+        for fact in capex.selected:
+            reason = _observation_rejection(
+                fact, request, _RULES["capital_expenditure"]
+            )
+            if reason is None:
+                selected.append(fact)
+            else:
+                rejected.append(
+                    MappingObservationRejectionV1(
+                        observation_digest=sha256_digest(fact), reason_code=reason
+                    )
+                )
+        rejected.extend(
+            MappingObservationRejectionV1(
+                observation_digest=sha256_digest(fact), reason_code=reason
+            )
+            for fact, reason in capex.rejected
+        )
     for fact in sorted(original.report.facts, key=sha256_digest):
-        if disclosed or depreciation or fact.concept != proposal.source_concept:
+        if (
+            disclosed
+            or depreciation
+            or capital_expenditure
+            or fact.concept != proposal.source_concept
+        ):
             continue
         reason = (
             "MAPPING_AUTOMATIC_RULE_UNSUPPORTED"

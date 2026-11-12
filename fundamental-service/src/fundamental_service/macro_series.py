@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import hashlib
-from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import Literal, Protocol
@@ -12,18 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .numerical_policy import using_valuation_context
 from .serialization import sha256_digest
-
-
-@dataclass(frozen=True)
-class RetainedMacroSourceV1:
-    """Original bytes and acquisition identity passed to a source provider."""
-
-    source_id: str
-    uri: str
-    source_version: str
-    terms_reference: str
-    content: bytes
-    captured_at: datetime
+from .source_evidence import RetainedSourceV1, SourceArtifactV1
 
 
 class MacroSeriesProviderPort(Protocol):
@@ -34,27 +22,8 @@ class MacroSeriesProviderPort(Protocol):
     def supports(self, series_id: str) -> bool: ...
 
     def reproduce_vintage(
-        self, *, series_id: str, sources: tuple[RetainedMacroSourceV1, ...]
+        self, *, series_id: str, sources: tuple[RetainedSourceV1, ...]
     ) -> MacroSeriesVintageV1: ...
-
-
-class MacroSourceArtifactV1(BaseModel):
-    """Digest-only provenance for one immutable provider source artifact."""
-
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    source_id: str = Field(min_length=1)
-    uri: str = Field(min_length=1)
-    source_version: str = Field(min_length=1)
-    terms_reference: str = Field(min_length=1)
-    content_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
-    captured_at: datetime
-
-    @model_validator(mode="after")
-    def timezone_required(self) -> MacroSourceArtifactV1:
-        if self.captured_at.tzinfo is None or self.captured_at.utcoffset() is None:
-            raise ValueError("macro source capture time must include a timezone")
-        return self
 
 
 class MacroObservationV1(BaseModel):
@@ -90,7 +59,7 @@ class MacroSeriesVintageV1(BaseModel):
     source_version: str = Field(min_length=1)
     available_at: datetime
     captured_at: datetime
-    artifacts: tuple[MacroSourceArtifactV1, ...] = Field(min_length=1)
+    artifacts: tuple[SourceArtifactV1, ...] = Field(min_length=1)
     observations: tuple[MacroObservationV1, ...] = Field(min_length=1)
     content_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
 
@@ -105,7 +74,7 @@ class MacroSeriesVintageV1(BaseModel):
         source_version: str,
         available_at: datetime,
         captured_at: datetime,
-        artifacts: tuple[MacroSourceArtifactV1, ...],
+        artifacts: tuple[SourceArtifactV1, ...],
         observations: tuple[MacroObservationV1, ...],
     ) -> MacroSeriesVintageV1:
         payload = {
@@ -176,7 +145,7 @@ def reproduce_macro_vintage(
     provider: MacroSeriesProviderPort,
     *,
     series_id: str,
-    sources: tuple[RetainedMacroSourceV1, ...],
+    sources: tuple[RetainedSourceV1, ...],
 ) -> MacroSeriesVintageV1:
     """Use an injected provider and bind every original artifact to its output."""
     if not provider.supports(series_id):
@@ -185,7 +154,7 @@ def reproduce_macro_vintage(
     if vintage.series_id != series_id or vintage.provider_id != provider.provider_id:
         raise ValueError("macro provider returned a different series or provider")
     artifacts = tuple(
-        MacroSourceArtifactV1(
+        SourceArtifactV1(
             source_id=source.source_id,
             uri=source.uri,
             source_version=source.source_version,

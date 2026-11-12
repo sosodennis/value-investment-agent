@@ -15,10 +15,9 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from .macro_series import (
     MacroObservationV1,
     MacroSeriesVintageV1,
-    MacroSourceArtifactV1,
-    RetainedMacroSourceV1,
 )
 from .snapshots import SnapshotError
+from .source_evidence import RetainedSourceV1, SourceArtifactV1
 
 NEW_YORK_FED_SOFR_SOURCE = "new-york-fed-sofr"
 NEW_YORK_FED_SOFR_PROFILE = "new-york-fed-markets-api-sofr-v1"
@@ -71,6 +70,29 @@ def _unique_members(pairs: list[tuple[str, object]]) -> dict[str, object]:
     return result
 
 
+def sofr_request_date(source_uri: str) -> date:
+    """Validate the exact single-date source query before capture or reproduction."""
+    try:
+        uri = urlsplit(source_uri)
+        query = parse_qs(uri.query, keep_blank_values=True, strict_parsing=True)
+        requested = date.fromisoformat(query["startDate"][0])
+        end_date = query["endDate"][0]
+    except (ValueError, KeyError, IndexError) as error:
+        raise ValueError("SOFR source date is missing") from error
+    if (
+        uri.scheme != "https"
+        or uri.netloc != "markets.newyorkfed.org"
+        or uri.path != _SOFR_ENDPOINT
+        or uri.fragment
+        or set(query) != {"startDate", "endDate"}
+        or query["startDate"] != [requested.isoformat()]
+        or query["endDate"] != [end_date]
+        or end_date != requested.isoformat()
+    ):
+        raise ValueError("SOFR source requires one canonical ISO date")
+    return requested
+
+
 def parse_new_york_fed_sofr(
     raw: bytes,
     *,
@@ -80,21 +102,11 @@ def parse_new_york_fed_sofr(
 ) -> SofrObservationV1:
     """Reproduce one daily overnight SOFR row without inferring historical availability."""
     try:
-        uri = urlsplit(source_uri)
-        query = parse_qs(uri.query, keep_blank_values=True, strict_parsing=True)
-        requested = effective_date.isoformat()
         if (
             len(raw) > 1024 * 1024
             or captured_at.tzinfo is None
             or captured_at.utcoffset() is None
-            or uri.scheme != "https"
-            or uri.netloc != "markets.newyorkfed.org"
-            or uri.path != _SOFR_ENDPOINT
-            or uri.fragment
-            or set(query) != {"startDate", "endDate"}
-            or any(len(values) != 1 for values in query.values())
-            or query["startDate"] != [requested]
-            or query["endDate"] != [requested]
+            or sofr_request_date(source_uri) != effective_date
             or effective_date
             >= captured_at.astimezone(ZoneInfo("America/New_York")).date()
         ):
@@ -138,7 +150,7 @@ class NewYorkFedSofrVintageProvider:
         return series_id == "us.sofr_overnight"
 
     def reproduce_vintage(
-        self, *, series_id: str, sources: tuple[RetainedMacroSourceV1, ...]
+        self, *, series_id: str, sources: tuple[RetainedSourceV1, ...]
     ) -> MacroSeriesVintageV1:
         if not self.supports(series_id) or len(sources) != 1:
             raise SnapshotError(
@@ -154,9 +166,8 @@ class NewYorkFedSofrVintageProvider:
                 "SOFR_SOURCE_INVALID", "SOFR source profile does not match"
             )
         try:
-            query = parse_qs(urlsplit(source.uri).query)
-            effective_date = date.fromisoformat(query["startDate"][0])
-        except (KeyError, ValueError, IndexError) as error:
+            effective_date = sofr_request_date(source.uri)
+        except ValueError as error:
             raise SnapshotError(
                 "SOFR_SOURCE_INVALID", "SOFR source date is invalid"
             ) from error
@@ -175,7 +186,7 @@ class NewYorkFedSofrVintageProvider:
             available_at=observation.available_at,
             captured_at=source.captured_at,
             artifacts=(
-                MacroSourceArtifactV1(
+                SourceArtifactV1(
                     source_id=source.source_id,
                     uri=source.uri,
                     source_version=source.source_version,

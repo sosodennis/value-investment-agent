@@ -11,13 +11,12 @@ from fundamental_service.macro_series import (
     MacroObservationV1,
     MacroSeriesProviderPort,
     MacroSeriesVintageV1,
-    MacroSourceArtifactV1,
     NominalGdpGrowthCeilingV1,
-    RetainedMacroSourceV1,
     reproduce_macro_vintage,
     select_macro_vintage,
 )
 from fundamental_service.serialization import sha256_digest
+from fundamental_service.source_evidence import RetainedSourceV1, SourceArtifactV1
 from fundamental_service.sofr_source import (
     NEW_YORK_FED_SOFR_PROFILE,
     NEW_YORK_FED_SOFR_SOURCE,
@@ -35,11 +34,11 @@ class AlternativeGdpProvider:
         return series_id in {"us.nominal_gdp", "us.real_gdp"}
 
     def reproduce_vintage(
-        self, *, series_id: str, sources: tuple[RetainedMacroSourceV1, ...]
+        self, *, series_id: str, sources: tuple[RetainedSourceV1, ...]
     ) -> MacroSeriesVintageV1:
         source = sources[0]
         raw_hash = hashlib.sha256(source.content).hexdigest()
-        artifact = MacroSourceArtifactV1(
+        artifact = SourceArtifactV1(
             source_id=source.source_id,
             uri=source.uri,
             source_version=source.source_version,
@@ -76,7 +75,7 @@ def _alternative_vintage() -> MacroSeriesVintageV1:
         provider,
         series_id="us.nominal_gdp",
         sources=(
-            RetainedMacroSourceV1(
+            RetainedSourceV1(
                 source_id="synthetic-gdp",
                 uri="https://example.test/gdp",
                 source_version="synthetic-v1",
@@ -112,7 +111,7 @@ def test_gdp_policy_accepts_alternative_provider_without_provider_switches():
 def test_one_provider_can_reproduce_different_requested_series():
     nominal = _alternative_vintage()
     provider: MacroSeriesProviderPort = AlternativeGdpProvider()
-    source = RetainedMacroSourceV1(
+    source = RetainedSourceV1(
         source_id="synthetic-real-gdp",
         uri="https://example.test/real-gdp",
         source_version="synthetic-v1",
@@ -136,7 +135,7 @@ def test_one_provider_can_reproduce_different_requested_series():
 def test_injected_provider_cannot_replace_requested_identity_or_originals(binding: str):
     class MisboundProvider(AlternativeGdpProvider):
         def reproduce_vintage(
-            self, *, series_id: str, sources: tuple[RetainedMacroSourceV1, ...]
+            self, *, series_id: str, sources: tuple[RetainedSourceV1, ...]
         ) -> MacroSeriesVintageV1:
             vintage = super().reproduce_vintage(series_id=series_id, sources=sources)
             if binding == "provider":
@@ -166,7 +165,7 @@ def test_injected_provider_cannot_replace_requested_identity_or_originals(bindin
             )
             return _rehash_vintage(vintage, artifacts=(changed,))
 
-    source = RetainedMacroSourceV1(
+    source = RetainedSourceV1(
         source_id="synthetic-gdp",
         uri="https://example.test/gdp",
         source_version="synthetic-v1",
@@ -246,7 +245,7 @@ def test_canonical_vintage_rejects_invalid_identity_or_provenance(case: str):
 
 def test_sofr_and_gdp_share_the_same_macro_provider_port_without_unit_confusion():
     provider: MacroSeriesProviderPort = NewYorkFedSofrVintageProvider()
-    source = RetainedMacroSourceV1(
+    source = RetainedSourceV1(
         source_id=NEW_YORK_FED_SOFR_SOURCE,
         uri="https://markets.newyorkfed.org/api/rates/secured/sofr/search.json?startDate=2025-03-28&endDate=2025-03-28",
         source_version=NEW_YORK_FED_SOFR_PROFILE,

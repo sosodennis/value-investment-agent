@@ -56,6 +56,13 @@ from .valuation_requirements import (
     ValuationRequirementsProfileV1,
     select_released_facts,
     valuation_requirements_profile,
+    composite_working_capital_requirements_profile,
+)
+from .working_capital import (
+    CompositeWorkingCapitalAssessmentV1,
+    CompositeWorkingCapitalInputV1,
+    WORKING_CAPITAL_FIELDS,
+    canonical_working_capital_inputs,
 )
 
 _ZERO_TOLERANCE = Decimal("0.000000001")
@@ -98,6 +105,12 @@ class HistoricalMetricsV1(StrictModel):
     quality_status: QualityStatus
     issue_codes: tuple[str, ...] = ()
     missing_evidence: tuple[str, ...] = ()
+    working_capital_assessments: tuple[CompositeWorkingCapitalAssessmentV1, ...] = (
+        Field(default=(), exclude_if=lambda value: not value)
+    )
+    working_capital_inputs: tuple[CompositeWorkingCapitalInputV1, ...] = Field(
+        default=(), exclude_if=lambda value: not value
+    )
 
 
 class ApprovedMarketPolicyInputsV1(StrictModel):
@@ -313,6 +326,8 @@ def derive_historical_metrics(
             profile_id=history.requirements_profile_id,
             profile_digest=history.requirements_profile_digest,
             quality_status=QualityStatus.ABSTAIN,
+            working_capital_assessments=history.working_capital_assessments,
+            working_capital_inputs=(),
             issue_codes=history.issue_codes,
             missing_evidence=tuple(
                 f"{year}:{field}" for year, field in history.missing_fields
@@ -325,14 +340,6 @@ def derive_historical_metrics(
         or set(estimates) != {period.fiscal_year for period in history.periods}
     ):
         raise ValueError("estimated operating inputs must cover each period exactly")
-    working_capital_fields = (
-        "operating_current_receivables",
-        "inventory",
-        "contract_assets",
-        "operating_current_payables",
-        "accrued_operating_liabilities",
-        "deferred_revenue",
-    )
     metrics: list[HistoricalMetricV1] = []
     issue_codes = list(history.issue_codes)
     if estimates:
@@ -348,12 +355,7 @@ def derive_historical_metrics(
                 "income_tax_expense",
                 "capital_expenditure",
                 "depreciation_and_amortization",
-                "operating_current_receivables",
-                "inventory",
-                "contract_assets",
-                "operating_current_payables",
-                "accrued_operating_liabilities",
-                "deferred_revenue",
+                *(WORKING_CAPITAL_FIELDS if period.working_capital is None else ()),
             )
         }
         estimate = estimates.get(period.fiscal_year)
@@ -361,7 +363,7 @@ def derive_historical_metrics(
             candidates = {
                 name: fact
                 for name, fact in candidates.items()
-                if name not in (*working_capital_fields, "capital_expenditure")
+                if name not in (*WORKING_CAPITAL_FIELDS, "capital_expenditure")
             }
         absent = tuple(name for name, fact in candidates.items() if fact is None)
         if absent:
@@ -434,10 +436,13 @@ def derive_historical_metrics(
             previous_estimate = estimates[previous.fiscal_year]
             current_working_capital = estimate.operating_working_capital
             previous_working_capital = previous_estimate.operating_working_capital
-            current_wc_facts = estimate.working_capital_facts
-            previous_wc_facts = previous_estimate.working_capital_facts
+            current_working_capital_facts = estimate.working_capital_facts
+            previous_working_capital_facts = previous_estimate.working_capital_facts
             capex_facts = estimate.capex_facts
         else:
+            working_capital_fields = (
+                WORKING_CAPITAL_FIELDS if previous.working_capital is None else ()
+            )
             previous_candidates = {
                 name: previous.fact(name) for name in working_capital_fields
             }
@@ -463,24 +468,41 @@ def derive_historical_metrics(
                 issue_codes.append("METRIC_NON_NUMERIC_VALUE")
                 continue
             current_working_capital = (
-                values["operating_current_receivables"]
-                + values["inventory"]
-                + values["contract_assets"]
-                - values["operating_current_payables"]
-                - values["accrued_operating_liabilities"]
-                - values["deferred_revenue"]
+                period.working_capital.value
+                if period.working_capital is not None
+                else (
+                    values["operating_current_receivables"]
+                    + values["inventory"]
+                    + values["contract_assets"]
+                    - values["operating_current_payables"]
+                    - values["accrued_operating_liabilities"]
+                    - values["deferred_revenue"]
+                )
             )
             previous_working_capital = (
-                previous_values["operating_current_receivables"]
-                + previous_values["inventory"]
-                + previous_values["contract_assets"]
-                - previous_values["operating_current_payables"]
-                - previous_values["accrued_operating_liabilities"]
-                - previous_values["deferred_revenue"]
+                previous.working_capital.value
+                if previous.working_capital is not None
+                else (
+                    previous_values["operating_current_receivables"]
+                    + previous_values["inventory"]
+                    + previous_values["contract_assets"]
+                    - previous_values["operating_current_payables"]
+                    - previous_values["accrued_operating_liabilities"]
+                    - previous_values["deferred_revenue"]
+                )
             )
-            current_wc_facts = tuple(fields[name] for name in working_capital_fields)
-            previous_wc_facts = tuple(
-                previous_fields[name] for name in working_capital_fields
+            if current_working_capital is None or previous_working_capital is None:
+                issue_codes.append("WORKING_CAPITAL_ESTIMATE_UNAVAILABLE")
+                continue
+            current_working_capital_facts = (
+                period.working_capital.source_facts
+                if period.working_capital is not None
+                else tuple(fields[field] for field in WORKING_CAPITAL_FIELDS)
+            )
+            previous_working_capital_facts = (
+                previous.working_capital.source_facts
+                if previous.working_capital is not None
+                else tuple(previous_fields[field] for field in WORKING_CAPITAL_FIELDS)
             )
             capex_facts = (fields["capital_expenditure"],)
         delta_working_capital = current_working_capital - previous_working_capital
@@ -496,8 +518,8 @@ def derive_historical_metrics(
             fields["income_before_tax"],
             *capex_facts,
             fields["depreciation_and_amortization"],
-            *current_wc_facts,
-            *previous_wc_facts,
+            *current_working_capital_facts,
+            *previous_working_capital_facts,
         )
         realized_facts = realized_fact_candidates
         metrics.extend(
@@ -514,7 +536,10 @@ def derive_historical_metrics(
                     period,
                     delta_working_capital,
                     "operating_working_capital - prior_operating_working_capital",
-                    (*current_wc_facts, *previous_wc_facts),
+                    (
+                        *current_working_capital_facts,
+                        *previous_working_capital_facts,
+                    ),
                     unit="currency",
                 ),
                 _metric(
@@ -528,11 +553,11 @@ def derive_historical_metrics(
                     (
                         *capex_facts,
                         fields["depreciation_and_amortization"],
-                        *current_wc_facts,
+                        *current_working_capital_facts,
                         fields["operating_income"],
                         fields["income_tax_expense"],
                         fields["income_before_tax"],
-                        *previous_wc_facts,
+                        *previous_working_capital_facts,
                     ),
                 ),
                 _metric(
@@ -560,6 +585,7 @@ def derive_historical_metrics(
         quality_status=status,
         issue_codes=tuple(dict.fromkeys(issue_codes)),
         missing_evidence=tuple(sorted(set(missing))),
+        working_capital_assessments=history.working_capital_assessments,
     )
 
 
@@ -888,7 +914,7 @@ def compose_forecast_assumptions(
 
 
 @using_valuation_context
-def prepare_automatic_valuation(
+def _prepare_automatic_valuation(
     facts: Iterable[CanonicalFactV1],
     *,
     snapshot: SourceSnapshotV1,
@@ -900,16 +926,38 @@ def prepare_automatic_valuation(
     market_policy: ApprovedMarketPolicyInputsV1 | None = None,
     mapping_version: str = "sec-canonical-mapping-v1",
     equity_dilution_evidence: EquityDilutionEvidenceV1 | None = None,
+    working_capital_inputs: tuple[CompositeWorkingCapitalInputV1, ...] = (),
 ) -> AutomaticValuationPreparationV1:
     """Compose a deterministic valuation request or an explicit gate outcome."""
 
-    profile = valuation_requirements_profile(model_id)
+    profile = (
+        composite_working_capital_requirements_profile(model_id, operating_only=False)
+        if working_capital_inputs
+        else valuation_requirements_profile(model_id)
+    )
     selected = select_released_facts(
         facts,
         profile=profile,
         snapshot=snapshot,
         valuation_timestamp=snapshot.valuation_timestamp,
+        additional_fact_ids=tuple(
+            fact_id for item in working_capital_inputs for fact_id in item.fact_ids
+        ),
     )
+    if any(item.mapping_version != mapping_version for item in working_capital_inputs):
+        return _blocked_preparation(
+            status="abstained",
+            quality=QualityStatus.ABSTAIN,
+            profile=profile,
+            model_id=model_id,
+            model_version=model_version,
+            policy_id=policy_id,
+            policy_version=policy_version,
+            issues=("WORKING_CAPITAL_MAPPING_VERSION_MISMATCH",),
+            missing=(),
+            facts=selected.facts,
+            snapshot=snapshot,
+        )
     if selected.missing_fields:
         return _blocked_preparation(
             status="abstained",
@@ -955,6 +1003,7 @@ def prepare_automatic_valuation(
             snapshot=snapshot,
             valuation_timestamp=snapshot.valuation_timestamp,
             profile=profile,
+            working_capital_inputs=working_capital_inputs,
         )
         metrics = derive_historical_metrics(history)
     except (PreparationError, AnnualHistoryError) as error:
@@ -1140,6 +1189,9 @@ def prepare_automatic_valuation(
         capital_bridge=capital,
         trace=TraceV1(
             expression="service-owned historical metrics and approved policy inputs",
+            source_refs=tuple(
+                item.output_digest for item in metrics.working_capital_assessments
+            ),
             inputs=tuple(item.fact_id for item in selected.facts),
             description=(
                 (
@@ -1428,6 +1480,51 @@ def prepare_automatic_valuation(
         input=request,
         preparation_digest=digest,
         equity_dilution=dilution,
+    )
+
+
+@using_valuation_context
+def prepare_automatic_valuation(
+    facts: Iterable[CanonicalFactV1],
+    *,
+    snapshot: SourceSnapshotV1,
+    model_id: Literal["fcff_dcf", "transition_fcff_dcf"],
+    model_version: str,
+    policy_id: str,
+    policy_version: str,
+    data_release_manifest_digest: str,
+    market_policy: ApprovedMarketPolicyInputsV1 | None = None,
+    mapping_version: str = "sec-canonical-mapping-v1",
+    equity_dilution_evidence: EquityDilutionEvidenceV1 | None = None,
+    working_capital_inputs: tuple[CompositeWorkingCapitalInputV1, ...] = (),
+) -> AutomaticValuationPreparationV1:
+    """Compose exact or explicitly versioned composite inputs; retain all refusals."""
+
+    inputs = canonical_working_capital_inputs(working_capital_inputs)
+    result = _prepare_automatic_valuation(
+        facts,
+        snapshot=snapshot,
+        model_id=model_id,
+        model_version=model_version,
+        policy_id=policy_id,
+        policy_version=policy_version,
+        data_release_manifest_digest=data_release_manifest_digest,
+        market_policy=market_policy,
+        mapping_version=mapping_version,
+        equity_dilution_evidence=equity_dilution_evidence,
+        working_capital_inputs=inputs,
+    )
+    if not inputs:
+        return result
+    metrics = result.historical_metrics.model_copy(
+        update={"working_capital_inputs": inputs}
+    )
+    payload = {
+        **result.model_dump(exclude={"preparation_digest"}),
+        "historical_metrics": metrics,
+    }
+    return AutomaticValuationPreparationV1.model_validate(
+        {**payload, "preparation_digest": sha256_digest(payload)}
     )
 
 
