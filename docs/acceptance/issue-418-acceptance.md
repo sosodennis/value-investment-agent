@@ -1,6 +1,7 @@
 # Issue 418: source-bound operating scenarios
 
-Status: WIP. Refs #418, #376 and #377. This increment adds the owner-approved
+Status: WIP, implementation and local acceptance complete; independent review and
+CI remain pending. Refs #418, #376 and #377. This increment adds the owner-approved
 scenario study alongside the exact study. It does not complete #376, approve
 an accounting mapping, authenticate a release, or promote a history threshold.
 The original exact-path abstentions and all 100 issuers / 589 targets remain.
@@ -93,7 +94,7 @@ service is not evidence of reviewed source mappings or a completed empirical stu
 
 ## Remaining acceptance
 
-- Exact-commit tests, container acceptance, deterministic repeat and CI/review.
+- CI and independent review, followed by integration/main verification.
 - Transition filed operating evidence remains a separate source/review gate.
 - First eligible original label and conditional scenario comparison need their
   own explicit label scope; exact labels/errors are still unavailable.
@@ -101,3 +102,41 @@ service is not evidence of reviewed source mappings or a completed empirical stu
   within-issuer history comparison rules before using outcomes for threshold
   selection; then expand the unchanged 100-issuer cohort.
 - `supported_history_threshold=null`; complete exact study cases remain 0/100.
+
+## Exact implementation evidence
+
+Implementation `0c686d18c22af54f53379a646191114b157f923d` passes 1,590 tests
+against an isolated PostgreSQL database, with 11 explicit optional SEC-resource
+skips and one expected duplicate-ZIP warning. Ruff, six-file formatting, mypy,
+both architecture guards and `git diff --check` pass. All command/exit-code and
+input/output digests, including the rejected abbreviated-SHA invocation, are in
+[the checkpoint](issue-418-checkpoint.json); raw outputs remain outside Git.
+
+| Result | Evidence |
+| --- | --- |
+| FCFF | 125 provisional scenario results; 25 distinct first-year FCFF values |
+| Transition | 125 abstentions, all `TRANSITION_EVIDENCE_MISSING`; inputs retained |
+| Independent issuers | One with conditional scenarios; zero complete exact cases |
+| First-year FCFF sampled range | USD 173.32m–191.31m, conditional assumptions only |
+| Full desktop repeat | Four artifact types reused, `wrote=false`, zero new artifacts; bytes/sizes/mtimes unchanged |
+| Container repeat | Same input/output as desktop, zero network requests, second run `wrote=false` and unchanged files |
+| Docker isolation | New project, ports 28418/25418, network and two new disposable volumes |
+| Cleanup | Only #418 containers/image/network/volumes removed; all 67 pre-existing container IDs/image IDs/start times equal baseline |
+
+Numeric output digest:
+`ffdc58976027a7b1d0429edf44242ddb8e4e9389c1a99d35935600e93fd60811`.
+Desktop report digest:
+`1e7f3f8cdbded2c9a918b74b0c3dd724b21ece62209b4886a1bcd4de30303c1f`.
+The container's Python 3.12 runtime differs from desktop Python 3.11, so its
+execution report has a distinct identity; numerical output remains identical.
+All 77 Python source files inside the image matched the implementation checkout.
+HTTP `/readyz` and published ports were checked, without claiming configured
+SEC ingestion or a reviewed data release. This adds no public service route.
+
+Sensitivity audit reveals that baseline 2013 capex is not consumed by this
+three-period forecast: each of 25 working-capital allocations has five identical
+forecasts across its five 2013-capex assumptions. Reinvestment lineage consumes
+2014/2015 capex only. This is evidence for an owning-layer requirements review in
+[#415](https://github.com/sosodennis/value-investment-agent/issues/415#issuecomment-6823019276),
+not an exemption from its current release contract. Scenario count cannot be
+used as independent sample count or forecast-error evidence.
