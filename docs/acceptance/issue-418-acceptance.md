@@ -1,7 +1,7 @@
 # Issue 418: source-bound operating scenarios
 
-Status: WIP, implementation and local acceptance complete; independent review and
-CI remain pending. Refs #418, #376 and #377. This increment adds the owner-approved
+Status: WIP, implementation and local acceptance complete; independent review
+remains pending. Refs #418, #376 and #377. This increment adds the owner-approved
 scenario study alongside the exact study. It does not complete #376, approve
 an accounting mapping, authenticate a release, or promote a history threshold.
 The original exact-path abstentions and all 100 issuers / 589 targets remain.
@@ -94,7 +94,7 @@ service is not evidence of reviewed source mappings or a completed empirical stu
 
 ## Remaining acceptance
 
-- CI and independent review, followed by integration/main verification.
+- Independent review, followed by integration/main verification.
 - Transition filed operating evidence remains a separate source/review gate.
 - First eligible original label and conditional scenario comparison need their
   own explicit label scope; exact labels/errors are still unavailable.
@@ -122,6 +122,7 @@ input/output digests, including the rejected abbreviated-SHA invocation, are in
 | Container repeat | Same input/output as desktop, zero network requests, second run `wrote=false` and unchanged files |
 | Docker isolation | New project, ports 28418/25418, network and two new disposable volumes |
 | Cleanup | Only #418 containers/image/network/volumes removed; all 67 pre-existing container IDs/image IDs/start times equal baseline |
+| CI at metadata head `381cf2b3b4c4e454746f114e7a56d73b23cb34d1` | [12 jobs passed](https://github.com/sosodennis/value-investment-agent/actions/runs/43214447271), release gate skipped; no reviewer yet |
 
 Numeric output digest:
 `ffdc58976027a7b1d0429edf44242ddb8e4e9389c1a99d35935600e93fd60811`.
