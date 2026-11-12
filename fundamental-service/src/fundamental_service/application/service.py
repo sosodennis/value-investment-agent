@@ -61,6 +61,7 @@ from ..source_admission import SourceAdmissionV1, SourceUsePolicyV1
 from ..source_admission_evidence import load_release_source_admissions
 from ..market_source_selection import MarketSourceError, verify_observed_market_inputs
 from ..market_reference_evidence import load_release_market_reference_selection
+from ..automatic_market_policy_evidence import load_release_automatic_market_policy
 from ..market_reference_selection import (
     IssuerMarketReferenceSelectionV1,
     MarketReferenceSelectionError,
@@ -1277,6 +1278,13 @@ class FundamentalApplication:
         )
         policy_version = policy.policy_version if policy is not None else "unresolved"
         try:
+            load_release_automatic_market_policy(
+                self._data_release_manifest(request.data_release_manifest_digest),
+                snapshot=snapshot,
+                policy=policy,
+                admissions=source_admissions,
+                artifacts=self.artifact_store,
+            )
             reference_selection = load_release_market_reference_selection(
                 self._data_release_manifest(request.data_release_manifest_digest),
                 snapshot=snapshot,
