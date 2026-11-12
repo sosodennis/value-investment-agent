@@ -148,8 +148,15 @@ def approve(request, store, roots):
     )
 
 
-def test_machine_approval_repeats_without_new_artifacts_or_human_review(tmp_path):
-    request, store, roots, _ = case(tmp_path)
+@pytest.mark.parametrize("concept", ("us-gaap:Revenues", "us-gaap:SalesRevenueNet"))
+def test_machine_approval_repeats_without_new_artifacts_or_human_review(
+    tmp_path, concept
+):
+    request, store, roots, _ = case(
+        tmp_path,
+        observation_changes={"concept": concept},
+        proposal_changes={"source_concept": concept},
+    )
     first = approve(request, store, roots)
     before = inventory(store.root)
     second = approve(request, ArtifactStore(store.root), roots)
@@ -266,12 +273,11 @@ def test_segment_net_income_is_excluded_while_consolidated_is_approved(tmp_path)
 @pytest.mark.parametrize(
     "proposal",
     (
+        {"source_concept": "us-gaap:SalesRevenueGoodsNet"},
+        {"source_concept": "us-gaap:SalesRevenueServicesNet"},
+        {"source_concept": "example:SalesRevenueNet"},
         {
             "source_concept": "us-gaap:RevenueFromContractWithCustomerIncludingAssessedTax"
-        },
-        {
-            "source_concept": "us-gaap:DepreciationDepletionAndAmortization",
-            "normalized_field": "depreciation_and_amortization",
         },
         {
             "source_concept": "example:OperatingTaxPartition",
@@ -298,6 +304,92 @@ def test_conflicting_annual_amounts_abstain_even_with_valid_source(tmp_path):
     )
     request, store, _, _ = case(tmp_path / "conflict", extra=(conflict,))
     assert "MAPPING_OBSERVATION_CONFLICT" in evaluate(request, store).reason_codes
+
+
+@pytest.mark.parametrize("difference", ("0", "1"))
+@pytest.mark.parametrize("concept", ("us-gaap:Revenues", "us-gaap:SalesRevenueNet"))
+def test_total_revenue_concepts_require_agreement_for_the_same_period(
+    tmp_path, difference, concept
+):
+    request, _, _, _ = case(tmp_path)
+    observed = next(
+        f for f in request.original.report.facts if f.concept == "us-gaap:Revenues"
+    )
+    peer_concept = (
+        "us-gaap:SalesRevenueNet"
+        if concept == "us-gaap:Revenues"
+        else "us-gaap:Revenues"
+    )
+    peer = observed.model_copy(
+        update={
+            "concept": peer_concept,
+            "value": str(Decimal(observed.value) + Decimal(difference)),
+        }
+    )
+    request, store, roots, _ = case(
+        tmp_path / "totals",
+        observation_changes={"concept": concept},
+        proposal_changes={"source_concept": concept},
+        extra=(peer,),
+    )
+    decision = evaluate(request, store)
+    if difference == "0":
+        assert decision.status == "approved"
+        assert (
+            sha256_digest(peer)
+            not in decision.mapping.observation_scope.observation_digests
+        )
+    else:
+        assert decision.status == "abstain" and decision.mapping is None
+        assert "MAPPING_OBSERVATION_CONFLICT" in decision.reason_codes
+        assert any(
+            r.observation_digest == sha256_digest(peer)
+            and r.reason_code == "MAPPING_OBSERVATION_CONFLICT"
+            for r in decision.rejected_observations
+        )
+        first = approve(request, store, roots)
+        before = inventory(store.root)
+        second = approve(request, store, roots)
+        assert (
+            first.approval_publication is None and second.approval_publication is None
+        )
+        assert not second.decision_publication.wrote and inventory(store.root) == before
+
+
+@pytest.mark.parametrize(
+    "changes",
+    (
+        {"entity_identifier": "999"},
+        {"unit": "iso4217:EUR"},
+        {"dimensions": (("axis", "member"),)},
+        {"period_start": date(2025, 11, 1)},
+    ),
+)
+def test_ineligible_peer_total_does_not_override_requested_observations(
+    tmp_path, changes
+):
+    request, _, _, _ = case(tmp_path)
+    observed = next(
+        f for f in request.original.report.facts if f.concept == "us-gaap:Revenues"
+    )
+    peer = observed.model_copy(
+        update={
+            "concept": "us-gaap:SalesRevenueNet",
+            "value": str(Decimal(observed.value) + 1),
+            **changes,
+        }
+    )
+    request, store, _, _ = case(tmp_path / "peer", extra=(peer,))
+    assert evaluate(request, store).status == "approved"
+
+
+def test_valid_peer_total_does_not_substitute_for_missing_requested_concept(tmp_path):
+    request, store, _, _ = case(
+        tmp_path, proposal_changes={"source_concept": "us-gaap:SalesRevenueNet"}
+    )
+    decision = evaluate(request, store)
+    assert decision.status == "abstain" and decision.mapping is None
+    assert "MAPPING_NO_ELIGIBLE_OBSERVATIONS" in decision.reason_codes
 
 
 def test_missing_bytes_or_integrity_never_produce_approval(tmp_path):

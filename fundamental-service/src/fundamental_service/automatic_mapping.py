@@ -27,11 +27,16 @@ from .facts import CanonicalMappingV1, MappingObservationScopeV1
 from .issuer_release_evidence import verify_original_bytes, verify_original_integrity
 from .issuer_identity import IdentityResolutionError, validate_original_filing_identity
 from .original_issuer import OriginalIssuerEvidenceV1
+from .registered_depreciation import (
+    ADJUSTED_DEPRECIATION,
+    DEPRECIATION,
+    select_registered_depreciation,
+)
 from .serialization import sha256_digest
 from .taxonomy_evidence import require_original_taxonomy
 
 AUTOMATIC_MAPPING_INPUT_ROLE = "automatic-mapping-input-v1"
-AUTOMATIC_MAPPING_POLICY: Literal["source-bound-us-gaap-v3"] = "source-bound-us-gaap-v3"
+AUTOMATIC_MAPPING_POLICY: Literal["source-bound-us-gaap-v4"] = "source-bound-us-gaap-v4"
 _GAAP_NAMESPACE = re.compile(
     r"http://(?:fasb\.org|xbrl\.us)/us-gaap/\d{4}(?:-\d{2}-\d{2})?"
 )
@@ -42,13 +47,22 @@ class DirectMappingRule:
     concept: str
     period: Literal["annual", "instant"]
     unit: Literal["iso4217:USD", "xbrli:shares"] = "iso4217:USD"
+    alternative_concepts: tuple[str, ...] = ()
+
+    @property
+    def concepts(self) -> tuple[str, ...]:
+        return (self.concept, *self.alternative_concepts)
 
 
-# Partial revenue tags, aggregate D&A, absence claims, computed partitions and
-# awards deliberately have no direct rule. Adding one changes the policy digest.
+# Partial revenue tags, absence claims, arbitrary computed partitions and awards
+# have no direct rule. Aggregate D&A additionally requires its registered scope.
+# Every rule change changes the policy digest.
 _RULES = {
-    "revenue": DirectMappingRule("us-gaap:Revenues", "annual"),
+    "revenue": DirectMappingRule(
+        "us-gaap:Revenues", "annual", alternative_concepts=("us-gaap:SalesRevenueNet",)
+    ),
     "cost_of_revenue": DirectMappingRule("us-gaap:CostOfRevenue", "annual"),
+    "depreciation_and_amortization": DirectMappingRule(DEPRECIATION, "annual"),
     "operating_income": DirectMappingRule("us-gaap:OperatingIncomeLoss", "annual"),
     "income_before_tax": DirectMappingRule(
         "us-gaap:IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest",
@@ -106,6 +120,7 @@ def automatic_mapping_policy_digest() -> str:
                 for name in (
                     "automatic_mapping.py",
                     "automatic_mapping_disclosures.py",
+                    "registered_depreciation.py",
                     "accounting_roles.py",
                     "arelle_parser.py",
                     "facts.py",
@@ -185,7 +200,7 @@ class AutomaticMappingDecisionV1(ReleaseModel):
     input_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
     source_revision: str = Field(pattern=r"^[0-9a-f]{40}$")
     evaluator_id: str = Field(min_length=1)
-    policy_version: Literal["source-bound-us-gaap-v3"] = AUTOMATIC_MAPPING_POLICY
+    policy_version: Literal["source-bound-us-gaap-v4"] = AUTOMATIC_MAPPING_POLICY
     policy_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
     status: Literal["approved", "abstain"]
     reason_codes: tuple[str, ...]
@@ -310,8 +325,17 @@ def evaluate_automatic_mapping(
         proposal.normalized_field == "stock_based_compensation"
         and proposal.source_concept == STOCK_COMPENSATION_DISCLOSURE
     )
+    depreciation = (
+        proposal.normalized_field == "depreciation_and_amortization"
+        and proposal.source_concept in {DEPRECIATION, ADJUSTED_DEPRECIATION}
+    )
+    adjusted = depreciation and proposal.source_concept == ADJUSTED_DEPRECIATION
+    computed = disclosed or adjusted
     if (
-        (not disclosed and (rule is None or proposal.source_concept != rule.concept))
+        (
+            not computed
+            and (rule is None or proposal.source_concept not in rule.concepts)
+        )
         or proposal.accounting_rules is not None
         or proposal.observation_scope is not None
         or proposal.status != "provisional"
@@ -338,12 +362,46 @@ def evaluate_automatic_mapping(
             )
             for fact, reason in disclosure.rejected
         )
+    if depreciation:
+        classification = select_registered_depreciation(
+            original,
+            adjusted=adjusted,
+            security_id=(
+                request.security_identity.security_id
+                if request.security_identity is not None
+                else None
+            ),
+        )
+        reasons.update(classification.reason_codes)
+        accounting_rules = classification.rules
+        for fact in classification.selected:
+            reason = (
+                None
+                if adjusted
+                else _observation_rejection(
+                    fact, request, _RULES[proposal.normalized_field]
+                )
+            )
+            if reason is None:
+                selected.append(fact)
+            else:
+                rejected.append(
+                    MappingObservationRejectionV1(
+                        observation_digest=sha256_digest(fact), reason_code=reason
+                    )
+                )
+        rejected.extend(
+            MappingObservationRejectionV1(
+                observation_digest=sha256_digest(fact), reason_code=reason
+            )
+            for fact, reason in classification.rejected
+        )
     for fact in sorted(original.report.facts, key=sha256_digest):
-        if disclosed or fact.concept != proposal.source_concept:
+        if disclosed or depreciation or fact.concept != proposal.source_concept:
             continue
         reason = (
             "MAPPING_AUTOMATIC_RULE_UNSUPPORTED"
-            if rule is None or proposal.source_concept != rule.concept
+            if rule is None or proposal.source_concept not in rule.concepts
             else _observation_rejection(fact, request, rule)
         )
         if reason:
@@ -357,16 +415,33 @@ def evaluate_automatic_mapping(
     if not selected:
         reasons.add("MAPPING_NO_ELIGIBLE_OBSERVATIONS")
     periods: dict[tuple[object, ...], set[Decimal]] = {}
-    for fact in () if disclosed else selected:
+    for fact in () if computed else selected:
         key = (fact.period_start, fact.period_end, fact.instant)
         periods.setdefault(key, set()).add(Decimal(fact.value))
+    if rule is not None and len(rule.concepts) > 1:
+        for fact in sorted(original.report.facts, key=sha256_digest):
+            if (
+                fact.concept not in rule.concepts
+                or fact.concept == proposal.source_concept
+                or _observation_rejection(fact, request, rule) is not None
+            ):
+                continue
+            key = (fact.period_start, fact.period_end, fact.instant)
+            if key in periods and Decimal(fact.value) not in periods[key]:
+                periods[key].add(Decimal(fact.value))
+                rejected.append(
+                    MappingObservationRejectionV1(
+                        observation_digest=sha256_digest(fact),
+                        reason_code="MAPPING_OBSERVATION_CONFLICT",
+                    )
+                )
     if any(len(values) != 1 for values in periods.values()):
         reasons.add("MAPPING_OBSERVATION_CONFLICT")
     mapping = None
     if not reasons:
         scope = (
             None
-            if disclosed
+            if computed
             else MappingObservationScopeV1(
                 issuer_id=original.source.cik,
                 accession_number=original.source.accession_number,
@@ -379,7 +454,7 @@ def evaluate_automatic_mapping(
         payload: dict[str, object] = {
             "contract_version": "fundamental.v1",
             "source_concept": f"computed:{proposal.normalized_field}"
-            if disclosed
+            if computed
             else proposal.source_concept,
             "normalized_field": proposal.normalized_field,
             "mapping_version": proposal.mapping_version,
@@ -393,10 +468,12 @@ def evaluate_automatic_mapping(
             ),
             "observation_scope": scope,
         }
-        if disclosed:
+        if computed:
             payload.update(
                 {
-                    "anchor_concept": STOCK_COMPENSATION_DISCLOSURE,
+                    "anchor_concept": STOCK_COMPENSATION_DISCLOSURE
+                    if disclosed
+                    else DEPRECIATION,
                     "accounting_rules": accounting_rules,
                 }
             )
