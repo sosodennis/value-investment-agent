@@ -75,6 +75,7 @@ def _bound(fixture):
     manifest = DataReleaseManifestV1(**payload, manifest_digest=sha256_digest(payload))
     policy = fixture.application.policy_registry.policy("fcff_dcf-us-gaap-public-v3")
     payload = policy.model_dump(exclude={"policy_digest"})
+    payload["issuer_id"] = plan.issuer_id
     payload["source_refs"] = (*policy.source_refs, ref.content_hash)
     original = admission.vintage.artifacts[0]
     row = next(x for x in admission.vintage.rows if x.subject == "United States")
@@ -131,6 +132,7 @@ def test_release_plan_reproduces_exact_issuer_date_reference_and_remains_unchang
         ("duplicate", "MARKET_REFERENCE_PLAN_AMBIGUOUS"),
         ("bytes", "MARKET_REFERENCE_PLAN_MISMATCH"),
         ("issuer", "MARKET_REFERENCE_PLAN_CONTEXT_MISMATCH"),
+        ("policy_issuer", "MARKET_REFERENCE_POLICY_ISSUER_MISMATCH"),
         ("timestamp", "MARKET_REFERENCE_PLAN_CONTEXT_MISMATCH"),
         ("noncanonical", "MARKET_REFERENCE_PLAN_NONCANONICAL"),
         ("invalid", "MARKET_REFERENCE_PLAN_INVALID"),
@@ -143,6 +145,10 @@ def test_release_reference_plan_refusals_are_explicit(tmp_path, change, code):
         policy = fixture.application.policy_registry.policy(
             "fcff_dcf-us-gaap-public-v3"
         )
+    elif change == "policy_issuer":
+        payload = policy.model_dump(exclude={"policy_digest"})
+        payload["issuer_id"] = "different-issuer"
+        policy = PolicyRecordV1(**payload, policy_digest=sha256_digest(payload))
     elif change == "duplicate":
         duplicate = ref.model_copy(update={"artifact_id": "duplicate-plan"})
         manifest = manifest.model_copy(

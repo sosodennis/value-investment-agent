@@ -64,6 +64,7 @@ def _bound(fixture):
     manifest = DataReleaseManifestV1(**payload, manifest_digest=sha256_digest(payload))
     policy = fixture.application.policy_registry.policy(plan.policy_id)
     payload = policy.model_dump(exclude={"policy_digest"})
+    payload["issuer_id"] = plan.issuer_id
     payload["source_refs"] = (*policy.source_refs, ref.content_hash)
     market = payload["market_inputs"]
     rate_evidence = next(
@@ -146,7 +147,14 @@ def test_formal_preparation_reproduces_terminal_assumption_and_original_traces(
 
 @pytest.mark.parametrize(
     "change",
-    ["value", "source", "risk_free", "rate_method", "terminal_method", "unpinned"],
+    [
+        "value",
+        "source",
+        "risk_free",
+        "rate_method",
+        "terminal_method",
+        "unpinned",
+    ],
 )
 def test_rehashed_policy_cannot_change_source_bound_terminal_assumption(
     tmp_path, change
@@ -193,6 +201,7 @@ def test_rehashed_policy_cannot_change_source_bound_terminal_assumption(
     [
         ("none", None),
         ("changed", "TERMINAL_POLICY_SOURCE_MISMATCH"),
+        ("issuer", "POLICY_NOT_FOUND"),
         ("authority", "MARKET_REFERENCE_POLICY_UNAVAILABLE"),
         ("missing", "TERMINAL_PLAN_MISSING"),
     ],
@@ -226,14 +235,17 @@ def test_independent_canary_uses_the_same_effective_terminal_policy(
         payload, Ed25519PrivateKey.from_private_bytes(b"verifier-key".ljust(32, b"0"))
     )
     registry = application.policy_registry
-    if change == "changed":
+    if change in {"changed", "issuer"}:
         payload = policy.model_dump(exclude={"policy_digest"})
-        payload["market_inputs"]["terminal_growth"] += Decimal("0.001")
-        next(
-            x
-            for x in payload["market_inputs"]["evidence"]
-            if x["role"] == "terminal_growth"
-        )["value"] = payload["market_inputs"]["terminal_growth"]
+        if change == "issuer":
+            payload["issuer_id"] = "different-issuer"
+        else:
+            payload["market_inputs"]["terminal_growth"] += Decimal("0.001")
+            next(
+                x
+                for x in payload["market_inputs"]["evidence"]
+                if x["role"] == "terminal_growth"
+            )["value"] = payload["market_inputs"]["terminal_growth"]
         registry = PolicyRegistry(
             initial_model_specs(),
             (PolicyRecordV1(**payload, policy_digest=sha256_digest(payload)),),
@@ -263,6 +275,7 @@ def test_independent_canary_uses_the_same_effective_terminal_policy(
     "change,code",
     [
         ("issuer", "TERMINAL_PLAN_CONTEXT_MISMATCH"),
+        ("policy_issuer", "TERMINAL_PLAN_ISSUER_POLICY_MISMATCH"),
         ("bytes", "TERMINAL_PLAN_MISMATCH"),
         ("duplicate", "TERMINAL_PLAN_AMBIGUOUS"),
     ],
@@ -281,6 +294,20 @@ def test_terminal_plan_release_context_and_original_identity_cannot_be_substitut
                 )
             }
         )
+    elif change == "policy_issuer":
+        payload = policy.model_dump(exclude={"policy_digest"})
+        payload["issuer_id"] = "different-issuer"
+        changed_policy = PolicyRecordV1(**payload, policy_digest=sha256_digest(payload))
+        with pytest.raises(DataReleaseError) as error:
+            load_release_terminal_growth_selection(
+                manifest,
+                snapshot=snapshot,
+                policy=changed_policy,
+                admissions=admissions,
+                artifacts=fixture.artifacts,
+            )
+        assert error.value.code == "TERMINAL_PLAN_ISSUER_POLICY_MISMATCH"
+        return
     else:
         refs = manifest.artifact_refs
         ref = next(x for x in refs if x.role == TERMINAL_GROWTH_PLAN_ROLE)

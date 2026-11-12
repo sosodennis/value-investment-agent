@@ -100,6 +100,11 @@ def load_release_terminal_growth_selection(
             "TERMINAL_PLAN_CONTEXT_MISMATCH",
             "terminal plan differs from valuation issuer, currency, policy or time",
         )
+    if policy.issuer_id != plan.issuer_id:
+        raise DataReleaseError(
+            "TERMINAL_PLAN_ISSUER_POLICY_MISMATCH",
+            "deployment market policy must have the terminal plan issuer scope",
+        )
     try:
         selection = select_terminal_growth(plan, admissions=admissions)
     except MarketSourceError as error:

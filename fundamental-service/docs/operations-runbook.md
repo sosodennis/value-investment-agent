@@ -102,6 +102,15 @@ beta remains a reference, and country tax cannot replace the #352 composer's
 historical normalized tax. Complete beta, debt-cost, capital-weight and terminal
 policies still require their own evidence.
 
+Policies may carry an immutable `issuer_id` scope. Preparation, calculation and
+the independent canary pass the valuation issuer into `PolicyRegistry`; a
+matching eligible issuer policy takes precedence, foreign policies are ignored,
+and same-scope ambiguity refuses. A policy pinning an issuer market-reference
+or terminal-growth plan must carry that same issuer scope. Unscoped legacy
+policies omit the optional field from canonical serialization, preserving their
+existing content digests. Keep generic policies only for assumptions genuinely
+shared across issuers.
+
 For source-derived stable terminal growth, release one canonical
 `issuer_terminal_growth_plan` and pin its hash in the effective deployment
 policy's `source_refs`. The plan binds issuer, USD currency, valuation timestamp,

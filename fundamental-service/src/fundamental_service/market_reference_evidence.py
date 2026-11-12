@@ -93,6 +93,11 @@ def load_release_market_reference_selection(
             "MARKET_REFERENCE_PLAN_CONTEXT_MISMATCH",
             "issuer reference plan differs from the valuation issuer or timestamp",
         )
+    if policy.issuer_id != plan.issuer_id:
+        raise DataReleaseError(
+            "MARKET_REFERENCE_POLICY_ISSUER_MISMATCH",
+            "deployment policy must have the issuer reference plan scope",
+        )
     selection = select_issuer_market_references(plan, admissions=admissions)
     if selection.status != "selected":
         raise DataReleaseError(

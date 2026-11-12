@@ -212,6 +212,7 @@ class DataReleaseCanaryRunner:
                             model_version=candidate.model_version,
                             valuation_timestamp=snapshot.valuation_timestamp,
                             policy_id=None,
+                            issuer_id=snapshot.identity.issuer_id,
                         )
                     except PolicyError:
                         continue
@@ -248,6 +249,7 @@ class DataReleaseCanaryRunner:
                         model_version=declared_policy.model_version,
                         valuation_timestamp=snapshot.valuation_timestamp,
                         policy_id=None,
+                        issuer_id=snapshot.identity.issuer_id,
                     )
                     selection = load_release_market_reference_selection(
                         manifest,
