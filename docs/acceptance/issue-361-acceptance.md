@@ -19,6 +19,68 @@ Eligible candidate-history valuations can be provisional. Missing, conflicting,
 unreviewed, future, or unsupported evidence must retain reasons and abstain.
 No completed #351 through #355 acceptance is changed. #350 is outside scope.
 
+## Automatic annual disclosure checkpoint
+
+Exact implementation `91f75bb8d6b0e8868bc200afe738c101c44f588d` extends automatic
+policy `source-bound-us-gaap-v2` to one exact annual stock-compensation expense
+sentence. Original issuer, annual period, consolidated scope, USD units, amount,
+precision and source offsets remain bound to the accounting evidence. Unknown
+scale, unsupported wording, conflicting amounts and comparative periods abstain.
+The existing accounting evaluator and #352 formulas retain ownership. An
+operating-only release rejects this additional expense role; no release profile
+or forged-certificate check is relaxed.
+
+Validation passes **1,284 Service/PostgreSQL, 56 Agent boundary and 17
+acceptance-tool tests**, Ruff/format, 50 Service-source and Agent producer mypy,
+both architecture guards and diff checks. Eleven optional resource tests skip;
+one duplicate-ZIP warning is intentional.
+[CI](https://github.com/sosodennis/value-investment-agent/actions/runs/43136454372)
+passes all 12 executed jobs; release skips. Engineering input
+`7b690088fa6405ea63b4a2584b1153015a5d8356a12e0fc1ef989d4740305975`;
+output `fd988a2a1f3d8bef263a55f1bcbf9170909aee45d6991e35f52337ab69ef19d0`.
+
+Two NVE originals retain **70 decisions: 36 approved and 34 abstained**. Each
+original has 32 scalar and three supporting award roles. The newly admitted
+annual expenses are USD 59,657 and USD 141,936. Independent issuer count is one.
+The full second run creates zero publications, returns `wrote=false`, makes no
+provider/parser calls and preserves all 645 content-file hashes, sizes and
+mtimes. Mapping input
+`869ca689b8f55ec9a4af4386f9470c41bf62ff65d286cb99009676adcddf460b`;
+output `c6b26100249b48958783481809ee4dde4db0748e134a4824173b8548cec6fa66`.
+Offline backup/empty-store restore preserves 18 tables/1,389 rows and all 70
+decisions; its second backup/restore/recomputation/report are unchanged.
+
+The isolated installed-service project `value-investment-agent-361-auto-mapping`
+used ports 18670/18671 and image
+`sha256:a905869c98ed19a2f34e8ffc875649e2dea3a318df1bcadf7a56e26dc2efc54b`.
+All 68 installed package files equal this exact implementation. Python 3.12.16,
+Arelle 2.47.4 and Pydantic 2.14.2 are recorded. The formal approval CLI reuses both
+batches; authenticated HTTP metadata/content retrieval returns 200 with matching
+digests. PostgreSQL and service restarts reproduce identical output bytes and
+zero new publications. Installed input
+`eb5e03217b8030f501188fd9ce71b4cfc51477ee4dc438ccf7d50a57632b92de`;
+output `3ef1a345f949fb2f8fdcd134dc825695572929aadda656ddeae9a3221a2fdddb`.
+
+The first export comparison failed because normal service startup adds ten
+model and ten policy records to the offline store. Each added payload/digest
+matches the exact startup inventory; all other 16 tables and 645 objects remain
+identical. Subsequent restarts and exports preserve installed backup digest
+`57758a79a845b8df01fad47a1b91af525969ab9c98cd00ede5c31622cdd6a529`.
+The 18-table/1,409-row portable backup was copied outside Docker and all 664
+files verified before removing only this disposable project's two containers,
+one network and two volumes. All 38 baseline containers retain identity, image
+and start time. The existing PostgreSQL project on 18665 remains available.
+
+`automatic_disclosure_increment` preserves all 44 preceding checkpoint entries
+and the initial harness failures. Generated source, mapping and backup bytes
+remain outside Git. Mapping reuse/recovery is verified within the stated scope;
+complete security-bound accounting/award coverage, admitted market policy/quote,
+trusted release, exact-input caller approval and the real numerical 19-gate flow
+remain incomplete. Unsupported decisions abstain; candidate history remains
+provisional or abstained and underpowered threshold evidence leaves
+`supported_history_threshold=null`. Independent PR review, merge and main
+verification are outstanding. Keep #361 OPEN and PR #370 draft.
+
 ## Automatic mapping approval increment (2026-11-12)
 
 The owner replaced the pending manual mapping gate with automatic policy
@@ -107,7 +169,7 @@ NVE's corporate bonds 42,706,080, cash 10,283,550, cash-included money funds
 9,842,796 and investment-interest receivables 460,627 still require a complete
 source-bound classification. No real asset aggregate, missing role, quote,
 policy or numerical valuation is approved by these engineering tests.
-Threshold remains null. The existing isolated PostgreSQL project on18665 stays
+Threshold remains null. The existing isolated PostgreSQL project on 18665 stays
 healthy; no containers, networks or volumes were started or cleaned.
 
 ## Exact automatic mapping checkpoint
@@ -142,7 +204,7 @@ it does not establish the remaining full numerical service acceptance.
 
 The appended `automatic_mapping_approval_increment` preserves all 41 prior
 checkpoint entries (42 total). No containers, networks or volumes were started
-or cleaned. The existing isolated PostgreSQL project remains healthy on18665;
+or cleaned. The existing isolated PostgreSQL project remains healthy on 18665;
 only #361-owned databases/content/backups were added. AI validation remains
 future scope; exact-input caller approval and independent PR review remain
 separate gates. #361, #407 and PR #370 remain open, with the PR draft.
