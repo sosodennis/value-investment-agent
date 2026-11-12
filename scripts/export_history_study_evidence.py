@@ -345,7 +345,9 @@ def main() -> int:
             ["git", "status", "--porcelain"], cwd=ROOT, text=True
         ):
             raise DesignError("exact clean implementation commit is required")
-        index = EvidenceIndex.model_validate(read_document(args.evidence_index))
+        index = EvidenceIndex.model_validate_json(
+            canonical_bytes(read_document(args.evidence_index))
+        )
         output = export_evidence(
             read_document(args.manifest), index, args.evidence_index.parent
         )

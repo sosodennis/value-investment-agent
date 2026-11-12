@@ -368,3 +368,48 @@ def test_relocation_and_republication_preserve_identity_and_artifact(
     assert before == {
         p.name: (p.read_bytes(), p.stat().st_mtime_ns) for p in output.glob("*.json")
     }
+
+
+def test_cli_reads_strict_json_arrays_and_publishes_a_reusable_analysis_panel(
+    evidence, monkeypatch, capsys
+):
+    manifest, index, directory, _ = evidence
+    manifest_path, index_path = directory / "manifest.json", directory / "index.json"
+    manifest_path.write_bytes(canonical_bytes(manifest))
+    index_path.write_bytes(canonical_bytes(index))
+    output = directory / "cli-output"
+    monkeypatch.setattr(
+        exporter.subprocess,
+        "check_output",
+        lambda command, **kwargs: "test-commit" if "rev-parse" in command else "",
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "export_history_study_evidence.py",
+            "--manifest",
+            str(manifest_path),
+            "--evidence-index",
+            str(index_path),
+            "--exact-commit",
+            "test-commit",
+            "--output-directory",
+            str(output),
+        ],
+    )
+    assert exporter.main() == 0
+    first = json.loads(capsys.readouterr().out)
+    assert first["wrote"] is True
+    panel = json.loads((output / f"{first['loss_panel_digest']}.json").read_bytes())
+    assert len(analysis.decode_panel(panel, manifest)) == 100
+    before = {p.name: (p.read_bytes(), p.stat().st_mtime_ns) for p in output.iterdir()}
+    assert exporter.main() == 0
+    second = json.loads(capsys.readouterr().out)
+    assert second["wrote"] is False
+    assert all(not row["wrote"] for row in second["publications"].values())
+    assert second["input_digest"] == first["input_digest"]
+    assert second["output_digest"] == first["output_digest"]
+    assert before == {
+        p.name: (p.read_bytes(), p.stat().st_mtime_ns) for p in output.iterdir()
+    }
