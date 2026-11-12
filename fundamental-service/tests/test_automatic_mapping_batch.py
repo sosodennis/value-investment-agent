@@ -133,6 +133,22 @@ def test_complete_batch_repeat_preserves_bytes_order_and_mtimes(tmp_path):
         )
 
 
+def test_certificate_invalidation_marks_the_dependent_batch_report_stale(tmp_path):
+    request, store, roots = batch_case(tmp_path)
+    receipt = run_batch(request, store, roots)
+    certificate = next(
+        role.approval
+        for role in read_decision(receipt, store).roles
+        if role.approval is not None
+    )
+    store.invalidate(certificate.artifact_id)
+    affected = store.invalidate_dependency(certificate.content_hash)
+    assert receipt.decision_publication.artifact.artifact_id in affected
+    assert (
+        store.get(receipt.decision_publication.artifact.artifact_id).status == "stale"
+    )
+
+
 @pytest.mark.parametrize(
     "change", ["omit", "add", "profile_version", "model_version", "threshold"]
 )

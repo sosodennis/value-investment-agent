@@ -257,19 +257,19 @@ def approve_mapping_batch(
         roles=tuple(roles),
     )
     output_digest = sha256_digest(batch_decision)
+    dependencies = {
+        input_digest,
+        batch_decision.policy_digest,
+        request.requirements.digest,
+    }
+    for role_decision in roles:
+        for ref in (role_decision.decision, role_decision.approval):
+            if ref is not None:
+                dependencies.add(ref.content_hash)
     decision_publication = artifacts.put_with_receipt(
         "automatic-mapping-batch-decision-" + output_digest,
         batch_decision,
-        dependency_hashes=tuple(
-            sorted(
-                {
-                    input_digest,
-                    batch_decision.policy_digest,
-                    request.requirements.digest,
-                    *(r.output_digest for r in receipts),
-                }
-            )
-        ),
+        dependency_hashes=tuple(sorted(dependencies)),
     )
     publications = [input_publication, decision_publication]
     for receipt in receipts:
