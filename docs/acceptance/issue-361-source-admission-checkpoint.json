@@ -264,6 +264,198 @@
     "unrelated_baseline_containers_unchanged": 40
   },
   "issue": 361,
+  "market_rate_binding_increment": {
+    "abstraction": "DailyMarketRatePolicyV1 consumes MacroSeriesVintageV1 from any injected provider; no provider IDs, endpoint or transport branches exist in the selector.",
+    "change": "Bind observed market-policy rates to admitted canonical source values before the #352 composer; retain deterministic nonretryable422 preparation refusals without rewriting existing artifacts.",
+    "ci": {
+      "conclusion": "success",
+      "exact_commit": "a2d5ef13f6b6dcfde75d34d052ae2ea0d032a09d",
+      "passed": 12,
+      "receipt_digest": "c9c00ea460a27212a643b5e1659d55a68801649e4874f88828885438c4d5af03",
+      "release_gate": "skipped",
+      "run": 43228651969
+    },
+    "exact_commit": "a2d5ef13f6b6dcfde75d34d052ae2ea0d032a09d",
+    "full_numerical_flow": false,
+    "installed_image": {
+      "baseline_containers": 46,
+      "binding_input_digest": "5716fc9599c500b600ff82ad6a282dee3d9eadf1d16fa91a9a29c313bcdefb75",
+      "binding_output_digest": "b05cf344ac05f27e1d3be0b27957ef86abe56d1bb65a7ddaf7058d36bf3d5f2e",
+      "command": "python3 .audit/issue-361-market-binding/verify_image.py",
+      "compose": {
+        "config_hash": "4c8dbf609d7782e8f63035f62fc5084d7efb0b3019002695901844d247028d4e",
+        "env_files": [],
+        "files": [
+          "compose/verification/docker-compose.issue280-operations.yml"
+        ],
+        "ports": {
+          "fundamental_postgres": 18686,
+          "fundamental_service": 18685
+        },
+        "project": "value-investment-agent-361-capture-profiles"
+      },
+      "current_rate_refusal": "MARKET_RATE_SOURCE_STALE",
+      "exit_code": 0,
+      "historical_cutoff": "2025-04-01T00:00:00Z",
+      "historical_rate_refusal": "MARKET_RATE_SOURCE_UNAVAILABLE",
+      "identity_resolution_configured": false,
+      "image_id": "sha256:76c6dfc14413ad3e8ae6b8180b744d4112b89722dd03011c85d35e7fb3d113a0",
+      "input_digest": "62cb91a889f5de33b211b7580ff4c74211e63d79b80eecb568dc8b00864e5685",
+      "installed_source_count": 87,
+      "inventory_restart_digest": "9d0f0c4d31e1e3d557f241c010f0c4158fbfaf6fc4856889e67d88e989e4e4a1",
+      "inventory_second_digest": "9d0f0c4d31e1e3d557f241c010f0c4158fbfaf6fc4856889e67d88e989e4e4a1",
+      "new_files_after_restart": 0,
+      "new_files_second": 0,
+      "output_digest": "34433e65d3b7c6bbad9658d8c91a47c245f6f2400e04213bbba6484e9f93a166",
+      "repeat_and_restart_wrote": false,
+      "repeat_downloads": 0,
+      "repeat_provider_calls": 0,
+      "repeat_selection_calls": 0,
+      "runtime": {
+        "arelle": "2.47.4",
+        "pydantic": "2.14.2",
+        "python": "3.12.16",
+        "xlrd": "2.0.2"
+      },
+      "source_admissions": 17,
+      "source_refusals": 10,
+      "source_replay_input_digest": "2627b538cb830c4c9699e15c490dd44b60cd6a68b86df779599f1cd08ad5fc39",
+      "source_replay_output_digest": "42234ca81e20c9449e454b91e792ebfafc32df514ca0cad006db0c65144b77af",
+      "unrelated_container_changes": {},
+      "unrelated_containers_unchanged": 44
+    },
+    "limitations": [
+      "The retained real-source packet has no production-policy-admissible rate at its historical2025 or current cutoff. This preserves abstention, not real numerical valuation acceptance.",
+      "Only observed risk-free-rate selection is configured. Other observed roles refuse until issuer/date/role policy is implemented. Explicit normative policy authority remains unchanged; synthetic tests now identify it accurately.",
+      "Independent review and complete #361 numerical/recovery/merge acceptance remain open. Fixed2016 cohort and threshold research belong #376/#377."
+    ],
+    "pre_change_counterexamples": [
+      {
+        "base_commit": "634e889619ad79ad45b4be3d5519a7ca5df3472d",
+        "case": "Observed-source policy with no released source admission was accepted; first regression failed DID NOT RAISE ServiceError.",
+        "exact_commit_run": false
+      },
+      {
+        "base_commit": "634e889619ad79ad45b4be3d5519a7ca5df3472d",
+        "case": "Working-diff nonretryable422 preparation refusal escaped runner with no blocked artifact; failure-retention regression reproduced it before correction.",
+        "exact_commit_run": false
+      }
+    ],
+    "remaining": [
+      "Provider-backed issuer/date ERP, beta and tax policy",
+      "Lawful dated quote and debt/capital/terminal policy",
+      "Complete source-bound accounting/awards and trusted release",
+      "Authentic exact-input caller approval and real numerical repeat/concurrency/restart/empty-store restore",
+      "Independent PR review, CI, merge and exact main-SHA verification"
+    ],
+    "selector_policy": {
+      "authority": "Versioned service selection assumption, not evidence of a calibrated history threshold.",
+      "conversion": "published percent / 100",
+      "currency": "USD",
+      "maximum_age_calendar_days": 7,
+      "series_id": "us.treasury_par_yield_10y",
+      "version": "usd-treasury-10y-latest-daily-7d-v1"
+    },
+    "supported_history_threshold": null,
+    "verification": {
+      "command": "python3 .audit/issue-361-market-binding/verify_checkpoint.py",
+      "commands": {
+        "architecture": {
+          "command": [
+            "python3",
+            "scripts/architecture_guard.py"
+          ],
+          "exit_code": 0,
+          "output_sha256": "6c8e024ff94859e9781de1f4a3201c70e338bc90774702d8ac83afc8a9a15ab9"
+        },
+        "diff": {
+          "command": [
+            "git",
+            "diff",
+            "--check",
+            "origin/main"
+          ],
+          "exit_code": 0,
+          "output_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "format": {
+          "command": [
+            "uvx",
+            "--from",
+            "ruff==0.14.10",
+            "ruff",
+            "format",
+            "--check",
+            "fundamental-service/src/fundamental_service/application/service.py",
+            "fundamental-service/src/fundamental_service/market_source_selection.py",
+            "fundamental-service/src/fundamental_service/preparation_runner.py",
+            "fundamental-service/tests/market_policy_fixtures.py",
+            "fundamental-service/tests/test_market_source_binding.py",
+            "fundamental-service/tests/test_valuation_preparation.py",
+            "fundamental-service/tests/test_valuation_preparation_integration.py"
+          ],
+          "exit_code": 0,
+          "output_sha256": "0321fffcb91606a42c0a19d8c1121d5c544379d663821fce616c71a7bb62f6b5"
+        },
+        "mypy": {
+          "command": [
+            "uv",
+            "run",
+            "--frozen",
+            "--project",
+            "fundamental-service",
+            "--with",
+            "mypy==1.19.1",
+            "mypy",
+            "--no-incremental",
+            "--follow-imports=silent",
+            "--ignore-missing-imports",
+            "fundamental-service/src/fundamental_service/application/service.py",
+            "fundamental-service/src/fundamental_service/market_source_selection.py",
+            "fundamental-service/src/fundamental_service/preparation_runner.py"
+          ],
+          "exit_code": 0,
+          "output_sha256": "8228fcc5ce46d42d01caf3cd941f4e9c5f2bcc372bb5b147a2f0572d2dd675a8"
+        },
+        "ruff": {
+          "command": [
+            "uvx",
+            "--from",
+            "ruff==0.14.10",
+            "ruff",
+            "check",
+            "fundamental-service"
+          ],
+          "exit_code": 0,
+          "output_sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18"
+        },
+        "service_postgres": {
+          "command": [
+            "uv",
+            "run",
+            "--frozen",
+            "--extra",
+            "dev",
+            "--project",
+            "fundamental-service",
+            "pytest",
+            "fundamental-service/tests",
+            "-ra"
+          ],
+          "exit_code": 0,
+          "output_sha256": "54276ffc80cea1c8547eac3da100f5ab67d762bb8207edc7770e15efaf022d77"
+        }
+      },
+      "exit_code": 0,
+      "input_digest": "f13480ebfe2bd03122d9cd6948312aaf51c64ad870b3d78254ab8e0517aac3da",
+      "output_digest": "160f6bfdefcbe34b1890702ea2b00c8c009bea3cce40bde48ad54cda843f5701",
+      "tests": {
+        "intentional_duplicate_zip_warnings": 1,
+        "optional_resource_skips": 11,
+        "service_postgres_passed": 1708
+      }
+    }
+  },
   "pull_request": 370,
   "remaining": [
     "Provider-neutral capture registration; the transport still imports concrete parsing/query/time rules.",

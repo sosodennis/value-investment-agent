@@ -19,6 +19,55 @@ Eligible candidate-history valuations can be provisional. Missing, conflicting,
 unreviewed, future, or unsupported evidence must retain reasons and abstain.
 No completed #351 through #355 acceptance is changed. #350 is outside scope.
 
+## Observed market-rate binding checkpoint
+
+Implementation `a2d5ef13f6b6dcfde75d34d052ae2ea0d032a09d` consumes the canonical
+values returned by the existing release source-admission loader before formal
+#352 preparation. A provider-neutral daily-rate selector applies a versioned
+currency, latest-vintage/day and freshness rule. It checks the declared value,
+original source identity/hash/version/terms and all timestamps against that
+selection. The trace retains original, admission, vintage, observation and
+selection digests. A rehashed policy cannot replace the observed rate. An
+unconfigured observed role refuses; an unlevered industry beta is not relabeled
+as an observed equity beta.
+
+The initial USD Treasury rule permits at most seven calendar days of observation
+age and converts published percent to fraction. This is an explicit selection
+assumption, not a history-sufficiency threshold. Existing normative-policy
+authority is unchanged. Synthetic policy-only fixtures now identify their
+assumptions as policies rather than claim nonexistent observed source evidence.
+Deterministic, nonretryable422 preparation refusals also produce retained blocked
+runner artifacts; repeats reuse their identity without rewrite. Transient and
+authorization errors retain their established error paths.
+
+Exact checks pass **1,708 Service/PostgreSQL tests**, Ruff, format, changed-source
+mypy, architecture and diff. Eleven optional SEC-resource tests skip; one
+intentional duplicate-ZIP fixture warning remains. Check input/output digests:
+`f13480ebfe2bd03122d9cd6948312aaf51c64ad870b3d78254ab8e0517aac3da` /
+`160f6bfdefcbe34b1890702ea2b00c8c009bea3cce40bde48ad54cda843f5701`.
+[CI 43228651969](https://github.com/sosodennis/value-investment-agent/actions/runs/43228651969)
+passes all 12 executed jobs; the release gate is skipped.
+
+The isolated `value-investment-agent-361-capture-profiles` image matches all
+87 installed source files. Its retained real-source packet has 17 admission
+decisions and 10 source refusals. At the **2025-04-01** historical cutoff, the rate
+selector refuses unavailable source evidence. At the packet's current cutoff,
+it refuses stale observations. The resulting refusal report repeats after service
+restart with zero downloads, source/selector calls or artifact writes, unchanged
+inventory hashes/mtimes and output digest
+`b05cf344ac05f27e1d3be0b27957ef86abe56d1bb65a7ddaf7058d36bf3d5f2e`.
+All 44 unrelated baseline containers keep their identity, image and start time.
+This checks real-source refusal persistence; SEC identity remains unconfigured
+in that image and complete numerical acceptance remains false. It does not test
+the fixed2016 research cohort, which belongs to #376/#377.
+
+The existing [source-admission checkpoint](issue-361-source-admission-checkpoint.json)
+records commands, exact commit, source/runtime pins, input/output digests,
+counterexamples, limitations and remaining work. Complete issuer/date financial
+policy, lawful quote, accounting/award evidence, trusted release, real numerical
+recovery and independent review remain required. #361/#369 remain OPEN, PR #370
+draft, and `supported_history_threshold=null`. No generated source/report enters Git.
+
 ## Injectable source capture checkpoint
 
 Implementation `93dff37246ce91dd4e7370ddd158470fed5a4f3b`, with request-boundary
