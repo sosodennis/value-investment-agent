@@ -229,3 +229,51 @@ Independent engineering review and serial parent integration have been requested
 from the main chat. Keep PR420 draft and #418/#376/#377 open until the relevant
 review, integration and main-delivery criteria pass. No accounting signature or
 mapping-quality promotion is claimed by this checkpoint.
+
+
+## #421 executable model binding checkpoint
+
+This checkpoint supersedes the earlier model-version acceptance for #420.
+Implementation `c9a5e3175199eccb49c3e0c356da751eb8f937af` preserves fix `b7890c0d` and ordinarily
+merges parent `9aa4a72a`. Unknown/stale/swapped model-version pairs are rejected
+at validated input and execution before forecast publication. The shared
+resolver checks the formal model specification against the executed FCFF graph
+and numerical policy; scenario replay output v2 records the resolved
+`model_spec_digest`. #352's numerical formulas are unchanged.
+
+| Exact-commit validation | Result |
+| --- | --- |
+| Fundamental Service / isolated PostgreSQL | 1,874 passed; 11 external SEC-resource tests explicitly skipped |
+| Ruff / format / five changed sources in mypy / both guards / diff | Passed |
+| Real invalid-input CLIs | 12 executions rejected with identical repeated error bytes; zero result artifacts |
+| NEWMARKET full comparison repeat | All six artifact types reused; zero new files; bytes, sizes and mtimes unchanged |
+| Installed image / restart | 96 Python files equal Git; desktop/container semantic digest equal; repeat and restart unchanged |
+| Conditional results | 125 labels, 625 FCFF comparisons, 625 retained Transition abstentions; one independent issuer |
+| Exact study / threshold | 0/100; `supported_history_threshold=null` |
+| Cleanup | Only this project removed; all 69 pre-existing containers retain IDs, image IDs and start times |
+
+Frozen decision and comparison inputs remain
+`206c1116eb56351c2e46f5637f52697723564babcf7cdf81d22d834b32388d68` and
+`c4b5b12bf6924fe225f4a75a14fbba2c52bb48b633269042679a029a86ea0df8`.
+New forecast output: `4eace7bde73a667707d919b6f51ddc6d441a3ab3f47efaeeb39102aa221cdc66`.
+New comparison output: `4ed6eb5dfbc2c1e9be2cd0622b116a44b0436de93d0f73e0592309fb741f70a4`.
+All forecast values, labels, errors, refusal classifications and source lineage
+match the prior checkpoint; the v2 specification evidence changes output identity.
+
+External checkpoint digest: `6d1ed44e68cd8187dee726daca56effeb18013190b6769ac8c00e129ce6445fc`.
+Raw SEC documents, frozen requests, complete outputs, command logs, runtime pins
+and archived verification scripts remain outside Git under
+`/Users/denniswong/Desktop/Project/value-investment-agent-issue-418-scenario-evidence/model-binding-421`.
+The preserved external reader failure concerns list-versus-dict audit parsing;
+the corrected reader passed without changing product source or earlier evidence.
+
+The disposable Compose project `value-investment-agent-418-model-binding-421`
+used ports28931/25931, one network and two disposable volumes. Its own image,
+containers, network and volumes have been removed. HTTP readiness had SEC
+identity resolution disabled; this checkpoint claims offline installed-module
+and PostgreSQL behavior, not source acquisition, trusted release or full valuation.
+
+[CI43255592531](https://github.com/sosodennis/value-investment-agent/actions/runs/43255592531) passed all 12 applicable jobs;
+`fundamental-release-gate` skipped. Keep #420 draft and #421/#418 open pending
+independent parent review, serial integration, merge-commit revalidation and main
+delivery. #377 method approval and Transition accounting evidence remain separate.
