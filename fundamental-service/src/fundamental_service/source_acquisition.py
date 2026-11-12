@@ -17,6 +17,10 @@ from lxml import etree, html
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from .arelle_parser import ArelleParserError, ArelleValidationProfileV1, _directory_hash
+from .automatic_source_mapping import (
+    AutomaticSecIngestionRequestV1,
+    AutomaticSourceMappingAuthority,
+)
 from .contracts import (
     IdentityResolutionRequestV1,
     IdentityResolutionV1,
@@ -26,8 +30,10 @@ from .contracts import (
     SecIngestionRequestV1,
     SecIngestionResponseV1,
     SecIngestionSourceV1,
+    SecSourceRequestV1,
     SourceRole,
 )
+from .data_releases import DataReleaseError
 from .facts import CanonicalFactRepository, CanonicalMappingV1
 from .historical_dqc import historical_profile
 from .ingestion import SecIngestionService
@@ -453,6 +459,7 @@ class SecAcquisitionUseCase:
         settings: SecAcquisitionSettings,
         authorized_organizations: frozenset[str],
         capture_store: SecCaptureStore | None = None,
+        automatic_mapping_authority: AutomaticSourceMappingAuthority | None = None,
     ) -> None:
         self.adapter = adapter
         self.ingestion = ingestion
@@ -461,30 +468,32 @@ class SecAcquisitionUseCase:
         self.settings = settings
         self.authorized_organizations = authorized_organizations
         self.capture_store = capture_store
+        self.automatic_mapping_authority = automatic_mapping_authority
 
     @staticmethod
-    def _canonical_key_payload(request: SecIngestionRequestV1) -> dict[str, object]:
+    def _canonical_key_payload(request: SecSourceRequestV1) -> dict[str, object]:
         return SecAcquisitionUseCase._canonical_request_payload(request)
 
     @staticmethod
     def _canonical_request_payload(
-        request: SecIngestionRequestV1,
+        request: SecSourceRequestV1,
     ) -> dict[str, object]:
         payload = request.model_dump(mode="json")
         payload["required_fields"] = sorted(request.required_fields)
-        payload["mappings"] = [
-            item.model_dump(mode="json")
-            for item in sorted(
-                request.mappings, key=lambda mapping: mapping.normalized_field
-            )
-        ]
+        if isinstance(request, SecIngestionRequestV1):
+            payload["mappings"] = [
+                item.model_dump(mode="json")
+                for item in sorted(
+                    request.mappings, key=lambda mapping: mapping.normalized_field
+                )
+            ]
         filing = dict(payload["filing"])
         filing["forms"] = sorted(request.filing.forms)
         payload["filing"] = filing
         return payload
 
     def _validation_profile(
-        self, request: SecIngestionRequestV1
+        self, request: SecSourceRequestV1
     ) -> ArelleValidationProfileV1:
         historical = historical_profile(request.validation_profile_id)
         if historical and self.settings.historical_dqc_dir is None:
@@ -512,7 +521,7 @@ class SecAcquisitionUseCase:
 
     def _runtime_key_payload(
         self,
-        request: SecIngestionRequestV1,
+        request: SecSourceRequestV1,
         validation_profile: ArelleValidationProfileV1,
     ) -> dict[str, object]:
         payload = self._canonical_request_payload(request)
@@ -522,11 +531,35 @@ class SecAcquisitionUseCase:
             "supported_filing_years": self.settings.supported_filing_years,
             "supported_filing_forms": self.settings.supported_filing_forms,
         }
+        if isinstance(request, AutomaticSecIngestionRequestV1):
+            payload["automatic_mapping_authority"] = (
+                self._automatic_authority().runtime_pin(request)
+            )
         return payload
+
+    def _automatic_authority(self) -> AutomaticSourceMappingAuthority:
+        if self.automatic_mapping_authority is None:
+            raise ServiceError(
+                "MAPPING_AUTOMATIC_AUTHORITY_UNAVAILABLE",
+                "automatic source mapping authority is not configured",
+                status_code=503,
+                retryable=False,
+            )
+        if (
+            self.automatic_mapping_authority.taxonomy_cache_sha256
+            != self.settings.taxonomy_cache_sha256
+        ):
+            raise ServiceError(
+                "MAPPING_AUTOMATIC_RUNTIME_MISMATCH",
+                "mapping authority and acquisition taxonomy pins differ",
+                status_code=422,
+                retryable=False,
+            )
+        return self.automatic_mapping_authority
 
     def execute(
         self,
-        request: SecIngestionRequestV1,
+        request: SecIngestionRequestV1 | AutomaticSecIngestionRequestV1,
         *,
         caller_principal: str,
         organization_id: str,
@@ -681,6 +714,18 @@ class SecAcquisitionUseCase:
                     retryable=resource_failure,
                     retry_after_ms=1000 if resource_failure else None,
                 ) from error
+            except DataReleaseError as error:
+                self.metadata.publish_source_audit(
+                    acquisition_key=acquisition_key,
+                    caller_principal=caller_principal,
+                    organization_id=organization_id,
+                    correlation_id=correlation_id,
+                    source_hashes=(),
+                    outcome=error.code,
+                )
+                raise ServiceError(
+                    error.code, str(error), status_code=422, retryable=False
+                ) from error
             except SnapshotError as error:
                 self.metadata.publish_source_audit(
                     acquisition_key=acquisition_key,
@@ -715,7 +760,7 @@ class SecAcquisitionUseCase:
 
     def _acquire_and_publish(
         self,
-        request: SecIngestionRequestV1,
+        request: SecIngestionRequestV1 | AutomaticSecIngestionRequestV1,
         *,
         acquisition_key: str,
         key_payload: dict[str, object],
@@ -725,6 +770,11 @@ class SecAcquisitionUseCase:
         deadline_at: datetime,
         validation_profile: ArelleValidationProfileV1,
     ) -> SecIngestionResponseV1:
+        mapping_resolver = (
+            self._automatic_authority().resolver_for(request)
+            if isinstance(request, AutomaticSecIngestionRequestV1)
+            else None
+        )
         adapter = self.adapter
         if (
             self.capture_store is not None
@@ -816,7 +866,11 @@ class SecAcquisitionUseCase:
         filing_archive_filename = self._select_filing_archive_filename(
             index_source.content, filing.accession_number
         )
-        mappings = self._resolve_mappings(request, correlation_id=correlation_id)
+        mappings = (
+            self._resolve_mappings(request, correlation_id=correlation_id)
+            if isinstance(request, SecIngestionRequestV1)
+            else ()
+        )
         captured_at = (
             max(
                 item.captured_at or item.available_at
@@ -846,6 +900,7 @@ class SecAcquisitionUseCase:
             acquisition_key=acquisition_key,
             taxonomy_cache_dir=self.settings.taxonomy_cache_dir,
             mappings=mappings,
+            mapping_resolver=mapping_resolver,
             reference_sources=(submissions_source, index_source),
             dts_filenames=dts_filenames,
             profile=validation_profile,
@@ -912,6 +967,7 @@ class SecAcquisitionUseCase:
             ),
             source_evidence=source_evidence,
             identity_evidence_ref=preparation.identity_evidence_ref,
+            mapping_evidence_ref=preparation.mapping_evidence_ref,
             quality_status=quality,
             issue_codes=tuple(sorted(issue_codes)),
             missing_evidence=required_missing,
@@ -988,7 +1044,7 @@ class SecAcquisitionUseCase:
 
     @staticmethod
     def _decode_submissions(
-        payload: bytes, request: SecIngestionRequestV1
+        payload: bytes, request: SecSourceRequestV1
     ) -> _Submissions:
         try:
             submissions = _Submissions.model_validate_json(payload)

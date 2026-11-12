@@ -1050,8 +1050,8 @@ class SecMappingReferenceV1(StrictModel):
 SecIdentityBasis = Literal["current-sec-ticker-v1", "original-filing-dei-v1"]
 
 
-class SecIngestionRequestV1(StrictModel):
-    """Versioned, service-owned request for bounded SEC filing acquisition."""
+class SecSourceRequestV1(StrictModel):
+    """Shared identity, source selection and runtime pins for SEC acquisition."""
 
     contract_version: Literal["fundamental.v1"]
     identity: IdentityV1
@@ -1065,7 +1065,6 @@ class SecIngestionRequestV1(StrictModel):
     # Transition FCFF includes the base evidence set plus filed operating
     # evidence, so the canonical request must accept more than 32 fields.
     required_fields: tuple[str, ...] = Field(min_length=1, max_length=64)
-    mappings: tuple[SecMappingReferenceV1, ...] = Field(min_length=1, max_length=64)
     source_selection_policy: Literal["sec-pit-v1"]
     coverage_profile: str = Field(min_length=1, max_length=128)
     legal_use_profile: Literal["sec-public-us-v1"]
@@ -1086,25 +1085,35 @@ class SecIngestionRequestV1(StrictModel):
         return value
 
     @model_validator(mode="after")
-    def request_is_canonical(self) -> "SecIngestionRequestV1":
+    def source_is_canonical(self) -> "SecSourceRequestV1":
         if self.identity_basis == "original-filing-dei-v1" and (
             self.filing.accession_number is None or self.filing.forms != ("10-K",)
         ):
             raise ValueError("original filing identity requires a pinned original 10-K")
         if len(self.required_fields) != len(set(self.required_fields)):
             raise ValueError("required_fields must be unique")
-        if set(self.required_fields) != {
-            item.normalized_field for item in self.mappings
-        }:
-            raise ValueError("each required field needs exactly one mapping")
-        if len({item.normalized_field for item in self.mappings}) != len(self.mappings):
-            raise ValueError("mappings must contain one reference per field")
         normalized_cik = str(int(self.cik))
         normalized_issuer = self.identity.issuer_id.lstrip("0") or "0"
         if not self.identity.issuer_id.isdigit() or normalized_issuer != normalized_cik:
             raise ValueError("CIK must match the canonical issuer identity")
         if self.identity.domicile != "US":
             raise ValueError("SEC ingestion requires a US issuer identity")
+        return self
+
+
+class SecIngestionRequestV1(SecSourceRequestV1):
+    """Bounded acquisition with explicit pre-existing mapping decisions."""
+
+    mappings: tuple[SecMappingReferenceV1, ...] = Field(min_length=1, max_length=64)
+
+    @model_validator(mode="after")
+    def mappings_are_complete(self) -> "SecIngestionRequestV1":
+        if set(self.required_fields) != {
+            item.normalized_field for item in self.mappings
+        }:
+            raise ValueError("each required field needs exactly one mapping")
+        if len({item.normalized_field for item in self.mappings}) != len(self.mappings):
+            raise ValueError("mappings must contain one reference per field")
         return self
 
 
@@ -1135,6 +1144,9 @@ class SecIngestionResponseV1(StrictModel):
     canonical_fact_ids: tuple[str, ...] = ()
     source_evidence: tuple[SecIngestionSourceV1, ...] = ()
     identity_evidence_ref: str | None = Field(default=None, min_length=1)
+    mapping_evidence_ref: str | None = Field(
+        default=None, min_length=1, exclude_if=lambda value: value is None
+    )
     quality_status: QualityStatus
     issue_codes: tuple[str, ...] = ()
     missing_evidence: tuple[str, ...] = ()

@@ -567,6 +567,7 @@ def _partial_acquisition_fixture(tmp_path, *, empty=False, schema="msft-20240630
         facts=facts,
         issues=(),
         identity_evidence_ref=None,
+        mapping_evidence_ref=None,
         parser_report=SimpleNamespace(
             taxonomy_cache_hash=settings.taxonomy_cache_sha256,
             finding_codes=(),

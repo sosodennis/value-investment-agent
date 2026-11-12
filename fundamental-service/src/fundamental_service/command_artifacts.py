@@ -28,6 +28,16 @@ class EvidenceArtifactStore(Protocol):
         retention: Literal["evidence", "operational_cache"] = "evidence",
     ) -> ArtifactPublicationV1: ...
 
+    def put_bytes_with_receipt(
+        self,
+        artifact_id: str,
+        payload: bytes,
+        dependency_hashes: tuple[str, ...] = (),
+        *,
+        media_type: str = "application/octet-stream",
+        retention: Literal["evidence", "operational_cache"] = "evidence",
+    ) -> ArtifactPublicationV1: ...
+
 
 @contextmanager
 def command_artifacts(

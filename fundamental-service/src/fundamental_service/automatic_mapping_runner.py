@@ -56,7 +56,19 @@ def _require_machine_identity(
     trust_roots: DataReleaseTrustRootsV1,
     private_key: Ed25519PrivateKey,
 ) -> None:
-    evaluator = trust_roots.automatic_mapping_evaluators.get(request.evaluator_id)
+    require_automatic_mapping_authority(
+        request.evaluator_id, trust_roots=trust_roots, private_key=private_key
+    )
+
+
+def require_automatic_mapping_authority(
+    evaluator_id: str,
+    *,
+    trust_roots: DataReleaseTrustRootsV1,
+    private_key: Ed25519PrivateKey,
+) -> None:
+    """Validate deployment authority before acquiring any mapping inputs."""
+    evaluator = trust_roots.automatic_mapping_evaluators.get(evaluator_id)
     if (
         evaluator is None
         or evaluator.policy_digest != automatic_mapping_policy_digest()

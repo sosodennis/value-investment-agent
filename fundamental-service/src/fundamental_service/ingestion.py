@@ -42,6 +42,8 @@ from .issuer_identity import (
     IdentityResolutionError,
     validate_original_filing_identity,
 )
+from .ingestion_mapping import IngestionMappingResolverPort, ValidatedOriginalV1
+from .original_issuer import OriginalOperatingSourceV1, evaluate_original_issuer
 from .replay import ArtifactRecordV1
 from .sec_integrity import assess_filing_response, extract_referenced_graphics
 from .sec_rebuild import parsed_facts_to_candidates, select_canonical_fact
@@ -206,6 +208,7 @@ class SecIngestionResult:
     missing_fields: tuple[str, ...] = ()
     issues: tuple[IssueV1, ...] = ()
     identity_evidence_ref: str | None = None
+    mapping_evidence_ref: str | None = None
 
 
 class SecIngestionService:
@@ -247,6 +250,7 @@ class SecIngestionService:
         acquisition_key: str | None = None,
         taxonomy_cache_dir: Path,
         mappings: tuple[CanonicalMappingV1, ...],
+        mapping_resolver: IngestionMappingResolverPort | None = None,
         reference_sources: tuple[CapturedSource, ...] = (),
         accepted_at: datetime | None = None,
         deadline_at: datetime | None = None,
@@ -261,6 +265,13 @@ class SecIngestionService:
         identity_ticker: str | None = None,
     ) -> SecIngestionResult:
         adapter = source_adapter or self.source_adapter
+        if mapping_resolver is not None and (
+            mappings or identity_basis != "original-filing-dei-v1"
+        ):
+            raise SnapshotError(
+                "MAPPING_RESOLUTION_MODE_INVALID",
+                "automatic mapping requires original identity without manual mappings",
+            )
         if identity_basis == "original-filing-dei-v1" and (
             form != "10-K" or is_amendment or not identity_ticker or accepted_at is None
         ):
@@ -610,6 +621,40 @@ class SecIngestionService:
                     evidence_ref=identity_evidence_ref,
                 ) from identity_failure
 
+        mapping_evidence_ref = None
+        mapping_issues: tuple[IssueV1, ...] = ()
+        mapping_missing: tuple[str, ...] = ()
+        if mapping_resolver is not None:
+            original = evaluate_original_issuer(
+                report,
+                source=OriginalOperatingSourceV1(
+                    cik=cik,
+                    accession_number=accession_number,
+                    uri=source.uri,
+                    content_hash=assessment.raw_content_hash,
+                    parser_input_hash=report.source_content_hash or "",
+                    form=form,
+                    is_amendment=is_amendment,
+                    available_at=accepted_at or filed_at,
+                    captured_at=source.captured_at or captured_at,
+                    http_status=source.http_status,
+                ),
+                decision_at=valuation_timestamp,
+            )
+            resolved = mapping_resolver.resolve(
+                ValidatedOriginalV1(
+                    identity=identity,
+                    original=original,
+                    integrity=integrity_evidence,
+                    captured_sources=captured_sources,
+                    primary_media_type=source.media_type,
+                )
+            )
+            mappings = resolved.mappings
+            mapping_evidence_ref = resolved.evidence_ref
+            mapping_issues = resolved.issues
+            mapping_missing = resolved.missing_fields
+
         other_sources = tuple(
             item for item in reference_sources if item.source_id != "sec-filing-index"
         )
@@ -634,8 +679,8 @@ class SecIngestionService:
             if record.source_id == "sec-filing"
         )
         all_facts: list[CanonicalFactV1] = []
-        missing_fields: list[str] = []
-        issues: list[IssueV1] = []
+        missing_fields: list[str] = list(mapping_missing)
+        issues: list[IssueV1] = list(mapping_issues)
         first_selection = FactSelection(None, (), ())
         for index, mapping in enumerate(mappings):
             if mapping.accounting_rules is not None:
@@ -711,6 +756,7 @@ class SecIngestionService:
             missing_fields=tuple(sorted(set(missing_fields))),
             issues=tuple(issues),
             identity_evidence_ref=identity_evidence_ref,
+            mapping_evidence_ref=mapping_evidence_ref,
         )
 
     def ingest_filing(

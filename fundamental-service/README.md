@@ -19,6 +19,16 @@ The service will own its source snapshots, point-in-time facts, model definition
 
 ## Source preparation command
 
+The acquisition owner also accepts `AutomaticSecIngestionRequestV1` with exact
+model, requirements, executable mapping policy, source revision and evaluator
+pins. It has no manual mapping references. An injected deployment authority
+validates these pins before source I/O. After original integrity, EFM/DQC and
+historical DEI validation, ingestion invokes the existing automatic mapping batch,
+retains every decision/certificate/refusal and normalizes accepted mappings with
+the existing fact functions. An incomplete acquisition remains abstained.
+This boundary is available to service orchestration; the automatic plan/command
+connection is the next increment tracked by #413. Manual command usage follows.
+
 `fundamental-prepare-source` coordinates source acquisition, trusted release
 activation and the existing automatic composer outside the serving API request
 path. Run it with the service's configured PostgreSQL, content volume, SEC
