@@ -31,6 +31,9 @@ from fundamental_service.equity_dilution import DilutionError, PerformanceStockA
 from fundamental_service.facts import select_fact_groups
 from fundamental_service.sec_rebuild import parsed_facts_to_candidates
 from fundamental_service.serialization import canonical_bytes, sha256_digest
+from fundamental_service.quote_sources import default_quote_providers
+from fundamental_service.operations import ServiceError
+from quote_provider_fixtures import SyntheticQuoteProvider
 from fundamental_service.valuation_preparation import prepare_automatic_valuation
 from test_preparation_runner import _fixture, _reviewed_candidate
 from test_valuation_preparation import _market_policy
@@ -43,6 +46,7 @@ def _load(fixture, **changes):
         snapshot=fixture.snapshot,
         artifacts=changes.get("artifacts", fixture.artifacts),
         released_facts=changes.get("released_facts", fixture.facts.list()),
+        quote_providers=changes.get("quote_providers", default_quote_providers()),
     )
 
 
@@ -165,6 +169,77 @@ def test_signed_quote_cannot_change_price_over_unchanged_source_bytes(
         with pytest.raises(DilutionError) as error:
             _load(fixture)
     assert error.value.code == "DILUTION_QUOTE_SOURCE_VALUE_MISMATCH"
+
+
+def _with_alternative_quote(fixture):
+    raw = canonical_bytes({"price": "10", "currency": "USD"})
+    source_hash = sha256(raw).hexdigest()
+    quote = fixture.dilution.quote.model_copy(
+        update={
+            "source_id": "synthetic-quote-vendor",
+            "source_version": "synthetic-v1",
+            "source_uri": "https://example.test/quotes/synthetic",
+            "terms_reference": "synthetic-test-only",
+            "content_hash": source_hash,
+        }
+    )
+    evidence = fixture.dilution.model_copy(update={"quote": quote})
+    artifact_id = f"equity-dilution:{evidence.digest}"
+    fixture.artifacts.put_with_receipt(artifact_id, evidence)
+    fixture.artifacts.put_bytes_with_receipt(
+        "alternative-quote", raw, media_type="application/json"
+    )
+    references = []
+    for reference in fixture.manifest.artifact_refs:
+        if reference.role == EQUITY_DILUTION_ARTIFACT_ROLE:
+            reference = reference.model_copy(
+                update={"artifact_id": artifact_id, "content_hash": evidence.digest}
+            )
+        elif reference.role == EQUITY_QUOTE_SOURCE_ROLE:
+            reference = reference.model_copy(
+                update={"artifact_id": "alternative-quote", "content_hash": source_hash}
+            )
+        references.append(reference)
+    fixture.manifest = _manifest(fixture, tuple(references))
+    fixture.dilution = evidence
+    fixture.metadata.get_data_release_manifest = lambda digest: (
+        fixture.manifest if digest == fixture.manifest.manifest_digest else None
+    )
+
+
+@pytest.mark.parametrize("consumer", ("serving", "canary"))
+def test_serving_and_canary_use_configured_quote_provider_with_same_composer(
+    tmp_path, consumer: str
+):
+    fixture = _fixture(tmp_path)
+    _with_alternative_quote(fixture)
+    if consumer == "canary":
+        candidate, unconfigured = _reviewed_candidate(fixture)
+        with pytest.raises(DataReleaseError) as error:
+            unconfigured.validate(candidate.manifest, candidate.verification)
+        candidate, configured = _reviewed_candidate(
+            fixture, quote_providers=(SyntheticQuoteProvider(),)
+        )
+        report = configured.validate(candidate.manifest, candidate.verification)
+        assert report.candidate_manifest_digest == candidate.manifest.manifest_digest
+    else:
+        request = ValuationEvidenceReadRequestV1(
+            contract_version="fundamental.v1",
+            snapshot_id=fixture.snapshot.snapshot_id,
+            data_release_manifest_digest=fixture.manifest.manifest_digest,
+            model_id="fcff_dcf",
+        )
+        with pytest.raises(ServiceError) as error:
+            fixture.application.prepare_valuation(request)
+        configured = replace(
+            fixture.application, quote_providers=(SyntheticQuoteProvider(),)
+        )
+        prepared = configured.prepare_valuation(request)
+        assert prepared.status == "prepared"
+        assert prepared.equity_dilution.incremental_shares == Decimal(10)
+        assert prepared.input.assumptions.capital_bridge.diluted_shares == Decimal(120)
+        assert prepared.quality_status is QualityStatus.PROVISIONAL
+    assert error.value.code == "DILUTION_QUOTE_SOURCE_PROFILE_UNSUPPORTED"
 
 
 def test_quote_security_must_match_the_snapshot_identity(tmp_path):

@@ -49,6 +49,7 @@ from fundamental_service.preparation_runner import (
     main,
 )
 from fundamental_service.release_runner import DataReleaseCanaryRunner
+from fundamental_service.quote_sources import default_quote_providers
 from fundamental_service.replay import ArtifactRecordV1, ArtifactStore
 from fundamental_service.serialization import canonical_bytes, sha256_digest
 from fundamental_service.snapshots import FilesystemSnapshotRepository
@@ -332,7 +333,7 @@ def _acquisition(fixture, *, quality=QualityStatus.VERIFIED):
     return SimpleNamespace(execute=execute, calls=calls)
 
 
-def _reviewed_candidate(fixture):
+def _reviewed_candidate(fixture, *, quote_providers=None):
     seed_manifest, verification, _, _, _, artifacts, roots = _candidate()
     manifest_payload = fixture.manifest.model_dump(exclude={"manifest_digest"})
     manifest_payload.update(
@@ -413,6 +414,9 @@ def _reviewed_candidate(fixture):
         mapping_reader=fixture.metadata,
         artifact_reader=artifacts,
         trust_roots=roots,
+        quote_providers=(
+            default_quote_providers() if quote_providers is None else quote_providers
+        ),
     )
     return candidate, canary
 
@@ -1074,6 +1078,7 @@ def test_preparation_and_calculation_reuse_postgres_artifacts_after_restart_and_
                 mapping_reader=metadata,
                 artifact_reader=artifacts,
                 trust_roots=roots,
+                quote_providers=application.quote_providers,
             ),
         )
         return runner, content, artifacts

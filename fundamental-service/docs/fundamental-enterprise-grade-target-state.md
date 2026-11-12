@@ -1037,9 +1037,33 @@ the shared contract. HTTP capture, immutable content storage, source-use
 admission and release signing remain separate owning boundaries.
 
 This provider contract currently covers macro series only. Treasury rates,
-Damodaran reference tables, issuer quote vendors, and facility benchmark
-observations need equivalent provider adapters before they can be swapped at
-runtime. Do not imply those providers are configured by the macro abstraction.
+Damodaran reference tables and facility benchmark observations need equivalent
+provider adapters before they can be swapped at runtime. Do not imply those
+providers are configured by the macro abstraction.
+
+### Provider-neutral quote evidence
+
+`quote_providers.QuoteSourceProviderPort` reproduces a common-share quote from
+retained bytes and selection metadata. The request deliberately excludes the
+expected price. `reproduce_quote_source` selects exactly one configured provider
+by source ID and source version, verifies the original content hash, and compares
+the entire reproduced quote with the release declaration. Unknown profiles,
+ambiguous providers, changed prices, currencies, identities and timestamps fail.
+No provider performs a download or chooses a valuation assumption here.
+
+`NasdaqHistoricalCloseProvider` adapts the existing bounded Nasdaq transcription
+profile. `create_app` and the release CLI assemble the supported provider tuple;
+the preparation CLI gives its canary the application's same tuple. Serving and
+the release canary depend on the port through the dilution-evidence loader.
+Explicitly supplying an empty tuple supports no quote format. Adding an adapter
+requires explicit composition, with no fallback to another vendor or series.
+Source-use admission and historical availability remain separate checks; a
+configured parser does not authorize its vendor's data.
+
+Synthetic alternate-vendor tests exercise both serving preparation and release
+canary validation through the same composer. Only provenance/input identities
+change when the quote source changes. No valuation formula or HTTP schema is
+changed by this source-boundary module addition.
 
 The first schemas use strict unknown-field rejection and no implicit defaults. Their minimum field groups are:
 

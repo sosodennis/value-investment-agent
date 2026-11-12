@@ -50,6 +50,7 @@ from .equity_award_evidence import (
     load_release_dilution_evidence,
 )
 from .equity_dilution import DilutionError, compute_treasury_stock_dilution
+from .quote_providers import QuoteSourceProviderPort
 from .replay import ArtifactStore
 from .history_composition import verify_history_components
 from .serialization import canonical_bytes, sha256_digest
@@ -130,12 +131,14 @@ class DataReleaseCanaryRunner:
         mapping_reader: ReleaseMappingReader,
         artifact_reader: ReleaseArtifactReader,
         trust_roots: DataReleaseTrustRootsV1,
+        quote_providers: tuple[QuoteSourceProviderPort, ...] = (),
     ) -> None:
         self._snapshots = snapshot_repository
         self._facts = fact_repository
         self._mappings = mapping_reader
         self._artifacts = artifact_reader
         self._trust_roots = trust_roots
+        self._quote_providers = quote_providers
 
     def validate(
         self,
@@ -299,6 +302,7 @@ class DataReleaseCanaryRunner:
                     snapshot=snapshot,
                     artifacts=self._artifacts,
                     released_facts=facts,
+                    quote_providers=self._quote_providers,
                 )
                 declared_awards = {
                     fact.fact_id
@@ -685,6 +689,8 @@ def _load_candidate(
 
 
 def main(argv: list[str] | None = None) -> int:
+    from .quote_sources import default_quote_providers
+
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--candidate", type=Path, required=True)
     parser.add_argument("--snapshots-root", type=Path, required=True)
@@ -701,6 +707,7 @@ def main(argv: list[str] | None = None) -> int:
             mapping_reader=_FilesystemMappingReader(args.mappings_root),
             artifact_reader=ArtifactStore(args.artifacts_root),
             trust_roots=DataReleaseTrustRootsV1.from_file(args.trust_roots),
+            quote_providers=default_quote_providers(),
         ).validate(manifest, verification)
     except (OSError, ValueError, DataReleaseError) as exc:
         print(f"data release canary failed: {exc}", file=sys.stderr)

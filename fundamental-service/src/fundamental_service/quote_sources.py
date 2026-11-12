@@ -13,6 +13,11 @@ from zoneinfo import ZoneInfo
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from .equity_dilution import CommonShareQuoteV1, DilutionError
+from .quote_providers import (
+    QuoteSourceProviderPort,
+    QuoteSourceRequestV1,
+    reproduce_quote_source,
+)
 
 NASDAQ_CLOSE_PROFILE = "nasdaq-historical-close-capture-v1"
 NASDAQ_CLOSE_SOURCE = "nasdaq-historical-close"
@@ -169,26 +174,39 @@ def select_nasdaq_historical_close(
         ) from error
 
 
+class NasdaqHistoricalCloseProvider:
+    """Nasdaq adapter implementing the provider-neutral quote boundary."""
+
+    def supports(self, source_id: str, source_version: str) -> bool:
+        return (
+            source_id == NASDAQ_CLOSE_SOURCE and source_version == NASDAQ_CLOSE_PROFILE
+        )
+
+    def reproduce_quote(
+        self, raw: bytes, *, request: QuoteSourceRequestV1
+    ) -> CommonShareQuoteV1:
+        if (
+            not self.supports(request.source_id, request.source_version)
+            or request.terms_reference != NASDAQ_TERMS
+        ):
+            raise DilutionError(
+                "DILUTION_QUOTE_SOURCE_PROFILE_UNSUPPORTED",
+                "quote metadata does not match the Nasdaq source profile",
+            )
+        return select_nasdaq_historical_close(
+            raw,
+            issuer_id=request.issuer_id,
+            security_id=request.security_id,
+            source_uri=request.source_uri,
+            observation_date=request.as_of.astimezone(_NEW_YORK).date(),
+            captured_at=request.captured_at,
+        )
+
+
+def default_quote_providers() -> tuple[QuoteSourceProviderPort, ...]:
+    """Composition for supported source formats; this does not admit source use."""
+    return (NasdaqHistoricalCloseProvider(),)
+
+
 def verify_quote_source(quote: CommonShareQuoteV1, raw: bytes) -> None:
-    if (
-        quote.source_id != NASDAQ_CLOSE_SOURCE
-        or quote.source_version != NASDAQ_CLOSE_PROFILE
-        or quote.terms_reference != NASDAQ_TERMS
-    ):
-        raise DilutionError(
-            "DILUTION_QUOTE_SOURCE_PROFILE_UNSUPPORTED",
-            "quote requires a supported executable source transcription profile",
-        )
-    selected = select_nasdaq_historical_close(
-        raw,
-        issuer_id=quote.issuer_id,
-        security_id=quote.security_id,
-        source_uri=quote.source_uri,
-        observation_date=quote.as_of.astimezone(_NEW_YORK).date(),
-        captured_at=quote.captured_at,
-    )
-    if selected != quote:
-        raise DilutionError(
-            "DILUTION_QUOTE_SOURCE_VALUE_MISMATCH",
-            "quote value, currency or timestamps differ from the retained source selection",
-        )
+    reproduce_quote_source(quote, raw, providers=default_quote_providers())

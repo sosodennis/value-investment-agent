@@ -869,8 +869,35 @@ admitted, and the threshold remains null.
 
 See [the exact provider checkpoint](issue-361-macro-provider-checkpoint.json)
 for the isolated service runtime, source hashes, command results and full-suite
-status. Treasury, Damodaran, quote and contracted-benchmark inputs still need
+status. Treasury, Damodaran and contracted-benchmark inputs still need
 equivalent provider adapters and admissibility evidence.
+
+## Interchangeable quote providers checkpoint
+
+Implementation `9c796b5bcd96b73913f5ec92568ac443452c623a` adds
+`QuoteSourceProviderPort`. Service preparation, source preparation CLI and release
+canary use configured providers through the same evidence loader. The provider
+request excludes the expected price; retained bytes must reproduce the complete
+quote. Unknown, ambiguous and altered sources fail. A synthetic second provider
+passes both serving and canary through the existing #352 composer.
+
+Exact checks pass: 1,517 Service/PostgreSQL tests, 117 focused tests and
+22 acceptance-tool tests, whole-package Ruff, changed-file format/types,
+architecture and diff checks. Eleven optional SEC-resource skips and one expected
+duplicate-ZIP warning remain. Engineering input/output digests are
+`26a9ad3d7bcbc256c99e4c7fe6a68316150443484b337a18f0e0e9543e88a794` /
+`3aa330f463a125a17c4495a36beb9fc1e1228b65facadc31ab112748a7761ef4`.
+
+The isolated provider image matches all 76 installed source files to this commit.
+Its synthetic quote replay repeats with digest
+`2d861d199f45189950d6fec17feac2778efdcb21e3d6ccc4a93b978ccb0a91ea`.
+Both the second execution and execution after service restart report
+`wrote=false`, identical inventory hashes/mtimes and zero new files. All 40
+unrelated baseline containers retain their identity, image and start time.
+This verifies adapter substitution and persistence, not a real dated quote or
+complete numerical acceptance. The existing provider project remains available.
+See [the quote-provider checkpoint](issue-361-quote-provider-checkpoint.json) for
+runtime pins, commands, digests and the two corrected audit-helper failures.
 
 Generated sources, mappings, proposals, diagnostics, and backups remain in ignored
 `.audit`. Do not reset, rebase, force-push, or discard the checkpoint chain. Do not
