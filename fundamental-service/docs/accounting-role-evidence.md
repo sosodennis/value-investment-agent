@@ -322,3 +322,48 @@ including its accounting rules. Numerical valuation still requires the existing
 The Agent's fact projection preserves the JSON evidence as service-owned data;
 it evaluates no accounting or valuation rules. No Agent/UI workflow changes are
 part of this contract addition.
+
+### Registered NVE noncontrolling equity
+
+Automatic policy `source-bound-us-gaap-v9` registers the same complete NVE 2023
+and 2024 originals for their reported noncontrolling-equity carrying amount.
+The [2023](https://xbrl.fasb.org/us-gaap/2023/elts/us-gaap-doc-2023.xml) and
+[2024](https://xbrl.fasb.org/us-gaap/2024/elts/us-gaap-doc-2024.xml) FASB taxonomy
+definitions distinguish these consolidated instant concepts:
+
+- `StockholdersEquity`: equity attributable to the parent, excluding temporary
+  equity and equity attributable to noncontrolling interests.
+- `StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest`:
+  equity attributable to the parent and noncontrolling interests, excluding
+  temporary equity.
+
+The retained taxonomy-document digests are
+`288ed00809b3f84f62ee82c93db6f063d4db09bdc4ee6d1654207a1865ded5e7` (2023) and
+`96b321b294493af54253a45e3694e85d501857cb4029ba2529089ad9d7880872` (2024).
+These documents explain accounting meaning; they supply no issuer amount or
+history-threshold ground truth. Source originals remain outside Git.
+
+The two complete audited statements present the equity components and total,
+without a separate temporary-equity claim outside this pair. Registration pins
+CIK/accession, raw original hash, full parsed-fact digest and the balance-sheet
+instants. The 2023 original supports March31 2022/2023; the 2024 original supports
+March31 2023/2024. Parent and inclusive total report USD64,565,129 / USD67,079,502 /
+USD65,568,517 at the respective instants. The existing accounting evaluator
+subtracts reported parent equity from reported inclusive equity. The result is
+zero at the reported unit precision, with both source observations retained.
+This is a derived carrying amount, not a `confirmed_absent` assertion or a
+claim that a missing tag means zero.
+
+This classification is limited to these full original scopes. The two taxonomy
+concepts alone cannot resolve temporary/redeemable noncontrolling claims for
+another issuer. A changed or unregistered original refuses. Matching requires
+USD, the same US GAAP namespace, consolidated issuer scope, an eligible instant,
+nonnegative finite values and unit-or-finer reported precision. Missing or
+conflicting components, rounded thousands, a total below the parent amount, or
+future periods refuse. Equivalent duplicates select deterministically.
+
+Automatic proposal, signed approval and retained-input canary reconstruction use
+the same rule through the existing provider-neutral parser/fact contracts. No
+provider request, valuation formula, financial selector, public schema or agent
+implementation changes. The remaining accounting/award/market gaps still block
+complete numerical valuation; supported-history thresholds stay null.
