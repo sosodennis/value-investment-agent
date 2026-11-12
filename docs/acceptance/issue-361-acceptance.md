@@ -21,6 +21,34 @@ No completed #351 through #355 acceptance is changed. #350 is outside scope.
 GitHub #351 and #352 are CLOSED; #352's merged Fundamental Service composer is
 the runtime valuation owner, not a pending dependency.
 
+## Installed SEC automatic preparation checkpoint
+
+At `676a1b43e1d1be9f846954c4f553648f929199a7`, the isolated SEC-enabled
+service automatically assessed both fixed NVE originals through the existing
+preparation command. It retained 34 approved mapping records, 65 canonical facts,
+two snapshots and every unsupported role. The result is **blocked**, with 15
+missing roles and SEC/DQC diagnostics. No release was activated and no numerical
+valuation was calculated. D&A and cash capex still require original-specific
+continuing-operations classification; identical concept names cannot supply it.
+
+Plan/output digests are
+`d7601f77513ed64df443c0987f1a99fb849c1bcebac36edd382173213fab59ab` /
+`bf0fa53125f1ce3258ea905d722e2dafeb99acdd053a5e7c72609852afd91ae9`.
+The ordinary repeat and a further repeat that forbids SEC provider I/O return
+the same artifact with `wrote=false`. All database rows and content file
+hashes/sizes/mtimes remain unchanged. The guarded repeat makes zero SEC calls.
+All 109 installed Python/SQL sources match this commit; 46 unrelated containers
+retain their image/start identity. The focused suite passes 194 tests with three
+optional skips, and the architecture guard passes.
+
+[Compact checkpoint](issue-361-sec-preparation-checkpoint.json) records exact
+commands, source/snapshot/mapping identities, runtime pins, digests and failed
+harness attempts. Originals and full generated reports remain outside Git.
+This verifies retained automatic preparation and reuse, including abstentions;
+complete accounting/award evidence, market policy, trusted release, authentic
+caller approval and numerical recovery acceptance remain outstanding. The
+history threshold remains null; #361 stays open and #370 stays draft.
+
 ## Source-bound industry capital adoption
 
 Implementation `f52933472f09da8b4d45b14ada60895dcf8b37a7` adopts four selected
