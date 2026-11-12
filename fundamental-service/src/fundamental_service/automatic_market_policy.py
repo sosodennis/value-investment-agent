@@ -7,6 +7,7 @@ contract. It contains no valuation formula and has no concrete source client.
 from __future__ import annotations
 
 from datetime import datetime
+from decimal import Decimal
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -25,6 +26,7 @@ from .market_source_selection import (
     select_market_rate,
 )
 from .serialization import sha256_digest
+from .snapshots import SnapshotError
 from .source_admission import SourceAdmissionV1
 from .terminal_growth import (
     TerminalGrowthPlanV1,
@@ -48,6 +50,8 @@ class AutomaticMarketPolicyPolicyV1(BaseModel):
     def terminal_context_matches(self) -> AutomaticMarketPolicyPolicyV1:
         if self.terminal_growth_plan.currency != self.currency:
             raise ValueError("market policy currency differs from terminal policy")
+        if self.terminal_growth_plan.risk_free_policy != self.risk_free_policy:
+            raise ValueError("terminal policy must use the approved risk-free policy")
         return self
 
 
@@ -64,6 +68,8 @@ class AutomaticMarketPolicyDecisionV1(BaseModel):
     input_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
     status: Literal["approved", "refused"]
     issue_codes: tuple[str, ...]
+    reference_selection: IssuerMarketReferenceSelectionV1 | None = None
+    terminal_selection: TerminalGrowthSelectionV1 | None = None
     reference_selection_digest: str | None = Field(
         default=None, pattern=r"^[0-9a-f]{64}$"
     )
@@ -81,8 +87,29 @@ class AutomaticMarketPolicyDecisionV1(BaseModel):
             raise ValueError("automatic market policy issues are not canonical")
         if self.status == "approved" and (self.issue_codes or self.inputs is None):
             raise ValueError("approved market policy requires complete inputs")
-        if self.status == "refused" and self.inputs is not None:
-            raise ValueError("refused market policy cannot contain inputs")
+        if self.status == "approved" and (
+            self.reference_selection is None or self.terminal_selection is None
+        ):
+            raise ValueError("approved market policy requires selection evidence")
+        if self.status == "refused" and (
+            self.inputs is not None or not self.issue_codes
+        ):
+            raise ValueError("refused market policy requires issues without inputs")
+        if (self.reference_selection is None) != (
+            self.reference_selection_digest is None
+        ) or (
+            self.reference_selection is not None
+            and self.reference_selection.output_digest
+            != self.reference_selection_digest
+        ):
+            raise ValueError("market policy reference selection digest is inconsistent")
+        if (self.terminal_selection is None) != (
+            self.terminal_selection_digest is None
+        ) or (
+            self.terminal_selection is not None
+            and self.terminal_selection.output_digest != self.terminal_selection_digest
+        ):
+            raise ValueError("market policy terminal selection digest is inconsistent")
         if self.output_digest != sha256_digest(
             self.model_dump(exclude={"output_digest"})
         ):
@@ -95,11 +122,15 @@ class AutomaticMarketPolicyDecisionV1(BaseModel):
 def _evidence(
     *,
     role: str,
-    value: object,
+    value: Decimal,
     method: Literal["observed_source", "approved_policy"],
     trace: TraceV1,
     rationale: str,
 ) -> MarketPolicyEvidenceV1:
+    if not trace.source_ids or not trace.source_uris or not trace.source_refs:
+        raise ValueError("observed policy evidence requires a source trace")
+    if trace.as_of is None or trace.available_at is None or trace.captured_at is None:
+        raise ValueError("observed policy evidence requires complete timestamps")
     return MarketPolicyEvidenceV1(
         role=role,
         method=method,
@@ -125,17 +156,56 @@ def evaluate_automatic_market_policy(
 ) -> AutomaticMarketPolicyDecisionV1:
     """Select and assemble all seven #352 market-policy roles deterministically."""
 
+    plan_decision = IssuerMarketReferencePlanDecisionV1.model_validate_json(
+        plan_decision.model_dump_json()
+    )
+    policy = AutomaticMarketPolicyPolicyV1.model_validate_json(policy.model_dump_json())
+    ordered_admissions = tuple(
+        sorted(
+            {item.output_digest: item for item in admissions}.values(),
+            key=lambda item: item.output_digest,
+        )
+    )
     issuer_id = plan_decision.issuer_id
     valuation_at = plan_decision.valuation_at
+    if (
+        policy.terminal_growth_plan.issuer_id != issuer_id
+        or policy.terminal_growth_plan.valuation_at != valuation_at
+    ):
+        context_issue = "TERMINAL_POLICY_CONTEXT_MISMATCH"
+    else:
+        context_issue = None
     input_payload = {
         "plan_decision": plan_decision,
         "policy": policy,
-        "admissions": admissions,
+        "admissions": ordered_admissions,
     }
     input_digest = sha256_digest(input_payload)
     issues = set(plan_decision.issue_codes)
+    if context_issue is not None:
+        issues.add(context_issue)
     if plan_decision.status != "planned" or plan_decision.plan is None:
         issues.add("ISSUER_MARKET_REFERENCE_PLAN_REFUSED")
+    elif (
+        plan_decision.plan.issuer_id != issuer_id
+        or plan_decision.plan.valuation_at != valuation_at
+    ):
+        issues.add("ISSUER_MARKET_REFERENCE_PLAN_CONTEXT_MISMATCH")
+    elif policy.terminal_growth_plan.policy_id != plan_decision.plan.policy_id:
+        issues.add("TERMINAL_POLICY_CONTEXT_MISMATCH")
+    elif policy.currency != "USD":
+        issues.add("INDUSTRY_CAPITAL_CURRENCY_UNSUPPORTED")
+    required_metrics = {
+        "country.equity_risk_premium",
+        "industry.equity_beta",
+        "industry.pre_tax_cost_of_debt",
+        "industry.debt_weight",
+        "industry.equity_weight",
+    }
+    if plan_decision.plan is not None and not required_metrics <= {
+        item.metric for item in plan_decision.plan.selections
+    }:
+        issues.add("ISSUER_MARKET_REFERENCE_PLAN_ROLES_INCOMPLETE")
     reference_selection: IssuerMarketReferenceSelectionV1 | None = None
     terminal_selection: TerminalGrowthSelectionV1 | None = None
     inputs: MarketPolicyInputsV1 | None = None
@@ -143,22 +213,24 @@ def evaluate_automatic_market_policy(
         assert plan_decision.plan is not None
         try:
             reference_selection = select_issuer_market_references(
-                plan_decision.plan, admissions=admissions
+                plan_decision.plan, admissions=ordered_admissions
             )
             if reference_selection.status != "selected":
                 issues.update(reference_selection.issue_codes)
                 issues.add("ISSUER_MARKET_REFERENCE_SELECTION_REFUSED")
-        except (ValueError, MarketReferenceSelectionError):
+        except MarketReferenceSelectionError as error:
+            issues.add(error.code)
+        except ValueError:
             issues.add("ISSUER_MARKET_REFERENCE_SELECTION_FAILED")
     if not issues:
         assert reference_selection is not None
         try:
             capital = adopt_industry_capital(reference_selection)
             terminal_selection = select_terminal_growth(
-                policy.terminal_growth_plan, admissions=admissions
+                policy.terminal_growth_plan, admissions=ordered_admissions
             )
             rate = select_market_rate(
-                admissions,
+                ordered_admissions,
                 policy=policy.risk_free_policy,
                 valuation_at=valuation_at,
                 currency=policy.currency,
@@ -200,9 +272,9 @@ def evaluate_automatic_market_policy(
                 terminal_growth=terminal_selection.value,
                 evidence=tuple(sorted(evidence, key=lambda item: item.role)),
             )
-        except MarketSourceError as error:
+        except (MarketSourceError, MarketReferenceSelectionError) as error:
             issues.add(error.code)
-        except (MarketReferenceSelectionError, ValueError, StopIteration):
+        except (ValueError, StopIteration):
             issues.add("ISSUER_MARKET_POLICY_ASSEMBLY_FAILED")
 
     payload = {
@@ -214,6 +286,8 @@ def evaluate_automatic_market_policy(
         "input_digest": input_digest,
         "status": "refused" if issues else "approved",
         "issue_codes": tuple(sorted(issues)),
+        "reference_selection": reference_selection,
+        "terminal_selection": terminal_selection,
         "reference_selection_digest": (
             reference_selection.output_digest if reference_selection else None
         ),
@@ -226,5 +300,8 @@ def evaluate_automatic_market_policy(
         {**payload, "output_digest": sha256_digest(payload)}
     )
     if expected is not None and result != expected:
-        raise ValueError("automatic market policy differs from retained replay")
+        raise SnapshotError(
+            "AUTOMATIC_MARKET_POLICY_REPLAY_MISMATCH",
+            "automatic market policy differs from retained replay",
+        )
     return result
