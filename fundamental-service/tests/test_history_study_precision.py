@@ -111,11 +111,13 @@ def test_atomic_report_reuses_original_bytes_and_refuses_corruption(
     assert path.read_bytes() == b"corrupt"
 
 
+@pytest.mark.parametrize("operation", ["fsync", "replace"])
 def test_interrupted_write_leaves_no_half_report_and_retry_converges(
     tmp_path: Path,
+    operation: str,
 ) -> None:
     report = {"value": "immutable"}
-    with patch.object(study.os, "replace", side_effect=OSError("interrupted")):
+    with patch.object(study.os, operation, side_effect=OSError("interrupted")):
         with pytest.raises(OSError, match="interrupted"):
             study.publish_report(tmp_path, report)
     assert sorted(p.name for p in tmp_path.iterdir()) == [".publication.lock"]

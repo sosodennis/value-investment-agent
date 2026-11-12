@@ -185,15 +185,17 @@ def publish_report(
             if destination.read_bytes() != raw:
                 raise DesignError("existing content-addressed report is corrupt")
             return {"report_digest": report_digest, "wrote": False}
-        with tempfile.NamedTemporaryFile(dir=directory, delete=False) as handle:
-            temporary = Path(handle.name)
-            handle.write(raw)
-            handle.flush()
-            os.fsync(handle.fileno())
+        temporary: Path | None = None
         try:
+            with tempfile.NamedTemporaryFile(dir=directory, delete=False) as handle:
+                temporary = Path(handle.name)
+                handle.write(raw)
+                handle.flush()
+                os.fsync(handle.fileno())
             os.replace(temporary, destination)
         finally:
-            temporary.unlink(missing_ok=True)
+            if temporary is not None:
+                temporary.unlink(missing_ok=True)
     return {"report_digest": report_digest, "wrote": True}
 
 
