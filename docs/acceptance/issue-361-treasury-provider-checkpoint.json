@@ -1,0 +1,488 @@
+{
+  "acceptance": {
+    "independent_pr_review_complete": false,
+    "market_policy_admitted": false,
+    "provider_evidence": "passed",
+    "real_numerical_flow": false,
+    "supported_history_threshold": null
+  },
+  "artifact_policy": "Raw originals, normalized observations, logs and reports remain in ignored .audit or the issue-owned persistent volume. Canonical publication uses temporary file plus atomic rename and reuses identical existing bytes.",
+  "change": "Interchangeable Treasury XML and ALFRED DGS10 adapters implement MacroSeriesProviderPort; source capture refuses caller timestamp overrides before I/O.",
+  "checkpoint_digest": "df0300dfecf8c3278165bdcbaf02e2f951f606d39f5cf0e54da563f805829031",
+  "engineering": {
+    "all_passed": true,
+    "commands": {
+      "architecture": {
+        "command": [
+          "python3",
+          "scripts/architecture_guard.py"
+        ],
+        "exit_code": 0,
+        "output_sha256": "6c8e024ff94859e9781de1f4a3201c70e338bc90774702d8ac83afc8a9a15ab9"
+      },
+      "diff": {
+        "command": [
+          "git",
+          "diff",
+          "--check",
+          "origin/main"
+        ],
+        "exit_code": 0,
+        "output_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "focused": {
+        "command": [
+          "uv",
+          "run",
+          "--frozen",
+          "--extra",
+          "dev",
+          "--project",
+          "fundamental-service",
+          "pytest",
+          "-q",
+          "fundamental-service/tests/test_treasury_source.py",
+          "fundamental-service/tests/test_public_source.py",
+          "fundamental-service/tests/test_macro_series.py",
+          "fundamental-service/tests/test_bea_source.py",
+          "fundamental-service/tests/test_sofr_source.py"
+        ],
+        "exit_code": 0,
+        "output_sha256": "c0daaeb439329040d109d260e5dedb5b711bcd356b314525526afa27c4ccc7b3"
+      },
+      "format": {
+        "command": [
+          "uvx",
+          "--from",
+          "ruff==0.14.10",
+          "ruff",
+          "format",
+          "--check",
+          "fundamental-service/src/fundamental_service/public_source.py",
+          "fundamental-service/src/fundamental_service/treasury_source.py",
+          "fundamental-service/tests/test_public_source.py",
+          "fundamental-service/tests/test_treasury_source.py",
+          "fundamental-service/tests/treasury_source_fixtures.py"
+        ],
+        "exit_code": 0,
+        "output_sha256": "f114d83b30c5c657ee43a847a45bafccaea255d82673feb87c26d252c61e29c1"
+      },
+      "mypy": {
+        "command": [
+          "uv",
+          "run",
+          "--frozen",
+          "--project",
+          "fundamental-service",
+          "--with",
+          "mypy==1.19.1",
+          "mypy",
+          "--no-incremental",
+          "--follow-imports=silent",
+          "--ignore-missing-imports",
+          "fundamental-service/src/fundamental_service/public_source.py",
+          "fundamental-service/src/fundamental_service/treasury_source.py"
+        ],
+        "exit_code": 0,
+        "output_sha256": "f9b031e5c45aa702cd4fef028d465551cb20a2c4698e0913c7b00766b20ac4d8"
+      },
+      "ruff": {
+        "command": [
+          "uvx",
+          "--from",
+          "ruff==0.14.10",
+          "ruff",
+          "check",
+          "fundamental-service"
+        ],
+        "exit_code": 0,
+        "output_sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18"
+      },
+      "service_postgres": {
+        "command": [
+          "uv",
+          "run",
+          "--frozen",
+          "--extra",
+          "dev",
+          "--project",
+          "fundamental-service",
+          "pytest",
+          "fundamental-service/tests",
+          "-ra"
+        ],
+        "exit_code": 0,
+        "output_sha256": "2d2e67338ea70cd02bf186815e34ec14a84e0041c550ecd425a43ba612dc05fa"
+      }
+    },
+    "focused": "123 passed",
+    "input_digest": "a3bad92145f43a240160891e26da61bac5ceed7e575a36df7ea6d853606be39e",
+    "output_digest": "fcaa4f4344f57428604ae7b91f376d5fd7742e19c425f74a2c06b6d14751f5e3",
+    "runtime": {
+      "postgres_port": 18665,
+      "postgres_project": "value-investment-agent-361-flow-tests",
+      "python": "3.12.12",
+      "runner_sha256": "4c49a81860438a1e747b5ef4cebd4aacfa5b2f02fee8e4e6922b96df149e380f",
+      "uv_lock_sha256": "98335af7aa12ea08b8089c871fd87c8d670477f55dbc205661a6f261554347bc"
+    },
+    "service_postgres": "1575 passed, 11 optional SEC-resource skips, one expected duplicate-ZIP warning"
+  },
+  "exact_commit": "1619b07fa9f7fdfe9a09f2f1b5723443be324de5",
+  "installed_replay": {
+    "baseline_container_count": 42,
+    "commands": [
+      {
+        "command": [
+          "docker",
+          "ps",
+          "-q"
+        ],
+        "exit_code": 0,
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_sha256": "d6c157bc013f8d74484498766c63aa4eb60b27e4113753b6dd20d550844a78b7"
+      },
+      {
+        "command": [
+          "docker",
+          "compose",
+          "-p",
+          "value-investment-agent-361-macro-providers",
+          "-f",
+          "compose/verification/docker-compose.issue280-operations.yml",
+          "config",
+          "--quiet"
+        ],
+        "exit_code": 0,
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "command": [
+          "docker",
+          "compose",
+          "-p",
+          "value-investment-agent-361-macro-providers",
+          "-f",
+          "compose/verification/docker-compose.issue280-operations.yml",
+          "build",
+          "fundamental-service"
+        ],
+        "exit_code": 0,
+        "stderr_sha256": "4210c2732774aa12ec674a1defc08c9751f9b9294723a09f985d36cb288df354",
+        "stdout_sha256": "ac778441876ca68e9ad347bf3116183aa56fdde3f9f3c6b18474d002364c3c45"
+      },
+      {
+        "command": [
+          "docker",
+          "compose",
+          "-p",
+          "value-investment-agent-361-macro-providers",
+          "-f",
+          "compose/verification/docker-compose.issue280-operations.yml",
+          "up",
+          "-d",
+          "--wait",
+          "fundamental-service"
+        ],
+        "exit_code": 0,
+        "stderr_sha256": "b74852b5c214c3920aadadec9121c2184d4ea66ba1877d52c4a6dc9e0dfe229d",
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "command": [
+          "docker",
+          "compose",
+          "-p",
+          "value-investment-agent-361-macro-providers",
+          "-f",
+          "compose/verification/docker-compose.issue280-operations.yml",
+          "config",
+          "--hash",
+          "fundamental-service"
+        ],
+        "exit_code": 0,
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_sha256": "627a8ee8a654c0d76ba9343b74e3a8b2de1eab0a26c97b7402e43579f3c0885b"
+      },
+      {
+        "command": [
+          "git",
+          "ls-tree",
+          "-r",
+          "--name-only",
+          "1619b07fa9f7fdfe9a09f2f1b5723443be324de5",
+          "fundamental-service/src/fundamental_service"
+        ],
+        "exit_code": 0,
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_sha256": "41794847f88746cb0729a014dad7da4f33e415957ea7d01665789bbabfa02252"
+      },
+      {
+        "command": [
+          "docker",
+          "cp",
+          "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/.audit/issue-361-treasury-provider/verify_in_container.py",
+          "value-investment-agent-361-macro-providers-fundamental-service-1:/tmp/issue361-verify-treasury-provider.py"
+        ],
+        "exit_code": 0,
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "command": [
+          "docker",
+          "exec",
+          "value-investment-agent-361-macro-providers-fundamental-service-1",
+          "mkdir",
+          "-p",
+          "/tmp/issue361-treasury"
+        ],
+        "exit_code": 0,
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "command": [
+          "docker",
+          "cp",
+          "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/.audit/issue-361-market-proposal/content/463de8652014839140aec743570ecd3bf41006880245ace93b4d01478239134b",
+          "value-investment-agent-361-macro-providers-fundamental-service-1:/tmp/issue361-treasury/treasury.xml"
+        ],
+        "exit_code": 0,
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "command": [
+          "docker",
+          "cp",
+          "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/.audit/issue-361-treasury-provider/research/1f8007137d78660ff16a4db0d6a421ff5dcea33272913b8a059816797e425656.bin",
+          "value-investment-agent-361-macro-providers-fundamental-service-1:/tmp/issue361-treasury/alfred.csv"
+        ],
+        "exit_code": 0,
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "command": [
+          "docker",
+          "exec",
+          "--user",
+          "0",
+          "value-investment-agent-361-macro-providers-fundamental-service-1",
+          "chmod",
+          "0444",
+          "/tmp/issue361-treasury/treasury.xml",
+          "/tmp/issue361-treasury/alfred.csv"
+        ],
+        "exit_code": 0,
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "command": [
+          "docker",
+          "exec",
+          "-e",
+          "PYTHONPATH=/app",
+          "value-investment-agent-361-macro-providers-fundamental-service-1",
+          "python",
+          "/tmp/issue361-verify-treasury-provider.py",
+          "1619b07fa9f7fdfe9a09f2f1b5723443be324de5"
+        ],
+        "exit_code": 0,
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_sha256": "a9c79d04bbc9ad8d41f4e312b8f65da2ea92788429c8d56cd3c17269539b0236"
+      },
+      {
+        "command": [
+          "docker",
+          "exec",
+          "-e",
+          "PYTHONPATH=/app",
+          "value-investment-agent-361-macro-providers-fundamental-service-1",
+          "python",
+          "/tmp/issue361-verify-treasury-provider.py",
+          "1619b07fa9f7fdfe9a09f2f1b5723443be324de5"
+        ],
+        "exit_code": 0,
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_sha256": "a9c79d04bbc9ad8d41f4e312b8f65da2ea92788429c8d56cd3c17269539b0236"
+      },
+      {
+        "command": [
+          "docker",
+          "compose",
+          "-p",
+          "value-investment-agent-361-macro-providers",
+          "-f",
+          "compose/verification/docker-compose.issue280-operations.yml",
+          "restart",
+          "fundamental-service"
+        ],
+        "exit_code": 0,
+        "stderr_sha256": "9798390c33dd723e0eb697090db407f3b2a668f3f523f5901d27be229187bdba",
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "command": [
+          "docker",
+          "exec",
+          "-e",
+          "PYTHONPATH=/app",
+          "value-investment-agent-361-macro-providers-fundamental-service-1",
+          "python",
+          "/tmp/issue361-verify-treasury-provider.py",
+          "1619b07fa9f7fdfe9a09f2f1b5723443be324de5"
+        ],
+        "exit_code": 0,
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_sha256": "a9c79d04bbc9ad8d41f4e312b8f65da2ea92788429c8d56cd3c17269539b0236"
+      },
+      {
+        "command": [
+          "docker",
+          "ps",
+          "-q"
+        ],
+        "exit_code": 0,
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_sha256": "d6c157bc013f8d74484498766c63aa4eb60b27e4113753b6dd20d550844a78b7"
+      }
+    ],
+    "commands_digest": "118303edcc18ba690f585418a27f7f3f029c93a6ac4767f1907715af4bebc902",
+    "compose": {
+      "config_hash": "b8aad112c7ed085a96f21281211419f8ec08423bb1ff150252608560ddb48cfe",
+      "env_files": [],
+      "files": [
+        "compose/verification/docker-compose.issue280-operations.yml"
+      ],
+      "ports": {
+        "fundamental_postgres": 18684,
+        "fundamental_service": 18683
+      },
+      "project": "value-investment-agent-361-macro-providers"
+    },
+    "first_publication": {
+      "artifact_count": 4,
+      "artifact_writes": 4,
+      "exact_commit": "1619b07fa9f7fdfe9a09f2f1b5723443be324de5",
+      "failure_count": 5,
+      "input_digest": "57fe7363396fd85601700a260c50e0465135db41d0179b2a3616fc01fc53b83d",
+      "observations": [
+        249,
+        1
+      ],
+      "output_digest": "881081c611b97b0168bcd25a56aa183efb7ff1f543505bf10ea134912bce0c22",
+      "provider_downloads": 0,
+      "wrote": true
+    },
+    "image_id": "sha256:1444fba4c404d3d5e0682fea2fe1edc99fe8686ca88a918182e3ae7053751bdc",
+    "input_digest": "e6d767c8266ef86a653c4d86ee31b141697a08463f5718acea0a01a1c5f2d0ec",
+    "installed_source_count": 77,
+    "installed_source_manifest_digest": "75932d973b2771093b05af3c0c775882eeb7070866f8c911940ae8c8cd681793",
+    "inventories": {
+      "inventory_before_digest": "31b6fece6d06167fbc549908e1ca5f4d069c803b742f66e1c0827de9bc17f080",
+      "inventory_first_digest": "31b6fece6d06167fbc549908e1ca5f4d069c803b742f66e1c0827de9bc17f080",
+      "inventory_restart_digest": "31b6fece6d06167fbc549908e1ca5f4d069c803b742f66e1c0827de9bc17f080",
+      "inventory_second_digest": "31b6fece6d06167fbc549908e1ca5f4d069c803b742f66e1c0827de9bc17f080",
+      "new_files_after_restart": 0,
+      "new_files_first": 0,
+      "new_files_second": 0
+    },
+    "output_digest": "8727046b0108abea69218e9fb49d1a8e9b9b8cdbfbe114ec88417bce1cd23dc9",
+    "readyz": {
+      "capabilities": {
+        "identity_resolution_configured": false
+      },
+      "contract_version": "internal.v1",
+      "status": "ready"
+    },
+    "repeat_and_restart": [
+      {
+        "artifact_count": 4,
+        "artifact_writes": 0,
+        "exact_commit": "1619b07fa9f7fdfe9a09f2f1b5723443be324de5",
+        "failure_count": 5,
+        "input_digest": "57fe7363396fd85601700a260c50e0465135db41d0179b2a3616fc01fc53b83d",
+        "observations": [
+          249,
+          1
+        ],
+        "output_digest": "881081c611b97b0168bcd25a56aa183efb7ff1f543505bf10ea134912bce0c22",
+        "provider_downloads": 0,
+        "wrote": false
+      },
+      {
+        "artifact_count": 4,
+        "artifact_writes": 0,
+        "exact_commit": "1619b07fa9f7fdfe9a09f2f1b5723443be324de5",
+        "failure_count": 5,
+        "input_digest": "57fe7363396fd85601700a260c50e0465135db41d0179b2a3616fc01fc53b83d",
+        "observations": [
+          249,
+          1
+        ],
+        "output_digest": "881081c611b97b0168bcd25a56aa183efb7ff1f543505bf10ea134912bce0c22",
+        "provider_downloads": 0,
+        "wrote": false
+      },
+      {
+        "artifact_count": 4,
+        "artifact_writes": 0,
+        "exact_commit": "1619b07fa9f7fdfe9a09f2f1b5723443be324de5",
+        "failure_count": 5,
+        "input_digest": "57fe7363396fd85601700a260c50e0465135db41d0179b2a3616fc01fc53b83d",
+        "observations": [
+          249,
+          1
+        ],
+        "output_digest": "881081c611b97b0168bcd25a56aa183efb7ff1f543505bf10ea134912bce0c22",
+        "provider_downloads": 0,
+        "wrote": false
+      }
+    ],
+    "report_content_sha256": "171b34342106d8e6bc22b2c3faf39e501f25836ebb45ccbed1e3fcbcfe2653e2",
+    "runtime": {
+      "arelle": "2.47.4",
+      "pydantic": "2.14.2",
+      "python": "3.12.16"
+    },
+    "unrelated_container_changes": {}
+  },
+  "issue": 361,
+  "next_step": "Review exact #414 diff/CI/source evidence and continue source-provider market-policy admission; keep unsupported cases abstained and threshold null.",
+  "protocol": "issue-361-treasury-provider-checkpoint-v1",
+  "remaining": [
+    "Damodaran ERP/beta provider and issuer classification, lawful dated quote, contracted debt benchmark, tax and capital-weight scope, bounded terminal-growth policy.",
+    "Complete source-bound accounting/award scope, automatic approvals, trusted release and exact-input caller approval.",
+    "Installed real numerical repeat/concurrency/restart/empty-store restore, independent review/CI, merge and main-SHA validation."
+  ],
+  "retained_failures": [
+    "Six caller-timestamp regression cases fail against the parent implementation before the source-boundary fix.",
+    "Initial mypy requires the CSV row list type annotation; corrected before the exact implementation commit.",
+    "First installed replay cannot read a copied mode-0600 original; only container temporary copies receive read permission. Original bytes remain unchanged.",
+    "First audit comparison incorrectly includes per-invocation artifact_writes. Corrected to compare content identity separately; original four-write receipt is retained, all subsequent runs write zero."
+  ],
+  "source_evidence": [
+    {
+      "available_at": "2026-11-11T20:02:35.586207Z",
+      "captured_at": "2026-11-11T20:02:35.586207Z",
+      "historical_backdating_allowed": false,
+      "observations": 249,
+      "source_hash": "463de8652014839140aec743570ecd3bf41006880245ace93b4d01478239134b",
+      "source_id": "treasury-yields"
+    },
+    {
+      "available_at": "2025-04-01T04:00:00Z",
+      "missing_action": "retain; never fill from current Treasury XML",
+      "missing_date": "2025-03-31",
+      "observation_date": "2025-03-28",
+      "observations": 1,
+      "percent_value": "4.27",
+      "source_hash": "1f8007137d78660ff16a4db0d6a421ff5dcea33272913b8a059816797e425656",
+      "source_id": "alfred-vintage",
+      "vintage_date": "2025-03-31"
+    }
+  ]
+}

@@ -905,3 +905,27 @@ restore `.tmp-issue355-sec-useragent-compose.yml` or clean another project.
 #361, unresolved blockers #369/#381/#394, and PR #370 remain open. Implemented
 normalization blockers #404/#405/#406 still need delivery and main verification. Complete
 source scope and supported automatic mapping approval precede numerical acceptance; thresholds stay null.
+
+## Treasury and ALFRED provider checkpoint
+
+Implementation `1619b07fa9f7fdfe9a09f2f1b5723443be324de5` adds two interchangeable
+`MacroSeriesProviderPort` adapters for daily ten-year Treasury par yields.
+Capture rejects caller-supplied timestamps before network access. Mutable
+Treasury XML is available only at retained capture; ALFRED historical availability
+requires the exact requested vintage in the CSV header and starts after that
+New York calendar day ends. Both retain percent bond-equivalent yield units.
+
+Exact checks pass: 1,575 Service/PostgreSQL and 123 focused tests, Ruff, format,
+types, architecture and diff. Eleven optional SEC-resource skips remain.
+The isolated installed image matches all 77 source files. Real retained Treasury
+XML (249 observations) and ALFRED (one observation) reproduce output digest
+`881081c611b97b0168bcd25a56aa183efb7ff1f543505bf10ea134912bce0c22`.
+Repeated execution and execution after service restart write no artifacts and
+preserve all inventory hashes/mtimes. The ALFRED March 31 vintage supplies March
+28 at 4.27%; its missing March 31 observation is retained without substitution.
+
+See [the Treasury-provider checkpoint](issue-361-treasury-provider-checkpoint.json)
+for exact commands, source/runtime pins, input/output digests and audit-helper
+corrections. This verifies source normalization and idempotency. Complete market
+policy, real numerical acceptance and independent PR review remain outstanding;
+`supported_history_threshold=null`. Generated evidence stays outside Git.
