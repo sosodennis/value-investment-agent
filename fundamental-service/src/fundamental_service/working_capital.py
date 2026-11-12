@@ -24,8 +24,8 @@ from .numerical_policy import using_valuation_context
 from .original_issuer import IssuerOperatingSourceV1, fact_matches_operating_identity
 from .serialization import canonical_bytes, sha256_digest
 
-WORKING_CAPITAL_INPUT_POLICY: Literal["composite-noncash-working-capital-v1"] = (
-    "composite-noncash-working-capital-v1"
+WORKING_CAPITAL_INPUT_POLICY: Literal["composite-noncash-working-capital-v2"] = (
+    "composite-noncash-working-capital-v2"
 )
 WORKING_CAPITAL_FIELDS = (
     "operating_current_receivables",
@@ -41,6 +41,14 @@ _REQUIRED_EXCLUSIONS = {
     "current_interest_bearing_debt": "liabilities",
     "current_operating_lease_liabilities": "liabilities",
     "current_finance_lease_liabilities": "liabilities",
+}
+_EXCLUSION_ROLE_COVERAGE = {
+    role: (side, (role,)) for role, side in _REQUIRED_EXCLUSIONS.items()
+} | {
+    "cash_and_short_term_investments": (
+        "assets",
+        ("cash_and_equivalents", "short_term_investments"),
+    ),
 }
 
 
@@ -86,7 +94,7 @@ class WorkingCapitalExclusionV1(StrictModel):
 
 
 class CompositeWorkingCapitalInputV1(StrictModel):
-    policy_version: Literal["composite-noncash-working-capital-v1"] = (
+    policy_version: Literal["composite-noncash-working-capital-v2"] = (
         WORKING_CAPITAL_INPUT_POLICY
     )
     policy_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
@@ -199,6 +207,8 @@ def working_capital_policy_digest() -> str:
             "version": WORKING_CAPITAL_INPUT_POLICY,
             "formula": "(current_assets - asset_exclusions) * asset_fraction - (current_liabilities - liability_exclusions) * liability_fraction",
             "required_exclusions": _REQUIRED_EXCLUSIONS,
+            "exclusion_role_coverage": _EXCLUSION_ROLE_COVERAGE,
+            "unsupported_exclusion_roles": "abstain_requires_versioned_source_mapping",
             "unknown": "abstain",
             "sensitivity": "one_at_a_time_scenarios",
             "residuals": "explicit_fraction_and_rationale_no_default",
@@ -271,13 +281,23 @@ def assess_composite_working_capital(
     ]
     if len(exclusion_observations) != len(set(exclusion_observations)):
         missing.append("WORKING_CAPITAL_EXCLUSION_OBSERVATION_DUPLICATE")
-    mapped_classes = {
-        account_class
-        for exclusion in policy_input.exclusions
-        if (fact := by_id.get(exclusion.fact_id or "")) is not None
-        and fact.normalized_field == exclusion.mapped_fact_role
-        for account_class in exclusion.covered_classes
-    }
+    mapped_classes: set[str] = set()
+    for exclusion in policy_input.exclusions:
+        coverage = _EXCLUSION_ROLE_COVERAGE.get(exclusion.mapped_fact_role)
+        if coverage is None:
+            missing.append(
+                f"WORKING_CAPITAL_EXCLUSION_ROLE_UNSUPPORTED:{exclusion.mapped_fact_role}"
+            )
+            continue
+        side, classes = coverage
+        if exclusion.side != side or exclusion.covered_classes != classes:
+            missing.append(
+                f"WORKING_CAPITAL_EXCLUSION_COVERAGE_MISMATCH:{exclusion.account_class}:{exclusion.mapped_fact_role}"
+            )
+            continue
+        fact = by_id.get(exclusion.fact_id or "")
+        if fact is not None and fact.normalized_field == exclusion.mapped_fact_role:
+            mapped_classes.update(classes)
     missing.extend(
         f"WORKING_CAPITAL_FACT_ROLE_MISSING:{account_class}"
         for account_class in sorted(set(_REQUIRED_EXCLUSIONS) - mapped_classes)

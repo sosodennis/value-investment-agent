@@ -1,8 +1,8 @@
-# Composite noncash working-capital input V1
+# Composite noncash working-capital input V2
 
 This Fundamental Service input policy is implemented for evaluation. It does not approve an issuer classification, product release, verified valuation, or history threshold.
 
-The exact six-component working-capital path remains available. The separate `composite-noncash-working-capital-v1` requirements profile uses reviewed gross current assets and liabilities, with explicit source-bound exclusions and residual operating-fraction assumptions. FCFF continues through the existing #352 composer and calculator.
+The exact six-component working-capital path remains available. The separate `composite-noncash-working-capital-v2` requirements profile uses reviewed gross current assets and liabilities, with explicit source-bound exclusions and residual operating-fraction assumptions. FCFF continues through the existing #352 composer and calculator.
 
 Automatic mapping policy `source-bound-us-gaap-v6` supports direct original
 `us-gaap:AssetsCurrent` and `us-gaap:LiabilitiesCurrent` observations. Each
@@ -11,7 +11,7 @@ accession and parsed source. The machine authority must trust the new policy
 digest; an earlier policy certificate cannot authorize it. These gross-total
 approvals do not classify residual balances or supply exclusions or assumptions.
 
-For each period, `CompositeWorkingCapitalInputV1` pins the policy digest, mapping version, issuer, period, original accession, source hash, gross-total fact IDs and exclusions. Required exclusions cover cash, short-term investments, current interest-bearing debt, and current operating- and finance-lease liabilities. Each exclusion identifies its gross parent, the actual mapped fact role, and the classes covered. A combined reported amount may cover several classes but is subtracted only once. Confirmed absence requires a mapped zero fact with confirmed-absence accounting evidence. Unknown required exclusions abstain; a missing tag never means zero.
+For each period, `CompositeWorkingCapitalInputV1` pins the policy digest, mapping version, issuer, period, original accession, source hash, gross-total fact IDs and exclusions. Required exclusions cover cash, short-term investments, current interest-bearing debt, and current operating- and finance-lease liabilities. Each exclusion identifies its gross parent, the actual mapped fact role, and the classes covered. The executable V2 policy binds each canonical exclusion role to its exact accounting classes and balance-sheet side. Direct roles cover only their named class. The supported combined role `cash_and_short_term_investments` covers exactly cash and short-term investments on the asset side and is subtracted once. Other combinations and issuer-specific role strings abstain until their source-bound classification is implemented and reviewed in a new policy version. Caller coverage lists, rationale and trusted signatures cannot establish this relation. Confirmed absence requires a mapped zero fact with confirmed-absence accounting evidence. Unknown required exclusions abstain; a missing tag never means zero.
 
 ```text
 asset_residual = current_assets - explicit_asset_exclusions
@@ -26,3 +26,5 @@ The assessment retains canonical facts including units, scale, original concepts
 Call `prepare_operating_forecast(..., working_capital_inputs=inputs)` for either operating model, or `prepare_automatic_valuation(..., working_capital_inputs=inputs)` for full valuation. Omit these inputs to retain the exact profile. Full valuation still requires the existing market-policy, capital-bridge and dilution evidence; aggregate working capital does not replace those gates.
 
 Estimated history and forecasts remain provisional. `supported_history_threshold` remains null. This increment does not resolve NEWMARKET 2013 continuing-capex scope or establish a trusted NEWMARKET release, first-subsequent label, forecast error, or complete fixed-cohort replay. Freeze the #377 evaluation protocol before using outcomes to select a history threshold; any estimated label must be identified as an estimate under this input-policy version.
+
+V2 replaces the pre-integration V1 evaluation policy to resolve #416. Its digest includes the executable role/class/side relation. Existing V1 inputs and certificates cannot authorize V2; regenerate and review inputs under the new version. The original facts and retained evidence are not rewritten.

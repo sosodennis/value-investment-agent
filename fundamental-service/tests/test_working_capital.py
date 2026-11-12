@@ -287,7 +287,7 @@ def test_estimated_route_is_a_distinct_profile_and_keeps_threshold_null():
     exact = operating_forecast_requirements_profile("fcff_dcf")
     estimated = composite_working_capital_requirements_profile("fcff_dcf")
     assert exact.profile_version == "operating-forecast-requirements-v1"
-    assert estimated.profile_version == "composite-noncash-working-capital-v1"
+    assert estimated.profile_version == "composite-noncash-working-capital-v2"
     assert "operating_current_receivables" in exact.required_fact_fields
     assert "operating_current_receivables" not in estimated.required_fact_fields
     assert "current_assets" in estimated.required_fact_fields
