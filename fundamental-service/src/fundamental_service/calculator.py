@@ -13,7 +13,11 @@ from .contracts import (
     ValuationInputV1,
 )
 from .numerical_policy import using_valuation_context
-from .operating_projection import OperatingProjectionError, project_operating_nodes
+from .operating_projection import (
+    OperatingProjectionError,
+    project_operating_nodes,
+    resolve_operating_model,
+)
 from .serialization import sha256_digest
 
 
@@ -105,15 +109,10 @@ def calculate(
             "CALLER_APPROVAL_REJECTED",
             "caller rejected this exact valuation input",
         )
-    if request.model_id not in {"fcff_dcf", "transition_fcff_dcf"}:
-        raise CalculationRefusal(
-            "MODEL_UNSUPPORTED",
-            f"model {request.model_id} is not released for the current profile",
-        )
-    if request.model_version != f"{request.model_id}-v2":
-        raise CalculationRefusal(
-            "MODEL_VERSION_UNSUPPORTED", "the current FCFF graph requires model v2"
-        )
+    try:
+        resolve_operating_model(request.model_id, request.model_version)
+    except OperatingProjectionError as error:
+        raise CalculationRefusal(error.code, str(error)) from error
     quality_status = request.quality.status
     if quality_status is not QualityStatus.VERIFIED and not (
         allow_provisional and quality_status is QualityStatus.PROVISIONAL

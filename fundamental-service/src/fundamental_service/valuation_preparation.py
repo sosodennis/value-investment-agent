@@ -14,6 +14,7 @@ from .annual_history import (
     AnnualHistoryError,
     AnnualHistoryPeriodV1,
     AnnualHistoryV1,
+    EstimatedOperatingInputsV1,
     resolve_annual_history,
 )
 from .contracts import (
@@ -315,6 +316,8 @@ def _metric(
 @using_valuation_context
 def derive_historical_metrics(
     history: AnnualHistoryV1,
+    *,
+    estimated_inputs: tuple[EstimatedOperatingInputsV1, ...] = (),
 ) -> HistoricalMetricsV1:
     """Derive reviewed FCFF historical metrics without numeric placeholders."""
 
@@ -331,8 +334,16 @@ def derive_historical_metrics(
             ),
         )
 
+    estimates = {item.fiscal_year: item for item in estimated_inputs}
+    if estimated_inputs and (
+        len(estimates) != len(estimated_inputs)
+        or set(estimates) != {period.fiscal_year for period in history.periods}
+    ):
+        raise ValueError("estimated operating inputs must cover each period exactly")
     metrics: list[HistoricalMetricV1] = []
     issue_codes = list(history.issue_codes)
+    if estimates:
+        issue_codes.append("SCENARIO_INPUTS_ASSUMED")
     missing: list[str] = []
     for index, period in enumerate(history.periods):
         candidates = {
@@ -347,6 +358,13 @@ def derive_historical_metrics(
                 *(WORKING_CAPITAL_FIELDS if period.working_capital is None else ()),
             )
         }
+        estimate = estimates.get(period.fiscal_year)
+        if estimate is not None:
+            candidates = {
+                name: fact
+                for name, fact in candidates.items()
+                if name not in (*WORKING_CAPITAL_FIELDS, "capital_expenditure")
+            }
         absent = tuple(name for name, fact in candidates.items() if fact is None)
         if absent:
             missing.extend(f"{period.fiscal_year}:{name}" for name in absent)
@@ -360,6 +378,8 @@ def derive_historical_metrics(
         if len(values) != len(fields):
             issue_codes.append("METRIC_NON_NUMERIC_VALUE")
             continue
+        if estimate is not None:
+            values["capital_expenditure"] = estimate.capital_expenditure
         revenue = values["revenue"]
         operating_income = values["operating_income"]
         income_before_tax = values["income_before_tax"]
@@ -412,68 +432,81 @@ def derive_historical_metrics(
         if previous_revenue.value <= _ZERO_TOLERANCE:
             issue_codes.append("METRIC_GROWTH_DENOMINATOR_UNSTABLE")
             continue
-        working_capital_fields = (
-            WORKING_CAPITAL_FIELDS if previous.working_capital is None else ()
-        )
-        previous_candidates = {
-            name: previous.fact(name) for name in working_capital_fields
-        }
-        absent_previous = tuple(
-            name for name, fact in previous_candidates.items() if fact is None
-        )
-        if absent_previous:
-            missing.extend(
-                f"{period.fiscal_year}:prior_{name}" for name in absent_previous
+        current_working_capital: Decimal | None
+        previous_working_capital: Decimal | None
+        if estimate is not None:
+            previous_estimate = estimates[previous.fiscal_year]
+            current_working_capital = estimate.operating_working_capital
+            previous_working_capital = previous_estimate.operating_working_capital
+            current_working_capital_facts = estimate.working_capital_facts
+            previous_working_capital_facts = previous_estimate.working_capital_facts
+            capex_facts = estimate.capex_facts
+        else:
+            working_capital_fields = (
+                WORKING_CAPITAL_FIELDS if previous.working_capital is None else ()
             )
-            continue
-        previous_fields = {
-            name: fact for name, fact in previous_candidates.items() if fact is not None
-        }
-        previous_values = {
-            name: fact.value
-            for name, fact in previous_fields.items()
-            if isinstance(fact.value, Decimal)
-        }
-        if len(previous_values) != len(previous_fields):
-            issue_codes.append("METRIC_NON_NUMERIC_VALUE")
-            continue
-        current_working_capital = (
-            period.working_capital.value
-            if period.working_capital is not None
-            else (
-                values["operating_current_receivables"]
-                + values["inventory"]
-                + values["contract_assets"]
-                - values["operating_current_payables"]
-                - values["accrued_operating_liabilities"]
-                - values["deferred_revenue"]
+            previous_candidates = {
+                name: previous.fact(name) for name in working_capital_fields
+            }
+            absent_previous = tuple(
+                name for name, fact in previous_candidates.items() if fact is None
             )
-        )
-        previous_working_capital = (
-            previous.working_capital.value
-            if previous.working_capital is not None
-            else (
-                previous_values["operating_current_receivables"]
-                + previous_values["inventory"]
-                + previous_values["contract_assets"]
-                - previous_values["operating_current_payables"]
-                - previous_values["accrued_operating_liabilities"]
-                - previous_values["deferred_revenue"]
+            if absent_previous:
+                missing.extend(
+                    f"{period.fiscal_year}:prior_{name}" for name in absent_previous
+                )
+                continue
+            previous_fields = {
+                name: fact
+                for name, fact in previous_candidates.items()
+                if fact is not None
+            }
+            previous_values = {
+                name: fact.value
+                for name, fact in previous_fields.items()
+                if isinstance(fact.value, Decimal)
+            }
+            if len(previous_values) != len(previous_fields):
+                issue_codes.append("METRIC_NON_NUMERIC_VALUE")
+                continue
+            current_working_capital = (
+                period.working_capital.value
+                if period.working_capital is not None
+                else (
+                    values["operating_current_receivables"]
+                    + values["inventory"]
+                    + values["contract_assets"]
+                    - values["operating_current_payables"]
+                    - values["accrued_operating_liabilities"]
+                    - values["deferred_revenue"]
+                )
             )
-        )
-        if current_working_capital is None or previous_working_capital is None:
-            issue_codes.append("WORKING_CAPITAL_ESTIMATE_UNAVAILABLE")
-            continue
-        current_working_capital_facts = (
-            period.working_capital.source_facts
-            if period.working_capital is not None
-            else tuple(fields[field] for field in WORKING_CAPITAL_FIELDS)
-        )
-        previous_working_capital_facts = (
-            previous.working_capital.source_facts
-            if previous.working_capital is not None
-            else tuple(previous_fields[field] for field in WORKING_CAPITAL_FIELDS)
-        )
+            previous_working_capital = (
+                previous.working_capital.value
+                if previous.working_capital is not None
+                else (
+                    previous_values["operating_current_receivables"]
+                    + previous_values["inventory"]
+                    + previous_values["contract_assets"]
+                    - previous_values["operating_current_payables"]
+                    - previous_values["accrued_operating_liabilities"]
+                    - previous_values["deferred_revenue"]
+                )
+            )
+            if current_working_capital is None or previous_working_capital is None:
+                issue_codes.append("WORKING_CAPITAL_ESTIMATE_UNAVAILABLE")
+                continue
+            current_working_capital_facts = (
+                period.working_capital.source_facts
+                if period.working_capital is not None
+                else tuple(fields[field] for field in WORKING_CAPITAL_FIELDS)
+            )
+            previous_working_capital_facts = (
+                previous.working_capital.source_facts
+                if previous.working_capital is not None
+                else tuple(previous_fields[field] for field in WORKING_CAPITAL_FIELDS)
+            )
+            capex_facts = (fields["capital_expenditure"],)
         delta_working_capital = current_working_capital - previous_working_capital
         capex = values["capital_expenditure"]
         depreciation = values["depreciation_and_amortization"]
@@ -485,7 +518,7 @@ def derive_historical_metrics(
             fields["operating_income"],
             fields["income_tax_expense"],
             fields["income_before_tax"],
-            fields["capital_expenditure"],
+            *capex_facts,
             fields["depreciation_and_amortization"],
             *current_working_capital_facts,
             *previous_working_capital_facts,
@@ -520,7 +553,7 @@ def derive_historical_metrics(
                         "delta_operating_working_capital) / nopat"
                     ),
                     (
-                        fields["capital_expenditure"],
+                        *capex_facts,
                         fields["depreciation_and_amortization"],
                         *current_working_capital_facts,
                         fields["operating_income"],

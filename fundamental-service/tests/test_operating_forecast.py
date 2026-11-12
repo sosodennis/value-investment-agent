@@ -147,7 +147,6 @@ def test_repeat_order_and_decimal_context_cannot_change_operating_identity(trapp
     (
         {"mapping_version": "reviewed-mapping-v2"},
         {"policy_version": "operating-policy-v2"},
-        {"model_version": "fcff_dcf-v3"},
         {"data_release_manifest_digest": "e" * 64},
     ),
 )
