@@ -19,6 +19,57 @@ Eligible candidate-history valuations can be provisional. Missing, conflicting,
 unreviewed, future, or unsupported evidence must retain reasons and abstain.
 No completed #351 through #355 acceptance is changed. #350 is outside scope.
 
+## Issuer ERP source selection checkpoint
+
+Implementation `94fe0386268a12115a965a40a04081992151ae42` binds one canonical
+issuer/date reference plan to the effective deployment policy and signed release.
+Provider-neutral selection retains exact rows, source/vintage/selection digests,
+freshness and missing/conflicting evidence. Both serving and the independent
+release canary reproduce the observed ERP. Industry unlevered beta cannot become
+issuer equity beta. New providers reuse the existing ports and selectors; #352
+retains financial calculations. Issuer classification remains explicit policy
+authority, distinct from source-use admission.
+
+Exact checks pass **1,783 Service/PostgreSQL tests**, Ruff/format, six-source mypy,
+architecture and diff. Eleven optional SEC-resource skips and one expected ZIP
+fixture warning remain. Engineering input/output:
+`2ebb17c3a4650ed7adab308f8380d767256594d5d7b0939b23599aa0762044d9` /
+`5249d31a0153338adc35db70632c36e93b60c09a915dd1197d9ffddc688d52e0`.
+[CI43240814434](https://github.com/sosodennis/value-investment-agent/actions/runs/43240814434)
+passes all12 executed checks; release gate skipped.
+
+The own `value-investment-agent-361-capture-profiles` image matches all91
+installed Python/SQL sources. A synthetic signed release prepares the exact ERP;
+four altered-policy/missing-authority paths refuse. Second, two concurrent
+processes and post-service-restart runs retain output
+`88694fdb325aec85ba568e1ec95769e09eeea6dec8becffb7683f58934df52f7`
+for packet input
+`9e6a38b2de3f9542a2b9b79dbe12115b3b074609aa496a657577d78a3cd0a730`,
+with evidence writes=0, report wrote=false and unchanged file hashes/mtimes.
+Installed check input/output:
+`21c0419b9dc4349bbce1603301e9505146bebc6a9284b90b75ddd78530a3b0c9` /
+`b974ff0a9961ccfe4c747007a4805e94333b8bbcf246527253a0a1a51ffca71e`.
+All unrelated baseline containers are unchanged. Ports remain18685/18686.
+
+Retained harness corrections: the manual own-service recreation initially omitted
+host overrides and briefly bound18080, then restored18685 without replacing the
+PostgreSQL volume; fixture generation and the installed audit command initially
+missed their internal-contract PYTHONPATH. These are recorded as failed audit
+attempts; the accepted installed report uses the corrected runtime tuple.
+
+This is synthetic source/policy binding acceptance. SEC identity is unconfigured
+in this stack, and real numerical acceptance remains incomplete. Full automatic
+issuer/date policy, lawful quote, accounting/award evidence, trusted complete
+release, caller approval and numerical recovery remain required. The existing
+[source-admission checkpoint](issue-361-source-admission-checkpoint.json) records
+commands, runtime pins, digests, failures and next steps. Threshold stays null;
+#361/#369 remain OPEN and #370 stays draft.
+
+Parent review also reproduced #420's arbitrary executable-model version claim
+at head `54de24365061c6ad8760ea70a62029336cf2764d`. [Blocker #421](https://github.com/sosodennis/value-investment-agent/issues/421)
+retains the validated-request counterexample and digests. #420 remains unmerged
+pending its owning-layer correction; no parent edits were made in the child.
+
 ## Composite accounting integration checkpoint
 
 Ordinary merge `f45a1fad04377c7826e6d86dd4ab7cd139bf3aaa` integrates PR #414
@@ -1167,6 +1218,6 @@ and retained that response. Freshness and complete policy admission remain open.
 Read-only review of #414 head `b0630e65` found an accounting-class substitution:
 an ordinary-payables mapped role can claim current-debt exclusion coverage and
 produce an estimate without missing-evidence flags. Owning blocker #416 records
-the exact counterexample and digests. The child CI passes, but #414 remains
-unintegrated pending a source-bound role/class contract. No child files or
-resources were changed; these findings do not establish full numerical progress.
+the exact counterexample and digests. That review kept #414 unintegrated until the source-bound role/class fix.
+Ordinary merge `f45a1fad` now integrates the correction, as recorded above.
+Complete real numerical acceptance remains outstanding.

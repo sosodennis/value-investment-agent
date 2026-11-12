@@ -590,6 +590,194 @@
     "unrelated_baseline_containers_unchanged": 40
   },
   "issue": 361,
+  "issuer_reference_selection_increment": {
+    "blocker": 369,
+    "change": "Deployment-pinned issuer/date reference plan reproduces provider-neutral ERP selection in both independent release canary and formal #352 preparation. Missing, conflicting, stale and unavailable references retain explicit refusals; industry unlevered beta cannot authorize issuer equity beta.",
+    "ci": {
+      "conclusion": "success",
+      "exact_commit": "94fe0386268a12115a965a40a04081992151ae42",
+      "executed_passed": 12,
+      "receipt_sha256": "cb2d38e7e29f2244506c56497e653471e2e3a169db6c73990594d93b56d21238",
+      "run": "https://github.com/sosodennis/value-investment-agent/actions/runs/43240814434",
+      "skipped": [
+        "fundamental-release-gate"
+      ]
+    },
+    "classification_authority": "Effective deployment policy source_refs must pin the exact issuer reference plan; source admission is not issuer country/industry classification approval.",
+    "exact_commit": "94fe0386268a12115a965a40a04081992151ae42",
+    "full_numerical_flow": false,
+    "installed_image": {
+      "command": [
+        "python3",
+        ".audit/issue-361-reference-selection/verify_image.py"
+      ],
+      "compose": {
+        "config_hash": "4c8dbf609d7782e8f63035f62fc5084d7efb0b3019002695901844d247028d4e",
+        "env_files": [],
+        "files": [
+          "compose/verification/docker-compose.issue280-operations.yml"
+        ],
+        "ports": {
+          "postgres": 18686,
+          "service": 18685
+        },
+        "project": "value-investment-agent-361-capture-profiles"
+      },
+      "concurrent_replays": 2,
+      "exit_code": 0,
+      "identity_resolution_configured": false,
+      "image_id": "sha256:655b8bd0ee7386f6544d0b355ddcaa809c78aaeef819e2ac1de84ef5745173d6",
+      "input_digest": "21c0419b9dc4349bbce1603301e9505146bebc6a9284b90b75ddd78530a3b0c9",
+      "inventory_first_digest": "9b0231f7b6e7cad9e0fb47b145b0c28159dfa64e21d9ae125c393d4a7e2305a6",
+      "inventory_restart_digest": "9b0231f7b6e7cad9e0fb47b145b0c28159dfa64e21d9ae125c393d4a7e2305a6",
+      "market_policy_checks": [
+        "d69521ee4632d95f74c4cf27fe3e01645e07d4d4de0c815c40300bf835aaba54"
+      ],
+      "new_files_concurrent": 0,
+      "new_files_restart": 0,
+      "new_files_second": 0,
+      "output_digest": "b974ff0a9961ccfe4c747007a4805e94333b8bbcf246527253a0a1a51ffca71e",
+      "repeat_and_restart_wrote": false,
+      "replay_command": [
+        "docker",
+        "exec",
+        "--user",
+        "0",
+        "value-investment-agent-361-capture-profiles-fundamental-service-1",
+        "chmod",
+        "0644",
+        "/tmp/issue361-reference-packet.json",
+        "/tmp/issue361-reference-replay.py"
+      ],
+      "replay_input_digest": "9e6a38b2de3f9542a2b9b79dbe12115b3b074609aa496a657577d78a3cd0a730",
+      "replay_output_digest": "88694fdb325aec85ba568e1ec95769e09eeea6dec8becffb7683f58934df52f7",
+      "retained_refusals": 4,
+      "runtime": {
+        "arelle": "2.47.4",
+        "pydantic": "2.14.2",
+        "python": "3.12.16"
+      },
+      "selection_digest": "8c739c69305601b5ad6e4ddb45dcb3876193d17a05ffb40ec6de90d03a5371eb",
+      "source_count": 91,
+      "unrelated_baseline_containers_unchanged": 42
+    },
+    "issue": 361,
+    "provider_contracts": [
+      "MarketReferenceProviderPort",
+      "MarketReferenceVintageV1",
+      "MacroSeriesProviderPort",
+      "QuoteSourceProviderPort",
+      "PublicSourceCaptureProfilePort"
+    ],
+    "remaining": [
+      "Executable issuer classification and full automatic beta/debt/capital-weight/bounded-terminal policy join from admitted evidence.",
+      "Lawful dated quote and complete original accounting/award scope; trusted complete release and authentic caller approval.",
+      "Real numerical repeat/concurrency/restart/empty-store restore, independent review/CI, main merge and merge-SHA verification."
+    ],
+    "retained_failures": [
+      "A manual own-service Compose recreation omitted host overrides and temporarily bound own service to default18080; corrected to18685/18686 with the existing PostgreSQL volume unchanged. This was a runtime-input mistake, not acceptance at the recorded tuple.",
+      "Initial ignored fixture generation missed finance-agent-core on PYTHONPATH; corrected without product edits.",
+      "Initial installed audit runner missed PYTHONPATH=/app and refused before publication; corrected only the audit command."
+    ],
+    "scope": "Synthetic signed ERP reference release, serving/canary policy binding and persistence proof; no real issuer numerical valuation or fixed-cohort threshold claim.",
+    "supported_history_threshold": null,
+    "verification": {
+      "commands": {
+        "architecture": {
+          "command": [
+            "python3",
+            "scripts/architecture_guard.py"
+          ],
+          "exit_code": 0,
+          "output_sha256": "6c8e024ff94859e9781de1f4a3201c70e338bc90774702d8ac83afc8a9a15ab9"
+        },
+        "diff": {
+          "command": [
+            "git",
+            "diff",
+            "--check",
+            "origin/main"
+          ],
+          "exit_code": 0,
+          "output_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "format": {
+          "command": [
+            "uvx",
+            "--from",
+            "ruff==0.14.10",
+            "ruff",
+            "format",
+            "--check",
+            "fundamental-service/src/fundamental_service/application/service.py",
+            "fundamental-service/src/fundamental_service/market_reference_evidence.py",
+            "fundamental-service/src/fundamental_service/market_reference_selection.py",
+            "fundamental-service/src/fundamental_service/market_source_selection.py",
+            "fundamental-service/src/fundamental_service/preparation_runner.py",
+            "fundamental-service/src/fundamental_service/release_runner.py",
+            "fundamental-service/tests/test_market_reference_evidence.py",
+            "fundamental-service/tests/test_market_reference_selection.py"
+          ],
+          "exit_code": 0,
+          "output_sha256": "8e93d18ae56550d4eef2feac77e6630617c7e169246e56e39c75d58b46167985"
+        },
+        "mypy": {
+          "command": [
+            "uv",
+            "run",
+            "--frozen",
+            "--project",
+            "fundamental-service",
+            "--with",
+            "mypy==1.19.1",
+            "mypy",
+            "--no-incremental",
+            "--follow-imports=silent",
+            "--ignore-missing-imports",
+            "fundamental-service/src/fundamental_service/application/service.py",
+            "fundamental-service/src/fundamental_service/market_reference_evidence.py",
+            "fundamental-service/src/fundamental_service/market_reference_selection.py",
+            "fundamental-service/src/fundamental_service/market_source_selection.py",
+            "fundamental-service/src/fundamental_service/preparation_runner.py",
+            "fundamental-service/src/fundamental_service/release_runner.py"
+          ],
+          "exit_code": 0,
+          "output_sha256": "ab35ee42183d4d6d3ba483825ab037d18a5a15622d03be01d82220b1564851ff"
+        },
+        "ruff": {
+          "command": [
+            "uvx",
+            "--from",
+            "ruff==0.14.10",
+            "ruff",
+            "check",
+            "fundamental-service"
+          ],
+          "exit_code": 0,
+          "output_sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18"
+        },
+        "service_postgres": {
+          "command": [
+            "uv",
+            "run",
+            "--frozen",
+            "--extra",
+            "dev",
+            "--project",
+            "fundamental-service",
+            "pytest",
+            "fundamental-service/tests",
+            "-ra"
+          ],
+          "exit_code": 0,
+          "output_sha256": "5555b0c02f774b4b4d7667caea9ddae75e4cf5bfb6c6864593b5cf37845f0e66"
+        }
+      },
+      "input_digest": "2ebb17c3a4650ed7adab308f8380d767256594d5d7b0939b23599aa0762044d9",
+      "output_digest": "5249d31a0153338adc35db70632c36e93b60c09a915dd1197d9ffddc688d52e0",
+      "tests": "1783 passed, 11 optional external SEC-resource skips; one expected duplicate-ZIP fixture warning"
+    }
+  },
   "market_rate_binding_increment": {
     "abstraction": "DailyMarketRatePolicyV1 consumes MacroSeriesVintageV1 from any injected provider; no provider IDs, endpoint or transport branches exist in the selector.",
     "change": "Bind observed market-policy rates to admitted canonical source values before the #352 composer; retain deterministic nonretryable422 preparation refusals without rewriting existing artifacts.",
@@ -784,9 +972,9 @@
   },
   "pull_request": 370,
   "remaining": [
-    "Provider-neutral capture registration; the transport still imports concrete parsing/query/time rules.",
-    "Complete issuer/date financial-policy join, lawful quote and exact contracted debt benchmark.",
-    "Accounting/award completeness, trusted complete release, authentic caller approval, real numerical repeat/restart/restore, review/CI and main verification."
+    "Executable issuer classification and full automatic beta/debt/capital-weight/bounded-terminal policy join from admitted evidence.",
+    "Lawful dated quote and complete original accounting/award scope; trusted complete release and authentic caller approval.",
+    "Real numerical repeat/concurrency/restart/empty-store restore, independent review/CI, main merge and merge-SHA verification."
   ],
   "repeat": {
     "admitted": 7,
