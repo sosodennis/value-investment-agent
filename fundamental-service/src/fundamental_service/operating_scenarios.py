@@ -5,6 +5,7 @@ mapping, and never publishes canonical facts or a data release. All hypothetical
 accounting inputs stay distinct from the immutable reported facts.
 """
 
+from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
 
@@ -45,14 +46,16 @@ from .operating_scenario_contracts import (
     OperatingScenarioRequestV1,
     OperatingScenarioReplayV1,
     OperatingScenarioResultV1,
+    OperatingScenarioV1,
     ParentPartitionV1,
     ScenarioPeriodInputsV1,
     ScenarioPeriodV1,
+    ScenarioObservationSetV1,
 )
 
 
 def _period_facts(
-    request: OperatingScenarioRequestV1, period: ScenarioPeriodV1
+    request: ScenarioObservationSetV1, period: ScenarioPeriodV1
 ) -> dict[str, CanonicalFactV1]:
     facts = {fact.fact_id: fact for fact in request.facts}
     if len(facts) != len(request.facts):
@@ -161,7 +164,7 @@ def _period_facts(
     return selected
 
 
-def _validate_sources(request: OperatingScenarioRequestV1) -> None:
+def _validate_sources(request: ScenarioObservationSetV1) -> None:
     mappings = {mapping.decision_id: mapping for mapping in request.mappings}
     reproduced: dict[tuple[str, str], set[str]] = {}
     for fact in request.facts:
@@ -241,6 +244,109 @@ def _partition(
     )
 
 
+@dataclass(frozen=True)
+class ScenarioHistory:
+    history: AnnualHistoryV1
+    estimates: tuple[EstimatedOperatingInputsV1, ...]
+    period_inputs: tuple[ScenarioPeriodInputsV1, ...]
+
+
+def resolve_scenario_observations(
+    observations: ScenarioObservationSetV1, periods: tuple[ScenarioPeriodV1, ...]
+) -> tuple[dict[str, CanonicalFactV1], ...]:
+    """Reproduce and select original observations before any hypothetical allocation."""
+    _validate_sources(observations)
+    return tuple(_period_facts(observations, period) for period in periods)
+
+
+@using_valuation_context
+def build_scenario_history(
+    periods: tuple[ScenarioPeriodV1, ...],
+    selected_periods: tuple[dict[str, CanonicalFactV1], ...],
+    scenario: OperatingScenarioV1,
+    *,
+    policy_digest: str,
+    scope_evidence: tuple[str, ...],
+) -> ScenarioHistory:
+    """Allocate the same source parents for forecasts and conditional outcomes."""
+    inputs: list[ScenarioPeriodInputsV1] = []
+    estimates: list[EstimatedOperatingInputsV1] = []
+    annual_periods: list[AnnualHistoryPeriodV1] = []
+    for period, facts in zip(periods, selected_periods, strict=True):
+        assets = _partition(
+            facts["current_assets"],
+            scenario.operating_asset_fraction,
+            excluded=facts["cash_and_equivalents"],
+        )
+        liabilities = _partition(
+            facts["current_liabilities"],
+            scenario.operating_liability_fraction,
+        )
+        capex = _partition(
+            facts["capital_expenditure"],
+            scenario.continuing_capex_fractions[period.fiscal_year],
+        )
+        assumption_digest = sha256_digest(
+            {
+                "scenario": scenario,
+                "period": period,
+                "policy": policy_digest,
+                "scope_evidence": scope_evidence,
+            }
+        )
+        inputs.append(
+            ScenarioPeriodInputsV1(
+                fiscal_year=period.fiscal_year,
+                assets=assets,
+                liabilities=liabilities,
+                capex=capex,
+                operating_working_capital=assets.operating - liabilities.operating,
+                assumption_digest=assumption_digest,
+            )
+        )
+        estimates.append(
+            EstimatedOperatingInputsV1(
+                fiscal_year=period.fiscal_year,
+                capital_expenditure=capex.operating,
+                operating_working_capital=inputs[-1].operating_working_capital,
+                capex_facts=(facts["capital_expenditure"],),
+                working_capital_facts=tuple(
+                    facts[role]
+                    for role in (
+                        "current_assets",
+                        "cash_and_equivalents",
+                        "current_liabilities",
+                    )
+                ),
+                assumption_digest=assumption_digest,
+            )
+        )
+        annual_periods.append(
+            AnnualHistoryPeriodV1(
+                fiscal_year=period.fiscal_year,
+                period_start=period.period_start,
+                period_end=period.period_end,
+                duration_facts=tuple(facts[role] for role in CORE_FIELDS),
+                instant_facts=(),
+            )
+        )
+    history = AnnualHistoryV1(
+        requirements_profile_id=SCENARIO_POLICY,
+        requirements_profile_digest=policy_digest,
+        requested_fiscal_years=tuple(
+            period.fiscal_year for period in reversed(periods)
+        ),
+        periods=tuple(annual_periods),
+        missing_fields=(),
+        quality=QualityStatus.PROVISIONAL,
+        issue_codes=(
+            "SCENARIO_ASSUMPTIONS_UNREVIEWED",
+            "HISTORY_THRESHOLD_UNVALIDATED",
+        ),
+    )
+    return ScenarioHistory(history, tuple(estimates), tuple(inputs))
+
+
 @using_valuation_context
 def replay_operating_scenarios(
     request: OperatingScenarioRequestV1,
@@ -258,10 +364,7 @@ def replay_operating_scenarios(
     source_error = None
     selected_periods = []
     try:
-        _validate_sources(request)
-        selected_periods = [
-            _period_facts(request, period) for period in request.periods
-        ]
+        selected_periods = list(resolve_scenario_observations(request, request.periods))
     except (PreparationError, SnapshotError, AnnualHistoryError) as error:
         source_error = error
     results = []
@@ -269,8 +372,6 @@ def replay_operating_scenarios(
     for scenario in request.scenarios:
         for model_id in models:
             inputs: list[ScenarioPeriodInputsV1] = []
-            estimates = []
-            periods = []
             metrics = None
             forecast = None
             tax = None
@@ -280,84 +381,19 @@ def replay_operating_scenarios(
             try:
                 if source_error is not None:
                     raise source_error
-                for period, facts in zip(
-                    request.periods, selected_periods, strict=True
-                ):
-                    assets = _partition(
-                        facts["current_assets"],
-                        scenario.operating_asset_fraction,
-                        excluded=facts["cash_and_equivalents"],
-                    )
-                    liabilities = _partition(
-                        facts["current_liabilities"],
-                        scenario.operating_liability_fraction,
-                    )
-                    capex = _partition(
-                        facts["capital_expenditure"],
-                        scenario.continuing_capex_fractions[period.fiscal_year],
-                    )
-                    assumption_digest = sha256_digest(
-                        {
-                            "scenario": scenario,
-                            "period": period,
-                            "policy": request.policy_digest,
-                            "scope_evidence": request.scope_assumption_evidence_digests,
-                        }
-                    )
-                    inputs.append(
-                        ScenarioPeriodInputsV1(
-                            fiscal_year=period.fiscal_year,
-                            assets=assets,
-                            liabilities=liabilities,
-                            capex=capex,
-                            operating_working_capital=assets.operating
-                            - liabilities.operating,
-                            assumption_digest=assumption_digest,
-                        )
-                    )
-                    estimates.append(
-                        EstimatedOperatingInputsV1(
-                            fiscal_year=period.fiscal_year,
-                            capital_expenditure=capex.operating,
-                            operating_working_capital=inputs[
-                                -1
-                            ].operating_working_capital,
-                            capex_facts=(facts["capital_expenditure"],),
-                            working_capital_facts=tuple(
-                                facts[role]
-                                for role in (
-                                    "current_assets",
-                                    "cash_and_equivalents",
-                                    "current_liabilities",
-                                )
-                            ),
-                            assumption_digest=assumption_digest,
-                        )
-                    )
-                    periods.append(
-                        AnnualHistoryPeriodV1(
-                            fiscal_year=period.fiscal_year,
-                            period_start=period.period_start,
-                            period_end=period.period_end,
-                            duration_facts=tuple(facts[role] for role in CORE_FIELDS),
-                            instant_facts=(),
-                        )
-                    )
+                prepared = build_scenario_history(
+                    request.periods,
+                    tuple(selected_periods),
+                    scenario,
+                    policy_digest=request.policy_digest,
+                    scope_evidence=request.scope_assumption_evidence_digests,
+                )
+                inputs = list(prepared.period_inputs)
                 if model_id == "transition_fcff_dcf":
                     _transition_filing_evidence(request.facts, snapshot=request.source)
-                history = AnnualHistoryV1(
-                    requirements_profile_id=SCENARIO_POLICY,
-                    requirements_profile_digest=request.policy_digest,
-                    requested_fiscal_years=tuple(
-                        period.fiscal_year for period in reversed(periods)
-                    ),
-                    periods=tuple(periods),
-                    missing_fields=(),
-                    quality=QualityStatus.PROVISIONAL,
-                    issue_codes=tuple(codes),
-                )
+                history = prepared.history
                 metrics = derive_historical_metrics(
-                    history, estimated_inputs=tuple(estimates)
+                    history, estimated_inputs=prepared.estimates
                 )
                 if (
                     metrics.quality_status is QualityStatus.ABSTAIN

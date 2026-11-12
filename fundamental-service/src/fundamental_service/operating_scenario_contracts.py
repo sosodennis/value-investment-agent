@@ -102,27 +102,48 @@ class OperatingScenarioV1(StrictModel):
         return self
 
 
-class OperatingScenarioRequestV1(StrictModel):
+class ScenarioObservationSetV1(StrictModel):
+    """Original observations and mappings shared by decision and label research."""
+
+    source: IssuerOperatingSourceV1
+    facts: tuple[CanonicalFactV1, ...] = Field(min_length=1)
+    mapping_version: str = Field(min_length=1)
+    mapping_manifest_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    mappings: tuple[CanonicalMappingV1, ...] = Field(min_length=1)
+    source_selection_policy: Literal["latest-complete-original-per-period-v1"] = (
+        "latest-complete-original-per-period-v1"
+    )
+
+    @model_validator(mode="after")
+    def mapping_manifest_is_pinned(self) -> "ScenarioObservationSetV1":
+        if (
+            tuple(mapping.decision_id for mapping in self.mappings)
+            != tuple(sorted({mapping.decision_id for mapping in self.mappings}))
+            or any(
+                mapping.mapping_version != self.mapping_version
+                for mapping in self.mappings
+            )
+            or self.mapping_manifest_digest != sha256_digest(self.mappings)
+        ):
+            raise ValueError(
+                "mapping manifest must pin ordered unique mappings and their version"
+            )
+        return self
+
+
+class OperatingScenarioRequestV1(ScenarioObservationSetV1):
     contract_version: Literal["fundamental.operating-scenarios.v1"] = (
         "fundamental.operating-scenarios.v1"
     )
     evidence_status: Literal["unreviewed_source_scenario"] = (
         "unreviewed_source_scenario"
     )
-    source: IssuerOperatingSourceV1
-    facts: tuple[CanonicalFactV1, ...] = Field(min_length=1)
     periods: tuple[ScenarioPeriodV1, ...] = Field(min_length=3, max_length=5)
     scenarios: tuple[OperatingScenarioV1, ...] = Field(min_length=1, max_length=1000)
-    mapping_version: str = Field(min_length=1)
-    mapping_manifest_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
-    mappings: tuple[CanonicalMappingV1, ...] = Field(min_length=1)
     protocol_version: str = Field(min_length=1)
     policy_version: Literal["nonnegative-parent-partitions-v1"] = SCENARIO_POLICY
     policy_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
     model_versions: dict[InitialModelId, str]
-    source_selection_policy: Literal["latest-complete-original-per-period-v1"] = (
-        "latest-complete-original-per-period-v1"
-    )
     scope_assumption_evidence_digests: tuple[str, ...] = Field(min_length=1)
     unresolved_classes: tuple[str, ...]
 
@@ -150,18 +171,6 @@ class OperatingScenarioRequestV1(StrictModel):
         if self.policy_digest != scenario_policy_digest():
             raise ValueError(
                 "scenario policy digest differs from the executable policy"
-            )
-        if (
-            tuple(mapping.decision_id for mapping in self.mappings)
-            != tuple(sorted({mapping.decision_id for mapping in self.mappings}))
-            or any(
-                mapping.mapping_version != self.mapping_version
-                for mapping in self.mappings
-            )
-            or self.mapping_manifest_digest != sha256_digest(self.mappings)
-        ):
-            raise ValueError(
-                "mapping manifest must pin ordered unique mappings and their version"
             )
         if set(self.model_versions) != {"fcff_dcf", "transition_fcff_dcf"} or any(
             not version for version in self.model_versions.values()

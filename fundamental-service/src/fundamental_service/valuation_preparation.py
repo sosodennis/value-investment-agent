@@ -432,6 +432,8 @@ def derive_historical_metrics(
         if previous_revenue.value <= _ZERO_TOLERANCE:
             issue_codes.append("METRIC_GROWTH_DENOMINATOR_UNSTABLE")
             continue
+        current_working_capital: Decimal | None
+        previous_working_capital: Decimal | None
         if estimate is not None:
             previous_estimate = estimates[previous.fiscal_year]
             current_working_capital = estimate.operating_working_capital
