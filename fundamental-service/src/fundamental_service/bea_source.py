@@ -19,10 +19,9 @@ from pydantic import ValidationError
 from .macro_series import (
     MacroObservationV1,
     MacroSeriesVintageV1,
-    MacroSourceArtifactV1,
-    RetainedMacroSourceV1,
 )
 from .snapshots import SnapshotError
+from .source_evidence import RetainedSourceV1, SourceArtifactV1
 
 BEA_GDP_PROFILE = "bea-nipa-gdp-vintage-v1"
 BEA_GDP_TERMS = "https://www.bea.gov/help/guidelines-for-citing-bea"
@@ -328,7 +327,7 @@ def parse_bea_nominal_gdp_vintage(
             raise ValueError("BEA release timestamp is later than source capture")
         workbook_hash = _sha256(workbook)
         artifacts = (
-            MacroSourceArtifactV1(
+            SourceArtifactV1(
                 source_id="bea-nipa-archive",
                 uri=workbook_uri,
                 source_version=BEA_GDP_PROFILE,
@@ -336,7 +335,7 @@ def parse_bea_nominal_gdp_vintage(
                 content_sha256=workbook_hash,
                 captured_at=workbook_captured_at.astimezone(UTC),
             ),
-            MacroSourceArtifactV1(
+            SourceArtifactV1(
                 source_id="bea-gdp-release",
                 uri=release_uri,
                 source_version=BEA_GDP_PROFILE,
@@ -412,7 +411,7 @@ class BeaNominalGdpVintageProvider:
         return series_id == self._SERIES_ID
 
     def reproduce_vintage(
-        self, *, series_id: str, sources: tuple[RetainedMacroSourceV1, ...]
+        self, *, series_id: str, sources: tuple[RetainedSourceV1, ...]
     ) -> MacroSeriesVintageV1:
         by_source = {source.source_id: source for source in sources}
         if (

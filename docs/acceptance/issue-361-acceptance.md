@@ -19,6 +19,125 @@ Eligible candidate-history valuations can be provisional. Missing, conflicting,
 unreviewed, future, or unsupported evidence must retain reasons and abstain.
 No completed #351 through #355 acceptance is changed. #350 is outside scope.
 
+## Injectable source capture checkpoint
+
+Implementation `93dff37246ce91dd4e7370ddd158470fed5a4f3b`, with request-boundary
+correction `e4c3ad7c01bd7a844123ce3919afd7fab6c67aa2`, removes provider branches
+from public HTTP capture. `PublicSourceCaptureProfilePort` validates requests and
+reproduces capture timing; a composition catalog registers concrete providers.
+A second provider parses retained bytes through the same transport and macro
+contracts. Malformed endpoints, missing queries, unsupported series, registration
+conflicts and inconsistent timestamps retain typed refusals. #352 math is unchanged.
+
+At the exact correction SHA, **1,676 Service/PostgreSQL and 269 focused tests**
+pass, with Ruff/format, five-source mypy, architecture and diff checks. Eleven
+optional SEC-resource tests skip and one duplicate-ZIP warning is intentional.
+Engineering input `9b1967f9726a08721f216deeaa35dca488755f673d7cf2925c0d3aaebc1fcec1`,
+output `62fd69014a10e4fa97648cf3cb688e69dce0d057f5ceb9fab2aef46c8479885a`.
+[Exact CI 43224609066](https://github.com/sosodennis/value-investment-agent/actions/runs/43224609066)
+passes all 12 executed jobs; the release gate is skipped.
+
+Two independent and two concurrent source replays reuse artifacts without calls,
+downloads or writes. The isolated `value-investment-agent-361-capture-profiles`
+image matches all 86 installed sources and preserves output
+`2c3e1ce191fb03382c7921a4d700f26db18cf9993a5eb2d42f17dfcc54920d93`
+through repeat and service restart, with `wrote=false` and unchanged inventories.
+Forty-two unrelated baseline containers remain unchanged. Runtime ports are
+18685/18686; SEC identity is unconfigured in this source-only stack.
+[The existing compact checkpoint](issue-361-source-admission-checkpoint.json)
+retains exact commands, digests, source/runtime pins and failures in its
+`capture_profiles_increment`; generated reports/originals remain outside Git.
+
+Complete issuer/date policy, accounting/award evidence, trusted release, caller
+approval and the actual numerical/recovery/review gates remain required. This
+checkpoint completes capture substitution; it does not approve market assumptions.
+#361/#369 remain OPEN, PR #370 draft, and `supported_history_threshold=null`.
+
+## Source admission checkpoint
+
+Exact implementation `9d234fae218b16cd55817f153b13f192192c1e88` passes
+**1,658 Service/PostgreSQL and 104 focused tests**, Ruff/format, seven-source
+mypy, architecture and diff checks. Eleven optional SEC-resource skips and one
+expected duplicate-ZIP warning remain. [CI 43218086138](https://github.com/sosodennis/value-investment-agent/actions/runs/43218086138)
+passes all 12 executed jobs; release gate skipped.
+
+Source admission reproduces retained macro/reference bytes through injected
+ports and a trusted source-use catalog. Release and serving share reproduction.
+The real-source pack retains 17 decisions: seven admitted and ten refused,
+including unknown ALFRED permission, future data, missing terms, corrupt bytes
+and unsupported redistribution. This is source-use approval, not approval of an
+issuer's seven market inputs or a complete valuation.
+
+Repeat and concurrent processes preserve output
+`0c9f205d5d63c176460485df6dce5338360c42f3aa82957e54e540abe8213949`,
+with zero repeated downloads/provider calls/artifact writes and unchanged file
+hashes, sizes and mtimes. The installed image matches all 84 sources; repeat and
+service restart preserve output
+`791bc888b04affd20666ba5072c0750cb02894a8bbcbb0f307afef75839e2f42`
+with `wrote=false`. Forty unrelated baseline containers are unchanged. The
+adapter stack has no SEC identity configuration and does not establish full
+numerical acceptance. [Compact evidence](issue-361-source-admission-checkpoint.json)
+records commands, digests, runtime pins and retained audit-helper failures.
+Raw sources and generated reports remain outside Git.
+
+The subsequent injectable capture checkpoint above completes the capture-profile
+work identified here. The issuer/date financial policy join and the outstanding
+numerical/recovery/review gates remain required. #361/#369 remain OPEN, PR #370
+draft, and `supported_history_threshold=null`.
+
+## Interchangeable reference provider checkpoint
+
+Provider implementation `30dc58404cbe5a46348ec20748bb855c5a12f958` and
+owning guard correction `0b294393fdbadd41a37e721643735f74dab177f5` add
+`MarketReferenceProviderPort` for country/industry reference tables. The existing
+macro providers and new reference providers share `RetainedSourceV1` and
+`SourceArtifactV1`; every caller migrated without compatibility aliases. No
+financial formula or issuer-policy approval moves into a source adapter.
+
+The Damodaran provider retains original beta/ERP/tax table identities, exact
+binary64 or OOXML numeric encodings, displayed precision, cell locators and
+published formula caches/shared-formula metadata. It never evaluates a formula.
+BIFF values explicitly remain opaque published caches. Country tax context says
+“Looked up for 2023”; workbook update is January 2025. Neither establishes a
+current issuer tax mix. Availability uses actual retained capture; caller
+availability/publication/capture overrides fail before HTTP.
+
+At exact correction SHA, **1,623 Service/PostgreSQL tests and 160 focused source
+tests pass**, with Ruff/format, ten-source mypy, root architecture guard and diff.
+Eleven optional SEC-resource tests skip and one duplicate-ZIP warning is
+intentional. Engineering input
+`916517a23ccecdb0d50ace421a6361ae26bb805a41a6f7cfe02c7177751e82e3`, output
+`668ed23284424672ac0b6cd3ac0418981b254d9260daa4cbe751b497de0ba7da`.
+[Exact correction CI 43211471636](https://github.com/sosodennis/value-investment-agent/actions/runs/43211471636)
+passes all 12 executed jobs; release gate skipped.
+The earlier failing full run remains evidence: the service architecture guard
+scanned third-party `.venv` code. #419 restricts it to owned source roots and
+adds rejection tests for all roots/import aliases; no decoding exception is hidden.
+
+Real retained originals reproduce **96 beta rows, 158 ERP rows and 158 tax rows**;
+one ERP aggregate remains explicitly missing. Two fresh processes with different
+hash seeds preserve output
+`04daf1b4a46a61067c46738bb966b659fbfa19ee93395b7758ae370c134b3a15`.
+The second has zero provider calls/downloads/writes/new files and unchanged
+hashes, sizes and mtimes. Original corrupt-source and future-vintage failures
+remain retained.
+
+The issue-owned `value-investment-agent-361-macro-providers` stack (18683/18684)
+installs all 81 source files exactly at the correction SHA. Image
+`sha256:e06713d2ab13e429cf46d1117298a9d6908dc31d6f30e8282e81cbe18d50ed6b`
+repeats and restarts with output
+`89e3e47fc515f666cdfa0ba08ac2f093a4f9496fbf7fb9b884e2bfeccbbe61fd`;
+repeat and restart write zero files and make zero provider calls. Forty unrelated
+baseline containers remain unchanged. SEC identity resolution is disabled in
+this adapter stack: it proves source persistence, not complete numerical acceptance.
+
+[Reference provider evidence](issue-361-reference-provider-checkpoint.json)
+records exact commands, digests, runtime pins and retained failures; raw source
+and generated reports stay outside Git. Complete automatic dated policy (#369),
+accounting/award evidence and #416, trusted release/caller approval and real
+numerical repeat/concurrency/restart/restore remain unfinished. #361/#369/#419
+remain OPEN, PR #370 draft, threshold null. #414 and #417 remain unintegrated.
+
 ## Free market-source and automatic approval checkpoint
 
 `e5076f8d4dbbb7233826dc64f2eebf9a823c4dc0` removes unsupported bootstrap
@@ -905,3 +1024,42 @@ restore `.tmp-issue355-sec-useragent-compose.yml` or clean another project.
 #361, unresolved blockers #369/#381/#394, and PR #370 remain open. Implemented
 normalization blockers #404/#405/#406 still need delivery and main verification. Complete
 source scope and supported automatic mapping approval precede numerical acceptance; thresholds stay null.
+
+## Treasury and ALFRED provider checkpoint
+
+Implementation `1619b07fa9f7fdfe9a09f2f1b5723443be324de5` adds two interchangeable
+`MacroSeriesProviderPort` adapters for daily ten-year Treasury par yields.
+Capture rejects caller-supplied timestamps before network access. Mutable
+Treasury XML is available only at retained capture; ALFRED historical availability
+requires the exact requested vintage in the CSV header and starts after that
+New York calendar day ends. Both retain percent bond-equivalent yield units.
+
+Exact checks pass: 1,575 Service/PostgreSQL and 123 focused tests, Ruff, format,
+types, architecture and diff. Eleven optional SEC-resource skips remain.
+The isolated installed image matches all 77 source files. Real retained Treasury
+XML (249 observations) and ALFRED (one observation) reproduce output digest
+`881081c611b97b0168bcd25a56aa183efb7ff1f543505bf10ea134912bce0c22`.
+Repeated execution and execution after service restart write no artifacts and
+preserve all inventory hashes/mtimes. The ALFRED March 31 vintage supplies March
+28 at 4.27%; its missing March 31 observation is retained without substitution.
+
+See [the Treasury-provider checkpoint](issue-361-treasury-provider-checkpoint.json)
+for exact commands, source/runtime pins, input/output digests and audit-helper
+corrections. This verifies source normalization and idempotency. Complete market
+policy, real numerical acceptance and independent PR review remain outstanding;
+`supported_history_threshold=null`. Generated evidence stays outside Git.
+
+At evidence head `79f9aaa75cc9cf0ecd1ae8f755bce43d60d6714e`, a separate ALFRED
+March 30 vintage supplies four observations through March 27 (4.38%), available
+conservatively from March 31 at 04:00 UTC. It is eligible at the original April 1
+cutoff. Its repeat uses zero provider calls, `wrote=false`, unchanged inventories
+and output `58b9b7f31c4941b20348aae7a683793560488116f2f181eeedac2d41c850484f`.
+An earlier empty one-day query returned full-history rows; the adapter rejected
+and retained that response. Freshness and complete policy admission remain open.
+
+Read-only review of #414 head `b0630e65` found an accounting-class substitution:
+an ordinary-payables mapped role can claim current-debt exclusion coverage and
+produce an estimate without missing-evidence flags. Owning blocker #416 records
+the exact counterexample and digests. The child CI passes, but #414 remains
+unintegrated pending a source-bound role/class contract. No child files or
+resources were changed; these findings do not establish full numerical progress.
