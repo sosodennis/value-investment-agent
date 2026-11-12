@@ -671,6 +671,13 @@
       },
       "service_postgres_passed": 1865
     },
+    "ci": {
+      "conclusion": "success",
+      "exact_commit": "40e61e493e42d2a05abe242990ea9d767323c5c6",
+      "executed_jobs_passed": 12,
+      "release_gate": "skipped",
+      "run": 43257267086
+    },
     "design": "https://github.com/sosodennis/value-investment-agent/issues/369#issuecomment-6828783192",
     "full_numerical_flow": false,
     "implementation_commit": "40e61e493e42d2a05abe242990ea9d767323c5c6",
@@ -1575,22 +1582,208 @@
   },
   "pr420_model_binding_independent_review": {
     "blocker": 421,
+    "child_ci": {
+      "conclusion": "success",
+      "passed": 12,
+      "release_gate": "skipped",
+      "run": 43256724665
+    },
     "command": "python3 .audit/issue-361-pr420-independent/verify.py",
     "exit_code": 0,
     "focused_tests_passed": 92,
     "implementation_commit": "c9a5e3175199eccb49c3e0c356da751eb8f937af",
     "input_digest": "944d4db706478267f51c7f53a3cd7fb349c2a6deceb1f838439460dc1cca1447",
-    "integrated": false,
+    "installed_merge": {
+      "command": "python3 .audit/issue-361-pr420-independent/verify_merge_image.py",
+      "comparison_input_digest": "c4b5b12bf6924fe225f4a75a14fbba2c52bb48b633269042679a029a86ea0df8",
+      "comparison_output_digest": "4ed6eb5dfbc2c1e9be2cd0622b116a44b0436de93d0f73e0592309fb741f70a4",
+      "complete_exact_study_cases": 0,
+      "compose": {
+        "config_hash": "4c8dbf609d7782e8f63035f62fc5084d7efb0b3019002695901844d247028d4e",
+        "env_files": [],
+        "files": [
+          "compose/verification/docker-compose.issue280-operations.yml"
+        ],
+        "ports": {
+          "postgres": 18686,
+          "service": 18685
+        },
+        "project": "value-investment-agent-361-capture-profiles"
+      },
+      "conditional_fcff_comparisons": 625,
+      "exit_code": 0,
+      "forecast_output_digest": "4eace7bde73a667707d919b6f51ddc6d441a3ab3f47efaeeb39102aa221cdc66",
+      "full_numerical_flow": false,
+      "image": "sha256:89d9886f95ed4da4ca6d51f4559bc9d28d472446d964d69584c9ccf4693e5892",
+      "independent_issuer_count": 1,
+      "input_digest": "b121301b71f2896b651ea83d276f905b56bdde4ab4e8a59b6e5affb67a6b6a4d",
+      "output_digest": "0bfad34ebee4d1e9fe91b62b67f92d5b749c05f306705fc46c7bf07ed0dc146a",
+      "repeat_artifact_writes": 0,
+      "repeat_concurrent_restart_inventories_unchanged": true,
+      "report_sha256": "de89dfe125063bb370ca4da4b250b18b4d168d69854cd98bf01d79b94e8314cd",
+      "runtime": {
+        "arelle-release": "2.47.4",
+        "cryptography": "50.0.2",
+        "pydantic": "2.14.2",
+        "python": "3.12.16"
+      },
+      "source_count": 99,
+      "supported_history_threshold": null,
+      "transition_refusals": 625,
+      "unrelated_baseline_containers_unchanged": 42
+    },
+    "integrated": true,
+    "integration_commit": "1b2072040dd4eed134f7357cf5cad2c5f0d175bc",
     "issue": 361,
     "matched_source_archive_files": [
       214,
       223
     ],
+    "merge_checks": {
+      "command": "uv run --frozen --project fundamental-service python .audit/issue-361-terminal-growth/verify_checkpoint.py",
+      "commands": {
+        "architecture": {
+          "command": [
+            "python3",
+            "scripts/architecture_guard.py"
+          ],
+          "exit_code": 0,
+          "output_sha256": "6c8e024ff94859e9781de1f4a3201c70e338bc90774702d8ac83afc8a9a15ab9"
+        },
+        "diff": {
+          "command": [
+            "git",
+            "diff",
+            "--check",
+            "origin/main"
+          ],
+          "exit_code": 0,
+          "output_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "format": {
+          "command": [
+            "uvx",
+            "--from",
+            "ruff==0.14.10",
+            "ruff",
+            "format",
+            "--check",
+            "fundamental-service/src/fundamental_service/annual_history.py",
+            "fundamental-service/src/fundamental_service/application/service.py",
+            "fundamental-service/src/fundamental_service/calculator.py",
+            "fundamental-service/src/fundamental_service/damodaran_source.py",
+            "fundamental-service/src/fundamental_service/free_source_policy.py",
+            "fundamental-service/src/fundamental_service/market_reference.py",
+            "fundamental-service/src/fundamental_service/market_reference_evidence.py",
+            "fundamental-service/src/fundamental_service/market_reference_selection.py",
+            "fundamental-service/src/fundamental_service/operating_comparison_runner.py",
+            "fundamental-service/src/fundamental_service/operating_forecast.py",
+            "fundamental-service/src/fundamental_service/operating_label_contracts.py",
+            "fundamental-service/src/fundamental_service/operating_labels.py",
+            "fundamental-service/src/fundamental_service/operating_projection.py",
+            "fundamental-service/src/fundamental_service/operating_scenario_contracts.py",
+            "fundamental-service/src/fundamental_service/operating_scenario_runner.py",
+            "fundamental-service/src/fundamental_service/operating_scenarios.py",
+            "fundamental-service/src/fundamental_service/policies.py",
+            "fundamental-service/src/fundamental_service/release_runner.py",
+            "fundamental-service/src/fundamental_service/terminal_growth.py",
+            "fundamental-service/src/fundamental_service/terminal_growth_evidence.py",
+            "fundamental-service/src/fundamental_service/valuation_preparation.py",
+            "fundamental-service/tests/reference_source_fixtures.py",
+            "fundamental-service/tests/test_historical_policy_selection.py",
+            "fundamental-service/tests/test_industry_capital_source.py",
+            "fundamental-service/tests/test_market_reference_evidence.py",
+            "fundamental-service/tests/test_operating_forecast.py",
+            "fundamental-service/tests/test_operating_labels.py",
+            "fundamental-service/tests/test_operating_model_binding.py",
+            "fundamental-service/tests/test_operating_scenarios.py",
+            "fundamental-service/tests/test_source_admission.py",
+            "fundamental-service/tests/test_terminal_growth.py",
+            "fundamental-service/tests/test_terminal_growth_evidence.py"
+          ],
+          "exit_code": 0,
+          "output_sha256": "6ed8d1cb172b51dddf192664f6e4b2a6c56db357a990dcce6f028de11201bd61"
+        },
+        "mypy": {
+          "command": [
+            "uv",
+            "run",
+            "--frozen",
+            "--project",
+            "fundamental-service",
+            "--with",
+            "mypy==1.19.1",
+            "mypy",
+            "--no-incremental",
+            "--follow-imports=silent",
+            "--ignore-missing-imports",
+            "fundamental-service/src/fundamental_service/annual_history.py",
+            "fundamental-service/src/fundamental_service/application/service.py",
+            "fundamental-service/src/fundamental_service/calculator.py",
+            "fundamental-service/src/fundamental_service/damodaran_source.py",
+            "fundamental-service/src/fundamental_service/free_source_policy.py",
+            "fundamental-service/src/fundamental_service/market_reference.py",
+            "fundamental-service/src/fundamental_service/market_reference_evidence.py",
+            "fundamental-service/src/fundamental_service/market_reference_selection.py",
+            "fundamental-service/src/fundamental_service/operating_comparison_runner.py",
+            "fundamental-service/src/fundamental_service/operating_forecast.py",
+            "fundamental-service/src/fundamental_service/operating_label_contracts.py",
+            "fundamental-service/src/fundamental_service/operating_labels.py",
+            "fundamental-service/src/fundamental_service/operating_projection.py",
+            "fundamental-service/src/fundamental_service/operating_scenario_contracts.py",
+            "fundamental-service/src/fundamental_service/operating_scenario_runner.py",
+            "fundamental-service/src/fundamental_service/operating_scenarios.py",
+            "fundamental-service/src/fundamental_service/policies.py",
+            "fundamental-service/src/fundamental_service/release_runner.py",
+            "fundamental-service/src/fundamental_service/terminal_growth.py",
+            "fundamental-service/src/fundamental_service/terminal_growth_evidence.py",
+            "fundamental-service/src/fundamental_service/valuation_preparation.py"
+          ],
+          "exit_code": 0,
+          "output_sha256": "3253c7a5a8535995ce0dc8b25611174b1763d2c9ff1bbb0a29e2e90cca3ca91e"
+        },
+        "ruff": {
+          "command": [
+            "uvx",
+            "--from",
+            "ruff==0.14.10",
+            "ruff",
+            "check",
+            "fundamental-service"
+          ],
+          "exit_code": 0,
+          "output_sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18"
+        },
+        "service_postgres": {
+          "command": [
+            "uv",
+            "run",
+            "--frozen",
+            "--extra",
+            "dev",
+            "--project",
+            "fundamental-service",
+            "pytest",
+            "fundamental-service/tests",
+            "-ra"
+          ],
+          "exit_code": 0,
+          "output_sha256": "611c551ba6595794ca0bddab5c06188b7c349a13b23a3a7f2af8c5b2da37427d"
+        }
+      },
+      "exit_code": 0,
+      "expected_fixture_warning": 1,
+      "input_digest": "7f21e988d206873e93a9f61193dd033085f0a65019ee283198c5431f75ef1503",
+      "optional_external_sec_skipped": 11,
+      "output_digest": "5b28a8d2a769f78b7b34ce28252908ce94c2fa6741d5db4ad41f4daadbb08f8a",
+      "service_postgres_passed": 1916
+    },
     "new_rejects_invented_model": true,
-    "next": "Wait for final child CI; ordinary integration and exact merge-commit checks remain required.",
+    "next": "Parent CI/main delivery and complete persistent numerical valuation acceptance remain required; issues stay open.",
     "old_accepts_invented_model": true,
     "output_digest": "dbee67d7996761056b6c52a696013410960434f538bb2db22ad09cdfec375dfb",
     "prior_counterexample_commit": "54de24365061c6ad8760ea70a62029336cf2764d",
+    "reviewed_head": "655ca9f7c2b39490f21ea5edadac88c8ddce5679",
     "reviewed_pr": 420,
     "test_command": [
       "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/fundamental-service/.venv/bin/python",

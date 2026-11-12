@@ -60,7 +60,21 @@ numerical policy and model-spec digest. All92 focused scenario/label/model tests
 pass in an isolated Git source archive. Review input/output:
 `944d4db706478267f51c7f53a3cd7fb349c2a6deceb1f838439460dc1cca1447` /
 `dbee67d7996761056b6c52a696013410960434f538bb2db22ad09cdfec375dfb`.
-Child CI and ordinary merge-commit validation remain required before integration.
+Child CI43256724665 passes all12 executed jobs; the release gate is skipped.
+Ordinary merge `1b2072040dd4eed134f7357cf5cad2c5f0d175bc` preserves every WIP
+commit and integrates that reviewed head. Merge checks pass **1,916 Service/
+PostgreSQL tests**, Ruff/format,21-source mypy, architecture and diff checks.
+Installed source parity matches all99 Python/SQL files. The real frozen request
+retains625 conditional FCFF comparisons and625 Transition refusals; second,
+concurrent and post-restart executions write no artifacts and leave inventories
+unchanged. All42 unrelated containers remain unchanged. Merge check input/output:
+`7f21e988d206873e93a9f61193dd033085f0a65019ee283198c5431f75ef1503` /
+`5b28a8d2a769f78b7b34ce28252908ce94c2fa6741d5db4ad41f4daadbb08f8a`.
+Installed wrapper input/output:
+`b121301b71f2896b651ea83d276f905b56bdde4ab4e8a59b6e5affb67a6b6a4d` /
+`0bfad34ebee4d1e9fe91b62b67f92d5b749c05f306705fc46c7bf07ed0dc146a`.
+Only one independent issuer and zero exact study cases are present. No mapping,
+release or history threshold is approved by these conditional comparisons.
 
 ## Terminal growth and issuer policy checkpoint
 
@@ -190,8 +204,9 @@ commands, runtime pins, digests, failures and next steps. Threshold stays null;
 
 Parent review also reproduced #420's arbitrary executable-model version claim
 at head `54de24365061c6ad8760ea70a62029336cf2764d`. [Blocker #421](https://github.com/sosodennis/value-investment-agent/issues/421)
-retains the validated-request counterexample and digests. #420 remains unmerged
-pending its owning-layer correction; no parent edits were made in the child.
+retains the validated-request counterexample and digests. #420 was subsequently corrected and ordinarily integrated at `1b207204`; the
+independent counterexample, model-binding and merge validation appear above.
+No parent edits were made in the child checkout.
 
 ## Composite accounting integration checkpoint
 
