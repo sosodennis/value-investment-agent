@@ -367,3 +367,37 @@ the same rule through the existing provider-neutral parser/fact contracts. No
 provider request, valuation formula, financial selector, public schema or agent
 implementation changes. The remaining accounting/award/market gaps still block
 complete numerical valuation; supported-history thresholds stay null.
+
+### Registered NVE noncurrent liability partition
+
+Automatic policy `source-bound-us-gaap-v10` also registers the same two complete
+NVE originals for an exhaustive noncurrent liability reconciliation. At March31
+2022/2023/2024, total liabilities are USD2,902,363 / USD2,175,668 / USD1,211,516;
+current liabilities are USD2,456,345 / USD1,832,760 / USD1,035,741; noncurrent
+operating lease liabilities are USD446,018 / USD342,908 / USD175,775. The full
+statements present this partition without offsetting noncurrent liability
+components. The original hashes and complete parsed-fact digests are pinned,
+with the same original and comparative instants as the equity registration.
+
+The existing accounting evaluator computes total liabilities minus current
+liabilities minus noncurrent operating lease liabilities. Only an exactly zero
+residual at unit-or-finer reported precision can supply both
+`long_term_interest_bearing_debt` and `long_term_finance_lease_liabilities`.
+These are nonnegative components of the registered residual; neither can carry
+a positive balance when that exhaustive residual is zero. A positive or negative
+residual refuses both classifications; the policy cannot allocate an unknown
+aggregate between debt and finance leases. This does not authorize netting,
+unreported liabilities, or this partition for another original.
+
+Each derived fact retains all three source observations, their original
+contexts, instants, units, reported precision and namespace, together with its
+source/mapping/policy pins. Signed mapping approval and independent retained-input
+reconstruction use this same source-neutral policy. Missing, conflicting,
+rounded, mixed-currency, mixed-namespace, foreign-entity or future-period
+components refuse. Equivalent duplicates and input order are deterministic.
+
+These are reported carrying-amount zeros, not `confirmed_absent` assertions.
+They prove neither current borrowing classifications nor annual finance lease
+expense: a lease paid off during the year could have expense and no closing
+balance. No award, market input, release, caller approval or verified valuation
+is inferred. The remaining gaps stay visible and history thresholds remain null.

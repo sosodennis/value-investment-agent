@@ -46,11 +46,18 @@ from .registered_noncontrolling_equity import (
     NONCONTROLLING_EQUITY,
     select_registered_noncontrolling_equity,
 )
+from .registered_noncurrent_liabilities import (
+    NONCURRENT_LIABILITY_RESIDUAL,
+    ROLES as NONCURRENT_LIABILITY_ROLES,
+    select_registered_noncurrent_liabilities,
+)
 from .serialization import sha256_digest
 from .taxonomy_evidence import require_original_taxonomy
 
 AUTOMATIC_MAPPING_INPUT_ROLE = "automatic-mapping-input-v1"
-AUTOMATIC_MAPPING_POLICY: Literal["source-bound-us-gaap-v9"] = "source-bound-us-gaap-v9"
+AUTOMATIC_MAPPING_POLICY: Literal["source-bound-us-gaap-v10"] = (
+    "source-bound-us-gaap-v10"
+)
 _GAAP_NAMESPACE = re.compile(
     r"http://(?:fasb\.org|xbrl\.us)/us-gaap/\d{4}(?:-\d{2}-\d{2})?"
 )
@@ -138,6 +145,7 @@ def automatic_mapping_policy_digest() -> str:
                     "registered_capital_expenditure.py",
                     "registered_non_operating_assets.py",
                     "registered_noncontrolling_equity.py",
+                    "registered_noncurrent_liabilities.py",
                     "accounting_roles.py",
                     "arelle_parser.py",
                     "facts.py",
@@ -191,6 +199,13 @@ def automatic_mapping_proposal(
     disclosed = normalized_field == "stock_based_compensation"
     investment_assets = normalized_field == "non_operating_assets"
     noncontrolling_equity = normalized_field == "noncontrolling_interests"
+    noncurrent_liabilities = normalized_field in NONCURRENT_LIABILITY_ROLES
+    if noncurrent_liabilities and (
+        original is None
+        or select_registered_noncurrent_liabilities(original, normalized_field).rules
+        is None
+    ):
+        return None
     if investment_assets and (
         original is None
         or select_registered_non_operating_assets(original).rules is None
@@ -206,12 +221,15 @@ def automatic_mapping_proposal(
         and not disclosed
         and not investment_assets
         and not noncontrolling_equity
+        and not noncurrent_liabilities
     ):
         return None
     concept = (
         NON_OPERATING_ASSETS if investment_assets else STOCK_COMPENSATION_DISCLOSURE
     )
-    if noncontrolling_equity:
+    if noncurrent_liabilities:
+        concept = NONCURRENT_LIABILITY_RESIDUAL
+    elif noncontrolling_equity:
         concept = NONCONTROLLING_EQUITY
     elif not disclosed and not investment_assets:
         assert rule is not None
@@ -243,7 +261,7 @@ class AutomaticMappingDecisionV1(ReleaseModel):
     input_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
     source_revision: str = Field(pattern=r"^[0-9a-f]{40}$")
     evaluator_id: str = Field(min_length=1)
-    policy_version: Literal["source-bound-us-gaap-v9"] = AUTOMATIC_MAPPING_POLICY
+    policy_version: Literal["source-bound-us-gaap-v10"] = AUTOMATIC_MAPPING_POLICY
     policy_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
     status: Literal["approved", "abstain"]
     reason_codes: tuple[str, ...]
@@ -386,7 +404,17 @@ def evaluate_automatic_mapping(
         proposal.normalized_field == "noncontrolling_interests"
         and proposal.source_concept == NONCONTROLLING_EQUITY
     )
-    computed = disclosed or adjusted or investment_assets or noncontrolling_equity
+    noncurrent_liabilities = (
+        proposal.normalized_field in NONCURRENT_LIABILITY_ROLES
+        and proposal.source_concept == NONCURRENT_LIABILITY_RESIDUAL
+    )
+    computed = (
+        disclosed
+        or adjusted
+        or investment_assets
+        or noncontrolling_equity
+        or noncurrent_liabilities
+    )
     if (
         (
             not computed
@@ -401,6 +429,19 @@ def evaluate_automatic_mapping(
     selected: list[ParsedXbrlFactV1] = []
     rejected: list[MappingObservationRejectionV1] = []
     accounting_rules = None
+    if noncurrent_liabilities:
+        liabilities = select_registered_noncurrent_liabilities(
+            original,
+            proposal.normalized_field,
+            security_id=(
+                request.security_identity.security_id
+                if request.security_identity is not None
+                else None
+            ),
+        )
+        reasons.update(liabilities.reason_codes)
+        selected.extend(liabilities.selected)
+        accounting_rules = liabilities.rules
     if noncontrolling_equity:
         equity = select_registered_noncontrolling_equity(
             original,
@@ -506,6 +547,7 @@ def evaluate_automatic_mapping(
             or capital_expenditure
             or investment_assets
             or noncontrolling_equity
+            or noncurrent_liabilities
             or fact.concept != proposal.source_concept
         ):
             continue
@@ -586,6 +628,8 @@ def evaluate_automatic_mapping(
                 anchor = NON_OPERATING_ASSETS
             elif noncontrolling_equity:
                 anchor = NONCONTROLLING_EQUITY
+            elif noncurrent_liabilities:
+                anchor = NONCURRENT_LIABILITY_RESIDUAL
             payload.update(
                 {
                     "anchor_concept": anchor,
