@@ -929,3 +929,18 @@ for exact commands, source/runtime pins, input/output digests and audit-helper
 corrections. This verifies source normalization and idempotency. Complete market
 policy, real numerical acceptance and independent PR review remain outstanding;
 `supported_history_threshold=null`. Generated evidence stays outside Git.
+
+At evidence head `79f9aaa75cc9cf0ecd1ae8f755bce43d60d6714e`, a separate ALFRED
+March 30 vintage supplies four observations through March 27 (4.38%), available
+conservatively from March 31 at 04:00 UTC. It is eligible at the original April 1
+cutoff. Its repeat uses zero provider calls, `wrote=false`, unchanged inventories
+and output `58b9b7f31c4941b20348aae7a683793560488116f2f181eeedac2d41c850484f`.
+An earlier empty one-day query returned full-history rows; the adapter rejected
+and retained that response. Freshness and complete policy admission remain open.
+
+Read-only review of #414 head `b0630e65` found an accounting-class substitution:
+an ordinary-payables mapped role can claim current-debt exclusion coverage and
+produce an estimate without missing-evidence flags. Owning blocker #416 records
+the exact counterexample and digests. The child CI passes, but #414 remains
+unintegrated pending a source-bound role/class contract. No child files or
+resources were changed; these findings do not establish full numerical progress.
