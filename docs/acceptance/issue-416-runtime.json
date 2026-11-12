@@ -1,0 +1,180 @@
+{
+  "acceptance_profile": "persistent-valuation-flow-v1",
+  "acceptance_scope": "fundamental-service",
+  "blockers": [
+    "Independent PR review and CI/integration are pending.",
+    "No real NEWMARKET release, exact label/error or threshold promotion is established by synthetic boundary acceptance."
+  ],
+  "branch": "codex/issue-376-aggregate-noncash-working-capital",
+  "checks": [
+    {
+      "command": "Not claimed by this synthetic accounting-coverage increment; see #376 / #361 for real end-to-end acceptance.",
+      "name": "architecture",
+      "status": "not_run"
+    },
+    {
+      "command": "Not claimed by this synthetic accounting-coverage increment; see #376 / #361 for real end-to-end acceptance.",
+      "name": "artifact_retrieval",
+      "status": "not_run"
+    },
+    {
+      "command": "Not claimed by this synthetic accounting-coverage increment; see #376 / #361 for real end-to-end acceptance.",
+      "name": "calculation",
+      "status": "not_run"
+    },
+    {
+      "command": "Not claimed by this synthetic accounting-coverage increment; see #376 / #361 for real end-to-end acceptance.",
+      "name": "concurrent_deduplication",
+      "status": "not_run"
+    },
+    {
+      "command": "Not claimed by this synthetic accounting-coverage increment; see #376 / #361 for real end-to-end acceptance.",
+      "name": "deterministic_repeat",
+      "status": "not_run"
+    },
+    {
+      "command": "Not claimed by this synthetic accounting-coverage increment; see #376 / #361 for real end-to-end acceptance.",
+      "name": "diff",
+      "status": "not_run"
+    },
+    {
+      "command": "Not claimed by this synthetic accounting-coverage increment; see #376 / #361 for real end-to-end acceptance.",
+      "name": "failure_retention",
+      "status": "not_run"
+    },
+    {
+      "command": "Not claimed by this synthetic accounting-coverage increment; see #376 / #361 for real end-to-end acceptance.",
+      "name": "forecast",
+      "status": "not_run"
+    },
+    {
+      "command": "Not claimed by this synthetic accounting-coverage increment; see #376 / #361 for real end-to-end acceptance.",
+      "name": "full_flow_repeat",
+      "status": "not_run"
+    },
+    {
+      "command": "Not claimed by this synthetic accounting-coverage increment; see #376 / #361 for real end-to-end acceptance.",
+      "name": "mapping",
+      "status": "not_run"
+    },
+    {
+      "command": "Not claimed by this synthetic accounting-coverage increment; see #376 / #361 for real end-to-end acceptance.",
+      "name": "preparation",
+      "status": "not_run"
+    },
+    {
+      "command": "Not claimed by this synthetic accounting-coverage increment; see #376 / #361 for real end-to-end acceptance.",
+      "name": "restart_restore",
+      "status": "not_run"
+    },
+    {
+      "command": "Not claimed by this synthetic accounting-coverage increment; see #376 / #361 for real end-to-end acceptance.",
+      "name": "review",
+      "status": "not_run"
+    },
+    {
+      "command": "Not claimed by this synthetic accounting-coverage increment; see #376 / #361 for real end-to-end acceptance.",
+      "name": "ruff",
+      "status": "not_run"
+    },
+    {
+      "command": "Not claimed by this synthetic accounting-coverage increment; see #376 / #361 for real end-to-end acceptance.",
+      "name": "service_acceptance",
+      "status": "not_run"
+    },
+    {
+      "command": "Not claimed by this synthetic accounting-coverage increment; see #376 / #361 for real end-to-end acceptance.",
+      "name": "snapshot_persistence",
+      "status": "not_run"
+    },
+    {
+      "command": "Not claimed by this synthetic accounting-coverage increment; see #376 / #361 for real end-to-end acceptance.",
+      "name": "source_acquisition",
+      "status": "not_run"
+    },
+    {
+      "command": "Not claimed by this synthetic accounting-coverage increment; see #376 / #361 for real end-to-end acceptance.",
+      "name": "source_reuse",
+      "status": "not_run"
+    },
+    {
+      "command": "Not claimed by this synthetic accounting-coverage increment; see #376 / #361 for real end-to-end acceptance.",
+      "name": "types",
+      "status": "not_run"
+    },
+    {
+      "command": "Synthetic substitutions, trusted-signature release rejection and installed-image repeat/restart; no real issuer release claim.",
+      "commit": "18d72bff1c35ccd4123e7c1a41db4b2fceaf1607",
+      "exit_code": 0,
+      "input_digest": "ac03f22dc4bc03d687296fad61e0096345ef5ee2e3bc3bbec55bff9e29ded31e",
+      "name": "coverage_boundary_acceptance",
+      "output_digest": "9843353980ef28f455d4e5afe58744648f66d11aa27acc8b491f0c25f1a66394",
+      "status": "pass"
+    }
+  ],
+  "commit": "18d72bff1c35ccd4123e7c1a41db4b2fceaf1607",
+  "issue": 416,
+  "latest_engineering_evidence": "docs/acceptance/issue-416-acceptance.md",
+  "next_step": "Independent review and current-head CI before serial integration through #414; real issuer evidence and #377 remain separate.",
+  "readiness": {
+    "capabilities": {
+      "identity_resolution_configured": true
+    },
+    "contract_version": "internal.v1",
+    "status": "ready"
+  },
+  "runtime": {
+    "allowed_untracked_paths": [],
+    "fundamental": {
+      "compose_files": [
+        "compose/verification/docker-compose.issue280-operations.yml",
+        "compose/verification/docker-compose.issue312-sec-ingestion.yml"
+      ],
+      "compose_project": "value-investment-agent-416-accounting-coverage",
+      "container_port": 8080,
+      "dependencies": [
+        {
+          "container_port": 5432,
+          "published_host": "0.0.0.0",
+          "published_port": 18982,
+          "service": "fundamental-postgres"
+        }
+      ],
+      "env_files": [
+        {
+          "path": "/Users/denniswong/Desktop/Project/value-investment-agent-issue-416-coverage-evidence/runtime.env",
+          "sha256": "374b7d2c9ba9608da1aaf2c1f2e2f880b3737bcff82a6f8fd706430138593da8"
+        }
+      ],
+      "image_id": "sha256:9b711834daf452d0150113574c820a819e4b919ff7176356a5ba0969b47c8026",
+      "networks": [
+        "value-investment-agent-416-accounting-coverage_default"
+      ],
+      "published_host": "0.0.0.0",
+      "published_port": 18981,
+      "runtime_pins": {
+        "arelle-release": "2.47.4",
+        "pydantic": "2.14.2",
+        "python": "3.12.16"
+      },
+      "service": "fundamental-service",
+      "source": {
+        "container_path": "/app/src/fundamental_service",
+        "file_count": 85,
+        "repository_path": "fundamental-service/src/fundamental_service",
+        "sha256": "382b672b10b0392ae5d2d1dbbb9e18dbb01dfc38cb4c5abc5b2b44a92fe01985"
+      },
+      "url": "http://127.0.0.1:18981",
+      "volumes": [
+        "value-investment-agent-416-accounting-coverage_fundamental-postgres-data",
+        "value-investment-agent-416-accounting-coverage_fundamental-service-data"
+      ]
+    },
+    "worktree": "/Users/denniswong/.codex/worktrees/issue-376-aggregate-noncash-working-capital/value-investment-agent"
+  },
+  "runtime_active": false,
+  "runtime_revalidation_required": true,
+  "schema_version": 2,
+  "sec_identity_required": true,
+  "status": "WIP"
+}
