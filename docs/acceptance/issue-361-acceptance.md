@@ -1635,3 +1635,47 @@ baseline-schema failure. Generated originals/reports/backups remain outside Git.
 Complete accounting/awards, dated market-policy/quote, trusted release, exact
 caller approval, real numerical recovery acceptance, independent review and
 merge/main verification remain outstanding. Keep #361 open and PR#370 draft.
+
+## Reported noncontrolling-equity checkpoint — ee4fea7c
+
+Implementation `ee4fea7c21f4094552fa41f5959b20a8fa930f43` adds one source-bound
+accounting classification under automatic policy `source-bound-us-gaap-v9`.
+For the two fixed NVE originals, the existing accounting evaluator derives the
+noncontrolling-equity carrying amount from reported inclusive and parent equity.
+Both original observations, their exact `INF` precision, namespace, period,
+source/fact/mapping hashes and source scope remain retained. A reported zero
+difference is `derived`; it does not assert absence from a missing tag. The
+[accounting source rationale](../../fundamental-service/docs/accounting-role-evidence.md)
+links the FASB definitions and explains the original-specific temporary-equity
+boundary. No data-source port or formal valuation formula changes.
+
+Exact checks pass2068 Service/PostgreSQL cases (11 optional skips, one expected
+duplicate-ZIP warning),96-source MyPy, full Service Ruff/format, both architecture
+guards and diff. The100 focused cases also pass (one optional database skip).
+[CI43323258316](https://github.com/sosodennis/value-investment-agent/actions/runs/43323258316)
+passes all12 executed jobs; release verification remains skipped.
+
+The same issue-owned SEC-enabled composition project now matches111 installed
+Python/SQL files at the new commit. It publishes41 approved mappings,79 facts,
+two original snapshots and one composed snapshot. All41 trusted signatures and
+retained-input policy reconstructions pass. The required-role gaps decrease
+from12 to11. No release activates and numerical valuation remains **abstain**;
+eligible valuations stay **provisional**, history sufficiency remains
+**underpowered**, and `supported_history_threshold=null`.
+
+Plan/output digests are
+`136722c368e03d100045c43144f1dfbe4e0d79b424dd9cab4a3db21b7ce4954e` /
+`0d17eac1ee8e6a35c3f6760b68cfbe6f7f97d36492029834294c839dbd9bef08`.
+Ordinary, service-restart and empty-store-restore repeats return that artifact
+with `wrote=false`, zero SEC calls and unchanged complete rows/content inventories.
+The portable backup and previous v8 backup remain outside Docker. All77 unrelated
+baseline containers preserve ID/image/start. The checkpoint writer itself repeats
+with identical digest and `wrote=false` using temporary-file atomic replacement.
+
+`nve_noncontrolling_equity_increment` in the existing SEC preparation checkpoint
+records exact commands, source/model/policy/runtime pins and all digests. It also
+retains the corrected synthetic foreign-issuer counterexample and report-helper
+precision/parser-binding failures; production evidence gates were unchanged.
+Complete remaining accounting/awards, dated market-policy/quote, trusted release,
+exact caller approval, numerical recovery acceptance, independent review and
+merge/main validation remain outstanding. Keep #361 open and PR#370 draft.
