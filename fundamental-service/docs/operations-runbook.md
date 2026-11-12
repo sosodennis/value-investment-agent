@@ -153,7 +153,7 @@ approval; `fundamental-prepare-source` requires approval of its exact prepared
 input before calculation and applies the same actor/time check before source or
 release access. Approval remains outside persisted public calculation evidence.
 
-Mapping approval uses Fundamental Service's `source-bound-us-gaap-v5` policy.
+Mapping approval uses Fundamental Service's `source-bound-us-gaap-v6` policy.
 It handles a narrow table of direct role/QName combinations, including
 consolidated current-assets/current-liabilities totals for the composite
 working-capital profile, and the bounded
@@ -322,7 +322,7 @@ The canonical receipt reports input/output digests and `wrote`; repeats preserve
 all artifact bytes and publication identities. Batch reports depend on every
 referenced child decision and approval digest.
 
-Policy `source-bound-us-gaap-v5` carries forward the bounded accounting
+Policy `source-bound-us-gaap-v6` carries forward the bounded accounting
 disclosure case:
 an annual consolidated USD share-compensation text fact containing the exact
 sentence `Stock-based compensation expense was $<integer> in fiscal <year>
@@ -345,6 +345,14 @@ preserves issuer-only input bytes and rules; such rules cannot be consumed as
 security-bound evidence. Neither mode proves complete economic share classes,
 award coverage, market policy or release readiness. Record and trust the new
 executable policy digest before running this version.
+
+This version also requires a registered, source/period-bound continuing scope
+for cash capex. NEWMARKET's mixed 2012/2013 cash-flow totals remain rejected;
+the later registered continuing periods retain their original amounts. Other
+originals return `MAPPING_CAPEX_SCOPE_UNREVIEWED` until classified. Treat this as
+missing accounting evidence, not a parser or signing error. Review the retained
+original and add a versioned classification in the owning Service policy; do
+not force an approval or reuse an earlier automatic policy certificate.
 
 The release canary reproduces the policy evaluation and accounting facts before
 accepting machine approval. Unsupported classifications and absence claims still

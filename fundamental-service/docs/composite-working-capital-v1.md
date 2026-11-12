@@ -4,7 +4,7 @@ This Fundamental Service input policy is implemented for evaluation. It does not
 
 The exact six-component working-capital path remains available. The separate `composite-noncash-working-capital-v1` requirements profile uses reviewed gross current assets and liabilities, with explicit source-bound exclusions and residual operating-fraction assumptions. FCFF continues through the existing #352 composer and calculator.
 
-Automatic mapping policy `source-bound-us-gaap-v5` supports direct original
+Automatic mapping policy `source-bound-us-gaap-v6` supports direct original
 `us-gaap:AssetsCurrent` and `us-gaap:LiabilitiesCurrent` observations. Each
 approval binds the consolidated USD instant observations to the original issuer,
 accession and parsed source. The machine authority must trust the new policy
