@@ -99,3 +99,35 @@ and `supported_history_threshold=null`. Main chat owns independent review and
 serial integration; #377 stays open and #417 remains draft until its actual
 accepted delivery scope passes review. No finite-sample interval guarantee,
 prospective power or threshold promotion is claimed.
+
+### Report interruption follow-up
+
+Final tested implementation:
+`be0fabbcba6cfb4a84c9c3f77d7e710a5b74cf17`. The previous checkpoint remains
+retained. A regression test first reproduced an orphan temporary file when
+`fsync` failed (one failed, one passed). The publisher now covers the temporary
+write, flush, synchronization and rename with the same `finally` cleanup.
+Both synchronization and rename failures leave only the lock file; retry writes
+once and then reuses the report. The failure log remains external as
+`issue377-methods-v4/fsync-regression-before.log`.
+
+All **59 tests**, four-file Ruff/format, both-script mypy, both architecture
+guards and diff pass at this exact commit. The complete two-process fixed-manifest
+analysis again has `wrote=false`, zero new files and unchanged bytes/sizes/mtimes.
+The statistics output digest remains identical to `00454000`; report/input
+identities change because the implementation and publication tool changed.
+
+External directory: the same evidence root's `checkpoint-be0fabbc`; reproducible
+driver `verify-be0fabbc.py`. All nine commands exited zero.
+
+| Final evidence | SHA-256 |
+| --- | --- |
+| Verification report | `ef00745ed13abd8fe1596c2a50ad7e2f6c79f2e5c802b24b12f12d063b7eed20` |
+| Verification input | `e38f91ba1c235a105aadfcf4cd10049fe879ddeb6d86f37d3098b6a02bef2231` |
+| Verification output | `bf7f60bc6f852df59fe467a8a95af88c755e1d4c99359f637423318412b0fec0` |
+| Analysis report | `e199ef314392b067c850eaeda0c83ce687f8a23dab3fe4c51950c12ee03132b1` |
+| Analysis input | `b91de8d3acfbeb0ff5da3f9ea2ac8234cf8090cdebb8dd4c6b05fd46617ebda9` |
+| Analysis output | `0926e67b720d0d1e26d6891cd0db923b900e96df245c60c9ccba4541c8034bc8` |
+
+The study/review/authority limitations above remain: no exact case or threshold
+is produced by this interruption repair.
