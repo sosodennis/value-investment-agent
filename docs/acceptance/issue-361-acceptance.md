@@ -1597,3 +1597,41 @@ checks prove source substitution and capture idempotency at the boundary; they
 do not approve issuer mappings, market policy, accounting scope, or
 `supported_history_threshold`. The exact tested commit and command digests are
 recorded by the follow-up checkpoint commit.
+
+## Admitted original composition checkpoint — 3cbabac3
+
+Implementation `3cbabac3c44138855cd79a0d0cf0ce18d10dcd04` composes independently
+admitted original snapshots before assessing aggregate model requirements.
+Per-original gaps and SEC/DQC diagnostics remain in the retained source outcomes.
+The formal requirements selector now receives the exact plan's sources/mappings.
+No provider interface, financial formula, source admission or absence rule changes.
+
+The isolated SEC-enabled project `value-investment-agent-361-composition-scope`
+(19485/19486, network `10.231.62.0/28`) matches all110 installed Python/SQL files.
+The two fixed NVE originals produce39 approved mappings,75 facts, two original
+snapshots and one composed history snapshot. All39 trusted signatures and
+retained-input policy reconstructions pass. Composition resolves the latest
+non-operating-asset requirement, while retaining12 missing required roles and
+`VALUATION_REQUIRED_FACTS_MISSING`. No release activates; numerical valuation
+remains **abstain**, eligible valuations remain **provisional**, and history
+sufficiency remains **underpowered** with `supported_history_threshold=null`.
+
+Plan/output digests are
+`b35e745ee142e165f275c8d5b98b711b61e20a3181e602e10361adeab0c8a249` /
+`033fb0e2df6e3156cc0e3b15bae334d3e79ed5379ea61fb6ea0065fd101cc9d1`.
+Ordinary, service-restart and empty-database-restore repeats return identical
+artifacts with `wrote=false` and zero SEC provider calls. Complete database rows
+and content hash/size/mtime inventories are unchanged; restore reproduces rows
+and bytes, then preserves its own mtimes on repeat. A verified portable backup
+is retained outside Docker. All77 baseline containers retain identity/image/start.
+
+Exact checks pass2050 Service/PostgreSQL cases (11 optional skips and one expected
+duplicate-ZIP fixture warning),95-source MyPy, full Service Ruff/format, both
+architecture guards and diff. [CI43318783471](https://github.com/sosodennis/value-investment-agent/actions/runs/43318783471)
+passes all12 executed jobs; the release gate is skipped. The
+`nve_composition_increment` in [the existing checkpoint](issue-361-sec-preparation-checkpoint.json)
+records commands, digests, runtime pins, remaining gates and the corrected audit
+baseline-schema failure. Generated originals/reports/backups remain outside Git.
+Complete accounting/awards, dated market-policy/quote, trusted release, exact
+caller approval, real numerical recovery acceptance, independent review and
+merge/main verification remain outstanding. Keep #361 open and PR#370 draft.
