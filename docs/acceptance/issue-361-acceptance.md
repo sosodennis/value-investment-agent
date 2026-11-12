@@ -19,6 +19,49 @@ Eligible candidate-history valuations can be provisional. Missing, conflicting,
 unreviewed, future, or unsupported evidence must retain reasons and abstain.
 No completed #351 through #355 acceptance is changed. #350 is outside scope.
 
+## Interchangeable industry capital sources
+
+Implementation `40e61e493e42d2a05abe242990ea9d767323c5c6` adds industry equity
+beta, pretax debt cost and debt/equity weights through the existing
+`MarketReferenceProviderPort`. A second JSON provider passes the same admission
+and selection boundary. Source-use catalog v2 retains the public aggregate
+permission and attribution; issuer adoption remains explicit policy.
+
+The retained [NYU original](https://pages.stern.nyu.edu/~adamodar/pc/archives/wacc24.xls)
+has SHA256 `812345650229c0a1c50921f5bab7ea3198dd5f48f05e7956d175cb349a508dea`.
+The parser retains exact binary64 values, source cells, missing rows and publisher
+methodology. Beta is a group regression average; debt cost is a sector estimate;
+weights include lease debt. None is relabeled as an observed company value.
+Availability is actual capture time, not the workbook's January2025 date.
+
+Exact validation passes **1,865 Service/PostgreSQL tests**, Ruff/format,
+ten-source mypy, architecture and diff checks;11 optional external SEC-resource
+skips and the intentional ZIP warning remain. Engineering input/output:
+`742555e91d72d45be32940bdcb2eb8b3ceb676a56ae3ce741b3b77fc2603ff15` /
+`bdafa1b3b347eb71dddf20fe228a74b1eaac5e582109ab4c0679e8673528bd0d`.
+
+The own18685/18686 installed image matches all93 Python/SQL sources. Four
+real aggregate metrics admit with16 retained source-use/data refusals. Second,
+two concurrent processes and post-service-restart runs write zero artifacts;
+output digests and file hashes/sizes/mtimes remain identical. Repeating capture
+downloads nothing and returns `wrote=false`. All42 unrelated containers retain
+identity, image and start time. Installed wrapper input/output:
+`2352fa68cdb90c06ce0220480ef5ff5df0db40a13321008472e0c5a7e99fee2d` /
+`ecd47bb7aea37b7967de50612c7a17868cd3a0848f4d47005cb7481420c99e2e`.
+The [existing checkpoint](issue-361-source-admission-checkpoint.json) retains
+commands, runtime pins and replay digests; generated originals/reports stay
+outside Git. This is source acceptance; complete issuer numerical acceptance
+remains false and the history threshold remains null.
+
+Independent review of #420 implementation `c9a5e317` reproduces the original
+#421 counterexample at `54de2436`: invented model versions formerly produced
+identical nodes. The fix rejects those pins and binds the actual formula graph,
+numerical policy and model-spec digest. All92 focused scenario/label/model tests
+pass in an isolated Git source archive. Review input/output:
+`944d4db706478267f51c7f53a3cd7fb349c2a6deceb1f838439460dc1cca1447` /
+`dbee67d7996761056b6c52a696013410960434f538bb2db22ad09cdfec375dfb`.
+Child CI and ordinary merge-commit validation remain required before integration.
+
 ## Terminal growth and issuer policy checkpoint
 
 Implementation `c853dbb875229bf28b19a23c2debfa245cf32385` derives an explicit
