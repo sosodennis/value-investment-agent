@@ -45,6 +45,14 @@ from .data_releases import (
 from .facts import CanonicalFactRepository
 from .quote_providers import QuoteSourceProviderPort
 from .quote_sources import default_quote_providers
+from .free_source_policy import (
+    default_macro_providers,
+    default_reference_providers,
+    free_market_source_policy,
+)
+from .macro_series import MacroSeriesProviderPort
+from .market_reference import MarketReferenceProviderPort
+from .source_admission import SourceUsePolicyV1
 from .governance import ModelInventory
 from .interface.transport import (
     EmptyOperationInputV1,
@@ -166,6 +174,9 @@ def create_app(
     sec_acquisition: SecAcquisitionUseCase | None = None,
     identity_resolution: SecIdentityResolutionUseCase | None = None,
     quote_providers: tuple[QuoteSourceProviderPort, ...] | None = None,
+    macro_providers: tuple[MacroSeriesProviderPort, ...] | None = None,
+    reference_providers: tuple[MarketReferenceProviderPort, ...] | None = None,
+    source_use_policy: SourceUsePolicyV1 | None = None,
 ) -> FastAPI:
     """Assemble transport, application use cases, and runtime resources."""
 
@@ -202,6 +213,15 @@ def create_app(
         quote_providers=(
             default_quote_providers() if quote_providers is None else quote_providers
         ),
+        macro_providers=default_macro_providers()
+        if macro_providers is None
+        else macro_providers,
+        reference_providers=default_reference_providers()
+        if reference_providers is None
+        else reference_providers,
+        source_use_policy=free_market_source_policy()
+        if source_use_policy is None
+        else source_use_policy,
     )
 
     @asynccontextmanager

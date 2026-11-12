@@ -1036,10 +1036,57 @@ identity, and is unaffected by source input order. SOFR and BEA also exercise
 the shared contract. HTTP capture, immutable content storage, source-use
 admission and release signing remain separate owning boundaries.
 
-This provider contract currently covers macro series only. Treasury rates,
-Damodaran reference tables and facility benchmark observations need equivalent
-provider adapters before they can be swapped at runtime. Do not imply those
-providers are configured by the macro abstraction.
+`TreasuryParYieldVintageProvider` and `AlfredTreasuryVintageProvider` also
+implement the macro port for `us.treasury_par_yield_10y`. The Treasury XML profile
+uses retained capture availability; ALFRED verifies the exact vintage header.
+`MarketReferenceProviderPort` separately covers country and industry tables;
+`DamodaranReferenceProvider` reproduces industry unlevered beta, rating-based
+country ERP and country tax references. Its canonical rows retain missing values,
+cell locators, original numeric encodings, display formats, formula caches and
+source-update context. Workbook update dates never backdate capture availability.
+Reference providers do not choose an issuer's industry or normalized tax mix.
+Neither macro nor reference ports provide CME Term SOFR.
+
+### Source-use admission and release reproduction
+
+`source_admission` combines the existing injected macro/reference ports with a
+trusted `SourceUsePolicyV1`. The request contains original bytes, identity,
+valuation timestamp and intended use; it contains no expected numeric value or
+approval flag. The source-use policy matches provider, canonical metric,
+population, source profile and terms identity. It requires exact retained terms
+bytes and preserves notices and a per-original decision, including missing,
+changed, conflicting or unsupported evidence. Failed parser and future-vintage
+cases are retained with stable refusal codes. Canonical requests and results
+have separate content digests. Replay re-executes the provider and trusted rules;
+recalculating a declaration's digest cannot authorize altered source values.
+
+`free_source_policy` is the composition-owned catalog for the bounded public
+Damodaran aggregates, BEA's own public GDP tables/releases, Treasury's own par
+yields and New York Fed overnight SOFR. It records the actual publisher terms
+or the scoped U.S. Government works basis, with exact evidence hashes and required
+attribution. The catalog does not grant raw-data redistribution, third-party
+company datasets, reference-rate substitution, or a quote license. ALFRED remains
+unadmitted by this catalog until its source-use evidence is established. A terms
+capture establishes the evidence used for the current intended-use decision; it
+does not establish that a data vintage existed at an earlier valuation date.
+
+The release canary and serving preparation both call
+`load_release_source_admissions`. A `market_source_admission` artifact requires
+its original source and terms bytes in the same pinned release, under
+`market_source_original` and `market_source_terms`. Both boundaries inject the
+same provider ports and a trusted catalog; missing/ambiguous providers, different
+catalogs, corrupt/noncanonical evidence and refused admissions fail. The existing
+artifact store owns atomic immutable persistence; no request-path network call or
+new database is added. Reproduction of an admission checks its declared source
+metadata and parser output; trusted acquisition receipts and release provenance
+remain necessary to establish the actual capture identity.
+
+This source-use decision is a prerequisite for a complete market-policy evaluator,
+not its replacement. Existing policy records do not yet require admissions for
+all seven market roles, and this increment does not link an admission to issuer
+classification, tax, capital weights, debt cost or terminal growth. The complete
+automatic market-policy and real numerical acceptance gates remain open. It does
+not promote accounting/forecast quality or `supported_history_threshold`.
 
 ### Provider-neutral quote evidence
 

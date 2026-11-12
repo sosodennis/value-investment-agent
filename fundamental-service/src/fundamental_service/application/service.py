@@ -55,6 +55,10 @@ from ..facts import (
 from ..equity_award_evidence import load_release_dilution_evidence
 from ..equity_dilution import DilutionError
 from ..quote_providers import QuoteSourceProviderPort
+from ..macro_series import MacroSeriesProviderPort
+from ..market_reference import MarketReferenceProviderPort
+from ..source_admission import SourceUsePolicyV1
+from ..source_admission_evidence import load_release_source_admissions
 from ..fiscal_periods import resolve_fiscal_periods
 from ..governance import ModelInventory
 from ..history_composition import verify_history_components
@@ -337,6 +341,9 @@ class FundamentalApplication:
     policy_registry: PolicyRegistry | None = None
     model_inventory: ModelInventory | None = None
     quote_providers: tuple[QuoteSourceProviderPort, ...] = ()
+    macro_providers: tuple[MacroSeriesProviderPort, ...] = ()
+    reference_providers: tuple[MarketReferenceProviderPort, ...] = ()
+    source_use_policy: SourceUsePolicyV1 | None = None
     release_cache: CacheLifecycle = dataclass_field(
         default_factory=lambda: CacheLifecycle(max_entries=256),
         repr=False,
@@ -1188,6 +1195,21 @@ class FundamentalApplication:
 
         evidence = self.read_valuation_evidence(request)
         snapshot = self.snapshot(request.snapshot_id)
+        try:
+            load_release_source_admissions(
+                self._data_release_manifest(request.data_release_manifest_digest),
+                artifacts=self.artifact_store,
+                policy=self.source_use_policy,
+                macro_providers=self.macro_providers,
+                reference_providers=self.reference_providers,
+            )
+        except (DataReleaseError, SnapshotError, ValueError) as error:
+            raise ServiceError(
+                getattr(error, "code", "SOURCE_ADMISSION_INVALID"),
+                str(error),
+                status_code=422,
+                retryable=False,
+            ) from error
         model_version = f"{request.model_id}-v2"
         policy = None
         if self.policy_registry is not None:
