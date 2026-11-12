@@ -59,6 +59,22 @@ class AnnualHistoryV1:
     supported_history_threshold: int | None = None
 
 
+@dataclass(frozen=True)
+class EstimatedOperatingInputsV1:
+    """Research-only inputs; source facts keep their original reported values.
+
+    This internal metric input grants no source, mapping or release approval.
+    The scenario owner validates allocations and retains their assumptions.
+    """
+
+    fiscal_year: int
+    capital_expenditure: Decimal
+    operating_working_capital: Decimal
+    capex_facts: tuple[CanonicalFactV1, ...]
+    working_capital_facts: tuple[CanonicalFactV1, ...]
+    assumption_digest: str
+
+
 def resolve_annual_history(
     facts: Iterable[CanonicalFactV1],
     *,
