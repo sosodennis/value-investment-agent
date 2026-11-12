@@ -49,7 +49,7 @@ def test_http_prepare_composes_complete_release_and_policy_inputs(tmp_path: Path
         item["path"] == "assumptions.wacc.risk_free_rate"
         and item["source_refs"]
         and item["as_of"] == "2025-01-03T00:00:00Z"
-        and item["method"] == "approved_source"
+        and item["method"] == "approved_policy"
         for item in result["assumptions_evidence"]
     )
     assert (

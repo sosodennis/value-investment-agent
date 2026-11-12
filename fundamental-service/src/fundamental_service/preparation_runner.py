@@ -940,14 +940,30 @@ class SourcePreparationRunner:
         snapshot_digest = self._application.snapshot(
             resolution.snapshot_id
         ).manifest_digest
-        preparation = self._application.prepare_valuation(
-            ValuationEvidenceReadRequestV1(
-                contract_version="fundamental.v1",
-                snapshot_id=resolution.snapshot_id,
-                data_release_manifest_digest=resolution.data_release_manifest_digest,
-                model_id=plan.model_id,
+        try:
+            preparation = self._application.prepare_valuation(
+                ValuationEvidenceReadRequestV1(
+                    contract_version="fundamental.v1",
+                    snapshot_id=resolution.snapshot_id,
+                    data_release_manifest_digest=resolution.data_release_manifest_digest,
+                    model_id=plan.model_id,
+                )
             )
-        )
+        except ServiceError as error:
+            if error.retryable or error.status_code != 422:
+                raise
+            return self._persist(
+                plan,
+                SourcePreparationEvidenceV1(
+                    source_revision=plan.source_revision,
+                    plan_digest=plan.digest,
+                    status="blocked",
+                    snapshot_id=resolution.snapshot_id,
+                    snapshot_manifest_digest=snapshot_digest,
+                    data_release_manifest_digest=resolution.data_release_manifest_digest,
+                    issue_codes=(error.code,),
+                ),
+            )
         if preparation.status != "prepared" or preparation.input is None:
             return self._persist(
                 plan,

@@ -57,8 +57,9 @@ from ..equity_dilution import DilutionError
 from ..quote_providers import QuoteSourceProviderPort
 from ..macro_series import MacroSeriesProviderPort
 from ..market_reference import MarketReferenceProviderPort
-from ..source_admission import SourceUsePolicyV1
+from ..source_admission import SourceAdmissionV1, SourceUsePolicyV1
 from ..source_admission_evidence import load_release_source_admissions
+from ..market_source_selection import MarketSourceError, verify_observed_market_inputs
 from ..fiscal_periods import resolve_fiscal_periods
 from ..governance import ModelInventory
 from ..history_composition import verify_history_components
@@ -153,6 +154,8 @@ def _approved_market_policy(
     policy: PolicyRecordV1 | None,
     *,
     valuation_timestamp: datetime | None = None,
+    currency: str | None = None,
+    source_admissions: tuple[SourceAdmissionV1, ...] = (),
 ) -> ApprovedMarketPolicyInputsV1 | None:
     """Translate a complete released market policy into preparation evidence."""
 
@@ -163,8 +166,23 @@ def _approved_market_policy(
         item.available_at > valuation_timestamp for item in market_inputs.evidence
     ):
         return None
+    observed_traces: dict[str, TraceV1] = {}
+    if any(item.method == "observed_source" for item in market_inputs.evidence):
+        if valuation_timestamp is None or currency is None:
+            raise MarketSourceError(
+                "MARKET_RATE_CONTEXT_MISSING",
+                "observed market inputs require valuation time and currency",
+            )
+        observed_traces = verify_observed_market_inputs(
+            market_inputs,
+            admissions=source_admissions,
+            valuation_at=valuation_timestamp,
+            currency=currency,
+        )
 
     def trace_for(role: str) -> TraceV1:
+        if role in observed_traces:
+            return observed_traces[role]
         evidence = next(
             (item for item in market_inputs.evidence if item.role == role), None
         )
@@ -1196,7 +1214,7 @@ class FundamentalApplication:
         evidence = self.read_valuation_evidence(request)
         snapshot = self.snapshot(request.snapshot_id)
         try:
-            load_release_source_admissions(
+            source_admissions = load_release_source_admissions(
                 self._data_release_manifest(request.data_release_manifest_digest),
                 artifacts=self.artifact_store,
                 policy=self.source_use_policy,
@@ -1234,10 +1252,17 @@ class FundamentalApplication:
             else (f"{request.model_id}-us-gaap-public-v3")
         )
         policy_version = policy.policy_version if policy is not None else "unresolved"
-        market_policy = _approved_market_policy(
-            policy,
-            valuation_timestamp=snapshot.valuation_timestamp,
-        )
+        try:
+            market_policy = _approved_market_policy(
+                policy,
+                valuation_timestamp=snapshot.valuation_timestamp,
+                currency=snapshot.identity.currency,
+                source_admissions=source_admissions,
+            )
+        except MarketSourceError as error:
+            raise ServiceError(
+                error.code, str(error), status_code=422, retryable=False
+            ) from error
         try:
             dilution = load_release_dilution_evidence(
                 self._data_release_manifest(request.data_release_manifest_digest),

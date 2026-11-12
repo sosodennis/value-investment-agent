@@ -29,9 +29,7 @@ def synthetic_market_inputs() -> MarketPolicyInputsV1:
         evidence=tuple(
             MarketPolicyEvidenceV1(
                 role=role,
-                method="observed_source"
-                if role == "risk_free_rate"
-                else "approved_policy",
+                method="approved_policy",
                 value=value,
                 source_id="synthetic-market-policy",
                 source_uri=f"urn:test:market:{role}",
@@ -41,7 +39,7 @@ def synthetic_market_inputs() -> MarketPolicyInputsV1:
                 as_of=datetime(2025, 1, 3, tzinfo=UTC),
                 available_at=datetime(2025, 1, 3, tzinfo=UTC),
                 captured_at=datetime(2026, 11, 3, tzinfo=UTC),
-                rationale="Synthetic fixture; not approved real market evidence",
+                rationale="Synthetic normative-policy fixture; no observed source is claimed",
             )
             for role, value in values.items()
         ),
