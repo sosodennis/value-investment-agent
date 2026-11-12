@@ -7,7 +7,7 @@ import time
 from collections.abc import Callable
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from email.message import Message
 from email.utils import parsedate_to_datetime
 from typing import Protocol
@@ -69,6 +69,12 @@ PUBLIC_SOURCE_SPECS: tuple[PublicSourceSpec, ...] = (
         SourceRole.MACRO,
         "https://www.federalreserve.gov/datadownload/",
         "https://www.federalreserve.gov/data.htm",
+    ),
+    PublicSourceSpec(
+        "new-york-fed-sofr",
+        SourceRole.MACRO,
+        "https://markets.newyorkfed.org/api/rates/secured/sofr/search.json",
+        "https://www.newyorkfed.org/privacy/termsofuse",
     ),
     PublicSourceSpec(
         "federal-reserve-policy",
@@ -262,7 +268,7 @@ class PublicSourceAdapter:
         prefix = urlsplit(spec.uri_prefix)
         path_allowed = (
             parsed.path == prefix.path
-            if source_id in {"fred-observations", "alfred-vintage"}
+            if source_id in {"fred-observations", "alfred-vintage", "new-york-fed-sofr"}
             else parsed.path.startswith(prefix.path)
         )
         if (
@@ -277,7 +283,41 @@ class PublicSourceAdapter:
                 "SOURCE_URI_NOT_ALLOWED",
                 f"URI is outside the registered {source_id} endpoint",
             )
+        if source_id == "new-york-fed-sofr":
+            try:
+                query = parse_qs(
+                    parsed.query, keep_blank_values=True, strict_parsing=True
+                )
+                start_value = query["startDate"][0]
+                end_value = query["endDate"][0]
+                start_date = date.fromisoformat(start_value)
+                end_date = date.fromisoformat(end_value)
+            except (KeyError, ValueError, IndexError) as error:
+                raise SnapshotError(
+                    "SOURCE_QUERY_INVALID",
+                    "New York Fed SOFR requests require one ordered ISO date range",
+                ) from error
+            if (
+                set(query) != {"startDate", "endDate"}
+                or any(len(values) != 1 for values in query.values())
+                or start_value != start_date.isoformat()
+                or end_value != end_date.isoformat()
+                or start_date != end_date
+            ):
+                raise SnapshotError(
+                    "SOURCE_QUERY_INVALID",
+                    "New York Fed SOFR capture requires one canonical ISO date",
+                )
+            if available_at is not None or publication_at is not None:
+                raise SnapshotError(
+                    "SOURCE_AVAILABILITY_UNVERIFIED",
+                    "SOFR historical availability must use service capture time",
+                )
         payload, status, media_type, retrieved_at = self._request(uri)
+        if source_id == "new-york-fed-sofr":
+            # Historical API responses do not establish when a value was first
+            # published. Treat it as available only from this retained capture.
+            available_at = retrieved_at
         if source_id == "alfred-vintage":
             vintage = parse_qs(parsed.query).get("vintage_date", ())
             if len(vintage) != 1:
@@ -306,7 +346,7 @@ class PublicSourceAdapter:
                 "SOURCE_TIMESTAMP_TIMEZONE_REQUIRED",
                 "source timestamps require a timezone",
             )
-        if publication_at is None:
+        if publication_at is None and source_id != "new-york-fed-sofr":
             publication_at = available_at
         if source_id in {"fred-observations", "alfred-vintage", "damodaran-reference"}:
             if not payload.strip():
@@ -328,6 +368,7 @@ class PublicSourceAdapter:
             media_type=media_type or "application/octet-stream",
             http_status=status,
             available_at=available_at,
+            captured_at=retrieved_at,
             publication_at=publication_at,
         )
 
