@@ -63,7 +63,8 @@ def test_all_declared_free_sources_have_allowlisted_capture_contract():
             uri,
             available_at=(
                 None
-                if spec.source_id == "new-york-fed-sofr"
+                if spec.source_id
+                in {"new-york-fed-sofr", "bea-gdp-release", "bea-nipa-archive"}
                 else datetime(2025, 1, 3, tzinfo=timezone.utc)
             ),
         )
@@ -180,6 +181,35 @@ def test_sofr_source_refuses_unverified_publication_timestamp():
             "new-york-fed-sofr",
             "https://markets.newyorkfed.org/api/rates/secured/sofr/search.json?startDate=2025-01-03&endDate=2025-01-03",
             publication_at=datetime(2025, 1, 3, tzinfo=timezone.utc),
+        )
+    assert error.value.code == "SOURCE_AVAILABILITY_UNVERIFIED"
+    assert calls == []
+
+
+@pytest.mark.parametrize(
+    ("source_id", "uri"),
+    (
+        (
+            "bea-gdp-release",
+            "https://www.bea.gov/news/2025/gross-domestic-product-test",
+        ),
+        (
+            "bea-nipa-archive",
+            "https://apps.bea.gov/HistData/Files/Releases/GDP_and_PI/2024/Q4/Third_March-28-2025/Section1all_xls.xlsx",
+        ),
+    ),
+)
+def test_bea_capture_cannot_claim_historical_availability_before_paired_reproduction(
+    source_id: str, uri: str
+):
+    calls = []
+    adapter = PublicSourceAdapter(
+        user_agent="value-agent test@example.com",
+        opener=lambda *_args, **_kwargs: calls.append(True),
+    )
+    with pytest.raises(SnapshotError) as error:
+        adapter.capture(
+            source_id, uri, available_at=datetime(2025, 1, 3, tzinfo=timezone.utc)
         )
     assert error.value.code == "SOURCE_AVAILABILITY_UNVERIFIED"
     assert calls == []

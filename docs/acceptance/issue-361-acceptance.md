@@ -137,7 +137,7 @@ inputs:
 | ERP | Damodaran United States ERP, 4.33%, January 2025 | Reproduce archive/cell and establish date availability and source-use policy |
 | Cost of debt | Tandy filing states CME Term SOFR + 210 bp; facility undrawn | Benchmark tenor/source, outstanding debt, and complete facility scope are unresolved |
 | Capital weights | None admitted | Require point-in-time security/quote and share count plus complete debt market value |
-| Terminal growth | None admitted | Historical macro vintage request failed; no ceiling or selected rate is available |
+| Terminal growth | BEA nominal-GDP upper-bound evidence is available in the provider checkpoint below | No terminal-growth rule or rate is admitted; the GDP ceiling is not an approved assumption |
 
 The user authorized deterministic automatic policy approval. The service should
 approve only a version-pinned evaluator decision that can replay source bytes,
@@ -847,6 +847,30 @@ earlier source-review increment started or cleaned no Docker resource. The
 focused conflict validation above used and removed its own project and does not
 establish the full numerical acceptance profile. Re-read the canonical runtime tuple
 before the next service acceptance run.
+
+## Interchangeable macro providers checkpoint
+
+Implementation commit `811452624ba37f9fe50aa7868db8da98ab642e67` adds
+`MacroSeriesProviderPort` with a requested series ID and immutable normalized
+vintage output. BEA annual GDP and New York Fed overnight SOFR implement the
+same provider contract. The policy operates on normalized observations, so a
+second provider can supply nominal GDP without source-specific policy branches.
+The BEA adapter reproduces the paired official 2024 Q4 third-estimate workbook
+and release page. Its 96 published annual observations are conservatively
+available after the archive date ends on `2025-03-29T04:00:00Z`.
+
+The exact replay input is `b302dcfb46fc94fbab10502cde044ffcdb43c4cc0c7db06a2f53ef94d6646889`;
+output is `34d0cbd1e554bd537298d8ed51da26a4eb0ead7bed78194e173999247463dd1d`.
+The second run reuses source, input and output artifacts with `wrote=false` and
+the identical output digest. A ten-year nominal-GDP CAGR ceiling is reproducible,
+but it does not approve a terminal-growth assumption. Historical SOFR is
+unavailable before its retained capture. The full market policy is still not
+admitted, and the threshold remains null.
+
+See [the exact provider checkpoint](issue-361-macro-provider-checkpoint.json)
+for the isolated service runtime, source hashes, command results and full-suite
+status. Treasury, Damodaran, quote and contracted-benchmark inputs still need
+equivalent provider adapters and admissibility evidence.
 
 Generated sources, mappings, proposals, diagnostics, and backups remain in ignored
 `.audit`. Do not reset, rebase, force-push, or discard the checkpoint chain. Do not

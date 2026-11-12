@@ -12,6 +12,12 @@ from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from .macro_series import (
+    MacroObservationV1,
+    MacroSeriesVintageV1,
+    MacroSourceArtifactV1,
+    RetainedMacroSourceV1,
+)
 from .snapshots import SnapshotError
 
 NEW_YORK_FED_SOFR_SOURCE = "new-york-fed-sofr"
@@ -121,3 +127,71 @@ def parse_new_york_fed_sofr(
             "SOFR_SOURCE_INVALID",
             "retained New York Fed response does not reproduce the SOFR profile",
         ) from error
+
+
+class NewYorkFedSofrVintageProvider:
+    """Normalize overnight SOFR through the shared macro provider contract."""
+
+    provider_id = "new-york-fed"
+
+    def supports(self, series_id: str) -> bool:
+        return series_id == "us.sofr_overnight"
+
+    def reproduce_vintage(
+        self, *, series_id: str, sources: tuple[RetainedMacroSourceV1, ...]
+    ) -> MacroSeriesVintageV1:
+        if not self.supports(series_id) or len(sources) != 1:
+            raise SnapshotError(
+                "SOFR_SOURCE_INVALID", "SOFR requires one retained source"
+            )
+        source = sources[0]
+        if (
+            source.source_id != NEW_YORK_FED_SOFR_SOURCE
+            or source.source_version != NEW_YORK_FED_SOFR_PROFILE
+            or source.terms_reference != NEW_YORK_FED_TERMS
+        ):
+            raise SnapshotError(
+                "SOFR_SOURCE_INVALID", "SOFR source profile does not match"
+            )
+        try:
+            query = parse_qs(urlsplit(source.uri).query)
+            effective_date = date.fromisoformat(query["startDate"][0])
+        except (KeyError, ValueError, IndexError) as error:
+            raise SnapshotError(
+                "SOFR_SOURCE_INVALID", "SOFR source date is invalid"
+            ) from error
+        observation = parse_new_york_fed_sofr(
+            source.content,
+            source_uri=source.uri,
+            effective_date=effective_date,
+            captured_at=source.captured_at,
+        )
+        return MacroSeriesVintageV1.build(
+            series_id="us.sofr_overnight",
+            provider_id=self.provider_id,
+            frequency="daily",
+            unit="percent",
+            source_version=NEW_YORK_FED_SOFR_PROFILE,
+            available_at=observation.available_at,
+            captured_at=source.captured_at,
+            artifacts=(
+                MacroSourceArtifactV1(
+                    source_id=source.source_id,
+                    uri=source.uri,
+                    source_version=source.source_version,
+                    terms_reference=source.terms_reference,
+                    content_sha256=observation.content_hash,
+                    captured_at=source.captured_at,
+                ),
+            ),
+            observations=(
+                MacroObservationV1(
+                    series_id="us.sofr_overnight",
+                    period_start=effective_date,
+                    period_end=effective_date,
+                    value=observation.percent_rate,
+                    unit="percent",
+                    source_sha256=observation.content_hash,
+                ),
+            ),
+        )
