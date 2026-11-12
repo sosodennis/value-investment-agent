@@ -129,7 +129,10 @@ def test_different_quote_evidence_changes_approval_digest_even_with_equal_shares
     assert first.preparation_digest != second.preparation_digest
 
 
-def test_signed_quote_cannot_change_price_over_unchanged_source_bytes(tmp_path):
+@pytest.mark.parametrize("consumer", ["serving", "canary"])
+def test_signed_quote_cannot_change_price_over_unchanged_source_bytes(
+    tmp_path, consumer
+):
     fixture = _fixture(tmp_path, released=False)
     evidence = fixture.dilution.model_copy(
         update={
@@ -151,8 +154,16 @@ def test_signed_quote_cannot_change_price_over_unchanged_source_bytes(tmp_path):
             for ref in fixture.manifest.artifact_refs
         ),
     )
-    with pytest.raises(DilutionError) as error:
-        _load(fixture, manifest=manifest)
+    fixture.manifest = manifest
+    if consumer == "canary":
+        candidate, canary = _reviewed_candidate(fixture)
+        with pytest.raises(DataReleaseError) as error:
+            canary.validate(candidate.manifest, candidate.verification)
+        assert fixture.state.active is None
+        assert fixture.state.publications == 0
+    else:
+        with pytest.raises(DilutionError) as error:
+            _load(fixture)
     assert error.value.code == "DILUTION_QUOTE_SOURCE_VALUE_MISMATCH"
 
 
