@@ -49,6 +49,17 @@ complete accounting/award evidence, market policy, trusted release, authentic
 caller approval and numerical recovery acceptance remain outstanding. The
 history threshold remains null; #361 stays open and #370 stays draft.
 
+Provider extension is documented in the Service's
+[source guide](../../fundamental-service/docs/market-input-providers.md).
+Exact `2b3b39271392e4f0c884268815d5301cec3dac81` also fixes the local Ruff
+0.3.0/CI 0.14.10 formatter conflict under linked blocker #422 by scoping the CI
+pin to Fundamental Service. Both hook paths, 57 provider/crosswalk tests, full
+Service lint/format (212 files), changed-source mypy, architecture and diff
+checks pass. [Exact check evidence](issue-361-provider-contract-checkpoint.json)
+records input/output digests and commands. Its changes are documentation,
+tooling and one annotation's layout; the installed SEC evidence above remains
+bound to `676a1b43`, with no new numerical acceptance claim.
+
 ## Source-bound industry capital adoption
 
 Implementation `f52933472f09da8b4d45b14ada60895dcf8b37a7` adopts four selected
