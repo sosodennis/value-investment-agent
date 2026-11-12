@@ -51,6 +51,7 @@ def runner_case(tmp_path, monkeypatch):
     application = SimpleNamespace(
         resolve_snapshot=missing_release,
         artifact_store=artifacts,
+        snapshot=metadata.snapshots.__getitem__,
         prepare_valuation=forbidden,
         calculate_valuation=forbidden,
     )
@@ -110,6 +111,21 @@ def test_mapping_free_plan_retains_full_blocked_result_and_reuses_everything(
     assert calls == (state.provider_calls, state.parser_calls)
     assert before == inventory(artifacts.root)
     assert tuple(metadata.audits) == audits
+
+
+def test_retained_partial_automatic_batch_supplies_only_approved_plan_mappings(
+    tmp_path, monkeypatch
+):
+    plan, runner, _, metadata, _ = runner_case(tmp_path, monkeypatch)
+    run(runner, plan)
+    acquired = next(iter(metadata.acquisitions.values()))
+    assert acquired.quality_status.value == "abstain"
+    assert metadata.snapshots[acquired.snapshot_id].coverage_status.value == "verified"
+    groups = runner._plan_mappings(plan)
+    assert groups is not None
+    assert {ref.decision_id for ref in groups[0]} == set(metadata.mappings)
+    assert "stock_based_compensation" in {ref.normalized_field for ref in groups[0]}
+    assert "non_operating_assets" not in {ref.normalized_field for ref in groups[0]}
 
 
 @pytest.mark.parametrize(

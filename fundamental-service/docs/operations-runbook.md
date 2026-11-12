@@ -209,7 +209,7 @@ mapping batch only after original byte integrity, EFM/DQC and historical issuer
 identity validation, then publishes mappings through the current metadata store
 and facts through the existing normalizer. The source report retains the full
 batch decision reference and canonical plan. Missing/unsupported/conflicting
-roles remain blocked; no release or calculation is attempted. A report-write
+aggregate model requirements remain blocked; no release or calculation is attempted. A report-write
 interruption can be retried against the completed acquisition without fetching
 or parsing again. Repeated identical reports return `wrote=false`.
 The source command requests read-only reuse of a completed acquisition, after
@@ -218,7 +218,26 @@ no duplicate source-audit row for that completed result. New acquisitions and
 refusals remain audited. HTTP ingestion keeps its default per-request reuse
 audit, independently of command artifact identity.
 
-For a complete supported original, the runner checks the retained batch input,
+For a multi-original plan, source integrity and individual model completeness
+are separate evidence. An acquisition may abstain for missing roles while its
+original-source snapshot independently passes integrity. All requested sources
+must have eligible integrity snapshots before composition; an invalid or missing
+source is retained and blocks the plan. The runner selects only the plan's exact
+accession/source/mapping facts, then uses the existing model requirements and
+annual-history resolver on the combined evidence. A latest capital role may come
+from a later eligible original without requiring it on every older filing. Future
+facts, incomplete aggregate history and conflicts still refuse. Individual
+acquisition quality, missing roles and diagnostics are never promoted or removed.
+Single-original plans retain their existing completeness gate.
+
+Canonical acquisition outcomes are stored under the pinned plan identity and
+retained across release, preparation and calculation reports, including restarts.
+Invalid or changed outcome evidence refuses before release resolution. Repeated
+outcomes and reports reuse their artifacts without new writes. This source check
+does not approve a release, establish award/market completeness, supply caller
+approval or promote the history threshold.
+
+For supported combined evidence, the runner checks the retained batch input,
 model, policy, evaluator, source and per-role decisions against the immutable
 release. `--candidate` still requires the independent release canary and
 authorization. `--approval` still requires the caller's decision for the exact
