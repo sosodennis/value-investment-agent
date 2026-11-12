@@ -623,3 +623,36 @@ async def test_producer_rejects_missing_ticker_without_service_calls() -> None:
 
     assert error.value.code == "FUNDAMENTAL_TICKER_MISSING"
     assert client.calls == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("invalid", [float("nan"), {1: "invalid-key"}, object()])
+async def test_producer_refuses_non_json_service_evidence(invalid) -> None:
+    client = _Client(ingestion={**_ingestion(), "unsupported_metadata": invalid})
+    with pytest.raises(FundamentalServiceFailure) as error:
+        await prepare_service_valuation_request(
+            _state(request=_request()),
+            client=client,
+            principal=_principal(),
+            correlation_id="correlation-1",
+            deadline_at=datetime(2026, 11, 7, tzinfo=UTC),
+        )
+    assert error.value.code == "UPSTREAM_MALFORMED"
+
+
+@pytest.mark.asyncio
+async def test_producer_normalizes_verified_fact_ids_to_json_without_losing_lineage() -> (
+    None
+):
+    ingestion = _ingestion()
+    ids = tuple(ingestion["canonical_fact_ids"])
+    client = _Client(ingestion={**ingestion, "canonical_fact_ids": ids})
+    result = await prepare_service_valuation_request(
+        _state(request=_request()),
+        client=client,
+        principal=_principal(),
+        correlation_id="correlation-1",
+        deadline_at=datetime(2026, 11, 7, tzinfo=UTC),
+    )
+    assert result.ingestion["canonical_fact_ids"] == list(ids)
+    assert result.valuation_request["historical_facts"] == list(ids)

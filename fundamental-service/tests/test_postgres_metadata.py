@@ -1026,8 +1026,8 @@ def test_versioned_releases_and_mappings_are_durable_and_immutable(
     request = make_valuation()
     policy_payload = {
         "contract_version": "fundamental.v1",
-        "policy_id": "policy-postgres-v1",
-        "policy_version": "policy-postgres-v1",
+        "policy_id": f"policy-postgres-{model.model_version}",
+        "policy_version": f"policy-postgres-{model.model_version}",
         "profile_id": "us-gaap-public-v1",
         "model_id": model.model_id,
         "model_version": model.model_version,
