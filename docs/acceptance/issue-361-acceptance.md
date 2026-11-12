@@ -43,9 +43,13 @@ unrelated baseline containers retain their identities, images and start times.
 The first harness attempt retained a file-permission refusal before publication;
 granting read access to the copied synthetic fixture corrected the harness only.
 
+CI at evidence head `f97d2dc57c05d0b91ebcc6f540fa6719cef14ce1` passes all
+12 executed jobs; the release gate is skipped:
+[run 43233376543](https://github.com/sosodennis/value-investment-agent/actions/runs/43233376543).
+
 This verifies integrated accounting boundaries. The image has no configured SEC
 identity resolution, and no complete real issuer release or numerical valuation
-is claimed. Parent CI, complete issuer/date financial policy, lawful quote,
+is claimed. Complete issuer/date financial policy, lawful quote,
 accounting/award completeness, authentic caller approval and numerical recovery
 remain required. #361/#415/#416 remain OPEN until main delivery, PR #370 remains
 draft, and `supported_history_threshold=null`. The compact
@@ -56,6 +60,21 @@ The [provider extension contract](../../fundamental-service/docs/operations-runb
 documents the existing injectable source ports. New providers reproduce common
 evidence contracts; transport, storage, selection and #352 formulas retain their
 existing owners. Generated originals and reports remain outside Git.
+
+The same production source path also admits a newly captured official 2026
+Treasury annual feed, source SHA-256
+`57cc8241f7a40ab01ec830d8112576dc44abfd145d9bbd47adc4a2c6914fde66`.
+At its actual capture cutoff `2026-11-12T14:08:50.732851Z`, the latest observed
+ten-year par yield is 4.98% on November 10. Availability starts at capture;
+an earlier cutoff refuses. Two host repeats download/write nothing. The installed
+89-source image reproduces the same selection digest
+`9d1d2cca7badd8bd041c82332acdca0d7e403931d33024cd3049126aaf2e35ba`
+before and after restart, with `wrote=false` and unchanged inventory on repeat.
+The installed replay input/output are
+`6ed09f01b08f260b5ccb35e0c7f0bdecf051d996bc142400193b22d3e4800f44` /
+`5f133b8e38311c1a538d801503f8103b027e8996aa9f545f103b23185bde29ef`.
+This is successful current-rate selection, not a 2025 historical source or a
+complete issuer market policy. No formula or source-time rule was changed.
 
 ## Observed market-rate binding checkpoint
 
@@ -223,7 +242,8 @@ records exact commands, digests, runtime pins and retained failures; raw source
 and generated reports stay outside Git. Complete automatic dated policy (#369),
 accounting/award evidence and #416, trusted release/caller approval and real
 numerical repeat/concurrency/restart/restore remain unfinished. #361/#369/#419
-remain OPEN, PR #370 draft, threshold null. #414 and #417 remain unintegrated.
+remain OPEN, PR #370 draft, threshold null. At this earlier checkpoint #414 and
+#417 were unintegrated; #414 is now integrated as recorded above.
 
 ## Free market-source and automatic approval checkpoint
 

@@ -224,6 +224,14 @@
   },
   "composite_integration_increment": {
     "change": "Ordinary merge after parent source/canary/composer review. Bind exclusion canonical role to exact accounting classes and balance-sheet side; preserve unresolved cash-capex refusals and explicit estimated working-capital scenarios.",
+    "ci": {
+      "conclusion": "success",
+      "exact_commit": "f97d2dc57c05d0b91ebcc6f540fa6719cef14ce1",
+      "passed": 12,
+      "receipt_digest": "d2b1c5bbc1656ae38ec0b39cee5af8d6b6de8a6145e526f85b49b8d2eb1a1949",
+      "release_gate": "skipped",
+      "run": 43233376543
+    },
     "exact_commit": "f45a1fad04377c7826e6d86dd4ab7cd139bf3aaa",
     "full_numerical_flow": false,
     "installed_image": {
@@ -334,7 +342,7 @@
       416
     ],
     "remaining": [
-      "Parent exact-head CI and integration recording; issues stay open until main delivery.",
+      "Integration is recorded; child issues stay open until accepted main delivery.",
       "Complete issuer/date financial policy and lawful dated quote; actual issuer accounting/award evidence and trusted complete release.",
       "Authentic exact-input caller approval; real numerical repeat/concurrency/restart/empty-store restore.",
       "Independent PR370 review, main merge and merge-SHA validation before closure and own-resource cleanup."
@@ -464,6 +472,88 @@
     "SourceUsePolicyV1",
     "SourceAdmissionV1"
   ],
+  "current_official_rate_increment": {
+    "before_availability_refusal": "MARKET_RATE_SOURCE_UNAVAILABLE",
+    "blocker": 369,
+    "exact_commit": "f97d2dc57c05d0b91ebcc6f540fa6719cef14ce1",
+    "full_numerical_flow": false,
+    "host_repeat": {
+      "artifact_writes": 0,
+      "command": "python3 .audit/issue-361-current-rate/verify_repeat.py",
+      "exit_code": 0,
+      "input_digest": "f8bd898d2376df44319ae997eb2f16d86bd93e2839ae06a272b42fc3c7d40a75",
+      "inventory_unchanged": true,
+      "output_digest": "9d51e1dd15516abb30c454d7dbba3ad9981149413f38878c80bdf5cc2be80559",
+      "process_hash_seeds": [
+        "0",
+        "761"
+      ],
+      "provider_downloads": 0,
+      "selection_calls": 0,
+      "wrote": false
+    },
+    "initial_capture": {
+      "command": "uv run --frozen --project fundamental-service python .audit/issue-361-current-rate/replay_current_rate.py",
+      "exit_code": 0,
+      "input_digest": "d282ae17a40ecc9c1c2ba69215b32eca596903e1c8256938df29dc8a0abc63a0",
+      "output_digest": "211aa8fdba6c3c1a745400724c303774491f010134846fc375380c39c72dbc0f",
+      "provider_downloads": 1
+    },
+    "installed_repeat": {
+      "command": "uv run --frozen --project fundamental-service python .audit/issue-361-current-rate/verify_installed.py",
+      "exit_code": 0,
+      "input_digest": "b3c6cd7666c03efb2ef858e11f8e71b43f2600afc30d4b06b965319dcf560855",
+      "installed_source_digest": "fd25252f5c3373425fab873f15643538d83ef397445d9cbe164ab5e596b3a167",
+      "output_digest": "b8a3f4b10ac8922ea49b76a5a54ca3225aa3b30073e0928cdd2bcc0613fc56a6",
+      "replay": {
+        "exact_commit": "f97d2dc57c05d0b91ebcc6f540fa6719cef14ce1",
+        "input_digest": "6ed09f01b08f260b5ccb35e0c7f0bdecf051d996bc142400193b22d3e4800f44",
+        "inventory_unchanged": true,
+        "output_digest": "5f133b8e38311c1a538d801503f8103b027e8996aa9f545f103b23185bde29ef",
+        "provider_downloads": 0,
+        "selected_rate": "0.0498",
+        "selection_digest": "9d1d2cca7badd8bd041c82332acdca0d7e403931d33024cd3049126aaf2e35ba",
+        "wrote": false
+      },
+      "source_count": 89
+    },
+    "installed_restart": {
+      "command": "python3 .audit/issue-361-current-rate/verify_restart.py",
+      "exit_code": 0,
+      "input_digest": "63842c6f62309c2eca3e840c00af6890bf74be93cdf12d718f32bac88d1ff52e",
+      "inventory_unchanged": true,
+      "output_digest": "991371847e62d451678ad9dc805ba31b4b15b5124f7626b01e11f80e35689181",
+      "replay": {
+        "exact_commit": "f97d2dc57c05d0b91ebcc6f540fa6719cef14ce1",
+        "input_digest": "6ed09f01b08f260b5ccb35e0c7f0bdecf051d996bc142400193b22d3e4800f44",
+        "inventory_unchanged": true,
+        "output_digest": "5f133b8e38311c1a538d801503f8103b027e8996aa9f545f103b23185bde29ef",
+        "provider_downloads": 0,
+        "selected_rate": "0.0498",
+        "selection_digest": "9d1d2cca7badd8bd041c82332acdca0d7e403931d33024cd3049126aaf2e35ba",
+        "wrote": false
+      }
+    },
+    "issue": 361,
+    "production_changes": false,
+    "remaining": [
+      "Complete source-bound issuer/date market policy and lawful quote.",
+      "Retained accounting/award completeness, trusted complete release and authentic caller approval.",
+      "Actual real numerical repeat/concurrency/restart/restore and independent PR370 review/main delivery."
+    ],
+    "scope": "Successful official current rate source admission and provider-neutral selection; not historical2025 evidence or a complete issuer policy.",
+    "selection_digest": "9d1d2cca7badd8bd041c82332acdca0d7e403931d33024cd3049126aaf2e35ba",
+    "source": {
+      "available_at": "2026-11-12T14:08:50.732851Z",
+      "captured_at": "2026-11-12T14:08:50.732851Z",
+      "observed_day": "2026-11-10T00:00:00Z",
+      "rate_fraction": "0.0498",
+      "source_sha256": "57cc8241f7a40ab01ec830d8112576dc44abfd145d9bbd47adc4a2c6914fde66",
+      "uri": "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/pages/xml?data=daily_treasury_yield_curve&field_tdr_date_value=2026",
+      "valuation_at": "2026-11-12T14:08:50.732851Z"
+    },
+    "supported_history_threshold": null
+  },
   "full_numerical_flow": false,
   "implementation_commit": "9d234fae218b16cd55817f153b13f192192c1e88",
   "installed_image": {
