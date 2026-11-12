@@ -1,4 +1,5 @@
 from dataclasses import replace
+import json
 from decimal import Decimal
 from hashlib import sha256
 from types import SimpleNamespace
@@ -128,6 +129,62 @@ def test_different_quote_evidence_changes_approval_digest_even_with_equal_shares
     assert first.preparation_digest != second.preparation_digest
 
 
+def test_signed_quote_cannot_change_price_over_unchanged_source_bytes(tmp_path):
+    fixture = _fixture(tmp_path, released=False)
+    evidence = fixture.dilution.model_copy(
+        update={
+            "quote": fixture.dilution.quote.model_copy(update={"price": Decimal(20)})
+        }
+    )
+    fixture.artifacts.put_with_receipt(f"equity-dilution:{evidence.digest}", evidence)
+    manifest = _manifest(
+        fixture,
+        tuple(
+            ref.model_copy(
+                update={
+                    "artifact_id": f"equity-dilution:{evidence.digest}",
+                    "content_hash": evidence.digest,
+                }
+            )
+            if ref.role == EQUITY_DILUTION_ARTIFACT_ROLE
+            else ref
+            for ref in fixture.manifest.artifact_refs
+        ),
+    )
+    with pytest.raises(DilutionError) as error:
+        _load(fixture, manifest=manifest)
+    assert error.value.code == "DILUTION_QUOTE_SOURCE_VALUE_MISMATCH"
+
+
+def test_quote_security_must_match_the_snapshot_identity(tmp_path):
+    fixture = _fixture(tmp_path)
+    evidence = fixture.dilution.model_copy(
+        update={
+            "quote": fixture.dilution.quote.model_copy(
+                update={"security_id": "OTHER-CLASS"}
+            )
+        }
+    )
+    artifact_id = f"equity-dilution:{evidence.digest}"
+    fixture.artifacts.put_with_receipt(artifact_id, evidence)
+    fixture.manifest = _manifest(
+        fixture,
+        tuple(
+            ref.model_copy(
+                update={"artifact_id": artifact_id, "content_hash": evidence.digest}
+            )
+            if ref.role == EQUITY_DILUTION_ARTIFACT_ROLE
+            else ref
+            for ref in fixture.manifest.artifact_refs
+        ),
+    )
+
+    with pytest.raises(DilutionError) as error:
+        _load(fixture)
+
+    assert error.value.code == "DILUTION_SNAPSHOT_MISMATCH"
+
+
 def test_legacy_release_without_award_artifact_cannot_prepare_per_share_value(tmp_path):
     fixture = _fixture(tmp_path)
     manifest = _manifest(
@@ -250,17 +307,41 @@ def test_artifact_and_quote_source_failures_are_retained(tmp_path, alteration, c
 def test_signed_candidate_with_stale_quote_refuses_before_activation(tmp_path):
     from datetime import timedelta
 
+    from fundamental_service.quote_sources import select_nasdaq_historical_close
+    from test_preparation_runner import quote_source_bytes
+
     fixture = _fixture(tmp_path, released=False)
+    from zoneinfo import ZoneInfo
+
+    stale_date = fixture.snapshot.valuation_timestamp.astimezone(
+        ZoneInfo("America/New_York")
+    ).date() - timedelta(days=10)
+    payload = json.loads(quote_source_bytes(fixture.snapshot))
+    payload["data"]["tradesTable"]["rows"][0]["date"] = stale_date.strftime("%m/%d/%Y")
+    source_bytes = canonical_bytes(payload)
+    source_uri = (
+        f"https://api.nasdaq.com/api/quote/{fixture.snapshot.identity.security_id}/historical"
+        f"?assetclass=stocks&fromdate={stale_date.isoformat()}"
+        f"&todate={(stale_date + timedelta(days=1)).isoformat()}&limit=10"
+    )
+    stale_quote = select_nasdaq_historical_close(
+        source_bytes,
+        issuer_id=fixture.snapshot.identity.issuer_id,
+        security_id=fixture.snapshot.identity.security_id,
+        source_uri=source_uri,
+        observation_date=stale_date,
+        captured_at=fixture.snapshot.valuation_timestamp,
+    )
     evidence = fixture.dilution.model_copy(
         update={
-            "quote": fixture.dilution.quote.model_copy(
-                update={
-                    "as_of": fixture.snapshot.valuation_timestamp - timedelta(days=10),
-                }
-            ),
+            "quote": stale_quote,
         }
     )
     fixture.artifacts.put_with_receipt(f"equity-dilution:{evidence.digest}", evidence)
+    quote_artifact_id = f"quote-source:{stale_quote.content_hash}"
+    fixture.artifacts.put_bytes_with_receipt(
+        quote_artifact_id, source_bytes, media_type="application/json"
+    )
     fixture.manifest = _manifest(
         fixture,
         tuple(
@@ -271,6 +352,13 @@ def test_signed_candidate_with_stale_quote_refuses_before_activation(tmp_path):
                 }
             )
             if ref.role == EQUITY_DILUTION_ARTIFACT_ROLE
+            else ref.model_copy(
+                update={
+                    "artifact_id": quote_artifact_id,
+                    "content_hash": stale_quote.content_hash,
+                }
+            )
+            if ref.role == EQUITY_QUOTE_SOURCE_ROLE
             else ref
             for ref in fixture.manifest.artifact_refs
         ),

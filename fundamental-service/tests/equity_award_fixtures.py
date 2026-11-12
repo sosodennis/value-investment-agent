@@ -2,7 +2,7 @@
 
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
-from hashlib import sha256
+from zoneinfo import ZoneInfo
 
 from fundamental_service.contracts import (
     CanonicalFactV1,
@@ -15,13 +15,34 @@ from fundamental_service.contracts import (
 )
 from fundamental_service.equity_award_evidence import EquityDilutionEvidenceV1
 from fundamental_service.equity_dilution import (
-    CommonShareQuoteV1,
     EquityAwardInventoryV1,
     RestrictedStockAwardV1,
     TreasuryStockPolicyV1,
 )
+from fundamental_service.quote_sources import select_nasdaq_historical_close
+from fundamental_service.serialization import canonical_bytes
 
-QUOTE_BYTES = b'{"price":"10","synthetic-test-only":true}'
+
+def quote_source_payload(snapshot):
+    day = snapshot.valuation_timestamp.astimezone(
+        ZoneInfo("America/New_York")
+    ).date() - timedelta(days=1)
+    return {
+        "synthetic-test-only": True,
+        "data": {
+            "symbol": snapshot.identity.security_id,
+            "totalRecords": 1,
+            "tradesTable": {
+                "headers": {"date": "Date", "close": "Close/Last"},
+                "rows": [{"date": day.strftime("%m/%d/%Y"), "close": "$10"}],
+            },
+        },
+        "status": {"rCode": 200, "bCodeMessage": None, "developerMessage": None},
+    }
+
+
+def quote_source_bytes(snapshot):
+    return canonical_bytes(quote_source_payload(snapshot))
 
 
 def award_evidence(snapshot):
@@ -82,6 +103,21 @@ def award_evidence(snapshot):
                 mapping_confidence="high",
             )
         )
+    observation_date = snapshot.valuation_timestamp.astimezone(
+        ZoneInfo("America/New_York")
+    ).date() - timedelta(days=1)
+    quote = select_nasdaq_historical_close(
+        quote_source_bytes(snapshot),
+        issuer_id=snapshot.identity.issuer_id,
+        security_id=snapshot.identity.security_id,
+        source_uri=(
+            f"https://api.nasdaq.com/api/quote/{snapshot.identity.security_id}/historical"
+            f"?assetclass=stocks&fromdate={observation_date.isoformat()}"
+            f"&todate={(observation_date + timedelta(days=1)).isoformat()}&limit=10"
+        ),
+        observation_date=observation_date,
+        captured_at=snapshot.valuation_timestamp,
+    )
     return EquityDilutionEvidenceV1(
         snapshot_manifest_digest=snapshot.manifest_digest,
         inventory=EquityAwardInventoryV1(
@@ -105,20 +141,7 @@ def award_evidence(snapshot):
                 ),
             ),
         ),
-        quote=CommonShareQuoteV1(
-            issuer_id=snapshot.identity.issuer_id,
-            security_id=snapshot.identity.security_id,
-            currency="USD",
-            price=Decimal(10),
-            source_id="synthetic-close",
-            source_uri="https://example.invalid/synthetic-close",
-            source_version="synthetic-v1",
-            terms_reference="synthetic-test-only",
-            content_hash=sha256(QUOTE_BYTES).hexdigest(),
-            as_of=snapshot.valuation_timestamp - timedelta(days=1),
-            available_at=snapshot.valuation_timestamp - timedelta(days=1),
-            captured_at=snapshot.valuation_timestamp,
-        ),
+        quote=quote,
         policy=TreasuryStockPolicyV1(
             policy_version="synthetic-treasury-stock-v1",
             max_quote_age_seconds=3 * 86400,

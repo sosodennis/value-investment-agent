@@ -18,6 +18,7 @@ from .equity_dilution import (
     _award_facts,
 )
 from .facts import canonical_fact_digest
+from .quote_sources import verify_quote_source
 from .serialization import canonical_bytes, sha256_digest
 
 EQUITY_DILUTION_ARTIFACT_ROLE: Literal["equity-dilution-evidence-v1"] = (
@@ -66,6 +67,8 @@ def verify_dilution_fact_bindings(
         or evidence.inventory.issuer_id != identity.issuer_id
         or evidence.inventory.security_id != identity.security_id
         or evidence.inventory.currency != identity.currency
+        or evidence.quote.issuer_id != identity.issuer_id
+        or evidence.quote.security_id != identity.security_id
     ):
         raise DilutionError(
             "DILUTION_SNAPSHOT_MISMATCH",
@@ -186,4 +189,5 @@ def load_release_dilution_evidence(
             "DILUTION_QUOTE_SOURCE_MISMATCH",
             "quote source bytes differ from the reviewed evidence",
         )
+    verify_quote_source(evidence.quote, raw_quote)
     return evidence

@@ -56,7 +56,11 @@ from fundamental_service.equity_award_evidence import (
     EQUITY_DILUTION_ARTIFACT_ROLE,
     EQUITY_QUOTE_SOURCE_ROLE,
 )
-from equity_award_fixtures import QUOTE_BYTES, award_evidence
+from equity_award_fixtures import (
+    award_evidence,
+    quote_source_bytes,
+    quote_source_payload,
+)
 from fundamental_service.valuation_requirements import valuation_requirements_profile
 from test_api import _release_manifest_for
 from test_postgres_metadata import DATABASE_URL, _sec_ingestion_request, _snapshot
@@ -89,7 +93,7 @@ def _fixture(
     ingestion = base.model_copy(
         update={
             "identity": base.identity.model_copy(
-                update={"security_id": f"COMMON-{namespace}"}
+                update={"security_id": f"COMMON-{namespace.upper()[:24]}"}
             ),
             "valuation_timestamp": VALUATION_TIME,
             "required_fields": required,
@@ -214,7 +218,7 @@ def _fixture(
             ),
             ArtifactRefV1(
                 artifact_id="synthetic-quote",
-                content_hash=hashlib.sha256(QUOTE_BYTES).hexdigest(),
+                content_hash=hashlib.sha256(quote_source_bytes(snapshot)).hexdigest(),
                 media_type="application/json",
                 role=EQUITY_QUOTE_SOURCE_ROLE,
             ),
@@ -240,9 +244,7 @@ def _fixture(
     )
     artifacts = ArtifactStore(tmp_path / "artifacts")
     artifacts.put_with_receipt(f"equity-dilution:{dilution.digest}", dilution)
-    artifacts.put_with_receipt(
-        "synthetic-quote", {"price": "10", "synthetic-test-only": True}
-    )
+    artifacts.put_with_receipt("synthetic-quote", quote_source_payload(snapshot))
     config = replace(
         OperationsConfig.testing(),
         release_publish_authorized_organizations=frozenset({"operators"}),
@@ -1437,16 +1439,36 @@ def test_multi_original_plan_acquires_composes_then_reuses_trusted_history(tmp_p
             "instruments": (award,),
         }
     )
+    from datetime import timedelta
+    from zoneinfo import ZoneInfo
+
+    from fundamental_service.quote_sources import select_nasdaq_historical_close
+
+    observation_date = history.valuation_timestamp.astimezone(
+        ZoneInfo("America/New_York")
+    ).date() - timedelta(days=1)
+    quote_bytes = quote_source_bytes(history)
+    quote = select_nasdaq_historical_close(
+        quote_bytes,
+        issuer_id=history.identity.issuer_id,
+        security_id=history.identity.security_id,
+        source_uri=(
+            f"https://api.nasdaq.com/api/quote/{history.identity.security_id}/historical"
+            f"?assetclass=stocks&fromdate={observation_date.isoformat()}"
+            f"&todate={(observation_date + timedelta(days=1)).isoformat()}&limit=10"
+        ),
+        observation_date=observation_date,
+        captured_at=history.valuation_timestamp,
+    )
+    quote_artifact_id = f"quote-source:{quote.content_hash}"
+    fixture.artifacts.put_bytes_with_receipt(
+        quote_artifact_id, quote_bytes, media_type="application/json"
+    )
     fixture.dilution = fixture.dilution.model_copy(
         update={
             "snapshot_manifest_digest": history.manifest_digest,
             "inventory": inventory,
-            "quote": fixture.dilution.quote.model_copy(
-                update={
-                    "issuer_id": history.identity.issuer_id,
-                    "security_id": history.identity.security_id,
-                }
-            ),
+            "quote": quote,
         }
     )
     fixture.artifacts.put_with_receipt(
@@ -1467,7 +1489,12 @@ def test_multi_original_plan_acquires_composes_then_reuses_trusted_history(tmp_p
                 role=EQUITY_DILUTION_ARTIFACT_ROLE,
             ),
             *(
-                ref
+                ref.model_copy(
+                    update={
+                        "artifact_id": quote_artifact_id,
+                        "content_hash": quote.content_hash,
+                    }
+                )
                 for ref in fixture.manifest.artifact_refs
                 if ref.role == EQUITY_QUOTE_SOURCE_ROLE
             ),
