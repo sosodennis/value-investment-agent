@@ -1,4 +1,5 @@
 import hashlib
+import json
 from datetime import date, datetime, timezone
 from decimal import Decimal
 
@@ -57,6 +58,18 @@ def test_sofr_parser_preserves_official_observation_and_capture_availability():
         (_response(day="2025-03-31"), _uri(), date(2025, 3, 28)),
         (_response("101"), _uri(), date(2025, 3, 28)),
         (b'{"refRates":[]}', _uri(), date(2025, 3, 28)),
+        (
+            json.dumps(
+                {
+                    "refRates": [
+                        *json.loads(_response())["refRates"],
+                        *json.loads(_response(day="2025-03-27"))["refRates"],
+                    ]
+                }
+            ).encode(),
+            _uri(),
+            date(2025, 3, 28),
+        ),
         (_response()[:-1] + b',"refRates":[]}', _uri(), date(2025, 3, 28)),
         (_response(), _uri("2025-03-31"), date(2025, 3, 28)),
         (
@@ -73,5 +86,16 @@ def test_sofr_parser_rejects_wrong_identity_or_ambiguous_values(raw, source_uri,
             source_uri=source_uri,
             effective_date=day,
             captured_at=datetime(2026, 11, 12, tzinfo=timezone.utc),
+        )
+    assert error.value.code == "SOFR_SOURCE_INVALID"
+
+
+def test_sofr_parser_rejects_effective_date_before_the_overnight_period_ends():
+    with pytest.raises(SnapshotError) as error:
+        parse_new_york_fed_sofr(
+            _response(),
+            source_uri=_uri(),
+            effective_date=date(2025, 3, 28),
+            captured_at=datetime(2025, 3, 28, 20, tzinfo=timezone.utc),
         )
     assert error.value.code == "SOFR_SOURCE_INVALID"

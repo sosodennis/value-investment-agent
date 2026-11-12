@@ -8,6 +8,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Literal
 from urllib.parse import parse_qs, urlsplit
+from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
@@ -36,6 +37,8 @@ class _Response(BaseModel):
 
 class SofrObservationV1(BaseModel):
     """A reproduced SOFR row; availability is conservatively the capture time."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
 
     source_id: Literal["new-york-fed-sofr"] = "new-york-fed-sofr"
     source_version: Literal["new-york-fed-markets-api-sofr-v1"] = (
@@ -86,6 +89,8 @@ def parse_new_york_fed_sofr(
             or any(len(values) != 1 for values in query.values())
             or query["startDate"] != [requested]
             or query["endDate"] != [requested]
+            or effective_date
+            >= captured_at.astimezone(ZoneInfo("America/New_York")).date()
         ):
             raise ValueError("SOFR capture does not match its source profile")
         payload = json.loads(
@@ -99,7 +104,7 @@ def parse_new_york_fed_sofr(
             for row in response.refRates
             if row.type == "SOFR" and row.effectiveDate == effective_date
         )
-        if len(matches) != 1:
+        if len(matches) != 1 or len(response.refRates) != 1:
             raise ValueError("SOFR response must contain one requested observation")
         row = matches[0]
         return SofrObservationV1(

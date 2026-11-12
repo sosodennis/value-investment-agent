@@ -36,6 +36,12 @@ def test_all_declared_free_sources_have_allowlisted_capture_contract():
 
     def opener(request, timeout):
         requests.append(request.full_url)
+        if "markets.newyorkfed.org" in request.full_url:
+            return FakeResponse(
+                b'{"refRates":[{"effectiveDate":"2025-01-03","type":"SOFR",'
+                b'"percentRate":4.33,"revisionIndicator":""}]}',
+                "application/json",
+            )
         if "api.bls.gov" in request.full_url or "home.treasury.gov" in request.full_url:
             return FakeResponse(json.dumps({"data": []}).encode(), "application/json")
         return FakeResponse(b"observation,value\n2025-01-01,1\n")
@@ -183,7 +189,9 @@ def test_sofr_capture_records_retrieval_time_without_claiming_publication_time()
     adapter = PublicSourceAdapter(
         user_agent="value-agent test@example.com",
         opener=lambda *_args, **_kwargs: FakeResponse(
-            b'{"refRates":[]}', "application/json"
+            b'{"refRates":[{"effectiveDate":"2025-01-03","type":"SOFR",'
+            b'"percentRate":4.33,"revisionIndicator":""}]}',
+            "application/json",
         ),
         min_interval_seconds=0,
     )
@@ -193,6 +201,22 @@ def test_sofr_capture_records_retrieval_time_without_claiming_publication_time()
     )
     assert source.available_at == source.captured_at
     assert source.publication_at is None
+
+
+def test_sofr_capture_refuses_invalid_observation_before_returning_a_source():
+    adapter = PublicSourceAdapter(
+        user_agent="value-agent test@example.com",
+        opener=lambda *_args, **_kwargs: FakeResponse(
+            b'{"refRates":[]}', "application/json"
+        ),
+        min_interval_seconds=0,
+    )
+    with pytest.raises(SnapshotError) as error:
+        adapter.capture(
+            "new-york-fed-sofr",
+            "https://markets.newyorkfed.org/api/rates/secured/sofr/search.json?startDate=2025-01-03&endDate=2025-01-03",
+        )
+    assert error.value.code == "SOFR_SOURCE_INVALID"
 
 
 @pytest.mark.parametrize(

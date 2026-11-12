@@ -315,6 +315,14 @@ class PublicSourceAdapter:
                 )
         payload, status, media_type, retrieved_at = self._request(uri)
         if source_id == "new-york-fed-sofr":
+            from .sofr_source import parse_new_york_fed_sofr
+
+            parse_new_york_fed_sofr(
+                payload,
+                source_uri=uri,
+                effective_date=start_date,
+                captured_at=retrieved_at,
+            )
             # Historical API responses do not establish when a value was first
             # published. Treat it as available only from this retained capture.
             available_at = retrieved_at
@@ -368,7 +376,9 @@ class PublicSourceAdapter:
             media_type=media_type or "application/octet-stream",
             http_status=status,
             available_at=available_at,
-            captured_at=retrieved_at,
+            captured_at=(
+                retrieved_at if source_id == "new-york-fed-sofr" else captured_at
+            ),
             publication_at=publication_at,
         )
 
