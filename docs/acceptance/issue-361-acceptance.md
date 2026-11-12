@@ -75,6 +75,11 @@ authentic caller approval and real numerical 19-gate acceptance remain pending.
 Unknown evidence still abstains; candidate history remains provisional/abstained,
 threshold remains null, #361 OPEN and PR #370 draft.
 
+The subsequent `automatic_mapping_operations_correction` preserves all 46
+preceding entries and aligns the runbook's policy name and accounting guidance
+with automatic semantic approval. Unsupported classifications abstain; there
+is no pending per-mapping human gate. Source and test bytes remain unchanged.
+
 ## Automatic annual disclosure checkpoint
 
 Exact implementation `91f75bb8d6b0e8868bc200afe738c101c44f588d` extends automatic

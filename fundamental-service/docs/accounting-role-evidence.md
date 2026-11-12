@@ -6,6 +6,13 @@ fact digest and policy version. `CanonicalFactV1.accounting_evidence` retains th
 rule, its exact parsed observations and resulting value. Direct observed facts
 and mappings omit these fields and preserve their existing canonical bytes.
 
+New mappings use a supported deterministic automatic policy for semantic
+approval. Unsupported classifications retain abstentions; this document does
+not create a pending human approval step. Retained independent review records
+remain an optional supported evidence path. Both paths must establish the full
+role's meaning, currency, period, scope, completeness and lack of overlap;
+structural source membership alone cannot approve a mapping.
+
 A `derived` period adds or subtracts at least two distinct source observations.
 Every component must match the same consolidated issuer, period and unit.
 Repeated observations, repeated concepts, conflicting observations, nonfinite
@@ -29,11 +36,12 @@ passage must include the applicable year and the accrued/noncurrent locations.
 The evaluator permits one paired exclusion, rejects overlapping concepts, and
 requires the resulting current portion to fit the nonnegative accrued balance.
 All numeric and passage digests join the retained source set. Original precision
-survives in the observations; no unrounded amount is inferred. Independent
-semantic review must establish the location member's meaning, matching coverage
-of the noncurrent component, completeness and remaining operating scope. This
-representation alone establishes a partial accounting relation, not a complete
-operating role. Unset scope is omitted from existing component bytes.
+survives in the observations; no unrounded amount is inferred. A supported policy
+or retained independent review must establish the location member's meaning,
+matching coverage of the noncurrent component, completeness and remaining
+operating scope. This representation alone establishes a partial accounting
+relation, not a complete operating role. Unset scope is omitted from existing
+component bytes.
 
 The lease and swap scopes are mutually exclusive on one component. Separate
 lease exclusions, swap exclusions and dated disclosure components may share a
@@ -55,9 +63,10 @@ result must be nonnegative. Missing pairs, overlaps, other bases and conflicting
 scope flags fail. The result retains the coarsest reported precision, or unknown
 precision when any source has unknown precision. The same evaluator supports
 issuer-only normalization and security-bound normalization. Unset fields preserve
-existing canonical bytes. Independent semantic review must establish that the
-original total and finance components provide complete, nonoverlapping coverage
-for the requested role. This representation does not approve that mapping.
+existing canonical bytes. A supported policy or retained independent review must
+establish that the original total and finance components provide complete,
+nonoverlapping coverage for the requested role. This representation does not
+approve that mapping.
 
 A `disclosed` duration transcribes one finite decimal literal from an exact
 nonnumeric parsed fact. `DisclosedAmountV1` retains Unicode code-point offsets
@@ -96,21 +105,23 @@ narrative remains in canonical evidence and survives persistence/restore checks.
 
 `complete_component=true` declares completeness only for the cited component;
 it cannot claim `complete_role`. Token membership validates transcription and
-date spelling, while independent semantic review must establish that the
-particular amount belongs to that date, currency and operating class, and that
-the proposed components cover the role without overlap. A comparative
-"respectively" passage requires that review; position alone cannot approve it.
+date spelling, while a supported policy or retained independent review must
+establish that the particular amount belongs to that date, currency and operating
+class, and that the proposed components cover the role without overlap. A
+comparative "respectively" passage requires that semantic decision; position
+alone cannot approve it.
 
 Source membership and deterministic scaling establish transcription only. The
-independent mapping review must establish currency, period, scope, completeness
-and overlap. For example, a rounded RSU-only cost cannot automatically supply
-total stock-based compensation. A provisional transcription stays provisional;
-it grants no release, caller approval, absence assertion or numerical valuation.
+supported policy or retained independent review must establish currency, period,
+scope, completeness and overlap. For example, a rounded RSU-only cost cannot
+automatically supply total stock-based compensation. A provisional transcription
+stays provisional; it grants no release, caller approval, absence assertion or
+numerical valuation.
 
 A `confirmed_absent` period supplies zero only with exact cited original
 nonnumeric disclosure for the same period. An exact quote establishes source
-membership, not its financial meaning. The mapping's independent semantic review
-must establish that the disclosure proves absence for this role, class and scope.
+membership, not its financial meaning. A supported policy or retained independent
+review must establish that the disclosure proves absence for this role, class and scope.
 Missing tags, silence, unquantified immateriality or generated signatures cannot
 establish absence. `unknown` and `unsupported` produce no numeric candidate;
 ingestion retains their period-specific reasons and missing evidence.

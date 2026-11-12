@@ -113,10 +113,12 @@ inventory remains missing evidence; do not manufacture zero-valued award facts.
 
 ## Automatic mapping approval
 
-Mapping approval uses Fundamental Service's `consolidated-direct-us-gaap-v1`
-policy. It handles a narrow table of direct role/QName combinations. Missing
-balances, computed partitions, awards, aggregate D&A conflicts and financial
-assumptions require other supported evidence. AI verification is future scope.
+Mapping approval uses Fundamental Service's `source-bound-us-gaap-v3` policy.
+It handles a narrow table of direct role/QName combinations and the bounded
+annual stock-compensation disclosure below. Missing balances, unsupported
+computed partitions, awards, aggregate D&A conflicts and financial assumptions
+retain abstentions until a supported policy and evidence cover them. AI
+verification is future scope.
 Human reviews remain readable historical records; they are no longer required
 for new automatic mappings.
 
@@ -198,8 +200,11 @@ The decision artifact contains the approved mapping. Existing ingestion/release
 assembly consumes it and its certificate. The release canary checks the trusted
 signature/policy, re-evaluates retained inputs and verifies that released facts
 reproduce approved observations. A signature alone cannot admit a fabricated
-mapping. This command does not activate releases, provide security authority or
-exact-input caller approval, or run a valuation. History thresholds remain null.
+mapping. Optional `security_identity` checks the exact original's historical DEI
+before producing security-bound disclosure rules. That binding does not establish
+complete economic-class or award coverage. This command does not activate
+releases, grant exact-input caller approval or run a valuation. History thresholds
+remain null.
 
 ## Sign an independent mapping review
 
