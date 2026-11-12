@@ -19,6 +19,59 @@ Eligible candidate-history valuations can be provisional. Missing, conflicting,
 unreviewed, future, or unsupported evidence must retain reasons and abstain.
 No completed #351 through #355 acceptance is changed. #350 is outside scope.
 
+## Interchangeable reference provider checkpoint
+
+Provider implementation `30dc58404cbe5a46348ec20748bb855c5a12f958` and
+owning guard correction `0b294393fdbadd41a37e721643735f74dab177f5` add
+`MarketReferenceProviderPort` for country/industry reference tables. The existing
+macro providers and new reference providers share `RetainedSourceV1` and
+`SourceArtifactV1`; every caller migrated without compatibility aliases. No
+financial formula or issuer-policy approval moves into a source adapter.
+
+The Damodaran provider retains original beta/ERP/tax table identities, exact
+binary64 or OOXML numeric encodings, displayed precision, cell locators and
+published formula caches/shared-formula metadata. It never evaluates a formula.
+BIFF values explicitly remain opaque published caches. Country tax context says
+“Looked up for 2023”; workbook update is January 2025. Neither establishes a
+current issuer tax mix. Availability uses actual retained capture; caller
+availability/publication/capture overrides fail before HTTP.
+
+At exact correction SHA, **1,623 Service/PostgreSQL tests and 160 focused source
+tests pass**, with Ruff/format, ten-source mypy, root architecture guard and diff.
+Eleven optional SEC-resource tests skip and one duplicate-ZIP warning is
+intentional. Engineering input
+`916517a23ccecdb0d50ace421a6361ae26bb805a41a6f7cfe02c7177751e82e3`, output
+`668ed23284424672ac0b6cd3ac0418981b254d9260daa4cbe751b497de0ba7da`.
+[Exact correction CI 43211471636](https://github.com/sosodennis/value-investment-agent/actions/runs/43211471636)
+passes all 12 executed jobs; release gate skipped.
+The earlier failing full run remains evidence: the service architecture guard
+scanned third-party `.venv` code. #419 restricts it to owned source roots and
+adds rejection tests for all roots/import aliases; no decoding exception is hidden.
+
+Real retained originals reproduce **96 beta rows, 158 ERP rows and 158 tax rows**;
+one ERP aggregate remains explicitly missing. Two fresh processes with different
+hash seeds preserve output
+`04daf1b4a46a61067c46738bb966b659fbfa19ee93395b7758ae370c134b3a15`.
+The second has zero provider calls/downloads/writes/new files and unchanged
+hashes, sizes and mtimes. Original corrupt-source and future-vintage failures
+remain retained.
+
+The issue-owned `value-investment-agent-361-macro-providers` stack (18683/18684)
+installs all 81 source files exactly at the correction SHA. Image
+`sha256:e06713d2ab13e429cf46d1117298a9d6908dc31d6f30e8282e81cbe18d50ed6b`
+repeats and restarts with output
+`89e3e47fc515f666cdfa0ba08ac2f093a4f9496fbf7fb9b884e2bfeccbbe61fd`;
+repeat and restart write zero files and make zero provider calls. Forty unrelated
+baseline containers remain unchanged. SEC identity resolution is disabled in
+this adapter stack: it proves source persistence, not complete numerical acceptance.
+
+[Reference provider evidence](issue-361-reference-provider-checkpoint.json)
+records exact commands, digests, runtime pins and retained failures; raw source
+and generated reports stay outside Git. Complete automatic dated policy (#369),
+accounting/award evidence and #416, trusted release/caller approval and real
+numerical repeat/concurrency/restart/restore remain unfinished. #361/#369/#419
+remain OPEN, PR #370 draft, threshold null. #414 and #417 remain unintegrated.
+
 ## Free market-source and automatic approval checkpoint
 
 `e5076f8d4dbbb7233826dc64f2eebf9a823c4dc0` removes unsupported bootstrap
