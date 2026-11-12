@@ -1,19 +1,18 @@
 import pytest
-
 from fundamental_service.classification_crosswalk import (
     ClassificationCrosswalkPolicyV1,
     IndustryCrosswalkRuleV1,
     apply_industry_crosswalk,
 )
 from fundamental_service.issuer_classification import reproduce_issuer_classification
+from fundamental_service.sec_classification_source import (
+    SecSubmissionClassificationProvider,
+)
 from fundamental_service.sec_sic_damodaran_crosswalk import (
     DAMODARAN_US_INDUSTRY_TAXONOMY,
     SEC_SIC_DAMODARAN_PROVIDER,
     SEC_SIC_DAMODARAN_VERSION,
     SecSicDamodaranIndustryCrosswalk,
-)
-from fundamental_service.sec_classification_source import (
-    SecSubmissionClassificationProvider,
 )
 from fundamental_service.snapshots import SnapshotError
 from test_issuer_classification import request, sec_submission
