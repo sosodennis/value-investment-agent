@@ -19,6 +19,47 @@ Eligible candidate-history valuations can be provisional. Missing, conflicting,
 unreviewed, future, or unsupported evidence must retain reasons and abstain.
 No completed #351 through #355 acceptance is changed. #350 is outside scope.
 
+## Complete source failure-retention checkpoint
+
+Exact implementation `d4d30a9fd3f1077e830bccf4ab0c8ef0fbd9188e` fixes
+[#412](https://github.com/sosodennis/value-investment-agent/issues/412). The runner
+now assesses every pinned original after nonretryable source/evidence failures.
+Its blocked report retains ordered request digests, accessions, snapshot/digests,
+quality, issue codes and missing evidence. Any incomplete original prevents history
+composition, release activation and calculation. Transport reuse and correlation
+metadata do not identify the evidence. Retryable/authorization failures retain
+existing propagation behavior.
+
+Thirteen retention cases fail against the previous implementation. Exact checks
+pass **1,338 Service/PostgreSQL, 56 Agent boundary and 17 acceptance-tool tests**,
+Ruff/format, mypy, both architecture guards and diff checks. Eleven optional
+resource skips and one intentional duplicate-ZIP warning remain.
+[CI](https://github.com/sosodennis/value-investment-agent/actions/runs/43152544465)
+passes all 12 executed jobs; release skips. Engineering input
+`9cfa3f9ba8a6b410a6b1849096b3f940499dddd9839c1121e1f199508e65c852`;
+output `3597d4e1a083e88a123864a92cc525e1433c0f588084da73007775d3f46e1e54`.
+
+The isolated installed project `value-investment-agent-361-source-retention`
+used ports 18676/18677 and image
+`sha256:7ee36600bf309a061a3c48e62e37f783dde835737023a8488bac26685592d862`.
+All 68 installed package files equal the exact implementation. Thirteen synthetic
+scenarios retain all three originals, including mixed failures. Complete repeats,
+Service/PostgreSQL restart and empty-store restore reproduce the same result
+digest with `wrote=false` and no repeat rows/content files. Installed input
+`659e12a85d7f94c4a19168c0ea12822c1a58b728ebe2c65748be04f1b64b25f9`;
+output `94ede089b7832d96704073a3fb72daafc98af03919e0fb9e55840319f0a4cab7`.
+The verified portable backup retains 18 tables, 53 rows and 14 content objects.
+Only this project's two containers, one network and two volumes were removed;
+all 38 baseline containers retain identity, image and start time.
+
+`complete_source_failure_retention_increment` preserves all 48 preceding entries
+and records the fixture/harness failures and corrections. This is installed runner
+failure-retention acceptance with synthetic acquisitions and real durable adapters.
+Complete real SEC numerical acceptance remains outstanding. The empty-store
+acquisition-to-automatic-mapping bootstrap still needs service orchestration;
+current source plans require pre-created mapping refs. Keep #361/#412 OPEN,
+PR #370 draft and `supported_history_threshold=null`.
+
 ## Authenticated caller approval checkpoint
 
 Exact implementation `54ff789dd3a55c71284a15130596faef4221e3ee` resolves the
