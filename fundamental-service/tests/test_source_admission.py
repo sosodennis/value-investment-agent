@@ -153,7 +153,7 @@ def test_production_catalog_never_admits_synthetic_terms():
     result = _admit(policy=free_market_source_policy())
     assert result.status == "refused"
     assert result.issue_codes == ("SOURCE_USE_TERMS_MISSING",)
-    assert result.request.policy_version == "free-market-source-use-v1"
+    assert result.request.policy_version == "free-market-source-use-v2"
 
 
 def test_unknown_or_ambiguous_trusted_rule_is_not_provider_permission():

@@ -45,7 +45,7 @@ class MarketReferenceSelectionPolicyV1(ReferenceSelectionModel):
 
     @model_validator(mode="after")
     def exact_subject(self) -> "MarketReferenceSelectionPolicyV1":
-        expected = "industry" if self.metric == "industry.unlevered_beta" else "country"
+        expected = "industry" if self.metric.startswith("industry.") else "country"
         if self.subject_kind != expected or self.subject != self.subject.strip():
             raise ValueError(
                 "reference selection requires an exact metric/subject kind"

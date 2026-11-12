@@ -13,7 +13,13 @@ from .serialization import sha256_digest
 from .source_evidence import RetainedSourceV1, SourceArtifactV1
 
 ReferenceMetric = Literal[
-    "industry.unlevered_beta", "country.equity_risk_premium", "country.tax_rate"
+    "industry.unlevered_beta",
+    "industry.equity_beta",
+    "industry.pre_tax_cost_of_debt",
+    "industry.debt_weight",
+    "industry.equity_weight",
+    "country.equity_risk_premium",
+    "country.tax_rate",
 ]
 
 
@@ -171,12 +177,12 @@ class MarketReferenceVintageV1(BaseModel):
             {x.name for x in self.context}
         ) != len(self.context):
             raise ValueError("reference context is repeated or unordered")
-        expected_unit = (
-            "multiple" if self.metric == "industry.unlevered_beta" else "fraction"
-        )
+        beta = self.metric in {"industry.unlevered_beta", "industry.equity_beta"}
+        industry = self.metric.startswith("industry.")
+        expected_unit = "multiple" if beta else "fraction"
         kinds = (
             {"industry", "aggregate"}
-            if expected_unit == "multiple"
+            if industry
             else (
                 {"country", "aggregate"}
                 if self.metric == "country.equity_risk_premium"
@@ -187,8 +193,13 @@ class MarketReferenceVintageV1(BaseModel):
             x.subject_kind not in kinds for x in self.rows
         ):
             raise ValueError("reference units or subject kinds do not match the metric")
-        if self.metric != "industry.unlevered_beta" and any(
-            row.value is not None and not Decimal(0) <= row.value < Decimal(1)
+        if not beta and any(
+            row.value is not None
+            and not (
+                Decimal(0) <= row.value <= Decimal(1)
+                if self.metric in {"industry.debt_weight", "industry.equity_weight"}
+                else Decimal(0) <= row.value < Decimal(1)
+            )
             for row in self.rows
         ):
             raise ValueError("reference numeric value is outside the metric domain")

@@ -33,6 +33,13 @@ DAMODARAN_SOURCE = "damodaran-reference"
 DAMODARAN_TERMS = "https://pages.stern.nyu.edu/~adamodar/New_Home_Page/datafile/"
 DAMODARAN_BETA_PROFILE = "damodaran-us-unlevered-beta-xls-v1"
 DAMODARAN_COUNTRY_PROFILE = "damodaran-country-erp-tax-xlsx-v1"
+DAMODARAN_CAPITAL_PROFILE = "damodaran-us-industry-capital-xls-v1"
+INDUSTRY_CAPITAL_COLUMNS: dict[ReferenceMetric, tuple[str, str]] = {
+    "industry.equity_beta": ("C", "0.00"),
+    "industry.pre_tax_cost_of_debt": ("G", "0.00%"),
+    "industry.debt_weight": ("J", "0.00%"),
+    "industry.equity_weight": ("E", "0.00%"),
+}
 
 
 def damodaran_reference_profile(uri: str) -> str:
@@ -49,6 +56,8 @@ def damodaran_reference_profile(uri: str) -> str:
         return DAMODARAN_BETA_PROFILE
     if re.fullmatch(r"/~adamodar/pc/archives/ctryprem[0-9]{2}\.xlsx", parsed.path):
         return DAMODARAN_COUNTRY_PROFILE
+    if re.fullmatch(r"/~adamodar/pc/archives/wacc[0-9]{2}\.xls", parsed.path):
+        return DAMODARAN_CAPITAL_PROFILE
     raise SnapshotError(
         "SOURCE_QUERY_INVALID", "unsupported Damodaran reference archive"
     )
@@ -246,11 +255,23 @@ def _beta_table(
         )
         for key, cell in (("tax_basis", "F8"), ("marginal_tax_raw_binary64", "F9"))
     )
+    rows = _industry_rows(sheet, digest, start=11, column="F", number_format="0.00")
+    return sheet.updated_on("B1"), rows, context
+
+
+def _industry_rows(
+    sheet: ReferenceSheet,
+    digest: str,
+    *,
+    start: int,
+    column: str,
+    number_format: str,
+) -> tuple[ReferenceRowV1, ...]:
     rows: list[ReferenceRowV1] = []
     ended = False
     aggregates = {"Total Market", "Total Market (without financials)"}
     seen_aggregates: set[str] = set()
-    for row in range(11, 1025):
+    for row in range(start, 1025):
         subject = sheet.cell(f"A{row}")
         if subject.kind == "empty" or (
             subject.kind == "text" and not subject.raw.strip()
@@ -270,17 +291,100 @@ def _beta_table(
         rows.append(
             _row(
                 sheet,
-                sheet_name=name,
+                sheet_name="Industry Averages",
                 row=row,
-                column="F",
+                column=column,
                 kind="aggregate" if aggregate else "industry",
                 source_hash=digest,
-                expected_format="0.00",
+                expected_format=number_format,
             )
         )
     if seen_aggregates != aggregates:
         raise ValueError("reference market aggregates are incomplete")
-    return sheet.updated_on("B1"), tuple(rows), context
+    return tuple(rows)
+
+
+def _capital_table(
+    raw: bytes, metric: ReferenceMetric, digest: str
+) -> tuple[date, tuple[ReferenceRowV1, ...], tuple[ReferenceContextV1, ...]]:
+    name = "Industry Averages"
+    sheet = read_reference_xls(raw, name)
+    for reference, text in (
+        ("A1", "Date updated:"),
+        ("B3", "Cost of equity and capital (updateable)"),
+        ("F3", "US companies"),
+        ("A9", "Long Term Treasury bond rate ="),
+        ("A10", "Risk Premium to Use for Equity ="),
+        ("A11", "Global Default Spread to add to cost of debt ="),
+        ("A12", "Do you want to use the marginal tax rate for cost of debt?"),
+        ("A13", "If yes, enter the marginal tax rate to use"),
+        (
+            "A15",
+            "These costs of capital are in US$. To convert to a different currency, please enter",
+        ),
+        ("A19", "Industry Name"),
+        ("B19", "Number of Firms"),
+        ("C19", "Beta"),
+        ("D19", "Cost of Equity"),
+        ("E19", "E/(D+E)"),
+        ("F19", "Std Dev in Stock"),
+        ("G19", "Cost of Debt"),
+        ("H19", "Tax Rate"),
+        ("I19", "After-tax Cost of Debt"),
+        ("J19", "D/(D+E)"),
+        ("K19", "Cost of Capital"),
+        ("L19", "Cost of Capital (Local Currency)"),
+    ):
+        _expect(sheet, reference, text)
+    definitions = read_reference_xls(raw, "Variables & FAQ")
+    for reference, text in (
+        ("A5", "Beta"),
+        ("B5", "Average regression beta across companies in the group."),
+        ("A7", "D/(D+E)"),
+        (
+            "B7",
+            "Total Debt (including lease debt)/ (Total Debt (including lease debt)+ Market Cap), "
+            "aggregated across all firms in group, with all numbers other than market cap coming "
+            "from most recent balance sheet; market cap is as of last day of the most recent year.",
+        ),
+        ("A8", "Cost of debt"),
+        (
+            "B8",
+            "Pre-tax cost of borrowing for sector, estimated based upon the standard deviation of equity.",
+        ),
+    ):
+        _expect(definitions, reference, text)
+    context = tuple(
+        ReferenceContextV1(
+            name=key,
+            raw_value=table.cell(cell).raw,
+            numeric_encoding="binary64" if encoding == "binary64" else "text",
+            number_format=table.cell(cell).number_format,
+            locator=f"{table_name}!{cell}",
+            source_sha256=digest,
+        )
+        for key, table, table_name, cell, encoding in (
+            ("beta_method", definitions, "Variables & FAQ", "B5", "text"),
+            ("capital_weight_method", definitions, "Variables & FAQ", "B7", "text"),
+            ("debt_cost_method", definitions, "Variables & FAQ", "B8", "text"),
+            ("currency_basis", sheet, name, "A15", "text"),
+            ("reference_risk_free", sheet, name, "D9", "binary64"),
+            ("reference_erp", sheet, name, "D10", "binary64"),
+            ("global_default_spread", sheet, name, "D11", "binary64"),
+            ("tax_basis", sheet, name, "F12", "text"),
+            ("reference_marginal_tax", sheet, name, "F13", "binary64"),
+        )
+    )
+    for cell in ("D9", "D10", "D11", "F13"):
+        if not 0 <= sheet.cell(cell).number() < 1:
+            raise ValueError("industry capital methodology rate is outside its domain")
+    if sheet.cell("F12").raw.strip() != "Yes":
+        raise ValueError("industry capital tax methodology changed")
+    column, number_format = INDUSTRY_CAPITAL_COLUMNS[metric]
+    rows = _industry_rows(
+        sheet, digest, start=20, column=column, number_format=number_format
+    )
+    return sheet.updated_on("B1"), rows, context
 
 
 class DamodaranReferenceProvider:
@@ -289,11 +393,15 @@ class DamodaranReferenceProvider:
     provider_id = "damodaran-public-aggregates"
 
     def supports(self, metric: ReferenceMetric) -> bool:
-        return metric in {
-            "industry.unlevered_beta",
-            "country.equity_risk_premium",
-            "country.tax_rate",
-        }
+        return (
+            metric
+            in {
+                "industry.unlevered_beta",
+                "country.equity_risk_premium",
+                "country.tax_rate",
+            }
+            or metric in INDUSTRY_CAPITAL_COLUMNS
+        )
 
     def reproduce_vintage(
         self, *, metric: ReferenceMetric, sources: tuple[RetainedSourceV1, ...]
@@ -306,12 +414,19 @@ class DamodaranReferenceProvider:
             source = sources[0]
             profile = damodaran_reference_profile(source.uri)
             beta = metric == "industry.unlevered_beta"
+            capital = metric in INDUSTRY_CAPITAL_COLUMNS
+            expected_profile = (
+                DAMODARAN_CAPITAL_PROFILE
+                if capital
+                else DAMODARAN_BETA_PROFILE
+                if beta
+                else DAMODARAN_COUNTRY_PROFILE
+            )
             if (
                 source.source_id != DAMODARAN_SOURCE
                 or source.source_version != profile
                 or source.terms_reference != DAMODARAN_TERMS
-                or profile
-                != (DAMODARAN_BETA_PROFILE if beta else DAMODARAN_COUNTRY_PROFILE)
+                or profile != expected_profile
                 or source.captured_at.tzinfo is None
                 or source.captured_at.utcoffset() is None
             ):
@@ -320,15 +435,19 @@ class DamodaranReferenceProvider:
                 )
             digest = hashlib.sha256(source.content).hexdigest()
             updated, rows, context = (
-                _beta_table(source.content, digest)
+                _capital_table(source.content, metric, digest)
+                if capital
+                else _beta_table(source.content, digest)
                 if beta
                 else _country_table(source.content, metric, digest)
             )
             captured = source.captured_at.astimezone(UTC)
             return MarketReferenceVintageV1.build(
                 metric=metric,
-                population="us-companies" if beta else "countries",
-                unit="multiple" if beta else "fraction",
+                population="us-companies" if beta or capital else "countries",
+                unit="multiple"
+                if metric in {"industry.unlevered_beta", "industry.equity_beta"}
+                else "fraction",
                 provider_id=self.provider_id,
                 source_version=source.source_version,
                 source_updated_on=updated,

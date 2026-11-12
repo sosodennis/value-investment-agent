@@ -3,6 +3,7 @@
 from .bea_source import BEA_GDP_PROFILE, BEA_GDP_TERMS, BeaNominalGdpVintageProvider
 from .damodaran_source import (
     DAMODARAN_BETA_PROFILE,
+    DAMODARAN_CAPITAL_PROFILE,
     DAMODARAN_COUNTRY_PROFILE,
     DAMODARAN_SOURCE,
     DAMODARAN_TERMS,
@@ -70,7 +71,7 @@ def free_market_source_policy() -> SourceUsePolicyV1:
             provider_id="damodaran-public-aggregates",
             metric_id=metric,
             population="us-companies"
-            if metric == "industry.unlevered_beta"
+            if metric.startswith("industry.")
             else "countries",
             source_id=DAMODARAN_SOURCE,
             source_version=profile,
@@ -94,6 +95,10 @@ def free_market_source_policy() -> SourceUsePolicyV1:
             ("country.equity_risk_premium", DAMODARAN_COUNTRY_PROFILE),
             ("country.tax_rate", DAMODARAN_COUNTRY_PROFILE),
             ("industry.unlevered_beta", DAMODARAN_BETA_PROFILE),
+            ("industry.equity_beta", DAMODARAN_CAPITAL_PROFILE),
+            ("industry.pre_tax_cost_of_debt", DAMODARAN_CAPITAL_PROFILE),
+            ("industry.debt_weight", DAMODARAN_CAPITAL_PROFILE),
+            ("industry.equity_weight", DAMODARAN_CAPITAL_PROFILE),
         )
     ]
     rules.extend(
@@ -183,6 +188,6 @@ def free_market_source_policy() -> SourceUsePolicyV1:
         )
     )
     return SourceUsePolicyV1(
-        policy_version="free-market-source-use-v1",
+        policy_version="free-market-source-use-v2",
         rules=tuple(sorted(rules, key=lambda x: x.rule_id)),
     )

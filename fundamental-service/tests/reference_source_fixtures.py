@@ -48,6 +48,101 @@ def beta_xls(*, beta: float = 1.0024856714394297, change: str = "") -> bytes:
     return output.getvalue()
 
 
+def capital_xls(*, change: str = "") -> bytes:
+    book = xlwt.Workbook()
+    sheet = book.add_sheet("Industry Averages")
+    definitions = book.add_sheet("Variables & FAQ")
+    labels = {
+        "A1": "Date updated:",
+        "B3": "Cost of equity and capital (updateable)",
+        "F3": "US companies",
+        "A9": "Long Term Treasury bond rate =",
+        "A10": "Risk Premium to Use for Equity =",
+        "A11": "Global Default Spread to add to cost of debt =",
+        "A12": "Do you want to use the marginal tax rate for cost of debt?",
+        "A13": "If yes, enter the marginal tax rate to use",
+        "A15": "These costs of capital are in US$. To convert to a different currency, please enter",
+        "A19": "Industry Name",
+        "B19": "Number of Firms",
+        "C19": "Beta",
+        "D19": "Cost of Equity",
+        "E19": "E/(D+E)",
+        "F19": "Std Dev in Stock",
+        "G19": "Cost of Debt",
+        "H19": "Tax Rate",
+        "I19": "After-tax Cost of Debt",
+        "J19": "D/(D+E)",
+        "K19": "Cost of Capital",
+        "L19": "Cost of Capital (Local Currency)",
+        "F12": "Yes",
+    }
+    if change == "header":
+        labels["G19"] = "After-tax Cost of Debt"
+    if change == "currency":
+        labels["A15"] = "These costs of capital are in euros"
+    if change == "population":
+        labels["F3"] = "Global companies"
+    if change == "tax_basis":
+        labels["F12"] = "No"
+    for ref, text in labels.items():
+        sheet.write(int(ref[1:]) - 1, ord(ref[0]) - ord("A"), text)
+    sheet.write(
+        0,
+        1,
+        datetime(2027 if change == "future" else 2025, 1, 5),
+        xlwt.easyxf(num_format_str="M/D/YY"),
+    )
+    for row, col, value in ((8, 3, 0.0458), (9, 3, 0.0433), (10, 3, 0), (12, 5, 0.25)):
+        sheet.write(row, col, 2.0 if change == "context_domain" else value)
+    for row, name in (
+        (19, "Retail (Special Lines)"),
+        (20, "Missing industry"),
+        (21, "Total Market"),
+        (22, "Total Market (without financials)"),
+    ):
+        if change == "gap" and row == 20:
+            continue
+        sheet.write(
+            row,
+            0,
+            "Retail (Special Lines)" if change == "duplicate" and row == 20 else name,
+        )
+        if row == 20:
+            continue
+        for col, value in (
+            (2, 1.23),
+            (3, 0.98),
+            (4, 0.775),
+            (6, 0.0578),
+            (8, 0.04335),
+            (9, 0.225),
+        ):
+            if change == "domain" and col == 9:
+                value = 1.01
+            style = "0.00" if col == 2 else "0.00%"
+            if change == "precision" and col == 6:
+                style = "0.000%"
+            sheet.write(row, col, value, xlwt.easyxf(num_format_str=style))
+    for row, variable, method in (
+        (4, "Beta", "Average regression beta across companies in the group."),
+        (
+            6,
+            "D/(D+E)",
+            "Total Debt (including lease debt)/ (Total Debt (including lease debt)+ Market Cap), aggregated across all firms in group, with all numbers other than market cap coming from most recent balance sheet; market cap is as of last day of the most recent year.",
+        ),
+        (
+            7,
+            "Cost of debt",
+            "Pre-tax cost of borrowing for sector, estimated based upon the standard deviation of equity.",
+        ),
+    ):
+        definitions.write(row, 0, variable)
+        definitions.write(row, 1, "Different method" if change == "method" else method)
+    output = BytesIO()
+    book.save(output)
+    return output.getvalue()
+
+
 def country_xlsx(*, change: str = "") -> bytes:
     def text(ref: str, value: str) -> str:
         return f'<c r="{ref}" t="inlineStr"><is><t>{escape(value)}</t></is></c>'
