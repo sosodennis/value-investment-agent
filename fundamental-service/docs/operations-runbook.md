@@ -275,7 +275,7 @@ The canonical receipt reports input/output digests and `wrote`; repeats preserve
 all artifact bytes and publication identities. Batch reports depend on every
 referenced child decision and approval digest.
 
-Policy `source-bound-us-gaap-v2` adds one bounded accounting disclosure case:
+Policy `source-bound-us-gaap-v3` supports one bounded accounting disclosure case:
 an annual consolidated USD share-compensation text fact containing the exact
 sentence `Stock-based compensation expense was $<integer> in fiscal <year>
 and $<integer> in fiscal <prior-year>.` The current year must equal that original
@@ -286,6 +286,17 @@ through the existing accounting-role evaluator. It does not assign a duration
 to the comparative amount. Unknown phrasing, partial expense, scaled/rounded
 amounts, conflicting disclosures, foreign/dimensional/future evidence abstain.
 This supplies annual expense only; award inventory and dilution remain separate.
+
+The optional `security_identity` on single and batch requests must reproduce the
+existing historical DEI identity check against the exact original, including
+issuer, paired ticker/share class, domicile, report period and USD GAAP scope.
+It does not consult a current ticker directory. Successful disclosure decisions
+then use the existing security-bound accounting rule contract. Missing or
+conflicting identity evidence abstains without a certificate. Omitting the field
+preserves issuer-only input bytes and rules; such rules cannot be consumed as
+security-bound evidence. Neither mode proves complete economic share classes,
+award coverage, market policy or release readiness. Record and trust the new
+executable policy digest before running this version.
 
 The release canary reproduces the policy evaluation and accounting facts before
 accepting machine approval. Unsupported classifications and absence claims still

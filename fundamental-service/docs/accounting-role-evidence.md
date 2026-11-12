@@ -70,10 +70,13 @@ precision survives candidate selection and canonical fact decoding. Existing
 rules omit the unset transcription field and keep their canonical bytes.
 
 The unscaled `$` token is also valid when it is the exact unit and scale marker
-for a USD integer. Automatic policy `source-bound-us-gaap-v2` admits only the
+for a USD integer. Automatic policy `source-bound-us-gaap-v3` admits only the
 bounded annual total stock-compensation sentence documented in the operations
-runbook. It builds the existing issuer-bound `disclosed` rule; the release canary
-reproduces the sentence selection and amount. No human reviewer is impersonated.
+runbook. It builds the existing issuer-bound `disclosed` rule, or a security-bound
+rule when the optional input identity passes the existing exact original DEI
+validator. The release canary reproduces the identity check, sentence selection
+and amount. Source reconstruction still rejects an issuer-only rule used as
+security evidence, and rejects a different security. No human reviewer is impersonated.
 Other accounting/absence classifications still need a supported policy decision
 or retained authentic review. This rule authorizes annual expense, not awards.
 

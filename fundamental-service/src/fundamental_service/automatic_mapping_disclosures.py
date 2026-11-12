@@ -8,6 +8,8 @@ import re
 from .accounting_roles import (
     AccountingPeriodRuleV1,
     AccountingPeriodV1,
+    AccountingRoleRules,
+    AccountingRoleRuleSetV1,
     DisclosedAmountV1,
     IssuerAccountingRoleRuleSetV1,
 )
@@ -31,7 +33,7 @@ _EXPENSE = re.compile(
 
 @dataclass(frozen=True)
 class StockCompensationDisclosureSelection:
-    rules: IssuerAccountingRoleRuleSetV1 | None
+    rules: AccountingRoleRules | None
     selected: tuple[ParsedXbrlFactV1, ...]
     rejected: tuple[tuple[ParsedXbrlFactV1, str], ...]
     reason_codes: tuple[str, ...]
@@ -39,6 +41,8 @@ class StockCompensationDisclosureSelection:
 
 def select_stock_compensation_disclosure(
     original: OriginalIssuerEvidenceV1,
+    *,
+    security_id: str | None = None,
 ) -> StockCompensationDisclosureSelection:
     """Admit only a complete exact sentence for the text fact's own annual period."""
     selected: list[tuple[ParsedXbrlFactV1, AccountingPeriodRuleV1]] = []
@@ -117,7 +121,7 @@ def select_stock_compensation_disclosure(
         > 1
     ):
         reasons.append("MAPPING_OBSERVATION_CONFLICT")
-    rules = None
+    rules: AccountingRoleRules | None = None
     if not reasons:
         rules = IssuerAccountingRoleRuleSetV1(
             policy_version=STOCK_COMPENSATION_DISCLOSURE_POLICY,
@@ -131,6 +135,13 @@ def select_stock_compensation_disclosure(
             currency="USD",
             periods=(selected[0][1],),
         )
+        if security_id is not None:
+            rules = AccountingRoleRuleSetV1.model_validate(
+                {
+                    **rules.model_dump(exclude={"protocol", "security_id"}),
+                    "security_id": security_id,
+                }
+            )
     return StockCompensationDisclosureSelection(
         rules=rules,
         selected=tuple(fact for fact, _ in selected),

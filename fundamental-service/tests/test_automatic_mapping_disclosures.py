@@ -30,7 +30,7 @@ SENTENCE = (
 )
 
 
-def expense_case(tmp_path, *, text=None, changes=None, conflict=False):
+def expense_case(tmp_path, *, text=None, changes=None, conflict=False, extra_facts=()):
     request, _, _, _ = case(tmp_path / "base")
     base = next(
         fact
@@ -48,7 +48,7 @@ def expense_case(tmp_path, *, text=None, changes=None, conflict=False):
             **(changes or {}),
         }
     )
-    extra = (disclosure,)
+    extra = (disclosure, *extra_facts)
     if conflict:
         extra += (
             disclosure.model_copy(

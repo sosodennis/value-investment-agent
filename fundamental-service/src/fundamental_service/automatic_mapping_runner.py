@@ -214,6 +214,7 @@ def approve_mapping_batch(
             original=request.original,
             integrity=request.integrity,
             evidence_refs=request.evidence_refs,
+            security_identity=request.security_identity,
             proposal=proposal,
         )
         receipt = approve_mapping(

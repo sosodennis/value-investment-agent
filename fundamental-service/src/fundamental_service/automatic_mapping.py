@@ -16,7 +16,7 @@ from .automatic_mapping_disclosures import (
     select_stock_compensation_disclosure,
     STOCK_COMPENSATION_DISCLOSURE,
 )
-from .contracts import SecIntegrityEvidenceV1
+from .contracts import IdentityV1, SecIntegrityEvidenceV1
 from .data_releases import (
     ArtifactRefV1,
     AutomaticMappingApprovalV1,
@@ -25,12 +25,13 @@ from .data_releases import (
 )
 from .facts import CanonicalMappingV1, MappingObservationScopeV1
 from .issuer_release_evidence import verify_original_bytes, verify_original_integrity
+from .issuer_identity import IdentityResolutionError, validate_original_filing_identity
 from .original_issuer import OriginalIssuerEvidenceV1
 from .serialization import sha256_digest
 from .taxonomy_evidence import require_original_taxonomy
 
 AUTOMATIC_MAPPING_INPUT_ROLE = "automatic-mapping-input-v1"
-AUTOMATIC_MAPPING_POLICY: Literal["source-bound-us-gaap-v2"] = "source-bound-us-gaap-v2"
+AUTOMATIC_MAPPING_POLICY: Literal["source-bound-us-gaap-v3"] = "source-bound-us-gaap-v3"
 _GAAP_NAMESPACE = re.compile(
     r"http://(?:fasb\.org|xbrl\.us)/us-gaap/\d{4}(?:-\d{2}-\d{2})?"
 )
@@ -110,6 +111,7 @@ def automatic_mapping_policy_digest() -> str:
                     "facts.py",
                     "sec_rebuild.py",
                     "issuer_release_evidence.py",
+                    "issuer_identity.py",
                     "original_issuer.py",
                     "regulatory_validation.py",
                     "sec_integrity.py",
@@ -127,6 +129,9 @@ class AutomaticMappingSourceV1(ReleaseModel):
     original: OriginalIssuerEvidenceV1
     integrity: SecIntegrityEvidenceV1
     evidence_refs: tuple[ArtifactRefV1, ...] = Field(min_length=1)
+    security_identity: IdentityV1 | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
 
     @model_validator(mode="after")
     def evidence_is_canonical(self) -> AutomaticMappingSourceV1:
@@ -180,7 +185,7 @@ class AutomaticMappingDecisionV1(ReleaseModel):
     input_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
     source_revision: str = Field(pattern=r"^[0-9a-f]{40}$")
     evaluator_id: str = Field(min_length=1)
-    policy_version: Literal["source-bound-us-gaap-v2"] = AUTOMATIC_MAPPING_POLICY
+    policy_version: Literal["source-bound-us-gaap-v3"] = AUTOMATIC_MAPPING_POLICY
     policy_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
     status: Literal["approved", "abstain"]
     reason_codes: tuple[str, ...]
@@ -289,6 +294,17 @@ def evaluate_automatic_mapping(
         verify_original_bytes(request.integrity, contents)
     except DataReleaseError as error:
         reasons.add(error.code)
+    if request.security_identity is not None:
+        try:
+            validate_original_filing_identity(
+                request.security_identity,
+                cik=original.source.cik,
+                ticker=request.security_identity.security_id,
+                accepted_at=original.source.available_at,
+                facts=original.report.facts,
+            )
+        except IdentityResolutionError as error:
+            reasons.add(error.code)
     rule = _RULES.get(proposal.normalized_field)
     disclosed = (
         proposal.normalized_field == "stock_based_compensation"
@@ -305,7 +321,14 @@ def evaluate_automatic_mapping(
     rejected: list[MappingObservationRejectionV1] = []
     accounting_rules = None
     if disclosed:
-        disclosure = select_stock_compensation_disclosure(original)
+        disclosure = select_stock_compensation_disclosure(
+            original,
+            security_id=(
+                request.security_identity.security_id
+                if request.security_identity is not None
+                else None
+            ),
+        )
         reasons.update(disclosure.reason_codes)
         selected.extend(disclosure.selected)
         accounting_rules = disclosure.rules
