@@ -40,7 +40,8 @@ canonical serialization. The command first resolves released evidence. On a miss
 it uses existing SEC acquisition and retention; an already stored snapshot can be
 used with `--candidate <trusted-candidate.json>` without another acquisition.
 Candidate publication and activation require the configured organizations, release
-verification and independent mapping review signatures. This command does not
+verification and trusted automatic mapping approval or retained human review.
+This command does not
 create review signatures or approve new mappings.
 
 Reuse also checks the plan's mapping decision IDs, versions and financial roles
@@ -60,6 +61,15 @@ sufficiency remains the formal #352 composer's decision.
 observations, source-bound accounting classifications, explicitly reviewed absence
 and unresolved roles. It preserves the original observations and existing release
 review/approval boundaries.
+
+`fundamental-approve-mapping` evaluates retained SEC originals using the
+versioned machine policy and a deployment-owned Ed25519 key. A complete
+`AutomaticMappingBatchRequestV1` generates every exact model role, retaining
+approved and abstained decisions in canonical order. The source evidence,
+policy digest and trusted evaluator must match; repeated commands reuse the
+same artifacts. [Automatic approval policy](docs/operations-runbook.md#automatic-mapping-approval)
+documents the command and supported disclosure limits. AI verification remains
+future work.
 
 The canonical JSON receipt contains an artifact reference and `wrote`. Read its
 metadata and bytes through the authenticated `/v1/artifacts/{artifact_id}` and

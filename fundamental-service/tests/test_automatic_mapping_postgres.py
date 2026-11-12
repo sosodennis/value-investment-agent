@@ -8,6 +8,7 @@ import subprocess
 import sys
 
 from cryptography.hazmat.primitives import serialization
+import pytest
 
 from fundamental_service.automatic_mapping import AutomaticMappingDecisionV1
 from fundamental_service.automatic_mapping_runner import approve_mapping
@@ -19,14 +20,16 @@ from fundamental_service.metadata import (
 from fundamental_service.persistence_recovery import export_backup, restore_backup
 from fundamental_service.serialization import canonical_bytes
 from test_automatic_mapping import case, MACHINE_KEY, REVISION
+from test_automatic_mapping_disclosures import expense_case
 from test_issuer_operating_release import inventory
 
 
+@pytest.mark.parametrize("request_factory", (case, expense_case))
 def test_machine_approval_cli_restart_and_empty_store_restore(
-    tmp_path, recovery_databases
+    tmp_path, recovery_databases, request_factory
 ):
     source_db, target_db = recovery_databases
-    request, offline, roots, _ = case(tmp_path)
+    request, offline, roots, _ = request_factory(tmp_path)
     request_path = tmp_path / "request.json"
     request_path.write_bytes(canonical_bytes(request))
     roots_path = tmp_path / "roots.json"
@@ -128,7 +131,11 @@ def test_machine_approval_cli_restart_and_empty_store_restore(
         decision = AutomaticMappingDecisionV1.model_validate_json(
             artifacts.read(expected.decision_publication.artifact.artifact_id)
         )
-        assert decision.status == "approved" and decision.mapping.observation_scope
+        assert decision.status == "approved"
+        assert (
+            decision.mapping.observation_scope is not None
+            or decision.mapping.accounting_rules is not None
+        )
         for ref in request.evidence_refs:
             assert artifacts.read(ref.artifact_id) == offline.read(ref.artifact_id)
     finally:

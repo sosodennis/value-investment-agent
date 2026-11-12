@@ -69,6 +69,14 @@ dimensional disclosures and partial-role amounts remain unsupported. Reported
 precision survives candidate selection and canonical fact decoding. Existing
 rules omit the unset transcription field and keep their canonical bytes.
 
+The unscaled `$` token is also valid when it is the exact unit and scale marker
+for a USD integer. Automatic policy `source-bound-us-gaap-v2` admits only the
+bounded annual total stock-compensation sentence documented in the operations
+runbook. It builds the existing issuer-bound `disclosed` rule; the release canary
+reproduces the sentence selection and amount. No human reviewer is impersonated.
+Other accounting/absence classifications still need a supported policy decision
+or retained authentic review. This rule authorizes annual expense, not awards.
+
 A derived instant may combine numeric components with a
 `DatedDisclosureComponentV1`. This explicitly typed component transcribes one
 partial-role amount from an original annual duration passage, using the same

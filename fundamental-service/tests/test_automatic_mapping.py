@@ -51,12 +51,19 @@ REVISION = "a" * 40
 EVALUATOR = "synthetic-automatic-mapper"
 
 
-def case(tmp_path, *, observation_changes=None, proposal_changes=None, extra=()):
+def case(
+    tmp_path,
+    *,
+    observation_changes=None,
+    proposal_changes=None,
+    extra=(),
+    normalize_revenue=True,
+):
     bundle, _, evidence, roots, _ = fixture(tmp_path)
     original = bundle.sources[0].originals[0]
     facts = tuple(
         fact.model_copy(update={"concept": "us-gaap:Revenues"})
-        if fact.concept == "us-gaap:revenue"
+        if normalize_revenue and fact.concept == "us-gaap:revenue"
         else fact
         for fact in original.report.facts
     )
@@ -375,8 +382,16 @@ def test_signed_approval_must_reproduce_policy_decision(tmp_path):
     assert error.value.code == "DATA_RELEASE_MAPPING_POLICY_UNTRUSTED"
 
 
-def test_automatic_mapping_passes_existing_release_and_read_only_canary(tmp_path):
-    request, store, roots, bundle = case(tmp_path)
+@pytest.mark.parametrize("disclosure", (False, True))
+def test_automatic_mapping_canary_rechecks_policy_and_required_profile(
+    tmp_path, disclosure
+):
+    if disclosure:
+        from test_automatic_mapping_disclosures import expense_case
+
+        request, store, roots, bundle = expense_case(tmp_path)
+    else:
+        request, store, roots, bundle = case(tmp_path)
     receipt = approve(request, store, roots)
     decision = evaluate(request, store)
     approval = AutomaticMappingApprovalV1.model_validate_json(
@@ -389,7 +404,11 @@ def test_automatic_mapping_passes_existing_release_and_read_only_canary(tmp_path
         sorted(
             (
                 decision.mapping,
-                *(m for m in bundle.mappings if m.normalized_field != "revenue"),
+                *(
+                    m
+                    for m in bundle.mappings
+                    if m.normalized_field != request.proposal.normalized_field
+                ),
             ),
             key=lambda m: m.decision_id,
         )
@@ -446,9 +465,17 @@ def test_automatic_mapping_passes_existing_release_and_read_only_canary(tmp_path
     service = IssuerOperatingReleaseService(
         releases=releases, evidence=store, trust_roots=roots
     )
-    assert service.publish(changed).wrote
     before = inventory(releases.root), inventory(store.root)
-    assert not service.publish(changed).wrote
+    if disclosure:
+        # This operating-only profile does not authorize the additional expense role.
+        for _ in range(2):
+            with pytest.raises(DataReleaseError) as error:
+                service.publish(changed)
+            assert error.value.code == "DATA_RELEASE_FIELDS_UNAVAILABLE"
+    else:
+        assert service.publish(changed).wrote
+        before = inventory(releases.root), inventory(store.root)
+        assert not service.publish(changed).wrote
     assert before == (inventory(releases.root), inventory(store.root))
     forged_approval = sign_automatic_mapping_approval(
         {**approval.model_dump(exclude={"signature"}), "output_digest": "f" * 64},

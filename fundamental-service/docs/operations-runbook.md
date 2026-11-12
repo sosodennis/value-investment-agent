@@ -254,6 +254,44 @@ release, approve financial policy, supply caller approval, or verify an estimate
 history threshold. Continue with the existing signed release verification and
 canary workflow; an authentic signature alone does not establish those gates.
 
+### Automatic mapping approval
+
+`fundamental-approve-mapping` uses the configured service database and content
+root, with `--artifacts-root` available for an explicitly offline evidence store:
+
+```sh
+fundamental-approve-mapping \
+  --request /preparation/automatic-mapping-batch.json \
+  --trust-roots /run/config/data-release-trust-roots.json \
+  --private-key /run/secrets/automatic-mapping.pem
+```
+
+The key must match the request's trusted automatic evaluator and current
+`--print-policy-digest`. It does not represent a person. The batch request pins
+the implementation revision, exact original/integrity/evidence references,
+mapping version, model version and service-owned requirements. It retains every
+required and supporting role once, including unsupported and missing roles.
+The canonical receipt reports input/output digests and `wrote`; repeats preserve
+all artifact bytes and publication identities. Batch reports depend on every
+referenced child decision and approval digest.
+
+Policy `source-bound-us-gaap-v2` adds one bounded accounting disclosure case:
+an annual consolidated USD share-compensation text fact containing the exact
+sentence `Stock-based compensation expense was $<integer> in fiscal <year>
+and $<integer> in fiscal <prior-year>.` The current year must equal that original
+text fact's annual period end; the comparison must be the preceding year.
+The service transcribes only the current-period amount, preserving the exact
+sentence, offsets, dollar unit, unscaled integer precision and source digest
+through the existing accounting-role evaluator. It does not assign a duration
+to the comparative amount. Unknown phrasing, partial expense, scaled/rounded
+amounts, conflicting disclosures, foreign/dimensional/future evidence abstain.
+This supplies annual expense only; award inventory and dilution remain separate.
+
+The release canary reproduces the policy evaluation and accounting facts before
+accepting machine approval. Unsupported classifications and absence claims still
+abstain; a machine signature does not fill evidence gaps. Release verification,
+authentic caller approval, numerical acceptance and PR review remain required.
+
 ## Recovery checks
 
 ### Export and restore the persistent data plane

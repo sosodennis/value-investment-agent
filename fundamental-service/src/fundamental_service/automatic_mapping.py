@@ -12,6 +12,10 @@ from typing import Literal, Protocol
 from pydantic import Field, model_validator
 
 from .arelle_parser import ParsedXbrlFactV1
+from .automatic_mapping_disclosures import (
+    select_stock_compensation_disclosure,
+    STOCK_COMPENSATION_DISCLOSURE,
+)
 from .contracts import SecIntegrityEvidenceV1
 from .data_releases import (
     ArtifactRefV1,
@@ -26,9 +30,7 @@ from .serialization import sha256_digest
 from .taxonomy_evidence import require_original_taxonomy
 
 AUTOMATIC_MAPPING_INPUT_ROLE = "automatic-mapping-input-v1"
-AUTOMATIC_MAPPING_POLICY: Literal["consolidated-direct-us-gaap-v1"] = (
-    "consolidated-direct-us-gaap-v1"
-)
+AUTOMATIC_MAPPING_POLICY: Literal["source-bound-us-gaap-v2"] = "source-bound-us-gaap-v2"
 _GAAP_NAMESPACE = re.compile(
     r"http://(?:fasb\.org|xbrl\.us)/us-gaap/\d{4}(?:-\d{2}-\d{2})?"
 )
@@ -102,6 +104,8 @@ def automatic_mapping_policy_digest() -> str:
                 name: hashlib.sha256((root / name).read_bytes()).hexdigest()
                 for name in (
                     "automatic_mapping.py",
+                    "automatic_mapping_disclosures.py",
+                    "accounting_roles.py",
                     "arelle_parser.py",
                     "facts.py",
                     "sec_rebuild.py",
@@ -144,11 +148,16 @@ def automatic_mapping_proposal(
 ) -> CanonicalMappingV1 | None:
     """Create only proposals supported by the service's executable rule table."""
     rule = _RULES.get(normalized_field)
-    if rule is None:
+    disclosed = normalized_field == "stock_based_compensation"
+    if rule is None and not disclosed:
         return None
+    concept = STOCK_COMPENSATION_DISCLOSURE
+    if not disclosed:
+        assert rule is not None
+        concept = rule.concept
     payload = {
         "contract_version": "fundamental.v1",
-        "source_concept": rule.concept,
+        "source_concept": concept,
         "normalized_field": normalized_field,
         "mapping_version": mapping_version,
         "confidence": "unresolved",
@@ -171,7 +180,7 @@ class AutomaticMappingDecisionV1(ReleaseModel):
     input_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
     source_revision: str = Field(pattern=r"^[0-9a-f]{40}$")
     evaluator_id: str = Field(min_length=1)
-    policy_version: Literal["consolidated-direct-us-gaap-v1"] = AUTOMATIC_MAPPING_POLICY
+    policy_version: Literal["source-bound-us-gaap-v2"] = AUTOMATIC_MAPPING_POLICY
     policy_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
     status: Literal["approved", "abstain"]
     reason_codes: tuple[str, ...]
@@ -185,7 +194,10 @@ class AutomaticMappingDecisionV1(ReleaseModel):
             if (
                 self.mapping is None
                 or self.mapping.status != "approved"
-                or self.mapping.observation_scope is None
+                or (
+                    self.mapping.observation_scope is None
+                    and self.mapping.accounting_rules is None
+                )
                 or self.reason_codes
             ):
                 raise ValueError("approved decisions require an exact scoped mapping")
@@ -278,18 +290,33 @@ def evaluate_automatic_mapping(
     except DataReleaseError as error:
         reasons.add(error.code)
     rule = _RULES.get(proposal.normalized_field)
+    disclosed = (
+        proposal.normalized_field == "stock_based_compensation"
+        and proposal.source_concept == STOCK_COMPENSATION_DISCLOSURE
+    )
     if (
-        rule is None
-        or proposal.source_concept != rule.concept
+        (not disclosed and (rule is None or proposal.source_concept != rule.concept))
         or proposal.accounting_rules is not None
         or proposal.observation_scope is not None
         or proposal.status != "provisional"
     ):
         reasons.add("MAPPING_AUTOMATIC_RULE_UNSUPPORTED")
     selected: list[ParsedXbrlFactV1] = []
-    rejected = []
+    rejected: list[MappingObservationRejectionV1] = []
+    accounting_rules = None
+    if disclosed:
+        disclosure = select_stock_compensation_disclosure(original)
+        reasons.update(disclosure.reason_codes)
+        selected.extend(disclosure.selected)
+        accounting_rules = disclosure.rules
+        rejected.extend(
+            MappingObservationRejectionV1(
+                observation_digest=sha256_digest(fact), reason_code=reason
+            )
+            for fact, reason in disclosure.rejected
+        )
     for fact in sorted(original.report.facts, key=sha256_digest):
-        if fact.concept != proposal.source_concept:
+        if disclosed or fact.concept != proposal.source_concept:
             continue
         reason = (
             "MAPPING_AUTOMATIC_RULE_UNSUPPORTED"
@@ -307,24 +334,30 @@ def evaluate_automatic_mapping(
     if not selected:
         reasons.add("MAPPING_NO_ELIGIBLE_OBSERVATIONS")
     periods: dict[tuple[object, ...], set[Decimal]] = {}
-    for fact in selected:
+    for fact in () if disclosed else selected:
         key = (fact.period_start, fact.period_end, fact.instant)
         periods.setdefault(key, set()).add(Decimal(fact.value))
     if any(len(values) != 1 for values in periods.values()):
         reasons.add("MAPPING_OBSERVATION_CONFLICT")
     mapping = None
     if not reasons:
-        scope = MappingObservationScopeV1(
-            issuer_id=original.source.cik,
-            accession_number=original.source.accession_number,
-            raw_content_hash=original.source.content_hash,
-            parser_input_hash=original.source.parser_input_hash,
-            parser_replay_digest=original.report.replay_digest(),
-            observation_digests=tuple(sorted({sha256_digest(f) for f in selected})),
+        scope = (
+            None
+            if disclosed
+            else MappingObservationScopeV1(
+                issuer_id=original.source.cik,
+                accession_number=original.source.accession_number,
+                raw_content_hash=original.source.content_hash,
+                parser_input_hash=original.source.parser_input_hash,
+                parser_replay_digest=original.report.replay_digest(),
+                observation_digests=tuple(sorted({sha256_digest(f) for f in selected})),
+            )
         )
-        payload = {
+        payload: dict[str, object] = {
             "contract_version": "fundamental.v1",
-            "source_concept": proposal.source_concept,
+            "source_concept": f"computed:{proposal.normalized_field}"
+            if disclosed
+            else proposal.source_concept,
             "normalized_field": proposal.normalized_field,
             "mapping_version": proposal.mapping_version,
             "confidence": "high",
@@ -337,6 +370,13 @@ def evaluate_automatic_mapping(
             ),
             "observation_scope": scope,
         }
+        if disclosed:
+            payload.update(
+                {
+                    "anchor_concept": STOCK_COMPENSATION_DISCLOSURE,
+                    "accounting_rules": accounting_rules,
+                }
+            )
         mapping = CanonicalMappingV1.model_validate(
             {**payload, "decision_id": "automatic-mapping-" + sha256_digest(payload)}
         )

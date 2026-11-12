@@ -117,6 +117,7 @@ class DisclosedValueV1(RoleModel):
     )
     scale_start: int = Field(ge=0)
     scale_token: Literal[
+        "$",
         "dollars",
         "shares",
         "thousand",
@@ -136,6 +137,7 @@ class DisclosedValueV1(RoleModel):
     @model_validator(mode="after")
     def transcription_is_consistent(self) -> DisclosedValueV1:
         scales = {
+            "$": 0,
             "dollars": 0,
             "shares": 0,
             "thousand": 3,
