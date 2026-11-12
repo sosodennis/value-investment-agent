@@ -70,6 +70,35 @@ lawful quote and accounting/award scope, trusted complete release, authentic
 caller approval, numerical recovery and PR/main verification. Threshold stays
 null; #361/#369 OPEN; #370 draft.
 
+## Terminal policy and canary authority correction
+
+Implementation `0ccc17ca733cc0a7187da1c16014532d4643577d` fixes a reviewed
+canary gap. At prior evidence `f46c0c1b`, a missing terminal plan plus two
+same-issuer/same-effective-date policies produced a passing canary with no market
+checks because `POLICY_AMBIGUOUS` was swallowed. The retained counterexample
+input/output are
+`d98e4a2517cd648e196046763559737cf63dc0654e753a7747d53ac142090729` /
+`ea010ae649894e79f1da4a159442a1f6e58cac3097b9793ea6abb74ce823af91`.
+
+The canary now ignores only `POLICY_NOT_FOUND`; ambiguous/ineligible authority
+refuses, and policies scoped to another issuer are excluded before lookup.
+Regression tests also confirm preparation refuses on the same ambiguous/missing
+release. Exact validation passes **1,823 Service/PostgreSQL tests**, Ruff/format,
+six-source mypy, architecture and diff;11 optional SEC-resource skips and one
+intentional ZIP warning remain. CI43252528781 passes all12 executed jobs; the
+release gate remains skipped. [Compact checkpoint](issue-361-source-admission-checkpoint.json)
+contains exact commands, input/output digests and prior failure evidence.
+
+The own18685/18686 image matches all93 installed sources at this commit. The
+retained synthetic packet has19 explicit refusals. Second, concurrent, post-restart
+and missing-plan/ambiguous-authority executions have identical output digest,
+zero evidence writes, `wrote=false` and unchanged inventories;42 unrelated
+containers are unchanged. Installed wrapper input/output:
+`dfdb87d670decdd78d4800564ad219e695c038f6a7bff495bf21c9cbfe4fa904` /
+`53e5ae90eb5c7b6b51c6832245248293a882d059ce762f1df8d5132f88268026`.
+This is synthetic policy-boundary acceptance, not complete real numerical
+valuation. Threshold remains null; #361/#369 OPEN and #370 draft.
+
 ## Issuer ERP source selection checkpoint
 
 Implementation `94fe0386268a12115a965a40a04081992151ae42` binds one canonical
