@@ -21,7 +21,45 @@ No completed #351 through #355 acceptance is changed. #350 is outside scope.
 GitHub #351 and #352 are CLOSED; #352's merged Fundamental Service composer is
 the runtime valuation owner, not a pending dependency.
 
-## Installed SEC automatic preparation checkpoint
+## Current installed SEC operating-scope checkpoint
+
+Exact implementation `702faecb58da5c18d84685965f0889f24796a4ea` adds NVE
+original-bound operating depreciation and cash capex under automatic policy
+`source-bound-us-gaap-v7`. The 2023 cash-flow aggregate includes securities
+amortization; the original fixed-asset note separately supplies operating
+depreciation. The selector binds each CIK/accession, raw hash, complete parsed
+fact digest and period. It retains incompatible aggregate observations.
+No financial formula, source-provider interface or absence claim changes.
+
+The isolated SEC-enabled project `value-investment-agent-361-nve-scope`
+(19285/19286) matches all 109 installed Python/SQL files. Its fixed two-original
+plan publishes 38 new approved mappings, 73 canonical facts and two snapshots;
+all 38 approvals pass signature verification and exact-input policy reconstruction.
+The result remains **blocked**, retaining 13 missing roles and SEC/DQC diagnostics.
+There are no release activations or numerical calculations.
+
+Plan/output digests are
+`5787660e8624e004cdad309b857bb8929a798642ae57a9bc0a73ce4be60c3dc9` /
+`7f94b3a58bd5f88c003f60866d7c3e4eed23514ea7a4e68b5cb6988e50bc4182`.
+Ordinary, post-service-restart and empty-database-restore repeats all return
+`wrote=false` with zero SEC requests. Original and restored database rows and
+content hashes/sizes agree; each repeat preserves file modification times.
+The portable backup is retained outside Docker. All 73 baseline containers
+preserve their IDs, images and start times.
+
+Exact checks pass 2,021 Service/PostgreSQL tests (11 optional skips and one
+intentional duplicate-ZIP warning), 198 focused cases (one optional skip),
+all 94 changed-source mypy checks, Service Ruff/format, architecture and diff.
+[CI 43308445891](https://github.com/sosodennis/value-investment-agent/actions/runs/43308445891)
+passes all 12 executed jobs; the release gate is skipped. The
+`nve_operating_scope_increment` in the [compact checkpoint](issue-361-sec-preparation-checkpoint.json)
+retains commands, digests, runtime pins, missing roles and failed harness attempts.
+Prior checkpoint entries remain intact. Full originals, scripts, logs and backup
+bytes stay outside Git. Complete accounting/award/market evidence, trusted release,
+authentic caller approval and real numerical acceptance remain outstanding.
+The threshold stays null; #361 stays open and #370 stays draft.
+
+## Prior installed SEC automatic preparation checkpoint
 
 At `676a1b43e1d1be9f846954c4f553648f929199a7`, the isolated SEC-enabled
 service automatically assessed both fixed NVE originals through the existing
