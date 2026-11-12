@@ -1,0 +1,221 @@
+{
+  "schema_version": 2,
+  "issue": 376,
+  "status": "WIP",
+  "acceptance_scope": "fundamental-service",
+  "acceptance_profile": "persistent-valuation-flow-v1",
+  "branch": "codex/issue-376-aggregate-noncash-working-capital",
+  "commit": "b410a214a0951f7bbd4072f233a0f9d6bfbd2208",
+  "sec_identity_required": true,
+  "runtime_revalidation_required": true,
+  "blockers": [
+    "This checkpoint verifies the versioned composite input policy and existing composer integration using synthetic issuer fixtures; it is not a trusted NEWMARKET release or empirical history replay.",
+    "NEWMARKET 2013 continuing-capex scope, independent trusted mapping review, first-original filing labels, forecast errors, full deterministic replay and reviewer sign-off remain open."
+  ],
+  "latest_engineering_evidence": "docs/acceptance/issue-376-acceptance.md",
+  "next_step": "Review this bounded policy increment and continue NEWMARKET original-source adjudication, including the 2013 continuing-capex scope, before any trusted release or forecast label.",
+  "runtime": {
+    "worktree": "/Users/denniswong/.codex/worktrees/issue-376-aggregate-noncash-working-capital/value-investment-agent",
+    "allowed_untracked_paths": [],
+    "fundamental": {
+      "compose_project": "via-issue376-wc-policy",
+      "compose_files": [
+        "compose/verification/docker-compose.issue280-operations.yml",
+        "compose/verification/docker-compose.issue312-sec-ingestion.yml"
+      ],
+      "env_files": [
+        {
+          "path": "/Users/denniswong/.codex/worktrees/issue-376-aggregate-noncash-working-capital/value-investment-agent/.audit/issue-376-working-capital/runtime.env",
+          "sha256": "3f4ba78e7ede36c76d336e968528d18032af7e4c000a50a251a9cdc6e254ed34"
+        }
+      ],
+      "service": "fundamental-service",
+      "url": "http://127.0.0.1:18973",
+      "container_port": 8080,
+      "published_port": 18973,
+      "published_host": "0.0.0.0",
+      "image_id": "sha256:f03ae21d844268ba84b350dec7095f0846cf461f4a606eb18f5292cc33f6f823",
+      "source": {
+        "repository_path": "fundamental-service/src/fundamental_service",
+        "container_path": "/app/src/fundamental_service",
+        "file_count": 70,
+        "sha256": "9ee034086cb1102b1f4ecac0cc5974203b6f69eea201785b856fb60c17e65216"
+      },
+      "runtime_pins": {
+        "python": "3.12.16",
+        "arelle-release": "2.47.4",
+        "pydantic": "2.14.2"
+      },
+      "dependencies": [
+        {
+          "service": "fundamental-postgres",
+          "published_host": "0.0.0.0",
+          "container_port": 5432,
+          "published_port": 18974
+        }
+      ],
+      "networks": ["via-issue376-wc-policy_default"],
+      "volumes": [
+        "via-issue376-wc-policy_fundamental-postgres-data",
+        "via-issue376-wc-policy_fundamental-service-data"
+      ]
+    }
+  },
+  "readiness": {
+    "status": "ready",
+    "capabilities": {"identity_resolution_configured": true}
+  },
+  "checks": [
+    {
+      "name": "source_acquisition",
+      "status": "not_run",
+      "command": "No live SEC filing acquisition was performed for this policy-only increment."
+    },
+    {
+      "name": "source_reuse",
+      "status": "not_run",
+      "command": "No real issuer source snapshot was replayed."
+    },
+    {
+      "name": "snapshot_persistence",
+      "status": "pass",
+      "command": "FUNDAMENTAL_TEST_DATABASE_URL=postgresql+asyncpg://fundamental:fundamental@127.0.0.1:18974/fundamental uv run --frozen --extra dev --project fundamental-service pytest -q fundamental-service/tests/test_postgres_metadata.py (22 passed; exact commit b410a214a0951f7bbd4072f233a0f9d6bfbd2208)",
+      "commit": "b410a214a0951f7bbd4072f233a0f9d6bfbd2208",
+      "exit_code": 0,
+      "input_digest": "9ee034086cb1102b1f4ecac0cc5974203b6f69eea201785b856fb60c17e65216",
+      "output_digest": "1812e62c17c9f41b19f1b8f24d8b4dc3d36790691a4b503f7189be3759afdf3c"
+    },
+    {
+      "name": "mapping",
+      "status": "pass",
+      "command": "uv run --frozen --extra dev --project fundamental-service pytest -q fundamental-service/tests/test_working_capital.py fundamental-service/tests/test_issuer_operating_release.py (36 passed); synthetic mapped evidence only",
+      "commit": "b410a214a0951f7bbd4072f233a0f9d6bfbd2208",
+      "exit_code": 0,
+      "input_digest": "0ad77c2134b41a8d679bc13e83e266e2598bc9b56d14dc8f4c10e1986b34ce41",
+      "output_digest": "eb816f1f5aba63ade0d23880380cae303f16cb912ab9b97ec36cfe002437b2e8"
+    },
+    {
+      "name": "preparation",
+      "status": "pass",
+      "command": "test_working_capital.py covers two-model preparation and full valuation preparation; same input fixtures with reversed order produce identical canonical results",
+      "commit": "b410a214a0951f7bbd4072f233a0f9d6bfbd2208",
+      "exit_code": 0,
+      "input_digest": "0ad77c2134b41a8d679bc13e83e266e2598bc9b56d14dc8f4c10e1986b34ce41",
+      "output_digest": "be0d425a5e8a25c523d3e84b3d00861182b4bf644c79c0c015e19abb76a381a7"
+    },
+    {
+      "name": "forecast",
+      "status": "pass",
+      "command": "Two model forecasts prepared through #352 service composer; both remain provisional with supported_history_threshold=null",
+      "commit": "b410a214a0951f7bbd4072f233a0f9d6bfbd2208",
+      "exit_code": 0,
+      "input_digest": "0ad77c2134b41a8d679bc13e83e266e2598bc9b56d14dc8f4c10e1986b34ce41",
+      "output_digest": "53104b0c77b0b616c19be55d96de31a9c3b4a4a3ef6cf58477c4ed5b8b8ba06d"
+    },
+    {
+      "name": "calculation",
+      "status": "pass",
+      "command": "Full valuation regression calls the existing Fundamental Service calculate() implementation with provisional quality explicitly allowed",
+      "commit": "b410a214a0951f7bbd4072f233a0f9d6bfbd2208",
+      "exit_code": 0,
+      "input_digest": "0ad77c2134b41a8d679bc13e83e266e2598bc9b56d14dc8f4c10e1986b34ce41",
+      "output_digest": "102db6b992f1681d7378e36864b40394d1d12c0a340d26214b30f5fd1ba9db47"
+    },
+    {
+      "name": "artifact_retrieval",
+      "status": "pass",
+      "command": "Synthetic signed composite issuer-release test verifies publication reuse and repeat serving from canonical stored artifacts",
+      "commit": "b410a214a0951f7bbd4072f233a0f9d6bfbd2208",
+      "exit_code": 0,
+      "input_digest": "0ad77c2134b41a8d679bc13e83e266e2598bc9b56d14dc8f4c10e1986b34ce41",
+      "output_digest": "464ee7f238e36ac399baa5583bb9222a93a82041859fa0a61c4f64ac0f3ca7d2"
+    },
+    {
+      "name": "restart_restore",
+      "status": "pass",
+      "command": "test_issuer_operating_release.py reconstructs the issuer-release service over the same artifact store and verifies repeat output bytes and unchanged inventory; synthetic fixtures",
+      "commit": "b410a214a0951f7bbd4072f233a0f9d6bfbd2208",
+      "exit_code": 0,
+      "input_digest": "0ad77c2134b41a8d679bc13e83e266e2598bc9b56d14dc8f4c10e1986b34ce41",
+      "output_digest": "464ee7f238e36ac399baa5583bb9222a93a82041859fa0a61c4f64ac0f3ca7d2"
+    },
+    {
+      "name": "deterministic_repeat",
+      "status": "pass",
+      "command": "Policy assessment, both model forecasts and full valuation repeat after reversing fact/input order; canonical output digests match",
+      "commit": "b410a214a0951f7bbd4072f233a0f9d6bfbd2208",
+      "exit_code": 0,
+      "input_digest": "0ad77c2134b41a8d679bc13e83e266e2598bc9b56d14dc8f4c10e1986b34ce41",
+      "output_digest": "718d5a94deab13a052d09c81381b8d7254a980b8f3a3942d984ec1bbee2f285a"
+    },
+    {
+      "name": "failure_retention",
+      "status": "pass",
+      "command": "Policy tests retain unknown exclusions, source scope mismatches, duplicate IDs, policy mismatches, and signed-release binding failures as abstentions/refusals",
+      "commit": "b410a214a0951f7bbd4072f233a0f9d6bfbd2208",
+      "exit_code": 0,
+      "input_digest": "0ad77c2134b41a8d679bc13e83e266e2598bc9b56d14dc8f4c10e1986b34ce41",
+      "output_digest": "eb816f1f5aba63ade0d23880380cae303f16cb912ab9b97ec36cfe002437b2e8"
+    },
+    {
+      "name": "concurrent_deduplication",
+      "status": "not_run",
+      "command": "No concurrent production artifact publication acceptance was required or claimed for this input-policy increment."
+    },
+    {
+      "name": "architecture",
+      "status": "pass",
+      "command": "python3 scripts/architecture_guard.py (exit 0)",
+      "commit": "b410a214a0951f7bbd4072f233a0f9d6bfbd2208",
+      "exit_code": 0,
+      "input_digest": "9ee034086cb1102b1f4ecac0cc5974203b6f69eea201785b856fb60c17e65216",
+      "output_digest": "705584113fe6619d6c8a3c460284eaeac90ce6e557f69a5e3f511b9538962c76"
+    },
+    {
+      "name": "ruff",
+      "status": "pass",
+      "command": "uvx --from ruff==0.14.10 ruff check fundamental-service; ruff format --check on all 11 changed Python files (exit 0)",
+      "commit": "b410a214a0951f7bbd4072f233a0f9d6bfbd2208",
+      "exit_code": 0,
+      "input_digest": "9ee034086cb1102b1f4ecac0cc5974203b6f69eea201785b856fb60c17e65216",
+      "output_digest": "705584113fe6619d6c8a3c460284eaeac90ce6e557f69a5e3f511b9538962c76"
+    },
+    {
+      "name": "types",
+      "status": "pass",
+      "command": "Pinned mypy 1.19.1 over 9 changed source modules (exit 0)",
+      "commit": "b410a214a0951f7bbd4072f233a0f9d6bfbd2208",
+      "exit_code": 0,
+      "input_digest": "9ee034086cb1102b1f4ecac0cc5974203b6f69eea201785b856fb60c17e65216",
+      "output_digest": "6cca9fbaf7ebe289cbdef81dc28f59e7a38058e752e90b5f0661802f8b8e8503"
+    },
+    {
+      "name": "diff",
+      "status": "pass",
+      "command": "git diff --check (exit 0)",
+      "commit": "b410a214a0951f7bbd4072f233a0f9d6bfbd2208",
+      "exit_code": 0,
+      "input_digest": "9ee034086cb1102b1f4ecac0cc5974203b6f69eea201785b856fb60c17e65216",
+      "output_digest": "a9195a72081688d8962300367ae2bbf8e5559ed373d40a7c8567b3e950b503d2"
+    },
+    {
+      "name": "service_acceptance",
+      "status": "pass",
+      "command": "Isolated Compose project via-issue376-wc-policy: config --quiet, Postgres healthy, Fundamental healthy, GET http://127.0.0.1:18973/readyz returned ready with identity_resolution_configured=true",
+      "commit": "b410a214a0951f7bbd4072f233a0f9d6bfbd2208",
+      "exit_code": 0,
+      "input_digest": "9ee034086cb1102b1f4ecac0cc5974203b6f69eea201785b856fb60c17e65216",
+      "output_digest": "e1e99916f0920aaa1accff4bdac6899b77478cc6a8ee6133d7489136f7b16e07"
+    },
+    {
+      "name": "full_flow_repeat",
+      "status": "not_run",
+      "command": "No full original-source-to-trusted-release-to-first-original-label research replay was performed."
+    },
+    {
+      "name": "review",
+      "status": "not_run",
+      "command": "Independent reviewer sign-off remains pending."
+    }
+  ]
+}
