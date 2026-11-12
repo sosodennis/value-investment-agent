@@ -21,7 +21,48 @@ No completed #351 through #355 acceptance is changed. #350 is outside scope.
 GitHub #351 and #352 are CLOSED; #352's merged Fundamental Service composer is
 the runtime valuation owner, not a pending dependency.
 
-## Current installed SEC operating-scope checkpoint
+## Current installed SEC investment-scope checkpoint
+
+Exact implementation `815afbbecf15b5b1abf0ff248ecb0d04e8a7e288` classifies NVE's
+2024-original investment assets under `source-bound-us-gaap-v8`. Current bonds,
+noncurrent bonds and separately tagged investment interest total 52,063,514 at
+2023-03-31 and 43,166,707 at 2024-03-31. Money-market funds already in cash are
+excluded. The earlier original remains unsupported for this role. Existing
+accounting evaluation and replaceable source ports supply the result.
+
+The isolated SEC-enabled project `value-investment-agent-361-investment-scope`
+(19385/19386) matches all 110 installed Python/SQL files. It adds 39 approved
+mappings, 75 facts and two snapshots. All 39 signatures and exact retained-input
+policy reconstructions pass. Preparation remains **blocked**: the earlier
+original retains 13 missing roles and the later original 12. No release activates
+and no numerical calculation is claimed.
+
+Plan/output digests are
+`7cedcc71029014956730060fe15353ee19095e6dbad73ac164af1ccb83d9f615` /
+`1bb40f50ae7b0887768a0b1b886779ac0fa1dddd13ef57af4eae1ebddad08da7`.
+Ordinary, service-restart and empty-database-restore repeats return
+`wrote=false`, make zero SEC calls and preserve identical rows/content; repeat
+file modification times remain unchanged. The portable backup is outside Docker.
+All 75 baseline containers preserve their IDs, images and start times.
+
+Exact checks pass 2,036 Service/PostgreSQL tests (11 optional skips and one
+expected duplicate-ZIP warning), 95-source mypy, Service Ruff/format,
+Service/Agent architecture and diff checks.
+[CI 43314253700](https://github.com/sosodennis/value-investment-agent/actions/runs/43314253700)
+passes all 12 executed jobs; release gate skipped. The compact checkpoint's
+`nve_investment_scope_increment` retains commands, digests, runtime pins and
+failed attempts, including an exit137 mapping-verification attempt followed by
+a successful unchanged retry. Previous checkpoint payloads are preserved.
+
+Linked blocker #381 also records the preparation gate's confusion between
+original-source integrity and per-original model completeness. Both retained
+source snapshots pass integrity; acquisition abstains for missing model roles.
+The owning fix must compose admitted originals before aggregate model assessment
+while retaining every original outcome. Complete accounting/awards, eligible
+market/quote, trusted release, authentic caller approval and real numerical
+acceptance remain outstanding. Threshold stays null; #361 is open and #370 draft.
+
+## Prior installed SEC operating-scope checkpoint
 
 Exact implementation `702faecb58da5c18d84685965f0889f24796a4ea` adds NVE
 original-bound operating depreciation and cash capex under automatic policy
