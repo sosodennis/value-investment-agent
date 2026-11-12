@@ -19,6 +19,50 @@ Eligible candidate-history valuations can be provisional. Missing, conflicting,
 unreviewed, future, or unsupported evidence must retain reasons and abstain.
 No completed #351 through #355 acceptance is changed. #350 is outside scope.
 
+## Signed quote source binding checkpoint
+
+Implementation `8807f0b4978531ee211146eeb8aad9b40042f4aa` adds one bounded
+Nasdaq historical-close transcription profile in Fundamental Service. The serving
+and release-canary loader now re-parses retained source bytes and verifies the
+declared quote price, security, currency, date and timestamps. Altering a signed
+quote over unchanged bytes is rejected before activation; a valid but stale
+source keeps the stale classification. Snapshot issuer/security binding is also
+checked. No valuation formula, policy approval or current-ticker lookup was added.
+
+The exact test checkpoint is `cf40438429bfebf649b3630b3a75f8146323369b`.
+All 1,449 service/PostgreSQL tests, 126 focused tests, 17 acceptance-tool tests,
+Ruff/format, changed-source mypy, architecture and diff checks pass. Eleven
+optional SEC runtime fixtures skip and one duplicate-ZIP warning is intentional.
+CI run [43172192355](https://github.com/sosodennis/value-investment-agent/actions/runs/43172192355)
+passes all 12 executed jobs; the release gate is skipped. Exact validation input
+`b5876e24fb7f8f97ea95c0a689ad1fb4bb8c8428abd2c25fe9b33b75e78a9ee4`, output
+`d0b0ecb3cd5da229818cccdfdf9c0582c1dcd5accd249f249906d94318bca6aa`.
+
+An isolated installed-image probe verified all 72 service source files against
+the exact test commit. Two source-replay runs preserve result digest
+`03c636a3b6731198f5858bf6464b811bc207a793bfb7aefc01f193e8e273c1a1`; the
+second artifact returns `wrote=false`. Input
+`d1021e348d4fd3c486d2e2820bf2cb8ee56b7a6e81cae501b3e167e72930e1a4`, output
+`012a0522edb2b96d44ce0506b207b345be317b574f1e8d272d924ff78f03376e`.
+The readiness-only Compose project used ports 18666/18667 and image
+`sha256:25145849506593b133d3765862534f72223dc26eafebb3de189fab3dd4951b85`;
+both services were healthy, then only that project's containers, network and
+volumes were removed. This tests source reproduction and readiness, not the
+19-gate valuation flow.
+
+The provider response does not contain historical publication time. The parser
+uses its dated observation only as a conservative freshness bound and uses the
+actual capture timestamp as `available_at`; it will not backdate availability.
+The official Nasdaq terms endpoint timed out without returning content, so no
+provider terms or market data are admitted. Complete issuer/accounting/award
+coverage, dated market policy, trusted complete release, exact-input caller
+approval and end-to-end numerical/recovery acceptance remain outstanding.
+Keep `supported_history_threshold=null`, #361 OPEN and PR #370 draft. Full
+commands, output hashes, image/runtime pins and residual blockers are in the
+[quote-source checkpoint](issue-361-quote-source-checkpoint.json), digest
+`693d5f5011b929499b6781c8cb8238e73e3e3647558def753c66bf10834af6f8` in the
+cumulative accounting checkpoint.
+
 ## Registered depreciation policy integration
 
 The ordinary merge `851cde947b6b0d7078f666f0018e8efa31034b1a` brings #410's
