@@ -21,7 +21,59 @@ No completed #351 through #355 acceptance is changed. #350 is outside scope.
 GitHub #351 and #352 are CLOSED; #352's merged Fundamental Service composer is
 the runtime valuation owner, not a pending dependency.
 
-## Current installed SEC investment-scope checkpoint
+## Current signed composite release checkpoint
+
+Production change `150ce77ecbf047b9e3f207996113d93fb145b146` carries explicit
+composite working-capital policy through a signed full security release, its
+independent canary, and serving to the official #352 composer. Source-bound
+fixture correction `5d5a345e3eebd1e0bb1725959bebb64fdfea82fb` pins the complete
+synthetic source bytes. This is pipeline evidence; real issuer acceptance is
+still incomplete. The nine retained NVE role gaps are unchanged.
+
+The release pins model/version, requirements digest, mapping version and
+canonical input policy. Every supporting fact must be declared by the exact
+snapshot. Wrong pins, unknown exclusions and foreign/missing/unbound inputs
+refuse. Ordinary release bytes remain unchanged when the policy is absent.
+Issuer operating releases retain their separate existing policy field.
+SEC/macro/reference/quote/classification/crosswalk ports remain the extension
+boundary; no provider parsing or financial formula moves into Agent/UI/report.
+
+At exact commit `5d5a345e`, **2,104 Service/PostgreSQL tests** pass (11 optional
+skips, one expected duplicate-ZIP warning). All 98 changed production sources
+pass mypy; full Service Ruff/format, both architecture guards and diff pass.
+[CI43331842098](https://github.com/sosodennis/value-investment-agent/actions/runs/43331842098)
+passes all 12 executed jobs; the release gate is skipped. The three project
+architecture skills were inspected and remain current.
+
+The isolated project `value-investment-agent-361-valuation-input-scope` uses
+19585/19586, its own network and volumes, and matches all 113 installed Python/SQL
+files. A synthetic signed release is read from PostgreSQL by the actual HTTP
+prepare/calculate endpoints and produces a **provisional** number through #352.
+Ordinary repeats, three concurrent requests, service restart and empty-database
+restore preserve the same result and 176 rows across 18 tables. Six content
+files preserve hash/size and repeat mtimes. All 79 unrelated baseline containers
+retain ID/image/start. No real issuer or threshold ground truth is inferred.
+
+Input/output digests:
+`5752798ce2b1f0ae1b6cecae682099df396fd131a36d9a4117b741c868a96a3c` /
+`1ce78d1cfc109d3abb84b3feb70e2e2dda1b8eb4f12cb118833930a9559bc874`.
+The repeated report returns `wrote=false`. Portable backup
+`44994be33fec4fd3e0fd65459976db8387eac57a041fa7e6c75742a2c102efe6`
+is retained outside Docker. `composite_security_release_increment` in the
+existing checkpoint retains commands, pins, digests and corrected harness
+failures; its atomic writer also repeats unchanged. Backup correctly refused the
+initial placeholder-source fixture; the original-bound fixture and fresh
+database pass without relaxing recovery validation.
+
+Remaining: compile the explicit policy into automatic source plans, complete
+real accounting/awards and eligible dated market/quote evidence, trusted release,
+authentic caller approval, real numerical repeats/recovery, independent review
+and merge/main verification. Real incomplete valuations **abstain**, eligible
+valuations remain **provisional**, history evidence remains **underpowered** and
+`supported_history_threshold=null`. Keep #361 and blockers open, PR #370 draft.
+Generated originals, research, reports and backups remain outside Git.
+
+## Prior installed SEC investment-scope checkpoint
 
 Exact implementation `815afbbecf15b5b1abf0ff248ecb0d04e8a7e288` classifies NVE's
 2024-original investment assets under `source-bound-us-gaap-v8`. Current bonds,
