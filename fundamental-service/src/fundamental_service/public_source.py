@@ -147,8 +147,15 @@ class PublicSourceAdapter:
             raise SnapshotError(
                 "SOURCE_REGISTRATION_MISMATCH", "capture source and register disagree"
             )
-        parsed = urlsplit(uri)
-        prefix = urlsplit(spec.uri_prefix)
+        try:
+            parsed = urlsplit(uri)
+            prefix = urlsplit(spec.uri_prefix)
+            port = parsed.port
+            hostname = parsed.hostname
+        except ValueError as error:
+            raise SnapshotError(
+                "SOURCE_URI_NOT_ALLOWED", "source URI is malformed"
+            ) from error
         path_allowed = (
             parsed.path == prefix.path
             if spec.path_match == "exact"
@@ -156,8 +163,8 @@ class PublicSourceAdapter:
         )
         if (
             parsed.scheme != "https"
-            or parsed.hostname != prefix.hostname
-            or parsed.port is not None
+            or hostname != prefix.hostname
+            or port is not None
             or parsed.username is not None
             or parsed.password is not None
             or not path_allowed

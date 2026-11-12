@@ -58,14 +58,19 @@ class PublicSourceSpec:
     path_match: Literal["prefix", "exact"] = "prefix"
 
     def __post_init__(self) -> None:
-        uri = urlsplit(self.uri_prefix)
+        try:
+            uri = urlsplit(self.uri_prefix)
+            port = uri.port
+            hostname = uri.hostname
+        except ValueError as error:
+            raise ValueError("invalid public source registration boundary") from error
         if (
             not self.source_id.strip()
             or not self.terms_reference.strip()
             or self.path_match not in {"exact", "prefix"}
             or uri.scheme != "https"
-            or not uri.hostname
-            or uri.port is not None
+            or not hostname
+            or port is not None
             or uri.username is not None
             or uri.password is not None
             or uri.query

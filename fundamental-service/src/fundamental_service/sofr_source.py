@@ -72,11 +72,12 @@ def _unique_members(pairs: list[tuple[str, object]]) -> dict[str, object]:
 
 def sofr_request_date(source_uri: str) -> date:
     """Validate the exact single-date source query before capture or reproduction."""
-    uri = urlsplit(source_uri)
-    query = parse_qs(uri.query, keep_blank_values=True, strict_parsing=True)
     try:
+        uri = urlsplit(source_uri)
+        query = parse_qs(uri.query, keep_blank_values=True, strict_parsing=True)
         requested = date.fromisoformat(query["startDate"][0])
-    except (KeyError, IndexError) as error:
+        end_date = query["endDate"][0]
+    except (ValueError, KeyError, IndexError) as error:
         raise ValueError("SOFR source date is missing") from error
     if (
         uri.scheme != "https"
@@ -85,7 +86,8 @@ def sofr_request_date(source_uri: str) -> date:
         or uri.fragment
         or set(query) != {"startDate", "endDate"}
         or query["startDate"] != [requested.isoformat()]
-        or query["endDate"] != [requested.isoformat()]
+        or query["endDate"] != [end_date]
+        or end_date != requested.isoformat()
     ):
         raise ValueError("SOFR source requires one canonical ISO date")
     return requested

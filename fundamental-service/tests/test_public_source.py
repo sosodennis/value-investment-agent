@@ -168,6 +168,44 @@ def test_registered_source_requires_one_matching_injected_profile_before_io():
     assert calls == []
 
 
+def test_malformed_endpoint_port_is_a_typed_source_refusal():
+    calls = []
+    adapter = PublicSourceAdapter(
+        user_agent="value-agent test@example.com",
+        opener=lambda *_args, **_kwargs: calls.append(True),
+    )
+    with pytest.raises(SnapshotError) as error:
+        adapter.capture(
+            "treasury-yields",
+            TREASURY_URI.replace("home.treasury.gov", "home.treasury.gov:invalid"),
+        )
+    assert error.value.code == "SOURCE_URI_NOT_ALLOWED"
+    assert calls == []
+
+
+def test_malformed_source_registration_uri_fails_configuration():
+    with pytest.raises(ValueError, match="registration boundary"):
+        PublicSourceSpec(
+            source_id="malformed-provider",
+            role=SourceRole.MACRO,
+            uri_prefix="https://rates.example.test:invalid/v1/",
+            terms_reference="https://rates.example.test/terms",
+        )
+
+
+def test_sofr_capture_missing_query_member_is_a_typed_refusal_before_io():
+    calls = []
+    uri = "https://markets.newyorkfed.org/api/rates/secured/sofr/search.json?startDate=2025-03-28"
+    adapter = PublicSourceAdapter(
+        user_agent="value-agent test@example.com",
+        opener=lambda *_args, **_kwargs: calls.append(True),
+    )
+    with pytest.raises(SnapshotError) as error:
+        adapter.capture("new-york-fed-sofr", uri)
+    assert error.value.code == "SOURCE_QUERY_INVALID"
+    assert calls == []
+
+
 def test_empty_registrations_do_not_load_default_sources():
     calls = []
     adapter = PublicSourceAdapter(
