@@ -19,6 +19,40 @@ Eligible candidate-history valuations can be provisional. Missing, conflicting,
 unreviewed, future, or unsupported evidence must retain reasons and abstain.
 No completed #351 through #355 acceptance is changed. #350 is outside scope.
 
+## Injectable source capture checkpoint
+
+Implementation `93dff37246ce91dd4e7370ddd158470fed5a4f3b`, with request-boundary
+correction `e4c3ad7c01bd7a844123ce3919afd7fab6c67aa2`, removes provider branches
+from public HTTP capture. `PublicSourceCaptureProfilePort` validates requests and
+reproduces capture timing; a composition catalog registers concrete providers.
+A second provider parses retained bytes through the same transport and macro
+contracts. Malformed endpoints, missing queries, unsupported series, registration
+conflicts and inconsistent timestamps retain typed refusals. #352 math is unchanged.
+
+At the exact correction SHA, **1,676 Service/PostgreSQL and 269 focused tests**
+pass, with Ruff/format, five-source mypy, architecture and diff checks. Eleven
+optional SEC-resource tests skip and one duplicate-ZIP warning is intentional.
+Engineering input `9b1967f9726a08721f216deeaa35dca488755f673d7cf2925c0d3aaebc1fcec1`,
+output `62fd69014a10e4fa97648cf3cb688e69dce0d057f5ceb9fab2aef46c8479885a`.
+[Exact CI 43224609066](https://github.com/sosodennis/value-investment-agent/actions/runs/43224609066)
+passes all 12 executed jobs; the release gate is skipped.
+
+Two independent and two concurrent source replays reuse artifacts without calls,
+downloads or writes. The isolated `value-investment-agent-361-capture-profiles`
+image matches all 86 installed sources and preserves output
+`2c3e1ce191fb03382c7921a4d700f26db18cf9993a5eb2d42f17dfcc54920d93`
+through repeat and service restart, with `wrote=false` and unchanged inventories.
+Forty-two unrelated baseline containers remain unchanged. Runtime ports are
+18685/18686; SEC identity is unconfigured in this source-only stack.
+[The existing compact checkpoint](issue-361-source-admission-checkpoint.json)
+retains exact commands, digests, source/runtime pins and failures in its
+`capture_profiles_increment`; generated reports/originals remain outside Git.
+
+Complete issuer/date policy, accounting/award evidence, trusted release, caller
+approval and the actual numerical/recovery/review gates remain required. This
+checkpoint completes capture substitution; it does not approve market assumptions.
+#361/#369 remain OPEN, PR #370 draft, and `supported_history_threshold=null`.
+
 ## Source admission checkpoint
 
 Exact implementation `9d234fae218b16cd55817f153b13f192192c1e88` passes
@@ -46,10 +80,10 @@ numerical acceptance. [Compact evidence](issue-361-source-admission-checkpoint.j
 records commands, digests, runtime pins and retained audit-helper failures.
 Raw sources and generated reports remain outside Git.
 
-Next, remove concrete source parsing/query/time branches from public capture
-through an injectable profile contract; then complete the issuer/date financial
-policy join and the outstanding numerical/recovery/review gates. #361/#369
-remain OPEN, PR #370 draft, and `supported_history_threshold=null`.
+The subsequent injectable capture checkpoint above completes the capture-profile
+work identified here. The issuer/date financial policy join and the outstanding
+numerical/recovery/review gates remain required. #361/#369 remain OPEN, PR #370
+draft, and `supported_history_threshold=null`.
 
 ## Interchangeable reference provider checkpoint
 
