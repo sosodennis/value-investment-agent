@@ -131,3 +131,76 @@ driver `verify-be0fabbc.py`. All nine commands exited zero.
 
 The study/review/authority limitations above remain: no exact case or threshold
 is produced by this interruption repair.
+
+## Formal conditional evidence adapter checkpoint
+
+Issue #377 / PR #417, branch `codex/issue-377-precision-protocol`, worktree
+`/Users/denniswong/.codex/worktrees/issue-377-precision-protocol-local/value-investment-agent`.
+Verified implementation: **`43d7469515a760a0389db33ba8d767d1bb3328be`**,
+following `6a8f5c14`. Ordinary merge `92dedde1` brought in parent `ee4fea7c`
+without rewriting existing WIP. The following commit contains acceptance metadata
+only. This is a validated offline conditional adapter, **not completed #377
+research, a trusted release or threshold approval**.
+
+The new CLI recomputes formal scenario and conditional label/error outputs and
+requires their complete canonical bytes to match the frozen artifacts. It
+retains complete source/mapping/assumption/model/policy lineage and all refusals,
+then exports the fixed 100-issuer / 1,200-cell panel plus a conditional appendix.
+It implements no financial formula. See
+[`issue-377-evidence-adapter.md`](../research/issue-377-evidence-adapter.md).
+
+| Acceptance at exact implementation | Result |
+| --- | --- |
+| Adapter + methods/planning + official scenario/label tests | **112 passed**, including 22 adapter tests |
+| Ruff 0.14.10 / format | Six scoped script/test files pass |
+| Mypy 1.19.1 | Three scripts pass |
+| Root and Fundamental architecture guards | Both pass |
+| `git diff --check` | Pass |
+| Real fixed NEWMARKET 2016 formal replay/export | 125 conditional labels; 625 FCFF comparisons; 625 Transition abstentions; one independent issuer |
+| Export and analysis, two offline fresh processes each | Identical input/output/report digests; all second publications `wrote=false` |
+| Source and output inventory comparison | Zero new second-run artifacts; existing bytes/sizes/mtimes unchanged |
+| Wrong exact commit | Expected CLI exit 2; no new artifact |
+| Exact study / actual cohort bootstrap | **0/100 exact cases; 0 cohort replicates; threshold null** |
+| Docker / service / acquisition / trusted release | Not claimed; offline adapter changes none of these boundaries |
+
+All 11 positive acceptance commands exited zero; the wrong-commit probe exited
+2 as expected. Commands and full results are retained in the verification report.
+The first CLI attempt at `6a8f5c14` failed because strict Python-mode validation
+rejected JSON arrays. Its command receipts remain in `checkpoint-6a8f5c14`.
+A new CLI regression reproduced the failure before `43d74695` switched the
+owning boundary to JSON-mode validation, preserving duplicate-field checks.
+
+Canonical runtime: CPython **3.11.15**, Darwin arm64, Pydantic **2.14.2**,
+Arelle **2.47.4**, cryptography **50.0.2**; `uv.lock` SHA-256
+`229bc76c75019d54df8c1cba240839bacf01e56d7493f4bc615e058c4e5f6f11`.
+The existing interpreter was reused with `PYTHONPATH` explicitly selecting this
+checkout, bytecode disabled and fresh-process network calls disabled. No parent
+checkout, `.env`, keys, configuration, database or Docker resources changed.
+
+External evidence root:
+`/Users/denniswong/Desktop/Project/value-investment-agent-issue-376-research-evidence/issue377-evidence-adapter/`.
+Driver: `verify.py`; complete reports/inputs/command receipts:
+`checkpoint-43d74695/{inputs,commands,export,analysis,verification}`. Historical
+documents, original parsed reports, frozen inputs and generated outputs stay
+outside Git. Only code/tests and compact methods/acceptance documentation are
+committed.
+
+| Evidence | SHA-256 |
+| --- | --- |
+| Verification report | `639fb65e1d8809cfa1c4466c5050bb476811464d6ad7dd3112a08967ee1a9422` |
+| Verification input | `b3e4484c71c640a4af741aee532bd5b6487e0440a0cf5f838e7b3c9d6e0f248c` |
+| Verification output | `d60d7e3f3ddeaa80872d457035f0604394a55ec9f0a35f7eeaae8e1fc56c567f` |
+| Export report | `731ef79e4487f7b10e6d34b892914387c0740b0c384a057c75a91d9638a50be3` |
+| Export input | `54eba6e16109f1d6d26eea0014ec9c6315c7cfb988ebaa861d9dfbfaf3c55c0d` |
+| Export output | `1b96eaf0587333a6679ed33ee0fb13a9fc74be56156a89795a9495067de71185` |
+| Analyzer panel | `c08ca5f05248a2976dfb852b59f62f93c1a4e07d2089fa571373097118b11ebf` |
+| Analysis report | `2e092ba872023e6f234d0747e805f455a351fd81da554734b3e61312e6935532` |
+| Analysis input | `beab378c4fbc4a3867900f3ba3a6dec6dad0c26ef991a44d22338a0895bf1320` |
+| Analysis output | `1fb66f9f0f83a1bb0a192205813abb6ed750d1112bf9c5da476db4ede85c3fe2` |
+
+Remaining: independent main-chat review and serial integration; authentic exact
+release/label evidence; four/five-year histories; missing accounting/Transition
+evidence; reviewed primary policy, precision and promotion criteria; the full
+fixed-cohort empirical study. Conditional scenario dispersion is not sampling
+uncertainty and cannot replace these gates. #377/#376 stay open and PR #417 stays
+draft pending that work.
