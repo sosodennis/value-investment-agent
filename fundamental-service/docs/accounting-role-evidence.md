@@ -68,6 +68,74 @@ establish that the original total and finance components provide complete,
 nonoverlapping coverage for the requested role. This representation does not
 approve that mapping.
 
+An optional `AccountingComponentV1.discontinued_depreciation_exclusion` retains
+an original dimensional D&A observation as the negative component of a duration
+`depreciation_and_amortization` rule. The rule permits exactly one positive
+consolidated D&A base and one excluded D&A observation. Its exact dimensions
+must identify discontinued income, with at most one business-segment axis;
+an ordinary `AllOther` segment observation alone is insufficient. Other roles,
+unrelated dimensions, overlapping components and a negative resulting amount
+remain unsupported. A component cannot carry both swap and D&A scopes.
+
+The same original report must supply the aligned issuer, duration and unit,
+plus the exact original segment-reporting passage that identifies the target
+year and discontinued D&A classification. The passage may describe an earlier
+comparative period; it does not replace the duration on the numeric observation.
+The evidence retains all original dimensions, classification text, source
+digests and reported decimals. The derived candidate does not invent a new
+decimal precision or substitute a more precise observation with another scope.
+A rounded discontinued amount remains rounded. Independent semantic review
+must establish coverage, inclusion in the consolidated base and continuing
+business scope before approving any mapping. The representation supplies no
+absence assertion, trusted release or verified forecast.
+
+### Registered NEWMARKET continuing D&A policy
+
+`registered_depreciation.py` proposes the bounded policy
+`newmarket-original-continuing-depreciation-v1`, under automatic policy
+`source-bound-us-gaap-v4`. This version also carries forward #408's historical
+total `SalesRevenueNet` support and cross-concept conflict refusals, together
+with the current security-bound stock-compensation policy. It registers CIK `0001282637` originals
+`0001282637-15-000004`, `0001282637-16-000028` and
+`0001282637-17-000005` by both retained source SHA-256 and the complete parsed
+fact multiset digest. The registry pins classifications, never numeric amounts.
+An unregistered original or changed observation, precision, dimension or passage
+abstains. Existing source bytes, taxonomy, integrity, availability and optional
+security-identity checks still apply before approval.
+
+The original segment note says that segment PPE depreciation and intangible
+amortization enter operating profit; its table reconciles petroleum additives,
+All Other and corporate amounts to total D&A. The footnote explicitly assigns
+Foundry Park I D&A in 2012/2013 to discontinued income. The 2014 original
+contains both years; the 2015 original contains 2013. The exact consolidated
+total minus the exact discontinued observation is a separate computed mapping.
+It never substitutes the All Other observation: that category also contains TEL
+and contract manufacturing. The later columns in those registered tables and
+the 2016 original's 2014–2016 table supply the direct continuing periods. This
+classification is specific to the complete pinned originals, not an inference
+from a missing modern concept or a general aggregate-D&A alias.
+
+Direct and computed mappings have disjoint periods. The direct proposal uses
+`us-gaap:DepreciationDepletionAndAmortization`; the adjusted proposal uses
+`registered:ContinuingDepreciationAndAmortization` and produces
+`computed:depreciation_and_amortization`, anchored to that original QName.
+Source text, numeric observations, dimensions and reported decimals survive
+reconstruction. A derived amount using the reported USD 5 million exclusion
+retains `decimals=-6`; it is a reported-value estimate, not unrounded truth.
+Release canaries reproduce the mapping policy and arithmetic. The future
+original remains label-only at the fixed 2016 origin.
+
+Source review inventory: external report
+`448d5edbfc814aba8aa7475b51c4b18d86c6dedd5920ca84d7c87c60d491a223`;
+earlier rounded-D&A relation implementation
+`ecb09fa8fec47dffc762ce51fb4dd951468c17dd` (PR #400). This increment preserves
+that checkpoint and integrates its exclusion guard with the current lease and
+dated-disclosure guards. Independent PR review remains pending. Machine
+certificates demonstrate execution of the proposed versioned policy; they do
+not establish complete working-capital/capex coverage, a full issuer release,
+forecast accuracy or a supported history threshold.
+
+
 A `disclosed` duration transcribes one finite decimal literal from an exact
 nonnumeric parsed fact. `DisclosedAmountV1` retains Unicode code-point offsets
 for the exact quote, amount token, unit quote and scale token, plus reported
