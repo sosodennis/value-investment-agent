@@ -19,6 +19,40 @@ Eligible candidate-history valuations can be provisional. Missing, conflicting,
 unreviewed, future, or unsupported evidence must retain reasons and abstain.
 No completed #351 through #355 acceptance is changed. #350 is outside scope.
 
+## Authenticated caller approval checkpoint
+
+Exact implementation `54ff789dd3a55c71284a15130596faef4221e3ee` resolves the
+implementation gap in [#411](https://github.com/sosodennis/value-investment-agent/issues/411).
+A supplied approval must match the authenticated subject and carry a timezone-aware
+decision time no later than receipt. All three calculation endpoints enforce this
+before application execution; the source runner checks before source access.
+Direct calculation still permits absent approval. The #361 runner still requires
+approval of its exact prepared input before calculation.
+
+Exact checks pass **1,317 Service/PostgreSQL, 56 Agent boundary and 17
+acceptance-tool tests**, Ruff/format, 51 Service-source and Agent producer mypy,
+both architecture guards and diff checks. Eleven optional resource tests skip;
+one duplicate-ZIP warning is intentional. [CI](https://github.com/sosodennis/value-investment-agent/actions/runs/43149977652)
+passes all 12 executed jobs; release skips. Engineering input
+`dd531d6ae7ba099cded85a49548dd81c2d6285d29bed025639a60503c6020a9f`;
+output `c32ae961ce60f320494fc8e90937341cefbeab82178a0cbdd8e36a385a1738f8`.
+
+The isolated installed project `value-investment-agent-361-caller-approval`
+used ports 18674/18675. All 68 installed package files equal the exact commit.
+Eighteen HTTP cases cover caller/future refusals and matching/absent approval
+reaching the ordinary missing-snapshot response. The complete repeat after
+PostgreSQL/service restart returns identical bytes with zero new rows/content
+files. Installed input
+`5440a07894dc7f96eba94ebe0f74e2f90534410af4fede4e22e2493dbc099a96`;
+output `26cc6ed3accc6df98e53f1f78d627caad27093b5db1df45e7b4a46b1ace39a92`.
+Only its disposable startup-seed containers/network/volumes were removed;
+all 38 baseline containers retain identity/image/start time. The checkpoint
+preserves all 47 preceding entries and initial regression/harness failures.
+
+This verifies the approval boundary with synthetic requests and an empty source
+store. Complete real numerical 19-gate acceptance remains outstanding. Keep
+#361/#411 OPEN, PR #370 draft and `supported_history_threshold=null`.
+
 ## Automatic original-bound security checkpoint
 
 Exact implementation `8ff612d63266be71e45f3ae6f5f488063c8129ac` adds optional
