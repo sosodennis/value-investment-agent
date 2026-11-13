@@ -15,7 +15,10 @@ from .accounting_roles import (
     evaluate_period_rule,
 )
 from .arelle_parser import ParsedXbrlFactV1, fact_semantic_digest
-from .original_issuer import OriginalIssuerEvidenceV1
+from .original_issuer import (
+    OriginalIssuerEvidenceV1,
+    parser_input_matches_registered_original,
+)
 from .serialization import sha256_digest
 
 NONCURRENT_LIABILITY_RESIDUAL = "registered:ZeroNoncurrentLiabilityResidual"
@@ -69,7 +72,7 @@ def liability_residual_concept(normalized_field: str) -> str:
 
 @dataclass(frozen=True)
 class OriginalClassification:
-    source_hash: str
+    parser_input_hash: str
     fact_digest: str
     instants: tuple[date, ...]
 
@@ -80,12 +83,12 @@ class OriginalClassification:
 # Only these complete originals establish the unnetted, nonnegative partitions.
 _ORIGINALS = {
     ("0000724910", "0001376474-23-000283"): OriginalClassification(
-        "26d95888105590690531f4b3c4da8ca910e6aa4e315f6372ed51c55459b0b05c",
+        "fbab4403625d475d594960fc11a39ef1be6dd079a854647c11243dba9bdb3469",
         "1ce5d69c3a2b560110b3cfffba644b15125475ce3531a99bdc5a5f5fd35ef90e",
         (date(2022, 3, 31), date(2023, 3, 31)),
     ),
     ("0000724910", "0001376474-24-000214"): OriginalClassification(
-        "e337d87718577db631e61f5495c3c8f96304c0552161cb5054305967394c9dc6",
+        "9b08f22245c6dbe458fdc90ff1484e87af5e8900b41774be6f4d0d7d7bd8ae57",
         "21c4ebca39e56c934edded6065b4ac78a0f451de96a540afe5d49726c53b01c1",
         (date(2023, 3, 31), date(2024, 3, 31)),
     ),
@@ -113,7 +116,9 @@ def select_registered_liability_residual(
         )
     prefix = partition.reason_prefix
     entry = _ORIGINALS.get((source.cik, source.accession_number))
-    if entry is None or source.content_hash != entry.source_hash:
+    if entry is None or not parser_input_matches_registered_original(
+        original, entry.parser_input_hash
+    ):
         return LiabilityResidualSelection(reason_codes=(f"{prefix}_SCOPE_UNREVIEWED",))
     if fact_semantic_digest(original.report) != entry.fact_digest:
         return LiabilityResidualSelection(reason_codes=(f"{prefix}_SOURCE_MISMATCH",))

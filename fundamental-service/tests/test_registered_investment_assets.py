@@ -85,7 +85,7 @@ def asset_case(tmp_path, monkeypatch, *, change=None, role="non_operating_assets
         "_ORIGINALS",
         {
             (source.cik, source.accession_number): policy.OriginalClassification(
-                source.content_hash,
+                source.parser_input_hash,
                 fact_semantic_digest(request.original.report),
                 (date(2024, 12, 31), date(2025, 12, 31)),
                 policy.ROLES,
@@ -206,7 +206,9 @@ def test_registered_investment_scope_requires_every_aligned_component(
     assert reason in decision.reason_codes
 
 
-@pytest.mark.parametrize("change", ("source", "accession", "issuer", "report"))
+@pytest.mark.parametrize(
+    "change", ("parser_input", "accession", "issuer", "report", "report_content")
+)
 def test_original_classification_does_not_transfer(tmp_path, monkeypatch, change):
     request, _, _, _ = asset_case(tmp_path, monkeypatch)
     original = request.original
@@ -218,9 +220,17 @@ def test_original_classification_does_not_transfer(tmp_path, monkeypatch, change
                 )
             }
         )
+    elif change == "report_content":
+        original = original.model_copy(
+            update={
+                "report": original.report.model_copy(
+                    update={"source_content_hash": "f" * 64}
+                )
+            }
+        )
     else:
         field, value = {
-            "source": ("content_hash", "f" * 64),
+            "parser_input": ("parser_input_hash", "f" * 64),
             "accession": ("accession_number", "0000724910-25-000001"),
             "issuer": ("cik", "0000000999"),
         }[change]
@@ -254,6 +264,29 @@ def test_reordered_equivalent_observations_preserve_classification(
     assert first.rules is not None
     assert sha256_digest(first.rules) == sha256_digest(second.rules)
     assert first.selected == second.selected
+
+
+def test_registered_classification_uses_parser_identity_and_retains_raw_hash(
+    tmp_path, monkeypatch
+):
+    request, store, _, _ = asset_case(tmp_path, monkeypatch)
+    raw_variant = request.original.model_copy(
+        update={
+            "source": request.original.source.model_copy(
+                update={"content_hash": "f" * 64}
+            )
+        }
+    )
+    selected = policy.select_registered_investment_assets(
+        raw_variant, "non_operating_assets"
+    )
+    assert selected.rules is not None
+    assert selected.rules.raw_content_hash == "f" * 64
+    assert selected.rules.parser_input_hash == request.original.source.parser_input_hash
+
+    unverified = evaluate(request.model_copy(update={"original": raw_variant}), store)
+    assert unverified.status == "abstain" and unverified.mapping is None
+    assert "DATA_RELEASE_ORIGINAL_INTEGRITY_MISMATCH" in unverified.reason_codes
 
 
 def test_batch_retains_other_missing_roles_and_rejects_cash_total_proposal(
@@ -430,7 +463,7 @@ def test_exclusion_registration_never_transfers_to_other_roles_or_future_periods
         "_ORIGINALS",
         {
             (source.cik, source.accession_number): policy.OriginalClassification(
-                entry.source_hash,
+                entry.parser_input_hash,
                 entry.fact_digest,
                 entry.instants,
                 frozenset({"cash_and_short_term_investments"}),

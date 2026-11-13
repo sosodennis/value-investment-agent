@@ -20,7 +20,10 @@ from .accounting_roles import (
     IssuerAccountingRoleRuleSetV1,
 )
 from .arelle_parser import fact_semantic_digest, ParsedXbrlFactV1
-from .original_issuer import OriginalIssuerEvidenceV1
+from .original_issuer import (
+    OriginalIssuerEvidenceV1,
+    parser_input_matches_registered_original,
+)
 from .serialization import sha256_digest
 
 DEPRECIATION = "us-gaap:DepreciationDepletionAndAmortization"
@@ -31,7 +34,7 @@ POLICY = "newmarket-original-continuing-depreciation-v1"
 
 @dataclass(frozen=True)
 class OriginalClassification:
-    source_hash: str
+    parser_input_hash: str
     fact_digest: str
     continuing_years: tuple[int, ...]
     discontinued_years: tuple[int, ...]
@@ -42,32 +45,32 @@ class OriginalClassification:
 # Only identities/classifications are pinned; amounts always come from facts.
 _ORIGINALS = {
     ("0001282637", "0001282637-15-000004"): OriginalClassification(
-        "5e9510723b0fb3a20bc9a4f77d14cdbc984dffb2c327fb98388c60ae98ee5f7d",
+        "d39dc0bc0bfe564d802422b7ece4d64845bd58e194208e2caccb0b7a9c72a2df",
         "fb3dfe48db99cd56e547a4b24349783f7d73f1b5fac7e0c4fb4d0a741ae591b3",
         (2014,),
         (2012, 2013),
     ),
     ("0001282637", "0001282637-16-000028"): OriginalClassification(
-        "06be302baf2ecf9ff95ab87243df1f2a1cd63e9ababc969b89c4764be794e380",
+        "90b1f0fddb61415dab858235894745b2c2808ee598ac0594b0a28010b808e14c",
         "87cdac62baffd9c6810d93bec52c418fef016931c445fca0771ec597d3bef5f0",
         (2014, 2015),
         (2013,),
     ),
     ("0001282637", "0001282637-17-000005"): OriginalClassification(
-        "19247250d691d0625172f45ab484b7e6ad44b2b82462e6aff3ed956f03576422",
+        "baed1535c218e094d38daa1aca950bc29048a1935596d649a68d53348109a1b5",
         "67ab534c782b3412c77d57cdc2e6dd42a2809924488d85ea6d975a0d09c706a1",
         (2014, 2015, 2016),
         (),
     ),
     ("0000724910", "0001376474-23-000283"): OriginalClassification(
-        "26d95888105590690531f4b3c4da8ca910e6aa4e315f6372ed51c55459b0b05c",
+        "fbab4403625d475d594960fc11a39ef1be6dd079a854647c11243dba9bdb3469",
         "1ce5d69c3a2b560110b3cfffba644b15125475ce3531a99bdc5a5f5fd35ef90e",
         (2022, 2023),
         (),
         FIXED_ASSET_DEPRECIATION,
     ),
     ("0000724910", "0001376474-24-000214"): OriginalClassification(
-        "e337d87718577db631e61f5495c3c8f96304c0552161cb5054305967394c9dc6",
+        "9b08f22245c6dbe458fdc90ff1484e87af5e8900b41774be6f4d0d7d7bd8ae57",
         "21c4ebca39e56c934edded6065b4ac78a0f451de96a540afe5d49726c53b01c1",
         (2023, 2024),
         (),
@@ -81,7 +84,7 @@ def registered_depreciation_concept(original: OriginalIssuerEvidenceV1) -> str:
     entry = _ORIGINALS.get((original.source.cik, original.source.accession_number))
     if (
         entry is not None
-        and original.source.content_hash == entry.source_hash
+        and parser_input_matches_registered_original(original, entry.parser_input_hash)
         and fact_semantic_digest(original.report) == entry.fact_digest
     ):
         return entry.direct_concept
@@ -106,7 +109,9 @@ def select_registered_depreciation(
     """Reproduce only the registered source classification, never infer absence."""
     source = original.source
     entry = _ORIGINALS.get((source.cik, source.accession_number))
-    if entry is None or source.content_hash != entry.source_hash:
+    if entry is None or not parser_input_matches_registered_original(
+        original, entry.parser_input_hash
+    ):
         return DepreciationSelection(reason_codes=("MAPPING_DA_SCOPE_UNREVIEWED",))
     if fact_semantic_digest(original.report) != entry.fact_digest:
         return DepreciationSelection(reason_codes=("MAPPING_DA_SOURCE_MISMATCH",))

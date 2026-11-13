@@ -14,7 +14,10 @@ from .accounting_roles import (
     IssuerAccountingRoleRuleSetV1,
 )
 from .arelle_parser import fact_semantic_digest, ParsedXbrlFactV1
-from .original_issuer import OriginalIssuerEvidenceV1
+from .original_issuer import (
+    OriginalIssuerEvidenceV1,
+    parser_input_matches_registered_original,
+)
 from .serialization import sha256_digest
 
 NON_OPERATING_ASSETS = "registered:InvestmentAssetsExcludingCash"
@@ -61,7 +64,7 @@ def investment_asset_concept(normalized_field: str) -> str:
 
 @dataclass(frozen=True)
 class OriginalClassification:
-    source_hash: str
+    parser_input_hash: str
     fact_digest: str
     instants: tuple[date, ...]
     roles: frozenset[str]
@@ -70,13 +73,13 @@ class OriginalClassification:
 # The complete investment/cash classification is in accounting-role-evidence.md.
 _ORIGINALS = {
     ("0000724910", "0001376474-23-000283"): OriginalClassification(
-        "26d95888105590690531f4b3c4da8ca910e6aa4e315f6372ed51c55459b0b05c",
+        "fbab4403625d475d594960fc11a39ef1be6dd079a854647c11243dba9bdb3469",
         "1ce5d69c3a2b560110b3cfffba644b15125475ce3531a99bdc5a5f5fd35ef90e",
         (date(2022, 3, 31), date(2023, 3, 31)),
         frozenset({"cash_and_short_term_investments"}),
     ),
     ("0000724910", "0001376474-24-000214"): OriginalClassification(
-        "e337d87718577db631e61f5495c3c8f96304c0552161cb5054305967394c9dc6",
+        "9b08f22245c6dbe458fdc90ff1484e87af5e8900b41774be6f4d0d7d7bd8ae57",
         "21c4ebca39e56c934edded6065b4ac78a0f451de96a540afe5d49726c53b01c1",
         (date(2023, 3, 31), date(2024, 3, 31)),
         ROLES,
@@ -107,7 +110,9 @@ def select_registered_investment_assets(
     entry = _ORIGINALS.get((source.cik, source.accession_number))
     if (
         entry is None
-        or source.content_hash != entry.source_hash
+        or not parser_input_matches_registered_original(
+            original, entry.parser_input_hash
+        )
         or normalized_field not in entry.roles
     ):
         return InvestmentAssetSelection(reason_codes=(f"{prefix}_SCOPE_UNREVIEWED",))

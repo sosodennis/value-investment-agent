@@ -67,7 +67,7 @@ def liability_case(tmp_path, monkeypatch, *, role=None, change=None):
         "_ORIGINALS",
         {
             (source.cik, source.accession_number): policy.OriginalClassification(
-                source.content_hash,
+                source.parser_input_hash,
                 fact_semantic_digest(request.original.report),
                 (date(2024, 12, 31), date(2025, 12, 31)),
             )
@@ -235,7 +235,11 @@ def test_unregistered_changed_and_future_originals_refuse(
             "MAPPING_NONCURRENT_SCOPE_UNREVIEWED",
         ),
         (
-            {"source": original.source.model_copy(update={"content_hash": "f" * 64})},
+            {
+                "source": original.source.model_copy(
+                    update={"parser_input_hash": "f" * 64}
+                )
+            },
             "MAPPING_NONCURRENT_SCOPE_UNREVIEWED",
         ),
         (

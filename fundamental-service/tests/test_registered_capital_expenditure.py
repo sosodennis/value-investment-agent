@@ -65,7 +65,7 @@ def capital_expenditure_case(
                     source.cik,
                     source.accession_number,
                 ): policy.OriginalCapitalExpenditureScope(
-                    source.content_hash,
+                    source.parser_input_hash,
                     fact_semantic_digest(request.original.report),
                     continuing,
                 )
@@ -135,7 +135,7 @@ def test_only_classified_period_is_signed_replayed_and_reused(tmp_path, monkeypa
     (
         "issuer",
         "accession",
-        "source",
+        "parser_input",
         "amount",
         "precision",
         "passage",
@@ -146,11 +146,11 @@ def test_only_classified_period_is_signed_replayed_and_reused(tmp_path, monkeypa
 def test_registered_scope_refuses_changed_source(tmp_path, monkeypatch, change):
     request, store, _, _ = capital_expenditure_case(tmp_path, monkeypatch)
     original = request.original
-    if change in {"issuer", "accession", "source"}:
+    if change in {"issuer", "accession", "parser_input"}:
         field, value = {
             "issuer": ("cik", "0000000002"),
             "accession": ("accession_number", "0000000001-25-999999"),
-            "source": ("content_hash", "f" * 64),
+            "parser_input": ("parser_input_hash", "f" * 64),
         }[change]
         original = original.model_copy(
             update={"source": original.source.model_copy(update={field: value})}

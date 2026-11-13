@@ -60,7 +60,7 @@ def operating_depreciation_case(tmp_path, monkeypatch):
         "_ORIGINALS",
         {
             (source.cik, source.accession_number): policy.OriginalClassification(
-                source.content_hash,
+                source.parser_input_hash,
                 fact_semantic_digest(request.original.report),
                 (2024, 2025),
                 (),
@@ -162,16 +162,18 @@ def test_batch_uses_the_original_bound_concept_and_keeps_other_missing_roles(
     assert batch.requirements.supported_history_threshold is None
 
 
-@pytest.mark.parametrize("change", ("source", "amount", "period", "precision"))
+@pytest.mark.parametrize("change", ("parser_input", "amount", "period", "precision"))
 def test_operating_proposal_does_not_inherit_a_changed_original(
     tmp_path, monkeypatch, change
 ):
     request, store, _, _ = operating_depreciation_case(tmp_path, monkeypatch)
     original = request.original
-    if change == "source":
+    if change == "parser_input":
         original = original.model_copy(
             update={
-                "source": original.source.model_copy(update={"content_hash": "f" * 64})
+                "source": original.source.model_copy(
+                    update={"parser_input_hash": "f" * 64}
+                )
             }
         )
     else:
@@ -301,7 +303,7 @@ def depreciation_case(tmp_path, monkeypatch, *, adjusted=True):
                 original.source.cik,
                 original.source.accession_number,
             ): policy.OriginalClassification(
-                original.source.content_hash,
+                original.source.parser_input_hash,
                 fact_semantic_digest(original.report),
                 (2024,),
                 (2025,),
@@ -367,16 +369,24 @@ def test_unadjusted_total_cannot_include_a_registered_discontinued_year(
 
 @pytest.mark.parametrize(
     "change",
-    ("issuer", "accession", "source", "amount", "precision", "passage", "dimension"),
+    (
+        "issuer",
+        "accession",
+        "parser_input",
+        "amount",
+        "precision",
+        "passage",
+        "dimension",
+    ),
 )
 def test_registry_does_not_authorize_changed_sources(tmp_path, monkeypatch, change):
     request, store, _, _ = depreciation_case(tmp_path, monkeypatch)
     original = request.original
-    if change in {"issuer", "accession", "source"}:
+    if change in {"issuer", "accession", "parser_input"}:
         field, value = {
             "issuer": ("cik", "0000000002"),
             "accession": ("accession_number", "0000000002-26-000001"),
-            "source": ("content_hash", "f" * 64),
+            "parser_input": ("parser_input_hash", "f" * 64),
         }[change]
         original = original.model_copy(
             update={"source": original.source.model_copy(update={field: value})}

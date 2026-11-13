@@ -53,7 +53,7 @@ def equity_case(tmp_path, monkeypatch, *, totals=("100", "90"), change=None):
         "_ORIGINALS",
         {
             (source.cik, source.accession_number): policy.OriginalClassification(
-                source.content_hash,
+                source.parser_input_hash,
                 fact_semantic_digest(request.original.report),
                 (date(2024, 12, 31), date(2025, 12, 31)),
             )
@@ -224,12 +224,14 @@ def test_equivalent_duplicates_and_source_order_preserve_decision(
     assert after.eligible_observation_digests == before.eligible_observation_digests
 
 
-def test_raw_original_hash_and_original_period_are_required(tmp_path, monkeypatch):
+def test_registered_parser_input_and_original_period_are_required(
+    tmp_path, monkeypatch
+):
     request, _, _, _ = equity_case(tmp_path, monkeypatch)
     changed_hash = request.original.model_copy(
         update={
             "source": request.original.source.model_copy(
-                update={"content_hash": "f" * 64}
+                update={"parser_input_hash": "f" * 64}
             )
         }
     )

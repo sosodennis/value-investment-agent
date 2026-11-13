@@ -211,7 +211,7 @@ def test_gross_balance_approval_is_source_bound_and_reused_after_restart(
         store.read(first.decision_publication.artifact.artifact_id)
     )
     assert decision.status == "approved"
-    assert decision.policy_version == "source-bound-us-gaap-v14"
+    assert decision.policy_version == "source-bound-us-gaap-v15"
     mapping = decision.mapping
     scope = mapping.observation_scope
     assert scope.issuer_id == request.original.source.cik
@@ -544,6 +544,21 @@ def test_missing_bytes_or_integrity_never_produce_approval(tmp_path):
     assert (
         "DATA_RELEASE_ORIGINAL_INTEGRITY_MISMATCH"
         in evaluate(changed, store).reason_codes
+    )
+    changed_raw_source = request.model_copy(
+        update={
+            "original": request.original.model_copy(
+                update={
+                    "source": request.original.source.model_copy(
+                        update={"content_hash": "f" * 64}
+                    )
+                }
+            )
+        }
+    )
+    assert (
+        "DATA_RELEASE_ORIGINAL_INTEGRITY_MISMATCH"
+        in evaluate(changed_raw_source, store).reason_codes
     )
 
 

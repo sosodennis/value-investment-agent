@@ -273,6 +273,23 @@ class OriginalIssuerEvidenceV1(StrictModel):
         return self
 
 
+def parser_input_matches_registered_original(
+    original: OriginalIssuerEvidenceV1, expected_parser_input_hash: str
+) -> bool:
+    """Match the reviewed filing representation after the integrity boundary.
+
+    The automatic-mapping request separately verifies exact raw bytes against
+    SEC integrity evidence before using a registered classification. This
+    identity check deliberately uses the retained parser input, so SEC response
+    normalization authorized by that policy does not change filing identity.
+    """
+    return (
+        original.status == "matched"
+        and original.source.parser_input_hash == expected_parser_input_hash
+        and original.report.source_content_hash == expected_parser_input_hash
+    )
+
+
 def _issuer_input_digest(
     source: OriginalOperatingSourceV1,
     decision_at: datetime,

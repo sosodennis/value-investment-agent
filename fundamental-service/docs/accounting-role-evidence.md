@@ -13,6 +13,38 @@ remain an optional supported evidence path. Both paths must establish the full
 role's meaning, currency, period, scope, completeness and lack of overlap;
 structural source membership alone cannot approve a mapping.
 
+Automatic policy `source-bound-us-gaap-v15` changes the identity used by the
+five registered selectors (D&A, capex, investment assets, liability residuals
+and noncontrolling equity). They require the registered CIK/accession,
+integrity-validated parser-input SHA-256 and complete fact multiset digest.
+Both the source's parser-input hash and the report's source-content hash must
+match that registered parser input. This supersedes the raw-hash registration
+described in the earlier policy checkpoints below; those checkpoints remain
+historical evidence.
+
+SEC can append response scripts outside the XBRL filing representation. The
+existing SEC integrity policy must still reproduce the permitted normalization
+from retained raw, archive, index and parser bytes before any mapping approval.
+Changing only the raw hash without matching integrity evidence abstains. Raw
+hashes remain in acquisition/integrity evidence, mapping lineage and accounting
+rules; a new raw response never overwrites a previous artifact. Unregistered
+parser inputs, altered facts, periods, scope or precision remain unsupported.
+
+The retained parser inputs for these existing classifications are:
+
+| CIK | Original accession | Parser-input SHA-256 |
+| --- | --- | --- |
+| `0001282637` | `0001282637-15-000004` | `d39dc0bc0bfe564d802422b7ece4d64845bd58e194208e2caccb0b7a9c72a2df` |
+| `0001282637` | `0001282637-16-000028` | `90b1f0fddb61415dab858235894745b2c2808ee598ac0594b0a28010b808e14c` |
+| `0001282637` | `0001282637-17-000005` | `baed1535c218e094d38daa1aca950bc29048a1935596d649a68d53348109a1b5` |
+| `0000724910` | `0001376474-23-000283` | `fbab4403625d475d594960fc11a39ef1be6dd079a854647c11243dba9bdb3469` |
+| `0000724910` | `0001376474-24-000214` | `9b08f22245c6dbe458fdc90ff1484e87af5e8900b41774be6f4d0d7d7bd8ae57` |
+
+Re-evaluation binds a new mapping/signature to v15 and its executable policy
+digest. Prior mappings and failures remain retained. This identity correction
+does not expand accounting classifications, change the formal forecast formulas
+or establish a supported history threshold.
+
 A `derived` period adds or subtracts at least two distinct source observations.
 Every component must match the same consolidated issuer, period and unit.
 Repeated observations, repeated concepts, conflicting observations, nonfinite
