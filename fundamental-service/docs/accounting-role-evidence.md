@@ -248,6 +248,45 @@ same fact regardless of input order. Signed approval and release replay repeat
 the classification. No source adapter, provider port, public schema, valuation
 formula, absence/award claim or history threshold changes.
 
+### Registered NVE cash and current-investment exclusion
+
+Automatic policy `source-bound-us-gaap-v12` extends the same investment selector
+(`registered_investment_assets.py`) to the existing
+`cash_and_short_term_investments` working-capital exclusion role. The two exact
+2023/2024 NVE originals above separately report cash and current corporate-bond
+investments on their balance sheets. Only those registered original hashes,
+complete parsed fact multisets and instant periods support the classification.
+
+| Original | Instant | Cash and cash equivalents | Current corporate bonds | Combined current-asset exclusion |
+| --- | --- | --- | --- | --- |
+| 2023 | 2022-03-31 | USD10,449,510 | USD20,839,683 | USD31,289,193 |
+| 2023 / 2024 | 2023-03-31 | USD1,669,896 | USD15,513,095 | USD17,182,991 |
+| 2024 | 2024-03-31 | USD10,283,550 | USD11,917,779 | USD22,201,329 |
+
+The source concepts are `us-gaap:CashAndCashEquivalentsAtCarryingValue` and
+`us-gaap:MarketableSecuritiesCurrent`. Both must be nonnegative consolidated
+USD instants at unit-or-finer precision in the same genuine US GAAP namespace.
+The existing accounting component evaluator sums them and retains both original
+observations, including namespace, precision, issuer/accession, period and
+source hashes. Missing, conflicting, mixed-namespace, rounded, foreign or future
+evidence refuses. Equivalent duplicates select deterministically.
+
+The 2023 maturity analysis includes USD906,141 in money-market funds within its
+USD16,419,236 short-duration total. Those funds are already cash equivalents;
+using that total instead of balance-sheet current bonds would duplicate cash.
+The all-maturity available-for-sale total, noncurrent bonds and investment
+interest receivable therefore never enter this current-asset exclusion. The
+separate `non_operating_assets` classification above still includes its three
+registered components and remains available only for the 2024 original.
+
+The existing composite recipe covers cash and short-term investments once with
+this combined role. It still requires explicit current debt/lease exclusions,
+source-bound gross parents and residual inclusion scenarios. No unknown amount
+becomes zero, no expense/award/claim absence is inferred, and an exclusion alone
+cannot establish a complete valuation. Signature/release replay verifies the
+same executable policy. Provider contracts and #352 valuation formulas stay
+with their existing owners; the history threshold remains null.
+
 A `disclosed` duration transcribes one finite decimal literal from an exact
 nonnumeric parsed fact. `DisclosedAmountV1` retains Unicode code-point offsets
 for the exact quote, amount token, unit quote and scale token, plus reported

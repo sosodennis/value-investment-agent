@@ -5,7 +5,7 @@ from decimal import Decimal
 
 import pytest
 
-from fundamental_service import registered_non_operating_assets as policy
+from fundamental_service import registered_investment_assets as policy
 from fundamental_service.arelle_parser import fact_semantic_digest
 from fundamental_service.automatic_mapping import (
     AutomaticMappingApprovalV1,
@@ -24,7 +24,7 @@ from test_automatic_mapping_batch import read_decision
 from test_issuer_operating_release import inventory
 
 
-def asset_case(tmp_path, monkeypatch, *, change=None):
+def asset_case(tmp_path, monkeypatch, *, change=None, role="non_operating_assets"):
     template, _, _, _ = case(tmp_path / "template")
     base = next(f for f in template.original.report.facts if f.is_numeric)
     facts = [
@@ -57,6 +57,17 @@ def asset_case(tmp_path, monkeypatch, *, change=None):
             "value": "52548876",
         }
     )
+    if role == "cash_and_short_term_investments":
+        facts = [f for f in facts if f.concept == "us-gaap:MarketableSecuritiesCurrent"]
+        facts.append(
+            cash.model_copy(
+                update={
+                    "context_id": "asset-2024",
+                    "instant": date(2024, 12, 31),
+                    "value": "1669896",
+                }
+            )
+        )
     facts = [cash, aggregate, *facts]
     if change is not None:
         facts = change(facts)
@@ -64,8 +75,8 @@ def asset_case(tmp_path, monkeypatch, *, change=None):
         tmp_path / "actual",
         extra=tuple(facts),
         proposal_changes={
-            "source_concept": policy.NON_OPERATING_ASSETS,
-            "normalized_field": "non_operating_assets",
+            "source_concept": policy.investment_asset_concept(role),
+            "normalized_field": role,
         },
     )
     source = request.original.source
@@ -77,6 +88,7 @@ def asset_case(tmp_path, monkeypatch, *, change=None):
                 source.content_hash,
                 fact_semantic_digest(request.original.report),
                 (date(2024, 12, 31), date(2025, 12, 31)),
+                policy.ROLES,
             )
         },
     )
@@ -215,7 +227,9 @@ def test_original_classification_does_not_transfer(tmp_path, monkeypatch, change
         original = original.model_copy(
             update={"source": original.source.model_copy(update={field: value})}
         )
-    selection = policy.select_registered_non_operating_assets(original)
+    selection = policy.select_registered_investment_assets(
+        original, "non_operating_assets"
+    )
     assert selection.rules is None and selection.reason_codes
 
 
@@ -226,15 +240,16 @@ def test_reordered_equivalent_observations_preserve_classification(
         tmp_path, monkeypatch, change=lambda fs: [*fs, fs[-1]]
     )
     original = request.original
-    first = policy.select_registered_non_operating_assets(original)
-    second = policy.select_registered_non_operating_assets(
+    first = policy.select_registered_investment_assets(original, "non_operating_assets")
+    second = policy.select_registered_investment_assets(
         original.model_copy(
             update={
                 "report": original.report.model_copy(
                     update={"facts": tuple(reversed(original.report.facts))}
                 )
             }
-        )
+        ),
+        "non_operating_assets",
     )
     assert first.rules is not None
     assert sha256_digest(first.rules) == sha256_digest(second.rules)
@@ -269,3 +284,173 @@ def test_batch_retains_other_missing_roles_and_rejects_cash_total_proposal(
     assert roles["convertible_instruments"].status == "abstain"
     assert roles["convertible_instruments"].approval is None
     assert batch.requirements.supported_history_threshold is None
+
+
+def test_cash_current_investment_exclusion_retains_components_and_signed_replay(
+    tmp_path, monkeypatch
+):
+    role = "cash_and_short_term_investments"
+    request, store, roots, _ = asset_case(tmp_path, monkeypatch, role=role)
+    proposal = automatic_mapping_proposal(
+        role,
+        mapping_version=request.proposal.mapping_version,
+        original=request.original,
+    )
+    assert proposal.source_concept == policy.CASH_AND_SHORT_TERM_INVESTMENTS
+    receipt = approve(request, store, roots)
+    decision = AutomaticMappingDecisionV1.model_validate_json(
+        store.read(receipt.decision_publication.artifact.artifact_id)
+    )
+    assert decision.status == "approved"
+    candidates = parsed_facts_to_candidates(
+        request.original.report,
+        source=request.original.source,
+        issuer_id=request.original.source.cik,
+        normalized_field=role,
+        mapping=decision.mapping,
+    )
+    assert {f.instant.year: f.value for f in candidates} == {
+        2024: Decimal("17182991"),
+        2025: Decimal("22201329"),
+    }
+    assert all(
+        {f.concept for f in candidate.accounting_evidence.source_facts}
+        == set(policy.CASH_SHORT_TERM_COMPONENTS)
+        for candidate in candidates
+    )
+    assert all(len(f.accounting_evidence.source_facts) == 2 for f in candidates)
+    approval = AutomaticMappingApprovalV1.model_validate_json(
+        store.read(receipt.approval_publication.artifact.artifact_id)
+    )
+    before = inventory(store.root)
+    assert (
+        verify_automatic_mapping_replay(
+            approval, decision.mapping, artifacts=ArtifactStore(store.root)
+        )
+        == request
+    )
+    repeat = approve(request, store, roots)
+    assert repeat.output_digest == receipt.output_digest
+    assert not any(
+        p.wrote
+        for p in (
+            repeat.input_publication,
+            repeat.decision_publication,
+            repeat.approval_publication,
+        )
+    )
+    assert inventory(store.root) == before
+    wrong = request.model_copy(
+        update={
+            "proposal": proposal.model_copy(
+                update={
+                    "source_concept": "us-gaap:AvailableForSaleSecuritiesDebtSecurities"
+                }
+            )
+        }
+    )
+    assert evaluate(wrong, store).status == "abstain"
+
+
+@pytest.mark.parametrize(
+    "change,reason",
+    [
+        ({"unit": "xbrli:shares"}, "COMPONENT_INVALID"),
+        ({"entity_identifier": "999"}, "COMPONENT_INVALID"),
+        ({"value": "-1"}, "COMPONENT_INVALID"),
+        ({"value": "NaN"}, "COMPONENT_INVALID"),
+        ({"decimals": "-3"}, "COMPONENT_INVALID"),
+        ({"decimals": None}, "COMPONENT_INVALID"),
+        ({"namespace_uri": "https://example.test/extension"}, "COMPONENT_INVALID"),
+        ({"instant": date(2026, 12, 31)}, "COMPONENT_MISSING"),
+        ({"consolidation_scope": "segment"}, "COMPONENT_INVALID"),
+    ],
+)
+def test_exclusion_requires_aligned_original_cash_components(
+    tmp_path, monkeypatch, change, reason
+):
+    request, store, _, _ = asset_case(
+        tmp_path,
+        monkeypatch,
+        role="cash_and_short_term_investments",
+        change=lambda fs: [*fs[:-1], fs[-1].model_copy(update=change)],
+    )
+    decision = evaluate(request, store)
+    assert decision.status == "abstain" and decision.mapping is None
+    assert f"MAPPING_INVESTMENT_EXCLUSION_{reason}" in decision.reason_codes
+
+
+@pytest.mark.parametrize("duplicate", ["equivalent", "conflict", "mixed_namespace"])
+def test_exclusion_duplicate_selection_is_deterministic_and_refuses_conflicts(
+    tmp_path, monkeypatch, duplicate
+):
+    changes = {
+        "equivalent": {},
+        "conflict": {"value": "1669897"},
+        "mixed_namespace": {"namespace_uri": "http://fasb.org/us-gaap/2023"},
+    }[duplicate]
+    request, store, _, _ = asset_case(
+        tmp_path,
+        monkeypatch,
+        role="cash_and_short_term_investments",
+        change=lambda fs: [*fs, fs[-1].model_copy(update=changes)],
+    )
+    original = request.original
+    first = policy.select_registered_investment_assets(
+        original, "cash_and_short_term_investments"
+    )
+    second = policy.select_registered_investment_assets(
+        original.model_copy(
+            update={
+                "report": original.report.model_copy(
+                    update={"facts": tuple(reversed(original.report.facts))}
+                )
+            }
+        ),
+        "cash_and_short_term_investments",
+    )
+    assert first == second
+    decision = evaluate(request, store)
+    if duplicate == "equivalent":
+        assert first.rules is not None and decision.status == "approved"
+    else:
+        assert first.rules is None and decision.status == "abstain"
+
+
+def test_exclusion_registration_never_transfers_to_other_roles_or_future_periods(
+    tmp_path, monkeypatch
+):
+    request, _, _, _ = asset_case(
+        tmp_path, monkeypatch, role="cash_and_short_term_investments"
+    )
+    source = request.original.source
+    entry = policy._ORIGINALS[(source.cik, source.accession_number)]
+    monkeypatch.setattr(
+        policy,
+        "_ORIGINALS",
+        {
+            (source.cik, source.accession_number): policy.OriginalClassification(
+                entry.source_hash,
+                entry.fact_digest,
+                entry.instants,
+                frozenset({"cash_and_short_term_investments"}),
+            )
+        },
+    )
+    assert (
+        automatic_mapping_proposal(
+            "non_operating_assets",
+            mapping_version=request.proposal.mapping_version,
+            original=request.original,
+        )
+        is None
+    )
+    future = request.original.model_copy(
+        update={"report_period_end": date(2024, 12, 31)}
+    )
+    result = policy.select_registered_investment_assets(
+        future, "cash_and_short_term_investments"
+    )
+    assert result.rules is None and result.reason_codes == (
+        "MAPPING_PERIOD_AFTER_ORIGINAL",
+    )

@@ -38,9 +38,10 @@ from .registered_depreciation import (
     registered_depreciation_concept,
     select_registered_depreciation,
 )
-from .registered_non_operating_assets import (
-    NON_OPERATING_ASSETS,
-    select_registered_non_operating_assets,
+from .registered_investment_assets import (
+    investment_asset_concept,
+    ROLES as INVESTMENT_ASSET_ROLES,
+    select_registered_investment_assets,
 )
 from .registered_noncontrolling_equity import (
     NONCONTROLLING_EQUITY,
@@ -55,8 +56,8 @@ from .serialization import sha256_digest
 from .taxonomy_evidence import require_original_taxonomy
 
 AUTOMATIC_MAPPING_INPUT_ROLE = "automatic-mapping-input-v1"
-AUTOMATIC_MAPPING_POLICY: Literal["source-bound-us-gaap-v11"] = (
-    "source-bound-us-gaap-v11"
+AUTOMATIC_MAPPING_POLICY: Literal["source-bound-us-gaap-v12"] = (
+    "source-bound-us-gaap-v12"
 )
 _GAAP_NAMESPACE = re.compile(
     r"http://(?:fasb\.org|xbrl\.us)/us-gaap/\d{4}(?:-\d{2}-\d{2})?"
@@ -143,7 +144,7 @@ def automatic_mapping_policy_digest() -> str:
                     "automatic_mapping_disclosures.py",
                     "registered_depreciation.py",
                     "registered_capital_expenditure.py",
-                    "registered_non_operating_assets.py",
+                    "registered_investment_assets.py",
                     "registered_noncontrolling_equity.py",
                     "registered_liability_residuals.py",
                     "accounting_roles.py",
@@ -197,7 +198,7 @@ def automatic_mapping_proposal(
     """Create only proposals supported by the service's executable rule table."""
     rule = _RULES.get(normalized_field)
     disclosed = normalized_field == "stock_based_compensation"
-    investment_assets = normalized_field == "non_operating_assets"
+    investment_assets = normalized_field in INVESTMENT_ASSET_ROLES
     noncontrolling_equity = normalized_field == "noncontrolling_interests"
     liability_residual = normalized_field in LIABILITY_RESIDUAL_ROLES
     if liability_residual and (
@@ -208,7 +209,7 @@ def automatic_mapping_proposal(
         return None
     if investment_assets and (
         original is None
-        or select_registered_non_operating_assets(original).rules is None
+        or select_registered_investment_assets(original, normalized_field).rules is None
     ):
         return None
     if noncontrolling_equity and (
@@ -224,9 +225,9 @@ def automatic_mapping_proposal(
         and not liability_residual
     ):
         return None
-    concept = (
-        NON_OPERATING_ASSETS if investment_assets else STOCK_COMPENSATION_DISCLOSURE
-    )
+    concept = STOCK_COMPENSATION_DISCLOSURE
+    if investment_assets:
+        concept = investment_asset_concept(normalized_field)
     if liability_residual:
         concept = liability_residual_concept(normalized_field)
     elif noncontrolling_equity:
@@ -261,7 +262,7 @@ class AutomaticMappingDecisionV1(ReleaseModel):
     input_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
     source_revision: str = Field(pattern=r"^[0-9a-f]{40}$")
     evaluator_id: str = Field(min_length=1)
-    policy_version: Literal["source-bound-us-gaap-v11"] = AUTOMATIC_MAPPING_POLICY
+    policy_version: Literal["source-bound-us-gaap-v12"] = AUTOMATIC_MAPPING_POLICY
     policy_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
     status: Literal["approved", "abstain"]
     reason_codes: tuple[str, ...]
@@ -397,8 +398,9 @@ def evaluate_automatic_mapping(
     )
     adjusted = depreciation and proposal.source_concept == ADJUSTED_DEPRECIATION
     investment_assets = (
-        proposal.normalized_field == "non_operating_assets"
-        and proposal.source_concept == NON_OPERATING_ASSETS
+        proposal.normalized_field in INVESTMENT_ASSET_ROLES
+        and proposal.source_concept
+        == investment_asset_concept(proposal.normalized_field)
     )
     noncontrolling_equity = (
         proposal.normalized_field == "noncontrolling_interests"
@@ -456,8 +458,9 @@ def evaluate_automatic_mapping(
         selected.extend(equity.selected)
         accounting_rules = equity.rules
     if investment_assets:
-        assets = select_registered_non_operating_assets(
+        assets = select_registered_investment_assets(
             original,
+            proposal.normalized_field,
             security_id=(
                 request.security_identity.security_id
                 if request.security_identity is not None
@@ -626,7 +629,7 @@ def evaluate_automatic_mapping(
             if disclosed:
                 anchor = STOCK_COMPENSATION_DISCLOSURE
             elif investment_assets:
-                anchor = NON_OPERATING_ASSETS
+                anchor = investment_asset_concept(proposal.normalized_field)
             elif noncontrolling_equity:
                 anchor = NONCONTROLLING_EQUITY
             elif liability_residual:
