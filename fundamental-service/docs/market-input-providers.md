@@ -27,6 +27,29 @@ These adapters exist independently of complete real-issuer valuation acceptance.
 An approved source or mapping does not establish all accounting roles, a quote,
 an approved release, caller approval or a verified history threshold.
 
+## Source suitability
+
+Production market inputs require a maintained structured dataset, a stable API
+or download interface, documented field meanings and update rules, and
+verifiable version or historical-date evidence. Provider abstractions preserve
+these capabilities; they do not make an unsuitable source suitable.
+
+Do not introduce an adapter that extracts a value from an individual article,
+blog post, article feed or narrative passage. Finding similar posts in several
+years does not establish a dataset contract. The 2025 Damodaran article/feed ERP
+candidate investigated under #361/#369 is excluded on this basis. Its retained
+bytes are research evidence only; no production provider, source-use grant,
+issuer policy or valuation input is authorized by that investigation.
+
+Keep recurring current preparation and historical point-in-time availability
+explicit. A structured provider may support current captured data while lacking
+reproducible historical vintages. Report that limitation and retain the refusal
+for an unsupported historical cutoff. A year in a filename, a series observation
+date or today's capture cannot establish historical publication. New providers
+must exercise the same source reproduction and policy boundaries in serving and
+the release canary, including missing periods, conflicts and unsupported
+versions.
+
 ## Extend a source
 
 | Responsibility | Contract | Composition point |
