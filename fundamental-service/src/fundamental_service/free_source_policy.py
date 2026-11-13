@@ -1,6 +1,13 @@
 """Trusted intended-use rules for bounded public aggregate source profiles."""
 
-from .bea_source import BEA_GDP_PROFILE, BEA_GDP_TERMS, BeaNominalGdpVintageProvider
+from .bea_source import (
+    BEA_CURRENT_GDP_PROFILE,
+    BEA_CURRENT_GDP_SOURCE,
+    BEA_GDP_PROFILE,
+    BEA_GDP_TERMS,
+    BeaCurrentNominalGdpProvider,
+    BeaNominalGdpVintageProvider,
+)
 from .damodaran_source import (
     DAMODARAN_BETA_PROFILE,
     DAMODARAN_CAPITAL_PROFILE,
@@ -49,6 +56,7 @@ NEW_YORK_FED_USE_SHA256 = (
 def default_macro_providers() -> tuple[MacroSeriesProviderPort, ...]:
     return (
         BeaNominalGdpVintageProvider(),
+        BeaCurrentNominalGdpProvider(),
         NewYorkFedSofrVintageProvider(),
         TreasuryParYieldVintageProvider(),
         AlfredTreasuryVintageProvider(),
@@ -136,6 +144,34 @@ def free_market_source_policy() -> SourceUsePolicyV1:
         )
         for source_id in ("bea-gdp-release", "bea-nipa-archive")
     )
+    rules.append(
+        SourceUseRuleV1(
+            rule_id="bea-current-nominal-gdp-capture-v1",
+            provider_id="bea-nipa-current",
+            metric_id="us.nominal_gdp",
+            population="us.nominal_gdp",
+            source_id=BEA_CURRENT_GDP_SOURCE,
+            source_version=BEA_CURRENT_GDP_PROFILE,
+            terms_reference=BEA_GDP_TERMS,
+            permitted_uses=("valuation_preparation", "derived_valuation_display"),
+            terms=(
+                TermsRequirementV1(
+                    uri=BEA_GDP_TERMS, content_sha256=BEA_CITATION_SHA256
+                ),
+                TermsRequirementV1(
+                    uri=US_GOVERNMENT_WORKS_URI,
+                    content_sha256=US_GOVERNMENT_WORKS_SHA256,
+                ),
+            ),
+            required_notices=(
+                "Source: U.S. Bureau of Economic Analysis, current NIPA table 1.1.5. "
+                "Derived calculations are by value-investment-agent; no BEA endorsement is implied.",
+            ),
+            basis="Current aggregate NIPA data is captured from the maintained official BEA "
+            "workbook. Its use begins at actual capture time; capture does not establish "
+            "earlier availability or confer historical-vintage status.",
+        )
+    )
     rules.extend(
         (
             SourceUseRuleV1(
@@ -192,6 +228,6 @@ def free_market_source_policy() -> SourceUsePolicyV1:
         )
     )
     return SourceUsePolicyV1(
-        policy_version="free-market-source-use-v3",
+        policy_version="free-market-source-use-v4",
         rules=tuple(sorted(rules, key=lambda x: x.rule_id)),
     )

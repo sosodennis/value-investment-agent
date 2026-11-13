@@ -4,6 +4,7 @@ from urllib.parse import urlsplit
 
 from .contracts import SourceRole
 from .damodaran_source import damodaran_reference_profile
+from .bea_source import BEA_CURRENT_GDP_URI
 from .snapshots import SnapshotError
 from .sofr_source import (
     NEW_YORK_FED_SOFR_PROFILE,
@@ -54,6 +55,13 @@ PUBLIC_SOURCE_SPECS: tuple[PublicSourceSpec, ...] = (
         SourceRole.MACRO,
         "https://apps.bea.gov/",
         "https://apps.bea.gov/API/signup/",
+    ),
+    PublicSourceSpec(
+        "bea-nipa-current",
+        SourceRole.MACRO,
+        BEA_CURRENT_GDP_URI,
+        "https://www.bea.gov/help/guidelines-for-citing-bea",
+        path_match="exact",
     ),
     PublicSourceSpec(
         "bea-gdp-release",
@@ -246,6 +254,13 @@ def _terms_uri(uri: str) -> None:
         )
 
 
+def _current_bea_uri(uri: str) -> None:
+    if uri != BEA_CURRENT_GDP_URI:
+        raise SnapshotError(
+            "SOURCE_URI_NOT_ALLOWED", "current BEA GDP requires its exact workbook URI"
+        )
+
+
 def default_public_source_registrations() -> tuple[PublicSourceRegistration, ...]:
     """Assemble profiles here; transport and valuation know no concrete providers."""
     profiles: dict[str, PublicSourceCaptureProfilePort] = {
@@ -263,6 +278,9 @@ def default_public_source_registrations() -> tuple[PublicSourceRegistration, ...
         "fred-observations": ProvidedAvailabilityCaptureProfile(require_nonempty=True),
         "bea-gdp-release": RetainedAvailabilityCaptureProfile(_bea_uri),
         "bea-nipa-archive": RetainedAvailabilityCaptureProfile(_bea_uri),
+        "bea-nipa-current": RetainedAvailabilityCaptureProfile(
+            _current_bea_uri, require_nonempty=True
+        ),
         "damodaran-reference": RetainedAvailabilityCaptureProfile(
             _damodaran_uri, require_nonempty=True
         ),

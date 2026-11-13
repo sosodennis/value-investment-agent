@@ -25,6 +25,11 @@ from .source_evidence import RetainedSourceV1, SourceArtifactV1
 
 BEA_GDP_PROFILE = "bea-nipa-gdp-vintage-v1"
 BEA_GDP_TERMS = "https://www.bea.gov/help/guidelines-for-citing-bea"
+BEA_CURRENT_GDP_PROFILE = "bea-current-nipa-gdp-capture-v1"
+BEA_CURRENT_GDP_SOURCE = "bea-nipa-current"
+BEA_CURRENT_GDP_URI = (
+    "https://apps.bea.gov/national/Release/XLS/Survey/Section1All_xls.xlsx"
+)
 _BEA_NEWS_HOST = "www.bea.gov"
 _BEA_ARCHIVE_HOST = "apps.bea.gov"
 _SHEET_NS = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
@@ -435,3 +440,89 @@ class BeaNominalGdpVintageProvider:
             workbook_captured_at=workbook.captured_at,
             release_captured_at=release.captured_at,
         )
+
+
+class BeaCurrentNominalGdpProvider:
+    """Reproduce the maintained current workbook, available only when captured."""
+
+    provider_id = "bea-nipa-current"
+    _SERIES_ID = "us.nominal_gdp"
+
+    def supports(self, series_id: str) -> bool:
+        return series_id == self._SERIES_ID
+
+    def reproduce_vintage(
+        self, *, series_id: str, sources: tuple[RetainedSourceV1, ...]
+    ) -> MacroSeriesVintageV1:
+        if (
+            not self.supports(series_id)
+            or len(sources) != 1
+            or sources[0].source_id != BEA_CURRENT_GDP_SOURCE
+            or sources[0].uri != BEA_CURRENT_GDP_URI
+            or sources[0].source_version != BEA_CURRENT_GDP_PROFILE
+            or sources[0].terms_reference != BEA_GDP_TERMS
+        ):
+            raise SnapshotError(
+                "BEA_CURRENT_GDP_SOURCE_INVALID",
+                "current GDP requires one exact maintained BEA workbook profile",
+            )
+        source = sources[0]
+        try:
+            captured_at = source.captured_at.astimezone(UTC)
+            published_date, values = _xlsx_gdp_row(source.content)
+            if (
+                source.captured_at.tzinfo is None
+                or source.captured_at.utcoffset() is None
+                or published_date > captured_at.date()
+                or max(values) > captured_at.year - 1
+            ):
+                raise ValueError("current BEA workbook dates exceed its capture")
+            source_hash = _sha256(source.content)
+            return MacroSeriesVintageV1.build(
+                series_id=self._SERIES_ID,
+                provider_id=self.provider_id,
+                frequency="annual",
+                unit="USD millions",
+                source_version=BEA_CURRENT_GDP_PROFILE,
+                available_at=captured_at,
+                captured_at=captured_at,
+                artifacts=(
+                    SourceArtifactV1(
+                        source_id=source.source_id,
+                        uri=source.uri,
+                        source_version=source.source_version,
+                        terms_reference=source.terms_reference,
+                        content_sha256=source_hash,
+                        captured_at=captured_at,
+                    ),
+                ),
+                observations=tuple(
+                    MacroObservationV1(
+                        series_id=self._SERIES_ID,
+                        period_start=date(year, 1, 1),
+                        period_end=date(year, 12, 31),
+                        value=value,
+                        unit="USD millions",
+                        source_sha256=source_hash,
+                    )
+                    for year, value in sorted(values.items())
+                ),
+            )
+        except SnapshotError:
+            raise
+        except (
+            KeyError,
+            IndexError,
+            ValueError,
+            InvalidOperation,
+            TypeError,
+            UnicodeError,
+            zipfile.BadZipFile,
+            ElementTree.ParseError,
+            ValidationError,
+            OverflowError,
+        ) as error:
+            raise SnapshotError(
+                "BEA_CURRENT_GDP_SOURCE_INVALID",
+                "retained current workbook does not match its source profile",
+            ) from error

@@ -382,6 +382,7 @@ def test_all_declared_free_sources_have_allowlisted_capture_contract():
                     "new-york-fed-sofr",
                     "bea-gdp-release",
                     "bea-nipa-archive",
+                    "bea-nipa-current",
                     "treasury-yields",
                     "alfred-vintage",
                     "damodaran-reference",
@@ -556,6 +557,24 @@ def test_sofr_capture_records_retrieval_time_without_claiming_publication_time()
     )
     assert source.available_at == source.captured_at
     assert source.publication_at is None
+
+
+def test_current_bea_capture_uses_actual_retrieval_time_and_exact_uri():
+    uri = "https://apps.bea.gov/national/Release/XLS/Survey/Section1All_xls.xlsx"
+    adapter = PublicSourceAdapter(
+        user_agent="value-agent test@example.com",
+        opener=lambda *_args, **_kwargs: FakeResponse(b"current workbook bytes"),
+        min_interval_seconds=0,
+    )
+
+    source = adapter.capture("bea-nipa-current", uri)
+
+    assert source.content == b"current workbook bytes"
+    assert source.available_at == source.captured_at
+    assert source.publication_at is None
+    with pytest.raises(SnapshotError) as error:
+        adapter.validate_capture("bea-nipa-current", uri + "?vintage=2025")
+    assert error.value.code == "SOURCE_URI_NOT_ALLOWED"
 
 
 def test_sofr_capture_refuses_invalid_observation_before_returning_a_source():

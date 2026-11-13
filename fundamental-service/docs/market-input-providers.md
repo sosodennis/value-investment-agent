@@ -14,7 +14,7 @@ decide whether that evidence can supply a model input.
 | Equity risk premium | NYU Damodaran country ERP workbook, through `MarketReferenceProviderPort` | The eligible country row selected using original-bound jurisdiction evidence and a versioned crosswalk. |
 | Pretax borrowing cost | The same NYU industry cost-of-capital workbook | An industry borrowing-cost assumption, not the issuer's contracted debt rate. Overnight SOFR cannot silently replace it. |
 | Debt/equity capital weights | The same NYU industry cost-of-capital workbook and industry row | Industry capital-policy assumptions, not current issuer market weights. A coherent published pair permits only the existing bounded representation normalization. |
-| Terminal growth | Admitted BEA nominal GDP vintage plus the selected long-term risk-free rate | The explicit policy `min(nominal_gdp_cagr, long_term_risk_free_rate)`, with a pinned GDP horizon and freshness bound. It is a stable-growth assumption, not observed company growth. |
+| Terminal growth | Captured current BEA NIPA workbook or publication-bound historical GDP vintage, plus the selected long-term risk-free rate | The explicit policy `min(nominal_gdp_cagr, long_term_risk_free_rate)`, with a pinned GDP horizon and freshness bound. It is a stable-growth assumption, not observed company growth. |
 
 SEC original-submission headers supply the issuer's dated SIC and incorporation
 jurisdiction. `IssuerClassificationProviderPort`,
@@ -143,10 +143,20 @@ Selection still checks the workbook's declared update date, maximum age,
 issuer classification and source-use evidence. Capture time bounds availability;
 an annotation cannot silently establish an earlier publication date. Retained
 bytes and their digests identify a capture, because live URLs can change.
-`free-market-source-use-v3` covers the revised country aggregate with the same
-exact publisher permission evidence and attribution restrictions as v1.
+`free-market-source-use-v4` includes the separate current BEA NIPA profile.
 Missing or changed permission bytes, raw-table redistribution and historical
 cutoffs before capture still refuse.
+
+The current BEA adapter uses the maintained
+`https://apps.bea.gov/national/Release/XLS/Survey/Section1All_xls.xlsx`
+workbook through `BeaCurrentNominalGdpProvider` and the existing macro-series
+port. It validates the published GDP table and makes its data available only at
+the actual capture timestamp. This supports current valuation requests; it does
+not establish prior availability and cannot be selected for an earlier cutoff.
+The historical archive adapter remains separate and still requires its paired
+BEA release evidence before assigning an archival availability date. Both
+profiles retain the same normalized series contract, allowing the existing
+terminal-growth selector to consume either admitted vintage without new math.
 
 The catalog's `histimpl.xls` annual series and the publisher's `ERPbymonth.xlsx`
 monthly series are research candidates, without production adapters or grants.

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+from dataclasses import replace
 from datetime import UTC, datetime
 from io import BytesIO
 from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
@@ -8,8 +9,12 @@ from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
 import pytest
 
 from fundamental_service.bea_source import (
-    BEA_GDP_PROFILE,
+    BEA_CURRENT_GDP_PROFILE,
+    BEA_CURRENT_GDP_SOURCE,
+    BEA_CURRENT_GDP_URI,
     BEA_GDP_TERMS,
+    BEA_GDP_PROFILE,
+    BeaCurrentNominalGdpProvider,
     BeaNominalGdpVintageProvider,
 )
 from fundamental_service.macro_series import (
@@ -17,7 +22,14 @@ from fundamental_service.macro_series import (
     NominalGdpGrowthCeilingV1,
     reproduce_macro_vintage,
 )
+from fundamental_service.free_source_policy import free_market_source_policy
 from fundamental_service.snapshots import SnapshotError
+from fundamental_service.source_admission import (
+    SourceUsePolicyV1,
+    SourceUseRuleV1,
+    TermsRequirementV1,
+    admit_macro_source,
+)
 from fundamental_service.source_evidence import RetainedSourceV1
 
 CAPTURED_AT = datetime(2026, 11, 12, 9, tzinfo=UTC)
@@ -116,6 +128,144 @@ def _sources(
             captured_at=CAPTURED_AT,
         ),
     )
+
+
+def _current_source(
+    *,
+    captured_at: datetime = datetime(2026, 11, 12, 9, tzinfo=UTC),
+    content: bytes | None = None,
+) -> RetainedSourceV1:
+    return RetainedSourceV1(
+        source_id=BEA_CURRENT_GDP_SOURCE,
+        uri=BEA_CURRENT_GDP_URI,
+        source_version=BEA_CURRENT_GDP_PROFILE,
+        terms_reference=BEA_GDP_TERMS,
+        content=_workbook() if content is None else content,
+        captured_at=captured_at,
+    )
+
+
+def test_current_bea_provider_is_available_only_at_actual_capture_and_repeatable():
+    provider = BeaCurrentNominalGdpProvider()
+    source = _current_source()
+    vintage = reproduce_macro_vintage(
+        provider, series_id="us.nominal_gdp", sources=(source,)
+    )
+
+    assert vintage.provider_id == "bea-nipa-current"
+    assert vintage.source_version == BEA_CURRENT_GDP_PROFILE
+    assert vintage.available_at == source.captured_at
+    assert vintage.observations[-1].period_end.isoformat() == "2024-12-31"
+    assert (
+        vintage.content_digest
+        == provider.reproduce_vintage(
+            series_id="us.nominal_gdp", sources=(source,)
+        ).content_digest
+    )
+    with pytest.raises(ValueError, match="unavailable"):
+        NominalGdpGrowthCeilingV1.derive(
+            vintage,
+            valuation_at=source.captured_at.replace(year=2025),
+        )
+
+
+def test_current_bea_profile_admits_only_current_capture_source():
+    provider = BeaCurrentNominalGdpProvider()
+    source = _current_source()
+    terms = RetainedSourceV1(
+        source_id="test-bea-terms",
+        uri=BEA_GDP_TERMS,
+        source_version="test-terms-v1",
+        terms_reference=BEA_GDP_TERMS,
+        content=b"terms fixture",
+        captured_at=source.captured_at,
+    )
+    terms_hash = hashlib.sha256(terms.content).hexdigest()
+    policy = SourceUsePolicyV1(
+        policy_version="test-current-bea-source-use-v1",
+        rules=(
+            SourceUseRuleV1(
+                rule_id="test-bea-current-gdp",
+                provider_id=provider.provider_id,
+                metric_id="us.nominal_gdp",
+                population="us.nominal_gdp",
+                source_id=BEA_CURRENT_GDP_SOURCE,
+                source_version=BEA_CURRENT_GDP_PROFILE,
+                terms_reference=BEA_GDP_TERMS,
+                permitted_uses=("valuation_preparation",),
+                terms=(
+                    TermsRequirementV1(uri=BEA_GDP_TERMS, content_sha256=terms_hash),
+                ),
+                required_notices=("Test-only source notice",),
+                basis="Test-only exact source rule",
+            ),
+        ),
+    )
+
+    result = admit_macro_source(
+        provider,
+        series_id="us.nominal_gdp",
+        sources=(source,),
+        terms=(terms,),
+        policy=policy,
+        valuation_at=source.captured_at,
+    )
+    historical = admit_macro_source(
+        provider,
+        series_id="us.nominal_gdp",
+        sources=(source,),
+        terms=(terms,),
+        policy=policy,
+        valuation_at=source.captured_at.replace(year=2025),
+    )
+
+    assert result.status == "admitted"
+    assert historical.status == "refused"
+    assert historical.issue_codes == ("SOURCE_NOT_AVAILABLE_AT_VALUATION",)
+
+
+def test_free_source_policy_has_separate_current_bea_rights_rule():
+    matches = tuple(
+        rule
+        for rule in free_market_source_policy().rules
+        if rule.provider_id == "bea-nipa-current"
+    )
+    assert len(matches) == 1
+    assert matches[0].source_version == BEA_CURRENT_GDP_PROFILE
+    assert matches[0].source_id == BEA_CURRENT_GDP_SOURCE
+    assert matches[0].permitted_uses == (
+        "valuation_preparation",
+        "derived_valuation_display",
+    )
+
+
+@pytest.mark.parametrize(
+    "change",
+    ("source_id", "uri", "profile", "terms", "published_after_capture"),
+)
+def test_current_bea_provider_rejects_mismatched_profile_and_future_workbook(
+    change: str,
+):
+    source = _current_source()
+    if change == "source_id":
+        source = replace(source, source_id="bea-nipa-archive")
+    elif change == "uri":
+        source = replace(source, uri=WORKBOOK_URI)
+    elif change == "profile":
+        source = replace(source, source_version=BEA_GDP_PROFILE)
+    elif change == "terms":
+        source = replace(source, terms_reference="https://example.test")
+    else:
+        source = _current_source(
+            captured_at=datetime(2025, 1, 1, tzinfo=UTC),
+            content=_workbook(published="March 27, 2025"),
+        )
+
+    with pytest.raises(SnapshotError) as error:
+        BeaCurrentNominalGdpProvider().reproduce_vintage(
+            series_id="us.nominal_gdp", sources=(source,)
+        )
+    assert error.value.code == "BEA_CURRENT_GDP_SOURCE_INVALID"
 
 
 def test_bea_provider_reproduces_provider_neutral_vintage_and_growth_policy():
