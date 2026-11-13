@@ -330,6 +330,20 @@ def compute_treasury_stock_dilution(
             )
         exercise = Decimal(0)
         if isinstance(award, StockOptionAwardV1):
+            price = award.exercise_price
+            concepts: tuple[str, ...] = (price.concept,)
+            if price.accounting_evidence is not None:
+                concepts += tuple(
+                    fact.concept for fact in price.accounting_evidence.source_facts
+                )
+            if any(
+                concept.rsplit(":", 1)[-1].endswith("WeightedAverageExercisePrice")
+                for concept in concepts
+            ):
+                raise DilutionError(
+                    "DILUTION_AGGREGATE_STRIKE_UNRESOLVED",
+                    "weighted-average exercise prices require separately evidenced strike groups before exact dilution",
+                )
             assert isinstance(award.exercise_price.value, Decimal)
             exercise = quantity * award.exercise_price.value
         repurchased = (exercise + compensation) / quote.price

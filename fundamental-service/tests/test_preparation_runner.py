@@ -86,13 +86,18 @@ def _fixture(
     empty_awards: bool = False,
     misaligned_history: bool = False,
     base_source_policy=None,
+    option_price_concept=None,
 ):
     source_bytes = b'{"source":"synthetic original filing fixture"}'
     source_hash = hashlib.sha256(source_bytes).hexdigest()
     profile = valuation_requirements_profile("fcff_dcf")
     required = (
         *profile.required_fact_fields,
-        *(profile.supporting_fact_fields[:2] if not empty_awards else ()),
+        *(
+            profile.supporting_fact_fields[: 3 if option_price_concept else 2]
+            if not empty_awards
+            else ()
+        ),
     )
     mapped_fields = tuple(
         dict.fromkeys((*required, *(f.normalized_field for f in _facts())))
@@ -152,7 +157,9 @@ def _fixture(
         f"mapping-{field}": CanonicalMappingV1(
             contract_version="fundamental.v1",
             decision_id=f"mapping-{field}",
-            source_concept=f"us-gaap:{field}",
+            source_concept=option_price_concept
+            if field == "equity_award_exercise_price" and option_price_concept
+            else f"us-gaap:{field}",
             normalized_field=field,
             mapping_version="mapping-v1",
             confidence="high",
@@ -190,7 +197,7 @@ def _fixture(
             else fact
             for fact in stored
         )
-    dilution = award_evidence(snapshot)
+    dilution = award_evidence(snapshot, option_price_concept=option_price_concept)
     if empty_awards:
         dilution = dilution.model_copy(
             update={

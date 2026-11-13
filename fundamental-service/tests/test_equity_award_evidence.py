@@ -105,6 +105,47 @@ def test_pinned_release_drives_composer_and_preserves_award_quote_provenance(tmp
     assert "HISTORY_THRESHOLD_UNVALIDATED" in prepared.issue_codes
 
 
+@pytest.mark.parametrize("aggregate", (False, True))
+def test_signed_option_strike_scope_agrees_in_serving_and_canary(tmp_path, aggregate):
+    concept = (
+        "us-gaap:ShareBasedCompensationArrangementByShareBasedPaymentAwardOptionsOutstandingWeightedAverageExercisePrice"
+        if aggregate
+        else "us-gaap:ShareBasedCompensationArrangementByShareBasedPaymentAwardOptionsExercisePrice"
+    )
+    fixture = _fixture(tmp_path, released=False, option_price_concept=concept)
+    candidate, canary = _reviewed_candidate(fixture)
+    before = {fact.fact_id: sha256_digest(fact) for fact in fixture.facts.list()}
+    if aggregate:
+        with pytest.raises(DataReleaseError) as error:
+            canary.validate(candidate.manifest, candidate.verification)
+        assert error.value.code == "DILUTION_AGGREGATE_STRIKE_UNRESOLVED"
+    else:
+        canary.validate(candidate.manifest, candidate.verification)
+    request = ValuationEvidenceReadRequestV1(
+        contract_version="fundamental.v1",
+        snapshot_id=fixture.snapshot.snapshot_id,
+        data_release_manifest_digest=candidate.manifest.manifest_digest,
+        model_id="fcff_dcf",
+    )
+    prepared = fixture.application.prepare_valuation(request)
+    repeated = fixture.application.prepare_valuation(request)
+    assert canonical_bytes(prepared) == canonical_bytes(repeated)
+    if aggregate:
+        assert prepared.status == "abstained"
+        assert prepared.quality_status is QualityStatus.ABSTAIN
+        assert "DILUTION_AGGREGATE_STRIKE_UNRESOLVED" in prepared.issue_codes
+        assert prepared.input is None
+    else:
+        assert prepared.status == "prepared"
+        assert prepared.equity_dilution.incremental_shares == Decimal(2)
+        assert prepared.input.assumptions.capital_bridge.diluted_shares == Decimal(112)
+    assert {
+        fact.fact_id: sha256_digest(fact) for fact in fixture.facts.list()
+    } == before
+    assert _load(fixture).inventory.instruments[0].exercise_price.concept == concept
+    assert fixture.state.active is None
+
+
 def _with_historical_awards(fixture):
     period = fixture.dilution.inventory.period_end
     prior = period.replace(year=period.year - 1)

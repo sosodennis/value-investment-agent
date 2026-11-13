@@ -52,6 +52,17 @@ the issuer, accession, original bytes, parser input and exact observation scope.
 They do not establish a complete award inventory, classify other award types,
 or assert that unsupported awards or claims are absent.
 
+The exact treasury-stock calculation refuses an exercise-price concept ending
+in `WeightedAverageExercisePrice`, including retained accounting-role inputs,
+with `DILUTION_AGGREGATE_STRIKE_UNRESOLVED`. Averaging strikes before applying
+the per-instrument antidilution limit can hide dilutive awards: two options at
+strikes 5/15 and a quote of 10 contribute 0.5 shares, while replacing both strikes
+with their average of 10 incorrectly gives 0. A completeness assertion or signature
+does not resolve that distribution. Aggregate facts remain retained. Grouping
+exceptions or bounded estimates require separately versioned evidence and
+policy; the current contract does not authorize them. This check identifies
+known tagged averages and does not prove that every other price is homogeneous.
+
 The signed release may retain award observations from several historical
 instants. Inventory completeness compares all released award observations at
 the inventory's own instant, while older observations retain their original

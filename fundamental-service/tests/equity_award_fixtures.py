@@ -17,6 +17,7 @@ from fundamental_service.equity_award_evidence import EquityDilutionEvidenceV1
 from fundamental_service.equity_dilution import (
     EquityAwardInventoryV1,
     RestrictedStockAwardV1,
+    StockOptionAwardV1,
     TreasuryStockPolicyV1,
 )
 from fundamental_service.quote_sources import select_nasdaq_historical_close
@@ -45,16 +46,25 @@ def quote_source_bytes(snapshot):
     return canonical_bytes(quote_source_payload(snapshot))
 
 
-def award_evidence(snapshot):
+def award_evidence(snapshot, *, option_price_concept=None):
     instant = datetime(2025, 12, 31, tzinfo=timezone.utc)
     available = datetime(2026, 2, 1, tzinfo=timezone.utc)
     source = max(snapshot.source_records, key=lambda item: item.available_at)
     facts = []
-    for role, value, unit, currency in (
+    rows = (
         ("equity_award_quantity", "10", "xbrli:shares", None),
         ("equity_award_unrecognized_compensation", "0", "iso4217:USD", "USD"),
-    ):
-        concept = "us-gaap:" + role
+    )
+    if option_price_concept is not None:
+        rows += (
+            ("equity_award_exercise_price", "8", "iso4217:USD/xbrli:shares", "USD"),
+        )
+    for role, value, unit, currency in rows:
+        concept = (
+            option_price_concept
+            if role == "equity_award_exercise_price"
+            else "us-gaap:" + role
+        )
         facts.append(
             CanonicalFactV1(
                 contract_version="fundamental.v1",
@@ -134,7 +144,14 @@ def award_evidence(snapshot):
                 description="Synthetic award completeness test; no real review",
             ),
             instruments=(
-                RestrictedStockAwardV1(
+                StockOptionAwardV1(
+                    instrument_id="synthetic-option",
+                    quantity=facts[0],
+                    unrecognized_compensation=facts[1],
+                    exercise_price=facts[2],
+                )
+                if option_price_concept is not None
+                else RestrictedStockAwardV1(
                     instrument_id="synthetic-rsu",
                     quantity=facts[0],
                     unrecognized_compensation=facts[1],

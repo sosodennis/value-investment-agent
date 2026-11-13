@@ -149,6 +149,96 @@ def test_excluded_anti_dilutive_awards_are_retained_per_class():
     assert result.instruments[0].assumed_repurchased_shares == Decimal(125)
 
 
+@pytest.mark.parametrize(
+    "concept",
+    (
+        "us-gaap:ShareBasedCompensationArrangementByShareBasedPaymentAwardOptionsOutstandingWeightedAverageExercisePrice",
+        "us-gaap:ShareBasedCompensationArrangementByShareBasedPaymentAwardOptionsVestedAndExpectedToVestWeightedAverageExercisePrice",
+        "issuer:OptionWeightedAverageExercisePrice",
+    ),
+)
+def test_average_strike_cannot_offset_an_undisclosed_dilutive_tranche(concept):
+    inventory, quote, policy = _inputs()
+    option = inventory.instruments[0]
+    price = option.exercise_price.model_copy(
+        update={
+            "concept": concept,
+            "value": Decimal(10),
+            "context": option.exercise_price.context.model_copy(
+                update={"concept_qname": concept}
+            ),
+        }
+    )
+    option = option.model_copy(
+        update={
+            "exercise_price": price,
+            "quantity": option.quantity.model_copy(update={"value": Decimal(2)}),
+            "unrecognized_compensation": option.unrecognized_compensation.model_copy(
+                update={"value": Decimal(0)}
+            ),
+        }
+    )
+    inventory = inventory.model_copy(update={"instruments": (option,)})
+    before = canonical_bytes(inventory)
+    # Two strikes of 5/15 also average 10, but at price 10 dilute by 0.5.
+    with pytest.raises(DilutionError) as error:
+        _compute(inventory, quote, policy)
+    assert error.value.code == "DILUTION_AGGREGATE_STRIKE_UNRESOLVED"
+    assert canonical_bytes(inventory) == before
+
+
+def test_separate_dilutive_and_antidilutive_strikes_retain_correct_dilution():
+    inventory, quote, policy = _inputs()
+    option = inventory.instruments[0]
+    options = []
+    for strike in (5, 15):
+        facts = []
+        for fact, value in (
+            (option.quantity, 1),
+            (option.exercise_price, strike),
+            (option.unrecognized_compensation, 0),
+        ):
+            facts.append(
+                fact.model_copy(
+                    update={
+                        "fact_id": f"{fact.fact_id}:{strike}",
+                        "value": Decimal(value),
+                        "security_scope": "segmented",
+                        "context": fact.context.model_copy(
+                            update={
+                                "dimensions": (
+                                    DimensionV1(
+                                        name="us-gaap:AwardTypeAxis",
+                                        member=f"synthetic:Strike{strike}",
+                                    ),
+                                ),
+                                "consolidation_scope": "segmented",
+                            }
+                        ),
+                    }
+                )
+            )
+        options.append(
+            option.model_copy(
+                update={
+                    "instrument_id": f"strike-{strike}",
+                    "quantity": facts[0],
+                    "exercise_price": facts[1],
+                    "unrecognized_compensation": facts[2],
+                }
+            )
+        )
+    inventory = EquityAwardInventoryV1.model_validate(
+        {**inventory.model_dump(), "instruments": tuple(options)}
+    )
+    result = _compute(inventory, quote, policy)
+    assert result.incremental_shares == Decimal("0.5")
+    assert sorted(row.incremental_shares for row in result.instruments) == [
+        Decimal(0),
+        Decimal("0.5"),
+    ]
+
+
 @pytest.mark.parametrize("dimensional", [False, True])
 def test_reviewed_inventory_keeps_parser_scope_without_rewriting_originals(dimensional):
     inventory, quote, policy = _inputs()
