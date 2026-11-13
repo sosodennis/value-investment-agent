@@ -21,7 +21,60 @@ No completed #351 through #355 acceptance is changed. #350 is outside scope.
 GitHub #351 and #352 are CLOSED; #352's merged Fundamental Service composer is
 the runtime valuation owner, not a pending dependency.
 
-## Current signed composite release checkpoint
+## Current explicit composite source-plan checkpoint
+
+Implementation `5fa6baf82e5ec335714de51fdf0abe4a07d40843` carries an explicit
+composite input policy through manual or automatic source plans. Plans pin the
+service model/profile, issuer, original accessions and mapping version. Automatic
+mapping accepts the exact service-owned ordinary or composite source profile;
+unsupported optional exclusion roles remain retained refusals. Aggregate history
+requires every declared exclusion under the same source/mapping pins. Missing,
+unknown, future and foreign-mapped evidence blocks. Candidate and active releases
+must contain the identical input policy. All valuation arithmetic stays in #352;
+the replaceable SEC/macro/reference/quote/classification/crosswalk ports remain
+the provider boundary. Ordinary plan bytes and the prior default fixture manifest
+`c32dcbaba4f3c3698c14ba6d57fb2184bd120cbae212805fc66ce96ebb900b61`
+remain unchanged.
+
+Exact validation passes **2,119 Service/PostgreSQL tests** (11 optional skips,
+one expected duplicate-ZIP warning), all98 changed-source mypy checks, full
+Service Ruff/format, both architecture guards and diff checks.
+[CI43334690898](https://github.com/sosodennis/value-investment-agent/actions/runs/43334690898)
+passes all12 executed jobs; release gate skipped.
+
+The isolated SEC-enabled project `value-investment-agent-361-composite-source-plan`
+uses19685/19686, its own network/volumes and all113 installed Python/SQL files
+matching that commit. Its installed `fundamental-prepare-source` command validates
+the signed candidate, prepares through #352 and calculates a **provisional**
+synthetic value under a synthetic exact-input caller approval. The authenticated
+HTTP artifact endpoint returns the saved source-plan evidence. Ordinary repeats,
+three concurrent commands, restart and an empty-database restore preserve all184
+rows across18 tables and nine content files; repeat hashes, sizes and mtimes
+remain unchanged. Reports return `wrote=false`. All81 unrelated baseline
+containers preserve ID/image/start time. Portable backup
+`50d2ce2f2cae380b092bc3077fe353a4018e1677edaace8bf2c5792e2666c3d5`
+is retained outside Docker. The restored runtime passes feature preflight.
+
+Plan/output digests:
+`da4246bac3c5452bad6fbed2bb54ad8fd59ef88fc0e2458dfcb14befe6e38383` /
+`6482ef87b46848affa1dece3a922ec41d556fdd7054f84e29ef292beb966be70`.
+`composite_source_plan_increment` in the retained checkpoint records exact
+commands, source/model/policy/runtime pins, digests and corrected fixture/harness
+failures. Its atomic writer also repeats with `wrote=false`. The HTTP probe
+initially omitted its signed GET envelope and correctly received400; the fixed
+probe uses the documented public contract. No production evidence gate was
+relaxed.
+
+This increment accepts already bound policy inputs. Automatic policy-recipe
+compilation, complete real issuer accounting/award and dated market/quote
+evidence, trusted real release, authentic caller approval and real numerical
+acceptance remain incomplete. The nine NVE role gaps are unchanged. Full-flow
+gates remain unverified; #361/blockers stay OPEN and PR#370 draft. Eligible
+valuations stay **provisional**, missing real evidence **abstains**, history is
+**underpowered**, and `supported_history_threshold=null`. Generated source,
+research, full reports and backups remain outside Git.
+
+## Prior signed composite release checkpoint
 
 Production change `150ce77ecbf047b9e3f207996113d93fb145b146` carries explicit
 composite working-capital policy through a signed full security release, its
