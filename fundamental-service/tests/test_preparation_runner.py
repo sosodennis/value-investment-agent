@@ -1829,3 +1829,37 @@ def test_invalid_candidate_refuses_before_required_public_source_io(tmp_path):
     with pytest.raises(ValueError, match="candidate does not match"):
         _run(_runner(fixture, public_acquisition=use_case), plan, candidate=changed)
     assert provider.calls == []
+
+
+def test_command_reports_stable_source_refusal_code_and_retryability(
+    monkeypatch, capsys
+):
+    import json
+    import fundamental_service.preparation_runner as command
+
+    async def busy(_args):
+        raise SnapshotError(
+            "PUBLIC_CAPTURE_IN_PROGRESS", "identical capture is busy", retryable=True
+        )
+
+    monkeypatch.setattr(command, "_run_command", busy)
+    args = [
+        "--plan",
+        "unused.json",
+        "--plan-digest",
+        "a" * 64,
+        "--actor",
+        "operator",
+        "--organization",
+        "operators",
+    ]
+    assert command.main(args) == 2
+    first = capsys.readouterr()
+    result = json.loads(first.err)
+    assert result["protocol"] == "source-preparation-error-v1"
+    assert (
+        result["code"] == "PUBLIC_CAPTURE_IN_PROGRESS" and result["retryable"] is True
+    )
+    assert result["plan_digest"] == "a" * 64
+    assert command.main(args) == 2
+    assert capsys.readouterr().err == first.err

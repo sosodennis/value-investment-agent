@@ -1593,6 +1593,21 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         receipt = asyncio.run(_run_command(args))
+    except SnapshotError as error:
+        print(
+            canonical_bytes(
+                {
+                    "protocol": "source-preparation-error-v1",
+                    "plan_digest": args.plan_digest,
+                    "code": error.code,
+                    "message": error.message,
+                    "retryable": error.retryable,
+                    "evidence_ref": error.evidence_ref,
+                }
+            ).decode("utf-8"),
+            file=sys.stderr,
+        )
+        return 2
     except (
         OSError,
         RuntimeError,

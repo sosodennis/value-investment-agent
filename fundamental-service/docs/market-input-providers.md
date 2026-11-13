@@ -174,6 +174,10 @@ canonical evidence and permit a later retry; they are not completed captures.
 A busy capture lease fails retryably before provider access. Invalid requests
 and corrupted persistence fail at their boundary rather than becoming ordinary
 provider failures.
+The command returns exit 2 with canonical `source-preparation-error-v1` JSON on
+stderr for source-plane exceptions. Its stable `code`, `retryable`, `plan_digest`
+and optional `evidence_ref` let a caller distinguish a busy lease from a permanent
+refusal without parsing message text.
 
 This acquisition stage does not automatically create source-use admissions,
 issuer crosswalks, market policies or trusted release candidates. The existing
