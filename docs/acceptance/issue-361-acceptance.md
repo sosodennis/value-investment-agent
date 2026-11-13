@@ -1898,3 +1898,66 @@ Next: independently review PR#417 at
 `14b2f27a9718f3d10e457054b049589f54402740`, serially integrate only after it
 passes, check the integration commit, then resume #361 real issuer preparation.
 Keep #361/#376/#377 OPEN and PR#370 draft; preserve all existing WIP commits.
+
+## Recipe recovery and PR #417 serial integration
+
+The pending recipe checks above completed at `8af6f952`: **2,137 Service/PostgreSQL
+tests** pass (11 optional skips, one expected duplicate-ZIP warning), plus the87
+focused cases,99-source mypy, full Service Ruff/format, both architecture guards
+and diff. [CI43339214146](https://github.com/sosodennis/value-investment-agent/actions/runs/43339214146)
+passes all12 executed jobs; the release gate is skipped. Installed synthetic
+CLI → signed canary → official composer → test-subject exact-input approval →
+calculator → authenticated artifact retrieval passes. Ordinary, three concurrent,
+restart and empty-store-restore repeats return the same outputs with `wrote=false`,
+186 rows across18 tables and10 content files. Backup
+`dd71aea9832e398d04f0a79880b70752194e78f6068b78f4c3028b0a68b4e4c9`
+is retained outside Docker. All81 unrelated containers preserve ID/image/start.
+This is synthetic pipeline evidence; real NVE numerical acceptance is incomplete.
+
+Independently reviewed [PR#417](https://github.com/sosodennis/value-investment-agent/pull/417)
+at **`14b2f27a9718f3d10e457054b049589f54402740`**. All13 actual changed files,
+official #352 composer calls, executable model/spec pins, fixed original/issuer/
+origin/first-subsequent-label lineage, retained failures and canonical atomic
+publication were inspected. **No blocking engineering findings remain.**
+[The SHA-bound review](https://github.com/sosodennis/value-investment-agent/pull/417#pullrequestreview-5884413547)
+records the declared-source conditional-arithmetic boundary. It does not establish
+raw SEC authentication, an accounting signature, trusted release, statistical
+method approval, a complete100-issuer study or history-threshold approval.
+
+The independent head run passes112 focused tests, script types/Ruff/format,
+both architecture guards and diff. Two offline fresh-process exports/analyses
+reproduce125 conditional labels,625 FCFF comparisons,625 Transition abstentions,
+one independent conditional issuer and zero exact scored cases. Second
+publications return `wrote=false`, create zero artifacts and preserve source/output
+bytes, sizes and mtimes; the wrong-SHA probe exits2 before publication. Verification
+report `2145d3d377c582960f40addf49624a8030f8ba7a56a669e86baed8c48b687262`
+pins that head. Generated research and receipts remain outside Git.
+
+PR#417 was merged normally and serially into the existing #361 branch at
+**`5ebf9aa4fde0e8d84fbfb9909df9f0f9acd6d6f8`**, preserving every WIP commit.
+At that integration SHA, the same112 research checks and full offline repeats
+pass, along with **2,218 Service/PostgreSQL tests** (11 optional skips, one expected
+warning),87 recipe-focused cases,99-source mypy, full Service Ruff/format, both
+architecture guards and diff. [CI43340321444](https://github.com/sosodennis/value-investment-agent/actions/runs/43340321444)
+passes12 executed jobs; the release gate is skipped. Integration verification
+report `3fcd78fea6d9be7340b49c9ebde265a0f34d7fb961d0cff5ee4bbe1ac655b951`
+has input/output `2de54c80b9419cc558e724cbc384ada4073ef0322fd4a574aef27c8d287d57ab` /
+`7f5d0ef60aa2f11f170353d90e6cbc0686cbddde0448ed9bdefefe24145d9f23`.
+Export output `1b96eaf0587333a6679ed33ee0fb13a9fc74be56156a89795a9495067de71185`
+and analysis output `1fb66f9f0f83a1bb0a192205813abb6ed750d1112bf9c5da476db4ede85c3fe2`
+match the reviewed head. No Docker acceptance is claimed for that offline diff.
+
+The current canonical runtime tuple now identifies the recipe-restored dataset
+on the issue-owned19685/19686 project. All114 installed Python/SQL sources match
+the integration commit; feature preflight passes, with full real-flow acceptance
+still false. The existing checkpoint adds
+`automatic_working_capital_recipe_increment` and
+`pr417_independent_engineering_integration`, preserving prior entries and exact
+commands/digests. Its atomic writer repeats unchanged with `wrote=false`.
+
+Continue original #361 preparation: complete remaining real accounting/award and
+dated market/quote evidence, trusted release/authentic caller approval and real
+numerical recovery acceptance, then review/CI and merge/main verification.
+#376/#377 remain OPEN. Eligible estimates stay **provisional**, incomplete
+valuations **abstain**, history evidence **underpowered**, and
+`supported_history_threshold=null`.
