@@ -16,6 +16,7 @@ from .contracts import (
 from .facts import CanonicalMappingV1
 from .numerical_policy import VALUATION_NUMERICAL_POLICY, using_valuation_context
 from .operating_projection import resolve_operating_model
+from .operating_disclosures import ConditionalTransitionDisclosuresV1
 from .original_issuer import IssuerOperatingSourceV1
 from .serialization import sha256_digest
 from .valuation_preparation import FORECAST_COMPOSER_VERSION, HistoricalMetricsV1
@@ -109,6 +110,9 @@ class ScenarioObservationSetV1(StrictModel):
 
 
 class OperatingScenarioRequestV1(ScenarioObservationSetV1):
+    transition_disclosures: ConditionalTransitionDisclosuresV1 | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
     contract_version: Literal[
         "fundamental.operating-scenarios.v1", "fundamental.operating-scenarios.v2"
     ] = "fundamental.operating-scenarios.v1"

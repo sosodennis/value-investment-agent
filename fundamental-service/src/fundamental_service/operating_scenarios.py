@@ -32,6 +32,7 @@ from .operating_projection import (
     project_operating_nodes,
     resolve_operating_model,
 )
+from .operating_disclosures import conditional_transition_disclosures
 from .original_issuer import (
     fact_matches_original_source,
     fact_matches_operating_identity,
@@ -436,9 +437,25 @@ def replay_operating_scenarios(
         selected_periods = list(resolve_scenario_observations(request, request.periods))
     except (PreparationError, SnapshotError, AnnualHistoryError) as error:
         source_error = error
+    disclosure_error = None
+    disclosure_fact_ids: tuple[str, ...] = ()
+    if source_error is None and request.transition_disclosures is not None:
+        try:
+            disclosures = conditional_transition_disclosures(
+                request.transition_disclosures,
+                facts=request.facts,
+                mappings=request.mappings,
+                source=request.source,
+                period_start=request.periods[-1].period_start,
+                period_end=request.periods[-1].period_end,
+            )
+            disclosure_fact_ids = tuple(fact.fact_id for fact in disclosures)
+        except SnapshotError as error:
+            disclosure_error = error
     results = []
     for scenario in request.scenarios:
         for model_id in models:
+            transition_fact_ids: tuple[str, ...] = ()
             inputs: list[ScenarioPeriodInputsV1] = []
             metrics = None
             forecast = None
@@ -459,7 +476,20 @@ def replay_operating_scenarios(
                 )
                 inputs = list(prepared.period_inputs)
                 if model_id == "transition_fcff_dcf":
-                    _transition_filing_evidence(request.facts, snapshot=request.source)
+                    if request.transition_disclosures is None:
+                        _transition_filing_evidence(
+                            request.facts, snapshot=request.source
+                        )
+                    else:
+                        if disclosure_error is not None:
+                            raise disclosure_error
+                        codes.extend(
+                            (
+                                "TRANSITION_DISCLOSURES_UNREVIEWED",
+                                "MODEL_SUITABILITY_UNESTABLISHED",
+                            )
+                        )
+                        transition_fact_ids = disclosure_fact_ids
                 history = prepared.history
                 metrics = derive_historical_metrics(
                     history, estimated_inputs=prepared.estimates
@@ -485,9 +515,14 @@ def replay_operating_scenarios(
                     tax_rate=tax,
                     historical_fact_ids=tuple(
                         sorted(
-                            fact_id
-                            for period in request.periods
-                            for fact_id in period.fact_ids.values()
+                            {
+                                *transition_fact_ids,
+                                *(
+                                    fact_id
+                                    for period in request.periods
+                                    for fact_id in period.fact_ids.values()
+                                ),
+                            }
                         )
                     ),
                 )

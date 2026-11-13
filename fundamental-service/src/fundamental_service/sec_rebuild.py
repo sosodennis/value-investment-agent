@@ -33,6 +33,7 @@ from .facts import (
 )
 from .snapshots import SnapshotError
 from .original_issuer import OriginalOperatingSourceV1
+from .operating_disclosures import scoped_operating_text
 
 
 def _candidate_id(
@@ -91,11 +92,11 @@ def parsed_facts_to_candidates(
     mapping: CanonicalMappingV1 | None = None,
     security_id: str | None = None,
 ) -> tuple[FactCandidateV1, ...]:
-    """Convert numeric facts in an offline parser report into candidates.
+    """Convert numeric facts and explicitly scoped operating text to candidates.
 
-    Facts without a typed period, unit, or finite numeric value are excluded
-    instead of being silently normalized. The caller can inspect the parser
-    report and source manifest for the exclusion context.
+    Monetary candidates require a typed period, unit and finite number.
+    The scoped operating-disclosure role retains original text verbatim.
+    Excluded observations remain in the parser report.
     """
     if not report.offline:
         raise SnapshotError(
@@ -188,8 +189,16 @@ def parsed_facts_to_candidates(
                 "ISSUER_MISMATCH",
                 "parsed XBRL entity does not match the requested issuer",
             )
-        value = _decimal_value(fact.value) if fact.is_numeric else None
-        if value is None or not fact.unit:
+        text_observation = scoped_operating_text(fact, mapping)
+        value = (
+            fact.value
+            if text_observation
+            else _decimal_value(fact.value)
+            if fact.is_numeric
+            else None
+        )
+        unit = "text" if text_observation else fact.unit
+        if value is None or not unit:
             continue
         if fact.period_start is not None and fact.period_end is not None:
             period_type = PeriodType.DURATION
@@ -208,8 +217,8 @@ def parsed_facts_to_candidates(
         else:
             continue
         currency = (
-            fact.unit.partition("/")[0].removeprefix("iso4217:")
-            if fact.unit.startswith("iso4217:")
+            unit.partition("/")[0].removeprefix("iso4217:")
+            if unit.startswith("iso4217:")
             else None
         )
         dimensions = tuple(
@@ -229,7 +238,7 @@ def parsed_facts_to_candidates(
                 concept=fact.concept,
                 normalized_field=normalized_field,
                 value=value,
-                unit=fact.unit,
+                unit=unit,
                 scale=fact.scale,
                 currency=currency,
                 period_type=period_type,
@@ -258,8 +267,8 @@ def parsed_facts_to_candidates(
                     else None
                 ),
                 context_id=fact.context_id,
-                unit_qname=fact.unit,
-                measure=fact.unit,
+                unit_qname=unit,
+                measure=unit,
                 source=provenance,
                 taxonomy_version=report.taxonomy_version,
                 mapping=mapping,
