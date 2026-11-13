@@ -1,4 +1,5 @@
 import json
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
@@ -855,6 +856,181 @@ class _AuditMetadata:
 
     def try_acquire_ingestion_lock(self, _acquisition_key):
         return self.lease
+
+    def get_sec_ingestion(self, _acquisition_key, *, expected_acquisition_payload):
+        return None
+
+
+class _RetainedAcquisitionMetadata(_AuditMetadata):
+    def __init__(self, result, *, published_during_lock=False):
+        super().__init__(lease=object() if published_during_lock else None)
+        self.result = result
+        self.published_during_lock = published_during_lock
+        self.reads = []
+        self.lock_attempts = 0
+        self.released = []
+
+    def get_sec_ingestion(self, acquisition_key, *, expected_acquisition_payload):
+        self.reads.append((acquisition_key, expected_acquisition_payload))
+        if self.published_during_lock and self.lock_attempts == 0:
+            return None
+        return self.result
+
+    def try_acquire_ingestion_lock(self, acquisition_key):
+        self.lock_attempts += 1
+        return super().try_acquire_ingestion_lock(acquisition_key)
+
+    def release_ingestion_lock(self, lease):
+        self.released.append(lease)
+
+
+def _retained_acquisition_use_case(tmp_path, *, published_during_lock=False):
+    from test_postgres_metadata import _sec_ingestion_result
+
+    fixture = _partial_acquisition_fixture(tmp_path)
+    result = _sec_ingestion_result(fixture.snapshot, correlation_id="original")
+    metadata = _RetainedAcquisitionMetadata(
+        result, published_during_lock=published_during_lock
+    )
+    use_case = SecAcquisitionUseCase(
+        adapter=fixture.provider,
+        ingestion=fixture.ingestion,
+        metadata=metadata,
+        content_store=fixture.content,
+        settings=fixture.settings,
+        authorized_organizations=frozenset({"org"}),
+    )
+    return use_case, metadata, fixture
+
+
+@pytest.mark.parametrize("audit_reuse", [False, True])
+def test_completed_acquisition_reuses_without_writer_lease(tmp_path, audit_reuse):
+    use_case, metadata, fixture = _retained_acquisition_use_case(tmp_path)
+    result = use_case.execute(
+        fixture.request,
+        caller_principal="caller",
+        organization_id="org",
+        correlation_id="new-caller",
+        deadline_at=datetime(2025, 1, 1, tzinfo=UTC),
+        audit_reuse=audit_reuse,
+    )
+
+    assert result == metadata.result.model_copy(
+        update={"status": "reused", "reused": True, "correlation_id": "new-caller"}
+    )
+    assert metadata.lock_attempts == 0 and not metadata.released
+    key, payload = metadata.reads[0]
+    assert key == sha256_digest(payload)
+    assert payload == use_case._runtime_key_payload(
+        fixture.request, use_case._validation_profile(fixture.request)
+    )
+    assert fixture.state.provider_calls == fixture.state.parser_calls == 0
+    assert len(metadata.audits) == int(audit_reuse)
+    if audit_reuse:
+        assert metadata.audits[0] == {
+            "acquisition_key": key,
+            "caller_principal": "caller",
+            "organization_id": "org",
+            "correlation_id": "new-caller",
+            "source_hashes": (),
+            "outcome": "reused",
+        }
+
+
+def test_concurrent_completed_acquisitions_are_read_only(tmp_path):
+    use_case, metadata, fixture = _retained_acquisition_use_case(tmp_path)
+
+    def execute(_):
+        return use_case.execute(
+            fixture.request,
+            caller_principal="caller",
+            organization_id="org",
+            correlation_id="unchanged",
+            deadline_at=datetime(2025, 1, 1, tzinfo=UTC),
+            audit_reuse=False,
+        )
+
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        results = tuple(pool.map(execute, range(3)))
+    assert results[0] == results[1] == results[2]
+    assert all(result.reused for result in results)
+    assert metadata.lock_attempts == 0 and not metadata.audits
+    assert len(metadata.reads) == 3
+    assert fixture.state.provider_calls == fixture.state.parser_calls == 0
+
+
+def test_acquisition_published_during_writer_lock_is_rechecked(tmp_path):
+    use_case, metadata, fixture = _retained_acquisition_use_case(
+        tmp_path, published_during_lock=True
+    )
+    result = use_case.execute(
+        fixture.request,
+        caller_principal="caller",
+        organization_id="org",
+        correlation_id="raced-publication",
+        deadline_at=datetime(2025, 1, 1, tzinfo=UTC),
+        audit_reuse=False,
+    )
+    assert result.reused and result.snapshot_id == metadata.result.snapshot_id
+    assert len(metadata.reads) == 2
+    assert metadata.lock_attempts == 1 and metadata.released == [metadata.lease]
+    assert not metadata.audits
+    assert fixture.state.provider_calls == fixture.state.parser_calls == 0
+
+
+@pytest.mark.parametrize(
+    ("organization_id", "taxonomy_manifest_id", "code"),
+    [
+        ("unauthorized", None, "INGESTION_NOT_AUTHORIZED"),
+        ("org", "uninstalled-taxonomy", "TAXONOMY_PACKAGE_INVALID"),
+    ],
+)
+def test_completed_acquisition_cannot_bypass_authorization_or_taxonomy(
+    tmp_path, organization_id, taxonomy_manifest_id, code
+):
+    use_case, metadata, fixture = _retained_acquisition_use_case(tmp_path)
+    request = fixture.request
+    if taxonomy_manifest_id is not None:
+        request = request.model_copy(
+            update={"taxonomy_manifest_id": taxonomy_manifest_id}
+        )
+    with pytest.raises(ServiceError) as error:
+        use_case.execute(
+            request,
+            caller_principal="caller",
+            organization_id=organization_id,
+            correlation_id="rejected",
+            deadline_at=datetime(2025, 1, 1, tzinfo=UTC),
+            audit_reuse=False,
+        )
+    assert error.value.code == code
+    assert not metadata.reads and metadata.lock_attempts == 0
+    assert metadata.audits[0]["outcome"] == code
+    assert fixture.state.provider_calls == fixture.state.parser_calls == 0
+
+
+def test_invalid_retained_acquisition_does_not_fall_back_to_provider(
+    tmp_path, monkeypatch
+):
+    from fundamental_service.snapshots import SnapshotError
+
+    use_case, metadata, fixture = _retained_acquisition_use_case(tmp_path)
+
+    def reject(*args, **kwargs):
+        raise SnapshotError("INGESTION_KEY_COLLISION", "another retained request")
+
+    monkeypatch.setattr(metadata, "get_sec_ingestion", reject)
+    with pytest.raises(SnapshotError, match="another retained request"):
+        use_case.execute(
+            fixture.request,
+            caller_principal="caller",
+            organization_id="org",
+            correlation_id="invalid-retained",
+            deadline_at=datetime(2025, 1, 1, tzinfo=UTC),
+            audit_reuse=False,
+        )
+    assert metadata.lock_attempts == 0 and not metadata.audits
+    assert fixture.state.provider_calls == fixture.state.parser_calls == 0
 
 
 @pytest.mark.parametrize(

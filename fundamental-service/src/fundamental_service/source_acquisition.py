@@ -617,6 +617,18 @@ class SecAcquisitionUseCase:
                 status_code=422,
                 retryable=False,
             )
+        existing = self.metadata.get_sec_ingestion(
+            acquisition_key, expected_acquisition_payload=key_payload
+        )
+        if existing is not None:
+            return self._reuse_response(
+                existing,
+                acquisition_key=acquisition_key,
+                caller_principal=caller_principal,
+                organization_id=organization_id,
+                correlation_id=correlation_id,
+                audit_reuse=audit_reuse,
+            )
         lease = self.metadata.try_acquire_ingestion_lock(acquisition_key)
         if lease is None:
             self.metadata.publish_source_audit(
@@ -640,25 +652,13 @@ class SecAcquisitionUseCase:
                 expected_acquisition_payload=key_payload,
             )
             if existing is not None:
-                if audit_reuse:
-                    self.metadata.publish_source_audit(
-                        acquisition_key=acquisition_key,
-                        caller_principal=caller_principal,
-                        organization_id=organization_id,
-                        correlation_id=correlation_id,
-                        source_hashes=tuple(
-                            sorted(
-                                item.content_hash for item in existing.source_evidence
-                            )
-                        ),
-                        outcome="reused",
-                    )
-                return existing.model_copy(
-                    update={
-                        "status": "reused",
-                        "reused": True,
-                        "correlation_id": correlation_id,
-                    }
+                return self._reuse_response(
+                    existing,
+                    acquisition_key=acquisition_key,
+                    caller_principal=caller_principal,
+                    organization_id=organization_id,
+                    correlation_id=correlation_id,
+                    audit_reuse=audit_reuse,
                 )
             self._require_before_deadline(deadline_at)
             try:
@@ -761,6 +761,35 @@ class SecAcquisitionUseCase:
                 ) from error
         finally:
             self.metadata.release_ingestion_lock(lease)
+
+    def _reuse_response(
+        self,
+        existing: SecIngestionResponseV1,
+        *,
+        acquisition_key: str,
+        caller_principal: str,
+        organization_id: str,
+        correlation_id: str,
+        audit_reuse: bool,
+    ) -> SecIngestionResponseV1:
+        if audit_reuse:
+            self.metadata.publish_source_audit(
+                acquisition_key=acquisition_key,
+                caller_principal=caller_principal,
+                organization_id=organization_id,
+                correlation_id=correlation_id,
+                source_hashes=tuple(
+                    sorted(item.content_hash for item in existing.source_evidence)
+                ),
+                outcome="reused",
+            )
+        return existing.model_copy(
+            update={
+                "status": "reused",
+                "reused": True,
+                "correlation_id": correlation_id,
+            }
+        )
 
     @contextmanager
     def _capture_lock(self, key: str) -> Iterator[None]:
