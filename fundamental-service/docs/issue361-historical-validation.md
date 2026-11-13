@@ -1,5 +1,64 @@
 # Historical SEC validation for issue 361
 
+## Original 2013 taxonomy configuration
+
+The opt-in `sec-efm-us-dqc-v3.6.2-gaap2013-config-v1` profile addresses
+[#371's observed DQC1 generic-config fallback](https://github.com/sosodennis/value-investment-agent/issues/371#issuecomment-6842819513).
+It accepts exactly `http://fasb.org/us-gaap/2013-01-31` with the existing
+historical DEI bounds. This is a project configuration adaptation of the pinned
+official v3.6.2 hooks, not a new upstream release or a compliance opinion.
+The package bytes and all eleven hooks remain unchanged. The completion marker
+is `dqc-v3.6.2-gaap2013-config-v1-all-eleven-modules-returned`; its
+`dqc_version` is `v3.6.2-gaap2013-config-v1`.
+
+Official DQC1 `_create_config` uses `_tr_mem` over the entire standard taxonomy
+to construct each axis's allowed members. The shipped selector has configs for
+2014–2017 but sends 2013 to the generic config. The original FASB 2013 taxonomy
+includes `EstimateOfFairValueFairValueDisclosureMember` and
+`NettingAndCollateralMember` under `FairValueByFairValueHierarchyLevelAxis`;
+the 2014 taxonomy removes them. Rebuilding all 22 axis configurations from the
+official 2014 DTS exactly matches the shipped 2014 configuration. Rebuilding
+2013 using that same official traversal produces canonical SHA-256
+`baf022187417e3d5f8d579942323d9d77e848d4f14909cccdecc43c4f81007a2`.
+No filing-specific allowed-member list or pre-effective severity override exists.
+
+The offline builder reads the [official FASB archive](https://xbrl.fasb.org/us-gaap/2013/us-gaap-2013-01-31.zip),
+SHA-256 `18ac2f2dd8c66578edeafc114e61dd3013297ecd5a2f35737e4f34e80f6a54bf`,
+the pinned official v3 source tree, and an existing complete offline cache:
+
+```sh
+python -m fundamental_service.historical_dqc_config \
+  --taxonomy-archive /external/evidence/us-gaap-2013.zip \
+  --official-root /external/evidence/historical-v3 \
+  --taxonomy-cache /external/evidence/taxonomy-cache \
+  --output-dir /external/evidence/config-artifacts \
+  --implementation-commit <exact-40-character-commit>
+```
+
+The existing locked, fsynced ArtifactStore publishes config and build receipt
+using temporary files and atomic rename. Identical source/cache/runtime/commit
+inputs reuse both artifacts with `wrote=false`, `generated=false` and unchanged
+bytes/mtimes. All captures and generated artifacts remain outside Git. Set
+`ArelleValidationProfileV1.historical_dqc_axis_config` to the published config
+artifact. This path is accepted only for the new profile; its profile digest
+binds the fixed config hash instead of the host filename. Existing profile
+serialization and digests remain byte-for-byte unchanged.
+
+Before execution, missing config fails `VALIDATION_RESOURCES_UNAVAILABLE` and
+changed bytes fail `VALIDATION_RESOURCE_HASH_MISMATCH`. The adapter rechecks the
+hash and routes only DQC1's config selector during that hook, restoring it on
+success or failure. Other rules, messages and original severity are untouched.
+Unknown/mixed namespaces and partial rule completion still fail closed. No
+service/deployment default is switched. Passing parser compatibility supplies
+no mapping review, signer authority, financial classification or threshold.
+
+Set `ISSUE371_EVIDENCE_ROOT` to the external #376 evidence root and run
+`pytest fundamental-service/tests/test_historical_dqc_config.py -q` for the real
+NEWMARKET original/invalid-member checks. Without the captured official assets,
+these source tests explicitly skip. The old profile must retain all 48 original
+DQC1 errors; the new profile must retain all 2,508 facts and complete eleven
+hooks. A synthetic invalid standard member must still emit DQC1 error severity.
+
 EDGAR 26.3 diagnostic adapter `dqc-0090-bound-diagnostics-v1` uses Arelle's
 `Logging.Message.Parameters` hook for rules `DQC.US.0090.9374` and `.9375`.
 The pinned official EDGAR branch binds the correct reconciliation facts but

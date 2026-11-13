@@ -16,7 +16,7 @@ from pydantic import (
     model_validator,
 )
 
-from .historical_dqc import V1_PROFILE, V3_PROFILE
+from .historical_dqc import V1_PROFILE, V3_PROFILE, V3_2013_PROFILE
 from .numerical_policy import using_valuation_context
 from .serialization import is_digest, sha256_digest
 from .accounting_roles import AccountingRoleEvidenceV1, accounting_reported_decimals
@@ -565,6 +565,7 @@ class SecIntegrityEvidenceV1(StrictModel):
             {
                 V1_PROFILE.dqc_version: V1_PROFILE.completion_marker,
                 V3_PROFILE.dqc_version: V3_PROFILE.completion_marker,
+                V3_2013_PROFILE.dqc_version: V3_2013_PROFILE.completion_marker,
             }.get(self.dqc_version, "dqc-dqcrt-checks-completed"),
         }.issubset(self.validation_evidence):
             raise ValueError("SEC integrity evidence requires EFM and DQC evidence")
