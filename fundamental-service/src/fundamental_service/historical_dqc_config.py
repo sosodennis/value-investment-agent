@@ -1,4 +1,4 @@
-"""Build the pinned 2013 DQC1 config from the original standard taxonomy, offline."""
+"""Build pinned DQC1 configs from complete original standard taxonomies, offline."""
 
 from __future__ import annotations
 
@@ -11,13 +11,20 @@ import socket
 import subprocess
 import tempfile
 import zipfile
+from dataclasses import dataclass
 from importlib.metadata import version
 from pathlib import Path
+from typing import Literal
 
 from pydantic import JsonValue, TypeAdapter
 
 from .arelle_parser import _directory_hash
-from .historical_dqc import V3_2013_PROFILE, _load_package
+from .historical_dqc import (
+    HistoricalDqcProfile,
+    V3_2012_PROFILE,
+    V3_2013_PROFILE,
+    _load_package,
+)
 from .replay import ArtifactStore
 from .serialization import canonical_bytes, is_digest, sha256_digest
 from .snapshots import SnapshotError
@@ -28,13 +35,39 @@ ENTRYPOINT = "us-gaap-2013-01-31/entire/us-gaap-entryPoint-std-2013-01-31.xsd"
 RULE_SHA256 = "9a428c1a045cfe3ca9d9652031310967003a9d7c69bd06aaa50e5f2ebc19bce9"
 
 
+@dataclass(frozen=True)
+class TaxonomyConfigSource:
+    profile: HistoricalDqcProfile
+    url: str
+    sha256: str
+    entrypoint: str
+
+
+CONFIG_SOURCES = {
+    2012: TaxonomyConfigSource(
+        V3_2012_PROFILE,
+        "https://xbrl.fasb.org/us-gaap/2012/us-gaap-2012-01-31.zip",
+        "4f4d3298fe03f6a703d981fd2aeebb033916c936b7d73490c8d5b9c4c50b2da8",
+        "us-gaap-2012-01-31/entire/us-gaap-entryPoint-std-2012-01-31.xsd",
+    ),
+    2013: TaxonomyConfigSource(
+        V3_2013_PROFILE, TAXONOMY_URL, TAXONOMY_SHA256, ENTRYPOINT
+    ),
+}
+
+
 def generate_axis_config(
-    *, taxonomy_archive: Path, official_root: Path, taxonomy_cache: Path
+    *,
+    taxonomy_archive: Path,
+    official_root: Path,
+    taxonomy_cache: Path,
+    taxonomy_year: Literal[2012, 2013] = 2013,
 ) -> dict[str, dict[str, JsonValue]]:
     """Use the official config-generation traversal, never filing-specific members."""
-    if hashlib.sha256(taxonomy_archive.read_bytes()).hexdigest() != TAXONOMY_SHA256:
-        raise ValueError("FASB 2013 taxonomy archive hash does not match")
-    if _directory_hash(official_root) != V3_2013_PROFILE.source_sha256:
+    source = CONFIG_SOURCES[taxonomy_year]
+    if hashlib.sha256(taxonomy_archive.read_bytes()).hexdigest() != source.sha256:
+        raise ValueError(f"FASB {taxonomy_year} taxonomy archive hash does not match")
+    if _directory_hash(official_root) != source.profile.source_sha256:
         raise ValueError("official historical DQC package hash does not match")
     if version("arelle-release") != "2.47.4":
         raise ValueError("Arelle 2.47.4 is required")
@@ -45,7 +78,9 @@ def generate_axis_config(
     config = TypeAdapter(dict[str, dict[str, JsonValue]]).validate_json(
         (official_root / "resources/DQC_US_0001/dqc_0001.json").read_bytes()
     )
-    with tempfile.TemporaryDirectory(prefix="fundamental-gaap2013-") as directory:
+    with tempfile.TemporaryDirectory(
+        prefix=f"fundamental-gaap{taxonomy_year}-"
+    ) as directory:
         stage = Path(directory).resolve()
         with zipfile.ZipFile(taxonomy_archive) as archive:
             for member in archive.infolist():
@@ -65,7 +100,7 @@ def generate_axis_config(
         manager = ModelManager.initialize(controller)
         controller.modelManager = manager
         try:
-            model = manager.load(str(stage / ENTRYPOINT))
+            model = manager.load(str(stage / source.entrypoint))
             if model is None or model.errors:
                 raise ValueError(
                     "complete original standard taxonomy could not load offline"
@@ -91,7 +126,7 @@ def generate_axis_config(
         finally:
             manager.close()
             controller.close()
-    if sha256_digest(config) != V3_2013_PROFILE.axis_config_sha256:
+    if sha256_digest(config) != source.profile.axis_config_sha256:
         raise ValueError("generated config differs from the reviewed profile pin")
     return config
 
@@ -103,6 +138,7 @@ def publish_axis_config(
     taxonomy_cache: Path,
     artifacts: ArtifactStore,
     implementation_commit: str,
+    taxonomy_year: Literal[2012, 2013] = 2013,
 ) -> dict[str, object]:
     if (
         implementation_commit != implementation_commit.lower()
@@ -110,16 +146,17 @@ def publish_axis_config(
         or not is_digest(implementation_commit + "0" * 24)
     ):
         raise ValueError("exact implementation commit must be a full lowercase SHA")
+    source = CONFIG_SOURCES[taxonomy_year]
     inputs = {
-        "protocol": "historical-dqc1-gaap2013-config-build-v1",
+        "protocol": f"historical-dqc1-gaap{taxonomy_year}-config-build-v1",
         "implementation_commit": implementation_commit,
-        "taxonomy_url": TAXONOMY_URL,
+        "taxonomy_url": source.url,
         "taxonomy_digest": hashlib.sha256(taxonomy_archive.read_bytes()).hexdigest(),
-        "official_source_commit": V3_2013_PROFILE.source_commit,
+        "official_source_commit": source.profile.source_commit,
         "official_package_digest": _directory_hash(official_root),
         "official_rule_digest": RULE_SHA256,
         "taxonomy_cache_digest": _directory_hash(taxonomy_cache),
-        "entrypoint": ENTRYPOINT,
+        "entrypoint": source.entrypoint,
         "python": platform.python_version(),
         "arelle": version("arelle-release"),
         "pydantic": version("pydantic"),
@@ -128,17 +165,17 @@ def publish_axis_config(
         ).hexdigest(),
     }
     if (
-        inputs["taxonomy_digest"] != TAXONOMY_SHA256
-        or inputs["official_package_digest"] != V3_2013_PROFILE.source_sha256
+        inputs["taxonomy_digest"] != source.sha256
+        or inputs["official_package_digest"] != source.profile.source_sha256
     ):
         raise ValueError("config inputs do not match the fixed official sources")
-    config_digest = V3_2013_PROFILE.axis_config_sha256
+    config_digest = source.profile.axis_config_sha256
     config_id = f"historical-dqc1-config-{config_digest}"
     report = {
         "inputs": inputs,
         "input_digest": sha256_digest(inputs),
         "output_digest": config_digest,
-        "profile_id": V3_2013_PROFILE.profile_id,
+        "profile_id": source.profile.profile_id,
         "release_authority": False,
     }
     report_id = "historical-dqc1-config-build-" + sha256_digest(report)
@@ -164,6 +201,7 @@ def publish_axis_config(
         taxonomy_archive=taxonomy_archive,
         official_root=official_root,
         taxonomy_cache=taxonomy_cache,
+        taxonomy_year=taxonomy_year,
     )
     if _directory_hash(taxonomy_cache) != inputs["taxonomy_cache_digest"]:
         raise ValueError("taxonomy cache changed during config generation")
@@ -187,6 +225,7 @@ def main() -> int:
     parser.add_argument("--taxonomy-cache", type=Path, required=True)
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--implementation-commit", required=True)
+    parser.add_argument("--taxonomy-year", type=int, choices=(2012, 2013), default=2013)
     args = parser.parse_args()
     checkout = Path(__file__).resolve().parents[3]
     revision = subprocess.check_output(
@@ -212,6 +251,7 @@ def main() -> int:
             taxonomy_cache=args.taxonomy_cache,
             artifacts=ArtifactStore(args.output_dir),
             implementation_commit=args.implementation_commit,
+            taxonomy_year=args.taxonomy_year,
         )
     except (OSError, ValueError, SnapshotError) as error:
         print(

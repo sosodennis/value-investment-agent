@@ -1,5 +1,33 @@
 # Historical SEC validation for issue 361
 
+## Original 2012 taxonomy configuration
+
+The separately selected `sec-efm-us-dqc-v3.6.2-gaap2012-config-v1` profile uses
+the same unchanged eleven official hooks and whole-taxonomy traversal described
+below. It accepts exactly `http://fasb.org/us-gaap/2012-01-31` and the existing
+historical DEI bounds. It does not extend the 2013 profile or accept mixed
+taxonomies. Its version and completion marker use `gaap2012` rather than
+`gaap2013`; profile identity binds its own config digest.
+
+The [complete original FASB 2012 archive](https://xbrl.fasb.org/us-gaap/2012/us-gaap-2012-01-31.zip)
+has SHA-256 `4f4d3298fe03f6a703d981fd2aeebb033916c936b7d73490c8d5b9c4c50b2da8`.
+Building its entire standard DTS offline produces all 22 axis configurations,
+canonical SHA-256
+`ad6459e7d296a73e411be5a20ccad94e5bd99e5f0a1eba9847b34c66ff634ca0`.
+Pass `--taxonomy-year 2012` and this archive to the builder command below.
+The default remains 2013; no deployment or request default changes. Each year
+rejects the other year's archive. A changed config cannot hide behind a completed
+build receipt; existing artifact bytes are verified before reuse.
+
+With `ISSUE371_EVIDENCE_ROOT` configured, the source tests cover original
+NEWMARKET accession `0001282637-13-000003`: all 1,965 facts remain identical,
+the old profile's refusal is retained, and a synthetic invalid standard member
+still blocks with the original DQC error severity. They also exercise the 2013
+case below. A successful parse does not approve a mapping, original acquisition
+receipt, accounting scope, release or threshold. In particular,
+`PaymentsToAcquireProductiveAssets` includes software/intangibles under the
+official taxonomy and cannot become PPE capex merely because parsing succeeds.
+
 ## Original 2013 taxonomy configuration
 
 The opt-in `sec-efm-us-dqc-v3.6.2-gaap2013-config-v1` profile addresses
