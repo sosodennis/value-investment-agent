@@ -143,9 +143,13 @@ Selection still checks the workbook's declared update date, maximum age,
 issuer classification and source-use evidence. Capture time bounds availability;
 an annotation cannot silently establish an earlier publication date. Retained
 bytes and their digests identify a capture, because live URLs can change.
-`free-market-source-use-v4` includes the separate current BEA NIPA profile.
-Missing or changed permission bytes, raw-table redistribution and historical
-cutoffs before capture still refuse.
+`free-market-source-use-v5` includes the separate current BEA NIPA profile.
+The BEA citation rule pins the exact complete citation article, while every
+admission still records the original terms-page digest. A changed article,
+link, attribution instruction or restriction refuses; unrelated page-shell
+changes do not change the selected article digest. Other sources retain their
+whole-document terms checks. Missing or changed permission bytes, raw-table
+redistribution and historical cutoffs before capture still refuse.
 
 The current BEA adapter uses the maintained
 `https://apps.bea.gov/national/Release/XLS/Survey/Section1All_xls.xlsx`

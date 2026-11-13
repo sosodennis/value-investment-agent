@@ -29,6 +29,7 @@ from fundamental_service.source_admission import (
     admit_reference_source,
 )
 from fundamental_service.source_evidence import RetainedSourceV1, SourceArtifactV1
+from fundamental_service.terms_content import HtmlTermsScopeV1
 from reference_source_fixtures import country_xlsx
 
 CAPTURE = datetime(2026, 11, 12, tzinfo=UTC)
@@ -161,7 +162,110 @@ def test_production_catalog_never_admits_synthetic_terms():
     result = _admit(policy=free_market_source_policy())
     assert result.status == "refused"
     assert result.issue_codes == ("SOURCE_USE_TERMS_MISSING",)
-    assert result.request.policy_version == "free-market-source-use-v4"
+    assert result.request.policy_version == "free-market-source-use-v5"
+
+
+_TERMS_ARTICLE = (
+    b'<article about="/terms"><p>Cite the source; no endorsement.</p>'
+    b'<a href="/attribution">Attribution instructions</a></article>'
+)
+
+
+def _scoped_policy() -> SourceUsePolicyV1:
+    old = _reference_policy()
+    requirement = TermsRequirementV1(
+        uri=_terms().uri,
+        content_sha256=hashlib.sha256(_TERMS_ARTICLE).hexdigest(),
+        content_scope=HtmlTermsScopeV1(
+            tag="article", attribute="about", value="/terms"
+        ),
+    )
+    return SourceUsePolicyV1(
+        policy_version="synthetic-scoped-terms-v1",
+        rules=(old.rules[0].model_copy(update={"terms": (requirement,)}),),
+    )
+
+
+def test_scoped_terms_retain_raw_hashes_and_exact_selected_content():
+    results = []
+    for shell in (b'<meta name="Generator" content="Drupal 10">', b"new navigation"):
+        raw = shell + _TERMS_ARTICLE + b"<script>new site assets</script>"
+        result = _admit(policy=_scoped_policy(), terms=(_terms(content=raw),))
+        assert result.status == "admitted"
+        check = result.source_checks[0].terms_content_checks[0]
+        assert check.raw_content_sha256 == hashlib.sha256(raw).hexdigest()
+        assert (
+            check.selected_content_sha256 == hashlib.sha256(_TERMS_ARTICLE).hexdigest()
+        )
+        assert check.content_scope == _scoped_policy().rules[0].terms[0].content_scope
+        assert (
+            result.request.terms_artifacts[0].content_sha256 == check.raw_content_sha256
+        )
+        assert (
+            _admit(
+                policy=_scoped_policy(), terms=(_terms(content=raw),), expected=result
+            )
+            == result
+        )
+        results.append(result)
+    assert results[0].input_digest != results[1].input_digest
+    assert results[0].output_digest != results[1].output_digest
+
+
+@pytest.mark.parametrize(
+    "raw,code",
+    [
+        (
+            _TERMS_ARTICLE.replace(b"no endorsement", b"commercial use prohibited"),
+            "SOURCE_USE_TERMS_CHANGED",
+        ),
+        (
+            _TERMS_ARTICLE.replace(b'href="/attribution"', b'href="/new-restrictions"'),
+            "SOURCE_USE_TERMS_CHANGED",
+        ),
+        (
+            _TERMS_ARTICLE.replace(
+                b"</article>", b"<p>Additional restriction</p></article>"
+            ),
+            "SOURCE_USE_TERMS_CHANGED",
+        ),
+        (b"no article", "SOURCE_USE_TERMS_SCOPE_INVALID"),
+        (_TERMS_ARTICLE + _TERMS_ARTICLE, "SOURCE_USE_TERMS_SCOPE_INVALID"),
+        (_TERMS_ARTICLE.replace(b"</article>", b""), "SOURCE_USE_TERMS_SCOPE_INVALID"),
+        (
+            b"<template>" + _TERMS_ARTICLE + b"</template>",
+            "SOURCE_USE_TERMS_SCOPE_INVALID",
+        ),
+    ],
+)
+def test_scoped_terms_never_approve_changed_or_unestablished_conditions(raw, code):
+    result = _admit(policy=_scoped_policy(), terms=(_terms(content=raw),))
+    assert result.status == "refused"
+    assert result.issue_codes == (code,)
+
+
+def test_scoped_terms_keep_uri_and_original_ambiguity_gates():
+    first = _terms(content=_TERMS_ARTICLE)
+    changed_shell = _terms(content=b"new assets" + _TERMS_ARTICLE)
+    wrong_uri = replace(first, uri="https://other.test/terms")
+    missing = _admit(policy=_scoped_policy(), terms=(wrong_uri,))
+    assert missing.issue_codes == ("SOURCE_USE_TERMS_MISSING",)
+    ambiguous = _admit(policy=_scoped_policy(), terms=(first, changed_shell))
+    assert ambiguous.issue_codes == ("SOURCE_USE_TERMS_AMBIGUOUS",)
+    assert _admit(policy=_scoped_policy(), terms=(first, first)).status == "admitted"
+
+
+def test_whole_document_terms_keep_their_original_serialization():
+    requirement = TermsRequirementV1(uri=_terms().uri, content_sha256="a" * 64)
+    assert json.loads(canonical_bytes(requirement)) == {
+        "uri": _terms().uri,
+        "content_sha256": "a" * 64,
+    }
+    result = _admit()
+    assert (
+        "terms_content_checks"
+        not in json.loads(canonical_bytes(result))["source_checks"][0]
+    )
 
 
 @pytest.mark.parametrize(

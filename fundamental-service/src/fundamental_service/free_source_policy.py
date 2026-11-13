@@ -20,6 +20,7 @@ from .damodaran_source import (
 from .macro_series import MacroSeriesProviderPort
 from .market_reference import MarketReferenceProviderPort
 from .source_admission import SourceUsePolicyV1, SourceUseRuleV1, TermsRequirementV1
+from .terms_content import HtmlTermsScopeV1
 from .sofr_source import (
     NEW_YORK_FED_SOFR_PROFILE,
     NEW_YORK_FED_SOFR_SOURCE,
@@ -41,6 +42,9 @@ DAMODARAN_USE_SHA256 = (
     "6d8ccb3d77715d951c8fa1ccf76654396fbf4f4bbcf8cb87487ac26656bb04aa"
 )
 BEA_CITATION_SHA256 = "362a0e376b235df1333aea67d3eb4d4cc103fd754d056d1a5950449bdc99b04f"
+BEA_CITATION_ARTICLE_SHA256 = (
+    "fa84365aa8063550b72f95fd50735201d26bd736fe7e13ee4da8cfd8a2bc721c"
+)
 US_GOVERNMENT_WORKS_URI = (
     "https://www.govinfo.gov/content/pkg/USCODE-2024-title17/html/"
     "USCODE-2024-title17-chap1-sec105.htm"
@@ -51,6 +55,16 @@ US_GOVERNMENT_WORKS_SHA256 = (
 NEW_YORK_FED_USE_SHA256 = (
     "8338801341327ba9c5066f463c8196032a6a6107a87db4a70c7590859daa67f8"
 )
+
+
+def _bea_citation_requirement() -> TermsRequirementV1:
+    return TermsRequirementV1(
+        uri=BEA_GDP_TERMS,
+        content_sha256=BEA_CITATION_ARTICLE_SHA256,
+        content_scope=HtmlTermsScopeV1(
+            tag="article", attribute="about", value="/help/guidelines-for-citing-bea"
+        ),
+    )
 
 
 def default_macro_providers() -> tuple[MacroSeriesProviderPort, ...]:
@@ -124,9 +138,7 @@ def free_market_source_policy() -> SourceUsePolicyV1:
             terms_reference=BEA_GDP_TERMS,
             permitted_uses=("valuation_preparation", "derived_valuation_display"),
             terms=(
-                TermsRequirementV1(
-                    uri=BEA_GDP_TERMS, content_sha256=BEA_CITATION_SHA256
-                ),
+                _bea_citation_requirement(),
                 TermsRequirementV1(
                     uri=US_GOVERNMENT_WORKS_URI,
                     content_sha256=US_GOVERNMENT_WORKS_SHA256,
@@ -155,9 +167,7 @@ def free_market_source_policy() -> SourceUsePolicyV1:
             terms_reference=BEA_GDP_TERMS,
             permitted_uses=("valuation_preparation", "derived_valuation_display"),
             terms=(
-                TermsRequirementV1(
-                    uri=BEA_GDP_TERMS, content_sha256=BEA_CITATION_SHA256
-                ),
+                _bea_citation_requirement(),
                 TermsRequirementV1(
                     uri=US_GOVERNMENT_WORKS_URI,
                     content_sha256=US_GOVERNMENT_WORKS_SHA256,
@@ -228,6 +238,6 @@ def free_market_source_policy() -> SourceUsePolicyV1:
         )
     )
     return SourceUsePolicyV1(
-        policy_version="free-market-source-use-v4",
+        policy_version="free-market-source-use-v5",
         rules=tuple(sorted(rules, key=lambda x: x.rule_id)),
     )

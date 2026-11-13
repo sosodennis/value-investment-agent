@@ -7,6 +7,14 @@ versioned source-use admission and the existing nominal-GDP growth ceiling.
 It is source preparation evidence, not full valuation or history-threshold
 approval.
 
+The captured admission below is a historical checkpoint under
+`free-market-source-use-v4`. The current policy is
+`free-market-source-use-v5`: it retains the original terms-page digest and
+pins the exact BEA citation article with an `exact-html-element-v1` scope.
+Replaying this evidence under v5 must use the retained original bytes and
+record both the whole-page and selected-article digests; this historical report
+is not a current v5 admission.
+
 ## Captured source
 
 The exact source is

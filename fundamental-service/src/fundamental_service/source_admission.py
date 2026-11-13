@@ -23,6 +23,7 @@ from .market_reference import (
 from .serialization import sha256_digest
 from .snapshots import SnapshotError
 from .source_evidence import RetainedSourceV1, SourceArtifactV1
+from .terms_content import HtmlTermsScopeV1, TermsContentError, terms_content_digest
 
 SourceUse = Literal[
     "valuation_preparation", "derived_valuation_display", "raw_data_redistribution"
@@ -35,8 +36,20 @@ class AdmissionModel(BaseModel):
 
 
 class TermsRequirementV1(AdmissionModel):
+    """Pin the whole document, or an explicit versioned exact content boundary."""
+
     uri: str = Field(min_length=1)
     content_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    content_scope: HtmlTermsScopeV1 | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
+
+
+class TermsContentCheckV1(AdmissionModel):
+    uri: str
+    raw_content_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    content_scope: HtmlTermsScopeV1
+    selected_content_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
 
 
 class SourceUseRuleV1(AdmissionModel):
@@ -87,6 +100,9 @@ class SourceUseCheckV1(AdmissionModel):
     rule_ids: tuple[str, ...]
     issue_codes: tuple[str, ...]
     required_notices: tuple[str, ...]
+    terms_content_checks: tuple[TermsContentCheckV1, ...] = Field(
+        default=(), exclude_if=lambda value: not value
+    )
 
 
 class SourceAdmissionRequestV1(AdmissionModel):
@@ -190,7 +206,7 @@ def _check_use(
     artifact: SourceArtifactV1,
     *,
     intended_use: SourceUse,
-    terms: tuple[SourceArtifactV1, ...],
+    terms: tuple[RetainedSourceV1, ...],
     policy: SourceUsePolicyV1,
 ) -> SourceUseCheckV1:
     metric = (
@@ -217,6 +233,7 @@ def _check_use(
     )
     codes: set[str] = set()
     notices: tuple[str, ...] = ()
+    terms_checks: list[TermsContentCheckV1] = []
     if not rules:
         codes.add("SOURCE_USE_POLICY_MISSING")
     elif len(rules) != 1:
@@ -227,18 +244,41 @@ def _check_use(
         if intended_use not in rule.permitted_uses:
             codes.add("SOURCE_USE_PURPOSE_UNSUPPORTED")
         for requirement in rule.terms:
-            matches = {x.content_sha256 for x in terms if x.uri == requirement.uri}
+            matches = {
+                hashlib.sha256(x.content).hexdigest(): x
+                for x in terms
+                if x.uri == requirement.uri
+            }
             if not matches:
                 codes.add("SOURCE_USE_TERMS_MISSING")
             elif len(matches) != 1:
                 codes.add("SOURCE_USE_TERMS_AMBIGUOUS")
-            elif matches != {requirement.content_sha256}:
-                codes.add("SOURCE_USE_TERMS_CHANGED")
+            else:
+                raw_digest, source = next(iter(matches.items()))
+                try:
+                    selected_digest = terms_content_digest(
+                        source.content, requirement.content_scope
+                    )
+                except TermsContentError:
+                    codes.add("SOURCE_USE_TERMS_SCOPE_INVALID")
+                    continue
+                if requirement.content_scope is not None:
+                    terms_checks.append(
+                        TermsContentCheckV1(
+                            uri=requirement.uri,
+                            raw_content_sha256=raw_digest,
+                            content_scope=requirement.content_scope,
+                            selected_content_sha256=selected_digest,
+                        )
+                    )
+                if selected_digest != requirement.content_sha256:
+                    codes.add("SOURCE_USE_TERMS_CHANGED")
     return SourceUseCheckV1(
         artifact_digest=sha256_digest(artifact),
         rule_ids=tuple(x.rule_id for x in rules),
         issue_codes=tuple(sorted(codes)),
         required_notices=notices,
+        terms_content_checks=tuple(sorted(terms_checks, key=sha256_digest)),
     )
 
 
@@ -281,7 +321,7 @@ def _admit(
                 vintage,
                 artifact,
                 intended_use=intended_use,
-                terms=request.terms_artifacts,
+                terms=terms,
                 policy=policy,
             )
             for artifact in request.source_artifacts
