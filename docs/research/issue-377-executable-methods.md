@@ -108,6 +108,11 @@ downloaded methods sources and complete generated reports remain outside Git.
 
 ## Decision still required before a threshold study
 
+The [cost-aware evidence calibration](issue-377-cost-aware-evidence.md) describes
+practical acquisition alternatives and external method limits. Conditional
+adapter delivery can proceed through independent review while exact accounting
+evidence remains incomplete. It changes none of the v4 methods or gates.
+
 The legacy 100-complete-issuer gate is infeasible with at most 90 original labels.
 This implementation preserves it and reports underpowered. A concrete candidate
 for independent review is a precision-based design limited to the fixed eligible
