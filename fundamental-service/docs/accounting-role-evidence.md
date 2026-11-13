@@ -508,6 +508,13 @@ Changed originals, other dates, unknown classes, partial/ambiguous sentences
 and changed parsed observations abstain. Automatic mapping signs only after
 retained original/integrity/taxonomy and the executable policy checks pass.
 
+Policy `source-bound-us-gaap-v14` anchors this computed balance to
+`us-gaap:DisclosureOfCompensationRelatedCostsShareBasedPaymentsTextBlock`.
+The v13 dispatcher incorrectly retained the D&A default anchor; #437 records
+that audit-lineage defect. Existing v13 artifacts remain immutable evidence.
+Re-evaluation under v14 creates a distinct mapping and signature, even when
+the transcribed balance and explicit date remain the same.
+
 This role is `equity_award_unrecognized_compensation`. Its approval does not
 establish award quantities, exercise-price distributions, complete company-wide
 inventory, performance conditions, a quote or a trusted complete data release.

@@ -57,9 +57,8 @@ from .serialization import sha256_digest
 from .taxonomy_evidence import require_original_taxonomy
 
 AUTOMATIC_MAPPING_INPUT_ROLE = "automatic-mapping-input-v1"
-AUTOMATIC_MAPPING_POLICY: Literal["source-bound-us-gaap-v13"] = (
-    "source-bound-us-gaap-v13"
-)
+AutomaticMappingPolicyVersion = Literal["source-bound-us-gaap-v14"]
+AUTOMATIC_MAPPING_POLICY: AutomaticMappingPolicyVersion = "source-bound-us-gaap-v14"
 _GAAP_NAMESPACE = re.compile(
     r"http://(?:fasb\.org|xbrl\.us)/us-gaap/\d{4}(?:-\d{2}-\d{2})?"
 )
@@ -270,7 +269,7 @@ class AutomaticMappingDecisionV1(ReleaseModel):
     input_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
     source_revision: str = Field(pattern=r"^[0-9a-f]{40}$")
     evaluator_id: str = Field(min_length=1)
-    policy_version: Literal["source-bound-us-gaap-v13"] = AUTOMATIC_MAPPING_POLICY
+    policy_version: AutomaticMappingPolicyVersion = AUTOMATIC_MAPPING_POLICY
     policy_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
     status: Literal["approved", "abstain"]
     reason_codes: tuple[str, ...]
@@ -645,7 +644,7 @@ def evaluate_automatic_mapping(
         }
         if computed:
             anchor = DEPRECIATION
-            if disclosed:
+            if disclosed or option_cost:
                 anchor = STOCK_COMPENSATION_DISCLOSURE
             elif investment_assets:
                 anchor = investment_asset_concept(proposal.normalized_field)

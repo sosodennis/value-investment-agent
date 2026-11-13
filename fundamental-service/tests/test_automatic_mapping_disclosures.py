@@ -309,6 +309,7 @@ def test_registered_option_cost_is_dated_reconstructible_and_idempotent(
         store.read(first.decision_publication.artifact.artifact_id)
     )
     assert decision.status == "approved"
+    assert decision.mapping.anchor_concept == STOCK_COMPENSATION_DISCLOSURE
     rule = decision.mapping.accounting_rules.periods[0]
     assert rule.period.instant
     assert rule.disclosed_amount.date.period_end == date(2025, 12, 31)
