@@ -2547,3 +2547,80 @@ Exact verification passes **2,613 Service/PostgreSQL tests**, 17 explicit extern
 Input/output `fad59639cf5cf166e4683307f9f3df4f43fa99e19722fc04c6078b5ebc622736` / `67825cffb9923266184f3cc1ba25e912a5f36e5c475ecb5f7caf5864e4230c1a`; report `a22e316c76fdbae2f9df4e79c34c5816691e9093657422da5f4b031a7528a2e1`. Ordinary/two concurrent/service-and-PostgreSQL-restart/empty-store-restore repeats preserve all67 rows/32 content files and return wrote=false. Same-store repeats preserve mtimes; newly restored mtimes are not original-store identity. Portable backup `9025a87367f693135dfd9a298e78cb6d92c3598c9ec143192180fd7faebe12fd` is verified outside Docker; repeat export/restore wrote=false. Only this project's two containers/network/two volumes were removed; 63 of66 baseline containers preserve ID/image/start/status. Before this cleanup, three#376-project baseline containers were already stopped or removed; those observations are retained without attribution. This cleanup causes no additional change to surviving pre-cleanup baseline containers. Compact checkpoint `nve_option_cost_anchor_correction` records commands, exit codes, runtime/input/output digests and fail-before evidence; generated corpus stays outside Git.
 
 Complete award inventory, preferred/convertible/other-class claims, dated market policy/quote, trusted release/authentic caller approval and real numerical full-flow/recovery remain incomplete. These narrow checks do not supply parent independent review or main acceptance. Keep #361/#437/#376/#377 OPEN and PR370 draft; threshold null, eligible estimates provisional, incomplete valuation abstain and history sufficiency underpowered. Next: resolve the remaining evidence in its service owner, considering explicit versioned estimates/scenarios or narrower conclusions where source cost warrants them.
+
+
+## Retained SEC ownership inspection — 1292ecaa
+
+Refs #361/#394 / draft PR #370. Exact implementation
+`1292ecaa1fff79145438acf31a7f0e1991804c61` preserves the preceding checkpoints
+`9507d61442a547fe0691d6ce8d0286976790c069` and
+`f67abc744ba4da933c875805b3a9e12c44ae9d4d`. Fundamental owns the bounded
+Form 3/4/5 source parser and the offline manifest-driven inspection tool. No
+financial formula, composer, model version or approval policy changed.
+
+The fixed retained metadata selects 81 NVE ownership filings from2014-01-01
+through2024-06-17, available before2025-04-01. Initial expansion reused12 originals
+and captured69; subsequent acquisition makes zero provider requests. All81 now
+transcribe141 rows, preserving original/XML hashes, issuer/accession/form/period,
+owners, locators, values/codes and footnotes. Four2014 originals have later SEC
+envelope dates; parser profile `sec-ownership-source-v2` retains every date and
+warning and conservatively delays availability. Seventeen originals have no
+derivative rows; absence is not zero. The original77-success/four-refusal report
+remains immutable. Unknown/dangling/unsafe/conflicting sources retain refusals.
+
+All **2,674 Service/PostgreSQL tests pass**, with17 explicit fixed external parser
+resource skips and one expected duplicate-ZIP warning. This includes39 ownership
+and operator tests, exercising real temporary Git repositories, wrong commits,
+untracked state, prohibited checkout destinations and unchanged publication.
+Full Service Ruff0.14.10, changed formatting, two-source mypy1.19.1, both
+architecture guards and diff pass. [CI43463035001](https://github.com/sosodennis/value-investment-agent/actions/runs/43463035001)
+passes12 executed jobs; release gate skipped. The interrupted initial test run
+with wrong isolated-database credentials remains retained; the complete corrected
+run uses the actual project configuration and exits0.
+
+Exact-commit desktop/repeated/two concurrent runs preserve all256 selected
+artifact files' bytes/sizes/mtimes; repeats return `wrote=false`, zero new files
+and zero downloads. Two fresh network-none Linux workers reproduce the same
+input/output digests and141 rows; second publication writes nothing, with no OOM.
+An independently verified245-file cache backup restores to an empty directory,
+reuses all81 originals without I/O and reproduces the same inspection. Repeated
+backup/restore returns `wrote=false`; restored mtimes are not original-store
+identity. This verifies source-cache recovery, not numerical valuation recovery.
+
+Inspection input/output:
+`c794b94ced7551f69fd544766e709fcb67f36003d7eeb417e3d143b9fe021e9a` /
+`ed8a0777c3e614548f93f5c0874024b6506eb9bfb5a5b1343897f17f950868af`.
+Desktop/Linux reports:
+`f1a51501d3596c787d50b6cdb81ece163f0e511e10005fa541989b14287744d8` /
+`9168a8cb26fe4f88c23196a6876af92e1b8b4f6d6a2263d84e693daa4f57057a`.
+Backup: `5b3bef7a133fd60d0d3d4b6ee5b50321f982366e2d9df5dd0d40165cadf96e1c`.
+Canonical checkpoint:
+`547b46790976d57536b508d0b9a38d1059ccb9f71c6ca6e62ae06411936ef4af`,
+input/output `170e74cb4716bee31a96ea34b4aa07dcddb1071fd315b1f5b39d2f005cca2d71` /
+`16a983509427aefdc6b48be07db7ba2301feb3f14e90d0cea0f8ac01a678555f`.
+Exact commands, exit codes, runtime/source pins, failures and digest reports are
+in ignored `.audit/issue-361-ownership/`; generated sources/reports/backups remain
+outside Git in `../value-investment-agent-issue-361-ownership-evidence/`.
+
+Final isolated project `value-investment-agent-361-ownership-final` uses19991/19992
+and10.231.84.0/28. All124 installed Python/SQL files match the exact commit.
+Both services are healthy; SEC identity is explicitly unconfigured because this
+increment checks offline source inspection. Its two containers/network/two
+disposable volumes are removed; all65 baseline containers retain
+ID/image/start/status. Earlier ownership verification resources are also removed.
+Images/cache remain; no global prune or unrelated resource cleanup occurred.
+
+Source audit `09119188ccab76b88750a130bbed1aab43bc6e3a67182a30134ba46bfd250032`
+retains an M/acquired-A conflict in0000724910-23-000001 and the2024 Form4 footnote
+explicitly identifying a2023 award. Current [SEC Form4 instructions](https://www.sec.gov/files/form4.pdf)
+and [SEC reporting bulletin](https://www.sec.gov/files/forms-3-4-5.pdf) are retained
+as operational references only; they do not repair historical values or supply
+financial/threshold ground truth. Transactions, owner totals and cross-date
+proxy counts cannot establish company-wide per-strike inventory or unrecognized
+cost allocation. No mapping, complete-inventory declaration, release, caller
+approval or numerical result was created. Threshold stays null; eligible
+estimates remain provisional, incomplete valuation abstains and history research
+remains underpowered. #361/#394/#376/#377/#383 stay OPEN, PR370 draft. Next: reconcile
+the specific award conflicts and full coverage/costs, then the remaining claims
+and dated market/quote evidence, trusted release, authentic exact-input approval
+and real numerical full-flow/recovery acceptance before parent review/main delivery.
