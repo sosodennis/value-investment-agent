@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from contextlib import AbstractContextManager, contextmanager
+from datetime import datetime, timedelta
 from hashlib import sha256
 from typing import Iterator, Literal, Protocol
 
@@ -16,6 +17,8 @@ from .serialization import canonical_bytes, sha256_digest
 from .snapshots import CapturedSource, ContentAddressedStore, SnapshotError
 from .source_capture import SourceCaptureRequest
 from .source_evidence import RetainedSourceV1, SourceArtifactV1
+
+CURRENT_REQUEST_WINDOW = timedelta(minutes=15)
 
 
 class PublicSourceAcquisitionRequestV1(StrictModel):
@@ -101,6 +104,62 @@ class PublicSourceAcquisitionEvidenceV1(StrictModel):
         if self.retryable:
             return f"public-source-attempt:{self.digest}"
         return f"public-source-acquisition:{self.request.digest}"
+
+    def issues_at(self, valuation_at: datetime) -> tuple[str, ...]:
+        if valuation_at.tzinfo is None or valuation_at.utcoffset() is None:
+            raise ValueError("source eligibility requires a valuation timezone")
+        if self.status == "failed":
+            return self.issue_codes
+        assert self.available_at is not None
+        return (
+            ("SOURCE_NOT_AVAILABLE_AT_VALUATION",)
+            if self.available_at > valuation_at
+            else ()
+        )
+
+
+class PublicSourceCutoffV1(StrictModel):
+    protocol: Literal["current-capture-before-cutoff-v1"] = (
+        "current-capture-before-cutoff-v1"
+    )
+    requested_at: AwareDatetime
+    valuation_at: AwareDatetime
+    captures: tuple[PublicSourceAcquisitionEvidenceV1, ...] = Field(
+        min_length=1, max_length=32
+    )
+
+    @model_validator(mode="after")
+    def capture_before_cutoff(self) -> PublicSourceCutoffV1:
+        if len({item.request.digest for item in self.captures}) != len(self.captures):
+            raise ValueError("current cutoff repeats a source capture")
+        if any(
+            item.request.valuation_timestamp != self.requested_at
+            or item.status != "captured"
+            or item.source is None
+            or not (
+                self.requested_at - CURRENT_REQUEST_WINDOW
+                <= item.source.captured_at
+                <= self.requested_at + CURRENT_REQUEST_WINDOW
+            )
+            for item in self.captures
+        ):
+            raise ValueError(
+                "current cutoff requires successful recent captures for its request"
+            )
+        if self.valuation_at != max(
+            (
+                self.requested_at,
+                *(item.source.captured_at for item in self.captures if item.source),
+            )
+        ):
+            raise ValueError(
+                "current cutoff must equal the last actual capture or request"
+            )
+        return self
+
+    @property
+    def digest(self) -> str:
+        return sha256_digest(self)
 
 
 class PublicSourceCapturePort(Protocol):
@@ -205,24 +264,7 @@ class PublicSourceAcquisition:
         with self._capture_lock(request.digest):
             artifact_id = f"public-source-acquisition:{request.digest}"
             # Recheck current deployment restrictions even when original bytes exist.
-            validated = self._provider.validate_capture(request.source_id, request.uri)
-            if (
-                validated.source_id != request.source_id
-                or validated.uri != request.uri
-                or validated.terms_reference != request.terms_reference
-                or any(
-                    value is not None
-                    for value in (
-                        validated.available_at,
-                        validated.publication_at,
-                        validated.captured_at,
-                    )
-                )
-            ):
-                raise SnapshotError(
-                    "SOURCE_REGISTRATION_MISMATCH",
-                    "request terms differ from the configured source register",
-                )
+            self.validate_request(request)
             try:
                 record = self._artifacts.get(artifact_id)
             except SnapshotError as error:
@@ -251,6 +293,27 @@ class PublicSourceAcquisition:
             )
             return self._artifacts.put_with_receipt(
                 evidence.artifact_id, evidence, dependencies
+            )
+
+    def validate_request(self, request: PublicSourceAcquisitionRequestV1) -> None:
+        """Check installed registration without capturing or publishing evidence."""
+        validated = self._provider.validate_capture(request.source_id, request.uri)
+        if (
+            validated.source_id != request.source_id
+            or validated.uri != request.uri
+            or validated.terms_reference != request.terms_reference
+            or any(
+                value is not None
+                for value in (
+                    validated.available_at,
+                    validated.publication_at,
+                    validated.captured_at,
+                )
+            )
+        ):
+            raise SnapshotError(
+                "SOURCE_REGISTRATION_MISMATCH",
+                "request terms differ from the configured source register",
             )
 
     def _retain(

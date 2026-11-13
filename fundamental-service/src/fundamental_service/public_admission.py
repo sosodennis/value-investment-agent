@@ -195,7 +195,7 @@ class PublicSourceAdmission:
             retained = self._acquisitions.read(supplied.artifact_id)
             if (
                 retained != supplied
-                or retained.request.valuation_timestamp != request.valuation_at
+                or retained.request.valuation_timestamp > request.valuation_at
             ):
                 raise ValueError(
                     "source admission capture differs from its pinned input"
@@ -207,7 +207,9 @@ class PublicSourceAdmission:
         terms_refs: list[ArtifactRefV1] = []
         sources: list[RetainedSourceV1] = []
         terms: list[RetainedSourceV1] = []
-        codes = {code for item in selected for code in item.issue_codes}
+        codes = {
+            code for item in selected for code in item.issues_at(request.valuation_at)
+        }
         for item in selected:
             acquisition_refs.append(
                 ArtifactRefV1(

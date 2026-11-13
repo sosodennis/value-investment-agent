@@ -62,6 +62,7 @@ from .public_acquisition import (
     PublicSourceAcquisition,
     PublicSourceAcquisitionEvidenceV1,
     PublicSourceAcquisitionRequestV1,
+    PublicSourceCutoffV1,
 )
 from .public_source import PublicSourceAdapter
 from .public_admission import (
@@ -102,6 +103,9 @@ class _SourcePreparationPlan(StrictModel, Generic[SourceRequestT]):
     )
     source_admissions: tuple[PublicSourceAdmissionRequestV1, ...] = Field(
         default=(), max_length=32, exclude_if=lambda value: not value
+    )
+    public_source_cutoff: PublicSourceCutoffV1 | None = Field(
+        default=None, exclude_if=lambda value: value is None
     )
     valuation_working_capital_policy: ValuationWorkingCapitalPolicyV1 | None = Field(
         default=None, exclude_if=lambda value: value is None
@@ -156,10 +160,21 @@ class _SourcePreparationPlan(StrictModel, Generic[SourceRequestT]):
         if not required <= requested <= required | set(profile.supporting_fact_fields):
             raise ValueError("source plan must cover the complete model requirements")
         first = self.ingestions[0]
+        cutoff = self.public_source_cutoff
+        if cutoff is not None and (
+            cutoff.valuation_at != first.valuation_timestamp
+            or tuple(item.request for item in cutoff.captures) != self.public_sources
+        ):
+            raise ValueError(
+                "current cutoff must pin the complete plan captures and date"
+            )
         if len({request.digest for request in self.public_sources}) != len(
             self.public_sources
         ) or any(
-            request.valuation_timestamp != first.valuation_timestamp
+            request.valuation_timestamp
+            != (
+                cutoff.requested_at if cutoff is not None else first.valuation_timestamp
+            )
             for request in self.public_sources
         ):
             raise ValueError(
@@ -388,6 +403,9 @@ class SourcePreparationEvidenceV1(StrictModel):
     source_admission_outcomes: tuple[PublicSourceAdmissionEvidenceV1, ...] = Field(
         default=(), max_length=32, exclude_if=lambda value: not value
     )
+    public_source_cutoff: PublicSourceCutoffV1 | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
     preparation: AutomaticValuationPreparationV1 | None = None
     calculation: UncertaintyReportV1 | None = None
 
@@ -402,8 +420,15 @@ class SourcePreparationEvidenceV1(StrictModel):
             raise ValueError(
                 "source admission outcomes require distinct evidenced decisions"
             )
+        if self.public_source_cutoff is not None and (
+            self.public_source_cutoff.captures != self.public_source_outcomes
+        ):
+            raise ValueError("current report must retain every cutoff capture")
         if self.status != "blocked" and any(
-            outcome.issue_codes for outcome in self.public_source_outcomes
+            outcome.issues_at(self.public_source_cutoff.valuation_at)
+            if self.public_source_cutoff is not None
+            else outcome.issue_codes
+            for outcome in self.public_source_outcomes
         ):
             raise ValueError("unavailable required public sources block preparation")
         if len(
@@ -862,6 +887,8 @@ class SourcePreparationRunner:
     def _persist(
         self, plan: SourcePreparationPlan, evidence: SourcePreparationEvidenceV1
     ) -> ArtifactPublicationV1:
+        if evidence.public_source_cutoff != plan.public_source_cutoff:
+            raise ValueError("preparation must retain the plan's public source cutoff")
         if (
             tuple(item.request for item in evidence.source_admission_outcomes)
             != plan.source_admissions
@@ -919,6 +946,8 @@ class SourcePreparationRunner:
             }
         )
         dependencies: tuple[str, ...] = (evidence.plan_digest,)
+        if evidence.public_source_cutoff is not None:
+            dependencies += (evidence.public_source_cutoff.digest,)
         for outcome in evidence.public_source_outcomes:
             dependencies += (outcome.request.digest, outcome.digest)
             if outcome.source is not None:
@@ -1179,6 +1208,14 @@ class SourcePreparationRunner:
             outcomes.append(
                 self._public_acquisition.read(publication.artifact.artifact_id)
             )
+        if (
+            plan.public_source_cutoff is not None
+            and tuple(outcomes) != plan.public_source_cutoff.captures
+        ):
+            raise SnapshotError(
+                "CURRENT_CAPTURE_MISMATCH",
+                "current plan differs from retained source captures",
+            )
         return tuple(outcomes)
 
     def _admit_public_sources(
@@ -1220,6 +1257,24 @@ class SourcePreparationRunner:
             for reference in outcome.release_refs
         )
 
+    def validate_candidate(
+        self,
+        plan: SourcePreparationPlan,
+        candidate: DataReleaseCandidatePublishRequestV1 | None,
+    ) -> None:
+        """Reject incompatible release inputs before source acquisition."""
+        if candidate is not None and (
+            candidate.manifest.profile_id != plan.release_profile_id
+            or candidate.verification.source_revision != plan.source_revision
+            or not set(plan.resolution_request().required_fields).issubset(
+                candidate.manifest.required_fields
+            )
+            or not self._matches_release_mappings(plan, candidate.manifest)
+        ):
+            raise ValueError(
+                "candidate does not match the plan profile, revision and mappings"
+            )
+
     def run(
         self,
         plan: SourcePreparationPlan,
@@ -1248,24 +1303,20 @@ class SourcePreparationRunner:
             for request in plan.ingestions:
                 self._acquisition.retained_acquisition(request)
         outcomes = self._retained_outcomes(plan)
-        if candidate is not None and (
-            candidate.manifest.profile_id != plan.release_profile_id
-            or candidate.verification.source_revision != plan.source_revision
-            or not set(plan.resolution_request().required_fields).issubset(
-                candidate.manifest.required_fields
-            )
-            or not self._matches_release_mappings(plan, candidate.manifest)
-        ):
-            raise ValueError(
-                "candidate does not match the plan profile, revision and mappings"
-            )
+        self.validate_candidate(plan, candidate)
         public_outcomes = self._acquire_public_sources(plan, deadline_at=deadline_at)
         admission_outcomes = self._admit_public_sources(
             plan, public_outcomes, deadline_at=deadline_at
         )
         public_issues = tuple(
             sorted(
-                {code for outcome in public_outcomes for code in outcome.issue_codes}
+                {
+                    code
+                    for outcome in public_outcomes
+                    for code in outcome.issues_at(
+                        plan.ingestions[0].valuation_timestamp
+                    )
+                }
                 | {
                     code
                     for admission in admission_outcomes
@@ -1290,6 +1341,7 @@ class SourcePreparationRunner:
                     status="blocked",
                     issue_codes=public_issues,
                     public_source_outcomes=public_outcomes,
+                    public_source_cutoff=plan.public_source_cutoff,
                     source_admission_outcomes=admission_outcomes,
                 ),
             )
@@ -1322,6 +1374,7 @@ class SourcePreparationRunner:
                     SourcePreparationEvidenceV1(
                         source_revision=plan.source_revision,
                         public_source_outcomes=public_outcomes,
+                        public_source_cutoff=plan.public_source_cutoff,
                         source_admission_outcomes=admission_outcomes,
                         plan_digest=plan.digest,
                         status="blocked",
@@ -1375,6 +1428,7 @@ class SourcePreparationRunner:
                             SourcePreparationEvidenceV1(
                                 source_revision=plan.source_revision,
                                 public_source_outcomes=public_outcomes,
+                                public_source_cutoff=plan.public_source_cutoff,
                                 source_admission_outcomes=admission_outcomes,
                                 plan_digest=plan.digest,
                                 status="blocked",
@@ -1393,6 +1447,7 @@ class SourcePreparationRunner:
                     SourcePreparationEvidenceV1(
                         source_revision=plan.source_revision,
                         public_source_outcomes=public_outcomes,
+                        public_source_cutoff=plan.public_source_cutoff,
                         source_admission_outcomes=admission_outcomes,
                         plan_digest=plan.digest,
                         status="blocked",
@@ -1408,6 +1463,7 @@ class SourcePreparationRunner:
                     SourcePreparationEvidenceV1(
                         source_revision=plan.source_revision,
                         public_source_outcomes=public_outcomes,
+                        public_source_cutoff=plan.public_source_cutoff,
                         source_admission_outcomes=admission_outcomes,
                         plan_digest=plan.digest,
                         status="blocked",
@@ -1426,6 +1482,7 @@ class SourcePreparationRunner:
                     SourcePreparationEvidenceV1(
                         source_revision=plan.source_revision,
                         public_source_outcomes=public_outcomes,
+                        public_source_cutoff=plan.public_source_cutoff,
                         source_admission_outcomes=admission_outcomes,
                         plan_digest=plan.digest,
                         status="release_required",
@@ -1466,6 +1523,7 @@ class SourcePreparationRunner:
                     SourcePreparationEvidenceV1(
                         source_revision=plan.source_revision,
                         public_source_outcomes=public_outcomes,
+                        public_source_cutoff=plan.public_source_cutoff,
                         source_admission_outcomes=admission_outcomes,
                         plan_digest=plan.digest,
                         status="blocked",
@@ -1498,6 +1556,7 @@ class SourcePreparationRunner:
                 SourcePreparationEvidenceV1(
                     source_revision=plan.source_revision,
                     public_source_outcomes=public_outcomes,
+                    public_source_cutoff=plan.public_source_cutoff,
                     source_admission_outcomes=admission_outcomes,
                     plan_digest=plan.digest,
                     status="blocked",
@@ -1514,6 +1573,7 @@ class SourcePreparationRunner:
                 SourcePreparationEvidenceV1(
                     source_revision=plan.source_revision,
                     public_source_outcomes=public_outcomes,
+                    public_source_cutoff=plan.public_source_cutoff,
                     source_admission_outcomes=admission_outcomes,
                     plan_digest=plan.digest,
                     status="blocked",
@@ -1532,6 +1592,7 @@ class SourcePreparationRunner:
                 SourcePreparationEvidenceV1(
                     source_revision=plan.source_revision,
                     public_source_outcomes=public_outcomes,
+                    public_source_cutoff=plan.public_source_cutoff,
                     source_admission_outcomes=admission_outcomes,
                     plan_digest=plan.digest,
                     status="approval_required",
@@ -1550,6 +1611,7 @@ class SourcePreparationRunner:
                 SourcePreparationEvidenceV1(
                     source_revision=plan.source_revision,
                     public_source_outcomes=public_outcomes,
+                    public_source_cutoff=plan.public_source_cutoff,
                     source_admission_outcomes=admission_outcomes,
                     plan_digest=plan.digest,
                     status="blocked",
@@ -1585,6 +1647,7 @@ class SourcePreparationRunner:
             SourcePreparationEvidenceV1(
                 source_revision=plan.source_revision,
                 public_source_outcomes=public_outcomes,
+                public_source_cutoff=plan.public_source_cutoff,
                 source_admission_outcomes=admission_outcomes,
                 plan_digest=plan.digest,
                 status="calculated",
@@ -1625,6 +1688,11 @@ async def _run_command(args: argparse.Namespace) -> ArtifactPublicationV1:
         if args.approval
         else None
     )
+    received_at = datetime.now(UTC)
+    deadline_at = received_at + timedelta(seconds=args.timeout_seconds)
+    if not args.actor.strip() or not args.organization.strip():
+        raise ValueError("runner requires an actor and organization")
+    guard_caller_approval(approval, caller_id=args.actor, received_at=received_at)
     async with app.router.lifespan_context(app):
         application = app.state.application
         if not application.ready or app.state.metadata_store is None:
@@ -1705,7 +1773,7 @@ async def _run_command(args: argparse.Namespace) -> ArtifactPublicationV1:
                 macro_providers=application.macro_providers,
                 reference_providers=application.reference_providers,
             )
-        return SourcePreparationRunner(
+        runner = SourcePreparationRunner(
             application=application,
             metadata=app.state.metadata_store,
             acquisition=app.state.sec_acquisition,
@@ -1713,12 +1781,33 @@ async def _run_command(args: argparse.Namespace) -> ArtifactPublicationV1:
             canary=canary,
             public_acquisition=public_acquisition,
             public_admission=public_admission,
-        ).run(
+        )
+        runner.validate_candidate(plan, candidate)
+        if args.current:
+            from .current_preparation import (
+                CurrentSourcePreparation,
+                CurrentSourcePreparationRequestV1,
+            )
+
+            if public_acquisition is None:
+                raise ValueError("current preparation requires public source requests")
+            selected, publication = CurrentSourcePreparation(
+                acquisitions=public_acquisition,
+                artifacts=application.artifact_store,
+                selection_lock=PostgresPublicCaptureLock(app.state.metadata_store),
+            ).execute(
+                CurrentSourcePreparationRequestV1(template=plan),
+                deadline_at=deadline_at,
+            )
+            if selected.plan is None:
+                return publication
+            plan = selected.plan
+        return runner.run(
             plan,
             actor_id=args.actor,
             organization_id=args.organization,
             correlation_id=f"source-preparation:{plan.digest[:32]}",
-            deadline_at=datetime.now(UTC) + timedelta(seconds=args.timeout_seconds),
+            deadline_at=deadline_at,
             candidate=candidate,
             approval=approval,
         )
@@ -1728,6 +1817,11 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--plan", type=Path, required=True)
     parser.add_argument("--plan-digest", required=True)
+    parser.add_argument(
+        "--current",
+        action="store_true",
+        help="capture current public originals, then freeze and reuse the effective valuation plan",
+    )
     parser.add_argument("--candidate", type=Path)
     parser.add_argument("--approval", type=Path)
     parser.add_argument("--machine-private-key", type=Path)

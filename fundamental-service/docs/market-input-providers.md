@@ -147,7 +147,7 @@ flow. Add `public_sources` to its plan, with one entry per exact source:
 }
 ```
 
-The timestamp must equal the plan's valuation timestamp. This example declares a
+The timestamp must equal the fixed-date plan's valuation timestamp. This example declares a
 request; it does not assert that the mutable workbook existed at that cutoff.
 The command uses `FUNDAMENTAL_PUBLIC_SOURCE_USER_AGENT` (or the configured SEC
 contact), existing PostgreSQL metadata and content storage. Inject
@@ -165,6 +165,37 @@ current registration restrictions are checked before cache reuse. Receipt and
 content stores perform the existing atomic writes. A crash after receipt commit
 can resume without another download; a crash before that commit can require
 another HTTP GET, without duplicate published records.
+
+For a current valuation, use the same command with `--current`. The pinned input
+is a complete template plan whose valuation timestamp is the business request
+time. A new request must be nonfuture and no more than 15 minutes old. The command
+retains every required original and permission receipt, then freezes an ordinary
+plan at the latest actual capture time or the request time, whichever is later.
+It updates SEC-ingestion and source-admission decision timestamps together; it
+does not change source timestamps or the original acquisition requests. The
+installed `current-capture-before-cutoff-v1` protocol requires captures within
+15 minutes of the business request. It does not refresh an old historical plan.
+
+`current-source-request:<request-digest>` and
+`current-source-preparation:<request-digest>` retain the canonical request and
+selection. The selection contains the exact frozen plan, and ordinary reports
+include `public_source_cutoff` with every capture. The request digest identifies
+`current-source-preparation-v1` wrapping the full template; it differs from the
+template's `--plan-digest`. Keep the original template and digest for retry,
+candidate-release and caller-approval invocations. Reopening the same selection
+days later returns the same plan with `wrote=false`; it cannot move the cutoff
+again. A distinct current valuation requires its own explicit business request.
+
+After interruption, completed receipts can reconstruct the same plan even when
+the request is old. An expired request with incomplete receipts refuses before
+any new capture. An in-window retry reuses successful captures and may retry
+transient failures. Permanent refusals and out-of-window captures are retained
+without a selected plan. Failed selections return their artifact receipt through
+the command; transient selections use content-addressed attempt identities.
+Corruption refuses without repair, and cached selections recheck the current
+source register without HTTP access. Neither mode grants source-use permission,
+creates an issuer market policy, approves a release or bypasses exact-input
+caller approval. Current data never establishes historical availability.
 
 Every declared source's outcome appears in `public_source_outcomes`, including
 failures and originals captured after the cutoff. A failed required source or
@@ -184,7 +215,9 @@ existing source-use evaluator. Each `public-source-admission-v1` entry pins
 `kind` (`macro` or `reference`), `provider_id`, `metric_id`, `intended_use`,
 `valuation_at`, trusted `policy_version`/`policy_digest`, and ordered distinct
 `source_request_digests`/`terms_request_digests`. Capture digests must identify
-entries in the same plan; all dates must match. Requests cannot install policies
+entries in the same plan; admission dates must equal the effective plan cutoff.
+In current mode acquisition requests retain the earlier business request time;
+the stored cutoff binds those exact receipts to the later decision. Requests cannot install policies
 or approve numbers. The command injects the application's configured macro and
 reference providers and trusted source-use policy into `PublicSourceAdmission`.
 
