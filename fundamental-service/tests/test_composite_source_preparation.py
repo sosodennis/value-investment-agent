@@ -276,3 +276,35 @@ def test_automatic_plan_pins_the_source_profile_and_policy(tmp_path, change):
     else:
         with pytest.raises(ValidationError):
             AutomaticSourcePreparationPlanV1(**plan_payload)
+
+
+def test_composed_history_requires_a_composite_policy_input_for_each_annual_period(
+    tmp_path,
+):
+    fixture = _valuation_fixture(tmp_path, sec_profile=True)
+    plan = _plan(fixture)
+    policy = plan.valuation_working_capital_policy
+    plan = type(plan)(
+        **(
+            plan.model_dump()
+            | {
+                "valuation_working_capital_policy": type(policy)(
+                    **(
+                        policy.model_dump()
+                        | {
+                            "inputs": tuple(
+                                item
+                                for item in policy.inputs
+                                if item.period_end.year != 2024
+                            )
+                        }
+                    )
+                )
+            }
+        )
+    )
+    fixture.application = _client(fixture).app.state.application
+    assert _runner(fixture)._assess_history_requirements(plan, fixture.snapshot) == (
+        ("HISTORY_MINIMUM_PERIODS_UNAVAILABLE",),
+        ("2024:working_capital_policy_input",),
+    )

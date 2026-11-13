@@ -946,7 +946,10 @@ class SourcePreparationRunner:
                 selected.facts,
                 snapshot=snapshot,
                 valuation_timestamp=snapshot.valuation_timestamp,
-                profile=profile,
+                profile=valuation_input_requirements(
+                    plan.valuation_working_capital_policy, plan.model_id
+                ),
+                working_capital_inputs=working_capital_inputs,
             )
         except AnnualHistoryError as error:
             return (error.code,), ()
