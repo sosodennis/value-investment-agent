@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import argparse
 import hashlib
-import json
 import sys
 from pathlib import Path
 from typing import Protocol
@@ -30,6 +29,7 @@ from .automatic_market_policy_evidence import (
     requires_automatic_market_policy,
 )
 from .data_releases import (
+    DataReleaseCandidatePublishRequestV1,
     DataReleaseError,
     AutomaticMappingApprovalV1,
     DataReleaseManifestV1,
@@ -923,11 +923,10 @@ class _FilesystemMappingReader:
 def _load_candidate(
     path: Path,
 ) -> tuple[DataReleaseManifestV1, DataReleaseVerificationV1]:
-    payload = json.loads(path.read_bytes())
-    return (
-        DataReleaseManifestV1.model_validate(payload["manifest"]),
-        DataReleaseVerificationV1.model_validate(payload["verification"]),
+    candidate = DataReleaseCandidatePublishRequestV1.model_validate_json(
+        path.read_bytes()
     )
+    return candidate.manifest, candidate.verification
 
 
 def main(argv: list[str] | None = None) -> int:

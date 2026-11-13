@@ -1,5 +1,6 @@
 import base64
 import hashlib
+import json
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
@@ -35,8 +36,10 @@ from fundamental_service.facts import (
     FilesystemCanonicalFactRepository,
     canonical_fact_digest,
 )
-from fundamental_service.release_runner import DataReleaseCanaryRunner
-from fundamental_service.serialization import sha256_digest
+from fundamental_service.release_runner import DataReleaseCanaryRunner, main
+from fundamental_service.replay import ArtifactStore
+from fundamental_service.serialization import canonical_bytes, sha256_digest
+from fundamental_service.snapshots import FilesystemSnapshotRepository
 
 
 class _Snapshots:
@@ -466,3 +469,69 @@ def test_release_canary_blocks_point_in_time_fact_mismatch() -> None:
     with pytest.raises(DataReleaseError) as error:
         runner.validate(manifest, verification)
     assert error.value.code == "DATA_RELEASE_FACT_MISMATCH"
+
+
+@pytest.mark.parametrize("corruption", [None, "signature", "digest", "envelope"])
+def test_cli_reads_canonical_json_and_repeats_or_refuses_tampering(
+    tmp_path, capsys, corruption
+):
+    manifest, verification, snapshots, facts, mappings, artifacts, roots = _candidate()
+    FilesystemSnapshotRepository(tmp_path / "snapshots").publish(snapshots.snapshot)
+    FilesystemCanonicalFactRepository(tmp_path / "facts").publish(facts.fact)
+    mapping_root = tmp_path / "mappings"
+    mapping_root.mkdir()
+    (mapping_root / f"{mappings.mapping.decision_id}.json").write_bytes(
+        canonical_bytes(mappings.mapping)
+    )
+    artifact_store = ArtifactStore(tmp_path / "artifacts")
+    artifact_store.put_bytes_with_receipt(
+        "release-evidence", artifacts.content, media_type="application/json"
+    )
+    trust_file = tmp_path / "trust-roots.json"
+    trust_file.write_bytes(canonical_bytes(roots))
+    expected = DataReleaseCanaryRunner(
+        snapshot_repository=snapshots,
+        fact_repository=facts,
+        mapping_reader=mappings,
+        artifact_reader=artifacts,
+        trust_roots=roots,
+    ).validate(manifest, verification)
+    payload = json.loads(
+        canonical_bytes({"manifest": manifest, "verification": verification})
+    )
+    if corruption == "signature":
+        payload["verification"]["signature"] = base64.b64encode(
+            b"invalid".ljust(64, b"0")
+        ).decode()
+    elif corruption == "digest":
+        payload["manifest"]["manifest_digest"] = "0" * 64
+    elif corruption == "envelope":
+        payload["unexpected"] = True
+    candidate_file = tmp_path / "candidate.json"
+    candidate_file.write_bytes(canonical_bytes(payload))
+    argv = [
+        "--candidate",
+        str(candidate_file),
+        "--snapshots-root",
+        str(tmp_path / "snapshots"),
+        "--facts-root",
+        str(tmp_path / "facts"),
+        "--mappings-root",
+        str(mapping_root),
+        "--artifacts-root",
+        str(tmp_path / "artifacts"),
+        "--trust-roots",
+        str(trust_file),
+    ]
+    if corruption is not None:
+        assert main(argv) == 2
+        captured = capsys.readouterr()
+        assert captured.out == ""
+        assert "data release canary failed:" in captured.err
+        return
+    assert main(argv) == 0
+    first = capsys.readouterr()
+    assert first.err == ""
+    assert first.out == canonical_bytes(expected).decode() + "\n"
+    assert main(argv) == 0
+    assert capsys.readouterr() == first
