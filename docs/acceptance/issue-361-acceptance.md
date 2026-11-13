@@ -2020,3 +2020,75 @@ Exact validation: **2,355 Service/PostgreSQL tests**, **222 focused tests**, 99-
 Ordinary and two concurrent source replays run twice, preserving all12 retained files' bytes/sizes/mtimes, with zero downloads/provider calls/new artifacts. The second report returns wrote=false and repeat digest `39bc75359254e75b159279a16167f059d978c373053782d0fe7c9a9636c7294a`. The separate installed source-adapter project `value-investment-agent-361-maintained-market` (19511/19512, subnet10.231.63.0/28) matches all114 installed Python/SQL sources;17 admissions/refusals reproduce before and after restart with output `da0e8557d28bf52b4c200753519beead130652f5e1c6c13f4c8bc4170552b017`. All83 baseline containers preserve ID/image/start. This source-only runtime has SEC identity unconfigured and does not establish complete valuation acceptance. The canonical SEC composition runtime still describes557c36be and requires revalidation for subsequent code.
 
 Checkpoint `maintained_market_dataset_increment` preserves prior entries, commands, exact commits, runtime pins, input/output digests and audit-helper corrections (default subnet exhaustion, read-only fixture lock, initial receipt-count omission). Originals, workbooks, generated reports and helper scripts remain ignored. The owner requested delivery cleanup next: pause feature additions, review #423/#427 and assess bounded main delivery. Full #361 numerical recovery remains incomplete; PR#370 stays draft, issues OPEN, threshold null, estimates provisional, incomplete results abstain and history underpowered.
+
+## Independent child reviews — 2026-11-13
+
+Checkpoint base `ab4cbd62e4fda589c5f3d3216303a49dd7708680` is clean and
+pushed. Its maintained structured market-source correction remains the active
+source policy; individual articles/feeds have no production admission authority.
+This review checkpoint adds no source, formula, schema or runtime change.
+
+- **#423, engineering review passes:** reviewed head
+  `00dbc27921a1b4980dc3b669206981b8ddbc01aa`, implementation
+  `638c5df2faded9e722f4eec738a5de3b79f87102`. The official composer/model
+  resolver/first-original-label chain and prepublication exporter preserve
+  frozen lineage, missing windows and abstentions. Fresh checks: 141 tests,
+  Ruff/format, source-aware mypy, both architecture guards and whitespace pass.
+  Checks receipt `f303dac700474ad2d8fb4e879d647c5ad5b40631d65ad493254d37cd2ddb8d0b`,
+  input `e4b1b9ead7cb7a1a0280b2a8148cd4f9ec57614d5cc044a03c1b475238b004e8`,
+  output `de14d4b3ee6303d4d90bfa8bb4a67e9c29f7c07df64dd2a7cbc060e21010567f`.
+  A fresh offline window/export/analysis pipeline ran twice at this exact head;
+  second writes are all false, bytes/sizes/mtimes unchanged, zero new artifacts.
+  Verification `4c26276da1df4051b433f0fe8bcad1372affdba9422205fe00e73e0cb2b13ed1`,
+  input `7c90ec771a5fb744c3c0f43bf83e780e385d8e12048817e8d7411cd17bef484e`,
+  output `24cf5fedc726ab875067096be31d29c3065f5242b594e29cdaebf5782e1866a3`.
+  Numeric outputs match retained implementation evidence. Wrong-SHA refusal
+  exits 2 as expected. Serial integration and integration checks are next.
+- **#427, changes requested:** reviewed head
+  `55f7d3aae895c746dce633853106cb5b0cacc9f9`, implementation
+  `e642b9aa87604bb6b49a2090f1611b7a07bb29ad`. One P2 finding: the new
+  `historical_dqc_config.py:30` builder exposes `dict[str, Any]` instead of
+  validating/typing its decoding boundary, contrary to backend guideline line42.
+  [Finding and remediation](https://github.com/sosodennis/value-investment-agent/pull/427#issuecomment-6843699914)
+  are also recorded in owning blocker #371. No merge was performed.
+  Fresh checks: 124 tests pass, nine explicitly skipped; Ruff/format,
+  four-source mypy, both architecture guards and whitespace pass. Receipt
+  `7f6590224a8e0da6ecbd6f1f6501b1cb80a9f1ad44314b23d7b7fb36884e2e48`,
+  input `f7d652c5b0566fed1e8b4ad274d953002fbb85605da38004cd7e20e687ae5221`,
+  output `eb11d966e41c31641cb99d7a15c6d83e85845d46463289b0e5e977bfa18d37f7`.
+  Two independent original direct/archive/negative replay processes retain
+  2,508 facts and the official invalid-member error; the old48-error refusal is
+  retained. Replay input
+  `d1cfefcc84be010f108cda4626adceaaf4724dafa7cae540b8318c0bcd9a9d3c`,
+  output `d4933be2ed3793008b608d93adf2a35d57af17ea13ceb0e5076bca25602e82b0`.
+  Second replay creates zero files and config/report writes are false. This
+  review did not rerun Docker or claim live HTTP/publication acceptance.
+- **#428, engineering review passes:** main-only head
+  `d6693c45544df0086f7933320b333953ba5475f1`, implementation
+  `b289b798461535506a9fadbeebaa8d61724c64fb`. All four diff files and #419/#422
+  criteria inspected. Fresh full suite: 316 passed,25 explicit skips and one
+  existing fixture serializer warning. Changed Ruff/format, dependency-aware
+  mypy, both actual package hooks, config validation, both guards and whitespace
+  pass. [Review](https://github.com/sosodennis/value-investment-agent/pull/428#issuecomment-6843699302)
+  receipt `e7942261ec70fd13f87a7b408054e7cc83f39a4f21e1de12b1f1e4d6a403ff25`,
+  input `0b9e503c76fec75a0f682e1325cb7f53e46dcc549d0cdb53dc81faf6565bb599`,
+  output `faaaf539dffbdfdf7e659c75328bbfea9be11c88040b80e8ac6b96da0aa23e2c`.
+  The delivery owner retains ready/merge/main verification/issue closure.
+
+Original #423 verification plus all14 command receipts, and #427 sealed receipt
+plus all19 bound files were independently hash-checked against their documented
+implementation SHAs. Metadata-only heads were checked separately. New full
+commands and outputs remain ignored under `.audit/issue-361-child-review/`;
+#423 generated replay artifacts are external under
+`/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-independent-review-evidence/423-replay/`.
+An initial review-harness attempt correctly refused output inside a Git checkout;
+its exit1 receipt is retained, and the corrected external output path uses the
+unchanged production publisher. No acceptance guard was relaxed.
+
+Next: serially integrate #423 and verify its integration commit; obtain the #427
+typed-boundary correction; assess #386 Decimal isolation as a bounded main
+increment without importing unrelated #361 contracts. Stale-PR retirement,
+backlog labels and #428 merge remain owned by the coordinating side. These are
+engineering reviews, not accounting signatures or threshold approval. #361,
+#371,#376,#377 remain open, exact cases0/100, history underpowered,
+`supported_history_threshold=null`; full numerical acceptance remains pending.
