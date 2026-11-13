@@ -201,6 +201,144 @@ def gross_balance_case(tmp_path, field, *, changes=None, extra=()):
     )
 
 
+def award_mapping_case(tmp_path, field, *, changes=None, extra=()):
+    proposal = automatic_mapping_proposal(
+        field, mapping_version="test-issuer-mapping-v1"
+    )
+    assert proposal is not None
+    unit = (
+        "xbrli:shares"
+        if field == "equity_award_quantity"
+        else "iso4217:USD/xbrli:shares"
+    )
+    return case(
+        tmp_path,
+        observation_concept="us-gaap:inventory",
+        observation_changes={
+            "concept": proposal.source_concept,
+            "unit": unit,
+            **(changes or {}),
+        },
+        proposal_changes=proposal.model_dump(),
+        extra=extra,
+    )
+
+
+@pytest.mark.parametrize(
+    ("field", "unit"),
+    (
+        ("equity_award_quantity", "xbrli:shares"),
+        ("equity_award_exercise_price", "iso4217:USD/xbrli:shares"),
+    ),
+)
+def test_option_facts_receive_scoped_replayable_machine_approval(tmp_path, field, unit):
+    request, store, roots, _ = award_mapping_case(tmp_path, field)
+    receipt = approve(request, store, roots)
+    decision = AutomaticMappingDecisionV1.model_validate_json(
+        store.read(receipt.decision_publication.artifact.artifact_id)
+    )
+    assert decision.status == "approved" and not decision.reason_codes
+    assert decision.policy_version == "source-bound-us-gaap-v17"
+    mapping = decision.mapping
+    assert mapping.normalized_field == field
+    assert mapping.observation_scope.issuer_id == request.original.source.cik
+    assert (
+        mapping.observation_scope.accession_number
+        == request.original.source.accession_number
+    )
+    assert (
+        mapping.observation_scope.raw_content_hash
+        == request.original.source.content_hash
+    )
+    candidates = parsed_facts_to_candidates(
+        request.original.report,
+        source=request.original.source,
+        issuer_id=request.original.source.cik,
+        normalized_field=field,
+        mapping=mapping,
+    )
+    assert candidates
+    assert all(candidate.normalized_field == field for candidate in candidates)
+    assert all(candidate.unit == unit for candidate in candidates)
+    approval = AutomaticMappingApprovalV1.model_validate_json(
+        store.read(receipt.approval_publication.artifact.artifact_id)
+    )
+    assert (
+        verify_automatic_mapping_replay(approval, mapping, artifacts=store) == request
+    )
+    before = inventory(store.root)
+    repeated = approve(request, ArtifactStore(store.root), roots)
+    assert repeated.output_digest == receipt.output_digest
+    assert inventory(store.root) == before
+    assert not any(
+        publication.wrote
+        for publication in (
+            repeated.input_publication,
+            repeated.decision_publication,
+            repeated.approval_publication,
+        )
+    )
+
+
+@pytest.mark.parametrize(
+    "field,changes,reason",
+    (
+        (
+            "equity_award_quantity",
+            {"unit": "iso4217:USD"},
+            "MAPPING_UNIT_UNSUPPORTED",
+        ),
+        (
+            "equity_award_exercise_price",
+            {"unit": "xbrli:shares"},
+            "MAPPING_UNIT_UNSUPPORTED",
+        ),
+        (
+            "equity_award_quantity",
+            {"dimensions": (("us-gaap:StatementClassOfStockAxis", "other"),)},
+            "MAPPING_SCOPE_UNSUPPORTED",
+        ),
+        (
+            "equity_award_exercise_price",
+            {"instant": date(2026, 12, 31)},
+            "MAPPING_PERIOD_AFTER_ORIGINAL",
+        ),
+    ),
+)
+def test_option_mapping_rejects_wrong_unit_scope_and_future_period(
+    tmp_path, field, changes, reason
+):
+    request, store, roots, _ = award_mapping_case(tmp_path, field, changes=changes)
+    decision = evaluate(request, store)
+    assert decision.status == "abstain" and decision.mapping is None
+    assert "MAPPING_NO_ELIGIBLE_OBSERVATIONS" in decision.reason_codes
+    assert reason in {item.reason_code for item in decision.rejected_observations}
+    assert approve(request, store, roots).approval_publication is None
+
+
+@pytest.mark.parametrize(
+    "field",
+    ("equity_award_quantity", "equity_award_exercise_price"),
+)
+def test_conflicting_option_observations_abstain(tmp_path, field):
+    request, _, _, _ = award_mapping_case(tmp_path, field)
+    observed = next(
+        fact
+        for fact in request.original.report.facts
+        if fact.concept == request.proposal.source_concept
+    )
+    conflict = observed.model_copy(
+        update={"value": str(Decimal(observed.value) + 1), "context_id": "conflict"}
+    )
+    request, store, roots, _ = award_mapping_case(
+        tmp_path / "conflict", field, extra=(conflict,)
+    )
+    decision = evaluate(request, store)
+    assert decision.status == "abstain" and decision.mapping is None
+    assert "MAPPING_OBSERVATION_CONFLICT" in decision.reason_codes
+    assert approve(request, store, roots).approval_publication is None
+
+
 @pytest.mark.parametrize("field", ("current_assets", "current_liabilities"))
 def test_gross_balance_approval_is_source_bound_and_reused_after_restart(
     tmp_path, field
@@ -211,7 +349,7 @@ def test_gross_balance_approval_is_source_bound_and_reused_after_restart(
         store.read(first.decision_publication.artifact.artifact_id)
     )
     assert decision.status == "approved"
-    assert decision.policy_version == "source-bound-us-gaap-v16"
+    assert decision.policy_version == "source-bound-us-gaap-v17"
     mapping = decision.mapping
     scope = mapping.observation_scope
     assert scope.issuer_id == request.original.source.cik

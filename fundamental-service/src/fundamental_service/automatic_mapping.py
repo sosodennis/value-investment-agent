@@ -57,8 +57,8 @@ from .serialization import sha256_digest
 from .taxonomy_evidence import require_original_taxonomy
 
 AUTOMATIC_MAPPING_INPUT_ROLE = "automatic-mapping-input-v1"
-AutomaticMappingPolicyVersion = Literal["source-bound-us-gaap-v16"]
-AUTOMATIC_MAPPING_POLICY: AutomaticMappingPolicyVersion = "source-bound-us-gaap-v16"
+AutomaticMappingPolicyVersion = Literal["source-bound-us-gaap-v17"]
+AUTOMATIC_MAPPING_POLICY: AutomaticMappingPolicyVersion = "source-bound-us-gaap-v17"
 _GAAP_NAMESPACE = re.compile(
     r"http://(?:fasb\.org|xbrl\.us)/us-gaap/\d{4}(?:-\d{2}-\d{2})?"
 )
@@ -68,7 +68,11 @@ _GAAP_NAMESPACE = re.compile(
 class DirectMappingRule:
     concept: str
     period: Literal["annual", "instant"]
-    unit: Literal["iso4217:USD", "xbrli:shares"] = "iso4217:USD"
+    unit: Literal[
+        "iso4217:USD",
+        "xbrli:shares",
+        "iso4217:USD/xbrli:shares",
+    ] = "iso4217:USD"
     alternative_concepts: tuple[str, ...] = ()
 
     @property
@@ -76,9 +80,10 @@ class DirectMappingRule:
         return (self.concept, *self.alternative_concepts)
 
 
-# Partial revenue tags, absence claims, arbitrary computed partitions and awards
-# have no direct rule. Aggregate D&A and cash capex require registered scope.
-# Every rule change changes the policy digest.
+# Partial revenue tags, absence claims and arbitrary computed partitions have no
+# direct rule. Award rules cover only the registered option-outstanding facts;
+# they do not establish complete inventory. Aggregate D&A and cash capex require
+# registered scope. Every rule change changes the policy digest.
 _RULES = {
     "revenue": DirectMappingRule(
         "us-gaap:Revenues", "annual", alternative_concepts=("us-gaap:SalesRevenueNet",)
@@ -126,6 +131,16 @@ _RULES = {
     ),
     "common_shares_outstanding": DirectMappingRule(
         "us-gaap:CommonStockSharesOutstanding", "instant", "xbrli:shares"
+    ),
+    "equity_award_quantity": DirectMappingRule(
+        "us-gaap:ShareBasedCompensationArrangementByShareBasedPaymentAwardOptionsOutstandingNumber",
+        "instant",
+        "xbrli:shares",
+    ),
+    "equity_award_exercise_price": DirectMappingRule(
+        "us-gaap:ShareBasedCompensationArrangementByShareBasedPaymentAwardOptionsOutstandingWeightedAverageExercisePrice",
+        "instant",
+        "iso4217:USD/xbrli:shares",
     ),
 }
 
