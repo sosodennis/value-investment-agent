@@ -2766,3 +2766,53 @@ unverified. Next: resolve these evidence gaps in their owning layer. Threshold
 stays null, NVE abstains, eligible estimates remain provisional and history
 research underpowered. Keep #361/#376/#377 OPEN and PR #370 draft pending full
 acceptance, independent review and main verification.
+
+## Current award inventory with historical evidence — 631872ff
+
+Implementation `631872ff817a162f349d223dd8728ef149d11acd` fixes the release
+boundary recorded in #394: a composed snapshot could retain several historical
+award instants, while the inventory and treasury-stock calculation require one
+instant. Both new serving/canary regressions fail before the correction. The
+shared verifier now checks all inventory-period observations, retains older
+facts and rejects stale inventory, omitted current observations and ambiguous
+instants. Later explicitly reviewed empty inventories may retain older awards;
+the historical observations do not establish absence. Coverage/source/quote and
+financial approval requirements remain. No #352 arithmetic or provider changes.
+
+Exact checks pass **2,722 Service/PostgreSQL tests**, with 17 explicit external
+parser-resource skips and one expected duplicate-ZIP warning. Full Service
+Ruff/format, changed-source mypy, both architecture guards and diff pass.
+[CI 43511741268](https://github.com/sosodennis/value-investment-agent/actions/runs/43511741268)
+passes 12 executed jobs; release gate skipped. These checks do not constitute
+independent review of the parent PR.
+
+The isolated SEC-enabled project `value-investment-agent-361-award-period`
+(20271/20272, 10.231.87.0/28) matches all 125 installed Python/SQL files and
+passes preflight. Its installed implementation passes 31 award/release tests.
+A deliberately **synthetic** signed release retains 112 facts, including two
+current and two historical award facts. Canary and official composer reproduce
+10 incremental shares and 120 diluted shares. Ordinary, two concurrent and new
+process repeats preserve all 120 files' bytes/sizes/mtimes and return identical
+reports with `wrote=false`. This verifies period binding and filesystem evidence
+reuse, not a real issuer valuation, HTTP full-flow acceptance or a new
+PostgreSQL recovery case.
+
+Replay input/output:
+`9378782bd0d119feaef384749be5ade0954228b2dbb898b9c2cd18664e58c5dc` /
+`6d72159d162b376af4ba7eef0c6f80c1c0c507628f699c4f562cb3e820bd3dec`.
+The [compact checkpoint](issue-361-award-period-checkpoint.json) preserves exact
+commands/digests, runtime pins and failed harness attempts. Its atomic writer
+repeats unchanged. Exporting all frozen test dependencies without rebuilding
+the read-only production project resolves the disposable Docker harness errors;
+production source and permissions remain unchanged. Generated evidence is
+retained outside Git. The temporary stack's two containers, network and two
+disposable volumes are removed; all 60 baseline containers retain ID/image/start/
+status. Images and build cache remain.
+
+Real NVE capital claims, complete awards, dated quote, trusted complete release,
+authentic caller approval, actual numerical full-flow/recovery, independent
+review and main verification remain outstanding. Next: resolve these source
+gaps without inventing zeros or treating aggregate option facts as complete
+per-strike coverage. Threshold stays null, incomplete real valuations abstain,
+eligible estimates remain provisional and history research underpowered. Keep
+#361/#394/#376/#377 OPEN and PR #370 draft.
