@@ -3,8 +3,11 @@
 Implementation: `173f32c32e9f22b638d0d0c5a7ddc978e05f415e`, following
 `670709498b06129bcca387dd2c7e5276dac22ca5`; base
 `842959b5f98f57242e6ca28fec7d039bbaa7385b`. Child PR: #432, targeting the
-#361 integration branch. This is a conditional research increment, pending
-independent review and serial integration. It does not close the exact study.
+#361 integration branch. Main-chat independent review of PR #432 head
+`d08bfe04c1fcbcf75938d6b79fd2d4b7ad892512` found no correctness issues. PR #432
+was merged serially at `bc8e037f4327eca1e85e46ca11aa49e989eecef5`; its head CI
+had 12 passing jobs and the release gate skipped. This remains a conditional
+research increment and does not close the exact study.
 
 ## Delivered behavior
 
@@ -131,13 +134,21 @@ The old `value-investment-agent-325-327-acceptance-app-backend-1` keeps its ID/i
 but shows a changed start time. No command targeted it; the retained event buffer
 does not establish the restart cause. The main chat was notified. Do not claim
 all pre-existing services stayed unchanged or infer that this run caused no load.
-The issue branch/worktree remain for review and integration; no foreign resource
-or parent checkout/database/trust/.env was modified.
+The #361 integration branch and worktree remain active for continued #361 work.
+No foreign resource or parent checkout/database/trust/.env was modified.
+
+## Review and integration verification
+
+At merge commit `bc8e037f4327eca1e85e46ca11aa49e989eecef5`, 128 focused history,
+scenario, label and analysis tests passed. Ruff, format, mypy on the three changed
+scripts, both architecture guards and `git diff --check` passed. The independent
+review found no correctness issues; it does not grant accounting or release
+approval.
 
 ## Remaining delivery gates
 
-Independent review, CI for the final PR head, serial integration and target-commit
-verification remain mandatory. #376/#377/#433 stay open until their own outcomes
-are delivered on main. Complete exact accounting evidence and trusted reviews,
+PR #432 review, CI and serial integration are complete on the #361 branch.
+#376/#377/#433 stay open until their own outcomes are delivered on main. Complete
+exact accounting evidence and trusted reviews,
 Transition evidence, five-year compatibility, reviewed prospective promotion
 criteria and unchanged fixed-100 execution remain separate unfinished work.

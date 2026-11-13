@@ -2,9 +2,12 @@
 
 Implementation `ae807271f887377bc84cf6393d6a2acd12b4a91e`, base
 `2af5f8e269005ebd312552371a51799162b478f2`, branch
-`codex/issue-371-gaap2012-config`. PR #434 targets the #361 integration branch.
-Independent review, serial integration and merge-commit verification are pending.
-This increment does not close #371 or the fixed-100 study.
+`codex/issue-371-gaap2012-config`. PR #434 targeted the #361 integration branch.
+Main-chat independent review of head `2d8dd47c3dfe0c8b9c082556221fad45435ef611`
+found no correctness issues. It was merged after #432 at
+`1b34ffa71602914c686e0edd1f13414c26c98bf0`; the first parent is #432 merge
+`bc8e037f4327eca1e85e46ca11aa49e989eecef5`. Head CI had 12 passing jobs and the
+release gate skipped. This increment does not close #371 or the fixed-100 study.
 
 ## Behavior and sources
 
@@ -91,6 +94,16 @@ Only this project's failed/finished containers and image tag were removed.
 All91 baseline containers retain IDs, images, start times and states. No own
 container/network/volume remains; external evidence and the review worktree remain.
 Cleanup report `93a5b030ce0e1b97e2f6388b46bde9c1469543ebc3515702ea22f0d516d10dcd`.
+
+## Merge-commit verification
+
+On `1b34ffa71602914c686e0edd1f13414c26c98bf0`, all 73 focused parser/config,
+architecture and source-replay tests passed; 9 optional fixtures skipped. Both
+Ruff and format checks, mypy on both changed production modules, both architecture
+guards and `git diff --check` passed. The 2012/2013 source-backed tests retain the
+1,965/2,508 original facts, prior refusal/findings and invalid-member blocking.
+The merge verification does not change the implementation evidence identities
+or authorize accounting mappings/release.
 
 Parser compatibility grants no mapping/reviewer/release authority. The official
 `PaymentsToAcquireProductiveAssets` definition includes software/intangibles;
