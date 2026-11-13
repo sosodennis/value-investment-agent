@@ -50,6 +50,8 @@ from fundamental_service.preparation_runner import (
 )
 from fundamental_service.release_runner import DataReleaseCanaryRunner
 from fundamental_service.quote_sources import default_quote_providers
+from fundamental_service.quote_admission import QUOTE_ADMISSION_ROLE, QUOTE_TERMS_ROLE
+from quote_provider_fixtures import publish_synthetic_quote_admission
 from fundamental_service.replay import ArtifactRecordV1, ArtifactStore
 from fundamental_service.serialization import canonical_bytes, sha256_digest
 from fundamental_service.snapshots import FilesystemSnapshotRepository, SnapshotError
@@ -83,6 +85,7 @@ def _fixture(
     namespace: str = "runner",
     empty_awards: bool = False,
     misaligned_history: bool = False,
+    base_source_policy=None,
 ):
     source_bytes = b'{"source":"synthetic original filing fixture"}'
     source_hash = hashlib.sha256(source_bytes).hexdigest()
@@ -204,6 +207,14 @@ def _fixture(
     )
     for fact in stored:
         facts.publish(fact)
+    artifacts = ArtifactStore(tmp_path / "artifacts")
+    source_use_policy, quote_refs = publish_synthetic_quote_admission(
+        dilution.quote,
+        quote_source_bytes(snapshot),
+        valuation_at=snapshot.valuation_timestamp,
+        artifacts=artifacts,
+        base_policy=base_source_policy,
+    )
     manifest = _release_manifest_for(snapshot, stored)
     payload = manifest.model_dump(exclude={"manifest_digest"})
     payload.update(
@@ -215,6 +226,7 @@ def _fixture(
         ),
         artifact_refs=(
             *manifest.artifact_refs,
+            *quote_refs,
             ArtifactRefV1(
                 artifact_id=f"equity-dilution:{dilution.digest}",
                 content_hash=dilution.digest,
@@ -247,7 +259,6 @@ def _fixture(
         ),
         get_mapping=mappings.__getitem__,
     )
-    artifacts = ArtifactStore(tmp_path / "artifacts")
     artifacts.put_with_receipt(f"equity-dilution:{dilution.digest}", dilution)
     artifacts.put_with_receipt("synthetic-quote", quote_source_payload(snapshot))
     config = replace(
@@ -262,6 +273,7 @@ def _fixture(
         metadata_store=metadata,
         config=config,
         policy_registry=synthetic_policy_registry(),
+        source_use_policy=source_use_policy,
     ).state.application
     return SimpleNamespace(
         plan=plan,
@@ -355,7 +367,13 @@ def _reviewed_candidate(fixture, *, quote_providers=None):
             *(
                 ref
                 for ref in fixture.manifest.artifact_refs
-                if ref.role in {EQUITY_DILUTION_ARTIFACT_ROLE, EQUITY_QUOTE_SOURCE_ROLE}
+                if ref.role
+                in {
+                    EQUITY_DILUTION_ARTIFACT_ROLE,
+                    EQUITY_QUOTE_SOURCE_ROLE,
+                    QUOTE_ADMISSION_ROLE,
+                    QUOTE_TERMS_ROLE,
+                }
             ),
         ),
     )
@@ -429,6 +447,7 @@ def _reviewed_candidate(fixture, *, quote_providers=None):
         quote_providers=(
             default_quote_providers() if quote_providers is None else quote_providers
         ),
+        source_use_policy=fixture.application.source_use_policy,
     )
     return candidate, canary
 
@@ -1088,6 +1107,7 @@ def test_preparation_and_calculation_reuse_postgres_artifacts_after_restart_and_
             metadata_store=metadata,
             config=fixture.application.config,
             policy_registry=synthetic_policy_registry(),
+            source_use_policy=fixture.application.source_use_policy,
         ).state.application
         runner = SourcePreparationRunner(
             application=application,
@@ -1109,6 +1129,7 @@ def test_preparation_and_calculation_reuse_postgres_artifacts_after_restart_and_
                 artifact_reader=artifacts,
                 trust_roots=roots,
                 quote_providers=application.quote_providers,
+                source_use_policy=application.source_use_policy,
             ),
         )
         return runner, content, artifacts
@@ -1136,7 +1157,12 @@ def test_preparation_and_calculation_reuse_postgres_artifacts_after_restart_and_
             raw = (
                 fixture.artifacts
                 if reference.role
-                in {EQUITY_DILUTION_ARTIFACT_ROLE, EQUITY_QUOTE_SOURCE_ROLE}
+                in {
+                    EQUITY_DILUTION_ARTIFACT_ROLE,
+                    EQUITY_QUOTE_SOURCE_ROLE,
+                    QUOTE_ADMISSION_ROLE,
+                    QUOTE_TERMS_ROLE,
+                }
                 else review_artifacts
             ).read(reference.artifact_id)
             assert (
@@ -1602,6 +1628,15 @@ def test_multi_original_plan_acquires_composes_then_reuses_trusted_history(
         f"equity-dilution:{fixture.dilution.digest}", fixture.dilution
     )
     manifest = _release_manifest_for(history, tuple(facts))
+    source_use_policy, quote_refs = publish_synthetic_quote_admission(
+        quote,
+        quote_bytes,
+        valuation_at=history.valuation_timestamp,
+        artifacts=fixture.artifacts,
+    )
+    fixture.application = replace(
+        fixture.application, source_use_policy=source_use_policy
+    )
     payload = manifest.model_dump(exclude={"manifest_digest"})
     payload.update(
         profile_id=plan.release_profile_id,
@@ -1609,6 +1644,7 @@ def test_multi_original_plan_acquires_composes_then_reuses_trusted_history(
         mapping_refs=fixture.manifest.mapping_refs,
         artifact_refs=(
             *manifest.artifact_refs,
+            *quote_refs,
             ArtifactRefV1(
                 artifact_id=f"equity-dilution:{fixture.dilution.digest}",
                 content_hash=fixture.dilution.digest,

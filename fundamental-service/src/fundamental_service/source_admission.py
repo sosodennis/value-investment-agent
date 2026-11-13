@@ -219,12 +219,34 @@ def _check_use(
         if isinstance(vintage, MacroSeriesVintageV1)
         else vintage.population
     )
+    return check_source_use(
+        provider_id=vintage.provider_id,
+        metric_id=metric,
+        population=population,
+        artifact=artifact,
+        intended_use=intended_use,
+        terms=terms,
+        policy=policy,
+    )
+
+
+def check_source_use(
+    *,
+    provider_id: str,
+    metric_id: str,
+    population: str,
+    artifact: SourceArtifactV1,
+    intended_use: SourceUse,
+    terms: tuple[RetainedSourceV1, ...],
+    policy: SourceUsePolicyV1,
+) -> SourceUseCheckV1:
+    """Check one reproduced original against deployment-owned permission rules."""
     rules = tuple(
         x
         for x in policy.rules
         if (
-            x.provider_id == vintage.provider_id
-            and x.metric_id == metric
+            x.provider_id == provider_id
+            and x.metric_id == metric_id
             and x.population == population
             and x.source_id == artifact.source_id
             and x.source_version == artifact.source_version

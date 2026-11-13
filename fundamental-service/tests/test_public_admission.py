@@ -22,9 +22,9 @@ from test_public_source import FakeResponse
 from test_source_admission import CAPTURE, METRIC, _reference_policy, _source, _terms
 
 
-def admission_fixture(tmp_path, *, at=CAPTURE, artifacts=None):
+def admission_fixture(tmp_path, *, at=CAPTURE, artifacts=None, policy=None):
     artifacts = artifacts or ArtifactStore(tmp_path / "artifacts")
-    policy = _reference_policy()
+    policy = policy or _reference_policy()
     originals = (_source(), _terms())
     requests = tuple(
         PublicSourceAcquisitionRequestV1(
@@ -301,8 +301,37 @@ def test_ordinary_preparation_pins_admission_before_formal_composer(
 
     fixture = _fixture(tmp_path)
     baseline = _reader(fixture, _run(_runner(fixture), fixture.plan))
+    from quote_provider_fixtures import publish_synthetic_quote_admission
+    from equity_award_fixtures import quote_source_bytes
+    from fundamental_service.quote_admission import (
+        QUOTE_ADMISSION_ROLE,
+        QUOTE_TERMS_ROLE,
+    )
+
+    policy, quote_refs = publish_synthetic_quote_admission(
+        fixture.dilution.quote,
+        quote_source_bytes(fixture.snapshot),
+        valuation_at=VALUATION_TIME,
+        artifacts=fixture.artifacts,
+        base_policy=_reference_policy(),
+    )
+    payload = fixture.manifest.model_dump(exclude={"manifest_digest"})
+    payload["artifact_refs"] = (
+        tuple(
+            ref
+            for ref in fixture.manifest.artifact_refs
+            if ref.role not in {QUOTE_ADMISSION_ROLE, QUOTE_TERMS_ROLE}
+        )
+        + quote_refs
+    )
+    fixture.manifest = DataReleaseManifestV1(
+        **payload, manifest_digest=sha256_digest(payload)
+    )
     admitted = admission_fixture(
-        tmp_path / "public-source", at=VALUATION_TIME, artifacts=fixture.artifacts
+        tmp_path / "public-source",
+        at=VALUATION_TIME,
+        artifacts=fixture.artifacts,
+        policy=policy,
     )
     plan = SourcePreparationPlanV2.model_validate(
         {

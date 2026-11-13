@@ -19,7 +19,15 @@ from .equity_dilution import (
 )
 from .facts import canonical_fact_digest
 from .quote_providers import QuoteSourceProviderPort, reproduce_quote_source
+from .quote_admission import (
+    QUOTE_ADMISSION_ROLE,
+    QUOTE_TERMS_ROLE,
+    QuoteAdmissionV1,
+    admit_quote_source,
+)
 from .serialization import canonical_bytes, sha256_digest
+from .source_admission import SourceUsePolicyV1
+from .source_evidence import RetainedSourceV1
 
 EQUITY_DILUTION_ARTIFACT_ROLE: Literal["equity-dilution-evidence-v1"] = (
     "equity-dilution-evidence-v1"
@@ -149,6 +157,7 @@ def load_release_dilution_evidence(
     artifacts: DilutionArtifactReader,
     released_facts: Iterable[CanonicalFactV1],
     quote_providers: tuple[QuoteSourceProviderPort, ...],
+    source_use_policy: SourceUsePolicyV1 | None,
 ) -> EquityDilutionEvidenceV1 | None:
     """Read immutable signed-release artifacts; never obtain external evidence."""
     matches = []
@@ -204,4 +213,119 @@ def load_release_dilution_evidence(
             "quote source bytes differ from the reviewed evidence",
         )
     reproduce_quote_source(evidence.quote, raw_quote, providers=quote_providers)
+    _verify_quote_admission(
+        evidence.quote,
+        raw_quote,
+        manifest=manifest,
+        snapshot=snapshot,
+        artifacts=artifacts,
+        providers=quote_providers,
+        policy=source_use_policy,
+    )
     return evidence
+
+
+def _verify_quote_admission(
+    quote: CommonShareQuoteV1,
+    raw_quote: bytes,
+    *,
+    manifest: DataReleaseManifestV1,
+    snapshot: SourceSnapshotV1,
+    artifacts: DilutionArtifactReader,
+    providers: tuple[QuoteSourceProviderPort, ...],
+    policy: SourceUsePolicyV1 | None,
+) -> None:
+    if policy is None:
+        raise DilutionError(
+            "DILUTION_QUOTE_USE_POLICY_UNAVAILABLE",
+            "quote use requires a configured trusted source policy",
+        )
+    admissions = []
+    for ref in sorted(manifest.artifact_refs, key=lambda item: item.artifact_id):
+        if ref.role != QUOTE_ADMISSION_ROLE:
+            continue
+        raw = artifacts.read(ref.artifact_id)
+        if (
+            ref.media_type != "application/json"
+            or sha256(raw).hexdigest() != ref.content_hash
+        ):
+            raise DilutionError(
+                "DILUTION_QUOTE_ADMISSION_ARTIFACT_MISMATCH",
+                "quote admission differs from the pinned release",
+            )
+        admission = QuoteAdmissionV1.model_validate_json(raw)
+        if canonical_bytes(admission) != raw:
+            raise DilutionError(
+                "DILUTION_QUOTE_ADMISSION_NONCANONICAL",
+                "quote admission requires canonical serialization",
+            )
+        if admission.request.quote == quote:
+            admissions.append(admission)
+    if not admissions:
+        raise DilutionError(
+            "DILUTION_QUOTE_ADMISSION_MISSING",
+            "release requires a source-use admission for its exact quote",
+        )
+    scoped = tuple(
+        admission
+        for admission in admissions
+        if admission.request.valuation_at == snapshot.valuation_timestamp
+        and admission.request.intended_use == "valuation_preparation"
+    )
+    if not scoped:
+        raise DilutionError(
+            "DILUTION_QUOTE_ADMISSION_SCOPE_MISMATCH",
+            "quote admission must cover this valuation and intended use",
+        )
+    if len(scoped) != 1:
+        raise DilutionError(
+            "DILUTION_QUOTE_ADMISSION_AMBIGUOUS",
+            "release repeats source-use admissions for the same quote and valuation",
+        )
+    admission = scoped[0]
+    terms = []
+    for item in admission.request.terms_artifacts:
+        refs = sorted(
+            (
+                ref
+                for ref in manifest.artifact_refs
+                if ref.role == QUOTE_TERMS_ROLE
+                and ref.content_hash == item.content_sha256
+            ),
+            key=lambda ref: ref.artifact_id,
+        )
+        if not refs:
+            raise DilutionError(
+                "DILUTION_QUOTE_TERMS_MISSING",
+                "quote permission terms are absent from the pinned release",
+            )
+        raw_terms = artifacts.read(refs[0].artifact_id)
+        if sha256(raw_terms).hexdigest() != item.content_sha256:
+            raise DilutionError(
+                "DILUTION_QUOTE_TERMS_MISMATCH",
+                "quote permission terms differ from the pinned release",
+            )
+        terms.append(
+            RetainedSourceV1(
+                source_id=item.source_id,
+                uri=item.uri,
+                source_version=item.source_version,
+                terms_reference=item.terms_reference,
+                captured_at=item.captured_at,
+                content=raw_terms,
+            )
+        )
+    admit_quote_source(
+        quote,
+        raw_quote,
+        providers=providers,
+        terms=tuple(terms),
+        policy=policy,
+        valuation_at=snapshot.valuation_timestamp,
+        expected=admission,
+    )
+    if admission.status != "admitted":
+        raise DilutionError(
+            "DILUTION_QUOTE_ADMISSION_REFUSED",
+            "quote source permission was refused: " + ",".join(admission.issue_codes),
+        )

@@ -1,6 +1,7 @@
 """Signed security releases carry the same estimated inputs to canary and composer."""
 
 import hashlib
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -38,7 +39,12 @@ from fundamental_service.working_capital import (
     ValuationWorkingCapitalPolicyV1,
     canonical_working_capital_inputs,
 )
-from equity_award_fixtures import award_evidence, quote_source_payload
+from equity_award_fixtures import (
+    award_evidence,
+    quote_source_payload,
+    quote_source_bytes,
+)
+from quote_provider_fixtures import publish_synthetic_quote_admission
 from test_api import _release_manifest_for
 from test_preparation_runner import _fixture, _reviewed_candidate
 from test_valuation_preparation import _facts
@@ -141,6 +147,15 @@ def _valuation_fixture(tmp_path: Path, *, sec_profile: bool = False):
         inputs=canonical_working_capital_inputs(inputs),
     )
     manifest = _release_manifest_for(snapshot, facts)
+    source_use_policy, quote_refs = publish_synthetic_quote_admission(
+        dilution.quote,
+        quote_source_bytes(snapshot),
+        valuation_at=snapshot.valuation_timestamp,
+        artifacts=fixture.artifacts,
+    )
+    fixture.application = replace(
+        fixture.application, source_use_policy=source_use_policy
+    )
     fixture.manifest = _manifest_with(
         manifest,
         required_fields=profile.required_fact_fields,
@@ -150,6 +165,7 @@ def _valuation_fixture(tmp_path: Path, *, sec_profile: bool = False):
         ),
         artifact_refs=(
             *manifest.artifact_refs,
+            *quote_refs,
             ArtifactRefV1(
                 artifact_id=award_id,
                 content_hash=dilution.digest,
@@ -187,6 +203,7 @@ def _client(fixture):
             metadata_store=fixture.metadata,
             config=fixture.application.config,
             policy_registry=fixture.application.policy_registry,
+            source_use_policy=fixture.application.source_use_policy,
         )
     )
 

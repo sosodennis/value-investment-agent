@@ -520,6 +520,7 @@ class DataReleaseCanaryRunner:
                     artifacts=self._artifacts,
                     released_facts=facts,
                     quote_providers=self._quote_providers,
+                    source_use_policy=self._source_use_policy,
                 )
                 declared_awards = {
                     fact.fact_id

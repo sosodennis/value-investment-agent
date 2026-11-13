@@ -1356,6 +1356,7 @@ class FundamentalApplication:
                 artifacts=self.artifact_store,
                 released_facts=evidence.facts,
                 quote_providers=self.quote_providers,
+                source_use_policy=self.source_use_policy,
             )
         except (DilutionError, SnapshotError, ValueError) as error:
             raise ServiceError(

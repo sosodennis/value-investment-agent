@@ -248,7 +248,11 @@ def test_canary_runs_configured_provider_reproduction_before_activation():
 
 def test_serving_composition_injects_and_checks_the_same_provider_and_policy(tmp_path):
     fixture = _fixture(tmp_path)
-    manifest, artifacts, _, inputs = _packet(fixture.manifest)
+    from quote_provider_fixtures import bind_synthetic_quote_permission
+
+    inputs = _macro_inputs()
+    inputs["policy"] = bind_synthetic_quote_permission(fixture, inputs["policy"])
+    manifest, artifacts, _, inputs = _packet(fixture.manifest, inputs=inputs)
     read_existing = fixture.artifacts.read
 
     class CombinedArtifacts:

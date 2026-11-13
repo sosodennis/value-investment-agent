@@ -470,14 +470,21 @@ def test_rehashed_inputs_cannot_substitute_context_sources_or_policy(change, cod
     assert error.value.code == code
 
 
-def _service_bound(fixture):
-    at = fixture.snapshot.valuation_timestamp
+def _service_source_policy(at):
     inputs = (*_reference_inputs(at), *macro_inputs(at=at))
     rules = {rule.rule_id: rule for item in inputs for rule in item["policy"].rules}
-    source_policy = SourceUsePolicyV1(
+    return SourceUsePolicyV1(
         policy_version="synthetic-full-market-policy-v1",
         rules=tuple(rules[key] for key in sorted(rules)),
     )
+
+
+def _service_bound(fixture):
+    at = fixture.snapshot.valuation_timestamp
+    inputs = (*_reference_inputs(at), *macro_inputs(at=at))
+    from quote_provider_fixtures import bind_synthetic_quote_permission
+
+    source_policy = bind_synthetic_quote_permission(fixture, _service_source_policy(at))
     manifest = fixture.manifest
     admissions = []
     for item in inputs:

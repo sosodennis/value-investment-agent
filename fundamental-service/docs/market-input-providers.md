@@ -95,6 +95,42 @@ unchanged policies and artifacts are reused without replacement.
 
 ## Source suitability
 
+### Quote permission
+
+`admit_quote_source` reproduces an exact `CommonShareQuoteV1` through the
+configured `QuoteSourceProviderPort` and checks its intended use against the
+deployment-owned `SourceUsePolicyV1`. Quote rules use the source adapter's
+`source_id` as `provider_id`, metric `common_share.price` and population
+`common-share`; source version and terms reference must also match. No quote
+rule is installed by the default free-market policy.
+
+The canonical `QuoteAdmissionV1` binds the complete quote, actual original
+content digest, valuation timestamp, purpose, policy version/digest and every
+retained terms artifact. Failed reproduction, missing or changed permission,
+unsupported use and evidence captured after the cutoff remain deterministic
+refusals. The decision contains required attribution notices. Its identity
+contains no execution time or random run identifier.
+
+A signed release must retain this decision with role
+`equity-quote-source-admission-v1` and its original permission documents with
+role `equity-quote-source-terms-v1`, alongside the existing quote original and
+award evidence. Serving and the independent canary reproduce the same decision
+under the installed policy before the official composer uses the quote.
+Missing, conflicting, altered, refused or differently scoped decisions fail;
+a release signature cannot install a source-use rule. Distinct valuation dates
+may reuse the same quote with their own exact admissions. Existing immutable
+artifact publication/recovery provides unchanged reuse; admission performs no
+network or storage I/O itself. Macro/reference admission bytes are unchanged.
+
+The installed Nasdaq historical-close parser remains a format reproducer.
+Its legacy `/terms-of-use` metadata is not a grant. Source research under #394
+found that URL returns 404 and the publisher's current
+[`/legal` page](https://www.nasdaq.com/legal) restricts automated capture and
+storage without permission. No production Nasdaq admission, new quote capture
+registration or permission exception is introduced. A replacement source needs
+its own maintained interface, exact terms evidence and trusted rule; it can use
+the same quote-provider boundary without changing valuation formulas.
+
 Production market inputs require a maintained structured dataset, a stable API
 or download interface, documented field meanings and update rules, and
 verifiable version or historical-date evidence. Provider abstractions preserve

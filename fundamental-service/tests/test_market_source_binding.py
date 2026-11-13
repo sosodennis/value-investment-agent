@@ -465,6 +465,33 @@ def test_unconfigured_observed_roles_cannot_reuse_a_risk_free_admission():
 def _source_bound_application(tmp_path):
     fixture = _fixture(tmp_path)
     inputs = _dated_inputs(at=fixture.snapshot.valuation_timestamp)
+    from quote_provider_fixtures import publish_synthetic_quote_admission
+    from equity_award_fixtures import quote_source_bytes
+    from fundamental_service.quote_admission import (
+        QUOTE_ADMISSION_ROLE,
+        QUOTE_TERMS_ROLE,
+    )
+    from fundamental_service.data_releases import DataReleaseManifestV1
+
+    inputs["policy"], quote_refs = publish_synthetic_quote_admission(
+        fixture.dilution.quote,
+        quote_source_bytes(fixture.snapshot),
+        valuation_at=fixture.snapshot.valuation_timestamp,
+        artifacts=fixture.artifacts,
+        base_policy=inputs["policy"],
+    )
+    payload = fixture.manifest.model_dump(exclude={"manifest_digest"})
+    payload["artifact_refs"] = (
+        tuple(
+            ref
+            for ref in fixture.manifest.artifact_refs
+            if ref.role not in {QUOTE_ADMISSION_ROLE, QUOTE_TERMS_ROLE}
+        )
+        + quote_refs
+    )
+    fixture.manifest = DataReleaseManifestV1(
+        **payload, manifest_digest=sha256_digest(payload)
+    )
     admission = admit_macro_source(DatedJsonRateProvider(), **inputs)
     manifest, sources, _, _ = _packet(fixture.manifest, inputs=inputs, result=admission)
     previous = fixture.artifacts.read

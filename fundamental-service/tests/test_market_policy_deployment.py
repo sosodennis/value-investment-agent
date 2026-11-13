@@ -23,12 +23,24 @@ from fundamental_service.policies import FilesystemPolicyRepository, PolicyRegis
 from fundamental_service.preparation_runner import SourcePreparationRunner, main
 from fundamental_service.release_runner import DataReleaseCanaryRunner
 from fundamental_service.serialization import canonical_bytes, sha256_digest
-from test_automatic_market_policy_evidence import _authorization, _service_bound
-from test_preparation_runner import _fixture, _reader, _reviewed_candidate, _run
+from test_automatic_market_policy_evidence import (
+    _authorization,
+    _service_bound,
+    _service_source_policy,
+)
+from test_preparation_runner import (
+    VALUATION_TIME,
+    _fixture,
+    _reader,
+    _reviewed_candidate,
+    _run,
+)
 
 
 def _deployment_fixture(tmp_path):
-    fixture = _fixture(tmp_path)
+    fixture = _fixture(
+        tmp_path, base_source_policy=_service_source_policy(VALUATION_TIME)
+    )
     original, original_canary = _reviewed_candidate(fixture)
     fixture.manifest = original.manifest
     manifest, expected, application, _ = _service_bound(fixture)

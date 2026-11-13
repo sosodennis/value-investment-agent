@@ -42,6 +42,11 @@ from test_terminal_growth_evidence import replace_metadata
 
 def bound(fixture):
     inputs = capital_inputs(fixture.snapshot.valuation_timestamp)
+    from quote_provider_fixtures import bind_synthetic_quote_permission
+
+    source_policy = bind_synthetic_quote_permission(fixture, inputs[0]["policy"])
+    for item in inputs:
+        item["policy"] = source_policy
     admissions = tuple(
         admit_reference_source(DamodaranReferenceProvider(), **item) for item in inputs
     )

@@ -34,7 +34,10 @@ from fundamental_service.sec_rebuild import parsed_facts_to_candidates
 from fundamental_service.serialization import canonical_bytes, sha256_digest
 from fundamental_service.quote_sources import default_quote_providers
 from fundamental_service.operations import ServiceError
-from quote_provider_fixtures import SyntheticQuoteProvider
+from quote_provider_fixtures import (
+    SyntheticQuoteProvider,
+    publish_synthetic_quote_admission,
+)
 from fundamental_service.valuation_preparation import prepare_automatic_valuation
 from test_preparation_runner import _fixture, _reviewed_candidate
 from test_valuation_preparation import _market_policy
@@ -48,6 +51,9 @@ def _load(fixture, **changes):
         artifacts=changes.get("artifacts", fixture.artifacts),
         released_facts=changes.get("released_facts", fixture.facts.list()),
         quote_providers=changes.get("quote_providers", default_quote_providers()),
+        source_use_policy=changes.get(
+            "source_use_policy", fixture.application.source_use_policy
+        ),
     )
 
 
@@ -353,6 +359,23 @@ def _with_alternative_quote(fixture):
         references.append(reference)
     fixture.manifest = _manifest(fixture, tuple(references))
     fixture.dilution = evidence
+    policy, refs = publish_synthetic_quote_admission(
+        quote,
+        raw,
+        valuation_at=fixture.snapshot.valuation_timestamp,
+        artifacts=fixture.artifacts,
+    )
+    fixture.manifest = _manifest(
+        fixture,
+        tuple(
+            ref
+            for ref in fixture.manifest.artifact_refs
+            if ref.role
+            not in {"equity-quote-source-admission-v1", "equity-quote-source-terms-v1"}
+        )
+        + refs,
+    )
+    fixture.application = replace(fixture.application, source_use_policy=policy)
     fixture.metadata.get_data_release_manifest = lambda digest: (
         fixture.manifest if digest == fixture.manifest.manifest_digest else None
     )
@@ -600,6 +623,23 @@ def test_signed_candidate_with_stale_quote_refuses_before_activation(tmp_path):
             for ref in fixture.manifest.artifact_refs
         ),
     )
+    policy, refs = publish_synthetic_quote_admission(
+        stale_quote,
+        source_bytes,
+        valuation_at=fixture.snapshot.valuation_timestamp,
+        artifacts=fixture.artifacts,
+    )
+    fixture.manifest = _manifest(
+        fixture,
+        tuple(
+            ref
+            for ref in fixture.manifest.artifact_refs
+            if ref.role
+            not in {"equity-quote-source-admission-v1", "equity-quote-source-terms-v1"}
+        )
+        + refs,
+    )
+    fixture.application = replace(fixture.application, source_use_policy=policy)
     candidate, canary = _reviewed_candidate(fixture)
     with pytest.raises(DataReleaseError) as error:
         canary.validate(candidate.manifest, candidate.verification)

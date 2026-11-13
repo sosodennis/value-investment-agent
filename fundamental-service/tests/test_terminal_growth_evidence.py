@@ -38,6 +38,10 @@ from test_terminal_growth import AnnualAndDailyProvider, _inputs, _plan
 
 def _bound(fixture):
     rate_inputs, gdp_inputs = _inputs(at=fixture.snapshot.valuation_timestamp)
+    from quote_provider_fixtures import bind_synthetic_quote_permission
+
+    source_policy = bind_synthetic_quote_permission(fixture, rate_inputs["policy"])
+    rate_inputs["policy"] = gdp_inputs["policy"] = source_policy
     admissions = tuple(
         admit_macro_source(AnnualAndDailyProvider(), **inputs)
         for inputs in (rate_inputs, gdp_inputs)

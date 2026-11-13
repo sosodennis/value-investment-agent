@@ -34,6 +34,9 @@ from test_source_admission_evidence import _packet
 
 
 def _bound(fixture):
+    from quote_provider_fixtures import bind_synthetic_quote_permission
+
+    source_policy = bind_synthetic_quote_permission(fixture, _reference_policy())
     valuation_at = fixture.snapshot.valuation_timestamp
     source = replace(_source(), captured_at=valuation_at - timedelta(days=1))
     inputs = dict(
@@ -41,7 +44,7 @@ def _bound(fixture):
         sources=(source,),
         terms=(_terms(),),
         valuation_at=valuation_at,
-        policy=_reference_policy(),
+        policy=source_policy,
     )
     admission = admit_reference_source(DamodaranReferenceProvider(), **inputs)
     manifest, artifacts, _, _ = _packet(
@@ -200,7 +203,7 @@ def test_serving_preparation_consumes_the_pinned_reference_plan_and_exact_erp(tm
     app = replace(
         fixture.application,
         policy_registry=PolicyRegistry(initial_model_specs(), (policy,)),
-        source_use_policy=_reference_policy(),
+        source_use_policy=fixture.application.source_use_policy,
         reference_providers=(DamodaranReferenceProvider(),),
     )
     request = ValuationEvidenceReadRequestV1(
@@ -270,7 +273,7 @@ def test_release_canary_checks_the_same_policy_authority_and_source_value(
         artifact_reader=base_canary._artifacts,
         trust_roots=base_canary._trust_roots,
         reference_providers=(DamodaranReferenceProvider(),),
-        source_use_policy=_reference_policy(),
+        source_use_policy=fixture.application.source_use_policy,
         policy_registry=None
         if change == "missing_registry"
         else PolicyRegistry(initial_model_specs(), (policy,)),
