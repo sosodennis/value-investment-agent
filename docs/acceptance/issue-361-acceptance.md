@@ -2662,3 +2662,38 @@ Complete awards, the three claims, eligible dated market/quote evidence, trusted
 release, authentic exact-input caller approval, numerical recovery acceptance,
 independent review/CI and main delivery remain outstanding. No threshold approval
 or parent completion is claimed; supported history threshold stays null.
+
+## Option disclosure identity and recovery — 307309d4
+
+Exact implementation `307309d4048291532ab88d4941afff8592717a74` applies the same
+validated parser identity to the remaining option-compensation registry and
+versions the automatic policy to v16. Three regressions fail before correction;
+all **2,707 Service/PostgreSQL tests pass** afterward (17 external parser-resource
+skips, one expected duplicate-ZIP warning). Full Service Ruff/format, 106-source
+mypy, both architecture guards and diff pass. No #352 financial formula changed.
+
+The same isolated SEC-enabled project matches all 125 installed Python/SQL
+files and passes exact-commit preflight. All 51 new mapping signatures and exact
+retained-input reconstructions pass, including both original-dated option-cost
+mappings. Previous versions and failures remain retained. This is not complete
+award inventory or an absence assertion for other capital claims.
+
+Effective input/output digests are
+`a4c5854269ff63355cadf6035796df13e783330220a32ce9b31dda06dad80683` /
+`db7926b42ec98f8b22853cb64e640d47a9c9f5c2758f35b15d64ac7ec84be00f`.
+Ordinary, provider-disabled, service-restart and empty-database-restore repeats
+return that same artifact with `wrote=false`, zero SEC/public requests and no new
+artifact rows/files. All 2,117 metadata rows and 680 files' bytes/sizes survive
+restore; same-store repeats also preserve mtimes. Restored mtimes are not claimed
+equal to original-store mtimes. Backup
+`3022db4832658cd191a5414adcd55d4d07f32550c7719f2acde749d9cb03250e`
+passes the host recovery verifier outside Docker; repeated export/restore writes
+nothing. All 65 unrelated containers retain ID/image/start/status. The
+[checkpoint](issue-361-option-parser-identity-checkpoint.json) records exact
+commands, exit codes and digests. Generated sources/reports/backup remain outside Git.
+
+NVE valuation remains **abstain** on `convertible_instruments`,
+`other_share_classes` and `preferred_claims`. Complete awards, dated quote,
+trusted release, exact-input caller approval, actual numerical full-flow/recovery,
+independent parent review/CI and main verification remain outstanding. Keep
+#361/#376/#377 OPEN and PR #370 draft; threshold stays null.
