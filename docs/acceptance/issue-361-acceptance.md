@@ -2187,3 +2187,69 @@ open, history underpowered, `supported_history_threshold=null`. Next: push
 this integration/checkpoint, inspect its CI and GitHub merge state, and finish
 the separately based #386 numeric-isolation main increment with PostgreSQL
 reuse/recovery evidence and independent review.
+
+
+### Verified #431 main delivery and #361 refresh
+
+PR #431 reviewed final head `fbc9c9428fbcb8c017b7508f37bd8139c9de13b9`
+merged normally at main `09f54799ae5923521155b9fbf36234b97b2ab930`.
+Independent implementation and metadata review have no actionable findings.
+Final-head CI43369121802 and main CI43369597854 pass all11 executed jobs;
+release gate skipped. Fresh exact-main dedicated PostgreSQL acceptance passes
+360 tests/8 explicit optional parser-resource skips. Five numeric-owner types,
+Ruff/format, both guards and diff pass. The broader main check remains exit1
+with274 unchanged, independently attributed legacy diagnostics and zero new
+or changed-line diagnostics; full main type cleanliness is not claimed.
+
+At the main merge SHA, baked image
+`sha256:8ca2d19ade39834b9db92e19a3dd8f59dc946f6b3c34f72cec2ae8e751dc928c`
+matches all Service sources. Actual authenticated HTTP exercises both released
+models,24-draw seeded MC and forged-digest refusal. Repeat, PostgreSQL/service
+restart and verified backup/restore reproduce report
+`734afa012a8f0ebf58c6b6c36a8afbec9e0737354f2ef39fa800f1396914341a`,
+input `23a3f73b6b6210bb3530d9aa5fb9b9c40ee61cb39afaa17d02490f0c2a674d7f`,
+output `b9b9cbbd4b89f442f3513a15bc92c378a5b96fbacedacc8c32dcaad472061ca3`.
+Every table inventory/content byte,size,mtime and13 artifact references remain
+identical on repeat and after recovery. These are synthetic development-key
+fixtures, not accounting or threshold approval. Full command receipts, canonical
+runtime tuple and both hash-verified backups remain external at
+`value-investment-agent-issue-361-independent-review-evidence/386-main`.
+Main acceptance index
+`80ca01403693667653d7162bec5c50c48f7c5fb63f593405064e0f71a8b3fdbc`
+links exact-SHA commands and input/output digests; GitHub evidence is
+[PR431 main verification](https://github.com/sosodennis/value-investment-agent/pull/431#issuecomment-6844740749).
+#386/#430 close only after this main verification.
+
+Cleanup removes only project `value-investment-agent-386-decimal-main`, its
+two containers/two volumes/network and four unreferenced project-specific image
+tags. All85 unrelated containers preserve IDs/images/start/status. Receipt
+`5dbb3c9649a735865f46822f0cf909e019d110b2f5815bc94e886981d4750c1b`,
+input `a737dd3c2fdc2eb803b99d28d321923e9bbfb688fbc07e2f2ba32f6b9cc4d523`,
+output `bc1e5e1d3ebce105e48490035f007fe0c2efa8aaecc4d0fa6e2c583c0a6aa720`.
+The merged remote branch is absent. Worktree/local branch cleanup remains
+incomplete: App archive refuses its protected primary checkout, and attaching
+the existing #361 checkout refuses because it is unmanaged. The clean #386
+checkout/local branch remain safely retained; no shell removal bypasses that
+protection. External evidence and backups remain available.
+
+Normal integration merge `03b1c224b946ed49e408132799231aceab063be0` brings
+this main delivery and #429 availability evidence into #361, preserving all WIP.
+Conflict resolution retains #361's existing version-bound operating resolver,
+formal composer, fixed numerical context and canonical V2 golden output.
+Production/test/lock trees equal prior #361 `f6bba6a8`; only three acceptance/
+operations documents change. Exact integration198 tests,196-file format,
+full Service Ruff,96-source mypy, both guards and diff pass. Check receipt
+`1e9fd0e635449d40cba0abc73eaf563ed1f55cfc7ea7c77d11230bfb6fadf7b7`,
+input `f3145658ece270e64602d6f569669510e5daf625a6b8025d06046769baee766d`,
+output `4768b90ace50315239d92b33a9c9508db98e068792e0abeca6003b3650739951`.
+The first external driver referenced a nonexistent identity test and exited4
+without running tests; receipt `2f9b30b7dd2f6026cc19b0a6dbf71c330019384be16b1de04006729459ffdc42`
+is retained. Only the driver path changed; corrected tests pass198, and successful
+same-SHA static checks are reused explicitly. No production check was weakened.
+
+Next: parent CI and resume #361's actual-source/accounting/award/market-policy/
+quote, trusted release and exact caller approval work, followed by real numeric
+repeat/concurrency/restart/empty-store recovery, independent review and main
+verification. Maintained official structured sources remain the market-provider
+policy; no article/feed is admitted. #361/#376/#377 remain open, PR#370 draft,
+full numerical acceptance incomplete and supported_history_threshold=null.
