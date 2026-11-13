@@ -36,22 +36,33 @@ WORKING_CAPITAL_FIELDS = (
     "accrued_operating_liabilities",
     "deferred_revenue",
 )
-_REQUIRED_EXCLUSIONS = {
+_REQUIRED_EXCLUSIONS: dict[str, Literal["assets", "liabilities"]] = {
     "cash_and_equivalents": "assets",
     "short_term_investments": "assets",
     "current_interest_bearing_debt": "liabilities",
     "current_operating_lease_liabilities": "liabilities",
     "current_finance_lease_liabilities": "liabilities",
 }
-_EXCLUSION_ROLE_COVERAGE = {
-    role: (side, (role,)) for role, side in _REQUIRED_EXCLUSIONS.items()
-} | {
+_EXCLUSION_ROLE_COVERAGE: dict[
+    str, tuple[Literal["assets", "liabilities"], tuple[str, ...]]
+] = {role: (side, (role,)) for role, side in _REQUIRED_EXCLUSIONS.items()} | {
     "cash_and_short_term_investments": (
         "assets",
         ("cash_and_equivalents", "short_term_investments"),
     ),
 }
 WORKING_CAPITAL_EXCLUSION_FIELDS = tuple(sorted(_EXCLUSION_ROLE_COVERAGE))
+WORKING_CAPITAL_REQUIRED_EXCLUSIONS = tuple(sorted(_REQUIRED_EXCLUSIONS))
+
+
+def working_capital_exclusion_coverage(
+    role: str,
+) -> tuple[Literal["assets", "liabilities"], tuple[str, ...]]:
+    """Resolve the same role semantics used by the executable assessment."""
+
+    if role not in _EXCLUSION_ROLE_COVERAGE:
+        raise ValueError(f"unsupported working-capital exclusion role: {role}")
+    return _EXCLUSION_ROLE_COVERAGE[role]
 
 
 class InclusionScenariosV1(StrictModel):

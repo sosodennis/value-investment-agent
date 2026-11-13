@@ -25,6 +25,7 @@ from .automatic_source_mapping import (
 from .application import FundamentalApplication
 from .annual_history import AnnualHistoryError, resolve_annual_history
 from .contracts import (
+    CanonicalFactV1,
     CallerApprovalEnvelopeV1,
     InitialModelId,
     QualityStatus,
@@ -67,6 +68,11 @@ from .working_capital import (
     ValuationWorkingCapitalPolicyV1,
     assess_composite_working_capital,
 )
+from .working_capital_preparation import (
+    ValuationWorkingCapitalRecipeV1,
+    WorkingCapitalBindingV1,
+    bind_working_capital_recipe,
+)
 
 
 SourceRequestT = TypeVar("SourceRequestT", bound=SecSourceRequestV1)
@@ -82,17 +88,43 @@ class _SourcePreparationPlan(StrictModel, Generic[SourceRequestT]):
     valuation_working_capital_policy: ValuationWorkingCapitalPolicyV1 | None = Field(
         default=None, exclude_if=lambda value: value is None
     )
+    valuation_working_capital_recipe: ValuationWorkingCapitalRecipeV1 | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
+
+    @property
+    def working_capital_spec(
+        self,
+    ) -> ValuationWorkingCapitalPolicyV1 | ValuationWorkingCapitalRecipeV1 | None:
+        return (
+            self.valuation_working_capital_policy
+            or self.valuation_working_capital_recipe
+        )
 
     @property
     def requirements_profile(self) -> ValuationRequirementsProfileV1:
         return source_preparation_requirements_profile(
             self.model_id,
-            composite_inputs=self.valuation_working_capital_policy is not None,
+            composite_inputs=self.working_capital_spec is not None,
         )
 
     @model_validator(mode="after")
     def requirements_match(self) -> _SourcePreparationPlan[SourceRequestT]:
         profile = self.requirements_profile
+        recipe = self.valuation_working_capital_recipe
+        if recipe is not None and (
+            self.valuation_working_capital_policy is not None
+            or recipe.model_id != self.model_id
+            or any(
+                item.accession_number
+                not in {request.filing.accession_number for request in self.ingestions}
+                or item.period_end > self.ingestions[0].valuation_timestamp.date()
+                for item in recipe.periods
+            )
+        ):
+            raise ValueError(
+                "source recipe must exclusively pin the plan model and filings"
+            )
         try:
             valuation_input_requirements(
                 self.valuation_working_capital_policy, self.model_id
@@ -184,9 +216,9 @@ class SourcePreparationPlanV2(_SourcePreparationPlan[SecIngestionRequestV1]):
         for request in self.ingestions:
             for reference in request.mappings:
                 if (
-                    self.valuation_working_capital_policy is not None
+                    self.working_capital_spec is not None
                     and reference.mapping_version
-                    != self.valuation_working_capital_policy.mapping_version
+                    != self.working_capital_spec.mapping_version
                 ):
                     raise ValueError(
                         "composite source plan must pin one mapping version"
@@ -213,9 +245,9 @@ class AutomaticSourcePreparationPlanV1(
                 or request.model_id != self.model_id
                 or request.requirements_digest != self.requirements_profile.digest
                 or (
-                    self.valuation_working_capital_policy is not None
+                    self.working_capital_spec is not None
                     and request.mapping_version
-                    != self.valuation_working_capital_policy.mapping_version
+                    != self.working_capital_spec.mapping_version
                 )
                 or any(
                     getattr(request, field) != getattr(first, field)
@@ -292,6 +324,9 @@ class SourcePreparationEvidenceV1(StrictModel):
     source_revision: str = Field(pattern=r"^[0-9a-f]{40}$")
     plan_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
     source_plan_ref: ArtifactRefV1 | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
+    working_capital_binding_ref: ArtifactRefV1 | None = Field(
         default=None, exclude_if=lambda value: value is None
     )
     status: Literal["approval_required", "blocked", "calculated", "release_required"]
@@ -504,9 +539,19 @@ class SourcePreparationRunner:
     def _matches_release_mappings(
         self, plan: SourcePreparationPlan, manifest: DataReleaseManifestV1
     ) -> bool:
-        if (
-            manifest.valuation_working_capital_policy
-            != plan.valuation_working_capital_policy
+        policy = manifest.valuation_working_capital_policy
+        recipe = plan.valuation_working_capital_recipe
+        if recipe is None:
+            if policy != plan.valuation_working_capital_policy:
+                return False
+        elif policy is None or any(
+            getattr(policy, pin) != getattr(recipe, pin)
+            for pin in (
+                "model_id",
+                "model_version",
+                "requirements_profile_digest",
+                "mapping_version",
+            )
         ):
             return False
         released = {
@@ -532,6 +577,19 @@ class SourcePreparationRunner:
                 or mapping.normalized_field != reference.normalized_field
             ):
                 return False
+        if recipe is not None:
+            for snapshot_ref in manifest.snapshot_refs:
+                try:
+                    snapshot = self._application.snapshot(snapshot_ref.snapshot_id)
+                except ServiceError as error:
+                    if error.code != "SNAPSHOT_NOT_FOUND":
+                        raise
+                    continue
+                if self._matches_plan(plan, snapshot):
+                    binding = self._bind_working_capital(plan, snapshot)
+                    assert binding is not None
+                    if binding.policy is None or binding.policy != policy:
+                        return False
         return True
 
     def _matches_release(
@@ -740,6 +798,27 @@ class SourcePreparationRunner:
         publication = self._artifacts.put_with_receipt(
             f"source-preparation-plan:{plan.digest}", plan
         )
+        binding_ref = None
+        if (
+            plan.valuation_working_capital_recipe is not None
+            and evidence.snapshot_id is not None
+            and self._plan_mappings(plan) is not None
+        ):
+            binding = self._bind_working_capital(
+                plan, self._application.snapshot(evidence.snapshot_id)
+            )
+            assert binding is not None
+            bound = self._artifacts.put_with_receipt(
+                f"working-capital-binding:{binding.digest}",
+                binding,
+                (plan.digest, binding.recipe_digest, binding.snapshot_manifest_digest),
+            )
+            binding_ref = ArtifactRefV1(
+                artifact_id=bound.artifact.artifact_id,
+                content_hash=bound.artifact.content_hash,
+                media_type=bound.artifact.media_type,
+                role=binding.protocol,
+            )
         if evidence.source_outcomes:
             self._artifacts.put_with_receipt(
                 f"source-preparation-acquisitions:{plan.digest}",
@@ -751,6 +830,7 @@ class SourcePreparationRunner:
         evidence = SourcePreparationEvidenceV1.model_validate(
             {
                 **evidence.model_dump(),
+                "working_capital_binding_ref": binding_ref,
                 "source_plan_ref": ArtifactRefV1(
                     artifact_id=publication.artifact.artifact_id,
                     content_hash=publication.artifact.content_hash,
@@ -762,6 +842,8 @@ class SourcePreparationRunner:
             }
         )
         dependencies: tuple[str, ...] = (evidence.plan_digest,)
+        if binding_ref is not None:
+            dependencies += (binding_ref.content_hash,)
         if evidence.snapshot_manifest_digest is not None:
             dependencies += (evidence.snapshot_manifest_digest,)
         if evidence.data_release_manifest_digest is not None:
@@ -882,9 +964,9 @@ class SourcePreparationRunner:
             outcomes.append(outcome)
         return tuple(snapshots), tuple(outcomes)
 
-    def _assess_history_requirements(
+    def _plan_facts(
         self, plan: SourcePreparationPlan, snapshot: SourceSnapshotV1
-    ) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    ) -> tuple[CanonicalFactV1, ...]:
         facts = self._application.fact_repository
         if facts is None:
             raise ValueError("history assessment requires a canonical fact repository")
@@ -904,23 +986,42 @@ class SourcePreparationRunner:
             for source in snapshot.source_records
             if source.role is SourceRole.FILING
         }
-        profile = plan.requirements_profile
-        working_capital_inputs = (
-            plan.valuation_working_capital_policy.inputs
-            if plan.valuation_working_capital_policy is not None
-            else ()
+        return tuple(
+            fact
+            for fact in facts.list()
+            if fact.source.content_hash in sources
+            and fact.mapping_decision_id is not None
+            and fact.mapping_decision_id
+            == mappings.get((sources[fact.source.content_hash], fact.normalized_field))
         )
+
+    def _bind_working_capital(
+        self, plan: SourcePreparationPlan, snapshot: SourceSnapshotV1
+    ) -> WorkingCapitalBindingV1 | None:
+        recipe = plan.valuation_working_capital_recipe
+        if recipe is None:
+            return None
+        return bind_working_capital_recipe(
+            recipe, self._plan_facts(plan, snapshot), snapshot=snapshot
+        )
+
+    def _assess_history_requirements(
+        self, plan: SourcePreparationPlan, snapshot: SourceSnapshotV1
+    ) -> tuple[tuple[str, ...], tuple[str, ...]]:
+        binding = self._bind_working_capital(plan, snapshot)
+        if binding is not None and binding.missing_evidence:
+            return (
+                "SOURCE_PREPARATION_WORKING_CAPITAL_INVALID",
+            ), binding.missing_evidence
+        policy = (
+            binding.policy
+            if binding is not None
+            else plan.valuation_working_capital_policy
+        )
+        profile = plan.requirements_profile
+        working_capital_inputs = policy.inputs if policy is not None else ()
         selected = select_released_facts(
-            (
-                fact
-                for fact in facts.list()
-                if fact.source.content_hash in sources
-                and fact.mapping_decision_id is not None
-                and fact.mapping_decision_id
-                == mappings.get(
-                    (sources[fact.source.content_hash], fact.normalized_field)
-                )
-            ),
+            self._plan_facts(plan, snapshot),
             profile=profile,
             snapshot=snapshot,
             valuation_timestamp=snapshot.valuation_timestamp,
@@ -946,9 +1047,7 @@ class SourcePreparationRunner:
                 selected.facts,
                 snapshot=snapshot,
                 valuation_timestamp=snapshot.valuation_timestamp,
-                profile=valuation_input_requirements(
-                    plan.valuation_working_capital_policy, plan.model_id
-                ),
+                profile=valuation_input_requirements(policy, plan.model_id),
                 working_capital_inputs=working_capital_inputs,
             )
         except AnnualHistoryError as error:
@@ -1080,7 +1179,10 @@ class SourcePreparationRunner:
                             0
                         ].fiscal_period_selector,
                     )
-                if len(snapshots) > 1:
+                if (
+                    len(snapshots) > 1
+                    or plan.valuation_working_capital_recipe is not None
+                ):
                     issues, missing = self._assess_history_requirements(plan, snapshot)
                     if issues:
                         return self._persist(

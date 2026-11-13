@@ -63,11 +63,28 @@ pins. Unknown, missing, future or foreign-mapped exclusions block preparation.
 The signed release still uses the full valuation profile, independently checks
 those facts, and passes the same inputs to the official composer.
 
-This plan contract takes already bound input facts and explicit residual
-assumptions. It does not yet compile them from an automatic policy recipe or
-establish complete real issuer evidence. Source providers remain replaceable
-through the existing [provider ports](market-input-providers.md); source-plan
-policy and the composer do not interpret provider-specific formats.
+Alternatively, declare `valuation_working_capital_recipe` using
+`ValuationWorkingCapitalRecipeV1`; it is mutually exclusive with an already bound
+policy. The recipe pins the service model/version, requirements digest, mapping
+version, original accession and annual period, exclusion roles/states and explicit
+residual scenarios. It contains no fact IDs. After acquisition, preparation binds
+each role to exactly one canonical fact under the plan's retained mappings and
+sources, then calls the same working-capital assessor. Unsupported absence,
+missing or ambiguous observations, amendments and future evidence refuse binding.
+
+The resulting `working-capital-binding-v1` artifact retains candidate facts,
+assessments, the bound policy or refusal reasons, recipe digest and snapshot
+digest. Preparation evidence links it with `working_capital_binding_ref`.
+Candidates and active releases must contain the exact reconstructed bound policy;
+changing a residual scenario cannot reuse a release approved for another input.
+Repeated preparation reuses identical reports without rewriting them. Omitting
+both optional fields retains ordinary plan bytes and digests.
+
+Recipes automate evidence binding; they do not supply missing issuer evidence or
+choose residual assumptions. Complete real issuer numerical acceptance remains
+outstanding. Source providers remain replaceable through the existing
+[provider ports](market-input-providers.md); recipes, source-plan policy and the
+composer consume canonical evidence and do not interpret provider formats.
 
 Estimated history and forecasts remain provisional. `supported_history_threshold` remains null. This increment does not resolve NEWMARKET 2013 continuing-capex scope or establish a trusted NEWMARKET release, first-subsequent label, forecast error, or complete fixed-cohort replay. Freeze the #377 evaluation protocol before using outcomes to select a history threshold; any estimated label must be identified as an estimate under this input-policy version.
 
