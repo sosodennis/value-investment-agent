@@ -2092,3 +2092,30 @@ backlog labels and #428 merge remain owned by the coordinating side. These are
 engineering reviews, not accounting signatures or threshold approval. #361,
 #371,#376,#377 remain open, exact cases0/100, history underpowered,
 `supported_history_threshold=null`; full numerical acceptance remains pending.
+
+### #423 serial integration result
+
+Normal merge `6b2fcc9195022e49cc660ea4cb58c1b47de98905` integrates reviewed
+head `00dbc27921a1b4980dc3b669206981b8ddbc01aa` after checkpoint `d7daa0fc`.
+No reset, rebase, squash, forced update or original WIP removal occurred.
+At this exact clean integration commit, all141 related tests pass, along with
+changed Ruff/format, source-aware mypy, both architecture guards and whitespace.
+Checks receipt `9e19acb50aed4feef5f9475783c75b3e7b0e09051c8bebc38a25e4ac44ea0d35`,
+input `23dcb9b2d56f7097ff47555566b3d16230de557f8c50d8f53701fc733e13ae29`,
+output `e7d37484e655befb25aa605f4728a6e7ddbb24c5c0520c152b00e8587f325e36`.
+
+The complete offline window/export/analysis pipeline also ran twice at this
+integration SHA. Each second digest equals its first; every second write is
+false, all inventories/bytes/sizes/mtimes remain unchanged, and zero artifacts,
+downloads, parser calls, snapshots or database mutations are added. Its expected
+wrong-SHA probe exits2 without altering outputs. Verification report
+`9afc2e251a8e62dbb0c484c9eb54c4a1e9555b17fcc79d674b8597913fcebee7`,
+input `ab707c04c96ee40a49da9c98e99fd3c99e0cf9d50ccaa06db1c03800b5e2d900`,
+output `3875720612844d6ac8af72d8104ca52a2301ee71031b5145bc5934a9445fb20b`.
+Window/export/analysis numeric output digests equal the independently reviewed
+child results. Conditional one-issuer/three-year limits and all missing cells
+remain; threshold null. Raw reports are external and source-only Docker evidence
+is not upgraded to full-service acceptance. Main delivery/full #361 acceptance
+remain pending; #427 is still excluded while its review correction is owned by
+the coordinating side. Next: parent CI, bounded #386 main preparation and review
+of the corrected #427 head.
