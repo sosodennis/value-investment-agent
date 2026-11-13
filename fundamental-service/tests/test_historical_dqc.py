@@ -29,6 +29,7 @@ from fundamental_service.historical_dqc import (
     HistoricalDqcProfile,
     V1_PROFILE,
     V3_PROFILE,
+    V3_2012_PROFILE,
     V3_2013_PROFILE,
     execution_for,
 )
@@ -124,11 +125,12 @@ def test_old_profile_serialization_and_identity_remain_immutable(
     assert "historical_dqc_axis_config" not in profile.model_dump(mode="json")
 
 
-def test_2013_config_is_explicit_profile_bound_and_location_independent():
+@pytest.mark.parametrize("historical", (V3_2012_PROFILE, V3_2013_PROFILE))
+def test_taxonomy_config_is_explicit_profile_bound_and_location_independent(historical):
     profile = _profile(
-        profile_id=V3_2013_PROFILE.profile_id,
-        dqc_version=V3_2013_PROFILE.dqc_version,
-        historical_dqc_sha256=V3_2013_PROFILE.source_sha256,
+        profile_id=historical.profile_id,
+        dqc_version=historical.dqc_version,
+        historical_dqc_sha256=historical.source_sha256,
         historical_dqc_axis_config="/runtime/config.json",
     )
     assert (
@@ -151,6 +153,16 @@ def test_2013_config_is_explicit_profile_bound_and_location_independent():
             )
     with pytest.raises(ValueError, match="axis config"):
         _profile(historical_dqc_axis_config="/unrequested.json")
+    other = V3_2013_PROFILE if historical == V3_2012_PROFILE else V3_2012_PROFILE
+    assert (
+        profile.digest()
+        != _profile(
+            profile_id=other.profile_id,
+            dqc_version=other.dqc_version,
+            historical_dqc_sha256=other.source_sha256,
+            historical_dqc_axis_config="/runtime/config.json",
+        ).digest()
+    )
 
 
 @pytest.mark.parametrize("raises", (False, True))
@@ -193,6 +205,7 @@ def test_explicit_config_selector_is_restored_even_on_rule_failure(
         historical_dqc.verify_axis_config(profile, path)
 
 
+@pytest.mark.parametrize("historical", (V3_2012_PROFILE, V3_2013_PROFILE))
 @pytest.mark.parametrize(
     "namespaces",
     (
@@ -200,9 +213,9 @@ def test_explicit_config_selector_is_restored_even_on_rule_failure(
         ("http://fasb.org/us-gaap/2013-01-31", "http://fasb.org/us-gaap/2012-01-31"),
     ),
 )
-def test_2013_config_does_not_broaden_taxonomy_coverage(namespaces, monkeypatch):
+def test_taxonomy_config_does_not_broaden_coverage(namespaces, monkeypatch, historical):
     validation, state, _, _ = _validation(namespaces)
-    state.profile = V3_2013_PROFILE
+    state.profile = historical
     monkeypatch.setattr(
         historical_dqc,
         "_load_package",

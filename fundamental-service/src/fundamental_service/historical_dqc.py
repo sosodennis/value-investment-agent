@@ -89,6 +89,15 @@ V3_PROFILE = HistoricalDqcProfile(
 )
 
 # A configuration adaptation, not an upstream DQC release or compliance opinion.
+V3_2012_PROFILE = replace(
+    V3_PROFILE,
+    profile_id="sec-efm-us-dqc-v3.6.2-gaap2012-config-v1",
+    dqc_version="v3.6.2-gaap2012-config-v1",
+    gaap_namespaces=frozenset({"http://fasb.org/us-gaap/2012-01-31"}),
+    completion_marker="dqc-v3.6.2-gaap2012-config-v1-all-eleven-modules-returned",
+    axis_config_sha256="ad6459e7d296a73e411be5a20ccad94e5bd99e5f0a1eba9847b34c66ff634ca0",
+)
+
 V3_2013_PROFILE = replace(
     V3_PROFILE,
     profile_id="sec-efm-us-dqc-v3.6.2-gaap2013-config-v1",
@@ -103,6 +112,7 @@ def historical_profile(profile_id: str) -> HistoricalDqcProfile | None:
     return {
         V1_PROFILE.profile_id: V1_PROFILE,
         V3_PROFILE.profile_id: V3_PROFILE,
+        V3_2012_PROFILE.profile_id: V3_2012_PROFILE,
         V3_2013_PROFILE.profile_id: V3_2013_PROFILE,
     }.get(profile_id)
 
