@@ -257,3 +257,153 @@ def test_disclosure_certificate_cannot_authorize_different_source_bytes(tmp_path
     assert sha256_digest(forged) != certificate.mapping_digest
     with pytest.raises(DataReleaseError, match="retained policy evaluation"):
         verify_automatic_mapping_replay(certificate, forged, artifacts=store)
+
+
+OPTION_COST = (
+    "There was $4,181 of unrecognized stock-based compensation as of December 31, "
+    "2025 related to nonvested options, which we expect to recognize in the first "
+    "quarter of fiscal 2026."
+)
+
+
+def option_cost_case(tmp_path, monkeypatch, *, text=OPTION_COST, **kwargs):
+    from fundamental_service import automatic_mapping_disclosures as policy
+    from fundamental_service.arelle_parser import fact_semantic_digest
+
+    request, store, roots, bundle = expense_case(
+        tmp_path, text="<p>" + text + "</p>", **kwargs
+    )
+    request = request.model_copy(
+        update={
+            "proposal": request.proposal.model_copy(
+                update={"normalized_field": "equity_award_unrecognized_compensation"}
+            )
+        }
+    )
+    source = request.original.source
+    monkeypatch.setattr(
+        policy,
+        "_OPTION_COST_ORIGINALS",
+        {
+            (source.cik, source.accession_number): (
+                source.content_hash,
+                fact_semantic_digest(request.original.report),
+            )
+        },
+    )
+    return request, store, roots, bundle
+
+
+def test_registered_option_cost_is_dated_reconstructible_and_idempotent(
+    tmp_path, monkeypatch
+):
+    request, store, roots, _ = option_cost_case(tmp_path, monkeypatch)
+    proposal = automatic_mapping_proposal(
+        "equity_award_unrecognized_compensation",
+        mapping_version="synthetic-v1",
+        original=request.original,
+    )
+    assert proposal.source_concept == STOCK_COMPENSATION_DISCLOSURE
+    first = approve(request, store, roots)
+    decision = AutomaticMappingDecisionV1.model_validate_json(
+        store.read(first.decision_publication.artifact.artifact_id)
+    )
+    assert decision.status == "approved"
+    rule = decision.mapping.accounting_rules.periods[0]
+    assert rule.period.instant
+    assert rule.disclosed_amount.date.period_end == date(2025, 12, 31)
+    candidates = parsed_facts_to_candidates(
+        request.original.report,
+        source=request.original.source,
+        issuer_id=request.original.source.cik,
+        normalized_field="equity_award_unrecognized_compensation",
+        mapping=decision.mapping,
+    )
+    assert len(candidates) == 1
+    assert candidates[0].instant == date(2025, 12, 31)
+    assert candidates[0].value == Decimal(4181)
+    assert candidates[0].accounting_evidence.source_facts[0].instant is None
+    approval = AutomaticMappingApprovalV1.model_validate_json(
+        store.read(first.approval_publication.artifact.artifact_id)
+    )
+    assert (
+        verify_automatic_mapping_replay(approval, decision.mapping, artifacts=store)
+        == request
+    )
+    before = inventory(store.root)
+    second = approve(request, ArtifactStore(store.root), roots)
+    assert first.output_digest == second.output_digest
+    assert not any(
+        p.wrote
+        for p in (
+            second.input_publication,
+            second.decision_publication,
+            second.approval_publication,
+        )
+    )
+    assert inventory(store.root) == before
+
+
+@pytest.mark.parametrize("mutation", ["issuer", "source", "facts", "unregistered"])
+def test_option_cost_never_inherits_another_originals_classification(
+    tmp_path, monkeypatch, mutation
+):
+    from fundamental_service import automatic_mapping_disclosures as policy
+
+    request, store, _, _ = option_cost_case(tmp_path, monkeypatch)
+    original = request.original
+    if mutation == "facts":
+        original = original.model_copy(
+            update={
+                "report": original.report.model_copy(
+                    update={"facts": original.report.facts[:-1]}
+                )
+            }
+        )
+    elif mutation == "unregistered":
+        monkeypatch.setattr(policy, "_OPTION_COST_ORIGINALS", {})
+    else:
+        original = original.model_copy(
+            update={
+                "source": original.source.model_copy(
+                    update={"cik": "0000000999"}
+                    if mutation == "issuer"
+                    else {"content_hash": "f" * 64}
+                )
+            }
+        )
+    request = request.model_copy(update={"original": original})
+    assert (
+        automatic_mapping_proposal(
+            "equity_award_unrecognized_compensation",
+            mapping_version="synthetic-v1",
+            original=original,
+        )
+        is None
+    )
+    result = evaluate(request, store)
+    assert result.status == "abstain" and result.mapping is None
+    assert any(code.startswith("MAPPING_OPTION_COST_") for code in result.reason_codes)
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        OPTION_COST.replace("December 31", "December 30"),
+        OPTION_COST.replace("2025 related", "2024 related"),
+        OPTION_COST.replace("fiscal 2026", "fiscal 2027"),
+        OPTION_COST.replace("$4,181", "$4,181 million"),
+        OPTION_COST.replace("$4,181", "$4,181.50"),
+        OPTION_COST.replace("nonvested options", "some nonvested options"),
+        OPTION_COST.replace("nonvested options", "restricted stock units"),
+        OPTION_COST + " " + OPTION_COST,
+    ],
+)
+def test_unsupported_option_cost_sentences_retain_abstention(
+    tmp_path, monkeypatch, text
+):
+    request, store, roots, _ = option_cost_case(tmp_path, monkeypatch, text=text)
+    result = evaluate(request, store)
+    assert result.status == "abstain" and result.mapping is None
+    assert result.rejected_observations
+    assert approve(request, store, roots).approval_publication is None

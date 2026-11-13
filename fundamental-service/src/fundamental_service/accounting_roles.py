@@ -257,14 +257,11 @@ class DisclosedInstantDateV1(RoleModel):
         return self
 
 
-class DatedDisclosureComponentV1(DisclosedValueV1):
-    kind: Literal["dated_disclosure"]
-    sign: Literal[1] = 1
+class _DatedDisclosedValueV1(DisclosedValueV1):
     date: DisclosedInstantDateV1
-    complete_component: Literal[True]
 
     @model_validator(mode="after")
-    def date_spans_are_exact(self) -> DatedDisclosureComponentV1:
+    def date_spans_are_exact(self) -> _DatedDisclosedValueV1:
         for start, token in (
             (self.date.month_day_start, self.date.month_day_token),
             (self.date.year_start, self.date.year_token),
@@ -283,6 +280,16 @@ class DatedDisclosureComponentV1(DisclosedValueV1):
         return self
 
 
+class DisclosedInstantAmountV1(_DatedDisclosedValueV1):
+    complete_role: Literal[True]
+
+
+class DatedDisclosureComponentV1(_DatedDisclosedValueV1):
+    kind: Literal["dated_disclosure"]
+    sign: Literal[1] = 1
+    complete_component: Literal[True]
+
+
 class AccountingPeriodRuleV1(RoleModel):
     period: AccountingPeriodV1
     disposition: Literal[
@@ -295,7 +302,7 @@ class AccountingPeriodRuleV1(RoleModel):
     ]
     components: tuple[AccountingComponentV1 | DatedDisclosureComponentV1, ...] = ()
     absence_passages: tuple[AbsencePassageV1, ...] = ()
-    disclosed_amount: DisclosedAmountV1 | None = Field(
+    disclosed_amount: DisclosedAmountV1 | DisclosedInstantAmountV1 | None = Field(
         default=None, exclude_if=lambda value: value is None
     )
     rationale: str = Field(min_length=1)
@@ -328,6 +335,11 @@ class AccountingPeriodRuleV1(RoleModel):
                 or self.disclosed_amount is None
             ):
                 raise ValueError("disclosed roles require one exact original amount")
+            if isinstance(self.disclosed_amount, DisclosedInstantAmountV1) and (
+                not self.period.instant
+                or self.disclosed_amount.date.period_end != self.period.period_end
+            ):
+                raise ValueError("disclosed amount date must match the role instant")
         elif self.disposition == "confirmed_absent":
             if self.components or not self.absence_passages or self.disclosed_amount:
                 raise ValueError(
@@ -542,6 +554,15 @@ def evaluate_period_rule(
     if rule.disposition == "disclosed":
         transcription = rule.disclosed_amount
         assert transcription is not None
+        if isinstance(transcription, DisclosedInstantAmountV1):
+            _require_disclosed_instant(
+                transcription,
+                fact=by_digest[transcription.parsed_fact_digest],
+                period=rule.period,
+            )
+            return _transcribe_amount(
+                transcription, by_digest[transcription.parsed_fact_digest], rules.unit
+            )
         fact = by_digest[transcription.parsed_fact_digest]
         if (
             fact.is_numeric
@@ -604,22 +625,7 @@ def evaluate_period_rule(
     for component in rule.components:
         fact = by_digest[component.parsed_fact_digest]
         if isinstance(component, DatedDisclosureComponentV1):
-            if (
-                not rule.period.instant
-                or component.date.period_end != rule.period.period_end
-                or fact.is_numeric
-                or fact.instant is not None
-                or fact.period_start is None
-                or fact.period_end is None
-                or not 330 <= (fact.period_end - fact.period_start).days <= 371
-                or not fact.period_start - timedelta(days=1)
-                <= rule.period.period_end
-                <= fact.period_end
-            ):
-                raise AccountingRoleError(
-                    "ACCOUNTING_DISCLOSED_DATE_MISMATCH",
-                    "dated disclosure requires its explicit instant within the original annual or comparative period",
-                )
+            _require_disclosed_instant(component, fact=fact, period=rule.period)
             amount = _transcribe_amount(component, fact, rules.unit)
             unsigned[component.parsed_fact_digest] = amount
             amounts.append(amount)
@@ -656,6 +662,30 @@ def evaluate_period_rule(
         result = sum(amounts, Decimal("0"))
         _validate_lease_expense_components(rules, rule, by_digest, unsigned, result)
         return result
+
+
+def _require_disclosed_instant(
+    transcription: _DatedDisclosedValueV1,
+    *,
+    fact: ParsedXbrlFactV1,
+    period: AccountingPeriodV1,
+) -> None:
+    if (
+        not period.instant
+        or transcription.date.period_end != period.period_end
+        or fact.is_numeric
+        or fact.instant is not None
+        or fact.period_start is None
+        or fact.period_end is None
+        or not 330 <= (fact.period_end - fact.period_start).days <= 371
+        or not fact.period_start - timedelta(days=1)
+        <= period.period_end
+        <= fact.period_end
+    ):
+        raise AccountingRoleError(
+            "ACCOUNTING_DISCLOSED_DATE_MISMATCH",
+            "dated disclosure requires its explicit instant within the original annual or comparative period",
+        )
 
 
 def _transcribe_amount(

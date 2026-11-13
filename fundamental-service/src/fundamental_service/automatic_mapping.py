@@ -13,6 +13,7 @@ from pydantic import Field, model_validator
 
 from .arelle_parser import ParsedXbrlFactV1
 from .automatic_mapping_disclosures import (
+    select_option_compensation_disclosure,
     select_stock_compensation_disclosure,
     STOCK_COMPENSATION_DISCLOSURE,
 )
@@ -56,8 +57,8 @@ from .serialization import sha256_digest
 from .taxonomy_evidence import require_original_taxonomy
 
 AUTOMATIC_MAPPING_INPUT_ROLE = "automatic-mapping-input-v1"
-AUTOMATIC_MAPPING_POLICY: Literal["source-bound-us-gaap-v12"] = (
-    "source-bound-us-gaap-v12"
+AUTOMATIC_MAPPING_POLICY: Literal["source-bound-us-gaap-v13"] = (
+    "source-bound-us-gaap-v13"
 )
 _GAAP_NAMESPACE = re.compile(
     r"http://(?:fasb\.org|xbrl\.us)/us-gaap/\d{4}(?:-\d{2}-\d{2})?"
@@ -198,9 +199,15 @@ def automatic_mapping_proposal(
     """Create only proposals supported by the service's executable rule table."""
     rule = _RULES.get(normalized_field)
     disclosed = normalized_field == "stock_based_compensation"
+    option_cost = normalized_field == "equity_award_unrecognized_compensation"
     investment_assets = normalized_field in INVESTMENT_ASSET_ROLES
     noncontrolling_equity = normalized_field == "noncontrolling_interests"
     liability_residual = normalized_field in LIABILITY_RESIDUAL_ROLES
+    if option_cost and (
+        original is None
+        or select_option_compensation_disclosure(original).rules is None
+    ):
+        return None
     if liability_residual and (
         original is None
         or select_registered_liability_residual(original, normalized_field).rules
@@ -223,6 +230,7 @@ def automatic_mapping_proposal(
         and not investment_assets
         and not noncontrolling_equity
         and not liability_residual
+        and not option_cost
     ):
         return None
     concept = STOCK_COMPENSATION_DISCLOSURE
@@ -232,7 +240,7 @@ def automatic_mapping_proposal(
         concept = liability_residual_concept(normalized_field)
     elif noncontrolling_equity:
         concept = NONCONTROLLING_EQUITY
-    elif not disclosed and not investment_assets:
+    elif not disclosed and not investment_assets and not option_cost:
         assert rule is not None
         concept = rule.concept
     if normalized_field == "depreciation_and_amortization" and original is not None:
@@ -262,7 +270,7 @@ class AutomaticMappingDecisionV1(ReleaseModel):
     input_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
     source_revision: str = Field(pattern=r"^[0-9a-f]{40}$")
     evaluator_id: str = Field(min_length=1)
-    policy_version: Literal["source-bound-us-gaap-v12"] = AUTOMATIC_MAPPING_POLICY
+    policy_version: Literal["source-bound-us-gaap-v13"] = AUTOMATIC_MAPPING_POLICY
     policy_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
     status: Literal["approved", "abstain"]
     reason_codes: tuple[str, ...]
@@ -387,6 +395,10 @@ def evaluate_automatic_mapping(
         proposal.normalized_field == "stock_based_compensation"
         and proposal.source_concept == STOCK_COMPENSATION_DISCLOSURE
     )
+    option_cost = (
+        proposal.normalized_field == "equity_award_unrecognized_compensation"
+        and proposal.source_concept == STOCK_COMPENSATION_DISCLOSURE
+    )
     depreciation = (
         proposal.normalized_field == "depreciation_and_amortization"
         and proposal.source_concept
@@ -417,6 +429,7 @@ def evaluate_automatic_mapping(
         or investment_assets
         or noncontrolling_equity
         or liability_residual
+        or option_cost
     )
     if (
         (
@@ -470,8 +483,13 @@ def evaluate_automatic_mapping(
         reasons.update(assets.reason_codes)
         selected.extend(assets.selected)
         accounting_rules = assets.rules
-    if disclosed:
-        disclosure = select_stock_compensation_disclosure(
+    if disclosed or option_cost:
+        selector = (
+            select_option_compensation_disclosure
+            if option_cost
+            else select_stock_compensation_disclosure
+        )
+        disclosure = selector(
             original,
             security_id=(
                 request.security_identity.security_id
@@ -552,6 +570,7 @@ def evaluate_automatic_mapping(
             or investment_assets
             or noncontrolling_equity
             or liability_residual
+            or option_cost
             or fact.concept != proposal.source_concept
         ):
             continue

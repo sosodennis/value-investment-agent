@@ -486,3 +486,32 @@ working-capital policy. This instant carrying-amount result is not a
 `confirmed_absent` assertion, does not establish annual finance-lease expense,
 and supplies no preferred/convertible/share-class or award absence. Those gaps,
 market/release/caller-approval requirements and the null history threshold remain.
+
+### Single dated disclosure balances
+
+`DisclosedInstantAmountV1` represents one complete balance quoted inside annual
+prose. It uses the same exact amount, currency, scale, precision and date-token
+checks as dated disclosure components. Its explicit date must match the target
+instant and fall within the original annual or opening comparative period.
+The parsed text fact keeps its original duration; normalization produces a
+separate instant candidate with all original facts and source spans attached.
+Existing undated duration disclosures retain their canonical representation.
+
+Automatic policy `source-bound-us-gaap-v13` registers the NVE originals
+`0001376474-23-000283` and `0001376474-24-000214` by original hash and complete
+parsed-fact digest, using the same two pins documented above. Their complete
+option notes state total unrecognized compensation related to nonvested options
+as of March 31, 2023 and March 31, 2024: USD2,173 and USD4,181, respectively.
+The exact sentence and its date/amount offsets enter the existing accounting
+rule evaluator; the registry supplies classification, never numeric amounts.
+Changed originals, other dates, unknown classes, partial/ambiguous sentences
+and changed parsed observations abstain. Automatic mapping signs only after
+retained original/integrity/taxonomy and the executable policy checks pass.
+
+This role is `equity_award_unrecognized_compensation`. Its approval does not
+establish award quantities, exercise-price distributions, complete company-wide
+inventory, performance conditions, a quote or a trusted complete data release.
+The annual option aggregate and the proxy's named-executive statements cannot
+alone establish all those claims. Treasury-stock arithmetic, forecasts and
+valuation remain with the existing formal composer/calculator; unsupported
+history thresholds remain null.
