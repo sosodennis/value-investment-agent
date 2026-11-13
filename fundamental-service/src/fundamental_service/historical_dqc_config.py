@@ -13,7 +13,8 @@ import tempfile
 import zipfile
 from importlib.metadata import version
 from pathlib import Path
-from typing import Any
+
+from pydantic import JsonValue, TypeAdapter
 
 from .arelle_parser import _directory_hash
 from .historical_dqc import V3_2013_PROFILE, _load_package
@@ -29,7 +30,7 @@ RULE_SHA256 = "9a428c1a045cfe3ca9d9652031310967003a9d7c69bd06aaa50e5f2ebc19bce9"
 
 def generate_axis_config(
     *, taxonomy_archive: Path, official_root: Path, taxonomy_cache: Path
-) -> dict[str, Any]:
+) -> dict[str, dict[str, JsonValue]]:
     """Use the official config-generation traversal, never filing-specific members."""
     if hashlib.sha256(taxonomy_archive.read_bytes()).hexdigest() != TAXONOMY_SHA256:
         raise ValueError("FASB 2013 taxonomy archive hash does not match")
@@ -41,7 +42,7 @@ def generate_axis_config(
 
     package = _load_package(official_root)
     module = importlib.import_module(f"{package.__name__}.dqc_us_0001")
-    config = json.loads(
+    config = TypeAdapter(dict[str, dict[str, JsonValue]]).validate_json(
         (official_root / "resources/DQC_US_0001/dqc_0001.json").read_bytes()
     )
     with tempfile.TemporaryDirectory(prefix="fundamental-gaap2013-") as directory:
