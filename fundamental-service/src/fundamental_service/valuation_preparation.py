@@ -28,6 +28,7 @@ from .contracts import (
     ValuationInputV1,
     WaccAssumptionsV1,
 )
+from .numerical_policy import using_valuation_context
 from .serialization import sha256_digest
 from .uncertainty_policy import (
     DEFAULT_UNCERTAINTY_POLICY_VERSION,
@@ -100,6 +101,7 @@ class ApprovedMarketPolicyInputsV1(StrictModel):
     )
 
     @model_validator(mode="after")
+    @using_valuation_context
     def evidence_matches_values(self) -> ApprovedMarketPolicyInputsV1:
         required = (
             "risk_free_rate",
@@ -276,6 +278,7 @@ def _metric(
     )
 
 
+@using_valuation_context
 def derive_historical_metrics(
     history: AnnualHistoryV1,
 ) -> HistoricalMetricsV1:
@@ -612,6 +615,7 @@ def _override_assumptions(
     )
 
 
+@using_valuation_context
 def apply_manual_override(
     preparation: AutomaticValuationPreparationV1,
     *,
@@ -751,6 +755,7 @@ def _transition_filing_evidence(
     return tuple(sorted(evidence, key=lambda fact: fact.fact_id))
 
 
+@using_valuation_context
 def prepare_automatic_valuation(
     facts: Iterable[CanonicalFactV1],
     *,
