@@ -2135,3 +2135,55 @@ GitHub confirms #423 merged at `6b2fcc91`; #428 main merge and issue closure
 are owned by the coordinating side. The isolated #386 main branch starts at
 `17975bd1`, and #427 awaits its source-owner correction. Parent CI and full
 numerical/recovery acceptance remain distinct pending gates.
+
+### #427 corrected-head review and serial integration
+
+Reviewed head `616a55bd0739bad76d2bf544cf95c82aff068a11` fixes the one P2
+typed-decoding finding with `TypeAdapter` and a bounded `JsonValue` dictionary.
+No actionable findings remain for this parser/config increment. Its review
+receipt `f85c930032132f15699e05e599c1b88ee9eb45cbf2a321ae0d2bdfe5666177bc`
+records124 passing tests,9 explicit skips, Ruff/format, dependency-aware mypy
+on four modules, both guards and whitespace, all exit0. Corrected-head CI
+43365046854 has12 executed successful jobs; the release job is skipped.
+
+Normal merge `95acf27687994f0478763603de1255a0b768c50e` retains every WIP
+commit. Exact clean integration checks also pass124 tests/9 skips and all the
+same static gates. Check receipt
+`4a3415402d38e8ad7a405785fe928276fddf18c55aac6fa80bcdfa3824f2a2ef`,
+input `2bada3f1658217e541812e196ff92265f40a3b923a6239a70711c07a3037df20`,
+output `57b55019a8fb7a668b0cd48696fb8b0274cbd53c130e0ca858661cc5e19bad46`.
+
+Two original-parser/config runs used isolated Compose project
+`value-investment-agent-361-review427`, immutable image
+`sha256:65e8f8f85e6f8c7ce792babdb5cfc6e16c54e8015adc0514fbafac8181319046`,
+exact source mounted read-only, network none, no host ports or named volumes,
+CPU1/memory1536m. Configuration and driver are ignored runtime inputs at
+`.audit/issue-361-child-review/review427-integration-compose.json` and
+`verify_dqc_integrated.py`. Commands are `docker compose -p
+value-investment-agent-361-review427 -f <config> config --quiet` and twice
+`run --rm --no-deps parser-acceptance`, all exit0. Full command receipts are
+external under `value-investment-agent-issue-361-independent-review-evidence/427-integration-container/`:
+`29c0d5c91ef7bded0b598453956806e983e67a61a56fc45a9bb7566b9e461467`
+and `3719d2465fc54c66017535dd8fc822f9f9c584159d2610a7d00551e49855068a`.
+Both replay input digests are
+`787a5b4d7e92fb0073c397011ee9ef9fcba9a84cba298ce0fa54aae9b3a2fbbf`;
+both output digests are
+`d4933be2ed3793008b608d93adf2a35d57af17ea13ceb0e5076bca25602e82b0`,
+equal to the reviewed child output. Report digest
+`9fe85d92264e1d694d9ec30979279f6ae85c4e44c93f75ae28da52f1b0668ac4`.
+Second config/report writes are false, new files0, and the output inventory
+(bytes/sizes/mtimes) is unchanged. Each run intentionally parses three cases:
+archive, direct original and synthetic invalid member. Each retains2508 facts;
+the invalid member blocks with DQC.US.0001.51; the old48-error refusal remains.
+Nine mapping roles remain proposals. Vendor escape-sequence warnings remain.
+Existing85 containers retain the same IDs/images/start times; disposable
+one-off containers are removed and no project resources remain. Resource
+receipt SHA256 `2ee547cd674895bc0f87e83dd91406f5d1b74f39c447dd5e5b1e336acd9876e0`.
+
+This proves the bounded original-parser/config behavior in a container; it
+does not establish live HTTP/full valuation acceptance, accounting approval,
+independent mapping approval or threshold evidence. #361/#371/#376/#377 stay
+open, history underpowered, `supported_history_threshold=null`. Next: push
+this integration/checkpoint, inspect its CI and GitHub merge state, and finish
+the separately based #386 numeric-isolation main increment with PostgreSQL
+reuse/recovery evidence and independent review.
