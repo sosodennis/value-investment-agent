@@ -2624,3 +2624,41 @@ remains underpowered. #361/#394/#376/#377/#383 stay OPEN, PR370 draft. Next: rec
 the specific award conflicts and full coverage/costs, then the remaining claims
 and dated market/quote evidence, trusted release, authentic exact-input approval
 and real numerical full-flow/recovery acceptance before parent review/main delivery.
+
+## Registered parser identity and current preparation — 749281c5
+
+Refs #361 / draft PR #370. Exact implementation
+`749281c5c4715a33cc0f075e6756fb3dabf4545f` fixes five registered accounting
+selectors that rejected SEC response variants despite validated identical parser
+inputs and complete fact digests. Policy v15 preserves the raw-hash lineage and
+all integrity gates. Source classifications and #352 formulas remain unchanged.
+
+All **2,705 Service/PostgreSQL tests pass**, with 17 explicit external parser
+resource skips and one expected duplicate-ZIP warning. Full Service Ruff/format,
+106-source mypy, both architecture guards and diff pass. The isolated
+`value-investment-agent-361-integrated-current-sources` project (20001/20002)
+matches all 125 installed Python/SQL sources and passes SEC-enabled preflight.
+The first preflight rejected copied older-SHA check records; those claims were
+reset to not_run before the successful gate. Full-flow checks remain incomplete.
+
+Real NVE preparation now passes the former working-capital binding failure.
+Its remaining accounting gaps are `convertible_instruments`, `other_share_classes`
+and `preferred_claims`; the full valuation remains **abstain**. All 49 new mapping
+signatures and retained-input policy reconstructions pass. Prior mappings,
+diagnostics and source failures remain retained. The option-cost disclosure
+registry still has the same identity defect and is the next bounded correction.
+
+Effective plan/output digests are
+`6f6953af72d46e7d98f74922cb8965b1fa99211669520402859bf6da833fdb49` /
+`25be452fbede58bd9796fea32aa9383e5648a7028a4d7cffaf884c8fd9125bbf`.
+The complete second run returns `wrote=false`, with no new artifacts and identical
+1,533 rows plus 514 files' bytes/sizes/mtimes. A further repeat with both provider
+request methods disabled makes zero SEC/public requests. All 65 unrelated
+baseline containers retain ID/image/start/status. The
+[compact checkpoint](issue-361-parser-identity-checkpoint.json) records exact
+commands, exit codes and input/output digests; generated corpus stays outside Git.
+
+Complete awards, the three claims, eligible dated market/quote evidence, trusted
+release, authentic exact-input caller approval, numerical recovery acceptance,
+independent review/CI and main delivery remain outstanding. No threshold approval
+or parent completion is claimed; supported history threshold stays null.
