@@ -6,6 +6,7 @@ from fundamental_service.history_sufficiency_report import (
     Fact,
     Filing,
     _history_period_gaps,
+    _microsoft_snapshot,
     _pilot_model,
     _select_fact,
     _wilson,
@@ -13,6 +14,16 @@ from fundamental_service.history_sufficiency_report import (
     build_history_sufficiency_report,
     first_subsequent_original_filing,
 )
+import json
+
+
+def test_retained_microsoft_original_uses_sec_utc_acceptance_time():
+    manifest = json.loads(DEFAULT_MANIFEST.read_bytes())
+    row, matches = _microsoft_snapshot(DEFAULT_MANIFEST, manifest)
+    assert matches is True
+    available_at = datetime.fromisoformat(row["available_at"].replace("Z", "+00:00"))
+    assert available_at > datetime(2024, 7, 30, 18, tzinfo=UTC)
+    assert available_at == datetime(2024, 7, 30, 20, 6, 22, tzinfo=UTC)
 
 
 def filing(
