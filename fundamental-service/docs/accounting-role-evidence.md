@@ -52,6 +52,16 @@ the issuer, accession, original bytes, parser input and exact observation scope.
 They do not establish a complete award inventory, classify other award types,
 or assert that unsupported awards or claims are absent.
 
+The signed release may retain award observations from several historical
+instants. Inventory completeness compares all released award observations at
+the inventory's own instant, while older observations retain their original
+fact/mapping/source lineage without entering current dilution. An inventory
+cannot predate a newer released award observation or omit a current class.
+Award observations without a consistent instant refuse. A later explicitly
+reviewed empty inventory can retain older awards; historical-only observations
+do not themselves prove that the later inventory is empty. Coverage, source,
+quote and exact released-fact checks still apply before the official composer.
+
 A `derived` period adds or subtracts at least two distinct source observations.
 Every component must match the same consolidated issuer, period and unit.
 Repeated observations, repeated concepts, conflicting observations, nonfinite

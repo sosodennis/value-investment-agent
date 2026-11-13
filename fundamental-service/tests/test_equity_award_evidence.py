@@ -1,4 +1,5 @@
 from dataclasses import replace
+from datetime import timedelta
 import json
 from decimal import Decimal
 from hashlib import sha256
@@ -96,6 +97,156 @@ def test_pinned_release_drives_composer_and_preserves_award_quote_provenance(tmp
     assert trace.policy_version == evidence.policy.policy_version
     assert prepared.quality_status is QualityStatus.PROVISIONAL
     assert "HISTORY_THRESHOLD_UNVALIDATED" in prepared.issue_codes
+
+
+def _with_historical_awards(fixture):
+    period = fixture.dilution.inventory.period_end
+    prior = period.replace(year=period.year - 1)
+    historical = tuple(
+        fact.model_copy(
+            update={
+                "fact_id": fact.fact_id + ":prior",
+                "instant": prior,
+                "period_end": prior,
+                "value": fact.value * 100,
+                "context": fact.context.model_copy(update={"instant": prior}),
+            }
+        )
+        for fact in fixture.dilution.facts
+    )
+    for fact in historical:
+        fixture.facts.publish(fact)
+    payload = fixture.manifest.model_dump(exclude={"manifest_digest"})
+    payload["snapshot_refs"] = _release_manifest_for(
+        fixture.snapshot, fixture.facts.list()
+    ).snapshot_refs
+    fixture.manifest = DataReleaseManifestV1(
+        **payload, manifest_digest=sha256_digest(payload)
+    )
+    fixture.metadata.get_data_release_manifest = lambda digest: (
+        fixture.manifest if digest == fixture.manifest.manifest_digest else None
+    )
+    return historical
+
+
+@pytest.mark.parametrize("consumer", ("serving", "canary"))
+def test_release_retains_historical_awards_without_counting_them_again(
+    tmp_path, consumer
+):
+    fixture = _fixture(tmp_path, released=False)
+    historical = _with_historical_awards(fixture)
+    before = {fact.fact_id: sha256_digest(fact) for fact in fixture.facts.list()}
+    if consumer == "canary":
+        candidate, canary = _reviewed_candidate(fixture)
+        report = canary.validate(candidate.manifest, candidate.verification)
+        assert len(report.checked_fact_digests) == len(before)
+        fixture.manifest = candidate.manifest
+    evidence = _load(fixture)
+    prepared = fixture.application.prepare_valuation(
+        ValuationEvidenceReadRequestV1(
+            contract_version="fundamental.v1",
+            snapshot_id=fixture.snapshot.snapshot_id,
+            data_release_manifest_digest=fixture.manifest.manifest_digest,
+            model_id="fcff_dcf",
+        )
+    )
+    assert prepared.status == "prepared"
+    assert prepared.equity_dilution.incremental_shares == Decimal(10)
+    assert prepared.input.assumptions.capital_bridge.diluted_shares == Decimal(120)
+    assert set(fact.fact_id for fact in historical) <= set(
+        prepared.input.historical_facts
+    )
+    assert {
+        fact.fact_id: sha256_digest(fact) for fact in fixture.facts.list()
+    } == before
+    assert _load(fixture, released_facts=reversed(fixture.facts.list())) == evidence
+
+
+@pytest.mark.parametrize("empty", (False, True))
+def test_inventory_cannot_ignore_a_newer_released_award_observation(tmp_path, empty):
+    fixture = _fixture(tmp_path)
+    evidence = fixture.dilution
+    period = evidence.inventory.period_end + timedelta(days=1)
+    newer = evidence.facts[0].model_copy(
+        update={
+            "fact_id": "newer-award",
+            "instant": period,
+            "period_end": period,
+            "context": evidence.facts[0].context.model_copy(update={"instant": period}),
+        }
+    )
+    if empty:
+        evidence = evidence.model_copy(
+            update={
+                "inventory": evidence.inventory.model_copy(update={"instruments": ()})
+            }
+        )
+    with pytest.raises(DilutionError) as error:
+        verify_dilution_fact_bindings(
+            evidence,
+            snapshot=fixture.snapshot,
+            released_facts=(*fixture.facts.list(), newer),
+        )
+    assert error.value.code == "DILUTION_INVENTORY_PERIOD_MISMATCH"
+
+
+def test_inventory_cannot_omit_a_current_award_class(tmp_path):
+    fixture = _fixture(tmp_path)
+    quantity = fixture.dilution.facts[0]
+    extra = quantity.model_copy(update={"fact_id": "another-current-class"})
+    with pytest.raises(DilutionError) as error:
+        verify_dilution_fact_bindings(
+            fixture.dilution,
+            snapshot=fixture.snapshot,
+            released_facts=(*fixture.facts.list(), extra),
+        )
+    assert error.value.code == "DILUTION_INVENTORY_INCOMPLETE"
+
+
+def test_historical_award_with_ambiguous_instant_is_not_silently_excluded(tmp_path):
+    fixture = _fixture(tmp_path)
+    historical = _with_historical_awards(fixture)
+    malformed = historical[0].model_copy(update={"instant": None})
+    facts = tuple(
+        malformed if fact.fact_id == malformed.fact_id else fact
+        for fact in fixture.facts.list()
+    )
+    with pytest.raises(DilutionError) as error:
+        verify_dilution_fact_bindings(
+            fixture.dilution, snapshot=fixture.snapshot, released_facts=facts
+        )
+    assert error.value.code == "DILUTION_FACT_SCOPE_MISMATCH"
+
+
+def test_reviewed_newer_empty_inventory_preserves_prior_awards(tmp_path):
+    fixture = _fixture(tmp_path)
+    inventory = fixture.dilution.inventory
+    period = inventory.period_end + timedelta(days=1)
+    evidence = fixture.dilution.model_copy(
+        update={
+            "inventory": inventory.model_copy(
+                update={
+                    "period_end": period,
+                    "instruments": (),
+                    "coverage_evidence": inventory.coverage_evidence.model_copy(
+                        update={
+                            "as_of": inventory.coverage_evidence.as_of
+                            + timedelta(days=1)
+                        }
+                    ),
+                }
+            )
+        }
+    )
+    verify_dilution_fact_bindings(
+        evidence, snapshot=fixture.snapshot, released_facts=fixture.facts.list()
+    )
+    prepared = _prepare(fixture, evidence)
+    assert prepared.status == "prepared"
+    assert prepared.equity_dilution.incremental_shares == 0
+    assert {fact.fact_id for fact in fixture.dilution.facts} <= set(
+        prepared.input.historical_facts
+    )
 
 
 def test_precomputed_net_count_never_substitutes_for_missing_award_evidence(tmp_path):

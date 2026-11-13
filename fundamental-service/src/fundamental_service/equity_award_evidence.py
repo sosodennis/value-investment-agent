@@ -75,14 +75,27 @@ def verify_dilution_fact_bindings(
             "award evidence belongs to a different snapshot or identity",
         )
     declared = {fact.fact_id: fact for fact in released_facts}
+    award_facts = tuple(
+        fact for fact in declared.values() if fact.normalized_field in AWARD_FACT_FIELDS
+    )
+    if any(fact.instant != fact.period_end for fact in award_facts):
+        raise DilutionError(
+            "DILUTION_FACT_SCOPE_MISMATCH",
+            "released award observations must identify their exact instant",
+        )
+    if any(fact.period_end > evidence.inventory.period_end for fact in award_facts):
+        raise DilutionError(
+            "DILUTION_INVENTORY_PERIOD_MISMATCH",
+            "inventory predates a released award observation",
+        )
     if {
         fact.fact_id
-        for fact in declared.values()
-        if fact.normalized_field in AWARD_FACT_FIELDS
+        for fact in award_facts
+        if fact.instant == evidence.inventory.period_end
     } != {fact.fact_id for fact in evidence.facts}:
         raise DilutionError(
             "DILUTION_INVENTORY_INCOMPLETE",
-            "reviewed inventory must retain every released award observation",
+            "reviewed inventory must retain every released award observation at its instant",
         )
     sources = {
         source.content_hash
