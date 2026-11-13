@@ -91,6 +91,9 @@ def _fixture(
         *profile.required_fact_fields,
         *(profile.supporting_fact_fields[:2] if not empty_awards else ()),
     )
+    mapped_fields = tuple(
+        dict.fromkeys((*required, *(f.normalized_field for f in _facts())))
+    )
     base = _sec_ingestion_request()
     ingestion = base.model_copy(
         update={
@@ -98,14 +101,14 @@ def _fixture(
                 update={"security_id": f"COMMON-{namespace.upper()[:24]}"}
             ),
             "valuation_timestamp": VALUATION_TIME,
-            "required_fields": required,
+            "required_fields": mapped_fields,
             "mappings": tuple(
                 SecMappingReferenceV1(
                     decision_id=f"mapping-{field}",
                     mapping_version="mapping-v1",
                     normalized_field=field,
                 )
-                for field in required
+                for field in mapped_fields
             ),
         }
     )
@@ -153,7 +156,7 @@ def _fixture(
             status="approved",
             reviewer="contract-test-reviewer",
         )
-        for field in required
+        for field in mapped_fields
     }
     stored = tuple(
         fact.model_copy(

@@ -20,6 +20,10 @@ models, so their absence alone does not block a numerical preparation. No
 missing amount is filled with zero or described as confirmed absent. Supplied
 diagnostics stay in released evidence and input provenance; changing their
 content can change evidence/input identity even when numerical results agree.
+The independent release canary admits supporting roles from the pinned composite
+profile or a complete compatible ordinary valuation profile. Each supplied fact
+still requires its released mapping, original source and canonical digest.
+Unknown supporting roles remain refused; optional never means unvalidated.
 
 Capital-bridge claims remain separate required point-in-time facts: cash,
 nonoperating assets, borrowing and lease principal, preferred/convertible claims,

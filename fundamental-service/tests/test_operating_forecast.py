@@ -301,7 +301,7 @@ def test_operating_contract_cannot_promote_quality_or_threshold():
         with pytest.raises(ValidationError):
             OperatingForecastV1.model_validate_json(json.dumps(payload))
     full = valuation_requirements_profile("fcff_dcf")
-    assert len(full.required_fact_fields) == 32
+    assert len(full.required_fact_fields) == 25
     assert full.market_policy_input_roles
 
 
@@ -384,9 +384,7 @@ def test_full_valuation_preparation_retains_failures_and_replays_current_version
     facts = _facts()
     if case in {"missing_capital", "missing_annual"}:
         excluded = (
-            "preferred_claims"
-            if case == "missing_capital"
-            else "stock_based_compensation"
+            "preferred_claims" if case == "missing_capital" else "capital_expenditure"
         )
         facts = tuple(f for f in facts if f.normalized_field != excluded)
     if case == "insufficient_history":

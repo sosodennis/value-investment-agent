@@ -23,6 +23,7 @@ from fundamental_service.equity_award_evidence import (
 from fundamental_service.facts import (
     CanonicalMappingV1,
     FilesystemCanonicalFactRepository,
+    canonical_fact_digest,
 )
 from fundamental_service.replay import ArtifactStore
 from fundamental_service.serialization import canonical_bytes, sha256_digest
@@ -245,6 +246,112 @@ def test_signed_composite_release_reaches_public_composer_and_calculator(tmp_pat
         allow_provisional=True,
     )
     assert calculated.per_share_value > 0
+
+
+@pytest.mark.parametrize("composite", [False, True])
+@pytest.mark.parametrize("omit_diagnostics", [False, True])
+def test_canary_and_http_accept_optional_diagnostics_with_complete_lineage(
+    tmp_path, composite, omit_diagnostics
+):
+    fixture = _valuation_fixture(tmp_path) if composite else _fixture(tmp_path)
+    diagnostic_fields = {
+        "cost_of_revenue",
+        "net_income",
+        "operating_lease_cost",
+        "finance_lease_cost",
+        "stock_based_compensation",
+        "basic_weighted_average_shares",
+        "diluted_weighted_average_shares",
+    }
+    declared = fixture.manifest.snapshot_refs[0]
+    diagnostic_refs = tuple(
+        ref
+        for ref in declared.facts
+        if fixture.facts.get(ref.fact_id).normalized_field in diagnostic_fields
+    )
+    assert {
+        fixture.facts.get(ref.fact_id).normalized_field for ref in diagnostic_refs
+    } == diagnostic_fields
+    if omit_diagnostics:
+        refs = tuple(ref for ref in declared.facts if ref not in diagnostic_refs)
+        fixture.manifest = _manifest_with(
+            fixture.manifest,
+            snapshot_refs=(
+                declared.model_copy(
+                    update={
+                        "facts": refs,
+                        "fact_set_digest": sha256_digest(refs),
+                    }
+                ),
+            ),
+        )
+    candidate, canary = _reviewed_candidate(fixture)
+    report = canary.validate(candidate.manifest, candidate.verification)
+    assert report == canary.validate(candidate.manifest, candidate.verification)
+    assert set(report.checked_fact_digests) == {
+        ref.fact_digest for ref in candidate.manifest.snapshot_refs[0].facts
+    }
+    response = _prepare(_client(fixture), fixture, candidate)
+    assert response.status_code == 200, response.text
+    assert response.json()["result"]["status"] == "prepared"
+    assert response.json()["result"]["quality_status"] == "provisional"
+
+
+@pytest.mark.parametrize("composite", [False, True])
+def test_reviewed_unknown_supporting_role_still_refuses_in_canary(tmp_path, composite):
+    fixture = _valuation_fixture(tmp_path) if composite else _fixture(tmp_path)
+    original = next(
+        fact
+        for ref in fixture.manifest.snapshot_refs[0].facts
+        if (fact := fixture.facts.get(ref.fact_id)).normalized_field
+        == "cost_of_revenue"
+    )
+    changed = original.model_copy(
+        update={
+            "fact_id": "unknown-diagnostic",
+            "normalized_field": "unknown_diagnostic",
+            "mapping_decision_id": "mapping-unknown-diagnostic",
+        }
+    )
+    fixture.facts.publish(changed)
+    mapping = fixture.mappings[original.mapping_decision_id].model_copy(
+        update={
+            "decision_id": changed.mapping_decision_id,
+            "normalized_field": changed.normalized_field,
+        }
+    )
+    fixture.mappings[mapping.decision_id] = mapping
+    reference = fixture.manifest.snapshot_refs[0]
+    refs = tuple(
+        ref.model_copy(
+            update={
+                "fact_id": changed.fact_id,
+                "fact_digest": canonical_fact_digest(changed),
+            }
+        )
+        if ref.fact_id == original.fact_id
+        else ref
+        for ref in reference.facts
+    )
+    fixture.manifest = _manifest_with(
+        fixture.manifest,
+        snapshot_refs=(
+            reference.model_copy(
+                update={"facts": refs, "fact_set_digest": sha256_digest(refs)}
+            ),
+        ),
+        mapping_refs=(
+            *fixture.manifest.mapping_refs,
+            MappingRefV1(
+                mapping_id=mapping.decision_id,
+                mapping_digest=sha256_digest(mapping),
+            ),
+        ),
+    )
+    candidate, canary = _reviewed_candidate(fixture)
+    with pytest.raises(DataReleaseError) as caught:
+        canary.validate(candidate.manifest, candidate.verification)
+    assert caught.value.code == "DATA_RELEASE_FIELDS_UNAVAILABLE"
 
 
 @pytest.mark.parametrize(

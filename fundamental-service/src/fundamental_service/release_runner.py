@@ -723,6 +723,15 @@ class DataReleaseCanaryRunner:
             }
             if not isinstance(manifest, IssuerOperatingReleaseManifestV1):
                 allowed_supporting_fields.update(AWARD_FACT_FIELDS)
+                models = (
+                    (valuation_input_policy.model_id,)
+                    if valuation_input_policy is not None
+                    else tuple(model.model_id for model in initial_model_specs())
+                )
+                for model_id in models:
+                    profile = valuation_release_requirements(manifest, model_id)
+                    if set(profile.required_fact_fields) <= declared_fields:
+                        allowed_supporting_fields.update(profile.supporting_fact_fields)
             if (
                 not declared_fields
                 <= {item.normalized_field for item in history}
