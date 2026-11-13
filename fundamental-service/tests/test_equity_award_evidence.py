@@ -328,17 +328,23 @@ def test_signed_quote_cannot_change_price_over_unchanged_source_bytes(
     assert error.value.code == "DILUTION_QUOTE_SOURCE_VALUE_MISMATCH"
 
 
-def _with_alternative_quote(fixture):
-    raw = canonical_bytes({"price": "10", "currency": "USD"})
+def _with_alternative_quote(fixture, *, quote=None, raw=None):
+    raw = (
+        raw if raw is not None else canonical_bytes({"price": "10", "currency": "USD"})
+    )
     source_hash = sha256(raw).hexdigest()
-    quote = fixture.dilution.quote.model_copy(
-        update={
-            "source_id": "synthetic-quote-vendor",
-            "source_version": "synthetic-v1",
-            "source_uri": "https://example.test/quotes/synthetic",
-            "terms_reference": "synthetic-test-only",
-            "content_hash": source_hash,
-        }
+    quote = (
+        quote
+        if quote is not None
+        else fixture.dilution.quote.model_copy(
+            update={
+                "source_id": "synthetic-quote-vendor",
+                "source_version": "synthetic-v1",
+                "source_uri": "https://example.test/quotes/synthetic",
+                "terms_reference": "synthetic-test-only",
+                "content_hash": source_hash,
+            }
+        )
     )
     evidence = fixture.dilution.model_copy(update={"quote": quote})
     artifact_id = f"equity-dilution:{evidence.digest}"

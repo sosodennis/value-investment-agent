@@ -131,6 +131,49 @@ registration or permission exception is introduced. A replacement source needs
 its own maintained interface, exact terms evidence and trusted rule; it can use
 the same quote-provider boundary without changing valuation formulas.
 
+### Twelve Data daily quote profile
+
+`TwelveDataDailyCloseProvider` implements the same `QuoteSourceProviderPort` as
+Nasdaq and is registered in the serving/canary composition. Its source profile
+is `twelve-data-us-common-daily-unadjusted-capture-v1`, source ID
+`twelve-data-daily-close`, with terms reference
+[`https://twelvedata.com/terms`](https://twelvedata.com/terms). Registration
+enables reproduction of retained bytes; the default policy grants no use.
+
+The maintained [time-series API](https://twelvedata.com/docs/market-data/time-series)
+documents daily bars and symbol, currency, exchange, MIC, asset type and exchange
+timezone metadata. This bounded profile requires an exact request to
+`https://api.twelvedata.com/time_series` with all parameters below:
+
+| Parameter | Required value |
+| --- | --- |
+| `symbol` | Exact requested security symbol |
+| `interval` | `1day` |
+| `country` | `US` |
+| `type` | `Common Stock` |
+| `mic_code` | `XNAS` or `XNYS` |
+| `date` | Exact `YYYY-MM-DD` observation date |
+| `format` | `JSON` |
+| `adjust` | `none` |
+| `dp` | `11` |
+
+The provider defaults to split-adjusted prices. Omitting `adjust=none` therefore
+refuses; an adjusted historical price cannot silently supply current treasury
+stock arithmetic. Response currency must be USD, metadata must match the
+requested exchange/common stock, and exactly one matching daily bar must be
+retained. Duplicate JSON members, provider errors and mismatched observations
+refuse. The date's New York midnight supplies conservative age; actual capture
+supplies availability and must follow that local calendar day's end. A newly
+captured historical response does not establish earlier availability.
+
+Provenance URIs exclude credentials; `apikey`, userinfo and unrecognized query
+parameters refuse. This adapter performs no HTTP capture and creates no account
+or key. Deployment must separately provide an entitled capture and exact retained
+permission evidence. Terms distinguish internal, non-display and redistribution
+uses and prohibit commercial Free Tier use. Neither a free label nor a parser
+is deployment permission. Format/admission tests use synthetic original bytes
+with explicit test-only permission; they do not establish a real issuer quote.
+
 Production market inputs require a maintained structured dataset, a stable API
 or download interface, documented field meanings and update rules, and
 verifiable version or historical-date evidence. Provider abstractions preserve
