@@ -210,6 +210,36 @@ def test_corrected_header_uses_conservative_later_availability():
     assert raised.value.code == "SEC_OWNERSHIP_NOT_AVAILABLE"
 
 
+def test_later_envelope_dates_do_not_erase_valid_historical_observations():
+    raw = (
+        submission()
+        .replace(b".txt : 20240501", b".txt : 20240502")
+        .replace(b".hdr.sgml : 20240501", b".hdr.sgml : 20240502")
+    )
+    result = parse(raw)
+    assert result.filing_date == result.changed_date == date(2024, 5, 1)
+    assert result.document_date == result.header_date == date(2024, 5, 2)
+    assert result.accepted_at == ACCEPTED
+    assert result.available_at == datetime(2024, 5, 3, 4, tzinfo=UTC)
+    assert result.issue_codes == ("SEC_OWNERSHIP_LATER_HEADER_AVAILABILITY",)
+    assert len(result.rows) == 1
+    with pytest.raises(SnapshotError) as raised:
+        parse_sec_ownership_source(
+            raw,
+            issuer_id=CIK,
+            valuation_at=datetime(2024, 5, 2, 23, tzinfo=UTC),
+            source=source(raw),
+        )
+    assert raised.value.code == "SEC_OWNERSHIP_NOT_AVAILABLE"
+
+
+def test_envelope_dates_earlier_than_change_date_remain_conflicting():
+    raw = submission().replace(b".txt : 20240501", b".txt : 20240430")
+    with pytest.raises(SnapshotError) as raised:
+        parse(raw)
+    assert raised.value.code == "SEC_OWNERSHIP_SOURCE_INVALID"
+
+
 def test_source_manifest_cannot_rewrite_hash_time_or_accession():
     raw = submission()
     for changes in (

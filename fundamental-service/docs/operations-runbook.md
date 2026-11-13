@@ -629,8 +629,11 @@ PYTHONPATH=fundamental-service/src:scripts \
 ```
 
 The source parser checks header/XML issuer, accession, form, reporting owners and
-period, converts SEC header acceptance from America/New_York, and conservatively
-delays availability for later header corrections. Unsafe XML and ambiguous
+period and converts SEC header acceptance from America/New_York. Parser profile
+`sec-ownership-source-v2` retains separate filing/change/document/header dates;
+later envelope dates retain a warning and conservatively delay availability until
+the following local midnight. An envelope date before the change date refuses.
+Unsafe XML and ambiguous
 documents refuse. Every source remains in the result, including missing bytes,
 future originals, amendments and filings with no derivative rows. XML locators,
 verbatim field values/codes, owner totals, footnote references and text retain

@@ -50,6 +50,7 @@ class SecOwnershipSourceV1(OwnershipModel):
 
 class SecOwnershipRequestV1(OwnershipModel):
     protocol: Literal["sec-ownership-observations-v1"] = OWNERSHIP_PROFILE
+    parser_version: Literal["sec-ownership-source-v2"] = "sec-ownership-source-v2"
     source_revision: str = Field(pattern=r"^[0-9a-f]{40}$")
     issuer_id: str = Field(pattern=r"^[0-9]{10}$")
     valuation_at: AwareDatetime
@@ -111,6 +112,8 @@ class SecOwnershipObservationV1(OwnershipModel):
     available_at: AwareDatetime
     filing_date: date
     changed_date: date
+    document_date: date
+    header_date: date
     captured_at: AwareDatetime
     owners: tuple[OwnershipOwnerV1, ...]
     document_fields: tuple[OwnershipFieldV1, ...]
@@ -208,7 +211,7 @@ def _fields(root: etree._Element) -> tuple[OwnershipFieldV1, ...]:
 
 def _header(
     raw: bytes, source: SecOwnershipSourceV1, issuer_id: str
-) -> tuple[date, date, date, datetime, datetime, tuple[str, ...]]:
+) -> tuple[date, date, date, date, date, datetime, datetime, tuple[str, ...]]:
     prefix = raw[: 256 * 1024].decode("latin-1")
     match = re.match(
         r"<SEC-DOCUMENT>([0-9]{10}-[0-9]{2}-[0-9]{6})\.txt : ([0-9]{8})\r?\n"
@@ -247,6 +250,8 @@ def _header(
         period = datetime.strptime(
             _one(header, "CONFORMED PERIOD OF REPORT"), "%Y%m%d"
         ).date()
+        document_date = datetime.strptime(match[2], "%Y%m%d").date()
+        header_date = datetime.strptime(match[3], "%Y%m%d").date()
     except ValueError as error:
         raise _invalid("ownership header dates are invalid") from error
     if (
@@ -255,20 +260,22 @@ def _header(
         or accepted.astimezone(UTC) != source.accepted_at
         or source.filing_date != filed
         or not period <= accepted.date() <= filed <= changed
-        or match[2] != changed.strftime("%Y%m%d")
-        or match[3] != changed.strftime("%Y%m%d")
+        or min(document_date, header_date) < changed
     ):
         raise _invalid("ownership header dates conflict with their source binding")
     available = max(accepted, datetime.combine(filed, time.min, _NEW_YORK))
-    if changed > accepted.date():
+    latest_date = max(changed, document_date, header_date)
+    if latest_date > accepted.date():
         available = max(
             available,
-            datetime.combine(changed + timedelta(days=1), time.min, _NEW_YORK),
+            datetime.combine(latest_date + timedelta(days=1), time.min, _NEW_YORK),
         )
     return (
         period,
         filed,
         changed,
+        document_date,
+        header_date,
         accepted.astimezone(UTC),
         available.astimezone(UTC),
         owner_ciks,
@@ -342,9 +349,16 @@ def parse_sec_ownership_source(
         or hashlib.sha256(raw).hexdigest() != source.content_sha256
     ):
         raise _invalid("ownership original size or source digest differs")
-    period, filed, changed, accepted, available, owner_ciks = _header(
-        raw, source, issuer_id
-    )
+    (
+        period,
+        filed,
+        changed,
+        document_date,
+        header_date,
+        accepted,
+        available,
+        owner_ciks,
+    ) = _header(raw, source, issuer_id)
     if available > valuation_at:
         raise SnapshotError(
             "SEC_OWNERSHIP_NOT_AVAILABLE",
@@ -413,6 +427,8 @@ def parse_sec_ownership_source(
         issues.append("SEC_OWNERSHIP_NO_DERIVATIVE_ROWS")
     if source.form.endswith("/A"):
         issues.append("SEC_OWNERSHIP_AMENDMENT_REQUIRES_RECONCILIATION")
+    if len({filed, changed, document_date, header_date}) != 1:
+        issues.append("SEC_OWNERSHIP_LATER_HEADER_AVAILABILITY")
     return SecOwnershipObservationV1(
         issuer_id=issuer_id,
         accession_number=source.accession_number,
@@ -425,6 +441,8 @@ def parse_sec_ownership_source(
         available_at=available,
         filing_date=filed,
         changed_date=changed,
+        document_date=document_date,
+        header_date=header_date,
         captured_at=source.captured_at,
         owners=owners,
         document_fields=tuple(
