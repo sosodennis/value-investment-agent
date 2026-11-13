@@ -204,3 +204,43 @@ evidence; reviewed primary policy, precision and promotion criteria; the full
 fixed-cohort empirical study. Conditional scenario dispersion is not sampling
 uncertainty and cannot replace these gates. #377/#376 stay open and PR #417 stays
 draft pending that work.
+
+## Cost-aware external calibration checkpoint
+
+Issue #377, documentation commit
+`4114a83c0ea9796aabe1f584b70a46eca1eb9b5e`, follows `91c1caee` without
+rewriting WIP. The [cost-aware evidence choices](../research/issue-377-cost-aware-evidence.md)
+record practical alternatives for the accounting, capex, Transition, label, and
+history gaps. They support review of the bounded conditional adapter while exact
+research remains incomplete. No executable method, tolerance, sample gate,
+financial formula, trusted release, or promotion policy changes.
+
+Eight primary method references returned HTTP 200 and have cached content
+snapshots outside Git. Their scope includes scenario feasibility, rolling-origin
+evaluation, scaling, dependence, bootstrap limitations, historical DQC profiles,
+and proportionate model validation. They provide no numerical promotion approval.
+
+Command `python3 -B /Users/denniswong/Desktop/Project/value-investment-agent-issue-376-research-evidence/issue377-external-calibration/verify.py`
+exited zero in two fresh processes at the documentation commit. Six local links
+resolve; five implementation/protocol files are byte-identical to verified
+`43d74695`; both recorded Git checks pass. Cached validation downloads nothing.
+Identical source/report publication returns `wrote=false`, creates zero new
+second-publication artifacts, and preserves existing bytes, sizes, and mtimes.
+These are documentation/source-cache checks, not new financial replay acceptance.
+Prior financial test evidence remains bound to `43d74695`.
+
+| External evidence | SHA-256 |
+| --- | --- |
+| Source retrieval report | `0807a36d83b6b412547f2320cfe4414c677c705f5d8bf6876c3677305ea78b1e` |
+| Source retrieval input | `8e50dc4214f24b058b28779f6b02ee08ec70d1c3437c7529baf9e785c4f48112` |
+| Source retrieval output | `72f40c9ddb4eed796ae8043c808f8ea9233b57e6788a42f873c3ed0a4763d951` |
+| Documentation/cache verification | `c2a9b906e5f8e4d08bd5c5f7e547860d962d72325def16de150aa84bf8fc2563` |
+| Verification input | `94f5d2735d76bc0d05ea1dce6dee2c6259e366e934ef2eebd7517fc409b2a427` |
+| Verification output | `ccd844a6cf84312a9051399643c9d46e3358d8d50d739c4a6bfd240d45aace76` |
+
+Evidence root: the external `issue377-external-calibration` directory linked in
+the research document. The reproducible driver retains full Git command results
+and source inventories. Raw sources and generated reports remain outside Git.
+Remaining: independent main-chat review and serial integration; reviewed methods
+and acquisition choices; exact evidence and the fixed-cohort empirical study.
+Exact cases remain 0/100 and `supported_history_threshold=null`.
