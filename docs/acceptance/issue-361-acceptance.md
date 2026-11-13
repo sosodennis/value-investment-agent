@@ -2733,3 +2733,36 @@ caller approval, actual numerical recovery, independent review/CI and main
 delivery remain outstanding. NVE remains **abstain**, eligible valuations
 **provisional**, history evidence **underpowered**, threshold null. Keep #361,
 #376/#377 OPEN and PR #370 draft.
+
+## Official option source preparation and recovery — 3bb1c2b0
+
+Exact `3bb1c2b0ac590463da2b3343ca1d0c8317c94461` uses implementation
+`5379a91ce93b7a7bcd7cc03a051876150cc3d8da` through the installed official
+`fundamental-prepare-source` command. The two fixed NVE originals produce
+55 mappings and 109 current-version facts; all 55 trusted signatures and exact
+retained-input policy reconstructions pass. No numerical acceptance is claimed.
+
+Effective input/output digests:
+`c67e0117b35d552eb5efa8136a35152a35c83a13ec4989d345ec4c0fdb3f0b98` /
+`b80434db0892c687801a3da13f0c0b3b7637137ec39442c60b33d08d460d717c`.
+Ordinary, provider-disabled, service-restart and empty-store-restored repeats
+return the same artifact, `wrote=false`, zero SEC/public requests and no new
+artifacts. Same-store repeats preserve all 2,809 rows and 886 files' bytes,
+sizes and mtimes. Restored bytes/sizes/rows match; restored mtimes are not claimed
+equal to the original. Portable backup
+`28b44d9ade9496eacc875890c22dff1b7ea598c716da46956c477463c1c5a6a3`
+also passes the host recovery verifier outside Docker. All 58 surviving unrelated
+baseline containers retain ID/image/start/status; the nine previously authorized
+exited-container removals remain explicitly recorded.
+
+[CI 43507066287](https://github.com/sosodennis/value-investment-agent/actions/runs/43507066287)
+passes 12 executed jobs at this SHA; release gate skipped. The
+[compact checkpoint](issue-361-options-source-flow-checkpoint.json) records exact
+commands, digests and remaining work. Its atomic writer repeats with `wrote=false`.
+Generated originals, reports and backup remain ignored outside the PR. Current
+preparation still blocks on `convertible_instruments`, `other_share_classes` and
+`preferred_claims`; subsequent award/quote/release/approval/numerical gates remain
+unverified. Next: resolve these evidence gaps in their owning layer. Threshold
+stays null, NVE abstains, eligible estimates remain provisional and history
+research underpowered. Keep #361/#376/#377 OPEN and PR #370 draft pending full
+acceptance, independent review and main verification.
