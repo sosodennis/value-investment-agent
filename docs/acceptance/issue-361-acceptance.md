@@ -2865,3 +2865,50 @@ and lawful dated quote evidence. Trusted complete release, authentic caller
 approval, real numerical full-flow/recovery, independent review and main delivery
 remain incomplete. Threshold null; incomplete cases abstain, eligible estimates
 provisional, history underpowered. Keep #361/#394/#376/#377 OPEN and PR #370 draft.
+
+## Maintained alternate quote adapter — ed8f8e23
+
+Implementation `ed8f8e237bff72c0f1039b55033b1a67ce427c51` adds Twelve Data daily
+quote transcription on the existing provider port and shared serving/canary
+composition. The maintained API documents instrument/currency/MIC/timezone and
+adjustment metadata. This profile requires an exact daily U.S. common-stock
+request with `adjust=none`; the provider's split-adjusted default refuses.
+Missing or conflicting metadata, wrong dates, malformed/ambiguous source,
+incomplete exchange-local day and credentials in provenance refuse. Availability
+remains actual capture time. No source I/O, key creation or default permission
+grant was added; official #352 arithmetic and model versions remain unchanged.
+
+Exact checks pass **2,796 Service/PostgreSQL tests**, with 17 external
+parser-resource skips and one expected duplicate-ZIP warning; full Service
+Ruff/format, changed-source mypy, both architecture guards and diff pass.
+[CI 43521797577](https://github.com/sosodennis/value-investment-agent/actions/runs/43521797577)
+passes 12 executed jobs; release gate skipped. The isolated SEC-enabled project
+`value-investment-agent-361-twelve-quote` (20471/20472, 10.231.89.0/28) matches
+127 installed Python/SQL files, passes preflight and 127 installed focused tests.
+
+Synthetic Twelve Data format originals, test-only source permission and a signed
+release reproduce the same official composer/canary result while retaining
+historical evidence. Ordinary, two concurrent and fresh-process repeats preserve
+all 125 files' bytes/sizes/mtimes and return `wrote=false`. Input/output:
+`e03071d00b212b5ba716acaf58a2513dbfe632330ec18e85614bd9bc6b46b125` /
+`f2dd3ab26e4c0d3ad3a636d7bbb135ef17df1830e455d20d3acc3120c6b1441e`.
+This proves source substitution and immutable release/composer evidence reuse;
+it does not establish a real quote, issuer valuation, HTTP numerical flow or
+new PostgreSQL recovery case.
+
+The [checkpoint](issue-361-quote-admission-checkpoint.json) adds
+`twelve_data_daily_increment`, preserving every prior entry. It records exact
+commands/digests, host/installed pins, generated harness digests and failures.
+The corrected research harness freezes an explicit source-receipt manifest,
+preventing concurrent CI journals from entering source discovery. Its assessment
+repeats unchanged; terms still require deployment-specific entitlements and
+commercial Free Tier use is excluded. No personal-use permission is inferred.
+Generated sources/reports/scripts and verified host backup remain outside Git.
+Only this temporary project's two containers, network and two disposable
+volumes were removed; all 60 baseline containers preserve ID/image/start/status.
+
+Next: genuine entitled quote acquisition and complete capital/award coverage,
+followed by trusted complete release, authentic caller approval and real
+numerical full-flow/recovery. Independent review/main delivery remain pending.
+Threshold null; incomplete real cases abstain, eligible estimates provisional,
+history underpowered. Keep #361/#369/#394/#376/#377 OPEN and PR #370 draft.
