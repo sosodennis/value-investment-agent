@@ -244,3 +244,94 @@ and source inventories. Raw sources and generated reports remain outside Git.
 Remaining: independent main-chat review and serial integration; reviewed methods
 and acquisition choices; exact evidence and the fixed-cohort empirical study.
 Exact cases remain 0/100 and `supported_history_threshold=null`.
+
+## Conditional window compiler checkpoint
+
+Issue #377 implementation `638c5df2faded9e722f4eec738a5de3b79f87102`
+starts from integration `719a238f` and preserves every previous checkpoint.
+Branch `codex/issue-377-history-window-evidence` uses isolated worktree
+`/Users/denniswong/.codex/worktrees/issue-377-precision-protocol-local/value-investment-agent`.
+The [window replay tool](../../scripts/replay_history_study_windows.py) retains
+common source/mapping/model/label identities, prevalidates generated arms with
+the reviewed exporter, and uses the existing atomic content-addressed publisher.
+There are no service schema, formula, database, trust or Compose changes.
+
+Exact-commit command:
+`PYTHONDONTWRITEBYTECODE=1 /Users/denniswong/.codex/worktrees/issue-376-aggregate-noncash-working-capital/value-investment-agent/fundamental-service/.venv/bin/python -B /Users/denniswong/Desktop/Project/value-investment-agent-issue-376-research-evidence/issue377-history-windows/verify_windows.py`.
+It exited 0. Its external command receipts bind the full argv, exact SHA,
+runtime, seed identity, exit code, stdout/stderr and input/output digests for
+14 commands. The wrong-SHA negative command intentionally exits 2 before output
+publication; the other 13 commands exit 0.
+
+| Exact implementation check | Result |
+| --- | --- |
+| Window, evidence, precision, analysis, scenario and label tests | 120 passed |
+| Ruff 0.14.10 / format | Both changed Python files pass |
+| mypy 1.19.1, imports resolved against Service source | New production script passes |
+| Root / Service architecture guards; Git whitespace | All pass |
+| Real three-year NEWMARKET arithmetic | Request, forecast and comparison bytes equal the reviewed #417 inputs/outputs |
+| Fresh-process window → export → analysis repeat | All three report/input/output digests identical, all second writes false |
+| Output inventories | Windows 5 JSON artifacts; export 2; analysis 1; persistent publication locks separately retained |
+| Second pipeline artifacts/downloads/parses | 0 / 0 / 0; bytes, size and mtime unchanged |
+| Source inputs | All three pinned original request/forecast/comparison files unchanged |
+| Publication interruption behavior | Tested recovery reuses the completed artifact and preserves its mtime |
+| Docker / live service acceptance | Not claimed for this offline-only tool; shared resources were not modified |
+
+Runtime: CPython 3.11.15, Darwin arm64, Arelle 2.47.4, Pydantic 2.14.2,
+cryptography 50.0.2; lock digest
+`229bc76c75019d54df8c1cba240839bacf01e56d7493f4bc615e058c4e5f6f11`.
+The manifest remains
+`448f496b10e51a2ed351a7a37deb36e0d4b9672c1fbc5ed3b0b845c8cd54da3a`.
+
+| External artifact | SHA-256 |
+| --- | --- |
+| Exact verification | `9f88315abf397fb5805e30c89fa830cc95b0fc5f5ac1bc965a8ba7358e6275a1` |
+| Verification input / output | `47466ee1381c749f89196b14062a1ac8232d6c8407b9366361a57c7ee0e513c6` / `6b315c11726c79d73a0e3609d839cf1906c05a95f2168a22025d7cbe4a2bd5f6` |
+| Window replay report | `7c25211ff92ea90adad83f58990483255d91f55f1a094882201205d520208def` |
+| Window input / output | `56617ab04e1069ebf60c65154f1a652c1caea9040d285dd7326af0d8dd366b45` / `5ebefbb878022911e6989ae8500649b7c84ad49e50dd71b5f0f4cd973e1e3281` |
+| Generated evidence index | `9928572738be6bc677b34785e8d20f498b30220ed451e43c17500ca39bb33479` |
+| Formal evidence export | `25ead3b405a011b1d2f25e295992c50f90cc5fc9915d6081d49907f26cdf0edb` |
+| Export input / output | `26b619332ac3ab04c15b5ebdcbc3c4c85298f2dbb899d13a64378d13fe235b69` / `1b96eaf0587333a6679ed33ee0fb13a9fc74be56156a89795a9495067de71185` |
+| Exploratory analysis | `d4e2011856592c9a605509d3b20bb80adf14b68af637cec654d67cf9377c05a4` |
+| Analysis input / output | `b26002c3e77ae8ea5cb3fac22496d0d860cd90379894f85ae7a1afd1533d87be` / `1fb66f9f0f83a1bb0a192205813abb6ed750d1112bf9c5da476db4ede85c3fe2` |
+
+The fixed panel retains 100 issuers / 589 filing targets / 1,200 cells. Actual
+conditional evidence remains one issuer, 125 labels, 625 FCFF comparisons and
+625 Transition abstentions in the three-year arm. Four/five-year windows remain
+unavailable. No exact case, sampling uncertainty or promotion authority was added.
+
+Four-year investigation at source commit `719a238f` acquired three SEC HTTP200
+responses and parsed direct/archive XML offline with the same retained archive
+DTS. Both retain 2,508 facts, identical semantic digest and all 48 DQC1 errors.
+Parser report `0a63bed54906b12523de47dc370e189ff9f0ca7273a531eb86054b7a627c9eed`
+reuses unchanged with zero parser calls. Nine source/period mapping proposals
+all retain `PARSER_VALIDATION_BLOCKED`; audit
+`9d2e882d38355918599a8f821673d27688075e8bc8435b2e61daea4dda91a4df`
+reuses with `wrote=false`, input
+`9f01a81daf9a833e673a334c5e8c4e8119d178196831056c23c99e5d6b888e79`,
+output `02d89d4187392d60f30038fe45ca6056b6e95a6c2f66e5659ffe3e2dfc569276`.
+The capture repeat disabled network and preserved all retained bytes and mtimes.
+
+[Linked blocker #371 evidence](https://github.com/sosodennis/value-investment-agent/issues/371#issuecomment-6840878314)
+records the observed generic rule configuration fallback for the 2013 taxonomy.
+The [official rule guidance](https://github.com/DataQualityCommittee/dqc_us_rules/blob/cafb54391c1d21e4c219bc3d491b855a9b877cb6/docs/DQC_US_0001/DQC_0001.md)
+was also retrieved HTTP200 (digest
+`b3a0190d198cdbeaa965b20fc58ed4a80c0d0a00b7b2cd52521eb291778b1827`):
+it states release September 29, 2016 and effective March 28, 2017. Its date and
+the member's existence in the 2013 schema do not prove that the reported
+axis/member combination is valid. Validate applicability and original taxonomy
+relationships in the parser layer; no severity, engine or profile was changed.
+
+Evidence root:
+`/Users/denniswong/Desktop/Project/value-investment-agent-issue-376-research-evidence/issue377-history-windows/`.
+Generated reports and historical sources are outside Git. Failed exploratory
+attempts remain recorded: content-store path lookup, ambiguous dimensional D&A
+selection, fixture import lint, publication-lock counting in the new recovery
+test, and a missing explicit GitHub repository argument. Corrected runs preserve
+source/refusal semantics.
+
+Next: independent review and serial integration of this bounded tool; resolve
+#371's per-rule historical compatibility evidence before producing the four-year
+arm; resolve 2011 source/scope gaps for five years. Primary policy, precision and
+promotion review, complete accounting/Transition evidence and the fixed-cohort
+study remain incomplete. Keep #376/#377 open and `supported_history_threshold=null`.
