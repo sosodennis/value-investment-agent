@@ -2816,3 +2816,52 @@ gaps without inventing zeros or treating aggregate option facts as complete
 per-strike coverage. Threshold stays null, incomplete real valuations abstain,
 eligible estimates remain provisional and history research underpowered. Keep
 #361/#394/#376/#377 OPEN and PR #370 draft.
+
+## Quote source-use release admission — 012a98f2
+
+Implementation `012a98f25e396741607aab9769b0a7db7603b6e6` closes the specific
+release gap recorded in #394: both serving and canary now reproduce one exact
+quote-use admission under the configured trusted policy. It binds retained quote
+and terms originals, valuation time and purpose through the existing replaceable
+provider port. Signatures cannot supply missing source permission. Existing
+macro/reference admission bytes and #352 financial arithmetic remain unchanged.
+
+Exact checks pass **2,757 Service/PostgreSQL tests**, with 17 explicit external
+parser-resource skips and one expected duplicate-ZIP warning; full Service
+Ruff/format, changed-source mypy, both architecture guards and diff pass.
+[CI 43518211789](https://github.com/sosodennis/value-investment-agent/actions/runs/43518211789)
+passes 12 executed jobs; release gate skipped. The isolated SEC-enabled project
+`value-investment-agent-361-quote-admission` (20371/20372, 10.231.88.0/28) matches
+126 installed Python/SQL files, passes preflight and 68 installed focused tests.
+
+An explicitly synthetic signed release retains 112 facts and reproduces 10
+incremental / 120 diluted shares through canary and official composer. Removing
+the synthetic source permission refuses in both paths. Ordinary, two concurrent
+and fresh-process repeats preserve all 122 files' bytes/sizes/mtimes and return
+`wrote=false`. Input/output digests:
+`4fb968536b69d52390af1ff7ec9c5d8252cb5b1c5167bdf11c8c98fce9dfa029` /
+`fe7cdf734bf6ccbc39cc832386082a0f94b0399692f486167bd707410312cf52`.
+This is filesystem release/composer evidence; real issuer numerical/HTTP flow
+and new PostgreSQL recovery acceptance are not established by this run.
+
+Primary-source research retains Nasdaq's 404 legacy terms, its current legal
+restrictions and actual dated quote bytes. No Nasdaq permission was added.
+The real refusal audit repeats unchanged with `SOURCE_USE_POLICY_MISSING`:
+input `adbe53b313e35fe9b2364d4b7e1818878ea48d08ce8a42e2f7d04df40c6cb693`,
+output `3e0f464f63e7ba4a5cb5fd70f4eae3b6f8a94c3c11024beaf2e0b62454bb850e`.
+Stooq's terms challenge remains unresolved; an Alpha Vantage terms PDF is
+retained without a grant assessment. None establishes an eligible real quote.
+
+The [compact checkpoint](issue-361-quote-admission-checkpoint.json) records exact
+commands/digests, pins and corrected failed working-tree fixture checks. The
+atomic checkpoint writer repeats unchanged. Generated originals/reports and the
+verified host corpus remain ignored outside Git. After backup, only this
+temporary project's two containers, network and two disposable volumes were
+removed; all 60 baseline containers preserve ID/image/start/status. Images,
+build cache and the older real-source stack remain.
+
+Next resolve complete capital claims, company-wide per-strike award coverage
+and lawful dated quote evidence. Trusted complete release, authentic caller
+approval, real numerical full-flow/recovery, independent review and main delivery
+remain incomplete. Threshold null; incomplete cases abstain, eligible estimates
+provisional, history underpowered. Keep #361/#394/#376/#377 OPEN and PR #370 draft.
