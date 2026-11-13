@@ -21,7 +21,60 @@ No completed #351 through #355 acceptance is changed. #350 is outside scope.
 GitHub #351 and #352 are CLOSED; #352's merged Fundamental Service composer is
 the runtime valuation owner, not a pending dependency.
 
-## Latest issuer market preparation checkpoint
+## Latest authorized market-policy assembly checkpoint
+
+Implementation `3c6135ca2d8d86d1e868c6e58b1e761605e00afd` adds an operator
+factory to the existing Fundamental market-policy release boundary. It fills
+absent market inputs from the existing reproduced decision only when the
+authorization already pins that exact decision, both selection plans, issuer,
+effective time, policy and model versions, and profile. Prefilled conflicts,
+refused decisions, missing sources and wrong pins fail explicitly. Candidate
+assembly and release validation share canonical artifact reading and the
+existing evaluator. No provider parsing, financial formula, deployment
+authority, policy publication or activation is added. A different candidate
+cannot replace an already published policy identity. The ordinary CLI is not
+yet wired to this factory or trusted publication.
+
+Exact checks pass **2,488 Service/PostgreSQL tests**, 101-source mypy, Service
+Ruff, changed-file format, both architecture guards and diff. **13 optional
+SEC/historical tests skip** for absent pinned resources; the expected
+duplicate-ZIP warning remains. Existing synthetic serving and independent
+canary tests now consume the assembled candidate through #352. This is not
+independent review of the parent PR or complete real numerical acceptance.
+[CI43393290745](https://github.com/sosodennis/value-investment-agent/actions/runs/43393290745)
+passes all12 executed jobs; the release gate skips. Exact check input/output:
+`7f807128468f6b0224b90fb718a2bbeb410a02556f5a67a521911f2b1bdf0b30` /
+`8afde2356e6a4e500fe87c907cf5d6919d4bd0398427945ae044376a433f2810`.
+
+The isolated, temporary Compose project
+`value-investment-agent-361-market-policy-assembly` installs all120 exact
+Python/SQL sources. It runs with no network, a read-only filesystem, no host
+ports and no named volumes. Explicitly **synthetic** factory inputs produce
+identical ordinary and two concurrent repeats, stable refusal classifications
+and zero published policies/artifacts/downloads (`wrote=false`). All93 existing
+containers preserve ID/image/start time. Temporary containers are removed;
+no project network or volume remains. The owned candidate image is retained.
+This stateless offline check claims no HTTP/service, restart or restore
+acceptance. Canonical report publication repeats without rewriting.
+
+Runtime input/output:
+`e423333a97d011b296928eb384d8df7eed1ba960fb1655bbb9fa6d8482bd77ae` /
+`d1d0f516cc17fb77b9a3b6ee422861dbaf5e6e6fa084cee36da2b4a979390099`.
+Candidate-result digest:
+`7a6bee9a3f49341f166c5ebf01209206ecdf745c46c98a4748be7721d52c54f3`.
+The compact checkpoint retains exact commands, pins and the corrected read-only
+Docker builder diagnostic. All prior checkpoint entries and WIP commits remain.
+
+Maintained structured datasets remain mandatory; article/blog/feed ERP is
+excluded and current capture cannot establish historical availability. Trusted
+CLI publication/release assembly, complete real accounting/awards/lawful quote,
+authentic caller approval, canonical SEC runtime revalidation and real numerical
+recovery remain incomplete. #361/#369/#376/#377 stay OPEN and PR370 draft.
+Eligible estimates remain **provisional**, incomplete real cases **abstain**,
+history sufficiency is **underpowered**, and `supported_history_threshold=null`.
+Generated fixtures, originals, reports and container evidence remain outside Git.
+
+## Prior issuer market preparation checkpoint
 
 Implementation `2fdeb1da3d6e9f3da91741c4930d0d13d94d4b8b` connects ordinary
 source plans to the existing classification, country/industry crosswalk,
