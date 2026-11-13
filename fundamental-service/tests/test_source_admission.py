@@ -10,6 +10,7 @@ import pytest
 from pydantic import ValidationError
 
 from fundamental_service.damodaran_source import (
+    DAMODARAN_COUNTRY_CURRENT_PROFILE,
     DAMODARAN_COUNTRY_PROFILE,
     DAMODARAN_SOURCE,
     DAMODARAN_TERMS,
@@ -58,9 +59,16 @@ def _terms(
     )
 
 
-def _reference_policy() -> SourceUsePolicyV1:
+def _reference_policy(*, revised: bool = False) -> SourceUsePolicyV1:
     original = free_market_source_policy()
-    selected = next(x for x in original.rules if x.metric_id == METRIC)
+    profile = (
+        DAMODARAN_COUNTRY_CURRENT_PROFILE if revised else DAMODARAN_COUNTRY_PROFILE
+    )
+    selected = next(
+        x
+        for x in original.rules
+        if x.metric_id == METRIC and x.source_version == profile
+    )
     rule = selected.model_copy(
         update={
             "terms": (
@@ -153,7 +161,49 @@ def test_production_catalog_never_admits_synthetic_terms():
     result = _admit(policy=free_market_source_policy())
     assert result.status == "refused"
     assert result.issue_codes == ("SOURCE_USE_TERMS_MISSING",)
-    assert result.request.policy_version == "free-market-source-use-v2"
+    assert result.request.policy_version == "free-market-source-use-v3"
+
+
+@pytest.mark.parametrize(
+    "kind,expected",
+    [
+        ("retained", ()),
+        ("missing", ("SOURCE_USE_TERMS_MISSING",)),
+        ("changed", ("SOURCE_USE_TERMS_CHANGED",)),
+        ("historical", ("SOURCE_NOT_AVAILABLE_AT_VALUATION",)),
+        ("redistribution", ("SOURCE_USE_PURPOSE_UNSUPPORTED",)),
+    ],
+)
+def test_revised_country_aggregate_uses_explicit_grant_and_retained_terms(
+    kind, expected
+):
+    original = replace(
+        _source(),
+        uri="https://pages.stern.nyu.edu/~adamodar/pc/datasets/ctryprem.xlsx",
+        source_version=DAMODARAN_COUNTRY_CURRENT_PROFILE,
+        content=country_xlsx(revised=True),
+    )
+    terms = (
+        ()
+        if kind == "missing"
+        else (_terms(content=b"changed"),)
+        if kind == "changed"
+        else (_terms(),)
+    )
+    result = _admit(
+        sources=(original,),
+        policy=_reference_policy(revised=True),
+        terms=terms,
+        valuation_at=datetime(2025, 4, 1, tzinfo=UTC)
+        if kind == "historical"
+        else CAPTURE,
+        intended_use="raw_data_redistribution"
+        if kind == "redistribution"
+        else "valuation_preparation",
+    )
+    assert result.issue_codes == expected
+    assert result.status == ("refused" if expected else "admitted")
+    assert result.vintage.source_version == DAMODARAN_COUNTRY_CURRENT_PROFILE
 
 
 def test_unknown_or_ambiguous_trusted_rule_is_not_provider_permission():

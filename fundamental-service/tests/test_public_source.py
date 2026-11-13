@@ -748,7 +748,18 @@ def test_captured_macro_and_vintage_fixtures_have_stable_hashes():
 
 
 @pytest.mark.parametrize("timestamp", ["available_at", "publication_at", "captured_at"])
-def test_reference_capture_rejects_caller_timestamp_overrides_before_network(timestamp):
+@pytest.mark.parametrize(
+    "path",
+    [
+        "archives/betas24.xls",
+        "datasets/betas.xls",
+        "datasets/wacc.xls",
+        "datasets/ctryprem.xlsx",
+    ],
+)
+def test_reference_capture_rejects_caller_timestamp_overrides_before_network(
+    timestamp, path
+):
     calls = []
     adapter = PublicSourceAdapter(
         user_agent="value-agent test@example.com",
@@ -757,21 +768,55 @@ def test_reference_capture_rejects_caller_timestamp_overrides_before_network(tim
     with pytest.raises(SnapshotError) as error:
         adapter.capture(
             "damodaran-reference",
-            "https://pages.stern.nyu.edu/~adamodar/pc/archives/betas24.xls",
+            "https://pages.stern.nyu.edu/~adamodar/pc/" + path,
             **{timestamp: datetime(2025, 1, 1, tzinfo=timezone.utc)},
         )
     assert error.value.code == "SOURCE_AVAILABILITY_UNVERIFIED"
     assert calls == []
 
 
-def test_reference_capture_uses_actual_capture_without_claiming_publication():
+@pytest.mark.parametrize(
+    "path",
+    [
+        "archives/betas24.xls",
+        "datasets/betas.xls",
+        "datasets/wacc.xls",
+        "datasets/ctryprem.xlsx",
+    ],
+)
+def test_reference_capture_uses_actual_capture_without_claiming_publication(path):
     adapter = PublicSourceAdapter(
         user_agent="value-agent test@example.com",
         opener=lambda *_args, **_kwargs: FakeResponse(b"retained binary original"),
     )
     source = adapter.capture(
         "damodaran-reference",
-        "https://pages.stern.nyu.edu/~adamodar/pc/archives/betas24.xls",
+        "https://pages.stern.nyu.edu/~adamodar/pc/" + path,
     )
     assert source.available_at == source.captured_at
     assert source.publication_at is None
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "datasets/unknown.xlsx",
+        "datasets/ctryprem.xlsx?expected=0.04",
+        "datasets/waccGlobal.xls",
+        "implprem/ERPbymonth.xlsx",
+        "../New_Home_Page/datafile/ctryprem.html",
+    ],
+)
+def test_unreviewed_reference_dataset_paths_refuse_before_network(path):
+    calls = []
+    adapter = PublicSourceAdapter(
+        user_agent="value-agent test@example.com",
+        opener=lambda *_args, **_kwargs: calls.append(True),
+    )
+    with pytest.raises(SnapshotError) as error:
+        adapter.capture(
+            "damodaran-reference",
+            "https://pages.stern.nyu.edu/~adamodar/pc/" + path,
+        )
+    assert error.value.code == "SOURCE_QUERY_INVALID"
+    assert calls == []

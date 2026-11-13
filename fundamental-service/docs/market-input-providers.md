@@ -50,6 +50,44 @@ must exercise the same source reproduction and policy boundaries in serving and
 the release canary, including missing periods, conflicts and unsupported
 versions.
 
+## Maintained NYU workbooks
+
+The [publisher's data catalog](https://pages.stern.nyu.edu/~adamodar/New_Home_Page/datacurrent.html)
+links these stable annual download interfaces. The existing
+`MarketReferenceProviderPort` reproduces their retained originals; serving and
+the release canary use the same provider.
+
+| Dataset | Supported download | Source profile |
+| --- | --- | --- |
+| U.S. industry unlevered beta | `pc/datasets/betas.xls` | `damodaran-us-unlevered-beta-xls-v1` |
+| U.S. industry equity beta, borrowing cost and capital weights | `pc/datasets/wacc.xls` | `damodaran-us-industry-capital-xls-v1` |
+| Country total ERP and tax reference | `pc/datasets/ctryprem.xlsx` | `damodaran-country-erp-tax-xlsx-v2` |
+
+Download paths are relative to `https://pages.stern.nyu.edu/~adamodar/`.
+The annual country workbook uses header row 8. Its explicit v2 profile retains
+the mature-market and U.S. ERP methodology inputs, volatility adjustment and
+any update annotation. It transcribes the published country total ERP in column
+E; it does not substitute the CDS column H, a methodology input or a recomputed
+number. Tax references retain their own lookup year. The existing archive
+country v1 profile uses header row 7; neither profile guesses or falls back to
+the other when a workbook changes.
+
+These annual downloads do not promise the latest quarterly or monthly value.
+Selection still checks the workbook's declared update date, maximum age,
+issuer classification and source-use evidence. Capture time bounds availability;
+an annotation cannot silently establish an earlier publication date. Retained
+bytes and their digests identify a capture, because live URLs can change.
+`free-market-source-use-v3` covers the revised country aggregate with the same
+exact publisher permission evidence and attribution restrictions as v1.
+Missing or changed permission bytes, raw-table redistribution and historical
+cutoffs before capture still refuse.
+
+The catalog's `histimpl.xls` annual series and the publisher's `ERPbymonth.xlsx`
+monthly series are research candidates, without production adapters or grants.
+They contain multiple ERP methodologies, including inputs from analyst growth
+estimates. A historical observation in today's cumulative workbook establishes
+neither its historical availability nor threshold ground truth.
+
 ## Extend a source
 
 | Responsibility | Contract | Composition point |

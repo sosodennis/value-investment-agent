@@ -8,6 +8,8 @@ import pytest
 
 from fundamental_service.damodaran_source import (
     DAMODARAN_BETA_PROFILE,
+    DAMODARAN_CAPITAL_PROFILE,
+    DAMODARAN_COUNTRY_CURRENT_PROFILE,
     DAMODARAN_COUNTRY_PROFILE,
     DAMODARAN_SOURCE,
     DAMODARAN_TERMS,
@@ -21,7 +23,7 @@ from fundamental_service.market_reference import (
 )
 from fundamental_service.snapshots import SnapshotError
 from fundamental_service.source_evidence import RetainedSourceV1
-from reference_source_fixtures import beta_xls, country_xlsx
+from reference_source_fixtures import beta_xls, capital_xls, country_xlsx
 
 CAPTURE = datetime(2026, 11, 12, tzinfo=UTC)
 
@@ -221,3 +223,129 @@ def test_missing_formula_cache_retains_country_and_reason():
     assert us.value is None
     assert us.missing_reason == "formula_cache_missing"
     assert us.source_formula == "1+1"
+
+
+@pytest.mark.parametrize(
+    "filename,profile,metric,content",
+    [
+        ("betas.xls", DAMODARAN_BETA_PROFILE, "industry.unlevered_beta", beta_xls),
+        ("wacc.xls", DAMODARAN_CAPITAL_PROFILE, "industry.equity_beta", capital_xls),
+    ],
+)
+def test_stable_annual_dataset_endpoints_reuse_reference_contract(
+    filename, profile, metric, content
+):
+    original = replace(
+        source(),
+        uri=f"https://pages.stern.nyu.edu/~adamodar/pc/datasets/{filename}",
+        source_version=profile,
+        content=content(),
+    )
+    vintage = reproduce_reference_vintage(
+        DamodaranReferenceProvider(), metric=metric, sources=(original,)
+    )
+    assert vintage.population == "us-companies"
+    assert vintage.available_at == CAPTURE
+    assert vintage.artifacts[0].uri == original.uri
+    assert any(row.value is None for row in vintage.rows)
+    with pytest.raises(ValueError, match="no reference vintage"):
+        select_reference_vintage(
+            (vintage,),
+            metric=metric,
+            population="us-companies",
+            valuation_at=datetime(2025, 4, 1, tzinfo=UTC),
+        )
+
+
+def current_country(*, change: str = "") -> RetainedSourceV1:
+    return replace(
+        source(),
+        uri="https://pages.stern.nyu.edu/~adamodar/pc/datasets/ctryprem.xlsx",
+        source_version=DAMODARAN_COUNTRY_CURRENT_PROFILE,
+        content=country_xlsx(change=change, revised=True),
+    )
+
+
+@pytest.mark.parametrize("metric", ["country.equity_risk_premium", "country.tax_rate"])
+def test_revised_country_dataset_retains_methodology_without_selecting_its_inputs(
+    metric: ReferenceMetric,
+):
+    from fundamental_service.serialization import canonical_bytes
+
+    original = current_country()
+    provider = DamodaranReferenceProvider()
+    vintage = reproduce_reference_vintage(provider, metric=metric, sources=(original,))
+    repeat = reproduce_reference_vintage(provider, metric=metric, sources=(original,))
+    assert canonical_bytes(vintage) == canonical_bytes(repeat)
+    assert vintage.source_version == DAMODARAN_COUNTRY_CURRENT_PROFILE
+    assert vintage.source_updated_on == date(2025, 1, 1)
+    assert vintage.available_at == CAPTURE
+    rows = {row.subject: row for row in vintage.rows}
+    assert rows["Missing country"].value is None
+    us = rows["United States"]
+    assert us.value == (
+        Decimal("4.3299999999999998E-2")
+        if metric == "country.equity_risk_premium"
+        else Decimal("0.25")
+    )
+    assert us.locator == (
+        "ERPs by country!E9"
+        if metric == "country.equity_risk_premium"
+        else "Country Tax Rates!B2"
+    )
+    context = {item.name: item for item in vintage.context}
+    assert context["mature_market_erp"].raw_value == "0.04"
+    assert context["us_implied_erp"].raw_value == "0.0433"
+    assert context["equity_volatility_multiplier"].raw_value == "1.5"
+    assert context["source_update_annotation"].raw_value == (
+        "Updated February for sovereign ratings"
+    )
+    if metric == "country.tax_rate":
+        assert context["tax_lookup_period"].raw_value == "Looked up for 2023"
+    with pytest.raises(ValueError, match="no reference vintage"):
+        select_reference_vintage(
+            (vintage,),
+            metric=metric,
+            population="countries",
+            valuation_at=datetime(2025, 4, 1, tzinfo=UTC),
+        )
+
+
+@pytest.mark.parametrize(
+    "original",
+    [
+        replace(source(), content=country_xlsx(revised=True)),
+        replace(current_country(), content=country_xlsx()),
+        replace(current_country(), source_version=DAMODARAN_COUNTRY_PROFILE),
+    ],
+)
+def test_country_schema_and_profile_cannot_silently_fall_back(original):
+    with pytest.raises(SnapshotError) as error:
+        reproduce_reference_vintage(
+            DamodaranReferenceProvider(),
+            metric="country.equity_risk_premium",
+            sources=(original,),
+        )
+    assert error.value.code == "REFERENCE_SOURCE_INVALID"
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        "header",
+        "duplicate",
+        "precision",
+        "gap",
+        "method",
+        "context_missing",
+        "context_precision",
+    ],
+)
+def test_revised_country_schema_preserves_failures(change):
+    with pytest.raises(SnapshotError) as error:
+        reproduce_reference_vintage(
+            DamodaranReferenceProvider(),
+            metric="country.equity_risk_premium",
+            sources=(current_country(change=change),),
+        )
+    assert error.value.code == "REFERENCE_SOURCE_INVALID"

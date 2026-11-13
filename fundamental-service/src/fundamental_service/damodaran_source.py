@@ -33,7 +33,13 @@ DAMODARAN_SOURCE = "damodaran-reference"
 DAMODARAN_TERMS = "https://pages.stern.nyu.edu/~adamodar/New_Home_Page/datafile/"
 DAMODARAN_BETA_PROFILE = "damodaran-us-unlevered-beta-xls-v1"
 DAMODARAN_COUNTRY_PROFILE = "damodaran-country-erp-tax-xlsx-v1"
+DAMODARAN_COUNTRY_CURRENT_PROFILE = "damodaran-country-erp-tax-xlsx-v2"
 DAMODARAN_CAPITAL_PROFILE = "damodaran-us-industry-capital-xls-v1"
+_DATASET_PROFILES = {
+    "/~adamodar/pc/datasets/betas.xls": DAMODARAN_BETA_PROFILE,
+    "/~adamodar/pc/datasets/wacc.xls": DAMODARAN_CAPITAL_PROFILE,
+    "/~adamodar/pc/datasets/ctryprem.xlsx": DAMODARAN_COUNTRY_CURRENT_PROFILE,
+}
 INDUSTRY_CAPITAL_COLUMNS: dict[ReferenceMetric, tuple[str, str]] = {
     "industry.equity_beta": ("C", "0.00"),
     "industry.pre_tax_cost_of_debt": ("G", "0.00%"),
@@ -43,7 +49,7 @@ INDUSTRY_CAPITAL_COLUMNS: dict[ReferenceMetric, tuple[str, str]] = {
 
 
 def damodaran_reference_profile(uri: str) -> str:
-    """Recognize a canonical archive URI; filenames never establish publication time."""
+    """Recognize maintained datasets; a URI never establishes publication time."""
     parsed = urlsplit(uri)
     if (
         parsed.scheme != "https"
@@ -51,7 +57,9 @@ def damodaran_reference_profile(uri: str) -> str:
         or parsed.query
         or parsed.fragment
     ):
-        raise SnapshotError("SOURCE_QUERY_INVALID", "invalid Damodaran archive URI")
+        raise SnapshotError("SOURCE_QUERY_INVALID", "invalid Damodaran reference URI")
+    if parsed.path in _DATASET_PROFILES:
+        return _DATASET_PROFILES[parsed.path]
     if re.fullmatch(r"/~adamodar/pc/archives/betas[0-9]{2}\.xls", parsed.path):
         return DAMODARAN_BETA_PROFILE
     if re.fullmatch(r"/~adamodar/pc/archives/ctryprem[0-9]{2}\.xlsx", parsed.path):
@@ -59,7 +67,7 @@ def damodaran_reference_profile(uri: str) -> str:
     if re.fullmatch(r"/~adamodar/pc/archives/wacc[0-9]{2}\.xls", parsed.path):
         return DAMODARAN_CAPITAL_PROFILE
     raise SnapshotError(
-        "SOURCE_QUERY_INVALID", "unsupported Damodaran reference archive"
+        "SOURCE_QUERY_INVALID", "unsupported Damodaran reference dataset"
     )
 
 
@@ -136,21 +144,77 @@ def _row(
     )
 
 
+def _country_current_context(
+    sheet: ReferenceSheet, digest: str
+) -> tuple[ReferenceContextV1, ...]:
+    for reference, label in (
+        ("A3", "Enter the current risk premium for a mature equity market"),
+        ("A4", "Enter the current risk premium for the US ="),
+        (
+            "A5",
+            "Do you want to adjust the country default spread for the additional volatility of the equity market to get to a country premium?",
+        ),
+        (
+            "A6",
+            "If yes, enter the multiplier to use on the default spread (See worksheet for volatility numbers for selected emerging markets)",
+        ),
+        ("E5", "Yes"),
+    ):
+        _expect(sheet, reference, label)
+    context: list[ReferenceContextV1] = []
+    for name, reference, numeric in (
+        ("mature_market_erp", "E3", True),
+        ("us_implied_erp", "E4", True),
+        ("country_spread_adjustment", "E5", False),
+        ("equity_volatility_multiplier", "E6", True),
+        ("mature_market_method", "F3", False),
+        ("us_erp_method", "F4", False),
+        ("source_update_annotation", "C2", False),
+    ):
+        cell = sheet.cell(reference)
+        if reference == "C2" and cell.kind == "empty":
+            continue
+        if numeric:
+            value = cell.number()
+            expected_format = "0.00" if reference == "E6" else "0.00%"
+            if cell.number_format != expected_format or (
+                value <= 0 if reference == "E6" else not 0 <= value < 1
+            ):
+                raise ValueError("reference methodology rate or format is invalid")
+        elif cell.kind != "text" or not cell.raw.strip():
+            raise ValueError("reference methodology text is missing")
+        context.append(
+            ReferenceContextV1(
+                name=name,
+                raw_value=cell.raw,
+                numeric_encoding="decimal_text" if numeric else "text",
+                number_format=cell.number_format,
+                locator=f"ERPs by country!{reference}",
+                source_sha256=digest,
+            )
+        )
+    return tuple(context)
+
+
 def _country_table(
-    raw: bytes, metric: ReferenceMetric, digest: str
+    raw: bytes, metric: ReferenceMetric, digest: str, *, revised: bool = False
 ) -> tuple[date, tuple[ReferenceRowV1, ...], tuple[ReferenceContextV1, ...]]:
     erp = read_reference_xlsx(raw, "ERPs by country")
     _expect(erp, "A1", "Country and Equity Risk Premiums")
     _expect(erp, "A2", "Date of update:")
-    _expect(erp, "A7", "Country")
-    _expect(erp, "D7", "Rating-based Default Spread")
-    _expect(erp, "E7", "Total Equity Risk Premium")
-    _expect(erp, "F7", "Country Risk Premium")
-    _expect(erp, "H7", "Total Equity Risk Premium2")
+    header = 8 if revised else 7
+    for column, label in (
+        ("A", "Country"),
+        ("D", "Rating-based Default Spread"),
+        ("E", "Total Equity Risk Premium"),
+        ("F", "Country Risk Premium"),
+        ("H", "Total Equity Risk Premium2"),
+    ):
+        _expect(erp, f"{column}{header}", label)
     updated = erp.updated_on("B2")
-    context: tuple[ReferenceContextV1, ...] = ()
+    context = _country_current_context(erp, digest) if revised else ()
     if metric == "country.equity_risk_premium":
-        name, sheet, start, column = "ERPs by country", erp, 8, "E"
+        name, sheet, start, column = "ERPs by country", erp, header + 1, "E"
         markers = [
             row
             for row in range(start, 1024)
@@ -173,7 +237,7 @@ def _country_table(
             or re.fullmatch(r"Looked up for [0-9]{4}", note.raw) is None
         ):
             raise ValueError("reference tax lookup period is unknown")
-        context = (
+        context += (
             ReferenceContextV1(
                 name="tax_lookup_period",
                 raw_value=note.raw,
@@ -420,6 +484,8 @@ class DamodaranReferenceProvider:
                 if capital
                 else DAMODARAN_BETA_PROFILE
                 if beta
+                else DAMODARAN_COUNTRY_CURRENT_PROFILE
+                if profile == DAMODARAN_COUNTRY_CURRENT_PROFILE
                 else DAMODARAN_COUNTRY_PROFILE
             )
             if (
@@ -439,7 +505,12 @@ class DamodaranReferenceProvider:
                 if capital
                 else _beta_table(source.content, digest)
                 if beta
-                else _country_table(source.content, metric, digest)
+                else _country_table(
+                    source.content,
+                    metric,
+                    digest,
+                    revised=profile == DAMODARAN_COUNTRY_CURRENT_PROFILE,
+                )
             )
             captured = source.captured_at.astimezone(UTC)
             return MarketReferenceVintageV1.build(

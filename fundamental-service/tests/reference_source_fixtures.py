@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from io import BytesIO
+import re
 from xml.sax.saxutils import escape
 from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
 
@@ -143,7 +144,7 @@ def capital_xls(*, change: str = "") -> bytes:
     return output.getvalue()
 
 
-def country_xlsx(*, change: str = "") -> bytes:
+def country_xlsx(*, change: str = "", revised: bool = False) -> bytes:
     def text(ref: str, value: str) -> str:
         return f'<c r="{ref}" t="inlineStr"><is><t>{escape(value)}</t></is></c>'
 
@@ -187,6 +188,44 @@ def country_xlsx(*, change: str = "") -> bytes:
         erp[2] = erp[2].replace("44196", "50000")
     if change == "gap":
         erp[8] = ""
+    if revised:
+        erp = {
+            row + 1 if row >= 7 else row: (
+                re.sub(
+                    r'r="([A-Z]+)([0-9]+)"',
+                    lambda match: f'r="{match[1]}{int(match[2]) + 1}"',
+                    cells,
+                )
+                if row >= 7
+                else cells
+            )
+            for row, cells in erp.items()
+        }
+        erp[2] += text("C2", "Updated February for sovereign ratings")
+        erp[3] = (
+            text("A3", "Enter the current risk premium for a mature equity market")
+            + number("E3", "0.04")
+            + text("F3", "Implied ERP with adjusted dollar riskfree rate")
+        )
+        erp[4] = (
+            text("A4", "Enter the current risk premium for the US =")
+            + number("E4", "0.0433")
+            + text("F4", "US equity risk premium computed using implied ERP approach")
+        )
+        erp[5] = text(
+            "A5",
+            "Do you want to adjust the country default spread for the additional volatility of the equity market to get to a country premium?",
+        ) + text("E5", "No" if change == "method" else "Yes")
+        erp[6] = text(
+            "A6",
+            "If yes, enter the multiplier to use on the default spread (See worksheet for volatility numbers for selected emerging markets)",
+        ) + (
+            '<c r="E6"><v>1.5</v></c>'
+            if change == "context_precision"
+            else '<c r="E6" s="2"><v>1.5</v></c>'
+        )
+        if change == "context_missing":
+            erp[3] = erp[3].replace("<v>0.04</v>", "")
     tax = {
         1: text("A1", "Country")
         + text("B1", "Tax Rate")
@@ -215,6 +254,12 @@ def country_xlsx(*, change: str = "") -> bytes:
         "xl/worksheets/sheet1.xml": sheet(erp),
         "xl/worksheets/sheet2.xml": sheet(tax),
     }
+    if revised:
+        parts["xl/styles.xml"] = (
+            parts["xl/styles.xml"]
+            .replace('count="2"', 'count="3"')
+            .replace("</cellXfs>", '<xf numFmtId="2"/></cellXfs>')
+        )
     if change == "precision":
         parts["xl/styles.xml"] = parts["xl/styles.xml"].replace(
             'numFmtId="10"', 'numFmtId="9"'
