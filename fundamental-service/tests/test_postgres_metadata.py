@@ -226,6 +226,8 @@ def _test_sec_acquisition_settings(request: SecIngestionRequestV1) -> SimpleName
         taxonomy_manifest_id=request.taxonomy_manifest_id,
         taxonomy_version=request.taxonomy_version,
         taxonomy_cache_sha256="c" * 64,
+        supported_filing_years=(2023, 2024),
+        supported_filing_forms=("10-K",),
         edgar_plugin_dir=Path("/runtime/arelle/EDGAR"),
         xule_plugin_dir=Path("/runtime/arelle/Xule"),
         dqc_ruleset_path=Path("/runtime/arelle/dqc-ruleset.xml"),
