@@ -2409,3 +2409,72 @@ Refs #361 / draft PR #370. Implementation `a990440982d0ba7c90661b27823e5c438adbb
 Exact source input commit `938528909914bbb1b102c1583017401dfee80b46`, input tree `edaf3e59dd565828308485a7a609edcb74f885f5`; output commit `a990440982d0ba7c90661b27823e5c438adbba9c`, output tree `b8628b0c8b551d504ea0b3273a8220f936b8b716`, patch SHA-256 `b75f612fd1e04950d16c041af771bf1ff065a26ec0759e16a082c3880408fd3f`. Exact verification command `uv run --frozen --extra dev --project fundamental-service pytest fundamental-service/tests -ra` exits0: **2,489 passed, 81 skipped**. Skips require isolated PostgreSQL or pinned SEC parser resources not configured in this local run. Full Fundamental Service Ruff, changed-file Ruff format, five-source mypy, architecture guard and `git diff --check` each exit0; commit hooks' Fundamental Service Ruff and format checks also pass. No live NVE source, installed-service numerical flow or PostgreSQL recovery is claimed by this increment.
 
 Incomplete: source completeness when SEC's `filings.recent` window does not cover 548 days, issuer-period award classification/conditions and complete inventory review, remaining accounting roles, lawful dated quote and approved market policy, trusted release, exact-input caller approval, and real composer/calculator repeat/concurrency/restart/restore acceptance. Next: exercise the automatic path on the retained NVE originals, prove snapshot reuse and source hashes on repeat, then bind award evidence only where its source coverage is complete; otherwise keep dilution provisional or abstained. #361/#369/#381/#394 remain open, PR #370 remains draft, and `supported_history_threshold=null`.
+
+## Historical proxy index and persistence — ffb64c79
+
+Refs #361/#394 and draft PR #370. Implementation
+`ffb64c79f7fab3a7e8a7f036c994cff0e6cd6614` requires
+`sec-equity-award-proxy.v2` for new automatic SEC ingestion. It captures all
+overlapping SEC historical submission shards, checks issuer/filename, indexed
+row counts, date ranges and conflicting accession metadata, and retains those
+originals in snapshot lineage. An incomplete recent window without a historical
+index refuses with `EQUITY_AWARD_PROXY_HISTORY_INCOMPLETE`; it cannot establish
+proxy absence. The v1 pin remains readable. Out-of-window old proxy rows do not
+need an acceptance time. No Agent/UI/report valuation formulas changed.
+
+At this exact implementation commit,
+`FUNDAMENTAL_TEST_DATABASE_URL=<isolated project PostgreSQL> uv run --frozen --extra dev --project fundamental-service pytest fundamental-service/tests -q -ra --tb=short`
+exits 0: **2,570 passed, 17 skipped**, one expected duplicate-ZIP warning. The
+remaining skips need separately configured fixed SEC parser resources. Full
+Service Ruff, changed-file format, four-source mypy, both architecture guards
+and diff checks exit 0. The synthetic cross-shard acquisition test exercises
+parsing, mapping, snapshot lineage and unchanged reuse; invalid-shard repeats
+retain the original bytes and reproduce the same error without new I/O.
+[CI43433311927](https://github.com/sosodennis/value-investment-agent/actions/runs/43433311927)
+passes all 12 executed jobs; release gate skipped. CI is not independent review.
+
+Installed project `value-investment-agent-361-proxy-history` used ports
+19941/19942, subnet `10.231.79.0/28`, its own volumes and the pinned SEC runtime.
+All **122** installed Python/SQL files match the commit; `/readyz` reports
+identity resolution configured. Retained NVEC metadata
+`c9bb2807b5dff6903830bbbf9df63e98fdb9a6ac1eeeec86c8ab414b182da936`
+selects original `0000724910-24-000003` and subsequent materials ending
+`000004`, `000005`, `000006` before `2025-04-01T00:00:00Z`. Eight original/index
+responses retain accession, form, accepted-at, URI and SHA-256. The real-source
+test invokes the installed acquisition capture method with PostgreSQL stores;
+it does not claim real automatic mapping, snapshot publication or valuation.
+
+The initial backup correctly refused synthetic suite rows that referenced host
+temporary bytes. Source evidence was then isolated in database
+`issue361_proxy_sources` through store APIs, preserving all 18 existing SEC and
+report artifacts without downloading them again. Migration-helper failures
+remain recorded. Ordinary repeat and service/PostgreSQL restart forbid provider
+I/O, preserve all rows/hash/size/mtime, and return `wrote=false`. Source input
+digest `a2709d5c66dfa4797c3cc20b812d274114ef724a0ba24947f0fe28ff5a7227d1`;
+report digest `d3f39b9ebcc3c27ede47c4fd38d996f6073d126827fa5184b091493148a45382`.
+
+Portable backup
+`aa521260d6be1cca15c652e5b5b6e568bce71ff483846d7d9ce21d09b4f6f818`
+contains **76 rows / 29 content objects / 18 tables** and is retained outside
+Docker. Repeated export and restore return `wrote=false`. Empty-database restore
+preserves row digest
+`6b2c1157ab7b39235ab82e7bfcb8ffc0639582361216617982931eb13189e82c`
+and source artifact digest, with zero provider I/O. The first restored read
+materializes the standalone report from its existing artifact; its artifact
+publication is unchanged. The next complete repeat changes no files or rows.
+Only this disposable Compose project's resources were removed after backup
+verification; all **63** baseline containers retain ID/image/start/status.
+
+Canonical runtime, command/log hashes, failed attempts and receipts remain in
+`.audit/issue-361-proxy-history/checkpoint.json` outside Git. Checkpoint
+`c0e27c5f86e524d66b51d91dcd9d6499db3d6a0399ac655a810a80c375eff52f`;
+input/output digests
+`315b68de681b91068b5d5493e988555ae6c50b6808f5681af0589249dfa37437` /
+`4b545c0d145c3f3d8d30124655fd325242f4e3502232e442623458e1a3affc92`.
+Verified scope is source capture/persistence. Award inventory/conditions,
+remaining accounting roles, dated quote/market policy, trusted release and
+exact-input approval still precede real numerical full-flow acceptance. Eligible
+estimates remain provisional, incomplete evidence abstains, history sufficiency
+is underpowered and `supported_history_threshold=null`. Keep #361 and blockers
+open and PR #370 draft. Next: independent PR #436 label-audit review at this
+checkpoint boundary, then resume issuer-bound source/mapping preparation.
