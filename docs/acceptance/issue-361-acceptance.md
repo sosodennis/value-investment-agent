@@ -1961,3 +1961,14 @@ numerical recovery acceptance, then review/CI and merge/main verification.
 #376/#377 remain OPEN. Eligible estimates stay **provisional**, incomplete
 valuations **abstain**, history evidence **underpowered**, and
 `supported_history_threshold=null`.
+
+
+## Current liability principal and persistent recovery — 719a238f
+
+Implementation `719a238f4329d2135342fec4da549d7b59fbd16b` reconciles current liabilities minus accounts payable, accrued liabilities and current operating lease liability for the two exact retained NVE originals. Only an exact-zero exhaustive nonnegative residual resolves current borrowing and current finance-lease carrying amounts. Every component remains traceable; missing/conflicting/rounded/foreign/future or mixed-namespace evidence abstains. Annual finance-lease expense, awards and other claims remain unproved. No valuation formula or provider boundary changes.
+
+Exact checks: **2,244 Service/PostgreSQL tests**, 195 focused tests, 99-source mypy, full Service Ruff/format, both architecture guards and diff pass (11 optional skips; one expected ZIP warning). CI status is recorded honestly in checkpoint key `nve_current_liability_principal_increment`; a skipped release gate does not establish full acceptance.
+
+The isolated SEC-enabled composition project (19485/19486) matches all114 installed Python/SQL sources. All49 current approvals pass trusted-signature verification and exact retained-input reconstruction;236 older-policy approvals remain retained. Current policy contributes95 facts, two original snapshots and one composed snapshot. Required scalar gaps fall nine→seven; real valuation remains **abstain**, releases inactive. Plan/output `d0c3b62fd2c45cd33e2a6b604a1624c4a7731569f83431935341ba68a5fe399f` / `a0e06a9d98b614d4843a6ae27832abf7d6e2b067994fa15989b6c19661df54da`. Ordinary, service-restart and empty-store-restore repeats return identical artifacts, wrote=false and zero SEC calls, preserving complete rows/content/hash/size and ordinary repeat mtimes. Portable backup `cf2de53bee4297d01ab53c4d82663d8fd6baa17c981cc03538ad8234d075b48d` remains outside Docker; all81 unrelated baseline containers preserve ID/image/start.
+
+The checkpoint preserves exact commands, runtime pins, input/output digests and a corrected harness sequencing failure: the initial read-only mapping verification overlapped the container restart (exit137); its serial retry succeeds. No production gate was relaxed. Next: bind cash/short-term-investment exclusions without cash-equivalent duplication, finish remaining accounting/award/dated market/quote evidence, trusted release/authentic caller approval, then real numerical acceptance, independent review/CI and merge/main verification. Threshold null; estimates provisional; history underpowered; #361/#381 remain OPEN and PR#370 draft. Generated sources/research/reports/backups stay outside Git.
