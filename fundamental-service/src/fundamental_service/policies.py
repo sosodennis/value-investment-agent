@@ -134,6 +134,11 @@ class PolicyRecordV1(BaseModel):
     issuer_id: str | None = Field(
         default=None, min_length=1, exclude_if=lambda value: value is None
     )
+    data_release_manifest_digest: str | None = Field(
+        default=None,
+        pattern=r"^[0-9a-f]{64}$",
+        exclude_if=lambda value: value is None,
+    )
     assumptions: AssumptionsV1 | None
     market_inputs: MarketPolicyInputsV1 | None = None
     source_refs: tuple[str, ...] = Field(min_length=1)
@@ -228,6 +233,7 @@ class PolicyRegistry:
         valuation_timestamp: datetime,
         policy_id: str | None,
         issuer_id: str | None = None,
+        data_release_manifest_digest: str | None = None,
     ) -> PolicyRecordV1:
         model = self.model(model_id, model_version)
         if model is None:
@@ -254,6 +260,10 @@ class PolicyRegistry:
                 and item.status == "active"
                 and item.policy_digest not in _REVOKED_POLICY_DIGESTS
                 and (item.issuer_id is None or item.issuer_id == issuer_id)
+                and (
+                    item.data_release_manifest_digest is None
+                    or item.data_release_manifest_digest == data_release_manifest_digest
+                )
                 and item.effective_at <= valuation_timestamp
                 and (
                     item.market_inputs is None
@@ -264,6 +274,13 @@ class PolicyRegistry:
                 )
             )
             if candidates:
+                release_scoped = tuple(
+                    item
+                    for item in candidates
+                    if item.data_release_manifest_digest is not None
+                )
+                if release_scoped:
+                    candidates = release_scoped
                 issuer_scoped = tuple(
                     item for item in candidates if item.issuer_id is not None
                 )
@@ -277,6 +294,14 @@ class PolicyRegistry:
             code = "POLICY_NOT_FOUND" if not candidates else "POLICY_AMBIGUOUS"
             raise PolicyError(code, "no unique effective policy release is available")
         policy = candidates[0]
+        if (
+            policy.data_release_manifest_digest is not None
+            and policy.data_release_manifest_digest != data_release_manifest_digest
+        ):
+            raise PolicyError(
+                "POLICY_DATA_RELEASE_MISMATCH",
+                "policy is bound to a different or unspecified data release",
+            )
         if policy.issuer_id is not None and issuer_id is None:
             raise PolicyError(
                 "POLICY_ISSUER_REQUIRED",

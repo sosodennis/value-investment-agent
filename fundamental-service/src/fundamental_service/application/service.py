@@ -708,6 +708,7 @@ class FundamentalApplication:
                 valuation_timestamp=value.valuation_context.valuation_timestamp,
                 policy_id=value.policy_id,
                 issuer_id=value.identity.issuer_id,
+                data_release_manifest_digest=value.valuation_context.data_release_manifest_digest,
             )
             if (
                 value.provenance.policy_version is not None
@@ -745,6 +746,7 @@ class FundamentalApplication:
                 valuation_timestamp=value.valuation_context.valuation_timestamp,
                 policy_id=value.policy_id,
                 issuer_id=value.identity.issuer_id,
+                data_release_manifest_digest=value.valuation_context.data_release_manifest_digest,
             )
             return resolve_policy_overrides(request=value, policy=policy)
         except PolicyError as error:
@@ -1297,6 +1299,7 @@ class FundamentalApplication:
                     valuation_timestamp=snapshot.valuation_timestamp,
                     policy_id=None,
                     issuer_id=snapshot.identity.issuer_id,
+                    data_release_manifest_digest=manifest.manifest_digest,
                 )
             except PolicyError as error:
                 raise ServiceError(

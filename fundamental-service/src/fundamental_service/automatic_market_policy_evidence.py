@@ -159,6 +159,10 @@ def load_release_automatic_market_policy(
         or decision.policy.currency != snapshot.identity.currency
         or decision.policy.policy_version != policy.policy_version
         or decision.policy.terminal_growth_plan.policy_id != policy.policy_id
+        or (
+            policy.data_release_manifest_digest is not None
+            and policy.data_release_manifest_digest != manifest.manifest_digest
+        )
         or evidence.plan_decision.plan is None
         or plan != evidence.plan_decision.plan
         or terminal_plan != decision.policy.terminal_growth_plan
@@ -230,11 +234,19 @@ def assemble_authorized_market_policy_record(
             "AUTOMATIC_MARKET_POLICY_EVIDENCE_MISSING",
             "market-policy assembly requires its released decision",
         )
-    candidate = authorization
+    if authorization.data_release_manifest_digest not in {
+        None,
+        manifest.manifest_digest,
+    }:
+        raise DataReleaseError(
+            "POLICY_DATA_RELEASE_MISMATCH",
+            "operator authorization is bound to a different data release",
+        )
+    payload = authorization.model_dump(exclude={"policy_digest"})
+    payload["data_release_manifest_digest"] = manifest.manifest_digest
     if authorization.market_inputs is None:
-        payload = authorization.model_dump(exclude={"policy_digest"})
         payload["market_inputs"] = evidence.decision.inputs
-        candidate = PolicyRecordV1(**payload, policy_digest=sha256_digest(payload))
+    candidate = PolicyRecordV1(**payload, policy_digest=sha256_digest(payload))
     load_release_automatic_market_policy(
         manifest,
         snapshot=snapshot,
@@ -249,4 +261,5 @@ def assemble_authorized_market_policy_record(
         valuation_timestamp=snapshot.valuation_timestamp,
         policy_id=candidate.policy_id,
         issuer_id=snapshot.identity.issuer_id,
+        data_release_manifest_digest=manifest.manifest_digest,
     )

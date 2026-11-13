@@ -70,8 +70,28 @@ and the canary. Existing conflicting inputs, missing authorization, refused
 decisions and incompatible pins fail explicitly. It performs no publication,
 signing, activation or network call. Publishing a different candidate under an
 already published policy identity remains an immutable-repository conflict.
-The source plan cannot supply deployment authority. This factory is an operator
-building block; the ordinary CLI does not yet assemble or install its candidate.
+The source plan cannot supply deployment authority.
+
+An operator can publish through `fundamental-prepare-source` with an already
+signed `--candidate`, `--market-policy-authorization`, its canonical
+`--market-policy-authorization-digest`, and the exact installed
+`--runtime-source-revision`. Publication requires the deployment's authorized
+organization. The command reproduces source admissions and runs the independent
+signed release canary with the proposed policy before publishing it. It then
+uses the existing release publication/activation, formal composer and exact
+caller approval flow. This command never creates a trust key or substitutes
+source preparation for deployment authority.
+
+Every assembled policy pins `data_release_manifest_digest`. Serving,
+calculation and the independent canary select it only for that release, including
+when a caller supplies its explicit policy ID. Publishing a candidate cannot
+change an older release before activation. A distinct release needs its own
+immutable policy identity; reusing a published identity with different content
+refuses. Unscoped existing policies preserve their canonical bytes and selection
+behavior. The command saves a content-addressed policy-publication receipt and
+includes its reference in the preparation evidence. A crash between policy and
+receipt publication is recoverable by repeating the same authorized command;
+unchanged policies and artifacts are reused without replacement.
 
 ## Source suitability
 

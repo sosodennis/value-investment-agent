@@ -174,12 +174,17 @@ def test_release_boundary_reproduces_automatic_policy_with_injected_sources():
 def _authorization(policy, **changes):
     payload = policy.model_dump(exclude={"policy_digest"})
     payload.update(changes)
+    if payload.get("data_release_manifest_digest") is None:
+        payload.pop("data_release_manifest_digest", None)
     return PolicyRecordV1(**payload, policy_digest=sha256_digest(payload))
 
 
 def test_policy_assembly_reuses_exact_authorized_evidence_without_side_effects():
     manifest, snapshot, expected, admissions, contents, _ = _bound()
     authorization = _authorization(expected, market_inputs=None)
+    expected = _authorization(
+        expected, data_release_manifest_digest=manifest.manifest_digest
+    )
     before = canonical_bytes(authorization), dict(contents)
     kwargs = dict(
         authorization=authorization,
@@ -198,9 +203,9 @@ def test_policy_assembly_reuses_exact_authorized_evidence_without_side_effects()
     assert (
         canonical_bytes(first) == canonical_bytes(second) == canonical_bytes(expected)
     )
-    assert first.model_dump(exclude={"market_inputs", "policy_digest"}) == (
-        authorization.model_dump(exclude={"market_inputs", "policy_digest"})
-    )
+    assert first.model_dump(
+        exclude={"market_inputs", "policy_digest", "data_release_manifest_digest"}
+    ) == (authorization.model_dump(exclude={"market_inputs", "policy_digest"}))
     assert (canonical_bytes(authorization), contents) == before
     assert authorization.market_inputs is None
     assert (
@@ -538,6 +543,9 @@ def test_serving_and_canary_reproduce_the_same_automatic_policy(tmp_path, change
         )
         manifest = DataReleaseManifestV1(
             **payload, manifest_digest=sha256_digest(payload)
+        )
+        policy = _authorization(
+            policy, data_release_manifest_digest=manifest.manifest_digest
         )
     elif change == "changed_value":
         payload = policy.model_dump(exclude={"policy_digest"})

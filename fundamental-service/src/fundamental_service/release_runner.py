@@ -243,6 +243,7 @@ class DataReleaseCanaryRunner:
                             valuation_timestamp=snapshot.valuation_timestamp,
                             policy_id=None,
                             issuer_id=snapshot.identity.issuer_id,
+                            data_release_manifest_digest=manifest.manifest_digest,
                         )
                     except PolicyError as error:
                         if error.code == "POLICY_NOT_FOUND":
@@ -302,6 +303,7 @@ class DataReleaseCanaryRunner:
                         valuation_timestamp=snapshot.valuation_timestamp,
                         policy_id=None,
                         issuer_id=snapshot.identity.issuer_id,
+                        data_release_manifest_digest=manifest.manifest_digest,
                     )
                     automatic_policy = load_release_automatic_market_policy(
                         manifest,

@@ -57,6 +57,8 @@ from .issuer_market_preparation import (
     IssuerMarketPreparationRequestV1,
 )
 from .release_runner import DataReleaseCanaryRunner
+from .market_policy_deployment import MarketPolicyDeployment
+from .policies import MetadataPolicyRepository, PolicyRecordV1
 from .replay import ArtifactPublicationV1
 from .uncertainty import UncertaintyReportV1
 from .serialization import canonical_bytes, sha256_digest
@@ -405,6 +407,9 @@ class SourcePreparationEvidenceV1(StrictModel):
     issuer_market_preparation_ref: ArtifactRefV1 | None = Field(
         default=None, exclude_if=lambda value: value is None
     )
+    market_policy_deployment_ref: ArtifactRefV1 | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
     status: Literal["approval_required", "blocked", "calculated", "release_required"]
     snapshot_id: str | None = None
     snapshot_manifest_digest: str | None = Field(
@@ -432,6 +437,14 @@ class SourcePreparationEvidenceV1(StrictModel):
 
     @model_validator(mode="after")
     def outcome_matches_evidence(self) -> SourcePreparationEvidenceV1:
+        deployment = self.market_policy_deployment_ref
+        if deployment is not None and (
+            deployment.role != "market-policy-deployment-v1"
+            or deployment.media_type != "application/json"
+            or self.snapshot_id is None
+            or self.data_release_manifest_digest is None
+        ):
+            raise ValueError("market policy publication requires its exact release")
         market_ref = self.issuer_market_preparation_ref
         if market_ref is not None and (
             market_ref.role != "issuer-market-preparation-v1"
@@ -539,12 +552,14 @@ class SourcePreparationRunner:
         public_acquisition: PublicSourceAcquisition | None = None,
         public_admission: PublicSourceAdmission | None = None,
         issuer_market_preparation: IssuerMarketPreparation | None = None,
+        market_policy_deployment: MarketPolicyDeployment | None = None,
     ) -> None:
         self._application = application
         self._metadata = metadata
         self._acquisition = acquisition
         self._artifacts = artifacts
         self._canary = canary
+        self._market_policy_deployment = market_policy_deployment
         self._public_acquisition = public_acquisition
         self._public_admission = public_admission
         self._issuer_market_preparation = issuer_market_preparation
@@ -1023,6 +1038,8 @@ class SourcePreparationRunner:
             dependencies += (binding_ref.content_hash,)
         if evidence.issuer_market_preparation_ref is not None:
             dependencies += (evidence.issuer_market_preparation_ref.content_hash,)
+        if evidence.market_policy_deployment_ref is not None:
+            dependencies += (evidence.market_policy_deployment_ref.content_hash,)
         if evidence.snapshot_manifest_digest is not None:
             dependencies += (evidence.snapshot_manifest_digest,)
         if evidence.data_release_manifest_digest is not None:
@@ -1367,6 +1384,8 @@ class SourcePreparationRunner:
         deadline_at: datetime,
         candidate: DataReleaseCandidatePublishRequestV1 | None = None,
         approval: CallerApprovalEnvelopeV1 | None = None,
+        market_policy_authorization: PolicyRecordV1 | None = None,
+        market_policy_authorization_digest: str | None = None,
     ) -> ArtifactPublicationV1:
         if not actor_id.strip() or not organization_id.strip():
             raise ValueError("runner requires an actor and organization")
@@ -1374,6 +1393,17 @@ class SourcePreparationRunner:
         if deadline_at.tzinfo is None or deadline_at <= received_at:
             raise ValueError("runner deadline must be an unexpired zoned timestamp")
         guard_caller_approval(approval, caller_id=actor_id, received_at=received_at)
+        if (market_policy_authorization is None) != (
+            market_policy_authorization_digest is None
+        ):
+            raise ValueError("market-policy authorization requires its exact digest")
+        if market_policy_authorization is not None and (
+            candidate is None or self._market_policy_deployment is None
+        ):
+            raise ValueError(
+                "market policy publication requires a signed candidate and deployment authority"
+            )
+        deployment_ref = None
         if (
             plan.issuer_market_policy is not None
             and self._issuer_market_preparation is None
@@ -1626,6 +1656,45 @@ class SourcePreparationRunner:
                     ),
                 )
         if candidate is not None:
+            if market_policy_authorization is not None:
+                assert self._market_policy_deployment is not None
+                assert market_policy_authorization_digest is not None
+                deployment_snapshot = self._candidate_snapshot(plan, candidate)
+                if deployment_snapshot is None:
+                    raise ValueError(
+                        "policy candidate does not contain the requested snapshot"
+                    )
+                try:
+                    deployment, publication = self._market_policy_deployment.publish(
+                        candidate,
+                        authorization=market_policy_authorization,
+                        authorization_digest=market_policy_authorization_digest,
+                        snapshot_id=deployment_snapshot.snapshot_id,
+                        organization_id=organization_id,
+                    )
+                except DataReleaseError as error:
+                    return self._persist(
+                        plan,
+                        SourcePreparationEvidenceV1(
+                            source_revision=plan.source_revision,
+                            plan_digest=plan.digest,
+                            public_source_outcomes=public_outcomes,
+                            public_source_cutoff=plan.public_source_cutoff,
+                            source_admission_outcomes=admission_outcomes,
+                            status="blocked",
+                            snapshot_id=deployment_snapshot.snapshot_id,
+                            snapshot_manifest_digest=deployment_snapshot.manifest_digest,
+                            data_release_manifest_digest=candidate.manifest.manifest_digest,
+                            issue_codes=(error.code,),
+                            source_outcomes=outcomes,
+                        ),
+                    )
+                deployment_ref = ArtifactRefV1(
+                    artifact_id=publication.artifact.artifact_id,
+                    content_hash=publication.artifact.content_hash,
+                    media_type=publication.artifact.media_type,
+                    role=deployment.protocol,
+                )
             self._activate(
                 candidate,
                 actor_id=actor_id,
@@ -1665,6 +1734,7 @@ class SourcePreparationRunner:
                             resolution.snapshot_id
                         ).manifest_digest,
                         data_release_manifest_digest=resolution.data_release_manifest_digest,
+                        market_policy_deployment_ref=deployment_ref,
                         issue_codes=("SOURCE_ADMISSION_RELEASE_MISMATCH",),
                         source_outcomes=outcomes,
                     ),
@@ -1696,6 +1766,7 @@ class SourcePreparationRunner:
                     snapshot_id=resolution.snapshot_id,
                     snapshot_manifest_digest=snapshot_digest,
                     data_release_manifest_digest=resolution.data_release_manifest_digest,
+                    market_policy_deployment_ref=deployment_ref,
                     issue_codes=(error.code,),
                     source_outcomes=outcomes,
                 ),
@@ -1713,6 +1784,7 @@ class SourcePreparationRunner:
                     snapshot_id=resolution.snapshot_id,
                     snapshot_manifest_digest=snapshot_digest,
                     data_release_manifest_digest=resolution.data_release_manifest_digest,
+                    market_policy_deployment_ref=deployment_ref,
                     issue_codes=preparation.issue_codes,
                     missing_evidence=preparation.missing_evidence,
                     source_outcomes=outcomes,
@@ -1732,6 +1804,7 @@ class SourcePreparationRunner:
                     snapshot_id=resolution.snapshot_id,
                     snapshot_manifest_digest=snapshot_digest,
                     data_release_manifest_digest=resolution.data_release_manifest_digest,
+                    market_policy_deployment_ref=deployment_ref,
                     source_outcomes=outcomes,
                     preparation=preparation,
                 ),
@@ -1751,6 +1824,7 @@ class SourcePreparationRunner:
                     snapshot_id=resolution.snapshot_id,
                     snapshot_manifest_digest=snapshot_digest,
                     data_release_manifest_digest=resolution.data_release_manifest_digest,
+                    market_policy_deployment_ref=deployment_ref,
                     issue_codes=("CALLER_APPROVAL_REJECTED",),
                     source_outcomes=outcomes,
                     preparation=preparation,
@@ -1787,6 +1861,7 @@ class SourcePreparationRunner:
                 snapshot_id=resolution.snapshot_id,
                 snapshot_manifest_digest=snapshot_digest,
                 data_release_manifest_digest=resolution.data_release_manifest_digest,
+                market_policy_deployment_ref=deployment_ref,
                 issue_codes=preparation.issue_codes,
                 missing_evidence=preparation.missing_evidence,
                 source_outcomes=outcomes,
@@ -1842,6 +1917,23 @@ async def _run_command(args: argparse.Namespace) -> ArtifactPublicationV1:
         if args.approval
         else None
     )
+    authorization = (
+        PolicyRecordV1.model_validate_json(
+            args.market_policy_authorization.read_bytes()
+        )
+        if args.market_policy_authorization
+        else None
+    )
+    if (authorization is None) != (args.market_policy_authorization_digest is None):
+        raise ValueError("market-policy authorization requires its exact digest")
+    if authorization is not None and (
+        candidate is None
+        or args.runtime_source_revision != plan.source_revision
+        or sha256_digest(authorization) != args.market_policy_authorization_digest
+    ):
+        raise ValueError(
+            "policy publication requires a signed candidate, exact authorization and runtime revision"
+        )
     received_at = datetime.now(UTC)
     deadline_at = received_at + timedelta(seconds=args.timeout_seconds)
     if not args.actor.strip() or not args.organization.strip():
@@ -1927,12 +2019,40 @@ async def _run_command(args: argparse.Namespace) -> ArtifactPublicationV1:
                 macro_providers=application.macro_providers,
                 reference_providers=application.reference_providers,
             )
+        policy_deployment = None
+        if authorization is not None:
+            if (
+                not trust_roots_file
+                or application.policy_registry is None
+                or application.source_use_policy is None
+                or application.fact_repository is None
+                or application.snapshot_repository is None
+            ):
+                raise ValueError(
+                    "market-policy publication requires configured deployment trust and evidence repositories"
+                )
+            policy_deployment = MarketPolicyDeployment(
+                policies=MetadataPolicyRepository(app.state.metadata_store),
+                registry=application.policy_registry,
+                snapshots=application.snapshot_repository,
+                facts=application.fact_repository,
+                mappings=app.state.metadata_store,
+                artifacts=application.artifact_store,
+                trust_roots=DataReleaseTrustRootsV1.from_file(Path(trust_roots_file)),
+                source_use_policy=application.source_use_policy,
+                macro_providers=application.macro_providers,
+                reference_providers=application.reference_providers,
+                quote_providers=application.quote_providers,
+                authorized_organizations=application.config.release_publish_authorized_organizations,
+                runtime_source_revision=args.runtime_source_revision,
+            )
         runner = SourcePreparationRunner(
             application=application,
             metadata=app.state.metadata_store,
             acquisition=app.state.sec_acquisition,
             artifacts=application.artifact_store,
             canary=canary,
+            market_policy_deployment=policy_deployment,
             public_acquisition=public_acquisition,
             public_admission=public_admission,
             issuer_market_preparation=_runtime_issuer_market_preparation(application)
@@ -1967,6 +2087,8 @@ async def _run_command(args: argparse.Namespace) -> ArtifactPublicationV1:
             deadline_at=deadline_at,
             candidate=candidate,
             approval=approval,
+            market_policy_authorization=authorization,
+            market_policy_authorization_digest=args.market_policy_authorization_digest,
         )
 
 
@@ -1980,6 +2102,8 @@ def main(argv: list[str] | None = None) -> int:
         help="capture current public originals, then freeze and reuse the effective valuation plan",
     )
     parser.add_argument("--candidate", type=Path)
+    parser.add_argument("--market-policy-authorization", type=Path)
+    parser.add_argument("--market-policy-authorization-digest")
     parser.add_argument("--approval", type=Path)
     parser.add_argument("--machine-private-key", type=Path)
     parser.add_argument("--runtime-source-revision")

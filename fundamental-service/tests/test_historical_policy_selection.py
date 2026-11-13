@@ -49,6 +49,7 @@ def _select(
     *,
     policy_id: str | None = None,
     issuer_id: str | None = None,
+    data_release_manifest_digest: str | None = None,
 ) -> PolicyRecordV1:
     return registry.select_policy(
         model_id="fcff_dcf",
@@ -56,7 +57,46 @@ def _select(
         valuation_timestamp=_at(2016),
         policy_id=policy_id,
         issuer_id=issuer_id,
+        data_release_manifest_digest=data_release_manifest_digest,
     )
+
+
+def test_staged_release_policies_cannot_change_another_release_or_unscoped_reads():
+    generic = _policy("fixture-generic", effective_year=2015, available_year=2015)
+    scoped_base = _policy(
+        "fixture-scoped", effective_year=2014, available_year=2014, issuer_id="issuer-a"
+    )
+    payload = scoped_base.model_dump(exclude={"policy_digest"})
+    payload["data_release_manifest_digest"] = "a" * 64
+    scoped = PolicyRecordV1(**payload, policy_digest=sha256_digest(payload))
+    for policies in ((generic, scoped), (scoped, generic)):
+        registry = PolicyRegistry(initial_model_specs(), policies)
+        assert _select(registry, issuer_id="issuer-a") == generic
+        assert (
+            _select(
+                registry, issuer_id="issuer-a", data_release_manifest_digest="b" * 64
+            )
+            == generic
+        )
+        assert (
+            _select(
+                registry, issuer_id="issuer-a", data_release_manifest_digest="a" * 64
+            )
+            == scoped
+        )
+        for digest in (None, "b" * 64):
+            with pytest.raises(PolicyError) as failure:
+                _select(
+                    registry,
+                    issuer_id="issuer-a",
+                    policy_id=scoped.policy_id,
+                    data_release_manifest_digest=digest,
+                )
+            assert failure.value.code == "POLICY_DATA_RELEASE_MISMATCH"
+    legacy = generic.model_dump()
+    assert "data_release_manifest_digest" not in legacy
+    legacy.pop("policy_digest")
+    assert sha256_digest(legacy) == generic.policy_digest
 
 
 def test_selection_uses_latest_available_evidence_independent_of_record_order() -> None:
