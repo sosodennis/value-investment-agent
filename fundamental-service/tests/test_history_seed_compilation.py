@@ -179,3 +179,99 @@ def test_unapproved_extension_cannot_claim_approved_mapping():
     payload["mappings"][0]["confidence"] = "high"
     with pytest.raises(ValueError, match="cannot grant mapping approval"):
         compiler.SeedExtension.model_validate_json(canonical_bytes(payload))
+
+
+def baseline_extension():
+    seed, extension = extension_inputs()
+    from fundamental_service.operating_scenario_policy import UnconsumedBaselineCapexV1
+
+    return seed, extension.model_copy(
+        update={
+            "schema_version": "history-study-seed-extension.v2",
+            "mappings": tuple(
+                m
+                for m in extension.mappings
+                if m.normalized_field != "capital_expenditure"
+            ),
+            "scenarios": tuple(
+                compiler.ExtendedScenario(
+                    scenario_id=p.scenario_id,
+                    parent_scenario_id=p.scenario_id,
+                )
+                for p in seed.decision.scenarios
+            ),
+            "unconsumed_capex": UnconsumedBaselineCapexV1(
+                source_content_hash=extension.original.source.content_hash,
+                evidence_digests=(sha256_digest(extension.original),),
+                rationale="The oldest original provides the required stock baselines but no classified PPE capex amount.",
+            ),
+        }
+    )
+
+
+def test_explicit_baseline_extension_preserves_scenarios_and_labels_without_capex_fact():
+    seed, extension = baseline_extension()
+    result = compiler.compile_seed(seed, extension)
+    assert result.decision.contract_version == "fundamental.operating-scenarios.v2"
+    assert result.contract_version == "fundamental.operating-comparison.v2"
+    assert result.label == seed.label
+    assert result.decision.scenarios == seed.decision.scenarios
+    assert result.decision.periods[0].unconsumed_capex == extension.unconsumed_capex
+    assert len(result.decision.periods[0].fact_ids) == 8
+    assert not any(
+        f.normalized_field == "capital_expenditure" and f.period_end.year == 2022
+        for f in result.decision.facts
+    )
+    assert sha256_digest(result) == sha256_digest(
+        compiler.compile_seed(seed, extension)
+    )
+    full = replay_operating_scenarios(result.decision)
+    assert full.results[0].status == "provisional_scenario"
+    shorter = windows.trailing_request(result, 3)
+    assert all(p.unconsumed_capex is None for p in shorter.decision.periods)
+    before = replay_operating_scenarios(seed.decision)
+    after = replay_operating_scenarios(shorter.decision)
+    assert [(n.node_id, n.value) for n in after.results[0].nodes] == [
+        (n.node_id, n.value) for n in before.results[0].nodes
+    ]
+
+
+@pytest.mark.parametrize(
+    "fault", ("v1", "allocation", "scenario", "source", "evidence")
+)
+def test_bad_baseline_extension_cannot_publish(fault):
+    seed, extension = baseline_extension()
+    if fault == "v1":
+        extension = extension.model_copy(
+            update={"schema_version": "history-study-seed-extension.v1"}
+        )
+    elif fault == "allocation":
+        extension = extension.model_copy(
+            update={
+                "scenarios": tuple(
+                    s.model_copy(update={"older_continuing_capex_fraction": Decimal(0)})
+                    for s in extension.scenarios
+                )
+            }
+        )
+    elif fault == "scenario":
+        extension = extension.model_copy(
+            update={
+                "scenarios": tuple(
+                    s.model_copy(update={"scenario_id": s.scenario_id + "-extra"})
+                    for s in extension.scenarios
+                )
+            }
+        )
+    else:
+        marker = extension.unconsumed_capex
+        update = (
+            {"source_content_hash": "0" * 64}
+            if fault == "source"
+            else {"evidence_digests": ()}
+        )
+        extension = extension.model_copy(
+            update={"unconsumed_capex": marker.model_copy(update=update)}
+        )
+    with pytest.raises(ValueError):
+        compiler.compile_seed(seed, extension)

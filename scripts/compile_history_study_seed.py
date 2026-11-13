@@ -16,6 +16,10 @@ from fundamental_service.contracts import CanonicalFactV1, QualityStatus, Strict
 from fundamental_service.facts import CanonicalMappingV1
 from fundamental_service.operating_label_contracts import OperatingComparisonRequestV1
 from fundamental_service.operating_scenario_contracts import (
+    BASELINE_SCENARIO_POLICY,
+    BASELINE_SOURCE_POLICY,
+    UnconsumedBaselineCapexV1,
+    scenario_policy_digest,
     CORE_FIELDS,
     PARENT_CONCEPTS,
     ScenarioPeriodV1,
@@ -36,26 +40,50 @@ from plan_history_study_precision import digest, publish_report
 class ExtendedScenario(StrictModel):
     scenario_id: str = Field(pattern=r"^[a-z0-9][a-z0-9-]{0,79}$")
     parent_scenario_id: str
-    older_continuing_capex_fraction: Decimal = Field(ge=0, le=1, allow_inf_nan=False)
+    older_continuing_capex_fraction: Decimal | None = Field(
+        default=None,
+        ge=0,
+        le=1,
+        allow_inf_nan=False,
+        exclude_if=lambda value: value is None,
+    )
 
 
 class SeedExtension(StrictModel):
-    schema_version: Literal["history-study-seed-extension.v1"]
+    schema_version: Literal[
+        "history-study-seed-extension.v1", "history-study-seed-extension.v2"
+    ]
     original: OriginalIssuerEvidenceV1
-    mappings: tuple[CanonicalMappingV1, ...] = Field(min_length=9, max_length=9)
+    mappings: tuple[CanonicalMappingV1, ...] = Field(min_length=8, max_length=9)
     fiscal_year: int
     period_start: date
     period_end: date
     mapping_version: str = Field(min_length=1)
     scenarios: tuple[ExtendedScenario, ...] = Field(min_length=1, max_length=1000)
     scope_assumptions: tuple[str, ...] = Field(min_length=1)
+    unconsumed_capex: UnconsumedBaselineCapexV1 | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
 
     @model_validator(mode="after")
     def explicit_unreviewed_observations(self) -> SeedExtension:
-        if {m.normalized_field for m in self.mappings} != {
-            *CORE_FIELDS,
-            *PARENT_CONCEPTS,
-        } or len({m.decision_id for m in self.mappings}) != len(self.mappings):
+        baseline = self.schema_version == "history-study-seed-extension.v2"
+        if baseline != (self.unconsumed_capex is not None):
+            raise ValueError(
+                "baseline extension requires its explicit versioned nonoperand"
+            )
+        expected = {*CORE_FIELDS, *PARENT_CONCEPTS}
+        if baseline:
+            expected.remove("capital_expenditure")
+        if (
+            any(
+                (item.older_continuing_capex_fraction is None) != baseline
+                for item in self.scenarios
+            )
+            or {m.normalized_field for m in self.mappings} != expected
+            or len(self.mappings) != len(expected)
+            or len({m.decision_id for m in self.mappings}) != len(self.mappings)
+        ):
             raise ValueError(
                 "one distinct mapping for every core/parent role is required"
             )
@@ -78,7 +106,14 @@ def compile_seed(
     seed: OperatingComparisonRequestV1, extension: SeedExtension
 ) -> OperatingComparisonRequestV1:
     """Rebind mappings through the formal mapper; perform no forecast or formula."""
+    # Revalidate typed boundaries before using model_copy-based caller objects.
+    seed = OperatingComparisonRequestV1.model_validate_json(canonical_bytes(seed))
+    extension = SeedExtension.model_validate_json(canonical_bytes(extension))
     decision = seed.decision
+    if any(period.unconsumed_capex is not None for period in decision.periods):
+        raise DesignError(
+            "an existing unknown baseline cannot become a consumed period"
+        )
     if (
         len(decision.periods) >= 5
         or extension.fiscal_year != decision.periods[0].fiscal_year - 1
@@ -95,6 +130,15 @@ def compile_seed(
     parents = {scenario.scenario_id: scenario for scenario in decision.scenarios}
     if {item.parent_scenario_id for item in extension.scenarios} != set(parents):
         raise DesignError("every prior scenario must be retained without substitution")
+    if extension.unconsumed_capex is not None and (
+        len(extension.scenarios) != len(parents)
+        or any(
+            item.scenario_id != item.parent_scenario_id for item in extension.scenarios
+        )
+    ):
+        raise DesignError(
+            "an unknown baseline has no allocation or new scenario dimension"
+        )
     source = compose_issuer_operating_source(
         (*decision.source.originals, extension.original),
         valuation_timestamp=decision.source.valuation_timestamp,
@@ -151,8 +195,20 @@ def compile_seed(
         identifiers[old_fact.fact_id] = matches[0].fact_id
     added = {}
     for mapping in extension.mappings:
+        mapping_source = extension.original.source.content_hash
+        if extension.unconsumed_capex is not None:
+            if mapping.observation_scope is not None:
+                mapping_source = mapping.observation_scope.raw_content_hash
+            elif mapping.accounting_rules is not None:
+                mapping_source = mapping.accounting_rules.raw_content_hash
+            else:
+                raise DesignError("v2 baseline mappings must bind an exact original")
+            if mapping_source not in originals:
+                raise DesignError(
+                    "baseline mapping source is not a retained eligible original"
+                )
         matches = mapped(
-            extension.original.source.content_hash,
+            mapping_source,
             mapping.decision_id,
             QualityStatus.PROVISIONAL,
         )
@@ -168,6 +224,7 @@ def compile_seed(
             period_start=extension.period_start,
             period_end=extension.period_end,
             fact_ids=added,
+            unconsumed_capex=extension.unconsumed_capex,
         ),
         *(
             period.model_copy(
@@ -186,7 +243,11 @@ def compile_seed(
             update={
                 "scenario_id": item.scenario_id,
                 "continuing_capex_fractions": {
-                    extension.fiscal_year: item.older_continuing_capex_fraction,
+                    **(
+                        {extension.fiscal_year: item.older_continuing_capex_fraction}
+                        if item.older_continuing_capex_fraction is not None
+                        else {}
+                    ),
                     **parents[item.parent_scenario_id].continuing_capex_fractions,
                 },
             }
@@ -194,8 +255,19 @@ def compile_seed(
         for item in sorted(extension.scenarios, key=lambda item: item.scenario_id)
     )
     mappings = tuple(sorted(rebound.values(), key=lambda mapping: mapping.decision_id))
+    version_changes: dict[str, object] = (
+        {
+            "contract_version": "fundamental.operating-scenarios.v2",
+            "policy_version": BASELINE_SCENARIO_POLICY,
+            "policy_digest": scenario_policy_digest(BASELINE_SCENARIO_POLICY),
+            "source_selection_policy": BASELINE_SOURCE_POLICY,
+        }
+        if extension.unconsumed_capex is not None
+        else {}
+    )
     extended = decision.model_copy(
         update={
+            **version_changes,
             "source": source,
             "facts": tuple(sorted(facts, key=lambda fact: fact.fact_id)),
             "periods": periods,
@@ -219,6 +291,11 @@ def compile_seed(
                 update={
                     "decision": extended,
                     "decision_input_digest": sha256_digest(extended),
+                    "contract_version": (
+                        "fundamental.operating-comparison.v2"
+                        if extension.unconsumed_capex is not None
+                        else seed.contract_version
+                    ),
                 }
             )
         )

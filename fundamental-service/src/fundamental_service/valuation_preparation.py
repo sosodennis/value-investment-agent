@@ -46,6 +46,11 @@ from .equity_dilution import (
     TreasuryStockResultV1,
     compute_treasury_stock_dilution,
 )
+from .operating_scenario_policy import (
+    BASELINE_SCENARIO_POLICY,
+    UnconsumedBaselineCapexV1,
+    scenario_policy_digest,
+)
 from .original_issuer import IssuerOperatingSourceV1
 from .serialization import sha256_digest
 from .uncertainty_policy import (
@@ -359,6 +364,23 @@ def derive_historical_metrics(
             )
         }
         estimate = estimates.get(period.fiscal_year)
+        if estimate is not None and isinstance(
+            estimate.capital_expenditure, UnconsumedBaselineCapexV1
+        ):
+            if (
+                index != 0
+                or history.requirements_profile_id != BASELINE_SCENARIO_POLICY
+                or history.requirements_profile_digest
+                != scenario_policy_digest(BASELINE_SCENARIO_POLICY)
+                or history.quality is not QualityStatus.PROVISIONAL
+                or estimate.capex_facts
+            ):
+                raise PreparationError(
+                    "BASELINE_CAPEX_POLICY_INVALID",
+                    "an unknown capex nonoperand requires the pinned research baseline policy",
+                    missing=(f"{period.fiscal_year}:capital_expenditure",),
+                )
+            issue_codes.append("BASELINE_CAPEX_UNKNOWN_UNCONSUMED")
         if estimate is not None:
             candidates = {
                 name: fact
@@ -378,7 +400,7 @@ def derive_historical_metrics(
         if len(values) != len(fields):
             issue_codes.append("METRIC_NON_NUMERIC_VALUE")
             continue
-        if estimate is not None:
+        if estimate is not None and isinstance(estimate.capital_expenditure, Decimal):
             values["capital_expenditure"] = estimate.capital_expenditure
         revenue = values["revenue"]
         operating_income = values["operating_income"]

@@ -49,6 +49,7 @@ def trailing_request(
                         period.fiscal_year
                     ]
                     for period in periods
+                    if period.unconsumed_capex is None
                 }
             }
         )

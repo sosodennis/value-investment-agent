@@ -20,47 +20,16 @@ from .original_issuer import IssuerOperatingSourceV1
 from .serialization import sha256_digest
 from .valuation_preparation import FORECAST_COMPOSER_VERSION, HistoricalMetricsV1
 
-SCENARIO_POLICY: Literal["nonnegative-parent-partitions-v1"] = (
-    "nonnegative-parent-partitions-v1"
+from .operating_scenario_policy import (
+    BASELINE_SCENARIO_POLICY,
+    BASELINE_SOURCE_POLICY,
+    CORE_FIELDS as CORE_FIELDS,
+    PARENT_CONCEPTS as PARENT_CONCEPTS,
+    SCENARIO_POLICY as SCENARIO_POLICY,
+    UNRESOLVED_CLASSES as UNRESOLVED_CLASSES,
+    UnconsumedBaselineCapexV1,
+    scenario_policy_digest as scenario_policy_digest,
 )
-CORE_FIELDS = (
-    "revenue",
-    "operating_income",
-    "income_before_tax",
-    "income_tax_expense",
-    "depreciation_and_amortization",
-)
-PARENT_CONCEPTS = {
-    "current_assets": "us-gaap:AssetsCurrent",
-    "current_liabilities": "us-gaap:LiabilitiesCurrent",
-    "cash_and_equivalents": "us-gaap:CashAndCashEquivalentsAtCarryingValue",
-    "capital_expenditure": "us-gaap:PaymentsToAcquirePropertyPlantAndEquipment",
-}
-UNRESOLVED_CLASSES = (
-    "short_term_investments",
-    "current_interest_bearing_debt",
-    "current_operating_lease_liabilities",
-    "current_finance_lease_liabilities",
-    "other_non_operating_current_assets_and_liabilities",
-)
-
-
-def scenario_policy_digest() -> str:
-    return sha256_digest(
-        {
-            "version": SCENARIO_POLICY,
-            "core_fields": CORE_FIELDS,
-            "parent_concepts": PARENT_CONCEPTS,
-            "unresolved_classes": UNRESOLVED_CLASSES,
-            "assumptions": (
-                "gross capex is a nonnegative sum of disjoint continuing and other cash payments",
-                "current assets less reported cash partitions jointly into operating and excluded balances",
-                "current liabilities partition jointly into operating and excluded balances",
-                "no missing investment, debt, lease or other classification is known to be zero",
-            ),
-            "bounds_claim": "sampled scenarios only; no global bounds or confidence interval",
-        }
-    )
 
 
 class ScenarioPeriodV1(StrictModel):
@@ -68,10 +37,16 @@ class ScenarioPeriodV1(StrictModel):
     period_start: date
     period_end: date
     fact_ids: dict[str, str]
+    unconsumed_capex: UnconsumedBaselineCapexV1 | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
 
     @model_validator(mode="after")
     def complete_period(self) -> "ScenarioPeriodV1":
-        if set(self.fact_ids) != {*CORE_FIELDS, *PARENT_CONCEPTS}:
+        expected = {*CORE_FIELDS, *PARENT_CONCEPTS}
+        if self.unconsumed_capex is not None:
+            expected.remove("capital_expenditure")
+        if set(self.fact_ids) != expected:
             raise ValueError(
                 "scenario period requires every core and parent observation"
             )
@@ -111,9 +86,10 @@ class ScenarioObservationSetV1(StrictModel):
     mapping_version: str = Field(min_length=1)
     mapping_manifest_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
     mappings: tuple[CanonicalMappingV1, ...] = Field(min_length=1)
-    source_selection_policy: Literal["latest-complete-original-per-period-v1"] = (
-        "latest-complete-original-per-period-v1"
-    )
+    source_selection_policy: Literal[
+        "latest-complete-original-per-period-v1",
+        "latest-complete-original-per-baseline-family-v2",
+    ] = "latest-complete-original-per-period-v1"
 
     @model_validator(mode="after")
     def mapping_manifest_is_pinned(self) -> "ScenarioObservationSetV1":
@@ -133,16 +109,18 @@ class ScenarioObservationSetV1(StrictModel):
 
 
 class OperatingScenarioRequestV1(ScenarioObservationSetV1):
-    contract_version: Literal["fundamental.operating-scenarios.v1"] = (
-        "fundamental.operating-scenarios.v1"
-    )
+    contract_version: Literal[
+        "fundamental.operating-scenarios.v1", "fundamental.operating-scenarios.v2"
+    ] = "fundamental.operating-scenarios.v1"
     evidence_status: Literal["unreviewed_source_scenario"] = (
         "unreviewed_source_scenario"
     )
     periods: tuple[ScenarioPeriodV1, ...] = Field(min_length=3, max_length=5)
     scenarios: tuple[OperatingScenarioV1, ...] = Field(min_length=1, max_length=1000)
     protocol_version: str = Field(min_length=1)
-    policy_version: Literal["nonnegative-parent-partitions-v1"] = SCENARIO_POLICY
+    policy_version: Literal[
+        "nonnegative-parent-partitions-v1", "baseline-unconsumed-capex-v2"
+    ] = SCENARIO_POLICY
     policy_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
     model_versions: dict[InitialModelId, str]
     scope_assumption_evidence_digests: tuple[str, ...] = Field(min_length=1)
@@ -162,14 +140,35 @@ class OperatingScenarioRequestV1(ScenarioObservationSetV1):
             )
         if len({item.scenario_id for item in self.scenarios}) != len(self.scenarios):
             raise ValueError("scenario identities must be unique")
+        baseline_policy = self.policy_version == BASELINE_SCENARIO_POLICY
+        if (
+            self.contract_version == "fundamental.operating-scenarios.v2"
+        ) != baseline_policy:
+            raise ValueError(
+                "scenario contract and input policy must be versioned together"
+            )
+        if (self.source_selection_policy == BASELINE_SOURCE_POLICY) != baseline_policy:
+            raise ValueError(
+                "baseline family source selection requires the explicit v2 policy"
+            )
         if any(
-            set(item.continuing_capex_fractions) != set(years)
+            period.unconsumed_capex is not None and (not baseline_policy or index != 0)
+            for index, period in enumerate(self.periods)
+        ):
+            raise ValueError(
+                "unknown capex is only admissible in the v2 decision baseline"
+            )
+        capex_years = {
+            p.fiscal_year for p in self.periods if p.unconsumed_capex is None
+        }
+        if any(
+            set(item.continuing_capex_fractions) != capex_years
             for item in self.scenarios
         ):
             raise ValueError(
                 "every scenario must explicitly allocate every capex period"
             )
-        if self.policy_digest != scenario_policy_digest():
+        if self.policy_digest != scenario_policy_digest(self.policy_version):
             raise ValueError(
                 "scenario policy digest differs from the executable policy"
             )
@@ -220,7 +219,7 @@ class ScenarioPeriodInputsV1(StrictModel):
     fiscal_year: int
     assets: ParentPartitionV1
     liabilities: ParentPartitionV1
-    capex: ParentPartitionV1
+    capex: ParentPartitionV1 | UnconsumedBaselineCapexV1
     operating_working_capital: Decimal
     assumption_digest: str
 
@@ -242,9 +241,10 @@ class OperatingScenarioResultV1(StrictModel):
 
 
 class OperatingScenarioReplayV1(StrictModel):
-    contract_version: Literal["fundamental.operating-scenario-replay.v2"] = (
-        "fundamental.operating-scenario-replay.v2"
-    )
+    contract_version: Literal[
+        "fundamental.operating-scenario-replay.v2",
+        "fundamental.operating-scenario-replay.v3",
+    ] = "fundamental.operating-scenario-replay.v2"
     evidence_status: Literal["unreviewed_source_scenario"] = (
         "unreviewed_source_scenario"
     )

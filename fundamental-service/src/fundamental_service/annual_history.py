@@ -12,6 +12,7 @@ from .contracts import (
     QualityStatus,
     SourceSnapshotV1,
 )
+from .operating_scenario_policy import UnconsumedBaselineCapexV1
 from .original_issuer import IssuerOperatingSourceV1, fact_matches_operating_identity
 from .valuation_requirements import (
     ValuationRequirementsProfileV1,
@@ -76,7 +77,7 @@ class EstimatedOperatingInputsV1:
     """
 
     fiscal_year: int
-    capital_expenditure: Decimal
+    capital_expenditure: Decimal | UnconsumedBaselineCapexV1
     operating_working_capital: Decimal
     capex_facts: tuple[CanonicalFactV1, ...]
     working_capital_facts: tuple[CanonicalFactV1, ...]
