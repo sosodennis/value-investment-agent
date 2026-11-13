@@ -640,3 +640,21 @@ docker compose -p value-investment-agent-270-integration \
 Keep the named volume unless the issue's disposable verification data has been
 recorded and a rebuild from captured public snapshots is available. Never use a
 global Docker prune command for this service.
+
+
+### Released FCFF Decimal isolation
+
+The existing preparation, historical-metric, manual-override, calculator and
+uncertainty boundaries execute in a fresh local Decimal context. The released
+`decimal-50-end-of-year-v1` policy remains 50 digits, HALF_EVEN, exponent bounds
+-999999 to 999999, clamp0, and traps for InvalidOperation, DivisionByZero and
+Overflow. Importing the calculator does not change the importing thread. Every
+boundary restores caller settings and flags after success or refusal, including
+fresh worker-thread calls.
+
+This fixes ambient-context drift while preserving the intended 50-digit FCFF
+formulas, public schemas, model identities and canonical results. Stored
+artifacts and caller approvals are not rewritten. It does not include the
+separate #361 lease/composer-version/provider changes. A precision34 migration
+requires its own versioned numerical policy and evidence; the former target
+table contradicted the model inventory's released50-digit policy.
