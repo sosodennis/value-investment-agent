@@ -87,3 +87,45 @@ and capex/scenario scope before running the real four-year composer arm. The
 2011 source-role/scope gap, Transition inputs, complete fixed-cohort study and
 precision/promotion approvals remain separate requirements. Exact cases remain
 0/100 and `supported_history_threshold=null`. Keep #371/#376/#377 open.
+
+## Independent review: typed JSON boundary correction
+
+The parent review found an explicit `dict[str, Any]` return in the new builder.
+Implementation `0f37f11903b95d61fd1ea9b6333c4a0b71ed625c` replaces it with
+`dict[str, dict[str, JsonValue]]` and decodes the pinned official input with
+Pydantic `TypeAdapter` at that JSON boundary. Official traversal and all source,
+configuration, profile and artifact identities retain their existing semantics.
+This is a correction to the same module; it adds no financial policy or authority.
+
+At that exact clean implementation, the configured historical/config/original/
+invalid-member tests pass: **28 passed, 2 explicit skips**, with the existing
+vendor escape-sequence warning. Ruff/format, dependency-aware changed-source
+mypy, both architecture guards and whitespace checks pass. Exact commands and
+outputs, including the initial mypy `import-untyped` failure for Arelle, are in
+external receipt `f96c4a8a4baf94fbff5a33a726008e4a52cfe8e89df5412f0c9324f0ce9cadc4.typing-checks.json`.
+The corrected mypy command uses the real frozen Service Python,
+`--follow-imports=silent --disable-error-code=import-untyped`: only the diagnostic
+for an external library without `py.typed` is suppressed; project type errors
+remain checked. Receipt input is
+`2e911970d659b5b40982d4866a6ca073d9416d96f0634f5deb0298ea0c1974b5`;
+output is `16ec9d93dc596f4ff3c7182f11dc4978c1c0394fcebc6cdce3a4eb8d7a498b61`.
+
+The actual builder CLI runs in two further fresh processes with the exact new
+commit, using the existing artifact store. Both return `wrote=false` and
+`generated=false`; the entire inventory retains bytes, sizes and mtimes, with
+zero new files. The output remains the pinned config digest
+`baf022187417e3d5f8d579942323d9d77e848d4f14909cccdecc43c4f81007a2`.
+CLI input is `a3ea1011f282bb268b18390a3e305f5c97599ac11c09cabc1dd9c73f2b119e30`;
+receipt is `2a661208163be30d52c4b3fe6573eb22dbac330214ee8e0b7f26904919ee798e.typed-builder-replay.json`.
+
+Retained harness failure: first publication under the new commit legitimately
+appended its new build receipt to the mutable artifact index. An initial wrapper
+incorrectly required that index to be unchanged even during this publication;
+it exited 1. Immutable config bytes/mtime and its second-run inventory check
+passed. The two later fully retained fresh-process checks above both reuse the
+whole store unchanged. No original source was modified or downloaded.
+
+The earlier full-suite and Docker reports remain bound to `e642b9aa`; they are
+not relabeled as tests of this typing correction. Current-head CI and independent
+re-review remain required before serial integration. The full historical issue
+and financial research are still incomplete.
