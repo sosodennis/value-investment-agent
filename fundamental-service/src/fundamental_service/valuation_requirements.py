@@ -169,13 +169,16 @@ def require_operating_source_profile(
 
 _ANNUAL_DURATION_FIELDS = (
     "revenue",
-    "cost_of_revenue",
     "operating_income",
     "income_before_tax",
     "income_tax_expense",
-    "net_income",
     "depreciation_and_amortization",
     "capital_expenditure",
+)
+
+_ANNUAL_DIAGNOSTIC_FIELDS = (
+    "cost_of_revenue",
+    "net_income",
     "operating_lease_cost",
     "finance_lease_cost",
     "stock_based_compensation",
@@ -220,24 +223,24 @@ _MARKET_POLICY_INPUT_ROLES = (
 
 _PROFILES = {
     "fcff_dcf": ValuationRequirementsProfileV1(
-        profile_id="fcff-valuation-requirements-v3",
-        profile_version="fcff-valuation-requirements-v3",
+        profile_id="fcff-valuation-requirements-v4",
+        profile_version="fcff-valuation-requirements-v4",
         model_id="fcff_dcf",
         annual_duration_fields=_ANNUAL_DURATION_FIELDS,
         annual_instant_fields=_ANNUAL_INSTANT_FIELDS,
         point_in_time_fact_fields=_POINT_IN_TIME_FACT_FIELDS,
         market_policy_input_roles=_MARKET_POLICY_INPUT_ROLES,
-        supporting_fact_fields=AWARD_FACT_FIELDS,
+        supporting_fact_fields=(*AWARD_FACT_FIELDS, *_ANNUAL_DIAGNOSTIC_FIELDS),
     ),
     "transition_fcff_dcf": ValuationRequirementsProfileV1(
-        profile_id="transition-fcff-valuation-requirements-v3",
-        profile_version="transition-fcff-valuation-requirements-v3",
+        profile_id="transition-fcff-valuation-requirements-v4",
+        profile_version="transition-fcff-valuation-requirements-v4",
         model_id="transition_fcff_dcf",
         annual_duration_fields=_ANNUAL_DURATION_FIELDS,
         annual_instant_fields=_ANNUAL_INSTANT_FIELDS,
         point_in_time_fact_fields=_POINT_IN_TIME_FACT_FIELDS,
         market_policy_input_roles=_MARKET_POLICY_INPUT_ROLES,
-        supporting_fact_fields=AWARD_FACT_FIELDS,
+        supporting_fact_fields=(*AWARD_FACT_FIELDS, *_ANNUAL_DIAGNOSTIC_FIELDS),
         transition_filing_evidence_required=True,
     ),
 }

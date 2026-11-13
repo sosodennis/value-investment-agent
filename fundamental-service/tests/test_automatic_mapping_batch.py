@@ -76,7 +76,13 @@ def test_batch_keeps_all_roles_missing_observations_and_unsupported_classificati
         )
     )
     assert len(request.requirements.required_fact_fields) == (
-        33 if model_id == "transition_fcff_dcf" else 32
+        26 if model_id == "transition_fcff_dcf" else 25
+    )
+    assert "finance_lease_cost" not in request.requirements.required_fact_fields
+    assert "finance_lease_cost" in request.requirements.supporting_fact_fields
+    assert roles["finance_lease_cost"].status == "abstain"
+    assert roles["finance_lease_cost"].reason_codes == (
+        "MAPPING_AUTOMATIC_RULE_UNSUPPORTED",
     )
     assert roles["revenue"].status == "approved"
     assert roles["non_operating_assets"].status == "abstain"

@@ -15,7 +15,7 @@ from fundamental_service.automatic_source_mapping import (
 from fundamental_service.contracts import SecCapturedSourceEvidenceV1, SourceRole
 from fundamental_service.ingestion_mapping import ValidatedOriginalV1
 from fundamental_service.data_releases import DataReleaseError
-from fundamental_service.serialization import sha256_digest
+from fundamental_service.serialization import canonical_bytes, sha256_digest
 from fundamental_service.snapshots import FilesystemContentStore
 from fundamental_service.valuation_requirements import (
     source_preparation_requirements_profile,
@@ -111,6 +111,44 @@ def source_case(tmp_path):
         taxonomy_cache_sha256=single.original.report.taxonomy_cache_hash,
     )
     return request, authority, validated, artifacts, mappings
+
+
+def test_retained_v3_requirements_cannot_authorize_v4_acquisition(tmp_path):
+    request, _, _, _, _ = source_case(tmp_path)
+    current = valuation_requirements_profile("fcff_dcf")
+    previous = current.model_copy(
+        update={
+            "profile_id": "fcff-valuation-requirements-v3",
+            "profile_version": "fcff-valuation-requirements-v3",
+            "annual_duration_fields": (
+                "revenue",
+                "cost_of_revenue",
+                "operating_income",
+                "income_before_tax",
+                "income_tax_expense",
+                "net_income",
+                "depreciation_and_amortization",
+                "capital_expenditure",
+                "operating_lease_cost",
+                "finance_lease_cost",
+                "stock_based_compensation",
+                "basic_weighted_average_shares",
+                "diluted_weighted_average_shares",
+            ),
+            "supporting_fact_fields": tuple(
+                f
+                for f in current.supporting_fact_fields
+                if f.startswith("equity_award_")
+            ),
+        }
+    )
+    assert previous.digest != current.digest
+    payload = request.model_dump(mode="json") | {
+        "requirements_digest": previous.digest,
+        "required_fields": list(previous.required_fact_fields),
+    }
+    with pytest.raises(ValidationError, match="exact service model requirements"):
+        AutomaticSecIngestionRequestV1.model_validate_json(canonical_bytes(payload))
 
 
 def test_empty_store_publishes_approved_mappings_and_every_abstention(tmp_path):

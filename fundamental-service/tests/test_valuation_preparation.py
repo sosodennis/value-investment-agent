@@ -230,6 +230,107 @@ def test_complete_history_prepares_provisional_input_with_lineage_and_digest() -
 
 @pytest.mark.parametrize("model_id", ("fcff_dcf", "transition_fcff_dcf"))
 @pytest.mark.parametrize(
+    "diagnostic",
+    (
+        "cost_of_revenue",
+        "net_income",
+        "operating_lease_cost",
+        "finance_lease_cost",
+        "stock_based_compensation",
+        "basic_weighted_average_shares",
+        "diluted_weighted_average_shares",
+    ),
+)
+def test_annual_diagnostics_are_retained_without_becoming_formula_prerequisites(
+    model_id, diagnostic
+):
+    facts = _facts()
+    if model_id == "transition_fcff_dcf":
+        facts = (
+            *facts,
+            _fact("filed_operating_evidence", 2025, "1").model_copy(
+                update={"value": "filed evidence"}
+            ),
+        )
+    variants = (
+        facts,
+        tuple(f for f in facts if f.normalized_field != diagnostic),
+        tuple(
+            f.model_copy(update={"value": Decimal("1234567")})
+            if f.normalized_field == diagnostic
+            else f
+            for f in facts
+        ),
+    )
+    prepared = tuple(
+        _prepare(f, market_policy=_market_policy(), model_id=model_id) for f in variants
+    )
+    assert all(p.status == "prepared" and p.input is not None for p in prepared)
+    assert all(p.quality_status is QualityStatus.PROVISIONAL for p in prepared)
+    numerical_assumptions = tuple(
+        p.input.assumptions.model_dump(exclude={"trace"}) for p in prepared
+    )
+    assert (
+        numerical_assumptions[0] == numerical_assumptions[1] == numerical_assumptions[2]
+    )
+    assert (
+        prepared[0].historical_metrics.metrics == prepared[1].historical_metrics.metrics
+    )
+    assert (
+        prepared[0].historical_metrics.metrics == prepared[2].historical_metrics.metrics
+    )
+    calculated = tuple(
+        calculate(
+            p.input.model_copy(
+                update={"uncertainty": UncertaintyV1(mode="none")}
+            ).with_digest(),
+            allow_provisional=True,
+        )
+        for p in prepared
+    )
+    assert len({r.intrinsic_value for r in calculated}) == 1
+    assert len({r.per_share_value for r in calculated}) == 1
+    assert {f.fact_id for f in facts if f.normalized_field == diagnostic} <= set(
+        prepared[0].input.historical_facts
+    )
+    assert not any(
+        f.normalized_field == diagnostic
+        and f.fact_id in prepared[1].input.historical_facts
+        for f in facts
+    )
+
+
+@pytest.mark.parametrize("model_id", ("fcff_dcf", "transition_fcff_dcf"))
+@pytest.mark.parametrize(
+    "dependency",
+    (
+        "revenue",
+        "operating_income",
+        "income_before_tax",
+        "income_tax_expense",
+        "capital_expenditure",
+        "depreciation_and_amortization",
+        "convertible_instruments",
+        "preferred_claims",
+        "other_share_classes",
+    ),
+)
+def test_missing_formula_dependencies_and_claims_still_abstain(model_id, dependency):
+    facts = tuple(f for f in _facts() if f.normalized_field != dependency)
+    if model_id == "transition_fcff_dcf":
+        facts = (
+            *facts,
+            _fact("filed_operating_evidence", 2025, "1").model_copy(
+                update={"value": "filed evidence"}
+            ),
+        )
+    result = _prepare(facts, market_policy=_market_policy(), model_id=model_id)
+    assert result.status == "abstained" and result.input is None
+    assert any(dependency in reason for reason in result.missing_evidence)
+
+
+@pytest.mark.parametrize("model_id", ("fcff_dcf", "transition_fcff_dcf"))
+@pytest.mark.parametrize(
     "conflict,code",
     (
         ("period", "HISTORY_PERIOD_ALIGNMENT_CONFLICT"),
@@ -350,11 +451,9 @@ def test_operating_lease_balances_are_disclosed_without_an_equity_deduction(mode
         "long_term_operating_lease_liabilities",
         "current_finance_lease_liabilities",
         "long_term_finance_lease_liabilities",
-        "operating_lease_cost",
-        "finance_lease_cost",
     ),
 )
-def test_unknown_lease_role_still_abstains(field):
+def test_unknown_lease_principal_still_abstains(field):
     result = _prepare(
         tuple(fact for fact in _facts() if fact.normalized_field != field),
         market_policy=_market_policy(),

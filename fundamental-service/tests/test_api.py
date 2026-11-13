@@ -1819,7 +1819,7 @@ def test_valuation_evidence_read_uses_profile_roles_and_abstains_on_missing_fact
     assert result["facts"][0]["fact_id"] == fact.fact_id
     assert "cash_and_equivalents" in result["missing_fields"]
     assert "DATA_RELEASE_FIELDS_UNAVAILABLE" in result["issue_codes"]
-    assert result["profile_id"] == "fcff-valuation-requirements-v3"
+    assert result["profile_id"] == "fcff-valuation-requirements-v4"
 
     preparation = TestClient(app).post(
         "/v1/valuation/prepare",
