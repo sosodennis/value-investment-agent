@@ -21,7 +21,44 @@ No completed #351 through #355 acceptance is changed. #350 is outside scope.
 GitHub #351 and #352 are CLOSED; #352's merged Fundamental Service composer is
 the runtime valuation owner, not a pending dependency.
 
-## Current explicit composite source-plan checkpoint
+## Current composite annual-history profile correction
+
+Implementation `fedc733d21382898bce20a7c4fa81f3bbcc8b33d` corrects the
+pre-release source-plan history gate: acquisition uses its source profile, while
+annual assessment must use the official full valuation profile and identical
+composite inputs. Missing2024 policy input now retains
+`HISTORY_MINIMUM_PERIODS_UNAVAILABLE` / `2024:working_capital_policy_input`.
+The regression fails on the previous implementation and passes after the fix;
+the installed container reproduces that refusal. The shared #352 resolver and
+all valuation arithmetic remain unchanged. Linked blocker #381 records the gap
+and its owning-layer correction.
+
+Exact checks pass **2,120 Service/PostgreSQL tests** (11 optional skips and the
+expected duplicate-ZIP warning),98-source mypy, full Service Ruff/format, both
+architecture guards, diff and
+[CI43336494360](https://github.com/sosodennis/value-investment-agent/actions/runs/43336494360)
+(12 executed jobs pass; release gate skipped). The issue-owned composite-source
+project19685/19686 now matches all113 sources at this commit. Previous scoped
+databases remain preserved; the new history-profile dataset independently passes
+installed CLI preparation/calculation, HTTP artifact retrieval, ordinary/three
+concurrent/restart/empty-store-restore repeats. All184 rows/nine content files
+remain identical, repeated reports return `wrote=false`, and all81 baseline
+containers retain ID/image/start. Restored runtime feature preflight passes.
+
+Plan/output digests:
+`5668502428996acedfddbe8338c0d0ba762ce4d7121b82f2a045ea4543ea8af3` /
+`038327f79a9e865749fc07c3e755fc60440e145a6e9a9496d5d5854226967d12`.
+Portable backup
+`8384337430b8284c4b0e1b9f61756a6a90eb52846030aac473e59e32e42c8ffe`
+stays outside Docker. Checkpoint key `composite_annual_history_profile_increment`
+retains exact commands, pins and digests without replacing prior evidence; its
+atomic writer repeats unchanged. These remain **synthetic**, **provisional**
+results. Real NVE evidence, automatic recipes, dated market inputs, trusted real
+release/caller approval, real numerical acceptance and independent review plus
+merge/main verification remain incomplete. Full-flow gates remain unverified;
+threshold stays null, #361/blockers OPEN and PR#370 draft.
+
+## Prior explicit composite source-plan checkpoint
 
 Implementation `5fa6baf82e5ec335714de51fdf0abe4a07d40843` carries an explicit
 composite input policy through manual or automatic source plans. Plans pin the
