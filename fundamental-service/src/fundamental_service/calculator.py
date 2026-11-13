@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from decimal import Decimal, getcontext
+from decimal import Decimal
 
 from .contracts import (
     CalculationArtifactV1,
@@ -12,9 +12,8 @@ from .contracts import (
     TraceV1,
     ValuationInputV1,
 )
+from .numerical_policy import using_valuation_context
 from .serialization import sha256_digest
-
-getcontext().prec = 50
 
 
 class CalculationRefusal(ValueError):
@@ -90,6 +89,7 @@ def with_calculation_result_hash(
     )
 
 
+@using_valuation_context
 def calculate(
     request: ValuationInputV1,
     *,
@@ -109,11 +109,7 @@ def calculate(
             "MODEL_UNSUPPORTED",
             f"model {request.model_id} is not released for the current profile",
         )
-    quality_status = (
-        request.quality.status
-        if hasattr(request.quality, "status")
-        else QualityStatus(request.quality["status"])
-    )
+    quality_status = request.quality.status
     if quality_status is not QualityStatus.VERIFIED and not (
         allow_provisional and quality_status is QualityStatus.PROVISIONAL
     ):
@@ -127,6 +123,12 @@ def calculate(
         )
     wacc = request.assumptions.wacc
     growth = request.assumptions.terminal_growth
+    forecast = request.assumptions.forecast
+    bridge = request.assumptions.capital_bridge
+    if wacc is None or growth is None or forecast is None or bridge is None:
+        raise CalculationRefusal(
+            "ASSUMPTIONS_INCOMPLETE", "complete FCFF assumptions are required"
+        )
     if wacc.debt_weight + wacc.equity_weight != Decimal("1"):
         raise CalculationRefusal(
             "WACC_WEIGHTS_INVALID", "capital weights must sum to one"
@@ -138,7 +140,6 @@ def calculate(
         raise CalculationRefusal(
             "DISCOUNT_RATE_INVALID", "WACC must exceed terminal growth and zero"
         )
-    forecast = request.assumptions.forecast
     if forecast.base_revenue is None or forecast.base_revenue <= 0:
         raise CalculationRefusal(
             "BASE_REVENUE_MISSING", "a positive base revenue fact is required"
@@ -244,7 +245,6 @@ def calculate(
         )
     )
     enterprise = present_value + terminal_pv
-    bridge = request.assumptions.capital_bridge
     equity = (
         enterprise
         + bridge.cash

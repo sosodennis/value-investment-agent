@@ -28,6 +28,7 @@ from .contracts import (
     ValuationInputV1,
     WaccAssumptionsV1,
 )
+from .numerical_policy import VALUATION_NUMERICAL_POLICY
 from .serialization import canonical_bytes, sha256_digest
 from .snapshots import SnapshotError
 
@@ -951,7 +952,7 @@ def initial_model_specs() -> tuple[ModelSpecV1, ...]:
         "required_evidence": ("issuer-filings", "capital-bridge", "golden-cohort"),
         "assumption_policy": "policy-v1-explicit-caller-assumptions",
         "formula_graph": "calculator-v1-fcff",
-        "numerical_policy": "decimal-50-end-of-year-v1",
+        "numerical_policy": VALUATION_NUMERICAL_POLICY,
         "eligibility_policy": "quality-policy-v1",
         "abstention_policy": "abstain-on-missing-or-unverified-evidence-v1",
         "uncertainty_policy": "caller-owned-explicit-controls-v1",
@@ -1397,7 +1398,7 @@ def expansion_model_specs() -> tuple[ModelSpecV1, ...]:
             required_evidence=family["evidence"],
             assumption_policy=family["assumption_policy"],
             formula_graph=family["formula_graph"],
-            numerical_policy="decimal-50-end-of-year-v1",
+            numerical_policy=VALUATION_NUMERICAL_POLICY,
             eligibility_policy=(
                 "model-required-facts-forbidden-conditions-and-quality-v1"
             ),

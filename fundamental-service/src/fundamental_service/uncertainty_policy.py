@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from decimal import Decimal
 from statistics import mean
+from typing import Final
 
 from .contracts import (
     DistributionParameterV1,
@@ -13,11 +14,12 @@ from .contracts import (
     ValuationInputV1,
 )
 from .serialization import sha256_digest
+from .numerical_policy import using_valuation_context
 
 DEFAULT_UNCERTAINTY_POLICY_VERSION = "fcff-monte-carlo-policy-v1"
 DEFAULT_SAMPLER_VERSION = "python-random-v1"
 DEFAULT_SAMPLE_COUNT = 256
-DEFAULT_INVALID_DRAW_POLICY = "skip"
+DEFAULT_INVALID_DRAW_POLICY: Final = "skip"
 
 _EMPIRICAL_MINIMUMS = {
     "revenue_growth": 3,
@@ -139,6 +141,7 @@ def _metric_parameter(
     )
 
 
+@using_valuation_context
 def build_default_uncertainty(
     request: ValuationInputV1,
     *,
@@ -147,7 +150,11 @@ def build_default_uncertainty(
 ) -> UncertaintyV1:
     """Build the canonical Monte Carlo controls for an automatic request."""
 
-    if request.assumptions.forecast is None or request.assumptions.wacc is None:
+    if (
+        request.assumptions.forecast is None
+        or request.assumptions.wacc is None
+        or request.assumptions.terminal_growth is None
+    ):
         raise ValueError("automatic uncertainty requires FCFF assumptions")
     metric_items = tuple(historical_metrics)
     forecast = request.assumptions.forecast
