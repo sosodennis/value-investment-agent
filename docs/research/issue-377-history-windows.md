@@ -40,3 +40,76 @@ duplicate facts, transition evidence, serialization, deterministic ordering,
 and authenticated release reads after restart without artifact publication.
 Generated verification receipts and real-case diagnostic artifacts stay outside
 Git. Synthetic release tests do not count as complete study issuers.
+
+## Offline conditional window replay
+
+`scripts/replay_history_study_windows.py` selects the trailing three, four and
+five periods from one frozen longest-history conditional request per issuer.
+It retains the complete original-source view, mapping manifest, fact inventory,
+first-original label and model/policy identities. It trims only the selected
+periods and their already explicit capex fractions. It never creates older
+observations or estimates a missing allocation. A shorter seed leaves the longer
+windows explicitly unavailable.
+
+The tool calls the existing Fundamental scenario and conditional-label functions.
+The reviewed evidence exporter validates every generated arm before publication.
+An invalid source, unavailable Transition model or incomplete label remains in
+the official results; executing an arm does not imply a numerical prediction.
+All 100 selected issuers and missing windows remain in the exporter's loss panel.
+
+The seed index pins `history-study-window-seeds.v1`, the unchanged fixed manifest
+digest, installed runtime/lock pins and content-addressed comparison requests.
+Run from a clean exact commit with inputs and outputs outside the checkout:
+
+```sh
+PYTHONPATH=fundamental-service/src:scripts python scripts/replay_history_study_windows.py \
+  --manifest /external/frozen-manifest.json \
+  --seed-index /external/window-seeds.json \
+  --exact-commit <implementation-sha> \
+  --output-directory /external/history-windows
+```
+
+The generated evidence index feeds `export_history_study_evidence.py`, followed
+by `analyze_history_study.py`. Canonical content identifies each request, forecast,
+comparison, index and report. Publication reuses the existing locked atomic
+publisher. Repeating a completed run returns `wrote=false`; resuming after a
+partial publication reuses completed files without changing their bytes or mtime.
+The tool has no acquisition fallback and changes no database, trusted release,
+runtime service or threshold policy.
+
+## NEWMARKET four-year source investigation
+
+The original accession `0001282637-14-000003`, available
+`2014-02-19T15:03:25Z`, contains the candidate 2012 observations needed before
+the unchanged 2016 decision. New retained SEC HTTP 200 receipts bind its index,
+direct XML and ZIP. Fresh offline parses of the direct and archived XML, using
+the same retained archive DTS, each produce 2,508 facts with the identical
+complete semantic digest
+`44f3b4453b97167ea6848d2f22b32e6100c7ff427cb9c5e3a2a056655ba2a1af`.
+The raw XML digests differ; semantic equality does not assert byte equality or
+independent capture of every direct DTS file.
+
+Both parses retain 48 `DQC.US.0001.51` findings with original error rule severity.
+The existing converter refuses canonical candidates with
+`PARSER_VALIDATION_BLOCKED`. Four-year arithmetic must therefore remain
+unavailable under the current contract. Original-bound mapping proposals retain
+the 2012 role observations and the exact passage for rounded discontinued D&A;
+they grant no review or release authority.
+
+The [official pinned DQC rule source](https://github.com/DataQualityCommittee/dqc_us_rules/blob/cafb54391c1d21e4c219bc3d491b855a9b877cb6/dqc_us_rules/dqc_us_0001.py)
+matches the locally pinned bytes (SHA-256
+`9a428c1a045cfe3ca9d9652031310967003a9d7c69bd06aaa50e5f2ebc19bce9`).
+Rule version 3.3.1 has taxonomy configurations for 2014–2017; the filing's 2013
+taxonomy uses the generic fallback. Its fair-value hierarchy member restriction
+produces the observed pension findings. This identifies behavior to investigate
+under #371, rather than proving that the original tags are valid. Per-rule
+taxonomy applicability and the original taxonomy/member definitions need
+validation in the owning parser layer. Changing severity, omitting the rule or
+selecting a different profile because it passes would not establish that result.
+
+Five-year evidence also lacks a complete compatible 2011 original role set and
+resolved productive-assets/PPE capex and discontinued-operation scope. Do not
+combine incompatible originals to fill it. Keep the existing three-year
+conditional case, both unavailable windows and every source finding. Conditional
+comparisons remain one issuer; complete exact cases remain zero and
+`supported_history_threshold` remains null.
