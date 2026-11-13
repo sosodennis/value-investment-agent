@@ -56,6 +56,10 @@ The reviewed evidence exporter validates every generated arm before publication.
 An invalid source, unavailable Transition model or incomplete label remains in
 the official results; executing an arm does not imply a numerical prediction.
 All 100 selected issuers and missing windows remain in the exporter's loss panel.
+The v2 export references the complete canonical artifacts instead of copying
+their payloads into a second appendix. Verification still recomputes every
+forecast/comparison and checks identical bytes. This bounds redundant in-memory
+representations; it does not reduce scenarios, labels, failures or source facts.
 
 The seed index pins `history-study-window-seeds.v1`, the unchanged fixed manifest
 digest, installed runtime/lock pins and content-addressed comparison requests.
@@ -77,6 +81,39 @@ partial publication reuses completed files without changing their bytes or mtime
 The tool has no acquisition fallback and changes no database, trusted release,
 runtime service or threshold policy.
 
+## Source-bound seed extension
+
+`scripts/compile_history_study_seed.py` adds exactly the immediately preceding
+annual period to a frozen three- or four-year conditional comparison request.
+Its `history-study-seed-extension.v1` input contains one complete original issuer
+report, nine distinct provisional observation mappings, aligned annual dates, a
+new mapping version, explicit scope assumptions and an allocation for each
+retained parent scenario. Source and parser identities must resolve through the
+existing Fundamental mapper at the unchanged decision cutoff. Future originals,
+missing scenarios, mismatched observations and claimed mapping approval fail.
+
+The compiler reproduces every existing fact through the formal mapper, requiring
+all fields except mapping and fact identity to remain equal. Labels, original
+filing inventory, model versions, financial policy and existing allocation values
+remain bound to the seed. New allocations are explicit conditional inputs. The
+compiler performs no valuation calculation, source acquisition or release review.
+
+```sh
+PYTHONPATH=fundamental-service/src:scripts python scripts/compile_history_study_seed.py \
+  --seed /external/frozen-comparison.json \
+  --extension /external/source-bound-extension.json \
+  --exact-commit <implementation-sha> \
+  --output-directory /external/compiled-history
+```
+
+Keep the canonical seed and extension outside Git. The command requires a clean
+exact commit, pins their content digests and installed runtime, and publishes a
+canonical request plus a provenance report with the existing atomic publisher.
+An identical rerun reuses both files with `wrote=false`. Publication status is
+excluded from semantic result identity. The request can then enter the window
+replay and evidence exporter above; it cannot authorize trusted release or
+increase the number of independent issuers.
+
 ## NEWMARKET four-year source investigation
 
 The original accession `0001282637-14-000003`, available
@@ -89,27 +126,39 @@ complete semantic digest
 The raw XML digests differ; semantic equality does not assert byte equality or
 independent capture of every direct DTS file.
 
-Both parses retain 48 `DQC.US.0001.51` findings with original error rule severity.
-The existing converter refuses canonical candidates with
-`PARSER_VALIDATION_BLOCKED`. Four-year arithmetic must therefore remain
-unavailable under the current contract. Original-bound mapping proposals retain
-the 2012 role observations and the exact passage for rounded discontinued D&A;
-they grant no review or release authority.
+The initial parses retain 48 `DQC.US.0001.51` findings with original error rule
+severity, and their `PARSER_VALIDATION_BLOCKED` refusals remain evidence. After
+the owning parser correction in #427, an offline replay with the pinned official
+GAAP 2013 profile reproduces all 2,508 facts unchanged with no blocking findings.
+That source replay permits provisional mapping, not mapping approval or release.
+Original-bound proposals retain the 2012 observations and the exact passage for
+rounded discontinued D&A.
 
 The [official pinned DQC rule source](https://github.com/DataQualityCommittee/dqc_us_rules/blob/cafb54391c1d21e4c219bc3d491b855a9b877cb6/dqc_us_rules/dqc_us_0001.py)
 matches the locally pinned bytes (SHA-256
 `9a428c1a045cfe3ca9d9652031310967003a9d7c69bd06aaa50e5f2ebc19bce9`).
 Rule version 3.3.1 has taxonomy configurations for 2014–2017; the filing's 2013
 taxonomy uses the generic fallback. Its fair-value hierarchy member restriction
-produces the observed pension findings. This identifies behavior to investigate
-under #371, rather than proving that the original tags are valid. Per-rule
-taxonomy applicability and the original taxonomy/member definitions need
-validation in the owning parser layer. Changing severity, omitting the rule or
-selecting a different profile because it passes would not establish that result.
+produces the observed pension findings. The #427 correction checks original
+taxonomy/member definitions and applicability in the parser layer; it preserves
+the original rules and findings instead of reducing severity to obtain a pass.
+Its historical profile remains taxonomy-specific; success for GAAP 2013 does
+not establish compatibility for GAAP 2012 or 2011.
+
+The four-year exploratory extension retains all 125 prior allocations and adds
+an independent five-point 2012 continuing-capex fraction grid, producing 625
+conditional scenarios. The 2012 original reports gross PPE capex of 38,753,000;
+its cash-flow scope combines continuing and discontinued operations. Segment
+reconciliation is retained but does not establish the exact continuing cash
+split. No scenario is selected as truth, a probability distribution or a global
+bound. Both three- and four-year arms can run through the existing #352 composer
+with this shared manifest. Transition retains its missing verified filing
+evidence abstention. Conditional errors compare stated assumptions and are not
+exact ground-truth forecast errors.
 
 Five-year evidence also lacks a complete compatible 2011 original role set and
 resolved productive-assets/PPE capex and discontinued-operation scope. Do not
-combine incompatible originals to fill it. Keep the existing three-year
-conditional case, both unavailable windows and every source finding. Conditional
+combine incompatible originals to fill it. Keep the three- and four-year
+conditional arms, the unavailable five-year arm and every source finding. Conditional
 comparisons remain one issuer; complete exact cases remain zero and
 `supported_history_threshold` remains null.

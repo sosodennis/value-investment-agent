@@ -20,7 +20,11 @@ from fundamental_service.serialization import canonical_bytes, sha256_digest
 
 import export_history_study_evidence as exporter
 from analyze_history_study import ROOT, WINDOWS, DesignError, read_document
-from plan_history_study_precision import digest, publish_report
+from plan_history_study_precision import (
+    canonical_bytes as canonical_json_bytes,
+    digest,
+    publish_report,
+)
 
 
 class WindowSeedIndex(StrictModel):
@@ -129,6 +133,7 @@ def prepare_windows(
                     "artifact_digests": entries[-1].identity(),
                 }
             )
+            del values, value, raw, request
     evidence_index = exporter.EvidenceIndex(
         schema_version="history-study-evidence-index.v1",
         fixed_manifest_digest=index.fixed_manifest_digest,
@@ -137,8 +142,10 @@ def prepare_windows(
     )
     with tempfile.TemporaryDirectory(prefix="history-window-validation-") as temporary:
         stage = Path(temporary)
-        for content_digest, value in artifacts.items():
-            (stage / f"{content_digest}.json").write_bytes(canonical_bytes(value))
+        for content_digest, artifact in artifacts.items():
+            (stage / f"{content_digest}.json").write_bytes(
+                canonical_json_bytes(artifact)
+            )
         validation = exporter.export_evidence(manifest, evidence_index, stage)
     output = {
         "schema_version": "history-study-window-replay.v1",

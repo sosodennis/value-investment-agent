@@ -97,11 +97,18 @@ def test_recomputed_scenarios_retain_all_cases_and_do_not_invent_exact_losses(ev
     assert {p.name: p.stat().st_mtime_ns for p in directory.iterdir()} == before
     appendix = result["conditional_evidence"]
     assert len(appendix) == 1
-    assert appendix[0]["comparison"] == json.loads(
+    assert result["schema_version"] == "history-study-evidence-export.v2"
+    assert appendix[0]["artifact_digests"] == index.entries[0].identity()
+    comparison = json.loads(
+        exporter.read_evidence(index.entries[0].comparison, directory)
+    )
+    assert comparison == json.loads(
         canonical_bytes(replay_operating_comparison(request))
     )
-    assert len(appendix[0]["comparison"]["comparisons"]) == 4
-    assert appendix[0]["request"] == json.loads(canonical_bytes(request))
+    assert len(comparison["comparisons"]) == 4
+    assert json.loads(
+        exporter.read_evidence(index.entries[0].request, directory)
+    ) == json.loads(canonical_bytes(request))
     cases = analysis.decode_panel(result["loss_panel"], manifest)
     assert len(cases) == 100 and sum(len(c.observations) for c in cases) == 1200
     assert all(not row.exact for case in cases for row in case.observations)
@@ -296,10 +303,10 @@ def test_official_source_conflicts_stay_abstained_and_do_not_count_as_success(ev
     assert result["independent_conditional_issuers"] == 0
     assert all(arm["conditional_comparisons"] == 0 for arm in result["arm_summaries"])
     assert all(arm["abstained_comparisons"] == 2 for arm in result["arm_summaries"])
-    assert all(
-        row["signed_error"] is None
-        for row in result["conditional_evidence"][0]["comparison"]["comparisons"]
+    comparison = json.loads(
+        exporter.read_evidence(index.entries[0].comparison, directory)
     )
+    assert all(row["signed_error"] is None for row in comparison["comparisons"])
 
 
 @pytest.mark.parametrize("fault", ["whitespace", "duplicate-field"])

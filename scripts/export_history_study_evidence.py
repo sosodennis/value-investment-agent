@@ -32,7 +32,10 @@ from analyze_history_study import (
     read_document,
     text_value,
 )
-from plan_history_study_precision import publish_report
+from plan_history_study_precision import (
+    canonical_bytes as canonical_json_bytes,
+    publish_report,
+)
 
 POLICY = "formal-conditional-evidence-export-v1"
 
@@ -90,7 +93,7 @@ def read_evidence(reference: FileReference, directory: Path) -> bytes:
     raw = path.read_bytes()
     if digest(raw) != reference.sha256:
         raise DesignError("frozen evidence content digest mismatch")
-    if canonical_bytes(read_document(path)) != raw:
+    if canonical_json_bytes(read_document(path)) != raw:
         raise DesignError("frozen evidence requires canonical serialization")
     return raw
 
@@ -112,6 +115,7 @@ def export_evidence(
         for row in (object_value(value),)
     }
     retained: dict[tuple[str, int], dict[str, object]] = {}
+    comparison_codes: dict[tuple[str, int, str], list[str]] = {}
     summaries = []
     conditional_issuers = set()
     common_identities: dict[str, str] = {}
@@ -204,9 +208,6 @@ def export_evidence(
             "years": years,
             "artifact_digests": entry.identity(),
             "comparison_basis_digest": common,
-            "request": object_value(json.loads(canonical_bytes(request))),
-            "forecast": object_value(json.loads(canonical_bytes(forecast))),
-            "comparison": object_value(json.loads(canonical_bytes(comparison))),
         }
         for model in MODELS:
             rows = tuple(row for row in comparison.comparisons if row.model_id == model)
@@ -215,6 +216,8 @@ def export_evidence(
             )
             if scored:
                 conditional_issuers.add(issuer)
+            codes = sorted({code for row in rows for code in row.issue_codes})
+            comparison_codes[issuer, years, model] = codes
             summaries.append(
                 {
                     "issuer_id": issuer,
@@ -230,11 +233,10 @@ def export_evidence(
                     "abstained_labels": sum(
                         label.status == "abstained" for label in comparison.labels
                     ),
-                    "issue_codes": sorted(
-                        {code for row in rows for code in row.issue_codes}
-                    ),
+                    "issue_codes": codes,
                 }
             )
+        del request, decision, forecast, comparison, rows
     cases = []
     for issuer, frozen in sorted(decisions.items()):
         observations = []
@@ -263,16 +265,7 @@ def export_evidence(
                         if target == "next_annual_undiscounted_fcff":
                             kind, status = "conditional_scenario", "abstained"
                             reasons.add("CONDITIONAL_SCENARIOS_NOT_EXACT_GROUND_TRUTH")
-                            comparison_rows = object_value(evidence["comparison"])[
-                                "comparisons"
-                            ]
-                            for value in list_value(comparison_rows):
-                                row = object_value(value)
-                                if row["model_id"] == model:
-                                    reasons.update(
-                                        text_value(code)
-                                        for code in list_value(row["issue_codes"])
-                                    )
+                            reasons.update(comparison_codes[issuer, years, model])
                         else:
                             reasons.add("FORMAL_REVENUE_COMPARISON_UNAVAILABLE")
                     observations.append(
@@ -315,11 +308,12 @@ def export_evidence(
     }
     decode_panel(panel, manifest)
     return {
-        "schema_version": "history-study-evidence-export.v1",
+        "schema_version": "history-study-evidence-export.v2",
         "evidence_authority": "recomputed_conditional_arithmetic_not_trusted_release",
         "loss_panel": panel,
         "loss_panel_digest": sha256_digest(panel),
         "conditional_evidence": [retained[key] for key in sorted(retained)],
+        "artifact_retention": "complete_canonical_inputs_and_outputs_at_pinned_index_references",
         "arm_summaries": sorted(
             summaries, key=lambda row: (row["issuer_id"], row["years"], row["model"])
         ),
