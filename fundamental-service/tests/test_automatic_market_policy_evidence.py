@@ -10,6 +10,7 @@ from fundamental_service.application.service import ServiceError
 from fundamental_service.automatic_market_policy_evidence import (
     AUTOMATIC_MARKET_POLICY_REF_PREFIX,
     AUTOMATIC_MARKET_POLICY_ROLE,
+    assemble_authorized_market_policy_record,
     build_automatic_market_policy_evidence,
     load_release_automatic_market_policy,
 )
@@ -21,6 +22,8 @@ from fundamental_service.data_releases import (
     sign_data_release_verification,
 )
 from fundamental_service.policies import (
+    FilesystemPolicyRepository,
+    PolicyError,
     PolicyRecordV1,
     PolicyRegistry,
     initial_model_specs,
@@ -168,6 +171,210 @@ def test_release_boundary_reproduces_automatic_policy_with_injected_sources():
     )
 
 
+def _authorization(policy, **changes):
+    payload = policy.model_dump(exclude={"policy_digest"})
+    payload.update(changes)
+    return PolicyRecordV1(**payload, policy_digest=sha256_digest(payload))
+
+
+def test_policy_assembly_reuses_exact_authorized_evidence_without_side_effects():
+    manifest, snapshot, expected, admissions, contents, _ = _bound()
+    authorization = _authorization(expected, market_inputs=None)
+    before = canonical_bytes(authorization), dict(contents)
+    kwargs = dict(
+        authorization=authorization,
+        model=initial_model_specs()[0],
+        snapshot=snapshot,
+        artifacts=_Artifacts(contents),
+        expected_source_revision="1" * 40,
+    )
+    first = assemble_authorized_market_policy_record(
+        manifest, admissions=admissions, **kwargs
+    )
+    second = assemble_authorized_market_policy_record(
+        manifest, admissions=tuple(reversed(admissions)), **kwargs
+    )
+    assert first == second == expected
+    assert (
+        canonical_bytes(first) == canonical_bytes(second) == canonical_bytes(expected)
+    )
+    assert first.model_dump(exclude={"market_inputs", "policy_digest"}) == (
+        authorization.model_dump(exclude={"market_inputs", "policy_digest"})
+    )
+    assert (canonical_bytes(authorization), contents) == before
+    assert authorization.market_inputs is None
+    assert (
+        assemble_authorized_market_policy_record(
+            manifest, admissions=admissions, **{**kwargs, "authorization": first}
+        )
+        == first
+    )
+
+
+def test_policy_assembly_cannot_replace_an_already_published_policy(tmp_path):
+    manifest, snapshot, policy, admissions, contents, _ = _bound()
+    authorization = _authorization(policy, market_inputs=None)
+    repository = FilesystemPolicyRepository(tmp_path)
+    repository.publish(authorization)
+    before = {
+        path: (path.read_bytes(), path.stat().st_mtime_ns)
+        for path in tmp_path.iterdir()
+    }
+    candidate = assemble_authorized_market_policy_record(
+        manifest,
+        authorization=authorization,
+        model=initial_model_specs()[0],
+        snapshot=snapshot,
+        admissions=admissions,
+        artifacts=_Artifacts(contents),
+        expected_source_revision="1" * 40,
+    )
+    with pytest.raises(PolicyError) as failure:
+        repository.publish(candidate)
+    assert failure.value.code == "POLICY_IMMUTABLE"
+    assert repository.get(authorization.policy_id) == authorization
+    assert {
+        path: (path.read_bytes(), path.stat().st_mtime_ns)
+        for path in tmp_path.iterdir()
+    } == before
+
+
+def test_refused_decision_cannot_supply_market_inputs_or_become_a_policy():
+    manifest, snapshot, policy, _, contents, evidence = _bound()
+    refused = build_automatic_market_policy_evidence(
+        source_revision=evidence.source_revision,
+        plan_decision=evidence.plan_decision,
+        policy=evidence.decision.policy,
+        admissions=(),
+    )
+    assert refused.decision.status == "refused" and refused.decision.inputs is None
+    assert refused.decision.issue_codes
+    refs = []
+    for ref in manifest.artifact_refs:
+        if ref.role == AUTOMATIC_MARKET_POLICY_ROLE:
+            raw = canonical_bytes(refused)
+            ref = ref.model_copy(
+                update={"content_hash": hashlib.sha256(raw).hexdigest()}
+            )
+            contents[ref.artifact_id] = raw
+        refs.append(ref)
+    authorization = _authorization(
+        policy,
+        market_inputs=None,
+        source_refs=(
+            AUTOMATIC_MARKET_POLICY_REF_PREFIX + sha256_digest(refused),
+            *policy.source_refs[1:],
+        ),
+    )
+    with pytest.raises(DataReleaseError) as failure:
+        assemble_authorized_market_policy_record(
+            manifest.model_copy(update={"artifact_refs": tuple(refs)}),
+            authorization=authorization,
+            model=initial_model_specs()[0],
+            snapshot=snapshot,
+            admissions=(),
+            artifacts=_Artifacts(contents),
+            expected_source_revision=evidence.source_revision,
+        )
+    assert failure.value.code == "AUTOMATIC_MARKET_POLICY_INPUTS_MISMATCH"
+    assert authorization.market_inputs is None
+
+
+@pytest.mark.parametrize(
+    "change,code",
+    [
+        ("model", "AUTOMATIC_MARKET_POLICY_MODEL_MISMATCH"),
+        ("profile", "AUTOMATIC_MARKET_POLICY_MODEL_MISMATCH"),
+        ("issuer", "AUTOMATIC_MARKET_POLICY_CONTEXT_MISMATCH"),
+        ("policy_id", "AUTOMATIC_MARKET_POLICY_CONTEXT_MISMATCH"),
+        ("version", "AUTOMATIC_MARKET_POLICY_CONTEXT_MISMATCH"),
+        ("decision_authority", "AUTOMATIC_MARKET_POLICY_UNAPPROVED"),
+        ("plan_authority", "AUTOMATIC_MARKET_POLICY_PLAN_UNAPPROVED"),
+        ("revision", "AUTOMATIC_MARKET_POLICY_REVISION_MISMATCH"),
+        ("source", "AUTOMATIC_MARKET_POLICY_REPLAY_MISMATCH"),
+        ("prefilled_value", "AUTOMATIC_MARKET_POLICY_INPUTS_MISMATCH"),
+        ("future", "POLICY_NOT_EFFECTIVE"),
+        ("retired", "POLICY_NOT_EFFECTIVE"),
+        ("missing", "AUTOMATIC_MARKET_POLICY_EVIDENCE_MISSING"),
+        ("ambiguous", "AUTOMATIC_MARKET_POLICY_EVIDENCE_AMBIGUOUS"),
+        ("changed", "AUTOMATIC_MARKET_POLICY_EVIDENCE_MISMATCH"),
+        ("noncanonical", "AUTOMATIC_MARKET_POLICY_EVIDENCE_NONCANONICAL"),
+    ],
+)
+def test_policy_assembly_retains_missing_conflicting_or_unauthorized_inputs(
+    change, code
+):
+    manifest, snapshot, policy, admissions, contents, _ = _bound()
+    authorization = _authorization(policy, market_inputs=None)
+    expected_revision = "1" * 40
+    if change == "model":
+        authorization = _authorization(authorization, model_version="other-version")
+    elif change == "profile":
+        authorization = _authorization(authorization, profile_id="other-profile")
+    elif change in {"issuer", "policy_id", "version"}:
+        field = {"issuer": "issuer_id", "version": "policy_version"}.get(change, change)
+        authorization = _authorization(authorization, **{field: "other"})
+    elif change == "decision_authority":
+        authorization = _authorization(authorization, source_refs=("unapproved",))
+    elif change == "plan_authority":
+        authorization = _authorization(
+            authorization, source_refs=(policy.source_refs[0],)
+        )
+    elif change == "revision":
+        expected_revision = "2" * 40
+    elif change == "source":
+        admissions = admissions[:-1]
+    elif change == "prefilled_value":
+        inputs = policy.market_inputs.model_dump()
+        inputs["beta"] += Decimal("0.1")
+        for item in inputs["evidence"]:
+            if item["role"] == "beta":
+                item["value"] = inputs["beta"]
+        authorization = _authorization(policy, market_inputs=inputs)
+    elif change == "future":
+        authorization = _authorization(
+            authorization, effective_at=AT + timedelta(days=1)
+        )
+    elif change == "retired":
+        authorization = _authorization(authorization, status="retired")
+    else:
+        ref = next(
+            x for x in manifest.artifact_refs if x.role == AUTOMATIC_MARKET_POLICY_ROLE
+        )
+        if change == "missing":
+            refs = tuple(x for x in manifest.artifact_refs if x != ref)
+        elif change == "ambiguous":
+            refs = (*manifest.artifact_refs, ref)
+        else:
+            contents[ref.artifact_id] += b" "
+            refs = tuple(
+                x.model_copy(
+                    update={
+                        "content_hash": hashlib.sha256(
+                            contents[x.artifact_id]
+                        ).hexdigest()
+                    }
+                )
+                if x == ref and change == "noncanonical"
+                else x
+                for x in manifest.artifact_refs
+            )
+        manifest = manifest.model_copy(update={"artifact_refs": refs})
+    before = canonical_bytes(authorization), dict(contents)
+    with pytest.raises((DataReleaseError, PolicyError)) as failure:
+        assemble_authorized_market_policy_record(
+            manifest,
+            authorization=authorization,
+            model=initial_model_specs()[0],
+            snapshot=snapshot,
+            admissions=admissions,
+            artifacts=_Artifacts(contents),
+            expected_source_revision=expected_revision,
+        )
+    assert failure.value.code == code
+    assert (canonical_bytes(authorization), contents) == before
+
+
 def test_release_boundary_retains_missing_or_changed_automatic_evidence():
     manifest, snapshot, policy, admissions, contents, _ = _bound()
     ref = next(
@@ -286,6 +493,15 @@ def _service_bound(fixture):
     )
     for name, raw in contents.items():
         fixture.artifacts.put_bytes_with_receipt(name, raw)
+    policy = assemble_authorized_market_policy_record(
+        manifest,
+        authorization=_authorization(policy, market_inputs=None),
+        model=initial_model_specs()[0],
+        snapshot=fixture.snapshot,
+        admissions=admissions,
+        artifacts=fixture.artifacts,
+        expected_source_revision=evidence.source_revision,
+    )
     application = replace(
         fixture.application,
         metadata_store=replace_metadata(fixture, manifest),

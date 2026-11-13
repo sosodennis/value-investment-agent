@@ -19,7 +19,7 @@ from .contracts import SourceSnapshotV1
 from .data_releases import DataReleaseError, DataReleaseManifestV1
 from .issuer_market_policy_plan import IssuerMarketReferencePlanDecisionV1
 from .market_reference_evidence import read_release_market_reference_plan
-from .policies import PolicyRecordV1
+from .policies import ModelSpecV1, PolicyRecordV1, PolicyRegistry
 from .serialization import canonical_bytes, sha256_digest
 from .snapshots import SnapshotError
 from .source_admission import SourceAdmissionV1
@@ -67,27 +67,17 @@ def requires_automatic_market_policy(policy: PolicyRecordV1 | None) -> bool:
     )
 
 
-def load_release_automatic_market_policy(
+def _read_automatic_market_policy(
     manifest: DataReleaseManifestV1,
     *,
-    snapshot: SourceSnapshotV1,
-    policy: PolicyRecordV1 | None,
-    admissions: tuple[SourceAdmissionV1, ...],
     artifacts: AdmissionArtifactReader,
-    expected_source_revision: str | None = None,
 ) -> AutomaticMarketPolicyEvidenceV1 | None:
-    """Verify the declared assembly without granting new policy authority."""
     refs = tuple(
         ref
         for ref in manifest.artifact_refs
         if ref.role == AUTOMATIC_MARKET_POLICY_ROLE
     )
     if not refs:
-        if requires_automatic_market_policy(policy):
-            raise DataReleaseError(
-                "AUTOMATIC_MARKET_POLICY_EVIDENCE_MISSING",
-                "automatic deployment policy requires its released decision",
-            )
         return None
     if len(refs) != 1:
         raise DataReleaseError(
@@ -116,9 +106,30 @@ def load_release_automatic_market_policy(
             "AUTOMATIC_MARKET_POLICY_EVIDENCE_NONCANONICAL",
             "automatic market-policy evidence requires canonical serialization",
         )
+    return evidence
+
+
+def load_release_automatic_market_policy(
+    manifest: DataReleaseManifestV1,
+    *,
+    snapshot: SourceSnapshotV1,
+    policy: PolicyRecordV1 | None,
+    admissions: tuple[SourceAdmissionV1, ...],
+    artifacts: AdmissionArtifactReader,
+    expected_source_revision: str | None = None,
+) -> AutomaticMarketPolicyEvidenceV1 | None:
+    """Verify the declared assembly without granting new policy authority."""
+    evidence = _read_automatic_market_policy(manifest, artifacts=artifacts)
+    if evidence is None:
+        if requires_automatic_market_policy(policy):
+            raise DataReleaseError(
+                "AUTOMATIC_MARKET_POLICY_EVIDENCE_MISSING",
+                "automatic deployment policy requires its released decision",
+            )
+        return None
     if (
         policy is None
-        or AUTOMATIC_MARKET_POLICY_REF_PREFIX + ref.content_hash
+        or AUTOMATIC_MARKET_POLICY_REF_PREFIX + sha256_digest(evidence)
         not in policy.source_refs
         or sum(
             item.startswith(AUTOMATIC_MARKET_POLICY_REF_PREFIX)
@@ -182,3 +193,60 @@ def load_release_automatic_market_policy(
             "deployment inputs differ from the complete reproduced decision",
         )
     return evidence
+
+
+def assemble_authorized_market_policy_record(
+    manifest: DataReleaseManifestV1,
+    *,
+    authorization: PolicyRecordV1,
+    model: ModelSpecV1,
+    snapshot: SourceSnapshotV1,
+    admissions: tuple[SourceAdmissionV1, ...],
+    artifacts: AdmissionArtifactReader,
+    expected_source_revision: str,
+) -> PolicyRecordV1:
+    """Build an unpublished candidate from an operator's exact authorization.
+
+    The authorization must already pin the decision and both selection plans.
+    Admissions must have been reproduced by the configured source-use owner.
+    This factory never installs a policy or changes a published identity; the
+    trusted publisher and signed release canary still own those later gates.
+    """
+    authorization = PolicyRecordV1.model_validate_json(canonical_bytes(authorization))
+    model = ModelSpecV1.model_validate_json(canonical_bytes(model))
+    if (
+        authorization.model_id != model.model_id
+        or authorization.model_version != model.model_version
+        or authorization.profile_id != model.profile_id
+        or model.lifecycle == "retired"
+    ):
+        raise DataReleaseError(
+            "AUTOMATIC_MARKET_POLICY_MODEL_MISMATCH",
+            "market-policy authorization must pin the supplied model and profile",
+        )
+    evidence = _read_automatic_market_policy(manifest, artifacts=artifacts)
+    if evidence is None:
+        raise DataReleaseError(
+            "AUTOMATIC_MARKET_POLICY_EVIDENCE_MISSING",
+            "market-policy assembly requires its released decision",
+        )
+    candidate = authorization
+    if authorization.market_inputs is None:
+        payload = authorization.model_dump(exclude={"policy_digest"})
+        payload["market_inputs"] = evidence.decision.inputs
+        candidate = PolicyRecordV1(**payload, policy_digest=sha256_digest(payload))
+    load_release_automatic_market_policy(
+        manifest,
+        snapshot=snapshot,
+        policy=candidate,
+        admissions=admissions,
+        artifacts=artifacts,
+        expected_source_revision=expected_source_revision,
+    )
+    return PolicyRegistry(models=(model,), policies=(candidate,)).select_policy(
+        model_id=model.model_id,
+        model_version=model.model_version,
+        valuation_timestamp=snapshot.valuation_timestamp,
+        policy_id=candidate.policy_id,
+        issuer_id=snapshot.identity.issuer_id,
+    )

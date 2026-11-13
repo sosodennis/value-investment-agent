@@ -61,6 +61,18 @@ trusted deployment policy, signed release canary, formal #352 composer and exact
 caller approval still enforce their own contracts. This stage does not install
 a deployment policy or approve historical sufficiency.
 
+The release boundary's `assemble_authorized_market_policy_record` can build an
+unpublished policy candidate from that retained decision. Its operator-supplied
+authorization must already name the exact decision and both selection plans,
+issuer, effective time, policy version, model version and profile. It fills only
+absent market inputs, using the same evidence reader and evaluator as serving
+and the canary. Existing conflicting inputs, missing authorization, refused
+decisions and incompatible pins fail explicitly. It performs no publication,
+signing, activation or network call. Publishing a different candidate under an
+already published policy identity remains an immutable-repository conflict.
+The source plan cannot supply deployment authority. This factory is an operator
+building block; the ordinary CLI does not yet assemble or install its candidate.
+
 ## Source suitability
 
 Production market inputs require a maintained structured dataset, a stable API
