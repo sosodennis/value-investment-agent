@@ -1,5 +1,9 @@
 from datetime import UTC, date, datetime
 from hashlib import sha256
+import json
+from pathlib import Path
+import subprocess
+import sys
 
 import pytest
 
@@ -353,3 +357,95 @@ def test_serialized_evidence_rejects_dropped_sources_and_changed_digests(tmp_pat
             SecOwnershipEvidenceV1.model_validate_json(
                 canonical_bytes({**evidence.model_dump(), **change})
             )
+
+
+@pytest.fixture
+def inspection_command(tmp_path, monkeypatch):
+    scripts = Path(__file__).resolve().parents[2] / "scripts"
+    monkeypatch.syspath_prepend(str(scripts))
+    import inspect_sec_ownership
+
+    repository = tmp_path / "repository"
+    repository.mkdir()
+    subprocess.run(["git", "init", str(repository)], check=True, capture_output=True)
+    subprocess.run(
+        [
+            "git",
+            "-c",
+            "user.name=Test",
+            "-c",
+            "user.email=test@example.com",
+            "commit",
+            "--allow-empty",
+            "-m",
+            "fixture",
+        ],
+        cwd=repository,
+        check=True,
+        capture_output=True,
+    )
+    head = subprocess.check_output(
+        ["git", "rev-parse", "HEAD"], cwd=repository, text=True
+    ).strip()
+    monkeypatch.setattr(inspect_sec_ownership, "ROOT", repository)
+    raw = submission()
+    store = FilesystemContentStore(tmp_path / "content")
+    store.put(raw, media_type="text/plain")
+    request = SecOwnershipRequestV1(
+        source_revision=head, issuer_id=CIK, valuation_at=CUTOFF, sources=(source(raw),)
+    )
+    manifest = tmp_path / "manifest.json"
+    manifest.write_bytes(canonical_bytes(request))
+    output = tmp_path / "reports"
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "inspect_sec_ownership.py",
+            "--manifest",
+            str(manifest),
+            "--content-root",
+            str(store.root),
+            "--output-directory",
+            str(output),
+        ],
+    )
+    return inspect_sec_ownership.main, repository, manifest, output
+
+
+def test_operator_command_reuses_the_actual_report_without_rewriting(
+    inspection_command, capsys
+):
+    command, _, _, output = inspection_command
+    assert command() == 0
+    first = json.loads(capsys.readouterr().out)
+    before = {p.name: (p.read_bytes(), p.stat().st_mtime_ns) for p in output.iterdir()}
+    assert command() == 0
+    second = json.loads(capsys.readouterr().out)
+    assert first["wrote"] is True and second["wrote"] is False
+    assert first["report_digest"] == second["report_digest"]
+    assert first["input_digest"] == second["input_digest"]
+    assert first["output_digest"] == second["output_digest"]
+    assert first["parsed"] == 1 and first["refused"] == 0
+    assert before == {
+        p.name: (p.read_bytes(), p.stat().st_mtime_ns) for p in output.iterdir()
+    }
+
+
+@pytest.mark.parametrize("change", ["untracked", "wrong_commit", "inside_checkout"])
+def test_operator_command_refuses_unreviewed_state_before_publication(
+    inspection_command, capsys, monkeypatch, change
+):
+    command, repository, manifest, output = inspection_command
+    if change == "untracked":
+        (repository / "unreviewed.py").write_text("source = 'not committed'\n")
+    elif change == "wrong_commit":
+        value = json.loads(manifest.read_bytes())
+        value["source_revision"] = "0" * 40
+        manifest.write_bytes(canonical_bytes(value))
+    else:
+        output = repository / "generated"
+        monkeypatch.setattr(sys, "argv", [*sys.argv[:-1], str(output)])
+    assert command() == 2
+    assert json.loads(capsys.readouterr().out)["status"] == "failed"
+    assert not output.exists()

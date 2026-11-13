@@ -33,7 +33,7 @@ def main() -> int:
             ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True
         ).strip()
         dirty = subprocess.check_output(
-            ["git", "status", "--porcelain", "--untracked-files=no"],
+            ["git", "status", "--porcelain"],
             cwd=ROOT,
             text=True,
         )
