@@ -2119,3 +2119,19 @@ is not upgraded to full-service acceptance. Main delivery/full #361 acceptance
 remain pending; #427 is still excluded while its review correction is owned by
 the coordinating side. Next: parent CI, bounded #386 main preparation and review
 of the corrected #427 head.
+
+### Main refresh after independent #428 delivery
+
+Normal merge `1bb1b6df6efae7f957953207031acaf409e6c544` brings main
+`17975bd1b5a5195d0dcaab9ba0e4c5808434424e` into #361. Its only tree change
+against #361 is the #419/#422 acceptance document: guard/hook implementations
+already match. Fresh exact-merge141 tests, Ruff/format, source-aware mypy, both
+architecture guards and whitespace pass. Receipt
+`a0db92855e02cea666a9d035d8636705a7a28a4d88fb75f53acda0f9b4252df7`,
+input `226740f8e274f1050cd7e010557946a0b58d488ee7e8296f01ae72069940128c`,
+output `62254193741bad6127059e45efe3fed5c3316164547f70ab591772320082a623`.
+No replay source or runtime code changed from the #423 integration acceptance.
+GitHub confirms #423 merged at `6b2fcc91`; #428 main merge and issue closure
+are owned by the coordinating side. The isolated #386 main branch starts at
+`17975bd1`, and #427 awaits its source-owner correction. Parent CI and full
+numerical/recovery acceptance remain distinct pending gates.
