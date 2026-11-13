@@ -114,6 +114,14 @@ class SecSourceCapturePort(SecRequestTransportPort, Protocol):
         deadline_at: datetime | None = None,
     ) -> CapturedSource: ...
 
+    def capture_submission_history(
+        self,
+        *,
+        cik: str,
+        filename: str,
+        deadline_at: datetime | None = None,
+    ) -> CapturedSource: ...
+
     def capture_filing_index(
         self,
         *,
@@ -225,6 +233,12 @@ def sec_source_register() -> SourceRegister:
             ),
             LegalSource(
                 "sec-submissions", SourceRole.ACQUISITION, SEC_TERMS, "indefinite"
+            ),
+            LegalSource(
+                "sec-submissions-history",
+                SourceRole.ACQUISITION,
+                SEC_TERMS,
+                "indefinite",
             ),
             LegalSource(
                 "sec-filing-index", SourceRole.REFERENCE, SEC_TERMS, "indefinite"
@@ -488,6 +502,7 @@ class SecEdgarSourceAdapter:
             "sec-companyfacts",
             "sec-company-tickers",
             "sec-submissions",
+            "sec-submissions-history",
             "sec-filing-index",
         }:
             raise SecSourceError(
@@ -495,7 +510,7 @@ class SecEdgarSourceAdapter:
             )
         if source_id == "sec-companyfacts":
             expected_prefixes = (f"{self.policy.base_url}/api/xbrl/companyfacts/",)
-        elif source_id == "sec-submissions":
+        elif source_id in {"sec-submissions", "sec-submissions-history"}:
             expected_prefixes = (f"{self.policy.base_url}/submissions/",)
         elif source_id == "sec-company-tickers":
             expected_prefixes = ("https://www.sec.gov/files/company_tickers.json",)
@@ -504,7 +519,8 @@ class SecEdgarSourceAdapter:
         parsed = urlsplit(uri)
         allowed_hosts = (
             {"data.sec.gov"}
-            if source_id in {"sec-companyfacts", "sec-submissions"}
+            if source_id
+            in {"sec-companyfacts", "sec-submissions", "sec-submissions-history"}
             else {"www.sec.gov"}
         )
         if (
@@ -538,7 +554,8 @@ class SecEdgarSourceAdapter:
                 SourceRole.FACTS
                 if source_id == "sec-companyfacts"
                 else SourceRole.ACQUISITION
-                if source_id in {"sec-company-tickers", "sec-submissions"}
+                if source_id
+                in {"sec-company-tickers", "sec-submissions", "sec-submissions-history"}
                 else SourceRole.REFERENCE
             ),
             content=payload,
@@ -593,6 +610,26 @@ class SecEdgarSourceAdapter:
             source_id="sec-submissions",
             uri=f"{self.policy.base_url}/submissions/CIK{int(normalized):010d}.json",
             captured_at=captured_at,
+            deadline_at=deadline_at,
+        )
+
+    def capture_submission_history(
+        self,
+        *,
+        cik: str,
+        filename: str,
+        deadline_at: datetime | None = None,
+    ) -> CapturedSource:
+        if not re.fullmatch(r"\d{10}", cik) or not re.fullmatch(
+            rf"CIK{cik}-submissions-\d{{3}}\.json", filename
+        ):
+            raise SecSourceError(
+                "SOURCE_URI_NOT_ALLOWED",
+                "SEC historical submissions filename must match the requested CIK",
+            )
+        return self.capture_json(
+            source_id="sec-submissions-history",
+            uri=f"{self.policy.base_url}/submissions/{filename}",
             deadline_at=deadline_at,
         )
 

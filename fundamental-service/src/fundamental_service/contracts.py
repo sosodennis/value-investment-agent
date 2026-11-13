@@ -1067,7 +1067,9 @@ class SecSourceRequestV1(StrictModel):
     # evidence, so the canonical request must accept more than 32 fields.
     required_fields: tuple[str, ...] = Field(min_length=1, max_length=64)
     source_selection_policy: Literal["sec-pit-v1"]
-    supplemental_filing_policy: Literal["sec-equity-award-proxy.v1"] | None = None
+    supplemental_filing_policy: (
+        Literal["sec-equity-award-proxy.v1", "sec-equity-award-proxy.v2"] | None
+    ) = None
     coverage_profile: str = Field(min_length=1, max_length=128)
     legal_use_profile: Literal["sec-public-us-v1"]
     filing: SecFilingSelectorV1

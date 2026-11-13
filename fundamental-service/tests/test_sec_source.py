@@ -64,6 +64,53 @@ def test_companyfacts_capture_is_public_and_hashable():
     assert calls[0][1] == "value-agent test@example.com"
 
 
+def test_submission_history_capture_uses_the_registered_issuer_endpoint():
+    payload = b'{"accessionNumber":[]}'
+    calls = []
+
+    def opener(request, timeout):
+        calls.append(request.full_url)
+        return FakeResponse(payload)
+
+    source = SecEdgarSourceAdapter(
+        SecRequestPolicy(
+            user_agent="value-agent test@example.com", min_interval_seconds=0
+        ),
+        opener=opener,
+    ).capture_submission_history(
+        cik="0000320193", filename="CIK0000320193-submissions-001.json"
+    )
+    assert source.source_id == "sec-submissions-history"
+    assert source.role is SourceRole.ACQUISITION
+    assert source.content == payload
+    assert calls == [
+        "https://data.sec.gov/submissions/CIK0000320193-submissions-001.json"
+    ]
+
+
+@pytest.mark.parametrize(
+    "filename",
+    [
+        "CIK0000000001-submissions-001.json",
+        "../CIK0000320193-submissions-001.json",
+        "CIK0000320193-submissions-001.json?extra=1",
+        "https://example.com/CIK0000320193-submissions-001.json",
+    ],
+)
+def test_submission_history_rejects_foreign_or_noncanonical_filename_without_io(
+    filename,
+):
+    calls = []
+    adapter = SecEdgarSourceAdapter(
+        SecRequestPolicy(user_agent="value-agent test@example.com"),
+        opener=lambda *_args, **_kwargs: calls.append(True),
+    )
+    with pytest.raises(SecSourceError) as error:
+        adapter.capture_submission_history(cik="0000320193", filename=filename)
+    assert error.value.code == "SOURCE_URI_NOT_ALLOWED"
+    assert calls == []
+
+
 def test_company_ticker_directory_capture_is_exact_and_hashable():
     payload = b'{"0":{"cik_str":320193,"ticker":"AAPL","title":"Apple Inc."}}'
     calls = []

@@ -83,8 +83,16 @@ class _RecentFilings(_SecPayload):
     isInlineXBRL: list[int | str] | None = None
 
 
+class _SubmissionHistoryReference(_SecPayload):
+    name: str = Field(pattern=r"^CIK\d{10}-submissions-\d{3}\.json$")
+    filingCount: int = Field(ge=1)
+    filingFrom: date
+    filingTo: date
+
+
 class _SecFilings(_SecPayload):
     recent: _RecentFilings
+    files: list[_SubmissionHistoryReference] | None = None
 
 
 class _Submissions(_SecPayload):
@@ -863,7 +871,10 @@ class SecAcquisitionUseCase:
             supported_filing_forms=self.settings.supported_filing_forms,
         )
         supplemental_sources, supplemental_issues = self._capture_award_proxy_sources(
-            request, submissions, deadline_at=deadline_at
+            request,
+            submissions,
+            annual_accession=filing.accession_number,
+            deadline_at=deadline_at,
         )
         if self.capture_store is not None and not isinstance(
             adapter, RetainedSecSourceAdapter
@@ -1268,9 +1279,26 @@ class SecAcquisitionUseCase:
 
     @staticmethod
     def _select_award_proxy_filings(
-        submissions: _Submissions, valuation_timestamp: datetime
+        submissions: _Submissions,
+        valuation_timestamp: datetime,
+        *,
+        history_rows: tuple[_RecentFilings, ...] = (),
     ) -> tuple[tuple[_SelectedFiling, ...], tuple[IssueV1, ...]]:
-        recent = submissions.filings.recent
+        row_sets = (submissions.filings.recent, *history_rows)
+        recent = _RecentFilings(
+            accessionNumber=[
+                value for rows in row_sets for value in rows.accessionNumber
+            ],
+            filingDate=[value for rows in row_sets for value in rows.filingDate],
+            acceptanceDateTime=[
+                value for rows in row_sets for value in rows.acceptanceDateTime
+            ],
+            form=[value for rows in row_sets for value in rows.form],
+            primaryDocument=[
+                value for rows in row_sets for value in rows.primaryDocument
+            ],
+            isXBRL=[value for rows in row_sets for value in rows.isXBRL],
+        )
         cutoff_date = valuation_timestamp.date() - timedelta(
             days=_AWARD_PROXY_LOOKBACK_DAYS
         )
@@ -1282,8 +1310,13 @@ class SecAcquisitionUseCase:
             ):
                 continue
             try:
-                accession = recent.accessionNumber[index]
                 filing_date = date.fromisoformat(recent.filingDate[index])
+                if (
+                    filing_date < cutoff_date
+                    or filing_date > valuation_timestamp.date()
+                ):
+                    continue
+                accession = recent.accessionNumber[index]
                 accepted_raw = recent.acceptanceDateTime[index]
                 if accepted_raw is None:
                     raise ValueError("acceptanceDateTime is missing")
@@ -1309,11 +1342,7 @@ class SecAcquisitionUseCase:
                     status_code=502,
                     retryable=False,
                 )
-            if (
-                filing_date < cutoff_date
-                or filing_date > valuation_timestamp.date()
-                or accepted_at > valuation_timestamp
-            ):
+            if accepted_at > valuation_timestamp:
                 continue
             eligible.append(
                 _SelectedFiling(
@@ -1325,6 +1354,17 @@ class SecAcquisitionUseCase:
                 )
             )
 
+        unique: dict[str, _SelectedFiling] = {}
+        for item in eligible:
+            previous = unique.setdefault(item.accession_number, item)
+            if previous != item:
+                raise ServiceError(
+                    "FILING_METADATA_CONFLICT",
+                    "SEC filing indexes disagree on proxy accession metadata",
+                    status_code=502,
+                    retryable=False,
+                )
+        eligible = list(unique.values())
         originals = [item for item in eligible if item.form == _AWARD_PROXY_BASE_FORM]
         if not originals:
             return (), (
@@ -1371,17 +1411,27 @@ class SecAcquisitionUseCase:
         request: SecSourceRequestV1,
         submissions: _Submissions,
         *,
+        annual_accession: str,
         deadline_at: datetime,
     ) -> tuple[tuple[CapturedSource, ...], tuple[IssueV1, ...]]:
         if request.supplemental_filing_policy is None:
             return (), ()
+        sources: list[CapturedSource] = []
+        history_rows: tuple[_RecentFilings, ...] = ()
+        if request.supplemental_filing_policy == "sec-equity-award-proxy.v2":
+            history_sources, history_rows = self._capture_award_proxy_history(
+                request,
+                submissions,
+                annual_accession=annual_accession,
+                deadline_at=deadline_at,
+            )
+            sources.extend(history_sources)
         selected, issues = self._select_award_proxy_filings(
-            submissions, request.valuation_timestamp
+            submissions, request.valuation_timestamp, history_rows=history_rows
         )
         if not selected:
-            return (), issues
+            return tuple(sources), issues
 
-        sources: list[CapturedSource] = []
         for filing in selected:
             adapter: SecSourceCapturePort = self.adapter
             if self.capture_store is not None:
@@ -1461,6 +1511,125 @@ class SecAcquisitionUseCase:
             )
             sources.append(replace(source, source_id="sec-supplemental-filing"))
         return tuple(sources), issues
+
+    def _capture_award_proxy_history(
+        self,
+        request: SecSourceRequestV1,
+        submissions: _Submissions,
+        *,
+        annual_accession: str,
+        deadline_at: datetime,
+    ) -> tuple[tuple[CapturedSource, ...], tuple[_RecentFilings, ...]]:
+        cutoff = request.valuation_timestamp.date() - timedelta(
+            days=_AWARD_PROXY_LOOKBACK_DAYS
+        )
+        try:
+            recent_dates = tuple(
+                date.fromisoformat(value)
+                for value in submissions.filings.recent.filingDate
+            )
+        except ValueError as error:
+            raise ServiceError(
+                "SOURCE_PAYLOAD_INVALID",
+                "SEC recent filing dates are invalid",
+                status_code=502,
+                retryable=False,
+            ) from error
+        references = submissions.filings.files
+        if references is None:
+            if recent_dates and min(recent_dates) <= cutoff:
+                return (), ()
+            raise ServiceError(
+                "EQUITY_AWARD_PROXY_HISTORY_INCOMPLETE",
+                "SEC recent filings do not cover the award-source window and the history index is missing",
+                status_code=502,
+                retryable=False,
+            )
+        if len({item.name for item in references}) != len(references) or any(
+            not item.name.startswith(f"CIK{request.cik}-")
+            or item.filingFrom > item.filingTo
+            for item in references
+        ):
+            raise ServiceError(
+                "SOURCE_PAYLOAD_INVALID",
+                "SEC historical filing index has duplicate, foreign or reversed entries",
+                status_code=502,
+                retryable=False,
+            )
+        overlapping = sorted(
+            (
+                item
+                for item in references
+                if item.filingTo >= cutoff
+                and item.filingFrom <= request.valuation_timestamp.date()
+            ),
+            key=lambda item: (item.filingFrom, item.filingTo, item.name),
+        )
+        if len(overlapping) > 12:
+            raise ServiceError(
+                "SEC_SUPPLEMENTAL_SOURCE_LIMIT",
+                "SEC award-source window exceeds the pinned historical shard limit",
+                status_code=422,
+                retryable=False,
+            )
+        adapter: SecSourceCapturePort = self.adapter
+        if self.capture_store is not None:
+            delegate = (
+                self.adapter._delegate
+                if isinstance(self.adapter, RetainedSecSourceAdapter)
+                else self.adapter
+            )
+            adapter = RetainedSecSourceAdapter(
+                delegate,
+                scope=SecCaptureScopeV1(
+                    cik=request.cik,
+                    accession_number=annual_accession,
+                    valuation_timestamp=request.valuation_timestamp,
+                    source_profile=(
+                        f"{request.source_selection_policy}+{request.supplemental_filing_policy}"
+                    ),
+                ),
+                receipts=self.capture_store,
+                content=self.content_store,
+                capture_lock=self._capture_lock,
+            )
+        sources: list[CapturedSource] = []
+        rows: list[_RecentFilings] = []
+        for reference in overlapping:
+            source = adapter.capture_submission_history(
+                cik=request.cik, filename=reference.name, deadline_at=deadline_at
+            )
+            try:
+                history = _RecentFilings.model_validate_json(source.content)
+                lengths = {
+                    len(history.accessionNumber),
+                    len(history.filingDate),
+                    len(history.acceptanceDateTime),
+                    len(history.form),
+                    len(history.primaryDocument),
+                    len(history.isXBRL),
+                }
+                if history.isInlineXBRL is not None:
+                    lengths.add(len(history.isInlineXBRL))
+                dates = tuple(date.fromisoformat(value) for value in history.filingDate)
+                if (
+                    lengths != {reference.filingCount}
+                    or not dates
+                    or min(dates) != reference.filingFrom
+                    or max(dates) != reference.filingTo
+                    or len(set(history.accessionNumber)) != reference.filingCount
+                ):
+                    raise ValueError("history shard differs from the SEC index")
+            except (ValidationError, ValueError) as error:
+                raise ServiceError(
+                    "EQUITY_AWARD_PROXY_HISTORY_INCOMPLETE",
+                    "SEC historical filing shard does not match its indexed rows and dates",
+                    status_code=502,
+                    retryable=False,
+                ) from error
+            sources.append(source)
+            rows.append(history)
+        return tuple(sources), tuple(rows)
 
     def _select_xbrl_entrypoint(
         self,

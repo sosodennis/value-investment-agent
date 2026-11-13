@@ -38,7 +38,7 @@ def source_case(tmp_path):
         valuation_timestamp=single.original.decision_at,
         required_fields=profile.required_fact_fields,
         source_selection_policy="sec-pit-v1",
-        supplemental_filing_policy="sec-equity-award-proxy.v1",
+        supplemental_filing_policy="sec-equity-award-proxy.v2",
         coverage_profile="automatic-fcff-v1",
         legal_use_profile="sec-public-us-v1",
         filing={
@@ -114,10 +114,11 @@ def source_case(tmp_path):
     return request, authority, validated, artifacts, mappings
 
 
-def test_automatic_request_requires_a_versioned_award_source_policy(tmp_path):
+@pytest.mark.parametrize("policy", [None, "sec-equity-award-proxy.v1"])
+def test_automatic_request_requires_a_versioned_award_source_policy(tmp_path, policy):
     request, *_ = source_case(tmp_path)
     payload = request.model_dump()
-    payload["supplemental_filing_policy"] = None
+    payload["supplemental_filing_policy"] = policy
 
     with pytest.raises(ValidationError, match="award-source policy"):
         AutomaticSecIngestionRequestV1(**payload)

@@ -3,6 +3,7 @@
 import hashlib
 import io
 import asyncio
+import json
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -74,6 +75,7 @@ def acquisition_case(
     artifacts=None,
     content=None,
     repository=None,
+    historical_proxy=False,
 ):
     request, authority, validated, source_artifacts, _ = source_case(tmp_path / "seed")
     metadata = metadata or MemoryAcquisitions()
@@ -145,12 +147,34 @@ def acquisition_case(
             },
         }
     )
+    submission_data = json.loads(submissions)
+    submission_data["filings"]["files"] = []
+    history_filename = f"CIK{request.cik}-submissions-001.json"
+    history = None
+    if historical_proxy:
+        recent = submission_data["filings"]["recent"]
+        history = canonical_bytes({key: values[:1] for key, values in recent.items()})
+        submission_data["filings"]["recent"] = {
+            key: values[1:] for key, values in recent.items()
+        }
+        submission_data["filings"]["files"] = [
+            {
+                "name": history_filename,
+                "filingCount": 1,
+                "filingFrom": proxy_accepted_at.date().isoformat(),
+                "filingTo": proxy_accepted_at.date().isoformat(),
+            }
+        ]
+    submissions = canonical_bytes(submission_data)
     state = SimpleNamespace(provider_calls=0, parser_calls=0, mode="valid")
 
     class Provider(SecEdgarSourceAdapter):
         def _request(self, uri, *, deadline_at=None):
             state.provider_calls += 1
-            if "/submissions/" in uri:
+            if uri.endswith(history_filename):
+                assert history is not None
+                value, media = history, "application/json"
+            elif "/submissions/" in uri:
                 value, media = submissions, "application/json"
             elif uri.endswith("/index.json"):
                 value, media = index, "application/json"
@@ -237,11 +261,12 @@ def acquire(request, use_case, correlation_id="first"):
     )
 
 
+@pytest.mark.parametrize("historical_proxy", [False, True])
 def test_empty_store_acquires_parses_maps_and_reuses_without_provider_or_parser(
-    tmp_path, monkeypatch
+    tmp_path, monkeypatch, historical_proxy
 ):
     request, use_case, state, metadata, artifacts = acquisition_case(
-        tmp_path, monkeypatch
+        tmp_path, monkeypatch, historical_proxy=historical_proxy
     )
     assert not metadata.mappings and not metadata.acquisitions
     result = acquire(request, use_case)
@@ -260,6 +285,14 @@ def test_empty_store_acquires_parses_maps_and_reuses_without_provider_or_parser(
     assert proxy_records[0].accession_number == "0000320193-26-000099"
     assert proxy_records[0].form == "DEF 14A"
     assert proxy_records[0].content_hash == hashlib.sha256(PROXY_BYTES).hexdigest()
+    history_records = [
+        record
+        for record in snapshot.source_records
+        if record.source_id == "sec-submissions-history"
+    ]
+    assert len(history_records) == int(historical_proxy)
+    if historical_proxy:
+        assert history_records[0].uri.endswith("-submissions-001.json")
     batch = AutomaticMappingBatchDecisionV1.model_validate_json(
         artifacts.read(result.mapping_evidence_ref)
     )
