@@ -284,6 +284,7 @@ def test_automatic_mapping_free_recipe_plan_uses_the_same_binding_contract(
         mapping_version=manual.valuation_working_capital_recipe.mapping_version
         if mapping == "exact"
         else "foreign",
+        supplemental_filing_policy=automatic.supplemental_filing_policy,
     )
     request = AutomaticSecIngestionRequestV1(**payload)
     if mapping == "foreign":

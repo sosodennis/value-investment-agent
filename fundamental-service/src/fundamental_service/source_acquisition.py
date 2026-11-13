@@ -25,12 +25,14 @@ from .contracts import (
     IdentityResolutionRequestV1,
     IdentityResolutionV1,
     IdentitySourceEvidenceV1,
+    IssueV1,
     QualityStatus,
     SecFilingSelectorV1,
     SecIngestionRequestV1,
     SecIngestionResponseV1,
     SecIngestionSourceV1,
     SecSourceRequestV1,
+    Severity,
     SourceRole,
 )
 from .data_releases import DataReleaseError
@@ -62,6 +64,9 @@ from .snapshots import (
 IDENTITY_MAPPING_VERSION: Literal["sec-issuer-identity-v1"] = "sec-issuer-identity-v1"
 LOGGER = logging.getLogger("fundamental_service")
 _SUPPORTED_SEC_FILING_FORMS = frozenset({"10-K", "10-K/A", "10-Q", "10-Q/A"})
+_AWARD_PROXY_LOOKBACK_DAYS = 548
+_AWARD_PROXY_BASE_FORM = "DEF 14A"
+_AWARD_PROXY_COMPANION_FORMS = frozenset({"DEF 14A/A", "DEFA14A", "DEFA14A/A"})
 
 
 class _SecPayload(BaseModel):
@@ -857,6 +862,9 @@ class SecAcquisitionUseCase:
             supported_filing_years=self.settings.supported_filing_years,
             supported_filing_forms=self.settings.supported_filing_forms,
         )
+        supplemental_sources, supplemental_issues = self._capture_award_proxy_sources(
+            request, submissions, deadline_at=deadline_at
+        )
         if self.capture_store is not None and not isinstance(
             adapter, RetainedSecSourceAdapter
         ):
@@ -932,7 +940,7 @@ class SecAcquisitionUseCase:
         captured_at = (
             max(
                 item.captured_at or item.available_at
-                for item in (submissions_source, index_source)
+                for item in (submissions_source, index_source, *supplemental_sources)
             )
             if isinstance(adapter, RetainedSecSourceAdapter)
             else datetime.now(UTC)
@@ -959,7 +967,12 @@ class SecAcquisitionUseCase:
             taxonomy_cache_dir=self.settings.taxonomy_cache_dir,
             mappings=mappings,
             mapping_resolver=mapping_resolver,
-            reference_sources=(submissions_source, index_source),
+            reference_sources=(
+                submissions_source,
+                index_source,
+                *supplemental_sources,
+            ),
+            additional_issues=supplemental_issues,
             submission_source=submission_source,
             dts_filenames=dts_filenames,
             profile=validation_profile,
@@ -1252,6 +1265,202 @@ class SecAcquisitionUseCase:
                 retryable=False,
             )
         return max(eligible, key=lambda item: (item.accepted_at, item.accession_number))
+
+    @staticmethod
+    def _select_award_proxy_filings(
+        submissions: _Submissions, valuation_timestamp: datetime
+    ) -> tuple[tuple[_SelectedFiling, ...], tuple[IssueV1, ...]]:
+        recent = submissions.filings.recent
+        cutoff_date = valuation_timestamp.date() - timedelta(
+            days=_AWARD_PROXY_LOOKBACK_DAYS
+        )
+        eligible: list[_SelectedFiling] = []
+        for index, form in enumerate(recent.form):
+            if (
+                form != _AWARD_PROXY_BASE_FORM
+                and form not in _AWARD_PROXY_COMPANION_FORMS
+            ):
+                continue
+            try:
+                accession = recent.accessionNumber[index]
+                filing_date = date.fromisoformat(recent.filingDate[index])
+                accepted_raw = recent.acceptanceDateTime[index]
+                if accepted_raw is None:
+                    raise ValueError("acceptanceDateTime is missing")
+                accepted_at = datetime.fromisoformat(
+                    accepted_raw.replace("Z", "+00:00")
+                )
+                primary_document = recent.primaryDocument[index]
+            except (IndexError, ValueError) as error:
+                raise ServiceError(
+                    "FILING_METADATA_INVALID",
+                    "SEC proxy filing metadata is incomplete or invalid",
+                    status_code=502,
+                    retryable=False,
+                ) from error
+            if (
+                not re.fullmatch(r"\d{10}-\d{2}-\d{6}", accession)
+                or not re.fullmatch(r"[A-Za-z0-9_.-]{1,200}", primary_document)
+                or accepted_at.tzinfo is None
+            ):
+                raise ServiceError(
+                    "FILING_METADATA_INVALID",
+                    "SEC proxy filing metadata is incomplete or invalid",
+                    status_code=502,
+                    retryable=False,
+                )
+            if (
+                filing_date < cutoff_date
+                or filing_date > valuation_timestamp.date()
+                or accepted_at > valuation_timestamp
+            ):
+                continue
+            eligible.append(
+                _SelectedFiling(
+                    accession_number=accession,
+                    form=form,
+                    filing_date=filing_date,
+                    accepted_at=accepted_at.astimezone(UTC),
+                    primary_document=primary_document,
+                )
+            )
+
+        originals = [item for item in eligible if item.form == _AWARD_PROXY_BASE_FORM]
+        if not originals:
+            return (), (
+                IssueV1(
+                    code="EQUITY_AWARD_PROXY_UNAVAILABLE",
+                    severity=Severity.WARNING,
+                    message=(
+                        "no definitive proxy original is available within the "
+                        "versioned award-source lookback"
+                    ),
+                ),
+            )
+        original = max(
+            originals, key=lambda item: (item.accepted_at, item.accession_number)
+        )
+        companions = sorted(
+            (
+                item
+                for item in eligible
+                if item.form in _AWARD_PROXY_COMPANION_FORMS
+                and item.accepted_at >= original.accepted_at
+            ),
+            key=lambda item: (item.accepted_at, item.accession_number),
+        )
+        selected = (original, *companions)
+        if len({item.accession_number for item in selected}) != len(selected):
+            raise ServiceError(
+                "FILING_METADATA_INVALID",
+                "SEC proxy submissions repeat an accession",
+                status_code=502,
+                retryable=False,
+            )
+        if len(selected) > 12:
+            raise ServiceError(
+                "SEC_SUPPLEMENTAL_SOURCE_LIMIT",
+                "SEC proxy source set exceeds the bounded filing limit",
+                status_code=422,
+                retryable=False,
+            )
+        return selected, ()
+
+    def _capture_award_proxy_sources(
+        self,
+        request: SecSourceRequestV1,
+        submissions: _Submissions,
+        *,
+        deadline_at: datetime,
+    ) -> tuple[tuple[CapturedSource, ...], tuple[IssueV1, ...]]:
+        if request.supplemental_filing_policy is None:
+            return (), ()
+        selected, issues = self._select_award_proxy_filings(
+            submissions, request.valuation_timestamp
+        )
+        if not selected:
+            return (), issues
+
+        sources: list[CapturedSource] = []
+        for filing in selected:
+            adapter: SecSourceCapturePort = self.adapter
+            if self.capture_store is not None:
+                delegate = (
+                    self.adapter._delegate
+                    if isinstance(self.adapter, RetainedSecSourceAdapter)
+                    else self.adapter
+                )
+                adapter = RetainedSecSourceAdapter(
+                    delegate,
+                    scope=SecCaptureScopeV1(
+                        cik=request.cik,
+                        accession_number=filing.accession_number,
+                        valuation_timestamp=request.valuation_timestamp,
+                        source_profile=(
+                            f"{request.source_selection_policy}+"
+                            f"{request.supplemental_filing_policy}"
+                        ),
+                    ),
+                    receipts=self.capture_store,
+                    content=self.content_store,
+                    capture_lock=self._capture_lock,
+                )
+            index = adapter.capture_filing_index(
+                cik=request.cik,
+                accession_number=filing.accession_number,
+                filed_at=filing.accepted_at,
+                deadline_at=deadline_at,
+            )
+            try:
+                names = [
+                    item.name
+                    for item in _FilingIndex.model_validate_json(
+                        index.content
+                    ).directory.item
+                ]
+            except ValidationError as error:
+                raise ServiceError(
+                    "SOURCE_PAYLOAD_INVALID",
+                    "SEC proxy filing index response is invalid",
+                    status_code=502,
+                    retryable=False,
+                ) from error
+            if names.count(filing.primary_document) != 1:
+                raise ServiceError(
+                    "FILING_INDEX_ENTRY_MISMATCH",
+                    "SEC proxy primary document is not uniquely listed in its accession",
+                    status_code=502,
+                    retryable=False,
+                )
+            sources.append(
+                replace(
+                    index,
+                    source_id="sec-supplemental-filing-index",
+                    available_at=filing.accepted_at,
+                    publication_at=filing.accepted_at,
+                    accession_number=filing.accession_number,
+                    form=filing.form,
+                    filing_date=filing.filing_date,
+                    filed_at=filing.accepted_at,
+                    filing_version=filing.accession_number,
+                    is_amendment=filing.is_amendment,
+                    amendment_scope="unknown" if filing.is_amendment else None,
+                )
+            )
+            source = adapter.capture_filing(
+                cik=request.cik,
+                accession_number=filing.accession_number,
+                primary_document=filing.primary_document,
+                filed_at=filing.accepted_at,
+                accepted_at=filing.accepted_at,
+                filing_date=filing.filing_date,
+                form=filing.form,
+                is_amendment=filing.is_amendment,
+                amendment_scope="unknown" if filing.is_amendment else None,
+                deadline_at=deadline_at,
+            )
+            sources.append(replace(source, source_id="sec-supplemental-filing"))
+        return tuple(sources), issues
 
     def _select_xbrl_entrypoint(
         self,

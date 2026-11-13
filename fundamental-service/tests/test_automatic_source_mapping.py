@@ -38,6 +38,7 @@ def source_case(tmp_path):
         valuation_timestamp=single.original.decision_at,
         required_fields=profile.required_fact_fields,
         source_selection_policy="sec-pit-v1",
+        supplemental_filing_policy="sec-equity-award-proxy.v1",
         coverage_profile="automatic-fcff-v1",
         legal_use_profile="sec-public-us-v1",
         filing={
@@ -111,6 +112,15 @@ def source_case(tmp_path):
         taxonomy_cache_sha256=single.original.report.taxonomy_cache_hash,
     )
     return request, authority, validated, artifacts, mappings
+
+
+def test_automatic_request_requires_a_versioned_award_source_policy(tmp_path):
+    request, *_ = source_case(tmp_path)
+    payload = request.model_dump()
+    payload["supplemental_filing_policy"] = None
+
+    with pytest.raises(ValidationError, match="award-source policy"):
+        AutomaticSecIngestionRequestV1(**payload)
 
 
 def test_retained_v3_requirements_cannot_authorize_v4_acquisition(tmp_path):

@@ -262,6 +262,7 @@ def test_automatic_plan_pins_the_source_profile_and_policy(tmp_path, change):
         requirements_digest=plan.requirements_profile.digest,
         required_fields=plan.requirements_profile.required_fact_fields,
         mapping_version=plan.valuation_working_capital_policy.mapping_version,
+        supplemental_filing_policy=automatic.supplemental_filing_policy,
     )
     if change == "mapping":
         payload["mapping_version"] = "different-mapping"

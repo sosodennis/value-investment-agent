@@ -61,9 +61,10 @@ class AutomaticSecIngestionRequestV1(SecSourceRequestV1):
             self.identity_basis != "original-filing-dei-v1"
             or self.filing.accession_number is None
             or self.filing.forms != ("10-K",)
+            or self.supplemental_filing_policy != "sec-equity-award-proxy.v1"
         ):
             raise ValueError(
-                "automatic mapping requires a pinned original annual filing"
+                "automatic mapping requires a pinned annual filing and award-source policy"
             )
         if (
             self.requirements_digest != profile.digest

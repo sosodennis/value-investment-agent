@@ -89,6 +89,82 @@ def test_sec_filing_index_selects_only_primary_schema_and_linkbases():
     )
 
 
+def test_award_proxy_selection_is_point_in_time_and_retains_following_materials():
+    valuation_at = datetime(2026, 11, 13, tzinfo=UTC)
+    submissions = _submissions_with_filings(
+        {
+            "accession": "0000320193-26-000455",
+            "filing_date": "2026-06-22",
+            "accepted_at": "2026-06-22T14:22:00Z",
+            "form": "DEF 14A",
+            "primary_document": "proxy.htm",
+        },
+        {
+            "accession": "0000320193-26-000499",
+            "filing_date": "2026-07-01",
+            "accepted_at": "2026-07-01T14:22:00Z",
+            "form": "DEFA14A",
+            "primary_document": "additional.htm",
+        },
+        {
+            "accession": "0000320193-26-000510",
+            "filing_date": "2026-07-03",
+            "accepted_at": "2026-07-03T14:22:00Z",
+            "form": "DEF 14A/A",
+            "primary_document": "amended.htm",
+        },
+        {
+            "accession": "0000320193-26-000600",
+            "filing_date": "2026-11-14",
+            "accepted_at": "2026-11-14T14:22:00Z",
+            "form": "DEF 14A",
+            "primary_document": "future.htm",
+        },
+        {
+            "accession": "0000320193-25-000010",
+            "filing_date": "2025-03-01",
+            "accepted_at": "2025-03-01T14:22:00Z",
+            "form": "DEF 14A",
+            "primary_document": "stale.htm",
+        },
+    )
+
+    selected, issues = SecAcquisitionUseCase._select_award_proxy_filings(
+        submissions, valuation_at
+    )
+
+    assert issues == ()
+    assert tuple(item.accession_number for item in selected) == (
+        "0000320193-26-000455",
+        "0000320193-26-000499",
+        "0000320193-26-000510",
+    )
+    assert tuple(item.form for item in selected) == (
+        "DEF 14A",
+        "DEFA14A",
+        "DEF 14A/A",
+    )
+
+
+def test_award_proxy_selection_retains_missing_original_diagnostic():
+    submissions = _submissions_with_filings(
+        {
+            "accession": "0000320193-26-000001",
+            "filing_date": "2026-05-01",
+            "accepted_at": "2026-05-01T14:22:00Z",
+            "form": "10-K",
+            "primary_document": "annual.htm",
+        }
+    )
+
+    selected, issues = SecAcquisitionUseCase._select_award_proxy_filings(
+        submissions, datetime(2026, 11, 13, tzinfo=UTC)
+    )
+
+    assert selected == ()
+    assert tuple(issue.code for issue in issues) == ("EQUITY_AWARD_PROXY_UNAVAILABLE",)
+
+
 def _submissions_with_filings(*filings: dict[str, object]):
     recent = {
         "accessionNumber": [item["accession"] for item in filings],

@@ -34,6 +34,8 @@ from fundamental_service.source_acquisition import SecAcquisitionUseCase
 from test_automatic_source_mapping import source_case
 from test_issuer_operating_release import inventory
 
+PROXY_BYTES = b"<html><body>synthetic definitive proxy</body></html>"
+
 
 class MemoryAcquisitions:
     def __init__(self):
@@ -98,6 +100,10 @@ def acquisition_case(
         for name, value in ((primary, raw), (schema, b"synthetic schema")):
             archive.writestr(ZipInfo(name, date_time=(2000, 1, 1, 0, 0, 0)), value)
     archive_name = original.source.accession_number + "-xbrl.zip"
+    proxy_accession = "0000320193-26-000099"
+    proxy_accepted_at = original.source.available_at - timedelta(days=60)
+    proxy_document = "proxy.htm"
+    proxy_bytes = PROXY_BYTES
     index = canonical_bytes(
         {
             "directory": {
@@ -105,6 +111,7 @@ def acquisition_case(
                     {"name": name, "size": str(len(value))}
                     for name, value in (
                         (primary, raw),
+                        (proxy_document, proxy_bytes),
                         (schema, b"synthetic schema"),
                         (archive_name, package.getvalue()),
                     )
@@ -118,13 +125,22 @@ def acquisition_case(
             "tickers": [],
             "filings": {
                 "recent": {
-                    "accessionNumber": [request.filing.accession_number],
-                    "filingDate": [original.source.available_at.date().isoformat()],
-                    "acceptanceDateTime": [original.source.available_at.isoformat()],
-                    "form": ["10-K"],
-                    "primaryDocument": [primary],
-                    "isXBRL": [1],
-                    "isInlineXBRL": [0],
+                    "accessionNumber": [
+                        proxy_accession,
+                        request.filing.accession_number,
+                    ],
+                    "filingDate": [
+                        proxy_accepted_at.date().isoformat(),
+                        original.source.available_at.date().isoformat(),
+                    ],
+                    "acceptanceDateTime": [
+                        proxy_accepted_at.isoformat(),
+                        original.source.available_at.isoformat(),
+                    ],
+                    "form": ["DEF 14A", "10-K"],
+                    "primaryDocument": [proxy_document, primary],
+                    "isXBRL": [0, 1],
+                    "isInlineXBRL": [0, 0],
                 }
             },
         }
@@ -140,6 +156,8 @@ def acquisition_case(
                 value, media = index, "application/json"
             elif uri.endswith(".zip"):
                 value, media = package.getvalue(), "application/zip"
+            elif uri.endswith("/" + proxy_document):
+                value, media = proxy_bytes, "text/html"
             else:
                 value, media = raw, "application/xml"
             return _SecResponse(
@@ -232,6 +250,16 @@ def test_empty_store_acquires_parses_maps_and_reuses_without_provider_or_parser(
     assert "non_operating_assets" in result.missing_evidence
     assert "MAPPING_AUTOMATIC_RULE_UNSUPPORTED" in result.issue_codes
     assert result.mapping_evidence_ref
+    snapshot = metadata.snapshots[result.snapshot_id]
+    proxy_records = [
+        record
+        for record in snapshot.source_records
+        if record.source_id == "sec-supplemental-filing"
+    ]
+    assert len(proxy_records) == 1
+    assert proxy_records[0].accession_number == "0000320193-26-000099"
+    assert proxy_records[0].form == "DEF 14A"
+    assert proxy_records[0].content_hash == hashlib.sha256(PROXY_BYTES).hexdigest()
     batch = AutomaticMappingBatchDecisionV1.model_validate_json(
         artifacts.read(result.mapping_evidence_ref)
     )

@@ -252,6 +252,7 @@ class SecIngestionService:
         mappings: tuple[CanonicalMappingV1, ...],
         mapping_resolver: IngestionMappingResolverPort | None = None,
         reference_sources: tuple[CapturedSource, ...] = (),
+        additional_issues: tuple[IssueV1, ...] = (),
         submission_source: CapturedSource | None = None,
         accepted_at: datetime | None = None,
         deadline_at: datetime | None = None,
@@ -705,6 +706,7 @@ class SecIngestionService:
             acquisition_key=acquisition_key,
             validation_profile_id=profile.profile_id,
             validation_profile_digest=report.validation_profile_digest,
+            additional_issues=additional_issues,
             sec_integrity_evidence=integrity_evidence,
         )
         source_record = next(
