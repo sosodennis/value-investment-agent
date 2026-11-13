@@ -2697,3 +2697,39 @@ NVE valuation remains **abstain** on `convertible_instruments`,
 trusted release, exact-input caller approval, actual numerical full-flow/recovery,
 independent parent review/CI and main verification remain outstanding. Keep
 #361/#376/#377 OPEN and PR #370 draft; threshold stays null.
+
+## Standard option facts and exact replay — 5379a91c
+
+Implementation `5379a91ce93b7a7bcd7cc03a051876150cc3d8da` versions automatic
+mapping policy to v17 and admits the standard option-outstanding quantity and
+weighted-average exercise-price observations. Both fixed NVE originals reproduce
+their signed mappings and candidates, together with the dated unrecognized
+compensation. These observations do not establish complete company-wide awards.
+
+Exact checks pass **2,715 Service/PostgreSQL tests**, with 17 explicit external
+parser-resource skips and one expected duplicate-ZIP warning. Another 154 focused
+mapping/parser/release tests, 106-source mypy, full Ruff/format, both architecture
+guards and diff pass. The installed SEC-enabled `value-investment-agent-361-options-v17`
+project (20171/20172) matches all 125 Python/SQL sources and passes preflight.
+
+Input/output digests are
+`a84787b8ef182684e7e1781c26e043bcf7ca43b3f5396a286eb284a99e5b3c53` /
+`b949b1c5e75c15e1b0aaa59d8886d9b55d78f52c30201ed7ec8e7da102e98f3f`.
+Same-database repeat returns `wrote=false`, zero new publications and identical
+2,173 rows plus 708 files' bytes/sizes/mtimes. A run against another empty store
+published 44 artifacts and is explicitly excluded as repeat evidence.
+
+The archived harness mixed security-scoped rules with issuer-only originals.
+The retained diagnostic reproduces both refusals and verifies the matching issuer
+and security source paths without changing production checks. The initial resource
+comparison also encountered the nine exited project containers already removed
+by the owner's cleanup request; their identities remain recorded separately.
+All 58 surviving baseline containers retain image/start/status. The
+[checkpoint](issue-361-option-facts-checkpoint.json) records exact commands and
+digests; generated inputs, reports and portable backup remain outside Git.
+
+Three capital-claim roles, complete awards, dated quote, trusted release, authentic
+caller approval, actual numerical recovery, independent review/CI and main
+delivery remain outstanding. NVE remains **abstain**, eligible valuations
+**provisional**, history evidence **underpowered**, threshold null. Keep #361,
+#376/#377 OPEN and PR #370 draft.
