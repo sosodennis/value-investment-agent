@@ -6,7 +6,7 @@ import hashlib
 import importlib
 import importlib.util
 import sys
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from types import ModuleType
 from typing import TYPE_CHECKING, Callable
@@ -52,6 +52,7 @@ class HistoricalDqcProfile:
     gaap_namespaces: frozenset[str]
     dei_namespaces: frozenset[str]
     completion_marker: str
+    axis_config_sha256: str | None = None
 
 
 V1_PROFILE = HistoricalDqcProfile(
@@ -87,11 +88,22 @@ V3_PROFILE = HistoricalDqcProfile(
     "dqc-historical-v3.6.2-all-eleven-modules-returned",
 )
 
+# A configuration adaptation, not an upstream DQC release or compliance opinion.
+V3_2013_PROFILE = replace(
+    V3_PROFILE,
+    profile_id="sec-efm-us-dqc-v3.6.2-gaap2013-config-v1",
+    dqc_version="v3.6.2-gaap2013-config-v1",
+    gaap_namespaces=frozenset({"http://fasb.org/us-gaap/2013-01-31"}),
+    completion_marker="dqc-v3.6.2-gaap2013-config-v1-all-eleven-modules-returned",
+    axis_config_sha256="baf022187417e3d5f8d579942323d9d77e848d4f14909cccdecc43c4f81007a2",
+)
+
 
 def historical_profile(profile_id: str) -> HistoricalDqcProfile | None:
     return {
         V1_PROFILE.profile_id: V1_PROFILE,
         V3_PROFILE.profile_id: V3_PROFILE,
+        V3_2013_PROFILE.profile_id: V3_2013_PROFILE,
     }.get(profile_id)
 
 
@@ -105,6 +117,7 @@ class HistoricalDqcExecution:
     returned_modules: list[str] = field(default_factory=list)
     unsupported_namespaces: tuple[str, ...] = ()
     failed: bool = False
+    axis_config_path: Path | None = None
 
     @property
     def completed(self) -> bool:
@@ -131,6 +144,11 @@ def options(parser: ParserForDynamicPlugins) -> None:
         action="store",
         dest="fundamental_historical_dqc_profile",
     )
+    parser.add_option(
+        "--fundamental-historical-dqc-axis-config",
+        action="store",
+        dest="fundamental_historical_dqc_axis_config",
+    )
 
 
 def initialize(
@@ -145,11 +163,49 @@ def initialize(
     )
     if selected is None:
         raise ValueError("unknown historical DQC profile")
+    config = getattr(runtime, "fundamental_historical_dqc_axis_config", None)
+    config_path = Path(config) if isinstance(config, str) and config else None
+    verify_axis_config(selected, config_path)
     setattr(
         controller,
         _STATE_ATTRIBUTE,
-        HistoricalDqcExecution(root=Path(root), profile=selected),
+        HistoricalDqcExecution(
+            root=Path(root), profile=selected, axis_config_path=config_path
+        ),
     )
+
+
+def verify_axis_config(profile: HistoricalDqcProfile, path: Path | None) -> None:
+    if profile.axis_config_sha256 is None:
+        if path is not None:
+            raise ValueError("selected DQC profile does not accept an axis config")
+        return
+    if path is None or not path.is_file():
+        raise ValueError("selected DQC profile requires its pinned axis config")
+    if hashlib.sha256(path.read_bytes()).hexdigest() != profile.axis_config_sha256:
+        raise ValueError("historical DQC axis config hash does not match")
+
+
+def _run_official_hook(
+    package: ModuleType,
+    name: str,
+    validation: ValidateXbrl,
+    state: HistoricalDqcExecution,
+) -> None:
+    hook = _official_hook(package, name)
+    if name != "dqc_us_0001" or state.profile.axis_config_sha256 is None:
+        hook(validation)
+        return
+    verify_axis_config(state.profile, state.axis_config_path)
+    module = importlib.import_module(f"{package.__name__}.{name}")
+    original_selector = getattr(module, "_determine_namespace")
+    # The parser runs each filing in its own worker. Route only configuration;
+    # the pinned official rule, messages and severity are left intact.
+    setattr(module, "_determine_namespace", lambda value: str(state.axis_config_path))
+    try:
+        hook(validation)
+    finally:
+        setattr(module, "_determine_namespace", original_selector)
 
 
 def _load_package(root: Path) -> ModuleType:
@@ -220,7 +276,7 @@ def validate(validation: ValidateXbrl) -> None:
     try:
         package = _load_package(state.root)
         for name in state.profile.modules:
-            _official_hook(package, name)(validation)
+            _run_official_hook(package, name, validation, state)
             state.returned_modules.append(name)
     except BaseException:
         state.failed = True

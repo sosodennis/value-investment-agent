@@ -29,6 +29,7 @@ from fundamental_service.historical_dqc import (
     HistoricalDqcProfile,
     V1_PROFILE,
     V3_PROFILE,
+    V3_2013_PROFILE,
     execution_for,
 )
 from fundamental_service.snapshots import SnapshotError
@@ -91,6 +92,125 @@ def test_v3_profile_requires_its_exact_package_version_and_distinct_digest():
             ArelleValidationProfileV1.model_validate(
                 {**profile.model_dump(), **changes}
             )
+
+
+@pytest.mark.parametrize(
+    ("historical", "profile_digest", "serialization_digest"),
+    (
+        (
+            V1_PROFILE,
+            "7650feee50a4c4b17820ae893b7cb685cc14db0abacec1a20bc1b05ce4f4df15",
+            "595a789b434a4381274d20a6b2ed179a4f382a2aaebdff7e831fe52a151da19a",
+        ),
+        (
+            V3_PROFILE,
+            "5a2e515af85d268d53a362e21b559751f31cd787f0b7bb419bdcbf64a70c638b",
+            "b698610277837718f48c04c51bea633a1694a349c9be95997b442a75053e6adf",
+        ),
+    ),
+)
+def test_old_profile_serialization_and_identity_remain_immutable(
+    historical, profile_digest, serialization_digest
+):
+    from fundamental_service.serialization import sha256_digest
+
+    profile = _profile(
+        profile_id=historical.profile_id,
+        dqc_version=historical.dqc_version,
+        historical_dqc_sha256=historical.source_sha256,
+    )
+    assert profile.digest() == profile_digest
+    assert sha256_digest(profile.model_dump(mode="json")) == serialization_digest
+    assert "historical_dqc_axis_config" not in profile.model_dump(mode="json")
+
+
+def test_2013_config_is_explicit_profile_bound_and_location_independent():
+    profile = _profile(
+        profile_id=V3_2013_PROFILE.profile_id,
+        dqc_version=V3_2013_PROFILE.dqc_version,
+        historical_dqc_sha256=V3_2013_PROFILE.source_sha256,
+        historical_dqc_axis_config="/runtime/config.json",
+    )
+    assert (
+        profile.digest()
+        == ArelleValidationProfileV1.model_validate(
+            {
+                **profile.model_dump(),
+                "historical_dqc_axis_config": "/other/host/different-name.artifact",
+            }
+        ).digest()
+    )
+    for changes in (
+        {"historical_dqc_axis_config": None},
+        {"profile_id": V3_PROFILE.profile_id},
+        {"dqc_version": V3_PROFILE.dqc_version},
+    ):
+        with pytest.raises(ValueError):
+            ArelleValidationProfileV1.model_validate(
+                {**profile.model_dump(), **changes}
+            )
+    with pytest.raises(ValueError, match="axis config"):
+        _profile(historical_dqc_axis_config="/unrequested.json")
+
+
+@pytest.mark.parametrize("raises", (False, True))
+def test_explicit_config_selector_is_restored_even_on_rule_failure(
+    tmp_path, monkeypatch, raises
+):
+    from dataclasses import replace
+
+    path = tmp_path / "config.json"
+    path.write_bytes(b"{}")
+    profile = replace(
+        V3_2013_PROFILE, axis_config_sha256=hashlib.sha256(b"{}").hexdigest()
+    )
+    state = HistoricalDqcExecution(tmp_path, profile=profile, axis_config_path=path)
+
+    def original_selector(value):
+        return "original-generic-config.json"
+
+    module = SimpleNamespace(_determine_namespace=original_selector)
+    monkeypatch.setattr(historical_dqc.importlib, "import_module", lambda name: module)
+
+    def hook(value):
+        assert module._determine_namespace(value) == str(path)
+        if raises:
+            raise RuntimeError("rule failed")
+
+    monkeypatch.setattr(historical_dqc, "_official_hook", lambda *args: hook)
+    package = SimpleNamespace(__name__="test_official")
+    if raises:
+        with pytest.raises(RuntimeError, match="rule failed"):
+            historical_dqc._run_official_hook(package, "dqc_us_0001", None, state)
+    else:
+        historical_dqc._run_official_hook(package, "dqc_us_0001", None, state)
+    assert module._determine_namespace is original_selector
+    path.write_bytes(b'{"changed":true}')
+    with pytest.raises(ValueError, match="hash"):
+        historical_dqc._run_official_hook(package, "dqc_us_0001", None, state)
+    path.unlink()
+    with pytest.raises(ValueError, match="requires"):
+        historical_dqc.verify_axis_config(profile, path)
+
+
+@pytest.mark.parametrize(
+    "namespaces",
+    (
+        ("http://fasb.org/us-gaap/2014-01-31",),
+        ("http://fasb.org/us-gaap/2013-01-31", "http://fasb.org/us-gaap/2012-01-31"),
+    ),
+)
+def test_2013_config_does_not_broaden_taxonomy_coverage(namespaces, monkeypatch):
+    validation, state, _, _ = _validation(namespaces)
+    state.profile = V3_2013_PROFILE
+    monkeypatch.setattr(
+        historical_dqc,
+        "_load_package",
+        lambda root: pytest.fail("unsupported taxonomy must not execute"),
+    )
+    historical_dqc.validate(validation)
+    assert not state.completed
+    assert state.unsupported_namespaces
 
 
 def test_ingestion_requires_completion_evidence_for_the_selected_historical_engine():

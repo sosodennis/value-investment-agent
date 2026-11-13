@@ -173,6 +173,9 @@ class ArelleValidationProfileV1(BaseModel):
     dqc_ruleset_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
     historical_dqc_dir: Path | None = None
     historical_dqc_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    historical_dqc_axis_config: Path | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
 
     @model_validator(mode="after")
     def pinned_runtime(self) -> "ArelleValidationProfileV1":
@@ -181,6 +184,12 @@ class ArelleValidationProfileV1(BaseModel):
         if self.efm_profile != "efm-strict-all-years":
             raise ValueError("SEC validation requires strict all-years EFM")
         historical = historical_profile(self.profile_id)
+        if (self.historical_dqc_axis_config is not None) != bool(
+            historical and historical.axis_config_sha256
+        ):
+            raise ValueError(
+                "historical DQC axis config must match its selected profile"
+            )
         if (
             self.dqc_version != (historical.dqc_version if historical else "v31.0.3")
             or self.xule_version != "30055"
@@ -238,8 +247,12 @@ class ArelleValidationProfileV1(BaseModel):
             "dqc_ruleset_path",
             "historical_dqc_dir",
         ):
-            if payload[name] is not None:
+            if payload.get(name) is not None:
                 payload[name] = Path(payload[name]).name
+        if self.historical_dqc_axis_config is not None:
+            selected = historical_profile(self.profile_id)
+            assert selected is not None
+            payload["historical_dqc_axis_config"] = selected.axis_config_sha256
         return sha256_digest(payload)
 
 
@@ -701,6 +714,22 @@ def _parse_in_process(
                 "VALIDATION_RESOURCE_HASH_MISMATCH",
                 "historical DQC source hash does not match",
             )
+    selected_config_profile = historical_profile(profile.profile_id)
+    if selected_config_profile and selected_config_profile.axis_config_sha256:
+        config_path = profile.historical_dqc_axis_config
+        if config_path is None or not config_path.is_file():
+            raise ArelleParserError(
+                "VALIDATION_RESOURCES_UNAVAILABLE",
+                "historical DQC axis config is unavailable",
+            )
+        if (
+            hashlib.sha256(config_path.read_bytes()).hexdigest()
+            != selected_config_profile.axis_config_sha256
+        ):
+            raise ArelleParserError(
+                "VALIDATION_RESOURCE_HASH_MISMATCH",
+                "historical DQC axis config hash does not match",
+            )
 
     manager = None
     findings: tuple[ArelleFindingV1, ...] = ()
@@ -783,6 +812,11 @@ def _parse_in_process(
                                 profile.historical_dqc_dir
                             ),
                             "fundamental_historical_dqc_profile": profile.profile_id,
+                            "fundamental_historical_dqc_axis_config": str(
+                                profile.historical_dqc_axis_config
+                            )
+                            if profile.historical_dqc_axis_config is not None
+                            else None,
                         }
                         if profile.historical_dqc_dir is not None
                         else {}
