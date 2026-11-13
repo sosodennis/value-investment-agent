@@ -1,4 +1,4 @@
-"""Original-bound zero residual of an exhaustive noncurrent liability partition."""
+"""Original-bound zero residuals of exhaustive liability principal partitions."""
 
 from dataclasses import dataclass
 from datetime import date
@@ -19,15 +19,52 @@ from .original_issuer import OriginalIssuerEvidenceV1
 from .serialization import sha256_digest
 
 NONCURRENT_LIABILITY_RESIDUAL = "registered:ZeroNoncurrentLiabilityResidual"
-POLICY = "original-bound-zero-noncurrent-liability-residual-v1"
-ROLES = frozenset(
-    {"long_term_interest_bearing_debt", "long_term_finance_lease_liabilities"}
+CURRENT_LIABILITY_RESIDUAL = "registered:ZeroCurrentLiabilityPrincipalResidual"
+
+
+@dataclass(frozen=True)
+class LiabilityPartition:
+    concept: str
+    policy_version: str
+    reason_prefix: str
+    roles: frozenset[str]
+    components: tuple[tuple[str, int], ...]
+
+
+PARTITIONS = (
+    LiabilityPartition(
+        NONCURRENT_LIABILITY_RESIDUAL,
+        "original-bound-zero-noncurrent-liability-residual-v1",
+        "MAPPING_NONCURRENT",
+        frozenset(
+            {"long_term_interest_bearing_debt", "long_term_finance_lease_liabilities"}
+        ),
+        (
+            ("us-gaap:Liabilities", 1),
+            ("us-gaap:LiabilitiesCurrent", -1),
+            ("us-gaap:OperatingLeaseLiabilityNoncurrent", -1),
+        ),
+    ),
+    LiabilityPartition(
+        CURRENT_LIABILITY_RESIDUAL,
+        "original-bound-zero-current-liability-principal-residual-v1",
+        "MAPPING_CURRENT",
+        frozenset(
+            {"current_interest_bearing_debt", "current_finance_lease_liabilities"}
+        ),
+        (
+            ("us-gaap:LiabilitiesCurrent", 1),
+            ("us-gaap:AccountsPayableCurrent", -1),
+            ("us-gaap:AccruedLiabilitiesCurrent", -1),
+            ("us-gaap:OperatingLeaseLiabilityCurrent", -1),
+        ),
+    ),
 )
-COMPONENTS = (
-    ("us-gaap:Liabilities", 1),
-    ("us-gaap:LiabilitiesCurrent", -1),
-    ("us-gaap:OperatingLeaseLiabilityNoncurrent", -1),
-)
+ROLES = frozenset(role for partition in PARTITIONS for role in partition.roles)
+
+
+def liability_residual_concept(normalized_field: str) -> str:
+    return next(p.concept for p in PARTITIONS if normalized_field in p.roles)
 
 
 @dataclass(frozen=True)
@@ -37,8 +74,10 @@ class OriginalClassification:
     instants: tuple[date, ...]
 
 
-# Complete original statements establish the nonnegative, unnetted partition.
-# Only a zero residual can resolve both roles without allocating an unknown sum.
+# The current partition classifies trade payables and cost accruals separately
+# from financing principal. It does not classify the entire accrued line as
+# operating or establish annual finance-lease expense or instrument absence.
+# Only these complete originals establish the unnetted, nonnegative partitions.
 _ORIGINALS = {
     ("0000724910", "0001376474-23-000283"): OriginalClassification(
         "26d95888105590690531f4b3c4da8ca910e6aa4e315f6372ed51c55459b0b05c",
@@ -54,42 +93,41 @@ _ORIGINALS = {
 
 
 @dataclass(frozen=True)
-class NoncurrentLiabilitySelection:
+class LiabilityResidualSelection:
     rules: AccountingRoleRules | None = None
     selected: tuple[ParsedXbrlFactV1, ...] = ()
     reason_codes: tuple[str, ...] = ()
 
 
-def select_registered_noncurrent_liabilities(
+def select_registered_liability_residual(
     original: OriginalIssuerEvidenceV1,
     normalized_field: str,
     *,
     security_id: str | None = None,
-) -> NoncurrentLiabilitySelection:
+) -> LiabilityResidualSelection:
     source = original.source
+    partition = next((p for p in PARTITIONS if normalized_field in p.roles), None)
+    if partition is None:
+        return LiabilityResidualSelection(
+            reason_codes=("MAPPING_LIABILITY_ROLE_UNSUPPORTED",)
+        )
+    prefix = partition.reason_prefix
     entry = _ORIGINALS.get((source.cik, source.accession_number))
-    if (
-        normalized_field not in ROLES
-        or entry is None
-        or source.content_hash != entry.source_hash
-    ):
-        return NoncurrentLiabilitySelection(
-            reason_codes=("MAPPING_NONCURRENT_SCOPE_UNREVIEWED",)
-        )
+    if entry is None or source.content_hash != entry.source_hash:
+        return LiabilityResidualSelection(reason_codes=(f"{prefix}_SCOPE_UNREVIEWED",))
     if fact_semantic_digest(original.report) != entry.fact_digest:
-        return NoncurrentLiabilitySelection(
-            reason_codes=("MAPPING_NONCURRENT_SOURCE_MISMATCH",)
-        )
+        return LiabilityResidualSelection(reason_codes=(f"{prefix}_SOURCE_MISMATCH",))
     selected = []
     periods = []
     for instant in entry.instants:
         if original.report_period_end is None or instant > original.report_period_end:
-            return NoncurrentLiabilitySelection(
+            return LiabilityResidualSelection(
                 reason_codes=("MAPPING_PERIOD_AFTER_ORIGINAL",)
             )
         components = []
         observations = []
-        for concept, sign in COMPONENTS:
+        namespaces: set[str | None] = set()
+        for concept, sign in partition.components:
             matches = tuple(
                 fact
                 for fact in sorted(original.report.facts, key=sha256_digest)
@@ -98,15 +136,16 @@ def select_registered_noncurrent_liabilities(
                 and not fact.dimensions
             )
             if not matches:
-                return NoncurrentLiabilitySelection(
-                    reason_codes=("MAPPING_NONCURRENT_COMPONENT_MISSING",)
+                return LiabilityResidualSelection(
+                    reason_codes=(f"{prefix}_COMPONENT_MISSING",)
                 )
             if any(not _eligible(fact, source.cik) for fact in matches):
-                return NoncurrentLiabilitySelection(
-                    reason_codes=("MAPPING_NONCURRENT_COMPONENT_INVALID",)
+                return LiabilityResidualSelection(
+                    reason_codes=(f"{prefix}_COMPONENT_INVALID",)
                 )
+            namespaces.update(fact.namespace_uri for fact in matches)
             if len({(Decimal(fact.value), fact.decimals) for fact in matches}) != 1:
-                return NoncurrentLiabilitySelection(
+                return LiabilityResidualSelection(
                     reason_codes=("MAPPING_OBSERVATION_CONFLICT",)
                 )
             fact = matches[0]
@@ -117,9 +156,9 @@ def select_registered_noncurrent_liabilities(
                     sign=1 if sign == 1 else -1,
                 )
             )
-        if len({fact.namespace_uri for fact in observations}) != 1:
-            return NoncurrentLiabilitySelection(
-                reason_codes=("MAPPING_NONCURRENT_COMPONENT_INVALID",)
+        if len(namespaces) != 1:
+            return LiabilityResidualSelection(
+                reason_codes=(f"{prefix}_COMPONENT_INVALID",)
             )
         selected.extend(observations)
         periods.append(
@@ -127,11 +166,11 @@ def select_registered_noncurrent_liabilities(
                 period=AccountingPeriodV1(period_end=instant, instant=True),
                 disposition="derived",
                 components=tuple(components),
-                rationale=POLICY,
+                rationale=partition.policy_version,
             )
         )
     rules: AccountingRoleRules = IssuerAccountingRoleRuleSetV1(
-        policy_version=POLICY,
+        policy_version=partition.policy_version,
         normalized_field=normalized_field,
         issuer_id=source.cik,
         accession_number=source.accession_number,
@@ -149,8 +188,8 @@ def select_registered_noncurrent_liabilities(
             fact for fact in selected if sha256_digest(fact) in references
         )
         if evaluate_period_rule(rules, period, observations_for_period) != Decimal(0):
-            return NoncurrentLiabilitySelection(
-                reason_codes=("MAPPING_NONCURRENT_RESIDUAL_UNALLOCATED",)
+            return LiabilityResidualSelection(
+                reason_codes=(f"{prefix}_RESIDUAL_UNALLOCATED",)
             )
     if security_id is not None:
         rules = AccountingRoleRuleSetV1.model_validate(
@@ -159,7 +198,7 @@ def select_registered_noncurrent_liabilities(
                 "security_id": security_id,
             }
         )
-    return NoncurrentLiabilitySelection(rules=rules, selected=tuple(selected))
+    return LiabilityResidualSelection(rules=rules, selected=tuple(selected))
 
 
 def _eligible(fact: ParsedXbrlFactV1, cik: str) -> bool:

@@ -211,7 +211,7 @@ def test_gross_balance_approval_is_source_bound_and_reused_after_restart(
         store.read(first.decision_publication.artifact.artifact_id)
     )
     assert decision.status == "approved"
-    assert decision.policy_version == "source-bound-us-gaap-v10"
+    assert decision.policy_version == "source-bound-us-gaap-v11"
     mapping = decision.mapping
     scope = mapping.observation_scope
     assert scope.issuer_id == request.original.source.cik

@@ -5,7 +5,7 @@ from decimal import Decimal, localcontext
 
 import pytest
 
-from fundamental_service import registered_noncurrent_liabilities as policy
+from fundamental_service import registered_liability_residuals as policy
 from fundamental_service.arelle_parser import fact_semantic_digest
 from fundamental_service.automatic_mapping import (
     AutomaticMappingApprovalV1,
@@ -19,9 +19,23 @@ from test_automatic_mapping import approve, case, evaluate
 from test_issuer_operating_release import inventory
 
 
+@pytest.fixture(
+    params=["long_term_interest_bearing_debt", "current_interest_bearing_debt"]
+)
+def principal_role(request):
+    return request.param
+
+
 def liability_case(tmp_path, monkeypatch, *, role=None, change=None):
     template, _, _, _ = case(tmp_path / "template")
     base = next(f for f in template.original.report.facts if f.is_numeric)
+    role = role or "long_term_interest_bearing_debt"
+    partition = next(p for p in policy.PARTITIONS if role in p.roles)
+    amounts = (
+        ((2024, ("100", "80", "20")), (2025, ("90", "60", "30")))
+        if len(partition.components) == 3
+        else ((2024, ("100", "40", "40", "20")), (2025, ("90", "30", "30", "30")))
+    )
     facts = [
         base.model_copy(
             update={
@@ -34,8 +48,8 @@ def liability_case(tmp_path, monkeypatch, *, role=None, change=None):
                 "decimals": "0",
             }
         )
-        for year, amounts in ((2024, ("100", "80", "20")), (2025, ("90", "60", "30")))
-        for (concept, _), value in zip(policy.COMPONENTS, amounts, strict=True)
+        for year, values in amounts
+        for (concept, _), value in zip(partition.components, values, strict=True)
     ]
     if change:
         facts = change(facts)
@@ -43,8 +57,8 @@ def liability_case(tmp_path, monkeypatch, *, role=None, change=None):
         tmp_path / "actual",
         extra=tuple(facts),
         proposal_changes={
-            "source_concept": policy.NONCURRENT_LIABILITY_RESIDUAL,
-            "normalized_field": role or "long_term_interest_bearing_debt",
+            "source_concept": partition.concept,
+            "normalized_field": role,
         },
     )
     source = request.original.source
@@ -72,7 +86,8 @@ def test_zero_partition_retains_all_components_and_signed_replay(
         original=request.original,
         mapping_version=request.proposal.mapping_version,
     )
-    assert proposal.source_concept == policy.NONCURRENT_LIABILITY_RESIDUAL
+    partition = next(p for p in policy.PARTITIONS if role in p.roles)
+    assert proposal.source_concept == partition.concept
     receipt = approve(request, store, roots)
     decision = AutomaticMappingDecisionV1.model_validate_json(
         store.read(receipt.decision_publication.artifact.artifact_id)
@@ -92,8 +107,8 @@ def test_zero_partition_retains_all_components_and_signed_replay(
     assert all(
         c.accounting_evidence.period_rule.disposition == "derived"
         and {f.concept for f in c.accounting_evidence.source_facts}
-        == {concept for concept, _ in policy.COMPONENTS}
-        and len(c.accounting_evidence.source_facts) == 3
+        == {concept for concept, _ in partition.components}
+        and len(c.accounting_evidence.source_facts) == len(partition.components)
         for c in candidates
     )
     approval = AutomaticMappingApprovalV1.model_validate_json(
@@ -134,16 +149,20 @@ def test_zero_partition_retains_all_components_and_signed_replay(
     ],
 )
 def test_invalid_partition_component_cannot_establish_zero(
-    tmp_path, monkeypatch, changes
+    tmp_path, monkeypatch, changes, principal_role
 ):
     request, store, _, _ = liability_case(
         tmp_path,
         monkeypatch,
+        role=principal_role,
         change=lambda facts: [facts[0].model_copy(update=changes), *facts[1:]],
     )
     result = evaluate(request, store)
     assert result.status == "abstain" and result.mapping is None
-    assert "MAPPING_NONCURRENT_COMPONENT_INVALID" in result.reason_codes
+    prefix = next(
+        p.reason_prefix for p in policy.PARTITIONS if principal_role in p.roles
+    )
+    assert prefix + "_COMPONENT_INVALID" in result.reason_codes
 
 
 @pytest.mark.parametrize("value", ["99", "101"])
@@ -159,7 +178,8 @@ def test_nonzero_residual_is_not_allocated_to_either_role(
     )
     result = evaluate(request, store)
     assert result.mapping is None and result.status == "abstain"
-    assert "MAPPING_NONCURRENT_RESIDUAL_UNALLOCATED" in result.reason_codes
+    partition = next(p for p in policy.PARTITIONS if role in p.roles)
+    assert partition.reason_prefix + "_RESIDUAL_UNALLOCATED" in result.reason_codes
 
 
 @pytest.mark.parametrize(
@@ -189,18 +209,26 @@ def test_nonzero_residual_is_not_allocated_to_either_role(
     ],
 )
 def test_incomplete_conflicting_and_misaligned_partitions_retain_reason(
-    tmp_path, monkeypatch, change, reason
+    tmp_path, monkeypatch, change, reason, principal_role
 ):
-    request, store, _, _ = liability_case(tmp_path, monkeypatch, change=change)
+    request, store, _, _ = liability_case(
+        tmp_path, monkeypatch, change=change, role=principal_role
+    )
     result = evaluate(request, store)
     assert result.mapping is None and result.status == "abstain"
-    assert reason in result.reason_codes
+    prefix = next(
+        p.reason_prefix for p in policy.PARTITIONS if principal_role in p.roles
+    )
+    assert reason.replace("MAPPING_NONCURRENT", prefix) in result.reason_codes
 
 
-def test_unregistered_changed_and_future_originals_refuse(tmp_path, monkeypatch):
-    request, _, _, _ = liability_case(tmp_path, monkeypatch)
+def test_unregistered_changed_and_future_originals_refuse(
+    tmp_path, monkeypatch, principal_role
+):
+    request, _, _, _ = liability_case(tmp_path, monkeypatch, role=principal_role)
     original = request.original
     role = request.proposal.normalized_field
+    prefix = next(p.reason_prefix for p in policy.PARTITIONS if role in p.roles)
     for changes, reason in (
         (
             {"source": original.source.model_copy(update={"cik": "0009999999"})},
@@ -221,15 +249,15 @@ def test_unregistered_changed_and_future_originals_refuse(tmp_path, monkeypatch)
         ({"report_period_end": date(2024, 12, 31)}, "MAPPING_PERIOD_AFTER_ORIGINAL"),
     ):
         changed = original.model_copy(update=changes)
-        assert policy.select_registered_noncurrent_liabilities(
+        assert policy.select_registered_liability_residual(
             changed, role
-        ).reason_codes == (reason,)
+        ).reason_codes == (reason.replace("MAPPING_NONCURRENT", prefix),)
         assert (
             automatic_mapping_proposal(role, original=changed, mapping_version="test")
             is None
         )
     assert (
-        policy.select_registered_noncurrent_liabilities(
+        policy.select_registered_liability_residual(
             original, "finance_lease_cost"
         ).rules
         is None
@@ -237,10 +265,13 @@ def test_unregistered_changed_and_future_originals_refuse(tmp_path, monkeypatch)
 
 
 def test_equivalent_duplicates_order_and_decimal_context_preserve_mapping(
-    tmp_path, monkeypatch
+    tmp_path, monkeypatch, principal_role
 ):
     request, store, _, _ = liability_case(
-        tmp_path, monkeypatch, change=lambda facts: [*facts, facts[0]]
+        tmp_path,
+        monkeypatch,
+        role=principal_role,
+        change=lambda facts: [*facts, facts[0]],
     )
     before = evaluate(request, store)
     assert before.status == "approved"
@@ -260,3 +291,59 @@ def test_equivalent_duplicates_order_and_decimal_context_preserve_mapping(
         after = evaluate(reordered, store)
     assert sha256_digest(after.mapping) == sha256_digest(before.mapping)
     assert after.eligible_observation_digests == before.eligible_observation_digests
+
+
+def test_current_partition_cannot_authorize_noncurrent_or_operating_scope(
+    tmp_path, monkeypatch
+):
+    request, store, _, _ = liability_case(
+        tmp_path, monkeypatch, role="current_interest_bearing_debt"
+    )
+    assert evaluate(request, store).status == "approved"
+    for role in (
+        "accrued_operating_liabilities",
+        "finance_lease_cost",
+        "convertible_instruments",
+        "preferred_claims",
+        "other_share_classes",
+    ):
+        assert (
+            automatic_mapping_proposal(
+                role, original=request.original, mapping_version="test"
+            )
+            is None
+        )
+    wrong = request.model_copy(
+        update={
+            "proposal": request.proposal.model_copy(
+                update={
+                    "source_concept": policy.NONCURRENT_LIABILITY_RESIDUAL,
+                }
+            )
+        }
+    )
+    assert evaluate(wrong, store).status == "abstain"
+
+
+def test_duplicate_with_another_namespace_cannot_hide_behind_equivalent_amount(
+    tmp_path, monkeypatch, principal_role
+):
+    request, store, _, _ = liability_case(
+        tmp_path,
+        monkeypatch,
+        role=principal_role,
+        change=lambda facts: [
+            *facts,
+            facts[0].model_copy(
+                update={
+                    "namespace_uri": "http://fasb.org/us-gaap/2023",
+                }
+            ),
+        ],
+    )
+    result = evaluate(request, store)
+    prefix = next(
+        p.reason_prefix for p in policy.PARTITIONS if principal_role in p.roles
+    )
+    assert result.status == "abstain"
+    assert prefix + "_COMPONENT_INVALID" in result.reason_codes

@@ -401,3 +401,49 @@ They prove neither current borrowing classifications nor annual finance lease
 expense: a lease paid off during the year could have expense and no closing
 balance. No award, market input, release, caller approval or verified valuation
 is inferred. The remaining gaps stay visible and history thresholds remain null.
+
+### Registered NVE current liability principal partition
+
+Automatic policy `source-bound-us-gaap-v11` moves the shared residual evaluator
+to `registered_liability_residuals.py` and registers a separate current partition
+for those same two original NVE statements. It retains the noncurrent policy
+above. New executable dependencies change the approval digest; prior policy
+certificates cannot authorize this version.
+
+The complete original balance sheets present current liabilities as three
+nonoverlapping lines: accounts payable, accrued payroll and other, and operating
+lease liabilities. This original-specific classification treats vendor goods/
+services payables and accrued costs separately from borrowing and finance-lease
+principal. The evaluator requires all four consolidated, nonnegative USD
+observations at unit-or-finer precision and computes:
+
+```text
+current principal residual = LiabilitiesCurrent
+                          - AccountsPayableCurrent
+                          - AccruedLiabilitiesCurrent
+                          - OperatingLeaseLiabilityCurrent
+```
+
+Only an exactly zero residual supplies `current_interest_bearing_debt` and
+`current_finance_lease_liabilities`. Every derived fact retains all four original
+observations, reported precision, namespace, issuer, instant, accession, source
+hash and mapping/policy pins. Missing, nonzero, conflicting, rounded, foreign,
+future or mixed-namespace evidence refuses. Equivalent duplicates select
+deterministically; an equivalent amount in another namespace also refuses.
+Another issuer or changed original cannot inherit this classification.
+
+External calibration uses the [official FASB2024 definitions](https://xbrl.fasb.org/us-gaap/2024/elts/us-gaap-doc-2024.xml)
+(retrieved SHA256
+`96b321b294493af54253a45e3694e85d501857cb4029ba2529089ad9d7880872`).
+`AccountsPayableCurrent` describes vendor obligations for goods and services;
+`AccruedLiabilitiesCurrent` describes costs, including taxes, interest, rent and
+utilities. `FinanceLeaseLiabilityCurrent` describes the discounted lease-payment
+obligation. The definitions alone establish no issuer amount: the registered
+complete statements and their unnetted reconciled partition supply this scope.
+
+The mixed accrued-cost line is not classified as entirely operating. Its
+operating fraction remains an explicit estimate under the existing composite
+working-capital policy. This instant carrying-amount result is not a
+`confirmed_absent` assertion, does not establish annual finance-lease expense,
+and supplies no preferred/convertible/share-class or award absence. Those gaps,
+market/release/caller-approval requirements and the null history threshold remain.
