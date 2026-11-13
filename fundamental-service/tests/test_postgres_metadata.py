@@ -420,6 +420,14 @@ def _cross_process_ingestion_contenders(
             snapshot,
             correlation_id=correlation_id,
         )
+        deadline = time.monotonic() + 30
+        while (
+            metadata._runner.run(_coalescing_probe_attempts(metadata, table, run_id))
+            < 50
+        ):
+            if time.monotonic() >= deadline:
+                raise TimeoutError("not all HTTP requests reached PostgreSQL")
+            time.sleep(0.01)
         metadata.publish_sec_ingestion(
             acquisition_key=acquisition_key,
             acquisition_payload=key_payload,
@@ -429,14 +437,6 @@ def _cross_process_ingestion_contenders(
             caller_principal=caller_principal,
             organization_id=organization_id,
         )
-        deadline = time.monotonic() + 30
-        while (
-            metadata._runner.run(_coalescing_probe_attempts(metadata, table, run_id))
-            < 50
-        ):
-            if time.monotonic() >= deadline:
-                raise TimeoutError("not all HTTP requests reached PostgreSQL")
-            time.sleep(0.01)
         return result
 
     use_case._acquire_and_publish = acquire_and_publish
