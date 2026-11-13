@@ -39,7 +39,7 @@ from .taxonomy_evidence import (
     build_taxonomy_cache_archive,
     taxonomy_cache_archive_digest,
 )
-from .valuation_requirements import valuation_requirements_profile
+from .valuation_requirements import automatic_source_requirements_profile
 
 
 class AutomaticSecIngestionRequestV1(SecSourceRequestV1):
@@ -54,7 +54,9 @@ class AutomaticSecIngestionRequestV1(SecSourceRequestV1):
 
     @model_validator(mode="after")
     def automatic_source_is_pinned(self) -> AutomaticSecIngestionRequestV1:
-        profile = valuation_requirements_profile(self.model_id)
+        profile = automatic_source_requirements_profile(
+            self.model_id, self.requirements_digest
+        )
         if (
             self.identity_basis != "original-filing-dei-v1"
             or self.filing.accession_number is None
@@ -245,7 +247,9 @@ class _AutomaticSourceMappingResolver:
             evidence_refs=tuple(unique[key] for key in sorted(unique)),
             mapping_version=request.mapping_version,
             model_version=request.model_version,
-            requirements=valuation_requirements_profile(request.model_id),
+            requirements=automatic_source_requirements_profile(
+                request.model_id, request.requirements_digest
+            ),
         )
         receipt = approve_mapping_batch(
             batch_request,

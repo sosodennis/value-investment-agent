@@ -11,7 +11,7 @@ from .data_releases import ArtifactRefV1, ReleaseModel
 from .policies import initial_model_specs
 from .valuation_requirements import (
     ValuationRequirementsProfileV1,
-    valuation_requirements_profile,
+    automatic_source_requirements_profile,
 )
 
 
@@ -25,9 +25,15 @@ class AutomaticMappingBatchRequestV1(AutomaticMappingSourceV1):
 
     @model_validator(mode="after")
     def requirements_are_service_owned(self) -> AutomaticMappingBatchRequestV1:
-        if self.requirements != valuation_requirements_profile(
-            self.requirements.model_id
-        ) or not any(
+        try:
+            profile = automatic_source_requirements_profile(
+                self.requirements.model_id, self.requirements.digest
+            )
+        except ValueError as error:
+            raise ValueError(
+                "batch requires the exact service model and requirements"
+            ) from error
+        if self.requirements != profile or not any(
             model.model_id == self.requirements.model_id
             and model.model_version == self.model_version
             for model in initial_model_specs()

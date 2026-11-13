@@ -20,7 +20,10 @@ from .contracts import (
 from .serialization import sha256_digest
 from .equity_award_evidence import AWARD_FACT_FIELDS
 from .original_issuer import IssuerOperatingSourceV1, fact_matches_operating_identity
-from .working_capital import WORKING_CAPITAL_INPUT_POLICY
+from .working_capital import (
+    WORKING_CAPITAL_EXCLUSION_FIELDS,
+    WORKING_CAPITAL_INPUT_POLICY,
+)
 
 
 class ValuationRequirementsProfileV1(StrictModel):
@@ -302,6 +305,48 @@ def composite_working_capital_requirements_profile(
     )
 
 
+def source_preparation_requirements_profile(
+    model_id: str, *, composite_inputs: bool = False
+) -> ValuationRequirementsProfileV1:
+    """Acquire optional exclusion roles while retaining every unsupported role."""
+
+    if not composite_inputs:
+        return valuation_requirements_profile(model_id)
+    profile = composite_working_capital_requirements_profile(
+        model_id, operating_only=False
+    )
+    return ValuationRequirementsProfileV1.model_validate(
+        profile.model_dump()
+        | {
+            "profile_id": f"{model_id}-composite-source-requirements-v1",
+            "profile_version": "composite-source-requirements-v1",
+            "supporting_fact_fields": tuple(
+                sorted(
+                    set(profile.supporting_fact_fields)
+                    | (
+                        set(WORKING_CAPITAL_EXCLUSION_FIELDS)
+                        - set(profile.required_fact_fields)
+                    )
+                )
+            ),
+        }
+    )
+
+
+def automatic_source_requirements_profile(
+    model_id: str, requirements_digest: str
+) -> ValuationRequirementsProfileV1:
+    """Resolve a digest against the service-owned source profiles only."""
+
+    for composite_inputs in (False, True):
+        profile = source_preparation_requirements_profile(
+            model_id, composite_inputs=composite_inputs
+        )
+        if profile.digest == requirements_digest:
+            return profile
+    raise ValueError("automatic acquisition requires exact service model requirements")
+
+
 __all__ = [
     "ReleasedFactSelectionV1",
     "UnsupportedValuationModel",
@@ -310,4 +355,6 @@ __all__ = [
     "composite_working_capital_requirements_profile",
     "select_released_facts",
     "valuation_requirements_profile",
+    "source_preparation_requirements_profile",
+    "automatic_source_requirements_profile",
 ]

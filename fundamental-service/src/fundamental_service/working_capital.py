@@ -51,6 +51,7 @@ _EXCLUSION_ROLE_COVERAGE = {
         ("cash_and_equivalents", "short_term_investments"),
     ),
 }
+WORKING_CAPITAL_EXCLUSION_FIELDS = tuple(sorted(_EXCLUSION_ROLE_COVERAGE))
 
 
 class InclusionScenariosV1(StrictModel):

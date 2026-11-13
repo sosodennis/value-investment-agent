@@ -20,7 +20,22 @@ from .working_capital import (
 def valuation_release_requirements(
     manifest: DataReleaseManifestV1, model_id: str
 ) -> ValuationRequirementsProfileV1:
-    policy = manifest.valuation_working_capital_policy
+    profile = valuation_input_requirements(
+        manifest.valuation_working_capital_policy, model_id
+    )
+    if manifest.valuation_working_capital_policy is not None and set(
+        manifest.required_fields
+    ) != set(profile.required_fact_fields):
+        raise DataReleaseError(
+            "DATA_RELEASE_VALUATION_INPUT_POLICY_MISMATCH",
+            "composite valuation inputs require the exact service field profile",
+        )
+    return profile
+
+
+def valuation_input_requirements(
+    policy: ValuationWorkingCapitalPolicyV1 | None, model_id: str
+) -> ValuationRequirementsProfileV1:
     if policy is None:
         return valuation_requirements_profile(model_id)
     try:
@@ -40,13 +55,9 @@ def valuation_release_requirements(
     profile = composite_working_capital_requirements_profile(
         model_id, operating_only=False
     )
-    if (
-        policy.requirements_profile_digest != profile.digest
-        or set(manifest.required_fields) != set(profile.required_fact_fields)
-        or not any(
-            model.model_id == model_id and model.model_version == policy.model_version
-            for model in initial_model_specs()
-        )
+    if policy.requirements_profile_digest != profile.digest or not any(
+        model.model_id == model_id and model.model_version == policy.model_version
+        for model in initial_model_specs()
     ):
         raise DataReleaseError(
             "DATA_RELEASE_VALUATION_INPUT_POLICY_MISMATCH",

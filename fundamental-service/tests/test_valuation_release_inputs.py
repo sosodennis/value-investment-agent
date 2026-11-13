@@ -44,14 +44,33 @@ from test_valuation_preparation import _facts
 from test_working_capital import MAPPING_VERSION, _composite_history, _fact_for
 
 
-def _valuation_fixture(tmp_path: Path):
+def _valuation_fixture(tmp_path: Path, *, sec_profile: bool = False):
     fixture = _fixture(tmp_path)
     snapshot, operating, inputs = _composite_history()
     source_bytes = b'{"fixture":"synthetic composite original, not issuer evidence"}'
     source_hash = hashlib.sha256(source_bytes).hexdigest()
     payload = snapshot.model_dump(exclude={"manifest_digest"})
+    if sec_profile:
+        payload.update(
+            {
+                field: getattr(fixture.snapshot, field)
+                for field in (
+                    "parser_version",
+                    "policy_version",
+                    "taxonomy_manifest_id",
+                    "validation_profile_id",
+                    "validation_profile_digest",
+                )
+            }
+        )
     payload["source_records"] = tuple(
-        source.model_copy(update={"content_hash": source_hash})
+        type(source).model_validate(
+            source.model_dump()
+            | {
+                "content_hash": source_hash,
+                "parser_version": payload["parser_version"],
+            }
+        )
         for source in snapshot.source_records
     )
     snapshot = type(snapshot)(
@@ -153,6 +172,8 @@ def _valuation_fixture(tmp_path: Path):
 
 def _manifest_with(manifest, **changes):
     payload = manifest.model_dump(exclude={"manifest_digest"}) | changes
+    if payload.get("valuation_working_capital_policy") is None:
+        payload.pop("valuation_working_capital_policy", None)
     return DataReleaseManifestV1(**payload, manifest_digest=sha256_digest(payload))
 
 

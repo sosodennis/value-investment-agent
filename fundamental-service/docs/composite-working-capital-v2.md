@@ -44,10 +44,30 @@ residual assumptions, deterministic sensitivity and provisional quality.
 
 An omitted policy preserves ordinary release serialization and digests. Issuer
 operating releases continue to use their existing `working_capital_inputs` field
-and cannot also declare the security policy. Source preparation must explicitly
-compile this policy before it can use the composite full valuation profile;
-this release contract alone does not provide missing issuer evidence or enable
-a numerical automatic source plan.
+and cannot also declare the security policy.
+
+## Source preparation
+
+Both manual-mapping and automatic-mapping source plans can explicitly carry
+the same `valuation_working_capital_policy`. The plan pins its model, mapping,
+issuer and original accessions; a candidate or active release must contain the
+identical policy. Omitting the policy retains ordinary plan bytes and digests.
+
+`source_preparation_requirements_profile(model_id, composite_inputs=True)`
+acquires gross totals, the full model requirements and optional exclusion roles.
+Automatic mapping accepts only the exact service-owned ordinary or composite
+source profile. Every unsupported optional role remains a retained refusal;
+it does not automatically become a required zero balance. Composed history
+must contain every declared supporting fact under the plan's source/mapping
+pins. Unknown, missing, future or foreign-mapped exclusions block preparation.
+The signed release still uses the full valuation profile, independently checks
+those facts, and passes the same inputs to the official composer.
+
+This plan contract takes already bound input facts and explicit residual
+assumptions. It does not yet compile them from an automatic policy recipe or
+establish complete real issuer evidence. Source providers remain replaceable
+through the existing [provider ports](market-input-providers.md); source-plan
+policy and the composer do not interpret provider-specific formats.
 
 Estimated history and forecasts remain provisional. `supported_history_threshold` remains null. This increment does not resolve NEWMARKET 2013 continuing-capex scope or establish a trusted NEWMARKET release, first-subsequent label, forecast error, or complete fixed-cohort replay. Freeze the #377 evaluation protocol before using outcomes to select a history threshold; any estimated label must be identified as an estimate under this input-policy version.
 

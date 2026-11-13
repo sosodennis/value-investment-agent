@@ -17,7 +17,10 @@ from fundamental_service.ingestion_mapping import ValidatedOriginalV1
 from fundamental_service.data_releases import DataReleaseError
 from fundamental_service.serialization import sha256_digest
 from fundamental_service.snapshots import FilesystemContentStore
-from fundamental_service.valuation_requirements import valuation_requirements_profile
+from fundamental_service.valuation_requirements import (
+    source_preparation_requirements_profile,
+    valuation_requirements_profile,
+)
 from test_automatic_mapping import EVALUATOR, MACHINE_KEY, REVISION
 from test_automatic_mapping_security import security_case
 from test_issuer_operating_release import inventory
@@ -139,6 +142,41 @@ def test_empty_store_publishes_approved_mappings_and_every_abstention(tmp_path):
     again = authority.resolver_for(request).resolve(validated)
     assert sha256_digest(again) == sha256_digest(result)
     assert before == inventory(artifacts.root)
+
+
+def test_automatic_source_retains_composite_totals_and_optional_exclusion_refusals(
+    tmp_path,
+):
+    request, authority, validated, artifacts, _ = source_case(tmp_path)
+    profile = source_preparation_requirements_profile("fcff_dcf", composite_inputs=True)
+    request = type(request)(
+        **(
+            request.model_dump()
+            | {
+                "required_fields": profile.required_fact_fields,
+                "requirements_digest": profile.digest,
+            }
+        )
+    )
+    first = authority.resolver_for(request).resolve(validated)
+    batch = AutomaticMappingBatchDecisionV1.model_validate_json(
+        artifacts.read(first.evidence_ref)
+    )
+    assert batch.requirements == profile
+    roles = {role.normalized_field: role for role in batch.roles}
+    assert {
+        "current_assets",
+        "current_liabilities",
+        "short_term_investments",
+        "cash_and_short_term_investments",
+    } <= roles.keys()
+    assert "contract_assets" not in roles
+    assert roles["short_term_investments"].status == "abstain"
+    assert roles["short_term_investments"].approval is None
+    assert profile.supported_history_threshold is None
+    before = inventory(artifacts.root)
+    assert authority.resolver_for(request).resolve(validated) == first
+    assert inventory(artifacts.root) == before
 
 
 @pytest.mark.parametrize(

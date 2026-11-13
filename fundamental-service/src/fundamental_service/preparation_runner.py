@@ -58,8 +58,14 @@ from .source_acquisition import SecAcquisitionUseCase
 from .snapshots import SnapshotError
 from .valuation_preparation import AutomaticValuationPreparationV1
 from .valuation_requirements import (
+    ValuationRequirementsProfileV1,
     select_released_facts,
-    valuation_requirements_profile,
+    source_preparation_requirements_profile,
+)
+from .valuation_release_inputs import valuation_input_requirements
+from .working_capital import (
+    ValuationWorkingCapitalPolicyV1,
+    assess_composite_working_capital,
 )
 
 
@@ -73,10 +79,26 @@ class _SourcePreparationPlan(StrictModel, Generic[SourceRequestT]):
     release_profile_id: str = Field(min_length=1)
     model_id: InitialModelId
     ingestions: tuple[SourceRequestT, ...] = Field(min_length=1, max_length=6)
+    valuation_working_capital_policy: ValuationWorkingCapitalPolicyV1 | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
+
+    @property
+    def requirements_profile(self) -> ValuationRequirementsProfileV1:
+        return source_preparation_requirements_profile(
+            self.model_id,
+            composite_inputs=self.valuation_working_capital_policy is not None,
+        )
 
     @model_validator(mode="after")
     def requirements_match(self) -> _SourcePreparationPlan[SourceRequestT]:
-        profile = valuation_requirements_profile(self.model_id)
+        profile = self.requirements_profile
+        try:
+            valuation_input_requirements(
+                self.valuation_working_capital_policy, self.model_id
+            )
+        except DataReleaseError as error:
+            raise ValueError(str(error)) from error
         required = set(profile.required_fact_fields)
         requested = {
             field for request in self.ingestions for field in request.required_fields
@@ -84,6 +106,15 @@ class _SourcePreparationPlan(StrictModel, Generic[SourceRequestT]):
         if not required <= requested <= required | set(profile.supporting_fact_fields):
             raise ValueError("source plan must cover the complete model requirements")
         first = self.ingestions[0]
+        if self.valuation_working_capital_policy is not None and any(
+            item.issuer_id != first.identity.issuer_id
+            or item.accession_number
+            not in {request.filing.accession_number for request in self.ingestions}
+            for item in self.valuation_working_capital_policy.inputs
+        ):
+            raise ValueError(
+                "composite source inputs must pin the plan issuer and filings"
+            )
         for request in self.ingestions:
             if any(
                 getattr(request, field) != getattr(first, field)
@@ -138,9 +169,7 @@ class _SourcePreparationPlan(StrictModel, Generic[SourceRequestT]):
             valuation_timestamp=first.valuation_timestamp,
             source_selection_policy="pit-v1",
             coverage_profile=first.coverage_profile,
-            required_fields=valuation_requirements_profile(
-                self.model_id
-            ).required_fact_fields,
+            required_fields=self.requirements_profile.required_fact_fields,
         )
 
 
@@ -154,6 +183,14 @@ class SourcePreparationPlanV2(_SourcePreparationPlan[SecIngestionRequestV1]):
         references: dict[str, SecMappingReferenceV1] = {}
         for request in self.ingestions:
             for reference in request.mappings:
+                if (
+                    self.valuation_working_capital_policy is not None
+                    and reference.mapping_version
+                    != self.valuation_working_capital_policy.mapping_version
+                ):
+                    raise ValueError(
+                        "composite source plan must pin one mapping version"
+                    )
                 previous = references.setdefault(reference.decision_id, reference)
                 if previous != reference:
                     raise ValueError("source plan mapping references must be coherent")
@@ -174,6 +211,12 @@ class AutomaticSourcePreparationPlanV1(
             if (
                 request.source_revision != self.source_revision
                 or request.model_id != self.model_id
+                or request.requirements_digest != self.requirements_profile.digest
+                or (
+                    self.valuation_working_capital_policy is not None
+                    and request.mapping_version
+                    != self.valuation_working_capital_policy.mapping_version
+                )
                 or any(
                     getattr(request, field) != getattr(first, field)
                     for field in (
@@ -461,6 +504,11 @@ class SourcePreparationRunner:
     def _matches_release_mappings(
         self, plan: SourcePreparationPlan, manifest: DataReleaseManifestV1
     ) -> bool:
+        if (
+            manifest.valuation_working_capital_policy
+            != plan.valuation_working_capital_policy
+        ):
+            return False
         released = {
             item.mapping_id: item.mapping_digest for item in manifest.mapping_refs
         }
@@ -856,7 +904,12 @@ class SourcePreparationRunner:
             for source in snapshot.source_records
             if source.role is SourceRole.FILING
         }
-        profile = valuation_requirements_profile(plan.model_id)
+        profile = plan.requirements_profile
+        working_capital_inputs = (
+            plan.valuation_working_capital_policy.inputs
+            if plan.valuation_working_capital_policy is not None
+            else ()
+        )
         selected = select_released_facts(
             (
                 fact
@@ -871,9 +924,23 @@ class SourcePreparationRunner:
             profile=profile,
             snapshot=snapshot,
             valuation_timestamp=snapshot.valuation_timestamp,
+            additional_fact_ids=tuple(
+                fact_id for item in working_capital_inputs for fact_id in item.fact_ids
+            ),
         )
         if selected.missing_fields:
             return selected.issue_codes, selected.missing_fields
+        missing_composite = {
+            missing
+            for item in working_capital_inputs
+            for missing in assess_composite_working_capital(
+                item, selected.facts, snapshot=snapshot
+            ).missing_evidence
+        }
+        if missing_composite:
+            return ("SOURCE_PREPARATION_WORKING_CAPITAL_INVALID",), tuple(
+                sorted(missing_composite)
+            )
         try:
             history = resolve_annual_history(
                 selected.facts,
