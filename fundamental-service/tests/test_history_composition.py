@@ -258,6 +258,45 @@ def test_bound_full_submission_evidence_is_retained_in_history(tmp_path):
     )
 
 
+def test_bound_supplemental_filings_are_retained_in_history(tmp_path):
+    repository, originals = _repository(tmp_path)
+    original = originals[1]
+    filing = original.source_records[0]
+    supplemental = filing.model_copy(
+        update={
+            "source_id": "sec-supplemental-filing",
+            "uri": filing.uri.rsplit("/", 1)[0] + "/0000000001-25-000010/def14a.htm",
+            "content_hash": "c" * 64,
+            "parser_input_hash": "d" * 64,
+            "media_type": "text/html",
+            "received_size": 48,
+            "accession_number": "0000000001-25-000010",
+            "form": "DEF 14A",
+            "is_amendment": True,
+            "amendment_scope": "unknown",
+        }
+    )
+    with_supplemental = _changed(
+        original, source_records=(*original.source_records, supplemental)
+    )
+    repository = FilesystemSnapshotRepository(tmp_path / "with-supplemental")
+    repository.publish(originals[0])
+    repository.publish(with_supplemental)
+
+    history = _compose(repository, (originals[0], with_supplemental))
+
+    retained = tuple(
+        source
+        for source in history.source_records
+        if source.source_id == "sec-supplemental-filing"
+    )
+    assert retained == (supplemental,)
+    assert verify_history_components(history, repository) == (
+        repository.get(originals[0].snapshot_id),
+        with_supplemental,
+    )
+
+
 @pytest.mark.parametrize(
     "changes",
     [

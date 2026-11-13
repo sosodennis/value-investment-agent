@@ -20,6 +20,9 @@ from .serialization import sha256_digest
 from .snapshots import SnapshotError, SnapshotRepository
 
 
+_ADDITIONAL_FILING_SOURCE_IDS = frozenset({"sec-supplemental-filing"})
+
+
 class HistorySnapshotReader(Protocol):
     def get(self, snapshot_id: str) -> SourceSnapshotV1: ...
 
@@ -54,7 +57,12 @@ def _verify_original(
         or any(
             source.role is SourceRole.FILING
             and source.source_id
-            not in {"sec-filing", "sec-filing-archive", "sec-filing-submission"}
+            not in {
+                "sec-filing",
+                "sec-filing-archive",
+                "sec-filing-submission",
+                *_ADDITIONAL_FILING_SOURCE_IDS,
+            }
             for source in component.source_records
         )
         or any(
