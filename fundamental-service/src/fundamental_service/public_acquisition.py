@@ -96,6 +96,12 @@ class PublicSourceAcquisitionEvidenceV1(StrictModel):
     def digest(self) -> str:
         return sha256_digest(self)
 
+    @property
+    def artifact_id(self) -> str:
+        if self.retryable:
+            return f"public-source-attempt:{self.digest}"
+        return f"public-source-acquisition:{self.request.digest}"
+
 
 class PublicSourceCapturePort(Protocol):
     def validate_capture(self, source_id: str, uri: str) -> SourceCaptureRequest: ...
@@ -161,7 +167,7 @@ class PublicSourceAcquisition:
             canonical_bytes(evidence) != raw
             or sha256(raw).hexdigest() != record.content_hash
             or record.dependency_hashes != dependencies
-            or artifact_id != self._artifact_id(evidence)
+            or artifact_id != evidence.artifact_id
         ):
             raise SnapshotError(
                 "PUBLIC_CAPTURE_IDENTITY_MISMATCH", "capture receipt differs from key"
@@ -192,12 +198,6 @@ class PublicSourceAcquisition:
             content=raw,
             captured_at=source.captured_at,
         )
-
-    @staticmethod
-    def _artifact_id(evidence: PublicSourceAcquisitionEvidenceV1) -> str:
-        if evidence.retryable:
-            return f"public-source-attempt:{evidence.digest}"
-        return f"public-source-acquisition:{evidence.request.digest}"
 
     def execute(
         self, request: PublicSourceAcquisitionRequestV1
@@ -250,7 +250,7 @@ class PublicSourceAcquisition:
                 (evidence.source.content_sha256,) if evidence.source else ()
             )
             return self._artifacts.put_with_receipt(
-                self._artifact_id(evidence), evidence, dependencies
+                evidence.artifact_id, evidence, dependencies
             )
 
     def _retain(

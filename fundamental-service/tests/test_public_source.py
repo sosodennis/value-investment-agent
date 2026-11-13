@@ -385,6 +385,10 @@ def test_all_declared_free_sources_have_allowlisted_capture_contract():
                     "treasury-yields",
                     "alfred-vintage",
                     "damodaran-reference",
+                    "damodaran-use-terms",
+                    "bea-citation-terms",
+                    "us-government-works-terms",
+                    "new-york-fed-use-terms",
                 }
                 else datetime(2025, 1, 3, tzinfo=timezone.utc)
             ),

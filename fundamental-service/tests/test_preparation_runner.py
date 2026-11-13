@@ -297,7 +297,14 @@ def _reader(fixture, receipt):
     )
 
 
-def _runner(fixture, *, acquisition=None, canary=None, public_acquisition=None):
+def _runner(
+    fixture,
+    *,
+    acquisition=None,
+    canary=None,
+    public_acquisition=None,
+    public_admission=None,
+):
     return SourcePreparationRunner(
         application=fixture.application,
         metadata=fixture.metadata,
@@ -305,6 +312,7 @@ def _runner(fixture, *, acquisition=None, canary=None, public_acquisition=None):
         artifacts=fixture.artifacts,
         canary=canary,
         public_acquisition=public_acquisition,
+        public_admission=public_admission,
     )
 
 

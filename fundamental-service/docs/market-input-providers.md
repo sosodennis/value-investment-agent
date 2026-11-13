@@ -179,11 +179,40 @@ stderr for source-plane exceptions. Its stable `code`, `retryable`, `plan_digest
 and optional `evidence_ref` let a caller distinguish a busy lease from a permanent
 refusal without parsing message text.
 
-This acquisition stage does not automatically create source-use admissions,
-issuer crosswalks, market policies or trusted release candidates. The existing
-selectors, evaluators and release canary remain required. Captured originals are
-available through `retained_source` for those provider ports. Omitting
-`public_sources` preserves existing SEC-only plans and their canonical digests.
+The optional `source_admissions` plan entries connect these captures to the
+existing source-use evaluator. Each `public-source-admission-v1` entry pins
+`kind` (`macro` or `reference`), `provider_id`, `metric_id`, `intended_use`,
+`valuation_at`, trusted `policy_version`/`policy_digest`, and ordered distinct
+`source_request_digests`/`terms_request_digests`. Capture digests must identify
+entries in the same plan; all dates must match. Requests cannot install policies
+or approve numbers. The command injects the application's configured macro and
+reference providers and trusted source-use policy into `PublicSourceAdmission`.
+
+Exact permission pages have separate registrations: `damodaran-use-terms`,
+`bea-citation-terms`, `us-government-works-terms` and `new-york-fed-use-terms`.
+Each permits its registered URL only and records actual capture availability.
+These pages supply permission evidence, never numerical ERP. The existing policy
+still requires exact reviewed terms hashes; changed pages refuse until the policy
+is reviewed and versioned. A fresh download does not grant historical permission
+or data availability.
+
+`source_admission_outcomes` retains every requested decision, acquisition refs,
+original/terms refs and stable refusal codes. Reproduction/schema failures,
+unavailable or ambiguous providers, policy mismatches, failed/late captures and
+missing/changed terms block preparation. Originals and the existing
+`SourceAdmissionV1` are published using immutable content-addressed artifacts.
+Repeats, concurrent publications and resumes after intermediate publication reuse
+identical artifacts with `wrote=false`. Corrupt retained originals refuse without
+repair or a download.
+
+An eligible outcome exposes the exact `release_refs` required by the existing
+release canary. A supplied or active release must include these admission and
+original/terms refs before formal preparation; otherwise the report retains
+`SOURCE_ADMISSION_RELEASE_MISMATCH`. Admission itself does not install issuer
+crosswalks, financial policies or trusted release candidates. Source-time
+orchestration for a current request, complete issuer policies and release
+generation remain separate work. Omitting `public_sources` and
+`source_admissions` preserves existing SEC-only plans and canonical digests.
 
 Workbook filenames and observation dates do not prove historical availability.
 The current Damodaran and mutable Treasury adapters bound availability by actual

@@ -178,6 +178,34 @@ PUBLIC_SOURCE_SPECS: tuple[PublicSourceSpec, ...] = (
         "https://www.ifrs.org/issued-standards/ifrs-taxonomy/",
         "https://www.ifrs.org/legal/terms-and-conditions/",
     ),
+    PublicSourceSpec(
+        "damodaran-use-terms",
+        SourceRole.REFERENCE,
+        "https://pages.stern.nyu.edu/~adamodar/New_Home_Page/datahistory.html",
+        "https://pages.stern.nyu.edu/~adamodar/New_Home_Page/datahistory.html",
+        path_match="exact",
+    ),
+    PublicSourceSpec(
+        "bea-citation-terms",
+        SourceRole.REFERENCE,
+        "https://www.bea.gov/help/guidelines-for-citing-bea",
+        "https://www.bea.gov/help/guidelines-for-citing-bea",
+        path_match="exact",
+    ),
+    PublicSourceSpec(
+        "us-government-works-terms",
+        SourceRole.REFERENCE,
+        "https://www.govinfo.gov/content/pkg/USCODE-2024-title17/html/USCODE-2024-title17-chap1-sec105.htm",
+        "https://www.govinfo.gov/content/pkg/USCODE-2024-title17/html/USCODE-2024-title17-chap1-sec105.htm",
+        path_match="exact",
+    ),
+    PublicSourceSpec(
+        "new-york-fed-use-terms",
+        SourceRole.REFERENCE,
+        "https://www.newyorkfed.org/privacy/termsofuse",
+        "https://www.newyorkfed.org/privacy/termsofuse",
+        path_match="exact",
+    ),
 )
 
 
@@ -210,9 +238,28 @@ def _damodaran_uri(uri: str) -> None:
     damodaran_reference_profile(uri)
 
 
+def _terms_uri(uri: str) -> None:
+    parsed = urlsplit(uri)
+    if parsed.query or parsed.fragment:
+        raise SnapshotError(
+            "SOURCE_QUERY_INVALID", "terms capture requires its exact registered URI"
+        )
+
+
 def default_public_source_registrations() -> tuple[PublicSourceRegistration, ...]:
     """Assemble profiles here; transport and valuation know no concrete providers."""
     profiles: dict[str, PublicSourceCaptureProfilePort] = {
+        **{
+            source_id: RetainedAvailabilityCaptureProfile(
+                _terms_uri, require_nonempty=True
+            )
+            for source_id in (
+                "damodaran-use-terms",
+                "bea-citation-terms",
+                "us-government-works-terms",
+                "new-york-fed-use-terms",
+            )
+        },
         "fred-observations": ProvidedAvailabilityCaptureProfile(require_nonempty=True),
         "bea-gdp-release": RetainedAvailabilityCaptureProfile(_bea_uri),
         "bea-nipa-archive": RetainedAvailabilityCaptureProfile(_bea_uri),
