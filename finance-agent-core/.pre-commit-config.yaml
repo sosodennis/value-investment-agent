@@ -16,7 +16,20 @@ repos:
       # Run the linter
       - id: ruff
         args: [ --fix ]
-        exclude: ^frontend/.agent/skills/
+        exclude: ^(frontend/.agent/skills/|fundamental-service/)
       # Run the formatter
       - id: ruff-format
-        exclude: ^frontend/.agent/skills/
+        exclude: ^(frontend/.agent/skills/|fundamental-service/)
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.14.10
+    hooks:
+      - id: ruff-check
+        name: Fundamental Service Ruff (CI pin)
+        alias: fundamental-ruff
+        files: ^fundamental-service/
+        args: [ --fix ]
+      - id: ruff-format
+        name: Fundamental Service format (CI pin)
+        alias: fundamental-ruff-format
+        files: ^fundamental-service/
