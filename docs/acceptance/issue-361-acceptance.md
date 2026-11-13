@@ -1871,3 +1871,30 @@ quote, trusted release, authentic exact-input caller approval, real numerical
 repeat/concurrency/restart/restore, independent review/CI and merge/main
 verification. Keep #361 and its unresolved blockers open, PR#370 draft, and the
 canonical full-flow acceptance gates unverified.
+
+## Automatic recipe checkpoint before PR #417 review
+
+Implementation `8af6f952e74a2358810afd7a91337b1e842ecada` binds explicit,
+source-neutral working-capital recipes after acquisition, retains canonical
+binding/refusal artifacts and requires signed release inputs to equal the
+reconstructed policy. Existing #352 arithmetic and replaceable provider ports
+are unchanged. The focused PostgreSQL run passes **87 tests**; precommit types,
+Ruff and diff checks pass. The installed issue-owned19685/19686 project matches
+all114 Python/SQL files and produces a provisional synthetic numerical result.
+
+Plan/input `514f1ed89ecdb22fe43f2f641f099b68af31497a9c8c6502bc07657773dabacf`;
+report/output `136b9c7da854526da46df1847e4cec7c8ade4bbfd8c8756163f451ea59455df1`;
+binding `53183e79d5fe61c9d0b81ede6e54dd8451adefe8cb81ea443adaf298274985e0`.
+Commands and generated evidence stay in
+`.audit/issue-361-working-capital-recipe/`: `verify_checks.py`,
+`setup_runtime.py`, `seed_runtime.py`, `verify_runtime.py`,
+`probe_source_plan.py` and `verify_recovery.py`. Source setup, seed, installed
+parity and first CLI probe exit0. Full exact-commit checks, CI and recovery were
+still running when this checkpoint was saved; their final results must be
+recorded separately. This is synthetic pipeline evidence, not real issuer
+acceptance or an accounting approval. Threshold remains null.
+
+Next: independently review PR#417 at
+`14b2f27a9718f3d10e457054b049589f54402740`, serially integrate only after it
+passes, check the integration commit, then resume #361 real issuer preparation.
+Keep #361/#376/#377 OPEN and PR#370 draft; preserve all existing WIP commits.
