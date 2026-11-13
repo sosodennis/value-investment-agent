@@ -2478,3 +2478,48 @@ estimates remain provisional, incomplete evidence abstains, history sufficiency
 is underpowered and `supported_history_threshold=null`. Keep #361 and blockers
 open and PR #370 draft. Next: independent PR #436 label-audit review at this
 checkpoint boundary, then resume issuer-bound source/mapping preparation.
+
+## Independent label-audit review and serial integration — 7ea6ec3c
+
+Refs #361/#376/#377 and draft PR #370. Independently reviewed all four added
+files in PR #436 at `79ad90a9fd77aa7d1c1299cb4daed5b3b6d2cbb9`, including
+the existing first-original selector, canonical publisher, decoding boundary,
+frozen manifest and external exact-head receipts. No actionable engineering
+findings remain. The committed acceptance table pins implementation `84ffa4e6`;
+PR delivery and independently reproduced receipts separately pin final head
+`79ad90a9`. These SHA scopes are not interchangeable.
+
+At the reviewed head and ordinary integration merge
+`7ea6ec3c1c65e56e1b206f2b49b8289023a40f98`, all **124** affected tests,
+Ruff 0.14.10, changed-file format, source-aware mypy 1.19.1, both architecture
+guards and diff check exit 0. Each exact clean checkout independently runs the
+100-snapshot audit twice in fresh processes with socket connections disabled.
+All 101 inputs and every report byte/size/mtime remain unchanged; second
+publication returns `wrote=false`. Wrong SHA and corrupt snapshot each exit 2
+before creating reports. All 1,931 annual rows survive, including amendments,
+nine missing labels and one 731-day horizon mismatch. The other 90 are only
+frozen-horizon eligible, before accounting, release, model and label-quality
+gates; raw SEC completeness and missingness mechanisms remain unestablished.
+No composer, formula, model-version binding, acquisition or approval changed.
+
+Semantic output at both SHAs:
+`b5f26f537e3dc1e23153bb02161ad2d20d5a5475a62e685a31b86be3b541f082`.
+Reviewed-head input/report:
+`50679b3a00f44a7d8ea9cd8d94293d1c58ba199afbd6b5626245e35d1f9c8262` /
+`389eb8d1c977657ac77bf0a910a35c5b553c09b5d666fbc93ea9072dca612a84`.
+Merge input/report:
+`564410df1f8547b22d21be35968d36c85968d98291aa00b0a27766f70830b3cd` /
+`a425dbaa6658ce6d4744d650934accf6b8b00430182bd2df904f55091ba1316f`.
+Independent review proof `b3cb25e3774b49dcaf8b74ec85e1429d892b1adedbdff92b0b86e0697319ed13`;
+integration proof `8be5f6f6c39a12cd2ab416c9ab1f8ad950807069f2c7f44bbbeb088edc160533`
+(input `714f3fbb87c2fcfd38981fde45c5a1c02eda94b1fcfee54eae8aafdeb09f21dc`,
+output `e54b128c21fd14c59f571fa52c1b2287e4afcaef5a1c32c364b0819c1368ebcf`).
+Commands, exit codes, runtime/source pins and generated reports stay outside
+Git in `/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-review-evidence/pr436/`.
+Head CI43433697007 passed 12 executed jobs, release gate skipped; independent
+review did not use CI as a substitute. This offline-only increment requires no
+new Compose project and claims no service-backed acceptance. All prior WIP
+commits and child author resources are retained. #376/#377 remain OPEN,
+`supported_history_threshold=null`; parent numerical acceptance, review/CI and
+main delivery remain incomplete. Next: resume real issuer-bound accounting and
+award evidence in the existing Fundamental Service preparation flow.
