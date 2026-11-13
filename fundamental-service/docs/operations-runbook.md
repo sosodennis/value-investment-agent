@@ -606,6 +606,45 @@ The full bundle digest participates in the prepared input and caller approval;
 equal numerical share counts do not make different quote evidence interchangeable.
 These contracts provide no independent review or release authority themselves.
 
+### Inspect retained ownership filings
+
+Use `scripts/inspect_sec_ownership.py` to transcribe accession-bound Form 3/4/5
+originals and amendments already saved by `RetainedSecSourceAdapter`. This is an
+offline source inspection step before inventory reconciliation. It makes no HTTP
+requests, publishes no snapshot and grants no mapping or release approval.
+
+The external `SecOwnershipRequestV1` manifest pins the exact clean commit, issuer
+CIK, valuation cutoff and ordered, distinct sources. Each source supplies its
+accession, form, original SHA-256, acceptance timestamp, filing date and retained
+capture timestamp. The content root is the existing `FilesystemContentStore`
+root containing those original `.bin` objects. Keep this manifest, source bytes
+and generated reports outside Git.
+
+```sh
+PYTHONPATH=fundamental-service/src:scripts \
+  uv run --frozen --project fundamental-service python scripts/inspect_sec_ownership.py \
+  --manifest /absolute/evidence/ownership-manifest.json \
+  --content-root /absolute/evidence/content \
+  --output-directory /absolute/evidence/ownership-reports
+```
+
+The source parser checks header/XML issuer, accession, form, reporting owners and
+period, converts SEC header acceptance from America/New_York, and conservatively
+delays availability for later header corrections. Unsafe XML and ambiguous
+documents refuse. Every source remains in the result, including missing bytes,
+future originals, amendments and filings with no derivative rows. XML locators,
+verbatim field values/codes, owner totals, footnote references and text retain
+their original meaning. A transaction date or A code does not establish a new
+grant; post-transaction holdings do not establish per-strike quantities.
+
+The report records exact commit, runtime versions, input/output digests and both
+full-submission/XML digests. Publication uses the existing locked temporary-file
+and atomic-rename publisher; identical repeats return `wrote=false` without
+rewriting artifacts. `parsed` establishes source transcription only. The report
+always retains `complete_inventory=false`, `mapping_approved=false` and a null
+history threshold. Insider filings alone do not establish company-wide coverage,
+and an amendment requires reconciliation with its original before financial use.
+
 - A missing snapshot or artifact returns `SOURCE_UNAVAILABLE` or a stable
   not-found code. The caller receives an unavailable/degraded result and must
   not calculate locally.
