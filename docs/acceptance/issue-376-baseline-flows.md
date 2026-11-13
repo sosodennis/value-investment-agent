@@ -4,7 +4,10 @@ Implementation `a016e0f9f65875981a8e006b848b10a8cc3db299` follows policy checkpo
 `6c6fb7f0266817b3d0fb05b77f952135204fd416` on
 `codex/issue-376-baseline-flows`. [PR #435](https://github.com/sosodennis/value-investment-agent/pull/435)
 targets the #361 integration branch. Desktop and isolated-container replay
-acceptance pass; independent review and serial integration remain pending. This is an incremental conditional study;
+acceptance and independent engineering review pass. It was integrated into the
+#361 branch at merge commit `20e783eb921bc80b86a3f5c6def850d498149b92` and the
+integrated Fundamental Service suite passes. PR #435 remains open/draft and this
+increment is not yet merged to main. This is an incremental conditional study;
 #376/#377/#425/#433 remain open for their accepted main outcomes.
 
 ## Behavior and scope
@@ -148,7 +151,9 @@ Docker and Git. The runtime proof records the exact Compose file digest, localho
 bindings, explicit absence of env files/browser, image, ownership and rebuild
 commands. No full SEC-backed preflight is claimed for this offline increment.
 
-Pending: final evidence checkpoint CI, independent review, serial integration
-and merge verification.
+Pending: CI for the updated #361 integration head, parent delivery review and
+merge verification. PR #435 itself remains open/draft pending its delivery
+workflow; the local review and serial integration do not close #376/#377 or
+approve a history threshold.
 No exact study, accounting release, Transition evidence or threshold completion
 is claimed. Keep the PR draft until those incremental delivery gates pass.
