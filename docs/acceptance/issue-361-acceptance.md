@@ -21,6 +21,57 @@ No completed #351 through #355 acceptance is changed. #350 is outside scope.
 GitHub #351 and #352 are CLOSED; #352's merged Fundamental Service composer is
 the runtime valuation owner, not a pending dependency.
 
+## Latest issuer market preparation checkpoint
+
+Implementation `2fdeb1da3d6e9f3da91741c4930d0d13d94d4b8b` connects ordinary
+source plans to the existing classification, country/industry crosswalk,
+reference-selection and automatic market-policy owners through injected ports.
+Classification reads the exact retained original submission; it makes no new
+HTTP request. Canonical request, mapping, plan, decision and bundle artifacts
+retain refusals. Candidate/active releases must contain the exact prepared refs
+before activation or composer execution. Prepared evidence does not install a
+trusted deployment policy. Existing #352 formulas, model versions and authentic
+exact-input caller approval remain unchanged. JSON reread now preserves default
+reference metric ordering at its owning policy boundary.
+
+Exact checks pass **2,469 Service/PostgreSQL tests**, 101-source mypy, Service
+Ruff, changed-file format, both architecture guards and diff. **13 optional
+SEC/historical runtime tests skip**; their resources are not configured. One
+duplicate-ZIP warning is expected. [CI43387643507](https://github.com/sosodennis/value-investment-agent/actions/runs/43387643507)
+passes all12 executed jobs; release gate skips. Check input/output:
+`2e08be16a81b36a910df4de1ca3b097552e9b3742e2bd30eb2dc2a2583773342` /
+`59af6120c36a21d29fddcb12c717004669864dbd8688bb7f024909b205d9f9a1`.
+
+The isolated source-only project
+`value-investment-agent-361-issuer-market-preparation` uses19931/19932 and its
+own network/volumes. All120 installed Python/SQL files match the exact commit.
+With explicitly **synthetic** source/admission inputs, installed preparation,
+authenticated HTTP retrieval, ordinary/two concurrent repeats, service/PostgreSQL
+restart and empty-store restore preserve43 rows and10 content files. Repeats
+return `wrote=false`; original-root hashes/sizes/mtimes and restored-root repeats
+remain unchanged. Export/restore repeat unchanged. The portable backup is
+verified outside Docker; canonical report publication uses temporary files and
+atomic rename and reuses identical bytes without rewriting.
+
+Runtime input/output:
+`6f5be84ddeb324d3cfc958c97ffa992910aaf32e9e685a8199a8b6d600b6db90` /
+`0f481934384afd4512d603bf3d07ed196043daa15ae7cc8dcf2acd4aae08104a`.
+The checkpoint retains exact command receipts and corrected audit-helper
+failures: null Docker network configuration and an omitted signed GET envelope
+that correctly returned400. The original93-container baseline is retained:
+91 unchanged, two unrelated stopped temporary containers disappeared. No cause
+is attributed and no all-unchanged claim is made.
+
+Maintained structured datasets remain the production source contract; individual
+article/blog/feed ERP is excluded. Current captures do not prove historical
+availability. Canonical SEC runtime557c36be still needs revalidation. Trusted
+issuer policy/release assembly, real accounting/awards/lawful quote, caller
+approval, real numerical recovery and independent review/main delivery remain
+incomplete. #361/#369/#376/#377 stay OPEN, PR370 draft. Eligible estimates remain
+**provisional**, incomplete real valuations **abstain**, history sufficiency is
+**underpowered**, and `supported_history_threshold=null`. Generated evidence
+stays outside Git. Prior checkpoints below retain their original scope and SHA.
+
 ## Current composite annual-history profile correction
 
 Implementation `fedc733d21382898bce20a7c4fa81f3bbcc8b33d` corrects the
