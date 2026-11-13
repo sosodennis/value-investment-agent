@@ -37,7 +37,7 @@ DEFAULT_INDUSTRY_METRICS: tuple[ReferenceMetric, ...] = (
 class IssuerMarketReferencePlanPolicyV1(BaseModel):
     """Versioned join policy with no concrete source-provider names."""
 
-    model_config = ConfigDict(extra="forbid", frozen=True)
+    model_config = ConfigDict(extra="forbid", frozen=True, validate_default=True)
 
     policy_version: str = Field(
         default=DEFAULT_ISSUER_REFERENCE_PLAN_POLICY, min_length=1

@@ -27,6 +27,40 @@ These adapters exist independently of complete real-issuer valuation acceptance.
 An approved source or mapping does not establish all accounting roles, a quote,
 an approved release, caller approval or a verified history threshold.
 
+## Ordinary issuer market preparation
+
+An ordinary source plan can carry `issuer_market_policy`, an
+`IssuerMarketPreparationRequestV1` pinning its classification provider, original
+annual accession/report period, country and industry crosswalk policies,
+reference selection policy and automatic market policy. The plan requires the
+same issuer, valuation timestamp, currency and source revision. In explicit
+current mode, classification and terminal policy timestamps freeze with the
+rest of the plan after public capture; historical plans keep their fixed dates.
+
+`IssuerMarketPreparation` coordinates the existing classification, crosswalk,
+reference-plan and automatic-market-policy functions through injected ports.
+The CLI's SEC source adapter reads the exact complete submission already stored
+in the snapshot. It checks its original context and raw hash, and retains the
+acquisition's actual SEC terms reference. It makes no HTTP request and never
+uses current company metadata to reconstruct a historical classification.
+
+Preparation saves canonical request, classification, mapping, plan, decision and
+bundle artifacts in the existing immutable store. The report references the
+bundle even when incomplete accounting or source evidence blocks valuation.
+Shared originals and classifications can serve distinct policy requests;
+unrelated request metadata cannot change their artifact identities. Repeated
+publication reuses unchanged artifacts, including after reopening or restoring
+the store. Unsupported mappings, unavailable originals and source conflicts
+remain explicit refusals.
+
+An eligible bundle exposes the exact reference plan, terminal plan, automatic
+decision and bundle references needed for a release. Source preparation refuses
+a candidate or active release missing those exact references before activation
+or composer execution. These references are prepared evidence: the existing
+trusted deployment policy, signed release canary, formal #352 composer and exact
+caller approval still enforce their own contracts. This stage does not install
+a deployment policy or approve historical sufficiency.
+
 ## Source suitability
 
 Production market inputs require a maintained structured dataset, a stable API

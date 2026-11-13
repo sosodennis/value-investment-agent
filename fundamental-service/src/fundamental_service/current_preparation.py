@@ -70,6 +70,10 @@ def _freeze_plan(
         {**item.model_dump(), "valuation_at": cutoff.valuation_at}
         for item in request.template.source_admissions
     )
+    if request.template.issuer_market_policy is not None:
+        payload["issuer_market_policy"] = request.template.issuer_market_policy.at(
+            cutoff.valuation_at
+        )
     payload["public_source_cutoff"] = cutoff
     return SOURCE_PREPARATION_PLAN.validate_python(payload)
 

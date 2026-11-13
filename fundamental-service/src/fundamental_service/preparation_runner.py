@@ -51,6 +51,11 @@ from .data_releases import (
 from .facts import CanonicalMappingV1, canonical_fact_digest
 from .operations import ServiceError, guard_caller_approval
 from .history_composition import compose_original_history
+from .issuer_market_preparation import (
+    IssuerMarketPreparation,
+    IssuerMarketPreparationEvidenceV1,
+    IssuerMarketPreparationRequestV1,
+)
 from .release_runner import DataReleaseCanaryRunner
 from .replay import ArtifactPublicationV1
 from .uncertainty import UncertaintyReportV1
@@ -107,6 +112,9 @@ class _SourcePreparationPlan(StrictModel, Generic[SourceRequestT]):
     public_source_cutoff: PublicSourceCutoffV1 | None = Field(
         default=None, exclude_if=lambda value: value is None
     )
+    issuer_market_policy: IssuerMarketPreparationRequestV1 | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
     valuation_working_capital_policy: ValuationWorkingCapitalPolicyV1 | None = Field(
         default=None, exclude_if=lambda value: value is None
     )
@@ -160,6 +168,16 @@ class _SourcePreparationPlan(StrictModel, Generic[SourceRequestT]):
         if not required <= requested <= required | set(profile.supporting_fact_fields):
             raise ValueError("source plan must cover the complete model requirements")
         first = self.ingestions[0]
+        market = self.issuer_market_policy
+        if market is not None and (
+            market.source_revision != self.source_revision
+            or market.classification_request.issuer_id != first.identity.issuer_id
+            or market.classification_request.valuation_at != first.valuation_timestamp
+            or market.market_policy.currency != first.identity.currency
+            or market.classification_request.accession_number
+            not in {item.filing.accession_number for item in self.ingestions}
+        ):
+            raise ValueError("issuer market request must pin the source plan context")
         cutoff = self.public_source_cutoff
         if cutoff is not None and (
             cutoff.valuation_at != first.valuation_timestamp
@@ -384,6 +402,9 @@ class SourcePreparationEvidenceV1(StrictModel):
     working_capital_binding_ref: ArtifactRefV1 | None = Field(
         default=None, exclude_if=lambda value: value is None
     )
+    issuer_market_preparation_ref: ArtifactRefV1 | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
     status: Literal["approval_required", "blocked", "calculated", "release_required"]
     snapshot_id: str | None = None
     snapshot_manifest_digest: str | None = Field(
@@ -411,6 +432,15 @@ class SourcePreparationEvidenceV1(StrictModel):
 
     @model_validator(mode="after")
     def outcome_matches_evidence(self) -> SourcePreparationEvidenceV1:
+        market_ref = self.issuer_market_preparation_ref
+        if market_ref is not None and (
+            market_ref.role != "issuer-market-preparation-v1"
+            or market_ref.media_type != "application/json"
+            or self.snapshot_id is None
+        ):
+            raise ValueError(
+                "issuer market evidence must bind a snapshot and JSON artifact"
+            )
         if len({item.request.digest for item in self.source_admission_outcomes}) != len(
             self.source_admission_outcomes
         ) or (
@@ -508,6 +538,7 @@ class SourcePreparationRunner:
         canary: DataReleaseCanaryRunner | None,
         public_acquisition: PublicSourceAcquisition | None = None,
         public_admission: PublicSourceAdmission | None = None,
+        issuer_market_preparation: IssuerMarketPreparation | None = None,
     ) -> None:
         self._application = application
         self._metadata = metadata
@@ -516,6 +547,7 @@ class SourcePreparationRunner:
         self._canary = canary
         self._public_acquisition = public_acquisition
         self._public_admission = public_admission
+        self._issuer_market_preparation = issuer_market_preparation
 
     def _plan_mappings(
         self, plan: SourcePreparationPlan
@@ -740,6 +772,13 @@ class SourcePreparationRunner:
         plan: SourcePreparationPlan,
         candidate: DataReleaseCandidatePublishRequestV1,
     ) -> bool:
+        return self._candidate_snapshot(plan, candidate) is not None
+
+    def _candidate_snapshot(
+        self,
+        plan: SourcePreparationPlan,
+        candidate: DataReleaseCandidatePublishRequestV1,
+    ) -> SourceSnapshotV1 | None:
         for reference in candidate.manifest.snapshot_refs:
             try:
                 snapshot = self._application.snapshot(reference.snapshot_id)
@@ -750,8 +789,8 @@ class SourcePreparationRunner:
             if self._matches_plan(plan, snapshot) and self._matches_release(
                 plan, snapshot, candidate.manifest
             ):
-                return True
-        return False
+                return snapshot
+        return None
 
     @staticmethod
     def _matches_plan(plan: SourcePreparationPlan, snapshot: SourceSnapshotV1) -> bool:
@@ -887,6 +926,31 @@ class SourcePreparationRunner:
     def _persist(
         self, plan: SourcePreparationPlan, evidence: SourcePreparationEvidenceV1
     ) -> ArtifactPublicationV1:
+        if plan.issuer_market_policy is not None and evidence.snapshot_id is not None:
+            market, publication = self._prepare_issuer_market(
+                plan,
+                self._application.snapshot(evidence.snapshot_id),
+                evidence.source_admission_outcomes,
+            )
+            if market.issue_codes and evidence.calculation is not None:
+                raise ValueError(
+                    "refused issuer market evidence cannot have a calculation"
+                )
+            evidence = SourcePreparationEvidenceV1.model_validate(
+                {
+                    **evidence.model_dump(),
+                    "issuer_market_preparation_ref": ArtifactRefV1(
+                        artifact_id=publication.artifact.artifact_id,
+                        content_hash=publication.artifact.content_hash,
+                        media_type=publication.artifact.media_type,
+                        role=market.protocol,
+                    ),
+                    "status": "blocked" if market.issue_codes else evidence.status,
+                    "issue_codes": tuple(
+                        sorted(set(evidence.issue_codes) | set(market.issue_codes))
+                    ),
+                }
+            )
         if evidence.public_source_cutoff != plan.public_source_cutoff:
             raise ValueError("preparation must retain the plan's public source cutoff")
         if (
@@ -957,6 +1021,8 @@ class SourcePreparationRunner:
             dependencies += tuple(ref.content_hash for ref in admission.release_refs)
         if binding_ref is not None:
             dependencies += (binding_ref.content_hash,)
+        if evidence.issuer_market_preparation_ref is not None:
+            dependencies += (evidence.issuer_market_preparation_ref.content_hash,)
         if evidence.snapshot_manifest_digest is not None:
             dependencies += (evidence.snapshot_manifest_digest,)
         if evidence.data_release_manifest_digest is not None:
@@ -1257,6 +1323,22 @@ class SourcePreparationRunner:
             for reference in outcome.release_refs
         )
 
+    def _prepare_issuer_market(
+        self,
+        plan: SourcePreparationPlan,
+        snapshot: SourceSnapshotV1,
+        admissions: tuple[PublicSourceAdmissionEvidenceV1, ...],
+    ) -> tuple[IssuerMarketPreparationEvidenceV1, ArtifactPublicationV1]:
+        if plan.issuer_market_policy is None or self._issuer_market_preparation is None:
+            raise ValueError("issuer market preparation is not configured")
+        return self._issuer_market_preparation.execute(
+            plan.issuer_market_policy,
+            snapshot=snapshot,
+            admissions=tuple(
+                item.admission for item in admissions if item.admission is not None
+            ),
+        )
+
     def validate_candidate(
         self,
         plan: SourcePreparationPlan,
@@ -1292,6 +1374,13 @@ class SourcePreparationRunner:
         if deadline_at.tzinfo is None or deadline_at <= received_at:
             raise ValueError("runner deadline must be an unexpired zoned timestamp")
         guard_caller_approval(approval, caller_id=actor_id, received_at=received_at)
+        if (
+            plan.issuer_market_policy is not None
+            and self._issuer_market_preparation is None
+        ):
+            raise ValueError(
+                "source plan requires configured issuer market preparation"
+            )
         if isinstance(plan, AutomaticSourcePreparationPlanV1):
             if self._acquisition is None:
                 raise ServiceError(
@@ -1492,6 +1581,50 @@ class SourcePreparationRunner:
                         source_outcomes=outcomes,
                     ),
                 )
+        if plan.issuer_market_policy is not None:
+            market_manifest: DataReleaseManifestV1 | None
+            if candidate is not None:
+                market_snapshot = self._candidate_snapshot(plan, candidate)
+                if market_snapshot is None:
+                    raise ValueError(
+                        "candidate does not contain the source-plan snapshot"
+                    )
+                market_manifest = candidate.manifest
+            else:
+                assert resolution is not None
+                assert resolution.data_release_manifest_digest is not None
+                market_snapshot = self._application.snapshot(resolution.snapshot_id)
+                market_manifest = self._metadata.get_data_release_manifest(
+                    resolution.data_release_manifest_digest
+                )
+            market, _ = self._prepare_issuer_market(
+                plan, market_snapshot, admission_outcomes
+            )
+            market_issues = market.issue_codes
+            if not market_issues and (
+                market_manifest is None
+                or any(
+                    ref not in market_manifest.artifact_refs
+                    for ref in market.release_refs
+                )
+            ):
+                market_issues = ("ISSUER_MARKET_PREPARATION_RELEASE_MISMATCH",)
+            if market_issues:
+                return self._persist(
+                    plan,
+                    SourcePreparationEvidenceV1(
+                        source_revision=plan.source_revision,
+                        plan_digest=plan.digest,
+                        public_source_outcomes=public_outcomes,
+                        public_source_cutoff=plan.public_source_cutoff,
+                        source_admission_outcomes=admission_outcomes,
+                        status="blocked",
+                        snapshot_id=market_snapshot.snapshot_id,
+                        snapshot_manifest_digest=market_snapshot.manifest_digest,
+                        issue_codes=market_issues,
+                        source_outcomes=outcomes,
+                    ),
+                )
         if candidate is not None:
             self._activate(
                 candidate,
@@ -1663,6 +1796,27 @@ class SourcePreparationRunner:
         )
 
 
+def _runtime_issuer_market_preparation(
+    application: FundamentalApplication,
+) -> IssuerMarketPreparation:
+    from .sec_classification_snapshot import SecSnapshotClassificationSources
+    from .sec_classification_source import SecSubmissionClassificationProvider
+    from .sec_sic_damodaran_crosswalk import SecSicDamodaranIndustryCrosswalk
+    from .sec_state_country_crosswalk import SecStateCountryCrosswalk
+
+    if application.content_store is None:
+        raise ValueError("issuer market preparation requires retained original bytes")
+    return IssuerMarketPreparation(
+        classification_provider=SecSubmissionClassificationProvider(),
+        classification_sources=SecSnapshotClassificationSources(
+            application.content_store
+        ),
+        country_provider=SecStateCountryCrosswalk(),
+        industry_provider=SecSicDamodaranIndustryCrosswalk(),
+        artifacts=application.artifact_store,
+    )
+
+
 async def _run_command(args: argparse.Namespace) -> ArtifactPublicationV1:
     package_root = Path(__file__).resolve().parents[2]
     for root in (package_root, package_root.parent / "finance-agent-core"):
@@ -1781,6 +1935,9 @@ async def _run_command(args: argparse.Namespace) -> ArtifactPublicationV1:
             canary=canary,
             public_acquisition=public_acquisition,
             public_admission=public_admission,
+            issuer_market_preparation=_runtime_issuer_market_preparation(application)
+            if plan.issuer_market_policy is not None
+            else None,
         )
         runner.validate_candidate(plan, candidate)
         if args.current:

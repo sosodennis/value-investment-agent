@@ -11,6 +11,7 @@ from .issuer_classification import (
     IssuerClassificationAttributeV1,
     IssuerClassificationObservationV1,
 )
+from .sec_source import SEC_TERMS
 from .snapshots import SnapshotError
 from .source_evidence import RetainedSourceV1, SourceArtifactV1
 
@@ -54,7 +55,7 @@ class SecSubmissionClassificationProvider:
         if (
             source.source_id != SEC_CLASSIFICATION_SOURCE
             or source.source_version != SEC_CLASSIFICATION_PROFILE
-            or source.terms_reference != SEC_CLASSIFICATION_TERMS
+            or source.terms_reference not in {SEC_CLASSIFICATION_TERMS, SEC_TERMS}
             or not 1 <= len(source.content) <= 64 * 1024 * 1024
         ):
             raise _invalid("SEC classification source profile or size is invalid")
