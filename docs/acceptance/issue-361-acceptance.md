@@ -2912,3 +2912,63 @@ followed by trusted complete release, authentic caller approval and real
 numerical full-flow/recovery. Independent review/main delivery remain pending.
 Threshold null; incomplete real cases abstain, eligible estimates provisional,
 history underpowered. Keep #361/#369/#394/#376/#377 OPEN and PR #370 draft.
+
+### Automatic quote acquisition and preparation increment — 4bdd9c09
+
+Implementation `4bdd9c09b988e76eb63ba0e383038921a4d76652` connects quote
+acquisition to the existing persistent source-preparation workflow. A quote
+selection supplies issuer/security/as-of without an expected price; the same
+replaceable quote provider reproduces the original before source-use admission.
+The runner retains exact quote-original/terms/admission release references,
+checks plan identity and active/candidate release coverage, and keeps the formal
+composer and exact-input caller approval boundary. Macro/reference admissions
+retain their existing canonical bytes and remain separate inputs to issuer
+market-policy preparation. Financial formulas and model versions are unchanged.
+
+Twelve Data uses its maintained official introduction documentation, retained
+SHA-256 `7e0b4a761778381fc1b59a0764d4b6d27defb1a02bd59313264095bd10c60d1f`,
+for header authentication. The runtime reads a deployment-owned credential file
+lazily, refuses authenticated redirects, caps quote bytes and refuses echoed
+credentials without persisting the body. No key/account or source permission is
+created. Missing permission/key attempts remain retryable and cannot poison the
+successful acquisition key. Malformed/provider-error originals remain available
+for admission refusal. Current preparation freezes actual capture availability;
+an old observation is never assigned invented historical availability.
+
+Exact validation passed **2,815 Service/PostgreSQL tests**, with17 external
+parser-resource skips and one expected duplicate-ZIP warning; **167 installed
+focused tests**, with2 parser-resource skips; full Service Ruff/format; six
+changed-module type checks; both architecture guards; diff; SEC preflight; and
+[12 executed CI jobs](https://github.com/sosodennis/value-investment-agent/actions/runs/43525795499).
+The release gate was skipped. The isolated runtime matched all128 installed
+Python/SQL files. Image
+`sha256:708cac50ce6cdb88dcf9324169af95c47b9836191fa71ccfaaf64002a4aa081f`
+used Python3.12.16/Arelle2.47.4/Pydantic2.14.2, separate ports20571/20572,
+subnet10.231.90.0/28 and project `value-investment-agent-361-quote-preparation`.
+
+Synthetic acquisition/release/composer/calculator evidence retained112 facts
+and reproduced10 incremental/120 diluted shares. Ordinary, two concurrent and
+fresh-process repeats retained all139 files' bytes/sizes/mtimes, with
+`wrote=false`. Replay input
+`a87d1bbb4888f7d39af48a5906b202f53fcfd2a3a21bc6b027d0748a5500d67d`,
+output `7c1bbaf606d27e28711dc4a4f0461fc34eb6d7aa2d78821494789a23edf96afe`.
+This is synthetic filesystem flow evidence, not real issuer numerical/HTTP
+acceptance, authentic caller approval or new PostgreSQL recovery acceptance.
+
+`issue-361-quote-admission-checkpoint.json`, key
+`automatic_quote_preparation_increment`, preserves prior checkpoints, exact
+commands/digests/runtime and diagnostic limitations. Its input digest is
+`6c17872d1be3092512f48c916fa7f928a0dc1f5848356d11bbe00e61e3d78e56`, output
+`93da645a0b403cf7369c314d3ca7dbcf906bd57be8b9e7b94e541022a5a5dff1`.
+The atomic checkpoint writer repeated unchanged. Originals, generated harnesses,
+reports and verified139-file host backup stay ignored outside the PR. Only this
+temporary project's two containers/network/two disposable volumes were removed;
+all60 baseline containers were unchanged, with images/cache preserved.
+
+Next: genuine entitled dated quote/configuration and complete real NVE capital
+claims, company-wide per-strike awards and cost allocation; complete issuer/date
+market policy and trusted release; authentic caller approval and actual full
+numerical repeat/concurrency/restart/restore. Independent review/main delivery
+remain required. Keep #361/#369/#394/#376/#377 OPEN and PR#370 draft.
+`supported_history_threshold=null`; incomplete real valuations abstain, eligible
+estimates remain provisional and history research remains underpowered.
