@@ -21,6 +21,7 @@ QUOTE_ADMISSION_ROLE: Literal["equity-quote-source-admission-v1"] = (
     "equity-quote-source-admission-v1"
 )
 QUOTE_TERMS_ROLE = "equity-quote-source-terms-v1"
+EQUITY_QUOTE_SOURCE_ROLE = "equity-dilution-quote-source-v1"
 QUOTE_METRIC = "common_share.price"
 QUOTE_POPULATION = "common-share"
 

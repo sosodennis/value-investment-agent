@@ -433,3 +433,52 @@ Neither a new provider nor automatic approval changes
 - [U.S. Treasury interest-rate statistics](https://home.treasury.gov/policy-issues/financing-the-government/interest-rate-statistics).
 - [BEA historical data](https://apps.bea.gov/histdata/) and [BEA citation guidance](https://www.bea.gov/help/guidelines-for-citing-bea).
 - [ALFRED](https://alfred.stlouisfed.org/) and [FRED terms](https://fred.stlouisfed.org/terms-of-use/); these links do not replace a deployment admission rule.
+
+
+## Automatic quote capture and source admission
+
+The source-preparation CLI uses the existing public acquisition receipts and
+locks for quotes as well as macro/reference originals. A `source_admissions`
+entry with `kind="quote"`, `metric_id="common_share.price"` and one source
+request digest supplies `quote_selection` with the original-derived `issuer_id`,
+`security_id` and exact `as_of`. It supplies no expected price. The selection
+must match the source plan identity. The configured `QuoteSourceProviderPort`
+reproduces the price from the captured original. Retained terms and the trusted
+source-use policy decide whether it may be used. Existing macro/reference plan
+serialization and digests are unchanged.
+
+Twelve Data capture uses the same exact unadjusted daily URI profile documented
+above. The deployment supplies `FUNDAMENTAL_TWELVE_DATA_API_KEY_FILE`; the key
+is read lazily for a network capture and sent only as `Authorization: apikey ...`
+to that endpoint. Credentials never belong in provenance URIs or artifacts.
+Quote redirects are refused, responses are capped at 1 MiB, and an echoed key
+refuses without retaining the body. The terms capture uses source ID
+`twelve-data-terms` and the exact `https://twelvedata.com/terms` URI, with no
+Authorization header. Registering the endpoint or configuring a key grants no
+source-use permission. There is no default Twelve Data permission rule.
+
+An eligible, unambiguous deployment rule must permit `valuation_preparation`
+before a quote network request. Full terms-byte, scope, policy-digest and
+valuation-time checks still run after acquisition. Missing permission or key
+creates a retained retryable attempt, so a corrected deployment can retry the
+same request; these attempts cannot poison the successful capture key. HTTP or
+reproduction failures remain explicit. Malformed/provider-error originals are
+retained for admission diagnostics rather than silently discarded.
+
+A current request captures first, freezes its actual cutoff, and updates the
+quote admission valuation time without changing the historical observation
+selection. A retrospective capture cannot pass an earlier decision cutoff.
+An admitted result exposes exact quote-original, terms and quote-admission
+`release_refs`; candidate/active-release checks require these refs. Issuer
+market policy preparation consumes macro/reference admissions separately.
+Neither quote admission nor transport creates complete award inventories,
+financial policies, release signatures or exact-input caller approval.
+Repeated/concurrent/reopened preparation reuses the existing capture and
+immutable result, returning `wrote=false` when unchanged.
+
+The maintained authentication reference is
+[Twelve Data introduction](https://twelvedata.com/docs/introduction). Actual
+subscription/non-display/storage/redistribution scope must be established for
+the deployment before installing a source-use rule. Synthetic test rules confer
+no real provider rights. Eligible valuation quality remains provisional and
+`supported_history_threshold` remains null.

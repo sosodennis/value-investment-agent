@@ -71,7 +71,8 @@ from .public_acquisition import (
     PublicSourceAcquisitionRequestV1,
     PublicSourceCutoffV1,
 )
-from .public_source import PublicSourceAdapter
+from .quote_capture import quote_preparation_source_adapter
+from .source_admission import SourceAdmissionV1
 from .public_admission import (
     PublicSourceAdmission,
     PublicSourceAdmissionEvidenceV1,
@@ -213,6 +214,15 @@ class _SourcePreparationPlan(StrictModel, Generic[SourceRequestT]):
             raise ValueError(
                 "source admissions must be distinct and pin plan captures and date"
             )
+        if any(
+            request.quote_selection is not None
+            and (
+                request.quote_selection.issuer_id != first.identity.issuer_id
+                or request.quote_selection.security_id != first.identity.security_id
+            )
+            for request in self.source_admissions
+        ):
+            raise ValueError("quote selections must pin the source plan identity")
         if self.valuation_working_capital_policy is not None and any(
             item.issuer_id != first.identity.issuer_id
             or item.accession_number
@@ -1352,7 +1362,9 @@ class SourcePreparationRunner:
             plan.issuer_market_policy,
             snapshot=snapshot,
             admissions=tuple(
-                item.admission for item in admissions if item.admission is not None
+                item.admission
+                for item in admissions
+                if isinstance(item.admission, SourceAdmissionV1)
             ),
         )
 
@@ -2001,7 +2013,15 @@ async def _run_command(args: argparse.Namespace) -> ArtifactPublicationV1:
                     "public preparation requires a contact User-Agent and content store"
                 )
             public_acquisition = PublicSourceAcquisition(
-                provider=PublicSourceAdapter(user_agent=user_agent),
+                provider=quote_preparation_source_adapter(
+                    user_agent=user_agent,
+                    policy=application.source_use_policy,
+                    api_key_file=Path(
+                        os.environ["FUNDAMENTAL_TWELVE_DATA_API_KEY_FILE"]
+                    )
+                    if os.getenv("FUNDAMENTAL_TWELVE_DATA_API_KEY_FILE")
+                    else None,
+                ),
                 artifacts=application.artifact_store,
                 content=application.content_store,
                 capture_lock=PostgresPublicCaptureLock(app.state.metadata_store),
@@ -2018,6 +2038,7 @@ async def _run_command(args: argparse.Namespace) -> ArtifactPublicationV1:
                 policy=application.source_use_policy,
                 macro_providers=application.macro_providers,
                 reference_providers=application.reference_providers,
+                quote_providers=application.quote_providers,
             )
         policy_deployment = None
         if authorization is not None:

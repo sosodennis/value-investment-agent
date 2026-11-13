@@ -11,6 +11,15 @@ from .data_releases import ArtifactRefV1
 from .macro_series import MacroSeriesProviderPort
 from .market_reference import MarketReferenceProviderPort, ReferenceMetric
 from .public_acquisition import PublicSourceAcquisitionEvidenceV1
+from .quote_admission import (
+    QUOTE_ADMISSION_ROLE,
+    QUOTE_METRIC,
+    QUOTE_TERMS_ROLE,
+    EQUITY_QUOTE_SOURCE_ROLE,
+    QuoteAdmissionV1,
+    admit_quote_source,
+)
+from .quote_providers import QuoteSourceProviderPort, QuoteSourceRequestV1
 from .replay import ArtifactPublicationV1
 from .serialization import sha256_digest
 from .source_admission import (
@@ -26,14 +35,21 @@ from .source_admission_evidence import (
     SOURCE_TERMS_ROLE,
 )
 from .source_evidence import RetainedSourceV1
+from .equity_dilution import DilutionError
 
 
 ContentDigest = Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
 
 
+class PublicQuoteSelectionV1(StrictModel):
+    issuer_id: str = Field(min_length=1)
+    security_id: str = Field(min_length=1)
+    as_of: AwareDatetime
+
+
 class PublicSourceAdmissionRequestV1(StrictModel):
     protocol: Literal["public-source-admission-v1"] = "public-source-admission-v1"
-    kind: Literal["macro", "reference"]
+    kind: Literal["macro", "reference", "quote"]
     provider_id: str = Field(min_length=1)
     metric_id: str = Field(min_length=1)
     intended_use: SourceUse = "valuation_preparation"
@@ -44,6 +60,9 @@ class PublicSourceAdmissionRequestV1(StrictModel):
         min_length=1, max_length=8
     )
     terms_request_digests: tuple[ContentDigest, ...] = Field(default=(), max_length=8)
+    quote_selection: PublicQuoteSelectionV1 | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
 
     @model_validator(mode="after")
     def canonical_requests(self) -> PublicSourceAdmissionRequestV1:
@@ -54,6 +73,16 @@ class PublicSourceAdmissionRequestV1(StrictModel):
             raise ValueError("source and terms captures must be distinct")
         if self.kind == "reference":
             TypeAdapter(ReferenceMetric).validate_python(self.metric_id)
+        if self.kind == "quote":
+            if (
+                self.quote_selection is None
+                or self.metric_id != QUOTE_METRIC
+                or len(self.source_request_digests) != 1
+                or self.quote_selection.as_of > self.valuation_at
+            ):
+                raise ValueError("quote admission requires one dated source selection")
+        elif self.quote_selection is not None:
+            raise ValueError("only quote admission accepts a quote selection")
         return self
 
     @property
@@ -69,7 +98,7 @@ class PublicSourceAdmissionEvidenceV1(StrictModel):
     acquisition_refs: tuple[ArtifactRefV1, ...]
     source_refs: tuple[ArtifactRefV1, ...]
     terms_refs: tuple[ArtifactRefV1, ...]
-    admission: SourceAdmissionV1 | None
+    admission: SourceAdmissionV1 | QuoteAdmissionV1 | None
     issue_codes: tuple[str, ...]
 
     @model_validator(mode="after")
@@ -78,8 +107,16 @@ class PublicSourceAdmissionEvidenceV1(StrictModel):
             raise ValueError("source admission issues must be canonical")
         for items, role in (
             (self.acquisition_refs, "public-source-acquisition-evidence-v1"),
-            (self.source_refs, SOURCE_ORIGINAL_ROLE),
-            (self.terms_refs, SOURCE_TERMS_ROLE),
+            (
+                self.source_refs,
+                EQUITY_QUOTE_SOURCE_ROLE
+                if self.request.kind == "quote"
+                else SOURCE_ORIGINAL_ROLE,
+            ),
+            (
+                self.terms_refs,
+                QUOTE_TERMS_ROLE if self.request.kind == "quote" else SOURCE_TERMS_ROLE,
+            ),
         ):
             if items != tuple(sorted(items, key=lambda ref: ref.artifact_id)) or len(
                 {ref.artifact_id for ref in items}
@@ -90,6 +127,36 @@ class PublicSourceAdmissionEvidenceV1(StrictModel):
         if self.admission is None:
             if not self.issue_codes:
                 raise ValueError("unreproduced admission requires a refusal")
+        elif isinstance(self.admission, QuoteAdmissionV1):
+            expected = self.request
+            quote_request = self.admission.request
+            selection = expected.quote_selection
+            quote = quote_request.quote
+            if (
+                expected.kind != "quote"
+                or selection is None
+                or quote.issuer_id != selection.issuer_id
+                or quote.security_id != selection.security_id
+                or quote.as_of != selection.as_of
+                or quote.source_id != expected.provider_id
+                or any(
+                    getattr(expected, field) != getattr(quote_request, field)
+                    for field in (
+                        "intended_use",
+                        "valuation_at",
+                        "policy_version",
+                        "policy_digest",
+                    )
+                )
+                or not set(self.admission.issue_codes) <= set(self.issue_codes)
+                or {ref.content_hash for ref in self.source_refs}
+                != {quote_request.source_content_sha256}
+                or {ref.content_hash for ref in self.terms_refs}
+                != {item.content_sha256 for item in quote_request.terms_artifacts}
+            ):
+                raise ValueError(
+                    "quote admission differs from its captures or selection"
+                )
         else:
             expected = self.request
             actual = self.admission.request
@@ -128,10 +195,12 @@ class PublicSourceAdmissionEvidenceV1(StrictModel):
             return ()
         return (
             ArtifactRefV1(
-                artifact_id=f"source-admission:{self.admission.output_digest}",
+                artifact_id=f"{'quote' if self.request.kind == 'quote' else 'source'}-admission:{self.admission.output_digest}",
                 content_hash=sha256_digest(self.admission),
                 media_type="application/json",
-                role=SOURCE_ADMISSION_ROLE,
+                role=QUOTE_ADMISSION_ROLE
+                if self.request.kind == "quote"
+                else SOURCE_ADMISSION_ROLE,
             ),
             *self.source_refs,
             *self.terms_refs,
@@ -170,12 +239,14 @@ class PublicSourceAdmission:
         policy: SourceUsePolicyV1,
         macro_providers: tuple[MacroSeriesProviderPort, ...] = (),
         reference_providers: tuple[MarketReferenceProviderPort, ...] = (),
+        quote_providers: tuple[QuoteSourceProviderPort, ...] = (),
     ) -> None:
         self._acquisitions = acquisitions
         self._artifacts = artifacts
         self._policy = policy
         self._macro_providers = macro_providers
         self._reference_providers = reference_providers
+        self._quote_providers = quote_providers
 
     def execute(
         self,
@@ -233,12 +304,14 @@ class PublicSourceAdmission:
                 artifact_id=publication.artifact.artifact_id,
                 content_hash=publication.artifact.content_hash,
                 media_type=publication.artifact.media_type,
-                role=SOURCE_ORIGINAL_ROLE if is_source else SOURCE_TERMS_ROLE,
+                role=(EQUITY_QUOTE_SOURCE_ROLE if is_source else QUOTE_TERMS_ROLE)
+                if request.kind == "quote"
+                else (SOURCE_ORIGINAL_ROLE if is_source else SOURCE_TERMS_ROLE),
             )
             (sources if is_source else terms).append(original)
             (source_refs if is_source else terms_refs).append(ref)
 
-        admission = None
+        admission: SourceAdmissionV1 | QuoteAdmissionV1 | None = None
         if (
             request.policy_version != self._policy.policy_version
             or request.policy_digest != self._policy.digest
@@ -264,7 +337,7 @@ class PublicSourceAdmission:
                         valuation_at=request.valuation_at,
                         intended_use=request.intended_use,
                     )
-            else:
+            elif request.kind == "reference":
                 metric = TypeAdapter(ReferenceMetric).validate_python(request.metric_id)
                 reference_providers = tuple(
                     provider
@@ -282,12 +355,59 @@ class PublicSourceAdmission:
                         valuation_at=request.valuation_at,
                         intended_use=request.intended_use,
                     )
+            else:
+                selection = request.quote_selection
+                assert selection is not None
+                original = sources[0]
+                quote_providers = tuple(
+                    provider
+                    for provider in self._quote_providers
+                    if provider.supports(original.source_id, original.source_version)
+                )
+                if original.source_id != request.provider_id:
+                    codes.add("SOURCE_ADMISSION_PROVIDER_MISMATCH")
+                elif len(quote_providers) != 1:
+                    codes.add("SOURCE_ADMISSION_PROVIDER_UNAVAILABLE")
+                else:
+                    try:
+                        quote = quote_providers[0].reproduce_quote(
+                            original.content,
+                            request=QuoteSourceRequestV1(
+                                issuer_id=selection.issuer_id,
+                                security_id=selection.security_id,
+                                source_id=original.source_id,
+                                source_version=original.source_version,
+                                terms_reference=original.terms_reference,
+                                source_uri=original.uri,
+                                as_of=selection.as_of,
+                                captured_at=original.captured_at,
+                            ),
+                        )
+                        if quote.as_of != selection.as_of:
+                            raise DilutionError(
+                                "DILUTION_QUOTE_SOURCE_VALUE_MISMATCH",
+                                "quote as-of differs from its exact selection",
+                            )
+                        admission = admit_quote_source(
+                            quote,
+                            original.content,
+                            providers=self._quote_providers,
+                            terms=tuple(terms),
+                            policy=self._policy,
+                            valuation_at=request.valuation_at,
+                            intended_use=request.intended_use,
+                        )
+                    except ValueError as error:
+                        codes.add("SOURCE_REPRODUCTION_FAILED")
+                        if isinstance(error, DilutionError):
+                            codes.add(error.code)
             if admission is None:
-                codes.add("SOURCE_ADMISSION_PROVIDER_UNAVAILABLE")
+                if request.kind != "quote" or not codes:
+                    codes.add("SOURCE_ADMISSION_PROVIDER_UNAVAILABLE")
         if admission is not None:
             codes.update(admission.issue_codes)
             self._artifacts.put_with_receipt(
-                f"source-admission:{admission.output_digest}",
+                f"{'quote' if request.kind == 'quote' else 'source'}-admission:{admission.output_digest}",
                 admission,
                 (
                     admission.input_digest,

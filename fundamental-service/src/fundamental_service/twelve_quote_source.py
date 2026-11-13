@@ -86,6 +86,19 @@ def _request_mic(source_uri: str, security_id: str, day: date) -> str:
     return mic[0]
 
 
+def validate_twelve_data_daily_uri(source_uri: str) -> None:
+    """Apply the same credential-free request profile before capture."""
+    try:
+        query = parse_qs(
+            urlsplit(source_uri).query, strict_parsing=True, max_num_fields=9
+        )
+        _request_mic(
+            source_uri, query["symbol"][0], date.fromisoformat(query["date"][0])
+        )
+    except (ValueError, KeyError, IndexError) as error:
+        raise ValueError("unsupported unadjusted daily capture URI") from error
+
+
 def select_twelve_data_daily_close(
     raw: bytes,
     *,

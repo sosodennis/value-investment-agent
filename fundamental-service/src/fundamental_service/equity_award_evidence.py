@@ -22,6 +22,7 @@ from .quote_providers import QuoteSourceProviderPort, reproduce_quote_source
 from .quote_admission import (
     QUOTE_ADMISSION_ROLE,
     QUOTE_TERMS_ROLE,
+    EQUITY_QUOTE_SOURCE_ROLE,
     QuoteAdmissionV1,
     admit_quote_source,
 )
@@ -37,7 +38,6 @@ AWARD_FACT_FIELDS = (
     "equity_award_unrecognized_compensation",
     "equity_award_exercise_price",
 )
-EQUITY_QUOTE_SOURCE_ROLE = "equity-dilution-quote-source-v1"
 
 
 class EquityDilutionEvidenceV1(DilutionModel):
