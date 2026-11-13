@@ -152,8 +152,8 @@ bindings, explicit absence of env files/browser, image, ownership and rebuild
 commands. No full SEC-backed preflight is claimed for this offline increment.
 
 Pending: CI for the updated #361 integration head, parent delivery review and
-merge verification. PR #435 itself remains open/draft pending its delivery
-workflow; the local review and serial integration do not close #376/#377 or
-approve a history threshold.
+merge verification. The #435 change is delivered to the #361 integration
+branch, not to `main`; this does not close #376/#377 or approve a history
+threshold.
 No exact study, accounting release, Transition evidence or threshold completion
 is claimed. Keep the PR draft until those incremental delivery gates pass.

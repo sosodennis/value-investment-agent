@@ -16,8 +16,9 @@ the real issuer valuation flow.
   12 executed jobs passed; the release gate was skipped.
 - Integration: ordinary `--no-ff` merge, preserving the existing #361 commit
   chain, produced `20e783eb921bc80b86a3f5c6def850d498149b92`.
-- PR #435 remains OPEN/draft. The integrated changes are present in #361; they
-  are not merged to `main`.
+- GitHub merged PR #435 into `codex/issue-361-replay-evidence` at
+  `2026-11-13T11:55:38Z`, using that same merge commit. PR #370 remains
+  OPEN/draft; #435 was not merged directly to `main`.
 
 ## Exact integration checks
 
@@ -54,7 +55,7 @@ merge, and merge-commit verification remain required.
 
 Structured checkpoint input/output digests are
 `d95e96fab26653b7d472951cd7cf12e71d18eecea0394be05bf7f5c0b2eed299` /
-`4b72723ef2ce5ac013ee1f488fc066bd4c308b655296a6dbe002e625dfb27541`.
+`cec747ddfd7581096eaa578edab601889fe955b903cb8f53a61812367e91fe68`.
 The canonical JSON artifact SHA-256 is
-`cf464dc1d938daabbedaf64a2587629515fa40bff5bffec406bfc17d654db5de`.
+`62d34baa0d59509ef41b71ba59b1fb397989a1106923ab9afbe062d994e5b8b0`.
 It records the exact commands, runtime pins, outcomes and cleanup state.
