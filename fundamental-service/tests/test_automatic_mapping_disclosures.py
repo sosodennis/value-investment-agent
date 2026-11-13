@@ -286,7 +286,7 @@ def option_cost_case(tmp_path, monkeypatch, *, text=OPTION_COST, **kwargs):
         "_OPTION_COST_ORIGINALS",
         {
             (source.cik, source.accession_number): (
-                source.content_hash,
+                source.parser_input_hash,
                 fact_semantic_digest(request.original.report),
             )
         },
@@ -345,7 +345,9 @@ def test_registered_option_cost_is_dated_reconstructible_and_idempotent(
     assert inventory(store.root) == before
 
 
-@pytest.mark.parametrize("mutation", ["issuer", "source", "facts", "unregistered"])
+@pytest.mark.parametrize(
+    "mutation", ["issuer", "parser_input", "report_content", "facts", "unregistered"]
+)
 def test_option_cost_never_inherits_another_originals_classification(
     tmp_path, monkeypatch, mutation
 ):
@@ -361,6 +363,14 @@ def test_option_cost_never_inherits_another_originals_classification(
                 )
             }
         )
+    elif mutation == "report_content":
+        original = original.model_copy(
+            update={
+                "report": original.report.model_copy(
+                    update={"source_content_hash": "f" * 64}
+                )
+            }
+        )
     elif mutation == "unregistered":
         monkeypatch.setattr(policy, "_OPTION_COST_ORIGINALS", {})
     else:
@@ -369,7 +379,7 @@ def test_option_cost_never_inherits_another_originals_classification(
                 "source": original.source.model_copy(
                     update={"cik": "0000000999"}
                     if mutation == "issuer"
-                    else {"content_hash": "f" * 64}
+                    else {"parser_input_hash": "f" * 64}
                 )
             }
         )
@@ -385,6 +395,28 @@ def test_option_cost_never_inherits_another_originals_classification(
     result = evaluate(request, store)
     assert result.status == "abstain" and result.mapping is None
     assert any(code.startswith("MAPPING_OPTION_COST_") for code in result.reason_codes)
+
+
+def test_option_cost_retains_raw_lineage_but_requires_validated_parser_identity(
+    tmp_path, monkeypatch
+):
+    from fundamental_service import automatic_mapping_disclosures as policy
+
+    request, store, _, _ = option_cost_case(tmp_path, monkeypatch)
+    variant = request.original.model_copy(
+        update={
+            "source": request.original.source.model_copy(
+                update={"content_hash": "f" * 64}
+            )
+        }
+    )
+    selected = policy.select_option_compensation_disclosure(variant)
+    assert selected.rules is not None
+    assert selected.rules.raw_content_hash == "f" * 64
+    assert selected.rules.parser_input_hash == request.original.source.parser_input_hash
+    decision = evaluate(request.model_copy(update={"original": variant}), store)
+    assert decision.status == "abstain" and decision.mapping is None
+    assert "DATA_RELEASE_ORIGINAL_INTEGRITY_MISMATCH" in decision.reason_codes
 
 
 @pytest.mark.parametrize(

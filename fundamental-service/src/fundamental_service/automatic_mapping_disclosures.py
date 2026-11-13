@@ -16,7 +16,10 @@ from .accounting_roles import (
     IssuerAccountingRoleRuleSetV1,
 )
 from .arelle_parser import fact_semantic_digest, ParsedXbrlFactV1
-from .original_issuer import OriginalIssuerEvidenceV1
+from .original_issuer import (
+    OriginalIssuerEvidenceV1,
+    parser_input_matches_registered_original,
+)
 from .serialization import sha256_digest
 
 
@@ -39,14 +42,14 @@ _OPTION_COST = re.compile(
     r"related to nonvested options, which we expect to recognize in the first "
     r"quarter of fiscal (?P<next_year>[0-9]{4})\.)"
 )
-# Classification pins for the complete NVE option note; amounts remain observations.
+# Parser-input and full-fact pins for the complete NVE option note.
 _OPTION_COST_ORIGINALS = {
     ("0000724910", "0001376474-23-000283"): (
-        "26d95888105590690531f4b3c4da8ca910e6aa4e315f6372ed51c55459b0b05c",
+        "fbab4403625d475d594960fc11a39ef1be6dd079a854647c11243dba9bdb3469",
         "1ce5d69c3a2b560110b3cfffba644b15125475ce3531a99bdc5a5f5fd35ef90e",
     ),
     ("0000724910", "0001376474-24-000214"): (
-        "e337d87718577db631e61f5495c3c8f96304c0552161cb5054305967394c9dc6",
+        "9b08f22245c6dbe458fdc90ff1484e87af5e8900b41774be6f4d0d7d7bd8ae57",
         "21c4ebca39e56c934edded6065b4ac78a0f451de96a540afe5d49726c53b01c1",
     ),
 }
@@ -66,7 +69,9 @@ def select_option_compensation_disclosure(
     """Transcribe one registered option-cost balance, without approving inventory."""
     source = original.source
     entry = _OPTION_COST_ORIGINALS.get((source.cik, source.accession_number))
-    if entry is None or source.content_hash != entry[0]:
+    if entry is None or not parser_input_matches_registered_original(
+        original, entry[0]
+    ):
         return CompensationDisclosureSelection(
             None, (), (), ("MAPPING_OPTION_COST_SCOPE_UNREVIEWED",)
         )

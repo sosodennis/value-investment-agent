@@ -45,6 +45,13 @@ digest. Prior mappings and failures remain retained. This identity correction
 does not expand accounting classifications, change the formal forecast formulas
 or establish a supported history threshold.
 
+Policy `source-bound-us-gaap-v16` applies the same identity rule to the registered
+option-compensation disclosure in `automatic_mapping_disclosures.py`. Its NVE
+2023/2024 parser and fact pins are the same as the corresponding rows above.
+The full dated amount, exact text location, period, classification and raw-hash
+lineage remain required. This correction supplies no complete award inventory
+or new absence assertion.
+
 A `derived` period adds or subtracts at least two distinct source observations.
 Every component must match the same consolidated issuer, period and unit.
 Repeated observations, repeated concepts, conflicting observations, nonfinite
