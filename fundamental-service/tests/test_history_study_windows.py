@@ -150,7 +150,8 @@ def test_windows_use_common_sources_labels_and_policy(evidence, start_year, avai
     )
     requests = [
         value
-        for value in artifacts.values()
+        for raw in artifacts.values()
+        for value in (json.loads(raw),)
         if value.get("contract_version") == "fundamental.operating-comparison.v1"
     ]
     assert len(requests) == len(available)

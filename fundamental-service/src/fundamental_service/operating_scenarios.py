@@ -9,6 +9,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
 
+from pydantic import ValidationError
+
 from .annual_history import (
     AnnualHistoryError,
     AnnualHistoryPeriodV1,
@@ -34,7 +36,7 @@ from .original_issuer import (
     fact_matches_original_source,
     fact_matches_operating_identity,
 )
-from .serialization import sha256_digest
+from .serialization import canonical_bytes, sha256_digest
 from .sec_rebuild import parsed_facts_to_candidates
 from .snapshots import SnapshotError
 from .valuation_preparation import (
@@ -47,6 +49,9 @@ from .operating_scenario_contracts import (
     CORE_FIELDS,
     PARENT_CONCEPTS,
     SCENARIO_POLICY,
+    BASELINE_SCENARIO_POLICY,
+    BASELINE_SOURCE_POLICY,
+    UnconsumedBaselineCapexV1,
     OperatingScenarioRequestV1,
     OperatingScenarioReplayV1,
     OperatingScenarioResultV1,
@@ -58,22 +63,14 @@ from .operating_scenario_contracts import (
 )
 
 
-def _period_facts(
-    request: ScenarioObservationSetV1, period: ScenarioPeriodV1
-) -> dict[str, CanonicalFactV1]:
-    facts = {fact.fact_id: fact for fact in request.facts}
-    if len(facts) != len(request.facts):
-        raise PreparationError("SCENARIO_FACT_ID_DUPLICATE", "duplicate input fact IDs")
-    absent = tuple(sorted(set(period.fact_ids.values()) - facts.keys()))
-    if absent:
-        raise PreparationError(
-            "SCENARIO_FACT_MISSING", "selected fact is absent", missing=absent
-        )
+def _latest_complete_original(
+    request: ScenarioObservationSetV1, period: ScenarioPeriodV1, roles: set[str]
+) -> str:
     source_roles: dict[tuple[datetime, str, str], set[str]] = {}
     for candidate in request.facts:
         if (
             candidate.period_end == period.period_end
-            and candidate.normalized_field in period.fact_ids
+            and candidate.normalized_field in roles
             and not candidate.context.dimensions
             and candidate.context.consolidation_scope == "consolidated"
         ):
@@ -84,7 +81,7 @@ def _period_facts(
             )
             source_roles.setdefault(key, set()).add(candidate.normalized_field)
     complete_sources = tuple(
-        key for key, roles in source_roles.items() if roles == set(period.fact_ids)
+        key for key, observed in source_roles.items() if observed == roles
     )
     if not complete_sources:
         raise PreparationError(
@@ -98,7 +95,35 @@ def _period_facts(
             "SCENARIO_ORIGINAL_SELECTION_CONFLICT",
             "equally available complete originals are ambiguous",
         )
-    _, source_hash, _ = latest[0]
+    return latest[0][1]
+
+
+def _period_facts(
+    request: ScenarioObservationSetV1, period: ScenarioPeriodV1
+) -> dict[str, CanonicalFactV1]:
+    facts = {fact.fact_id: fact for fact in request.facts}
+    if len(facts) != len(request.facts):
+        raise PreparationError("SCENARIO_FACT_ID_DUPLICATE", "duplicate input fact IDs")
+    absent = tuple(sorted(set(period.fact_ids.values()) - facts.keys()))
+    if absent:
+        raise PreparationError(
+            "SCENARIO_FACT_MISSING", "selected fact is absent", missing=absent
+        )
+    baseline = (
+        period.unconsumed_capex is not None
+        and request.source_selection_policy == BASELINE_SOURCE_POLICY
+    )
+    families = (
+        (set(CORE_FIELDS), set(period.fact_ids) - set(CORE_FIELDS))
+        if baseline
+        else (set(period.fact_ids),)
+    )
+    source_hashes = {
+        role: source_hash
+        for family in families
+        for source_hash in (_latest_complete_original(request, period, family),)
+        for role in family
+    }
     selected = {}
     for role, fact_id in sorted(period.fact_ids.items()):
         fact = facts.get(fact_id)
@@ -134,7 +159,7 @@ def _period_facts(
             candidate
             for candidate in request.facts
             if candidate.normalized_field == role
-            and candidate.source.content_hash == source_hash
+            and candidate.source.content_hash == source_hashes[role]
             and candidate.period_end == period.period_end
             and not candidate.context.dimensions
             and candidate.context.consolidation_scope == "consolidated"
@@ -158,12 +183,20 @@ def _period_facts(
             {
                 (selected[role].source.content_hash, selected[role].accession_number)
                 for role in PARENT_CONCEPTS
+                if role in selected
             }
         )
         != 1
     ):
         raise PreparationError(
             "SCENARIO_PARENT_SOURCE_MISMATCH", "parent allocations require one original"
+        )
+    if period.unconsumed_capex is not None and (
+        period.unconsumed_capex.source_content_hash != source_hashes["current_assets"]
+    ):
+        raise PreparationError(
+            "SCENARIO_BASELINE_SOURCE_MISMATCH",
+            "unknown capex evidence must refer to the selected original",
         )
     return selected
 
@@ -259,6 +292,20 @@ def resolve_scenario_observations(
     observations: ScenarioObservationSetV1, periods: tuple[ScenarioPeriodV1, ...]
 ) -> tuple[dict[str, CanonicalFactV1], ...]:
     """Reproduce and select original observations before any hypothetical allocation."""
+    if any(period.unconsumed_capex is not None for period in periods):
+        try:
+            if (
+                not isinstance(observations, OperatingScenarioRequestV1)
+                or periods != observations.periods
+            ):
+                raise ValueError("unknown capex is decision-baseline only")
+            OperatingScenarioRequestV1.model_validate_json(
+                canonical_bytes(observations)
+            )
+        except (ValidationError, ValueError) as error:
+            raise PreparationError(
+                "SCENARIO_BASELINE_POLICY_INVALID", str(error)
+            ) from error
     _validate_sources(observations)
     return tuple(_period_facts(observations, period) for period in periods)
 
@@ -271,6 +318,7 @@ def build_scenario_history(
     *,
     policy_digest: str,
     scope_evidence: tuple[str, ...],
+    policy_version: str = SCENARIO_POLICY,
 ) -> ScenarioHistory:
     """Allocate the same source parents for forecasts and conditional outcomes."""
     inputs: list[ScenarioPeriodInputsV1] = []
@@ -286,9 +334,13 @@ def build_scenario_history(
             facts["current_liabilities"],
             scenario.operating_liability_fraction,
         )
-        capex = _partition(
-            facts["capital_expenditure"],
-            scenario.continuing_capex_fractions[period.fiscal_year],
+        capex: ParentPartitionV1 | UnconsumedBaselineCapexV1 = (
+            period.unconsumed_capex
+            if period.unconsumed_capex is not None
+            else _partition(
+                facts["capital_expenditure"],
+                scenario.continuing_capex_fractions[period.fiscal_year],
+            )
         )
         assumption_digest = sha256_digest(
             {
@@ -311,9 +363,15 @@ def build_scenario_history(
         estimates.append(
             EstimatedOperatingInputsV1(
                 fiscal_year=period.fiscal_year,
-                capital_expenditure=capex.operating,
+                capital_expenditure=(
+                    capex.operating if isinstance(capex, ParentPartitionV1) else capex
+                ),
                 operating_working_capital=inputs[-1].operating_working_capital,
-                capex_facts=(facts["capital_expenditure"],),
+                capex_facts=(
+                    (facts["capital_expenditure"],)
+                    if isinstance(capex, ParentPartitionV1)
+                    else ()
+                ),
                 working_capital_facts=tuple(
                     facts[role]
                     for role in (
@@ -335,7 +393,7 @@ def build_scenario_history(
             )
         )
     history = AnnualHistoryV1(
-        requirements_profile_id=SCENARIO_POLICY,
+        requirements_profile_id=policy_version,
         requirements_profile_digest=policy_digest,
         requested_fiscal_years=tuple(
             period.fiscal_year for period in reversed(periods)
@@ -396,6 +454,7 @@ def replay_operating_scenarios(
                     tuple(selected_periods),
                     scenario,
                     policy_digest=request.policy_digest,
+                    policy_version=request.policy_version,
                     scope_evidence=request.scope_assumption_evidence_digests,
                 )
                 inputs = list(prepared.period_inputs)
@@ -462,6 +521,11 @@ def replay_operating_scenarios(
                 )
             )
     result = OperatingScenarioReplayV1(
+        contract_version=(
+            "fundamental.operating-scenario-replay.v3"
+            if request.policy_version == BASELINE_SCENARIO_POLICY
+            else "fundamental.operating-scenario-replay.v2"
+        ),
         input_digest=sha256_digest(request),
         output_digest="0" * 64,
         retained_fact_ids=tuple(sorted(fact.fact_id for fact in request.facts)),

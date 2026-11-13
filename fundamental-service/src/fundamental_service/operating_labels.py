@@ -212,6 +212,11 @@ def replay_operating_comparison(
                 )
             )
     result = OperatingScenarioComparisonV1(
+        contract_version=(
+            "fundamental.operating-comparison-replay.v2"
+            if request.contract_version == "fundamental.operating-comparison.v2"
+            else "fundamental.operating-comparison-replay.v1"
+        ),
         input_digest=sha256_digest(request),
         output_digest="0" * 64,
         decision_input_digest=forecasts.input_digest,

@@ -21,7 +21,6 @@ from fundamental_service.serialization import canonical_bytes, sha256_digest
 import export_history_study_evidence as exporter
 from analyze_history_study import ROOT, WINDOWS, DesignError, read_document
 from plan_history_study_precision import (
-    canonical_bytes as canonical_json_bytes,
     digest,
     publish_report,
 )
@@ -49,6 +48,7 @@ def trailing_request(
                         period.fiscal_year
                     ]
                     for period in periods
+                    if period.unconsumed_capex is None
                 }
             }
         )
@@ -75,7 +75,7 @@ def trailing_request(
 
 def prepare_windows(
     manifest: object, index: WindowSeedIndex, directory: Path
-) -> tuple[dict[str, object], dict[str, object]]:
+) -> tuple[dict[str, object], dict[str, bytes]]:
     """Verify every generated arm before publishing any output artifact."""
     if (
         sha256_digest(manifest) != exporter.MANIFEST_DIGEST
@@ -84,7 +84,7 @@ def prepare_windows(
         raise DesignError("fixed 100-issuer manifest digest differs")
     if index.runtime != exporter.runtime_pins():
         raise DesignError("installed runtime differs from frozen pins")
-    artifacts: dict[str, object] = {}
+    artifacts: dict[str, bytes] = {}
     entries = []
     windows = []
     issuers: set[str] = set()
@@ -118,7 +118,7 @@ def prepare_windows(
             for kind, value in values.items():
                 raw = canonical_bytes(value)
                 content_digest = digest(raw)
-                artifacts[content_digest] = json.loads(raw)
+                artifacts[content_digest] = raw
                 references[kind] = exporter.FileReference(
                     path=f"{content_digest}.json", sha256=content_digest
                 )
@@ -143,9 +143,7 @@ def prepare_windows(
     with tempfile.TemporaryDirectory(prefix="history-window-validation-") as temporary:
         stage = Path(temporary)
         for content_digest, artifact in artifacts.items():
-            (stage / f"{content_digest}.json").write_bytes(
-                canonical_json_bytes(artifact)
-            )
+            (stage / f"{content_digest}.json").write_bytes(artifact)
         validation = exporter.export_evidence(manifest, evidence_index, stage)
     output = {
         "schema_version": "history-study-window-replay.v1",
@@ -208,7 +206,7 @@ def main() -> int:
             "output_digest": sha256_digest(output),
         }
         publications = [
-            publish_report(args.output_directory, value)
+            publish_report(args.output_directory, json.loads(value))
             for _, value in sorted(artifacts.items())
         ]
         index_receipt = publish_report(args.output_directory, output["evidence_index"])

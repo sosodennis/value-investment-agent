@@ -70,6 +70,14 @@ class ConditionalLabelRequestV1(ScenarioObservationSetV1):
 
     @model_validator(mode="after")
     def complete_label_grid(self) -> "ConditionalLabelRequestV1":
+        if self.source_selection_policy != "latest-complete-original-per-period-v1":
+            raise ValueError(
+                "labels require the unchanged complete-original source policy"
+            )
+        if any(period.unconsumed_capex is not None for period in self.periods):
+            raise ValueError(
+                "label periods require observed capex; baseline exemption is decision-only"
+            )
         years = tuple(period.fiscal_year for period in self.periods)
         if years[1] != years[0] + 1:
             raise ValueError(
@@ -97,9 +105,9 @@ class ConditionalLabelRequestV1(ScenarioObservationSetV1):
 
 
 class OperatingComparisonRequestV1(StrictModel):
-    contract_version: Literal["fundamental.operating-comparison.v1"] = (
-        "fundamental.operating-comparison.v1"
-    )
+    contract_version: Literal[
+        "fundamental.operating-comparison.v1", "fundamental.operating-comparison.v2"
+    ] = "fundamental.operating-comparison.v1"
     decision: OperatingScenarioRequestV1
     decision_input_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
     label: ConditionalLabelRequestV1
@@ -115,6 +123,10 @@ class OperatingComparisonRequestV1(StrictModel):
 
     @model_validator(mode="after")
     def pinned_comparison(self) -> "OperatingComparisonRequestV1":
+        if (self.contract_version == "fundamental.operating-comparison.v2") != (
+            self.decision.contract_version == "fundamental.operating-scenarios.v2"
+        ):
+            raise ValueError("comparison and decision contract versions must match")
         if self.decision_input_digest != sha256_digest(self.decision):
             raise ValueError("decision input must remain frozen and separate")
         if self.filing_inventory_digest != sha256_digest(self.filing_inventory):
@@ -161,9 +173,10 @@ class OperatingScenarioErrorV1(StrictModel):
 
 
 class OperatingScenarioComparisonV1(StrictModel):
-    contract_version: Literal["fundamental.operating-comparison-replay.v1"] = (
-        "fundamental.operating-comparison-replay.v1"
-    )
+    contract_version: Literal[
+        "fundamental.operating-comparison-replay.v1",
+        "fundamental.operating-comparison-replay.v2",
+    ] = "fundamental.operating-comparison-replay.v1"
     evidence_status: Literal["unreviewed_conditional_scenario_comparison"] = (
         "unreviewed_conditional_scenario_comparison"
     )
