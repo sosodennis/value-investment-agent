@@ -57,6 +57,13 @@ from .uncertainty import UncertaintyReportV1
 from .serialization import canonical_bytes, sha256_digest
 from .source_acquisition import SecAcquisitionUseCase
 from .snapshots import SnapshotError
+from .public_acquisition import (
+    PostgresPublicCaptureLock,
+    PublicSourceAcquisition,
+    PublicSourceAcquisitionEvidenceV1,
+    PublicSourceAcquisitionRequestV1,
+)
+from .public_source import PublicSourceAdapter
 from .valuation_preparation import AutomaticValuationPreparationV1
 from .valuation_requirements import (
     ValuationRequirementsProfileV1,
@@ -85,6 +92,9 @@ class _SourcePreparationPlan(StrictModel, Generic[SourceRequestT]):
     release_profile_id: str = Field(min_length=1)
     model_id: InitialModelId
     ingestions: tuple[SourceRequestT, ...] = Field(min_length=1, max_length=6)
+    public_sources: tuple[PublicSourceAcquisitionRequestV1, ...] = Field(
+        default=(), max_length=32, exclude_if=lambda value: not value
+    )
     valuation_working_capital_policy: ValuationWorkingCapitalPolicyV1 | None = Field(
         default=None, exclude_if=lambda value: value is None
     )
@@ -138,6 +148,15 @@ class _SourcePreparationPlan(StrictModel, Generic[SourceRequestT]):
         if not required <= requested <= required | set(profile.supporting_fact_fields):
             raise ValueError("source plan must cover the complete model requirements")
         first = self.ingestions[0]
+        if len({request.digest for request in self.public_sources}) != len(
+            self.public_sources
+        ) or any(
+            request.valuation_timestamp != first.valuation_timestamp
+            for request in self.public_sources
+        ):
+            raise ValueError(
+                "public source requests must be distinct and pin plan date"
+            )
         if self.valuation_working_capital_policy is not None and any(
             item.issuer_id != first.identity.issuer_id
             or item.accession_number
@@ -342,11 +361,22 @@ class SourcePreparationEvidenceV1(StrictModel):
     source_outcomes: tuple[SourceAcquisitionOutcomeV1, ...] = Field(
         default=(), max_length=6, exclude_if=lambda value: not value
     )
+    public_source_outcomes: tuple[PublicSourceAcquisitionEvidenceV1, ...] = Field(
+        default=(), max_length=32, exclude_if=lambda value: not value
+    )
     preparation: AutomaticValuationPreparationV1 | None = None
     calculation: UncertaintyReportV1 | None = None
 
     @model_validator(mode="after")
     def outcome_matches_evidence(self) -> SourcePreparationEvidenceV1:
+        if self.status != "blocked" and any(
+            outcome.issue_codes for outcome in self.public_source_outcomes
+        ):
+            raise ValueError("unavailable required public sources block preparation")
+        if len(
+            {outcome.request.digest for outcome in self.public_source_outcomes}
+        ) != len(self.public_source_outcomes):
+            raise ValueError("public source outcomes must retain distinct requests")
         if self.source_plan_ref is not None and (
             self.source_plan_ref.content_hash != self.plan_digest
             or self.source_plan_ref.media_type != "application/json"
@@ -418,12 +448,14 @@ class SourcePreparationRunner:
         acquisition: SecAcquisitionUseCase | None,
         artifacts: PreparationArtifactWriter,
         canary: DataReleaseCanaryRunner | None,
+        public_acquisition: PublicSourceAcquisition | None = None,
     ) -> None:
         self._application = application
         self._metadata = metadata
         self._acquisition = acquisition
         self._artifacts = artifacts
         self._canary = canary
+        self._public_acquisition = public_acquisition
 
     def _plan_mappings(
         self, plan: SourcePreparationPlan
@@ -795,6 +827,11 @@ class SourcePreparationRunner:
     def _persist(
         self, plan: SourcePreparationPlan, evidence: SourcePreparationEvidenceV1
     ) -> ArtifactPublicationV1:
+        if (
+            tuple(outcome.request for outcome in evidence.public_source_outcomes)
+            != plan.public_sources
+        ):
+            raise ValueError("preparation must retain every planned public source")
         publication = self._artifacts.put_with_receipt(
             f"source-preparation-plan:{plan.digest}", plan
         )
@@ -842,6 +879,10 @@ class SourcePreparationRunner:
             }
         )
         dependencies: tuple[str, ...] = (evidence.plan_digest,)
+        for outcome in evidence.public_source_outcomes:
+            dependencies += (outcome.request.digest, outcome.digest)
+            if outcome.source is not None:
+                dependencies += (outcome.source.content_sha256,)
         if binding_ref is not None:
             dependencies += (binding_ref.content_hash,)
         if evidence.snapshot_manifest_digest is not None:
@@ -1071,6 +1112,32 @@ class SourcePreparationRunner:
             role="automatic-mapping-batch-decision-v1",
         )
 
+    def _acquire_public_sources(
+        self, plan: SourcePreparationPlan, *, deadline_at: datetime
+    ) -> tuple[PublicSourceAcquisitionEvidenceV1, ...]:
+        if not plan.public_sources:
+            return ()
+        if self._public_acquisition is None:
+            raise ServiceError(
+                "PUBLIC_SOURCE_ACQUISITION_UNAVAILABLE",
+                "required public source capture is not configured",
+                status_code=503,
+                retryable=False,
+            )
+        outcomes = []
+        for request in plan.public_sources:
+            if datetime.now(UTC) >= deadline_at:
+                raise SnapshotError(
+                    "REQUEST_DEADLINE_EXCEEDED",
+                    "public source acquisition deadline expired",
+                    retryable=True,
+                )
+            publication = self._public_acquisition.execute(request)
+            outcomes.append(
+                self._public_acquisition.read(publication.artifact.artifact_id)
+            )
+        return tuple(outcomes)
+
     def run(
         self,
         plan: SourcePreparationPlan,
@@ -1110,6 +1177,23 @@ class SourcePreparationRunner:
             raise ValueError(
                 "candidate does not match the plan profile, revision and mappings"
             )
+        public_outcomes = self._acquire_public_sources(plan, deadline_at=deadline_at)
+        public_issues = tuple(
+            sorted(
+                {code for outcome in public_outcomes for code in outcome.issue_codes}
+            )
+        )
+        if public_issues:
+            return self._persist(
+                plan,
+                SourcePreparationEvidenceV1(
+                    source_revision=plan.source_revision,
+                    plan_digest=plan.digest,
+                    status="blocked",
+                    issue_codes=public_issues,
+                    public_source_outcomes=public_outcomes,
+                ),
+            )
         resolution = self._resolve(plan)
         if resolution is None and not (
             candidate is not None
@@ -1138,6 +1222,7 @@ class SourcePreparationRunner:
                     plan,
                     SourcePreparationEvidenceV1(
                         source_revision=plan.source_revision,
+                        public_source_outcomes=public_outcomes,
                         plan_digest=plan.digest,
                         status="blocked",
                         snapshot_id=first_incomplete.snapshot_id,
@@ -1189,6 +1274,7 @@ class SourcePreparationRunner:
                             plan,
                             SourcePreparationEvidenceV1(
                                 source_revision=plan.source_revision,
+                                public_source_outcomes=public_outcomes,
                                 plan_digest=plan.digest,
                                 status="blocked",
                                 snapshot_id=snapshot.snapshot_id,
@@ -1205,6 +1291,7 @@ class SourcePreparationRunner:
                     plan,
                     SourcePreparationEvidenceV1(
                         source_revision=plan.source_revision,
+                        public_source_outcomes=public_outcomes,
                         plan_digest=plan.digest,
                         status="blocked",
                         issue_codes=(error.code,),
@@ -1218,6 +1305,7 @@ class SourcePreparationRunner:
                     plan,
                     SourcePreparationEvidenceV1(
                         source_revision=plan.source_revision,
+                        public_source_outcomes=public_outcomes,
                         plan_digest=plan.digest,
                         status="blocked",
                         issue_codes=(error.code,),
@@ -1234,6 +1322,7 @@ class SourcePreparationRunner:
                     plan,
                     SourcePreparationEvidenceV1(
                         source_revision=plan.source_revision,
+                        public_source_outcomes=public_outcomes,
                         plan_digest=plan.digest,
                         status="release_required",
                         snapshot_id=snapshot.snapshot_id,
@@ -1280,6 +1369,7 @@ class SourcePreparationRunner:
                 plan,
                 SourcePreparationEvidenceV1(
                     source_revision=plan.source_revision,
+                    public_source_outcomes=public_outcomes,
                     plan_digest=plan.digest,
                     status="blocked",
                     snapshot_id=resolution.snapshot_id,
@@ -1294,6 +1384,7 @@ class SourcePreparationRunner:
                 plan,
                 SourcePreparationEvidenceV1(
                     source_revision=plan.source_revision,
+                    public_source_outcomes=public_outcomes,
                     plan_digest=plan.digest,
                     status="blocked",
                     snapshot_id=resolution.snapshot_id,
@@ -1310,6 +1401,7 @@ class SourcePreparationRunner:
                 plan,
                 SourcePreparationEvidenceV1(
                     source_revision=plan.source_revision,
+                    public_source_outcomes=public_outcomes,
                     plan_digest=plan.digest,
                     status="approval_required",
                     snapshot_id=resolution.snapshot_id,
@@ -1326,6 +1418,7 @@ class SourcePreparationRunner:
                 plan,
                 SourcePreparationEvidenceV1(
                     source_revision=plan.source_revision,
+                    public_source_outcomes=public_outcomes,
                     plan_digest=plan.digest,
                     status="blocked",
                     snapshot_id=resolution.snapshot_id,
@@ -1359,6 +1452,7 @@ class SourcePreparationRunner:
             plan,
             SourcePreparationEvidenceV1(
                 source_revision=plan.source_revision,
+                public_source_outcomes=public_outcomes,
                 plan_digest=plan.digest,
                 status="calculated",
                 snapshot_id=resolution.snapshot_id,
@@ -1450,12 +1544,28 @@ async def _run_command(args: argparse.Namespace) -> ArtifactPublicationV1:
                 taxonomy_cache_dir=acquisition.settings.taxonomy_cache_dir,
                 taxonomy_cache_sha256=acquisition.settings.taxonomy_cache_sha256,
             )
+        public_acquisition = None
+        if plan.public_sources:
+            user_agent = os.getenv("FUNDAMENTAL_PUBLIC_SOURCE_USER_AGENT") or os.getenv(
+                "FUNDAMENTAL_SEC_USER_AGENT"
+            )
+            if not user_agent or application.content_store is None:
+                raise ValueError(
+                    "public preparation requires a contact User-Agent and content store"
+                )
+            public_acquisition = PublicSourceAcquisition(
+                provider=PublicSourceAdapter(user_agent=user_agent),
+                artifacts=application.artifact_store,
+                content=application.content_store,
+                capture_lock=PostgresPublicCaptureLock(app.state.metadata_store),
+            )
         return SourcePreparationRunner(
             application=application,
             metadata=app.state.metadata_store,
             acquisition=app.state.sec_acquisition,
             artifacts=application.artifact_store,
             canary=canary,
+            public_acquisition=public_acquisition,
         ).run(
             plan,
             actor_id=args.actor,

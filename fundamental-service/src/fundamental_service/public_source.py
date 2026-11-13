@@ -124,7 +124,7 @@ class PublicSourceAdapter:
         self._sleep = sleep
         self._last_request_at: float | None = None
 
-    def capture(
+    def validate_capture(
         self,
         source_id: str,
         uri: str,
@@ -132,7 +132,7 @@ class PublicSourceAdapter:
         available_at: datetime | None = None,
         publication_at: datetime | None = None,
         captured_at: datetime | None = None,
-    ) -> CapturedSource:
+    ) -> SourceCaptureRequest:
         registration = self._registrations.get(source_id)
         if registration is None:
             raise SnapshotError(
@@ -190,6 +190,28 @@ class PublicSourceAdapter:
                     "source timestamps require a timezone",
                 )
         profile.validate_request(request)
+        return request
+
+    def capture(
+        self,
+        source_id: str,
+        uri: str,
+        *,
+        available_at: datetime | None = None,
+        publication_at: datetime | None = None,
+        captured_at: datetime | None = None,
+    ) -> CapturedSource:
+        request = self.validate_capture(
+            source_id,
+            uri,
+            available_at=available_at,
+            publication_at=publication_at,
+            captured_at=captured_at,
+        )
+        spec, profile = (
+            self._registrations[source_id].spec,
+            self._registrations[source_id].profile,
+        )
         payload, status, media_type, retrieved_at = self._request(uri)
         timing = profile.resolve_capture(
             request, SourceCaptureResponse(payload, media_type, retrieved_at)

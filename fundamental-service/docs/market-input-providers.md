@@ -132,6 +132,55 @@ To add an alternative:
 
 ## Availability, persistence and approval
 
+The ordinary `fundamental-prepare-source --plan ... --plan-digest ...` command
+can acquire required public originals before the existing SEC/release/forecast
+flow. Add `public_sources` to its plan, with one entry per exact source:
+
+```json
+{
+  "protocol": "public-source-acquisition-v1",
+  "source_id": "damodaran-reference",
+  "uri": "https://pages.stern.nyu.edu/~adamodar/pc/datasets/ctryprem.xlsx",
+  "source_profile": "damodaran-country-erp-tax-xlsx-v2",
+  "terms_reference": "https://pages.stern.nyu.edu/~adamodar/New_Home_Page/datafile/",
+  "valuation_timestamp": "2026-11-13T12:00:00Z"
+}
+```
+
+The timestamp must equal the plan's valuation timestamp. This example declares a
+request; it does not assert that the mutable workbook existed at that cutoff.
+The command uses `FUNDAMENTAL_PUBLIC_SOURCE_USER_AGENT` (or the configured SEC
+contact), existing PostgreSQL metadata and content storage. Inject
+`PublicSourceCapturePort` and the acquisition store/lock ports to use another
+capture implementation. The profile is a downstream reproduction pin; declaring
+its name does not establish that the captured bytes match it. Existing provider
+reproduction and source admission must still validate them.
+
+Canonical source/URI/profile/terms/valuation/protocol identity scopes each
+receipt. Identical requests share a lock and reuse verified originals with
+`wrote=false`, including after restart. Different valuation timestamps create
+separate captures of mutable URLs. No issuer is included in the shared public
+source identity. Corrupt receipts or originals refuse without refetch/repair;
+current registration restrictions are checked before cache reuse. Receipt and
+content stores perform the existing atomic writes. A crash after receipt commit
+can resume without another download; a crash before that commit can require
+another HTTP GET, without duplicate published records.
+
+Every declared source's outcome appears in `public_source_outcomes`, including
+failures and originals captured after the cutoff. A failed required source or
+`SOURCE_NOT_AVAILABLE_AT_VALUATION` blocks preparation. Permanent provider
+refusals are reused for that exact request. Retryable attempts retain their own
+canonical evidence and permit a later retry; they are not completed captures.
+A busy capture lease fails retryably before provider access. Invalid requests
+and corrupted persistence fail at their boundary rather than becoming ordinary
+provider failures.
+
+This acquisition stage does not automatically create source-use admissions,
+issuer crosswalks, market policies or trusted release candidates. The existing
+selectors, evaluators and release canary remain required. Captured originals are
+available through `retained_source` for those provider ports. Omitting
+`public_sources` preserves existing SEC-only plans and their canonical digests.
+
 Workbook filenames and observation dates do not prove historical availability.
 The current Damodaran and mutable Treasury adapters bound availability by actual
 capture time. Downloading an old annual table today cannot authorize its use at

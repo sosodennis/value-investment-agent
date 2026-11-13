@@ -52,7 +52,7 @@ from fundamental_service.release_runner import DataReleaseCanaryRunner
 from fundamental_service.quote_sources import default_quote_providers
 from fundamental_service.replay import ArtifactRecordV1, ArtifactStore
 from fundamental_service.serialization import canonical_bytes, sha256_digest
-from fundamental_service.snapshots import FilesystemSnapshotRepository
+from fundamental_service.snapshots import FilesystemSnapshotRepository, SnapshotError
 from fundamental_service.equity_award_evidence import (
     EQUITY_DILUTION_ARTIFACT_ROLE,
     EQUITY_QUOTE_SOURCE_ROLE,
@@ -297,13 +297,14 @@ def _reader(fixture, receipt):
     )
 
 
-def _runner(fixture, *, acquisition=None, canary=None):
+def _runner(fixture, *, acquisition=None, canary=None, public_acquisition=None):
     return SourcePreparationRunner(
         application=fixture.application,
         metadata=fixture.metadata,
         acquisition=acquisition,
         artifacts=fixture.artifacts,
         canary=canary,
+        public_acquisition=public_acquisition,
     )
 
 
@@ -1042,13 +1043,23 @@ def test_incomplete_acquisition_stays_blocked_and_reuses_evidence_after_restore(
 
 @pytest.mark.skipif(not DATABASE_URL, reason="isolated PostgreSQL is required")
 @pytest.mark.parametrize("empty_awards", [False, True])
+@pytest.mark.parametrize("acquire_public", [False, True])
 def test_preparation_and_calculation_reuse_postgres_artifacts_after_restart_and_restore(
-    tmp_path, recovery_databases, empty_awards
+    tmp_path, recovery_databases, empty_awards, acquire_public
 ):
     source_database, target_database = recovery_databases
     fixture = _fixture(
         tmp_path, released=False, namespace=uuid4().hex, empty_awards=empty_awards
     )
+    from fundamental_service.public_acquisition import (
+        PostgresPublicCaptureLock,
+        PublicSourceAcquisition,
+    )
+
+    plan = fixture.plan
+    public_provider = None
+    if acquire_public:
+        public_provider, _, plan = _public_source_fixture(fixture, tmp_path)
     candidate, _ = _reviewed_candidate(fixture)
     _, _, _, _, _, review_artifacts, roots = _candidate()
     store = PostgresMetadataStore(
@@ -1075,6 +1086,14 @@ def test_preparation_and_calculation_reuse_postgres_artifacts_after_restart_and_
             metadata=metadata,
             acquisition=None,
             artifacts=artifacts,
+            public_acquisition=PublicSourceAcquisition(
+                provider=public_provider,
+                artifacts=artifacts,
+                content=content,
+                capture_lock=PostgresPublicCaptureLock(metadata),
+            )
+            if public_provider is not None
+            else None,
             canary=DataReleaseCanaryRunner(
                 snapshot_repository=application.snapshot_repository,
                 fact_repository=application.fact_repository,
@@ -1124,7 +1143,7 @@ def test_preparation_and_calculation_reuse_postgres_artifacts_after_restart_and_
                     dependency_hashes=(),
                 )
             )
-        prepared = _run(runner, fixture.plan, candidate=candidate)
+        prepared = _run(runner, plan, candidate=candidate)
         preparation = SourcePreparationEvidenceV1.model_validate_json(
             artifacts.read(prepared.artifact.artifact_id)
         ).preparation
@@ -1134,11 +1153,12 @@ def test_preparation_and_calculation_reuse_postgres_artifacts_after_restart_and_
             caller_id="operator",
             decided_at=VALUATION_TIME,
         )
-        calculated = _run(runner, fixture.plan, approval=approval)
+        calculated = _run(runner, plan, approval=approval)
         evidence = SourcePreparationEvidenceV1.model_validate_json(
             artifacts.read(calculated.artifact.artifact_id)
         )
         assert evidence.status == "calculated"
+        assert bool(evidence.public_source_outcomes) is acquire_public
         assert evidence.calculation.base.per_share_value > 0
         assert evidence.calculation.base.quality_status is QualityStatus.PROVISIONAL
         assert (
@@ -1163,9 +1183,7 @@ def test_preparation_and_calculation_reuse_postgres_artifacts_after_restart_and_
         restarted, _, restored_artifacts = wire(store)
         with localcontext(Context(prec=7, rounding=ROUND_DOWN)) as context:
             context.traps[Inexact] = True
-            repeated = _run(
-                restarted, fixture.plan, approval=approval, correlation="restart"
-            )
+            repeated = _run(restarted, plan, approval=approval, correlation="restart")
         assert repeated.artifact == calculated.artifact
         assert repeated.wrote is False
         assert restored_artifacts.read(
@@ -1204,7 +1222,7 @@ def test_preparation_and_calculation_reuse_postgres_artifacts_after_restart_and_
                 restored_result = pool.submit(
                     _run,
                     restored_runner,
-                    fixture.plan,
+                    plan,
                     approval=approval,
                     correlation="restore",
                 ).result()
@@ -1230,6 +1248,8 @@ def test_preparation_and_calculation_reuse_postgres_artifacts_after_restart_and_
             ).wrote
             is False
         )
+        if public_provider is not None:
+            assert len(public_provider.calls) == 1
     finally:
         store.close()
 
@@ -1665,3 +1685,147 @@ def test_command_rejects_changed_plan_digest(tmp_path, capsys):
     )
     assert result == 2
     assert "plan digest" in capsys.readouterr().err
+
+
+def _public_source_fixture(fixture, tmp_path):
+    from test_public_acquisition import Provider, acquisition, request
+
+    provider = Provider()
+    provider.source = replace(
+        provider.source,
+        available_at=VALUATION_TIME - timedelta(hours=1),
+        captured_at=VALUATION_TIME - timedelta(hours=1),
+    )
+    source_request = request(valuation_timestamp=VALUATION_TIME)
+    plan = SourcePreparationPlanV2.model_validate(
+        {
+            **fixture.plan.model_dump(),
+            "public_sources": (source_request,),
+        }
+    )
+    use_case = acquisition(tmp_path / "public", provider, artifacts=fixture.artifacts)
+    return provider, use_case, plan
+
+
+def test_required_public_source_runs_before_formal_preparation_and_reuses_report(
+    tmp_path,
+):
+    from test_public_acquisition import inventory
+
+    fixture = _fixture(tmp_path)
+    provider, use_case, plan = _public_source_fixture(fixture, tmp_path)
+    runner = _runner(fixture, public_acquisition=use_case)
+    first = _run(runner, plan)
+    report = _reader(fixture, first)
+    assert report.status == "approval_required"
+    assert report.preparation.status == "prepared"
+    baseline = _reader(fixture, _run(_runner(fixture), fixture.plan))
+    assert report.preparation == baseline.preparation
+    assert report.public_source_outcomes[0].source.source_id == "damodaran-reference"
+    assert report.public_source_outcomes[0].digest in first.artifact.dependency_hashes
+    before = inventory(tmp_path)
+    second = _run(
+        _runner(fixture, public_acquisition=use_case), plan, correlation="repeat"
+    )
+    assert second.artifact == first.artifact and not second.wrote
+    assert inventory(tmp_path) == before and len(provider.calls) == 1
+    assert plan.digest != fixture.plan.digest
+
+
+def test_required_public_source_after_cutoff_blocks_even_existing_release(tmp_path):
+    fixture = _fixture(tmp_path)
+    provider, use_case, plan = _public_source_fixture(fixture, tmp_path)
+    provider.source = replace(
+        provider.source,
+        available_at=VALUATION_TIME + timedelta(hours=1),
+        captured_at=VALUATION_TIME + timedelta(hours=1),
+    )
+    first = _run(_runner(fixture, public_acquisition=use_case), plan)
+    report = _reader(fixture, first)
+    assert report.status == "blocked" and report.preparation is None
+    assert report.issue_codes == ("SOURCE_NOT_AVAILABLE_AT_VALUATION",)
+    assert report.public_source_outcomes[0].source is not None
+    second = _run(_runner(fixture, public_acquisition=use_case), plan)
+    assert second.artifact == first.artifact and not second.wrote
+    assert len(provider.calls) == 1
+
+
+def test_public_source_failure_retains_all_required_sources_and_stable_report(tmp_path):
+    fixture = _fixture(tmp_path)
+    provider, use_case, plan = _public_source_fixture(fixture, tmp_path)
+    source_request = plan.public_sources[0]
+    other = source_request.model_copy(
+        update={"uri": source_request.uri.replace("ctryprem.xlsx", "wacc.xls")}
+    )
+    plan = SourcePreparationPlanV2.model_validate(
+        {**plan.model_dump(), "public_sources": (source_request, other)}
+    )
+    capture = provider.capture
+
+    def partly_failing(source_id, uri):
+        if uri == source_request.uri:
+            provider.calls.append((source_id, uri))
+            raise SnapshotError("SOURCE_PAYLOAD_INVALID", "source fixture")
+        return capture(source_id, uri)
+
+    provider.capture = partly_failing
+    first = _run(_runner(fixture, public_acquisition=use_case), plan)
+    report = _reader(fixture, first)
+    assert report.status == "blocked" and report.preparation is None
+    assert report.issue_codes == ("SOURCE_PAYLOAD_INVALID",)
+    assert tuple(x.status for x in report.public_source_outcomes) == (
+        "failed",
+        "captured",
+    )
+    assert (
+        tuple(x.request for x in report.public_source_outcomes) == plan.public_sources
+    )
+    second = _run(_runner(fixture, public_acquisition=use_case), plan)
+    assert second.artifact == first.artifact and not second.wrote
+    assert len(provider.calls) == 2
+
+
+def test_public_sources_require_configured_acquisition(tmp_path):
+    fixture = _fixture(tmp_path)
+    _, _, plan = _public_source_fixture(fixture, tmp_path)
+    with pytest.raises(ServiceError) as failure:
+        _run(_runner(fixture), plan)
+    assert failure.value.code == "PUBLIC_SOURCE_ACQUISITION_UNAVAILABLE"
+
+
+@pytest.mark.parametrize("kind", ["duplicate", "date"])
+def test_public_source_plan_rejects_duplicates_and_mixed_valuation_dates(
+    tmp_path, kind
+):
+    fixture = _fixture(tmp_path)
+    _, _, plan = _public_source_fixture(fixture, tmp_path)
+    source_request = plan.public_sources[0]
+    requests = (
+        (source_request, source_request)
+        if kind == "duplicate"
+        else (
+            source_request.model_copy(
+                update={"valuation_timestamp": VALUATION_TIME + timedelta(days=1)}
+            ),
+        )
+    )
+    with pytest.raises(ValueError, match="distinct and pin plan date"):
+        SourcePreparationPlanV2.model_validate(
+            {**plan.model_dump(), "public_sources": requests}
+        )
+
+
+def test_invalid_candidate_refuses_before_required_public_source_io(tmp_path):
+    fixture = _fixture(tmp_path, released=False)
+    provider, use_case, plan = _public_source_fixture(fixture, tmp_path)
+    candidate, _ = _reviewed_candidate(fixture)
+    changed = candidate.model_copy(
+        update={
+            "manifest": candidate.manifest.model_copy(
+                update={"profile_id": "different-profile"}
+            )
+        }
+    )
+    with pytest.raises(ValueError, match="candidate does not match"):
+        _run(_runner(fixture, public_acquisition=use_case), plan, candidate=changed)
+    assert provider.calls == []
