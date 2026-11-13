@@ -114,3 +114,68 @@ Next: ordinary-merge latest reviewed main, rerun affected exact-commit checks,
 record final receipts, obtain independent PR review/CI, serially merge and verify
 the main merge commit. Only then close #386/#430 and clean owned resources.
 #361/#376/#377 remain open, history underpowered and threshold null.
+
+## Final main refresh and canonical runtime tuple
+
+Ordinary merge `cc82a4d4954e6640b147abbabac2e4b54ac1d75d` includes
+reviewed main `a74151c4029c224af7fbe31f047fd2188a6457c7`. Numeric production
+sources are identical to the earlier checkpoint; #387 adds one fixture test.
+At this exact clean SHA, full Service tests against the same dedicated
+PostgreSQL pass360 tests/8 explicit optional parser-resource skips, exit0.
+Receipt `b8addfd07bb99af8190d801327dc59cd2814dcbaeed6f46a86bc1016f1aa4007`,
+input `b342c91b6a6dd982de35c59c59197b995e146be45d20a7bf138fe1e14078b08b`,
+output `9d1fba178c8ccaf4ad1bac522101814e401e2675f277d326ab4cfa6de6422ccb`.
+Ruff/format, five clean numeric-module types, both guards and diff pass;
+all274 broader legacy diagnostics are byte-identical to the attributed set.
+Receipt `3a8c137600781406ac3364edfc3a4496533516691cbc2344b993e272c25ea6ca`,
+input `1b54de80680f68d39c259fda701a20abe2eb1ecd8a1d9f09492a4caecc731fec`,
+output `37843479197de8f76cef83d9ee47d4691796da05aabd0d365edba5e6d4438a53`.
+
+| Runtime field | Exact value |
+| --- | --- |
+| Worktree | `/Users/denniswong/.codex/worktrees/issue-386-decimal-main/value-investment-agent-issue-361-replay-evidence` |
+| Branch/implementation | `codex/issue-386-decimal-main` / `cc82a4d4954e6640b147abbabac2e4b54ac1d75d` |
+| Application project/URL | N/A; Fundamental-only numeric correction |
+| Fundamental project | `value-investment-agent-386-decimal-main` |
+| Ordered Compose files | External evidence root `compose.json` only; derives the operations base |
+| Compose SHA256 | `e7ffafad80869bfb6fa78632a9079c86e08cee21a8b75f7a5c0ef21f2c7b23cf` |
+| Env file/digest | External `runtime.env` / `537a79e9f03327d132336ec6052d13564c2fe1850397b893904f0c459f5afa7f` |
+| Actual published bindings | Service `127.0.0.1:19636:8080`; PostgreSQL `127.0.0.1:19637:5432` |
+| Fundamental URL | `http://127.0.0.1:19636` |
+| Exact baked image | `sha256:fda046ae07c0a8eb090f5246ac566d49491ebfc10fe8794f8d832d23e0974a6a` |
+| Browser/tab | N/A; no browser/UI change or browser acceptance |
+| Runtime overrides | External `compose.json`, `runtime.env`, `verify_numeric_runtime.py`, `verify_recovery.py`; none are commit inputs |
+| Equivalent preflight | Driver verifies clean exact SHA, Compose config, image revision, all baked source hashes and real `/readyz`; exit0 |
+
+Machine-readable tuple digest
+`13a5ea715c1f78303342860b3f2dd5bd7378a988e7ce9cfb45dddecc0a49a259`.
+Replay entrypoint: from the worktree, set
+`PYTHONDONTWRITEBYTECODE=1` and
+`PYTHONPATH=fundamental-service/src:finance-agent-core:fundamental-service/tests`,
+then run the frozen `$PY -B <external-root>/verify_numeric_runtime.py`.
+Recovery additionally adds the external root to `PYTHONPATH` and runs
+`verify_recovery.py`. Compose commands always pass the recorded env file,
+`-p` project and `-f` file; no developer-default configuration is implicit.
+
+Refreshed-SHA HTTP repeat, restart and recovery all reproduce report
+`68a89e79844fe8605d90d9e282793ed456aa28b63a1525d2b077a4e7a28ad9a0`,
+input `052c4597f4f7679a794eddd48fee159c9c8c68114cc5212a3de96e89be49540c`,
+output `5ffa396c90143afe40127d796504c8694aecb778e3f507382fa43a9762614f89`.
+All table rows/content bytes/sizes/mtimes remain identical on retries and after
+restore. There are9 artifact references, unchanged on repeats. The synthetic
+release is explicitly versioned by implementation SHA, so its input differs
+from eb59fce4; no cross-input digest equivalence is claimed. Recovery receipt
+`e6f7b0405da4866f858f2e1165b6bff847cf7661d294dabc41e9cef099df0a9f`;
+command `171a152f40a043ab66853e6bfea1461915e9b52b3003c52f47fbb5507382cd41`,
+input `eecb57ee58b27be65c5d896c62c115a64a5b272e5d8b64eb445ff09f66afaa9c`,
+output `5ed6a72fb353c3ce2a830263cbb3e5c0b383e5458002c2622e23400307dc76fc`.
+Existing85 container IDs/images/start times/status remain unchanged.
+
+PR #431 independent review at cc82a4d4 has no actionable findings; independent
+343 tests/25 explicit DB/resource skips and five numeric-module types pass.
+The reviewer inspected actual drivers and canonical receipts, without claiming
+to rerun this database. CI43368727100 passes all11 executed jobs, release skipped;
+main CI does not contain the integration-only Fundamental PostgreSQL job, so
+the dedicated local database evidence above remains explicit. Next: final
+metadata-head review/CI, serial main merge, exact merge verification and owned
+resource cleanup. This checkpoint contains acceptance metadata only.
