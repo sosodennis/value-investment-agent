@@ -32,7 +32,7 @@ were added. Existing profile serialization/digests are fixed by regression tests
 | Old v3 profile | Retains all 48 DQC1 original errors and refuses candidate rebuild |
 | New explicit 2013 profile | All eleven official hooks complete; no blocking findings on the fixed original |
 | Synthetic invalid standard member | Official DQC1 still emits original error severity |
-| Source/period-bound mapping proposals | Nine roles produce one candidate each; still provisional and unreviewed |
+| Source/period-bound mapping proposals | Nine roles produce one candidate each with new content-bound proposal IDs; still provisional and unreviewed |
 | Host and isolated Docker fresh-process repeat | Same output digest across runtimes; each runtime repeats its input/report digests |
 | Second publication in each runtime | Config/report `wrote=false`, zero new files, unchanged bytes/sizes/mtimes |
 | Offline builder CLI repeat | Second `generated=false`, `wrote=false`; wrong-SHA command exits 2 before reading sources |
@@ -68,17 +68,18 @@ it. Do not report all preexisting runtimes as unchanged.
 All raw filings, FASB archives, configurations, candidates and generated reports
 remain outside Git under
 `/Users/denniswong/Desktop/Project/value-investment-agent-issue-376-research-evidence/issue377-history-windows/`.
-Drivers: `verify_issue371.py`, `seal_issue371_acceptance.py`; command archive:
+Drivers: `verify_issue371.py`, `seal_issue371_acceptance.py` and their immutable
+`<source-digest>.py` copies; command archive:
 `issue371-check-commands.sh`. The sealed receipt records exact commands, exit
 codes, input/output identities, log/driver hashes and the container discrepancy.
 
 | Artifact | SHA-256 |
 | --- | --- |
-| Sealed acceptance receipt | `29653e95fbfdc4de8afc0679bcbf27eb405a211b6e0fb3a46d2fcab20ac19646` |
-| Receipt input / output | `fbed92e3bbe5e6231fdb544dd9cbb3dcec3e8134754dd3b36e8d1443aba90b9d` / `06e344d26a86281817d4a27355df8b8ab643a774dbf842ea84848656573674d5` |
-| Host acceptance report / input | `83161f911a7a190123dcdffd84ea5db65982454e24fb8d32035d4c15195bceec` / `a1950e2a8314ca4c9850cd0789110c86732f04b995b47ab1b3e362c4221b6cbb` |
-| Docker acceptance report / input | `41a829945d4100ee42f40d96e9c376b9f2ecdacad3e022c2c3d647f7419dc65e` / `ef65a9fd707a0474abb4b407069506e8eba43d94a689bd143116dcc4c694cda7` |
-| Identical host/Docker output | `ab0c9b8fad79a5bbb9f9cdc3ecbdf0a05c79b2338d25d816528eea0e9f0b34e1` |
+| Sealed acceptance receipt | `fd4b10c4e7fd095f6b58c1c92cd582830c62b005b0f039907b3ca7b2d759bc61` |
+| Receipt input / output | `0c821d74f68caa020ba4a173b2d3e6e7b9632f0830d73201bc4a0122c83950d4` / `1345a9b899fb78ed7eab42dc937f5ac00e696de559b3c17279cce39bf28982dd` |
+| Host acceptance report / input | `8d677399a917389efbf240bb2c36d4e6e8ac1dedca39da874360c8389486c351` / `dd0abf9c8e501fae67faa0cfc7952962af4a2260907f6551df32180569cb5d49` |
+| Docker acceptance report / input | `c3c0f3349b4bc0096d62452020dff856557c0c3c3475059c32439ab530a91fc5` / `3c87d3e0835ed94ff61389d1012fb37266bd2685a5e5004489b1c562fc045472` |
+| Identical host/Docker output | `d4933be2ed3793008b608d93adf2a35d57af17ea13ceb0e5076bca25602e82b0` |
 | Builder CLI input / config output | `4f311e1b6936df9da942d937472476f3ccaf4fecf071626405d231b0bb8d643b` / `baf022187417e3d5f8d579942323d9d77e848d4f14909cccdecc43c4f81007a2` |
 
 Next: independent review and serial integration, then review the 2012 mapping
