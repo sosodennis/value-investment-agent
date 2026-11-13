@@ -56,6 +56,10 @@ The reviewed evidence exporter validates every generated arm before publication.
 An invalid source, unavailable Transition model or incomplete label remains in
 the official results; executing an arm does not imply a numerical prediction.
 All 100 selected issuers and missing windows remain in the exporter's loss panel.
+The v2 export references the complete canonical artifacts instead of copying
+their payloads into a second appendix. Verification still recomputes every
+forecast/comparison and checks identical bytes. This bounds redundant in-memory
+representations; it does not reduce scenarios, labels, failures or source facts.
 
 The seed index pins `history-study-window-seeds.v1`, the unchanged fixed manifest
 digest, installed runtime/lock pins and content-addressed comparison requests.

@@ -42,9 +42,12 @@ independently retrieved bytes and trusted review signatures.
 
 ## Retained results
 
-The versioned export preserves complete typed requests, original reports,
-fact IDs/scopes/units/periods/accessions, mapping manifests, assumptions,
-forecasts, labels and comparisons in its conditional appendix. It also reports
+The `history-study-evidence-export.v2` export references complete canonical
+requests, original reports, fact IDs/scopes/units/periods/accessions, mapping
+manifests, assumptions, forecasts, labels and comparisons by their pinned input
+artifact digests. These files remain at the evidence index locations; the
+appendix avoids embedding identical large payloads again. Every supplied output
+is still recomputed and compared byte-for-byte before publication. It also reports
 per-model/arm counts and all issue codes. Scenario counts never multiply issuer
 counts. An issuer with only abstentions counts as represented, with zero issuers
 having a numerical conditional comparison.
