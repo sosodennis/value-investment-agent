@@ -195,6 +195,86 @@ def test_composite_assessment_is_source_bound_and_deterministic():
     assert canonical_bytes(result) == canonical_bytes(repeated)
 
 
+@pytest.mark.parametrize("version", ["original", ACCESSION])
+def test_original_source_versions_and_compatible_issuer_scopes_share_one_assessment(
+    version,
+):
+    source = _snapshot()
+    record = source.source_records[0].model_copy(update={"filing_version": version})
+    source = source.model_copy(update={"source_records": (record,)})
+    scopes = ("unspecified", "issuer", "consolidated")
+    facts = tuple(
+        fact.model_copy(
+            update={"filing_version": version, "security_scope": scopes[i % 3]}
+        )
+        for i, fact in enumerate(_facts())
+    )
+    result = assess_composite_working_capital(_input(), facts, snapshot=source)
+    assert result.status == "estimated", result.missing_evidence
+    assert result.value == Decimal("35.0")
+    assert result.source_facts == tuple(
+        sorted(facts, key=lambda f: (f.fact_id, sha256_digest(f)))
+    )
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        "version_mismatch",
+        "unknown_version",
+        "missing_version",
+        "amended_form",
+        "source_amendment",
+        "fact_amendment",
+        "source_link",
+        "fact_link",
+    ],
+)
+def test_original_version_checks_retain_amendment_and_version_refusals(case):
+    source = _snapshot()
+    record = source.source_records[0]
+    facts = list(_facts())
+    source_changes = {}
+    fact_changes = {}
+    if case in {"version_mismatch", "unknown_version", "missing_version"}:
+        source_changes["filing_version"] = {
+            "version_mismatch": ACCESSION,
+            "unknown_version": "unresolved",
+            "missing_version": None,
+        }[case]
+        if case != "version_mismatch":
+            fact_changes["filing_version"] = source_changes["filing_version"]
+    elif case == "amended_form":
+        source_changes["form"] = "10-K/A"
+    elif case == "source_amendment":
+        source_changes["is_amendment"] = True
+    elif case == "fact_amendment":
+        fact_changes["is_amendment"] = True
+    elif case == "source_link":
+        source_changes["amends_accession"] = ACCESSION
+    else:
+        fact_changes["amends_accession"] = ACCESSION
+    source = source.model_copy(
+        update={"source_records": (record.model_copy(update=source_changes),)}
+    )
+    facts[0] = facts[0].model_copy(update=fact_changes)
+    result = assess_composite_working_capital(_input(), tuple(facts), snapshot=source)
+    assert result.status == "abstained" and result.value is None
+    reason = "FILING_VERSION" if "version" in case else "AMENDMENT"
+    assert any(item.endswith(":" + reason) for item in result.missing_evidence)
+
+
+@pytest.mark.parametrize("scope", ["segmented", "unknown", "security"])
+def test_segmented_unknown_and_unbacked_security_scopes_abstain(scope):
+    facts = list(_facts())
+    facts[0] = facts[0].model_copy(update={"security_scope": scope})
+    result = assess_composite_working_capital(
+        _input(), tuple(facts), snapshot=_snapshot()
+    )
+    assert result.status == "abstained" and result.value is None
+    assert any(item.endswith(":SECURITY_SCOPE") for item in result.missing_evidence)
+
+
 def test_unknown_exclusion_abstains_without_turning_unknown_into_zero():
     policy = _input()
     exclusions = tuple(
@@ -287,7 +367,7 @@ def test_estimated_route_is_a_distinct_profile_and_keeps_threshold_null():
     exact = operating_forecast_requirements_profile("fcff_dcf")
     estimated = composite_working_capital_requirements_profile("fcff_dcf")
     assert exact.profile_version == "operating-forecast-requirements-v1"
-    assert estimated.profile_version == "composite-noncash-working-capital-v2"
+    assert estimated.profile_version == "composite-noncash-working-capital-v3"
     assert "operating_current_receivables" in exact.required_fact_fields
     assert "operating_current_receivables" not in estimated.required_fact_fields
     assert "current_assets" in estimated.required_fact_fields

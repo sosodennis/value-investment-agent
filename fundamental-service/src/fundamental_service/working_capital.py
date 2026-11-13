@@ -25,8 +25,8 @@ from .numerical_policy import using_valuation_context
 from .original_issuer import IssuerOperatingSourceV1, fact_matches_operating_identity
 from .serialization import canonical_bytes, sha256_digest
 
-WORKING_CAPITAL_INPUT_POLICY: Literal["composite-noncash-working-capital-v2"] = (
-    "composite-noncash-working-capital-v2"
+WORKING_CAPITAL_INPUT_POLICY: Literal["composite-noncash-working-capital-v3"] = (
+    "composite-noncash-working-capital-v3"
 )
 WORKING_CAPITAL_FIELDS = (
     "operating_current_receivables",
@@ -107,7 +107,7 @@ class WorkingCapitalExclusionV1(StrictModel):
 
 
 class CompositeWorkingCapitalInputV1(StrictModel):
-    policy_version: Literal["composite-noncash-working-capital-v2"] = (
+    policy_version: Literal["composite-noncash-working-capital-v3"] = (
         WORKING_CAPITAL_INPUT_POLICY
     )
     policy_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
@@ -226,6 +226,8 @@ def working_capital_policy_digest() -> str:
             "sensitivity": "one_at_a_time_scenarios",
             "residuals": "explicit_fraction_and_rationale_no_default",
             "source_scope": "one_original_filing_same_instant_currency_consolidation",
+            "filing_version": "same_nonempty_original_or_exact_accession_no_amendment_link",
+            "security_scope": "dimensionless_issuer_or_same_security_accounting_evidence",
         }
     )
 
@@ -379,8 +381,26 @@ def assess_composite_working_capital(
                 and not source.is_amendment
                 and fact.amendment_scope is None
                 and source.amendment_scope is None
-                and fact.filing_version == "original"
-                and source.filing_version == "original",
+                and fact.amends_accession is None
+                and source.amends_accession is None
+                and not (source.form or "").endswith("/A"),
+            ),
+            (
+                "FILING_VERSION",
+                source.filing_version is not None
+                and source.filing_version in {"original", source.accession_number}
+                and fact.filing_version == source.filing_version,
+            ),
+            (
+                "SECURITY_SCOPE",
+                fact.security_scope in {None, "issuer", "consolidated", "unspecified"}
+                or (
+                    fact.security_scope == "security"
+                    and fact.accounting_evidence is not None
+                    and fact.security_id is not None
+                    and fact.accounting_evidence.rule_set.security_id
+                    == fact.security_id
+                ),
             ),
             (
                 "AVAILABILITY",
@@ -433,7 +453,6 @@ def assess_composite_working_capital(
                     item.context.entity_scope,
                     item.context.consolidation_scope,
                     item.currency,
-                    item.security_scope,
                     item.security_id,
                 )
                 for item in referenced
