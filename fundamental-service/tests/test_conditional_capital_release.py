@@ -14,7 +14,6 @@ from fundamental_service.conditional_capital_contracts import (
 )
 from fundamental_service.contracts import CanonicalFactV1, SourceSnapshotV1
 from fundamental_service.data_releases import (
-    ArtifactRefV1,
     DataReleaseError,
     DataReleaseManifestV1,
     IssuerOperatingReleaseManifestV1,
@@ -84,16 +83,6 @@ def _conditional_fixture(tmp_path):
         ref
         for ref in fixture.manifest.artifact_refs
         if ref.role != EQUITY_DILUTION_ARTIFACT_ROLE
-    )
-    artifact_id = f"equity-dilution:{dilution.digest}"
-    fixture.artifacts.put_with_receipt(artifact_id, dilution)
-    refs += (
-        ArtifactRefV1(
-            artifact_id=artifact_id,
-            content_hash=dilution.digest,
-            media_type="application/json",
-            role=EQUITY_DILUTION_ARTIFACT_ROLE,
-        ),
     )
     template, _, _ = _case()
     latest = {

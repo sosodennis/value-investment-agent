@@ -124,6 +124,7 @@ def _case():
         currency=snapshot.identity.currency,
         valuation_timestamp=snapshot.valuation_timestamp,
         period_end=date(2025, 12, 31),
+        max_quote_age_seconds=259200,
         observations={field: observations[field] for field in OBSERVED_CAPITAL_FIELDS},
         supporting_observations=(observations["equity_award_quantity"],),
         unknowns=CAPITAL_UNKNOWNS,

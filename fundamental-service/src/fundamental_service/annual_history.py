@@ -16,6 +16,7 @@ from .operating_scenario_policy import UnconsumedBaselineCapexV1
 from .original_issuer import IssuerOperatingSourceV1, fact_matches_operating_identity
 from .valuation_requirements import (
     ValuationRequirementsProfileV1,
+    conditional_capital_requirements_profile,
     require_operating_source_profile,
 )
 from .working_capital import (
@@ -102,7 +103,13 @@ def resolve_annual_history(
         raise ValueError("valuation_timestamp must include a timezone")
     require_operating_source_profile(snapshot, profile)
     supplied_facts = tuple(facts)
-    aggregate_policy = profile.profile_version == WORKING_CAPITAL_INPUT_POLICY
+    aggregate_policy = (
+        profile.profile_version == WORKING_CAPITAL_INPUT_POLICY
+        or profile
+        == conditional_capital_requirements_profile(
+            profile.model_id, composite_inputs=True
+        )
+    )
     if working_capital_inputs and not aggregate_policy:
         raise AnnualHistoryError(
             "WORKING_CAPITAL_INPUT_POLICY_MISMATCH",

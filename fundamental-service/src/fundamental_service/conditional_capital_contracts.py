@@ -112,6 +112,7 @@ class ConditionalCapitalPolicyV1(_CapitalModel):
     currency: str = Field(pattern=r"^[A-Z]{3}$")
     valuation_timestamp: datetime
     period_end: date
+    max_quote_age_seconds: int = Field(gt=0)
     observations: dict[str, CapitalObservationRefV1]
     supporting_observations: tuple[CapitalObservationRefV1, ...] = Field(min_length=1)
     unknowns: tuple[str, ...]

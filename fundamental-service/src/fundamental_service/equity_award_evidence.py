@@ -7,6 +7,7 @@ from typing import Literal, Protocol
 from pydantic import Field
 
 from .contracts import CanonicalFactV1, QualityStatus, SourceRole, SourceSnapshotV1
+from .conditional_capital_contracts import ConditionalCapitalPolicyV1
 from .data_releases import DataReleaseManifestV1
 from .equity_dilution import (
     AWARD_FACT_FIELDS,
@@ -16,6 +17,7 @@ from .equity_dilution import (
     EquityAwardInventoryV1,
     PerformanceStockAwardV1,
     TreasuryStockPolicyV1,
+    require_eligible_common_share_quote,
     _award_facts,
 )
 from .facts import canonical_fact_digest
@@ -188,12 +190,34 @@ def load_release_dilution_evidence(
     verify_dilution_fact_bindings(
         evidence, snapshot=snapshot, released_facts=released_facts
     )
+    verify_release_quote(
+        evidence.quote,
+        manifest=manifest,
+        snapshot=snapshot,
+        artifacts=artifacts,
+        quote_providers=quote_providers,
+        source_use_policy=source_use_policy,
+    )
+    return evidence
+
+
+def verify_release_quote(
+    quote: CommonShareQuoteV1,
+    *,
+    manifest: DataReleaseManifestV1,
+    snapshot: SourceSnapshotV1,
+    artifacts: DilutionArtifactReader,
+    quote_providers: tuple[QuoteSourceProviderPort, ...],
+    source_use_policy: SourceUsePolicyV1 | None,
+) -> None:
+    """Reproduce the exact retained quote and its trusted intended-use admission."""
+
     quote_reference = next(
         (
             ref
             for ref in manifest.artifact_refs
             if ref.role == EQUITY_QUOTE_SOURCE_ROLE
-            and ref.content_hash == evidence.quote.content_hash
+            and ref.content_hash == quote.content_hash
         ),
         None,
     )
@@ -203,14 +227,14 @@ def load_release_dilution_evidence(
             "reviewed quote source bytes are unavailable",
         )
     raw_quote = artifacts.read(quote_reference.artifact_id)
-    if sha256(raw_quote).hexdigest() != evidence.quote.content_hash:
+    if sha256(raw_quote).hexdigest() != quote.content_hash:
         raise DilutionError(
             "DILUTION_QUOTE_SOURCE_MISMATCH",
             "quote source bytes differ from the reviewed evidence",
         )
-    reproduce_quote_source(evidence.quote, raw_quote, providers=quote_providers)
+    reproduce_quote_source(quote, raw_quote, providers=quote_providers)
     _verify_quote_admission(
-        evidence.quote,
+        quote,
         raw_quote,
         manifest=manifest,
         snapshot=snapshot,
@@ -218,24 +242,71 @@ def load_release_dilution_evidence(
         providers=quote_providers,
         policy=source_use_policy,
     )
-    return evidence
 
 
-def _verify_quote_admission(
-    quote: CommonShareQuoteV1,
-    raw_quote: bytes,
-    *,
+def load_release_conditional_quote(
     manifest: DataReleaseManifestV1,
+    *,
+    policy: ConditionalCapitalPolicyV1,
     snapshot: SourceSnapshotV1,
     artifacts: DilutionArtifactReader,
-    providers: tuple[QuoteSourceProviderPort, ...],
-    policy: SourceUsePolicyV1 | None,
-) -> None:
-    if policy is None:
+    quote_providers: tuple[QuoteSourceProviderPort, ...],
+    source_use_policy: SourceUsePolicyV1 | None,
+) -> CommonShareQuoteV1:
+    """Select an admitted quote without asserting a complete award inventory."""
+
+    if any(ref.role == EQUITY_DILUTION_ARTIFACT_ROLE for ref in manifest.artifact_refs):
         raise DilutionError(
-            "DILUTION_QUOTE_USE_POLICY_UNAVAILABLE",
-            "quote use requires a configured trusted source policy",
+            "CONDITIONAL_CAPITAL_INVENTORY_CONFLICT",
+            "conditional hypotheses cannot also assert a complete award inventory",
         )
+    quotes = tuple(
+        admission.request.quote
+        for admission in _release_quote_admissions(manifest, artifacts)
+        if admission.request.valuation_at == snapshot.valuation_timestamp
+        and admission.request.intended_use == "valuation_preparation"
+        and (
+            admission.request.quote.issuer_id,
+            admission.request.quote.security_id,
+            admission.request.quote.currency,
+        )
+        == (
+            snapshot.identity.issuer_id,
+            snapshot.identity.security_id,
+            snapshot.identity.currency,
+        )
+    )
+    if len(quotes) != 1:
+        raise DilutionError(
+            "DILUTION_QUOTE_ADMISSION_MISSING"
+            if not quotes
+            else "DILUTION_QUOTE_ADMISSION_AMBIGUOUS",
+            "conditional capital requires one admitted quote for its exact security and valuation",
+        )
+    quote = quotes[0]
+    require_eligible_common_share_quote(
+        quote,
+        issuer_id=policy.issuer_id,
+        security_id=policy.security_id,
+        currency=policy.currency,
+        period_end=policy.period_end,
+        valuation_timestamp=snapshot.valuation_timestamp,
+        max_quote_age_seconds=policy.max_quote_age_seconds,
+    )
+    verify_release_quote(
+        quote,
+        manifest=manifest,
+        snapshot=snapshot,
+        artifacts=artifacts,
+        quote_providers=quote_providers,
+        source_use_policy=source_use_policy,
+    )
+    return quote
+
+
+def _release_quote_admissions(
+    manifest: DataReleaseManifestV1, artifacts: DilutionArtifactReader
+) -> tuple[QuoteAdmissionV1, ...]:
     admissions = []
     for ref in sorted(manifest.artifact_refs, key=lambda item: item.artifact_id):
         if ref.role != QUOTE_ADMISSION_ROLE:
@@ -255,6 +326,27 @@ def _verify_quote_admission(
                 "DILUTION_QUOTE_ADMISSION_NONCANONICAL",
                 "quote admission requires canonical serialization",
             )
+        admissions.append(admission)
+    return tuple(admissions)
+
+
+def _verify_quote_admission(
+    quote: CommonShareQuoteV1,
+    raw_quote: bytes,
+    *,
+    manifest: DataReleaseManifestV1,
+    snapshot: SourceSnapshotV1,
+    artifacts: DilutionArtifactReader,
+    providers: tuple[QuoteSourceProviderPort, ...],
+    policy: SourceUsePolicyV1 | None,
+) -> None:
+    if policy is None:
+        raise DilutionError(
+            "DILUTION_QUOTE_USE_POLICY_UNAVAILABLE",
+            "quote use requires a configured trusted source policy",
+        )
+    admissions = []
+    for admission in _release_quote_admissions(manifest, artifacts):
         if admission.request.quote == quote:
             admissions.append(admission)
     if not admissions:

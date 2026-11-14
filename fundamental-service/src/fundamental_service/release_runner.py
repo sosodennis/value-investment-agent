@@ -52,6 +52,7 @@ from .facts import (
 from .equity_award_evidence import (
     EQUITY_DILUTION_ARTIFACT_ROLE,
     load_release_dilution_evidence,
+    load_release_conditional_quote,
 )
 from .equity_dilution import (
     AWARD_FACT_FIELDS,
@@ -505,6 +506,33 @@ class DataReleaseCanaryRunner:
             for ref in manifest.artifact_refs
             if ref.role == EQUITY_DILUTION_ARTIFACT_ROLE
         )
+        if manifest.conditional_capital_policies:
+            try:
+                for declaration in manifest.snapshot_refs:
+                    snapshot = self._snapshots.get(declaration.snapshot_id)
+                    if not isinstance(snapshot, SourceSnapshotV1):
+                        raise DataReleaseError(
+                            "DATA_RELEASE_SOURCE_SCOPE_MISMATCH",
+                            "conditional quotes require a security snapshot",
+                        )
+                    policy = next(
+                        item
+                        for item in manifest.conditional_capital_policies
+                        if item.snapshot_manifest_digest == snapshot.manifest_digest
+                    )
+                    load_release_conditional_quote(
+                        manifest,
+                        policy=policy,
+                        snapshot=snapshot,
+                        artifacts=self._artifacts,
+                        quote_providers=self._quote_providers,
+                        source_use_policy=self._source_use_policy,
+                    )
+            except (DilutionError, SnapshotError, ValueError) as error:
+                raise DataReleaseError(
+                    getattr(error, "code", "DILUTION_EVIDENCE_INVALID"), str(error)
+                ) from error
+            return
         has_award_facts = any(
             self._facts.get(ref.fact_id).normalized_field in AWARD_FACT_FIELDS
             for snapshot in manifest.snapshot_refs

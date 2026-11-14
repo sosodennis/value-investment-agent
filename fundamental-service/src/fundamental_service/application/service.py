@@ -52,7 +52,10 @@ from ..facts import (
     canonical_fact_digest,
     verify_accounting_role_evidence,
 )
-from ..equity_award_evidence import load_release_dilution_evidence
+from ..equity_award_evidence import (
+    load_release_dilution_evidence,
+    load_release_conditional_quote,
+)
 from ..equity_dilution import DilutionError
 from ..quote_providers import QuoteSourceProviderPort
 from ..macro_series import MacroSeriesProviderPort
@@ -92,7 +95,7 @@ from ..replay import (
     ReplayReportV1,
     replay_manifest,
 )
-from ..serialization import is_digest, sha256_digest
+from ..serialization import canonical_bytes, is_digest, sha256_digest
 from ..snapshots import (
     ContentAddressedStore,
     SnapshotError,
@@ -109,6 +112,7 @@ from ..uncertainty import (
     validate_uncertainty_controls,
 )
 from ..valuation_preparation import (
+    CONDITIONAL_FORECAST_COMPOSER_VERSION,
     ApprovedMarketPolicyInputsV1,
     AutomaticValuationPreparationV1,
     ManualValuationOverrideRequestV1,
@@ -119,6 +123,7 @@ from ..valuation_requirements import (
     select_released_facts,
 )
 from ..valuation_release_inputs import (
+    valuation_release_conditional_capital,
     valuation_release_requirements,
     valuation_release_working_capital_inputs,
 )
@@ -1253,7 +1258,7 @@ class FundamentalApplication:
         )
 
     def prepare_valuation(
-        self, request: ValuationEvidenceReadRequestV1
+        self, request: ValuationEvidenceReadRequestV1, *, policy_id: str | None = None
     ) -> AutomaticValuationPreparationV1:
         """Prepare one valuation from the pinned release and service policy."""
 
@@ -1297,7 +1302,7 @@ class FundamentalApplication:
                     model_id=request.model_id,
                     model_version=model_version,
                     valuation_timestamp=snapshot.valuation_timestamp,
-                    policy_id=None,
+                    policy_id=policy_id,
                     issuer_id=snapshot.identity.issuer_id,
                     data_release_manifest_digest=manifest.manifest_digest,
                 )
@@ -1350,15 +1355,33 @@ class FundamentalApplication:
                 error.code, str(error), status_code=422, retryable=False
             ) from error
         try:
-            dilution = load_release_dilution_evidence(
-                self._data_release_manifest(request.data_release_manifest_digest),
-                snapshot=snapshot,
-                artifacts=self.artifact_store,
-                released_facts=evidence.facts,
-                quote_providers=self.quote_providers,
-                source_use_policy=self.source_use_policy,
+            conditional = valuation_release_conditional_capital(
+                manifest,
+                snapshot,
+                evidence.facts,
+                mapping_version=evidence.mapping_version or "sec-canonical-mapping-v1",
             )
-        except (DilutionError, SnapshotError, ValueError) as error:
+            conditional_quote = None
+            dilution = None
+            if conditional is not None:
+                conditional_quote = load_release_conditional_quote(
+                    manifest,
+                    policy=conditional.policy,
+                    snapshot=snapshot,
+                    artifacts=self.artifact_store,
+                    quote_providers=self.quote_providers,
+                    source_use_policy=self.source_use_policy,
+                )
+            else:
+                dilution = load_release_dilution_evidence(
+                    manifest,
+                    snapshot=snapshot,
+                    artifacts=self.artifact_store,
+                    released_facts=evidence.facts,
+                    quote_providers=self.quote_providers,
+                    source_use_policy=self.source_use_policy,
+                )
+        except (DataReleaseError, DilutionError, SnapshotError, ValueError) as error:
             raise ServiceError(
                 getattr(error, "code", "DILUTION_EVIDENCE_INVALID"),
                 str(error),
@@ -1379,6 +1402,10 @@ class FundamentalApplication:
             mapping_version=evidence.mapping_version or "sec-canonical-mapping-v1",
             equity_dilution_evidence=dilution,
             working_capital_inputs=working_capital_inputs,
+            conditional_capital_policy=conditional.policy
+            if conditional is not None
+            else None,
+            conditional_quote=conditional_quote,
         )
 
     def apply_manual_override(
@@ -1753,6 +1780,56 @@ class FundamentalApplication:
             resolved, resolution, correlation_id=correlation_id
         )
 
+    def _is_released_conditional_input(self, value: ValuationInputV1) -> bool:
+        manifest = self._data_release_manifest(
+            value.valuation_context.data_release_manifest_digest
+        )
+        tagged = (
+            value.provenance.preparation_version
+            == CONDITIONAL_FORECAST_COMPOSER_VERSION
+        )
+        if manifest is None or not manifest.conditional_capital_policies:
+            if tagged:
+                raise ServiceError(
+                    "CONDITIONAL_CAPITAL_RELEASE_MISSING",
+                    "conditional composition requires a pinned conditional release",
+                    status_code=422,
+                    retryable=False,
+                )
+            return False
+        if value.model_id != "fcff_dcf" and value.model_id != "transition_fcff_dcf":
+            raise ServiceError(
+                "CONDITIONAL_CAPITAL_MODEL_MISMATCH",
+                "conditional capital requires a released FCFF composer",
+                status_code=422,
+                retryable=False,
+            )
+        expected = self.prepare_valuation(
+            ValuationEvidenceReadRequestV1(
+                contract_version="fundamental.v1",
+                snapshot_id=value.valuation_context.data_snapshot_id,
+                data_release_manifest_digest=manifest.manifest_digest,
+                model_id=value.model_id,
+            ),
+            policy_id=value.policy_id,
+        )
+        if expected.input is not None:
+            resolved, _ = self._resolve_policy(expected.input)
+        else:
+            resolved = None
+        if resolved is None or canonical_bytes(
+            resolved.model_dump(exclude={"input_digest", "caller_approval"})
+        ) != canonical_bytes(
+            value.model_dump(exclude={"input_digest", "caller_approval"})
+        ):
+            raise ServiceError(
+                "CONDITIONAL_CAPITAL_INPUT_MISMATCH",
+                "conditional calculation requires the exact recomposed release input and joint scenarios",
+                status_code=422,
+                retryable=False,
+            )
+        return True
+
     def _calculate_resolved(
         self,
         resolved: ValuationInputV1,
@@ -1771,6 +1848,14 @@ class FundamentalApplication:
         guard_calculation_budget(resolved, self.config)
         snapshot = self.snapshot(resolved.valuation_context.data_snapshot_id)
         self._verify_fact_references(resolved)
+        released_conditional = self._is_released_conditional_input(resolved)
+        if released_conditional and resolved.caller_approval is None:
+            raise ServiceError(
+                "CALLER_APPROVAL_REQUIRED",
+                "conditional scenarios require caller approval of the exact full input",
+                status_code=422,
+                retryable=False,
+            )
         has_uncertainty = resolved.uncertainty.mode != "none"
         calculation_input = resolved
         calculation_resolution = resolution
@@ -1805,7 +1890,9 @@ class FundamentalApplication:
                 update={"input_digest": calculation_input.input_digest}
             )
         try:
-            service_owned_uncertainty = is_service_owned_monte_carlo(resolved)
+            service_owned_uncertainty = (
+                released_conditional or is_service_owned_monte_carlo(resolved)
+            )
             result = calculate(
                 calculation_input,
                 correlation_id=correlation_id,

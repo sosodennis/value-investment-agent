@@ -194,6 +194,45 @@ def _validate_trace(
         )
 
 
+def require_eligible_common_share_quote(
+    quote: CommonShareQuoteV1,
+    *,
+    issuer_id: str,
+    security_id: str,
+    currency: str,
+    period_end: date,
+    valuation_timestamp: datetime,
+    max_quote_age_seconds: int,
+) -> None:
+    """Shared exact and conditional identity, availability and freshness policy."""
+
+    if valuation_timestamp.tzinfo is None or valuation_timestamp.utcoffset() is None:
+        raise DilutionError(
+            "DILUTION_TIMESTAMP_INVALID", "valuation timestamp requires a timezone"
+        )
+    if (quote.issuer_id, quote.security_id, quote.currency) != (
+        issuer_id,
+        security_id,
+        currency,
+    ):
+        raise DilutionError(
+            "DILUTION_QUOTE_SCOPE_MISMATCH",
+            "quote must match the inventory issuer, security and currency",
+        )
+    if (
+        quote.available_at > valuation_timestamp
+        or period_end > valuation_timestamp.date()
+    ):
+        raise DilutionError(
+            "DILUTION_FUTURE_EVIDENCE",
+            "award inventory and quote must be available by valuation time",
+        )
+    if valuation_timestamp - quote.as_of > timedelta(seconds=max_quote_age_seconds):
+        raise DilutionError(
+            "DILUTION_QUOTE_STALE", "quote exceeds the explicit policy freshness limit"
+        )
+
+
 @using_valuation_context
 def compute_treasury_stock_dilution(
     inventory: EquityAwardInventoryV1,
@@ -203,33 +242,16 @@ def compute_treasury_stock_dilution(
     valuation_timestamp: datetime,
 ) -> TreasuryStockResultV1:
     """Compute only arithmetic; completeness/review/release are owning caller gates."""
-    if valuation_timestamp.tzinfo is None or valuation_timestamp.utcoffset() is None:
-        raise DilutionError(
-            "DILUTION_TIMESTAMP_INVALID", "valuation timestamp requires a timezone"
-        )
-    if (quote.issuer_id, quote.security_id, quote.currency) != (
-        inventory.issuer_id,
-        inventory.security_id,
-        inventory.currency,
-    ):
-        raise DilutionError(
-            "DILUTION_QUOTE_SCOPE_MISMATCH",
-            "quote must match the inventory issuer, security and currency",
-        )
-    if (
-        quote.available_at > valuation_timestamp
-        or inventory.period_end > valuation_timestamp.date()
-    ):
-        raise DilutionError(
-            "DILUTION_FUTURE_EVIDENCE",
-            "award inventory and quote must be available by valuation time",
-        )
-    if valuation_timestamp - quote.as_of > timedelta(
-        seconds=policy.max_quote_age_seconds
-    ):
-        raise DilutionError(
-            "DILUTION_QUOTE_STALE", "quote exceeds the explicit policy freshness limit"
-        )
+
+    require_eligible_common_share_quote(
+        quote,
+        issuer_id=inventory.issuer_id,
+        security_id=inventory.security_id,
+        currency=inventory.currency,
+        period_end=inventory.period_end,
+        valuation_timestamp=valuation_timestamp,
+        max_quote_age_seconds=policy.max_quote_age_seconds,
+    )
     _validate_trace(
         inventory.coverage_evidence, inventory=inventory, cutoff=valuation_timestamp
     )
