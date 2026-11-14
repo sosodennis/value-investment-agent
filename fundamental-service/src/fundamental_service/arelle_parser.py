@@ -772,10 +772,10 @@ def _parse_in_process(
             controller = CntlrCmdLine(disable_persistent_config=True)
             plugin_root = _validation_plugin_root(profile)
             controller._pluginManager._pluginBase = str(plugin_root) + os.sep
-            dqc_plugin = controller._pluginManager.addPluginModule("validate/DQC")
-            if dqc_plugin is None:
+            xule_plugin = controller._pluginManager.addPluginModule("xule")
+            if xule_plugin is None:
                 raise ArelleParserError(
-                    "DQC_PLUGIN_UNAVAILABLE", "pinned DQC plugin did not load"
+                    "DQC_PLUGIN_UNAVAILABLE", "pinned XULE engine did not load"
                 )
             edgar_plugin = controller._pluginManager.addPluginModule("EDGAR/validate")
             if edgar_plugin is None:
@@ -786,10 +786,11 @@ def _parse_in_process(
             # which caches an empty DisclosureSystem.Types hook list.
             controller._pluginManager.pluginMethodsForClasses.clear()
             controller.preloadedPlugins = {
-                "validate/DQC": dqc_plugin,
+                "xule": xule_plugin,
                 "EDGAR/validate": edgar_plugin,
             }
-            plugin_names = ["EDGAR/validate", "validate/DQC"]
+            # EDGAR owns DQC registration; the standalone validator duplicates it.
+            plugin_names = ["EDGAR/validate", "xule"]
             diagnostic_evidence: tuple[str, ...] = ()
             if profile.dqc_ruleset_catalog is not None:
                 ruleset_plugin = str(Path(__file__).with_name("dqc_ruleset_plugin.py"))
@@ -847,6 +848,7 @@ def _parse_in_process(
                     "xule_rule_set": str(profile.dqc_ruleset_path),
                     "xule_multi": False,
                     "xule_bypass_packages": False,
+                    "xule_cache_size_bytes": 32 * 1024 * 1024,
                     **(
                         {
                             "fundamental_dqc_ruleset_catalog": profile.dqc_ruleset_catalog.model_dump_json()
