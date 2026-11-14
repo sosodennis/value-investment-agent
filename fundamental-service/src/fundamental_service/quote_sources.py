@@ -19,6 +19,7 @@ from .quote_providers import (
     reproduce_quote_source,
 )
 from .twelve_quote_source import TwelveDataDailyCloseProvider
+from .yahoo_quote_source import YahooDailyCloseProvider
 
 NASDAQ_CLOSE_PROFILE = "nasdaq-historical-close-capture-v1"
 NASDAQ_CLOSE_SOURCE = "nasdaq-historical-close"
@@ -206,7 +207,11 @@ class NasdaqHistoricalCloseProvider:
 
 def default_quote_providers() -> tuple[QuoteSourceProviderPort, ...]:
     """Composition for supported source formats; this does not admit source use."""
-    return (NasdaqHistoricalCloseProvider(), TwelveDataDailyCloseProvider())
+    return (
+        NasdaqHistoricalCloseProvider(),
+        TwelveDataDailyCloseProvider(),
+        YahooDailyCloseProvider(),
+    )
 
 
 def verify_quote_source(quote: CommonShareQuoteV1, raw: bytes) -> None:

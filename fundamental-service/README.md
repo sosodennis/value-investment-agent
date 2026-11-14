@@ -221,6 +221,19 @@ terms captures with market inputs. Conflicting capture profiles refuse.
 The configuration grants no source-use rights: deployment still needs an
 entitled provider credential and an approved policy covering the intended use.
 
+The quote reproduction registry also accepts retained Yahoo chart bytes under
+`yahoo-us-equity-latest-completed-daily-close-capture-v1`. This profile preserves
+the numeric `indicators.quote.close` token as a decimal, ignores `adjclose`, and
+requires the selected day to match both the final daily bar and the provider's
+latest regular-market trade. It supports USD equities on Nasdaq or NYSE and
+requires capture after the New York calendar day ends. Availability is the actual
+capture time, so it cannot establish an earlier historical information set.
+Yahoo's older history is split-adjusted even when yfinance uses
+`auto_adjust=False`; this profile refuses earlier sessions and subsequent split
+events instead of claiming to reconstruct an unadjusted historical price.
+Source-use admission remains independent. Registering this decoder grants no
+Yahoo permission and does not configure a live capture adapter.
+
 ## Source preparation command
 
 The acquisition owner also accepts `AutomaticSecIngestionRequestV1` with exact
