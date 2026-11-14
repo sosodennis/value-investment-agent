@@ -18,6 +18,11 @@ from .original_preparation import (
     OriginalPreparationRequestV1,
     OriginalSecuritySelectionV1,
 )
+from .original_source_plan import (
+    AutomaticSourcePlanConfigurationV1,
+    OriginalSourcePlan,
+    OriginalSourcePlanRequestV1,
+)
 from .public_acquisition import PostgresPublicCaptureLock
 from .serialization import canonical_bytes
 from .snapshots import SnapshotError
@@ -59,7 +64,24 @@ async def _run_command(args: argparse.Namespace) -> object:
             content=application.content_store,
             capture_lock=PostgresPublicCaptureLock(metadata),
         )
+        compiler = OriginalSourcePlan(
+            originals=preparation,
+            artifacts=application.artifact_store,
+            compilation_lock=PostgresPublicCaptureLock(metadata),
+        )
         if args.artifact_id:
+            if args.artifact_id.startswith(
+                ("original-source-plan:", "original-source-plan-attempt:")
+            ):
+                compiled = compiler.read(args.artifact_id)
+                return {
+                    "artifact": application.artifact_store.get(args.artifact_id),
+                    "input_digest": compiled.request.digest,
+                    "output_digest": compiled.digest,
+                    "evidence": compiled,
+                    "plan_ref": compiled.plan_ref,
+                    "wrote": False,
+                }
             if args.artifact_id.startswith(
                 ("original-validation:", "original-validation-attempt:")
             ):
@@ -115,6 +137,22 @@ async def _run_command(args: argparse.Namespace) -> object:
                 original_request,
                 deadline_at=deadline_at,
             )
+            if args.source_plan_configuration is not None:
+                compiled_request = OriginalSourcePlanRequestV1(
+                    original_preparation=preparation.reference(
+                        prepared.artifact_id, "sec-original-preparation-v1"
+                    ),
+                    configuration=args.source_plan_configuration,
+                )
+                compiled, compilation_publication = compiler.execute(compiled_request)
+                return {
+                    "artifact": compilation_publication.artifact,
+                    "input_digest": compiled_request.digest,
+                    "output_digest": compiled.digest,
+                    "evidence": compiled,
+                    "plan_ref": compiled.plan_ref,
+                    "wrote": compilation_publication.wrote,
+                }
             return {
                 "artifact": original_publication.artifact,
                 "input_digest": original_request.digest,
@@ -141,6 +179,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--timeout-seconds", type=int, default=120)
     parser.add_argument("--artifact-id")
     parser.add_argument("--prepare-originals", action="store_true")
+    parser.add_argument("--source-plan-configuration", type=Path)
+    parser.add_argument("--configuration-digest")
     parser.add_argument("--ticker")
     parser.add_argument("--share-class")
     parser.add_argument(
@@ -148,6 +188,10 @@ def main(argv: list[str] | None = None) -> int:
         choices=("sec-efm-us-dqc-v31.0.3", "sec-efm-us-dqc-v1.0.0-historical"),
     )
     args = parser.parse_args(argv)
+    if bool(args.source_plan_configuration) != bool(args.configuration_digest):
+        parser.error("source plan configuration requires its canonical digest")
+    if args.source_plan_configuration and not args.prepare_originals:
+        parser.error("source compilation requires --prepare-originals")
     if args.artifact_id:
         if (
             args.cik
@@ -180,6 +224,18 @@ def main(argv: list[str] | None = None) -> int:
         args.security_selection = OriginalSecuritySelectionV1(
             ticker=args.ticker, share_class=args.share_class
         )
+        args.source_plan_configuration = (
+            AutomaticSourcePlanConfigurationV1.model_validate_json(
+                args.source_plan_configuration.read_bytes()
+            )
+            if args.source_plan_configuration is not None
+            else None
+        )
+        if (
+            args.source_plan_configuration is not None
+            and args.source_plan_configuration.digest != args.configuration_digest
+        ):
+            raise ValueError("source plan configuration digest differs")
         result = asyncio.run(_run_command(args))
     except (SnapshotError, ServiceError) as error:
         print(
