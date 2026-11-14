@@ -316,6 +316,20 @@ def test_source_failure_is_cached_and_not_retried(example, tmp_path):
     assert first["rows"][0]["failure_code"] == "SEC_RATE_LIMITED"
 
 
+def test_invalidated_failure_attempt_cannot_be_reused(example, tmp_path):
+    row, pins, captured = example
+    provider = Provider(captured, SnapshotError("SEC_RATE_LIMITED", "provider refusal"))
+    recovery.recover_corpus([row], pins, provider, tmp_path)
+    recovery.ArtifactStore(tmp_path / "receipts").invalidate(
+        "history-original-recovery:" + sha256_digest(row.identity())
+    )
+    before = inventory(tmp_path)
+    with pytest.raises(SnapshotError) as error:
+        recovery.recover_corpus([row], pins, provider, tmp_path)
+    assert error.value.code == "RECOVERY_ATTEMPT_INVALID"
+    assert provider.calls == 1 and inventory(tmp_path) == before
+
+
 def test_offline_cache_miss_does_not_poison_future_network_attempt(example, tmp_path):
     row, pins, captured = example
     provider = Provider(captured)

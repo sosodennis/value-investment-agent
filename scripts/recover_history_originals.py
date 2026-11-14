@@ -150,9 +150,13 @@ def recover_row(
     with file_lock(directory / "locks", f"attempt-{key}"):
         previous = None
         try:
-            previous = checked_document(
-                store.read(artifact_id), store.get(artifact_id).content_hash
-            )
+            record = store.get(artifact_id)
+            if record.status != "valid" or record.retention != "evidence":
+                raise SnapshotError(
+                    "RECOVERY_ATTEMPT_INVALID",
+                    "retained recovery attempt is not valid evidence",
+                )
+            previous = checked_document(store.read(artifact_id), record.content_hash)
         except SnapshotError as error:
             if error.code != "ARTIFACT_NOT_FOUND":
                 raise
