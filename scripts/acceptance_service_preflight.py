@@ -143,6 +143,19 @@ print(json.dumps({'files':files,'runtime_pins':{'python':platform.python_version
 """
 
 
+CONTAINER_SEC_RESOURCES = """
+import json
+from fundamental_service.app import app
+acquisition=app.state.sec_acquisition
+if acquisition is None:
+    raise ValueError('SEC acquisition is not configured')
+settings=acquisition.settings
+print(json.dumps({name:getattr(settings,name) for name in (
+    'taxonomy_cache_sha256','edgar_plugin_sha256','xule_plugin_sha256',
+    'dqc_ruleset_sha256','historical_dqc_sha256')}))
+"""
+
+
 def check_container(
     service: dict[str, Any],
     specification: dict[str, Any],
@@ -286,6 +299,14 @@ def verify(manifest: dict[str, Any]) -> dict[str, Any]:
         actual["runtime_pins"] == service["runtime_pins"],
         "container runtime pins differ",
     )
+    # Fresh composition checks mounted resources through the same startup guards;
+    # the already running process can outlive deleted or changed bind-mount bytes.
+    sec_resources = json.loads(
+        run(
+            ["docker", "exec", main_id, "python", "-c", CONTAINER_SEC_RESOURCES],
+            results,
+        )
+    )
     url = service["url"].rstrip("/") + "/readyz"
     with urlopen(url, timeout=10) as response:
         ready = json.load(response)
@@ -300,6 +321,7 @@ def verify(manifest: dict[str, Any]) -> dict[str, Any]:
         "scope": "fundamental-service",
         "source_digest": digest(expected),
         "runtime_pins": actual["runtime_pins"],
+        "sec_resources": sec_resources,
         "readiness": ready,
         "commands": results,
         "full_replay_acceptance": False,

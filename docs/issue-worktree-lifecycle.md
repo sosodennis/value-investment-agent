@@ -155,6 +155,12 @@ services when `START_ACCEPTANCE_STACK=1`. Source or runtime drift fails before
 acceptance. A passing preflight establishes the runtime tuple; it does not
 establish replay acceptance or independent accounting review.
 
+Service preflight also composes the SEC runtime in a fresh container process to
+revalidate the mounted taxonomy, EDGAR, XULE, DQC and configured catalog pins.
+An already started service can remain healthy after its mounted files disappear.
+Keep certified resources in durable deployment storage, outside temporary cleanup
+directories, and revalidate their original hashes when restoring them.
+
 ```sh
 ACCEPTANCE_MANIFEST=docs/acceptance/issue-361-runtime.json \
   scripts/acceptance_preflight.sh --report-directory /tmp/issue361-preflight
