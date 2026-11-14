@@ -59,8 +59,8 @@ from .serialization import sha256_digest
 from .taxonomy_evidence import require_original_taxonomy
 
 AUTOMATIC_MAPPING_INPUT_ROLE = "automatic-mapping-input-v1"
-AutomaticMappingPolicyVersion = Literal["source-bound-us-gaap-v21"]
-AUTOMATIC_MAPPING_POLICY: AutomaticMappingPolicyVersion = "source-bound-us-gaap-v21"
+AutomaticMappingPolicyVersion = Literal["source-bound-us-gaap-v22"]
+AUTOMATIC_MAPPING_POLICY: AutomaticMappingPolicyVersion = "source-bound-us-gaap-v22"
 _GAAP_NAMESPACE = re.compile(
     r"http://(?:fasb\.org|xbrl\.us)/us-gaap/\d{4}(?:-\d{2}-\d{2})?"
 )
@@ -161,6 +161,7 @@ def automatic_mapping_policy_digest() -> str:
                     "automatic_mapping_batch.py",
                     "automatic_mapping_runner.py",
                     "automatic_source_mapping.py",
+                    "preparation_runner.py",
                     "automatic_mapping_disclosures.py",
                     "registered_depreciation.py",
                     "registered_capital_expenditure.py",

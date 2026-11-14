@@ -98,6 +98,13 @@ The executable digest includes the batch, runner and resolver, so a signing
 policy pin also binds this orchestration. This is an additive internal artifact
 field and does not establish complete financial coverage.
 
+Policy `source-bound-us-gaap-v22` also binds the source preparation consumer.
+Preparation loads every approved proposal outcome, and fact selection and
+release matching use the complete accession/field/mapping-ID tuple. A second
+supported period mapping can neither replace the first in an index nor be
+dropped before history or working-capital preparation. Foreign mapping IDs still
+refuse; all original version, issuer, source and digest pins remain required.
+
 The exact treasury-stock calculation refuses an exercise-price concept ending
 in `WeightedAverageExercisePrice`, including retained accounting-role inputs,
 with `DILUTION_AGGREGATE_STRIKE_UNRESOLVED`. Averaging strikes before applying

@@ -630,32 +630,33 @@ class SourcePreparationRunner:
                 )
             references = []
             for role in batch.roles:
-                if role.status != "approved":
-                    continue
-                assert role.decision is not None
-                decision = AutomaticMappingDecisionV1.model_validate_json(
-                    artifacts.read(role.decision.artifact_id)
-                )
-                if (
-                    sha256_digest(decision) != role.decision.content_hash
-                    or decision.mapping is None
-                    or decision.source_revision != request.source_revision
-                    or decision.evaluator_id != request.evaluator_id
-                    or decision.policy_digest != request.mapping_policy_digest
-                    or decision.mapping.mapping_version != request.mapping_version
-                    or decision.mapping.normalized_field != role.normalized_field
-                ):
-                    raise ValueError(
-                        "automatic mapping decision differs from its retained reference"
+                for outcome in role.proposal_decisions():
+                    if outcome.status != "approved":
+                        continue
+                    assert outcome.decision is not None
+                    decision = AutomaticMappingDecisionV1.model_validate_json(
+                        artifacts.read(outcome.decision.artifact_id)
                     )
-                mapping = decision.mapping
-                references.append(
-                    SecMappingReferenceV1(
-                        decision_id=mapping.decision_id,
-                        mapping_version=mapping.mapping_version,
-                        normalized_field=mapping.normalized_field,
+                    if (
+                        sha256_digest(decision) != outcome.decision.content_hash
+                        or decision.mapping is None
+                        or decision.source_revision != request.source_revision
+                        or decision.evaluator_id != request.evaluator_id
+                        or decision.policy_digest != request.mapping_policy_digest
+                        or decision.mapping.mapping_version != request.mapping_version
+                        or decision.mapping.normalized_field != role.normalized_field
+                    ):
+                        raise ValueError(
+                            "automatic mapping decision differs from its retained reference"
+                        )
+                    mapping = decision.mapping
+                    references.append(
+                        SecMappingReferenceV1(
+                            decision_id=mapping.decision_id,
+                            mapping_version=mapping.mapping_version,
+                            normalized_field=mapping.normalized_field,
+                        )
                     )
-                )
             groups.append(tuple(references))
         return tuple(groups)
 
@@ -764,7 +765,7 @@ class SourcePreparationRunner:
         if groups is None:
             return False
         expected = {
-            (request.filing.accession_number, item.normalized_field): item.decision_id
+            (request.filing.accession_number, item.normalized_field, item.decision_id)
             for request, group in zip(plan.ingestions, groups, strict=True)
             for item in group
         }
@@ -785,10 +786,10 @@ class SourcePreparationRunner:
             if fact.source.content_hash not in sources:
                 return False
             accession = sources.get(fact.source.content_hash)
-            key = (accession, fact.normalized_field)
+            key = (accession, fact.normalized_field, fact.mapping_decision_id)
             if key not in expected:
-                key = (None, fact.normalized_field)
-            if key not in expected or fact.mapping_decision_id != expected[key]:
+                key = (None, fact.normalized_field, fact.mapping_decision_id)
+            if key not in expected:
                 return False
         return True
 
@@ -1183,7 +1184,7 @@ class SourcePreparationRunner:
                 "history assessment requires retained plan mappings",
             )
         mappings = {
-            (request.filing.accession_number, item.normalized_field): item.decision_id
+            (request.filing.accession_number, item.normalized_field, item.decision_id)
             for request, group in zip(plan.ingestions, groups, strict=True)
             for item in group
         }
@@ -1197,8 +1198,12 @@ class SourcePreparationRunner:
             for fact in facts.list()
             if fact.source.content_hash in sources
             and fact.mapping_decision_id is not None
-            and fact.mapping_decision_id
-            == mappings.get((sources[fact.source.content_hash], fact.normalized_field))
+            and (
+                sources[fact.source.content_hash],
+                fact.normalized_field,
+                fact.mapping_decision_id,
+            )
+            in mappings
         )
 
     def _bind_working_capital(
