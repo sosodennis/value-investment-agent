@@ -3111,3 +3111,44 @@ Exact implementation `04450ac837bf3726c0563e540a9777b27e737484` is installed in 
 A separate current request retained a new `METADATA_IMMUTABLE` engineering failure for both acquisitions, without snapshots. Its failed source receipt was also retrieved by the authenticated API. The fixed M2 manifest/date is unchanged. The failure is under root-cause investigation; neither immutable-store deletion nor suppression is accepted as a fix. See the existing source-plan-contracts checkpoint's `independent_source_stages_increment` for exact input/output digests.
 
 Exact checks:367 focused PostgreSQL tests passed without skips; full service suite3459 passed/20 skipped; Ruff, format, owner types, both architecture guards and diff passed. Scoped independent review found no remaining findings before runtime acceptance. CI12 jobs passed and the release gate was skipped. These are engineering/source evidence, not final delivery review or numerical acceptance. M1/M2/M3 remain incomplete; supported history threshold remains null.
+
+### Computed accounting fact provenance identity — c6985291
+
+Exact implementation `c6985291e111906468fb3c4525324ddbc570d2aa` fixes the reproduced current-date
+`METADATA_IMMUTABLE` collision. Computed fact IDs now bind actual source,
+capture/parser provenance, issuer/security and taxonomy, in addition to mapping
+and accounting evidence. Policy `source-bound-us-gaap-v26` creates distinct
+legitimate recaptures; existing facts and refusal evidence remain intact.
+
+Installed SEC-enabled Docker/PostgreSQL source parity, fresh preflight,
+513 focused tests, Ruff/format/types/architecture/diff and 3,470 full service
+tests pass. The full local suite skips 20 external-parser-resource or Linux-specific tests.
+Two independent scoped reviews report no remaining scoped findings. These are
+implementation checks, not final delivery review. CI run 43635335485 has
+12 successful jobs; release gate is skipped and is not counted as passed.
+
+The actual public CIK/date entrypoint automatically compiles and executes both
+a separate current operational request and the original fixed-date request.
+Both SEC originals have snapshots with verified source coverage and no immutable
+collision. Nine accounting/capital gaps and missing quote-use policy remain
+explicit refusals. Authenticated API reads reproduce source/report digests,
+while unsigned reads return 401. Ordinary/concurrent source replays, service
+and PostgreSQL restart, and offline backup/independent empty-store restore
+retain the exact source artifacts and row/file inventories. Reuse reports
+`wrote=false`; the HTTP guard records no download. The restore also executes
+the actual retained issuer/date source flow before matching re-export.
+Only the disposable restore DB/content are removed; the verified host backup
+and source store are retained.
+
+The [checkpoint](issue-361-source-plan-contracts-checkpoint.json), key
+`accounting_fact_identity_increment`, retains exact commands' receipt digests,
+source outcomes, all missing roles, restart/restore identity, cleanup and CI.
+Originals, reports and backups remain outside Git. A stale incomplete current
+request correctly refuses after its 15-minute capture window; no date/clock
+bypass was used. The original fixed case remains unchanged.
+
+M1/M2/M3 remain incomplete. These source-only checks do not establish a real
+numerical valuation or numerical M3. Complete capital/award evidence or an
+explicit formal conditional policy, eligible entitled quote, trusted release,
+real exact-input caller approval and final delivery remain outstanding.
+Threshold stays null and PR370 stays draft.
