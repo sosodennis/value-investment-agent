@@ -11,7 +11,7 @@ from fundamental_service.contracts import (
 )
 from fundamental_service.automatic_source_mapping import AutomaticSecIngestionRequestV1
 from fundamental_service.facts import FilesystemCanonicalFactRepository
-from fundamental_service.preparation_runner import (
+from fundamental_service.source_plan_contracts import (
     AutomaticSourcePreparationPlanV1,
     SourcePreparationPlanV2,
 )

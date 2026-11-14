@@ -9,8 +9,8 @@ from fundamental_service.operations import ServiceError
 from fundamental_service.preparation_runner import (
     SourceAcquisitionOutcomeV1,
     SourcePreparationAcquisitionsV1,
-    SourcePreparationPlanV2,
 )
+from fundamental_service.source_plan_contracts import SourcePreparationPlanV2
 from fundamental_service.serialization import canonical_bytes, sha256_digest
 from fundamental_service.snapshots import SnapshotError
 from test_preparation_runner import (

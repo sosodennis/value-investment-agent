@@ -295,7 +295,7 @@ def test_ordinary_preparation_pins_admission_before_formal_composer(
     tmp_path, bind_release
 ):
     from fundamental_service.data_releases import DataReleaseManifestV1
-    from fundamental_service.preparation_runner import SourcePreparationPlanV2
+    from fundamental_service.source_plan_contracts import SourcePreparationPlanV2
     from fundamental_service.serialization import sha256_digest
     from test_preparation_runner import VALUATION_TIME, _fixture, _reader, _run, _runner
 
@@ -506,7 +506,7 @@ def test_admission_persistence_survives_postgres_restart_and_empty_store_restore
 
 
 def test_plan_rejects_admission_for_unpinned_capture_or_different_date(tmp_path):
-    from fundamental_service.preparation_runner import SourcePreparationPlanV2
+    from fundamental_service.source_plan_contracts import SourcePreparationPlanV2
     from test_preparation_runner import VALUATION_TIME, _fixture
     from pydantic import ValidationError
 

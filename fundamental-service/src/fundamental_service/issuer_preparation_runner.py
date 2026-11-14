@@ -20,7 +20,7 @@ from .original_source_plan import (
     AutomaticSourcePlanConfigurationV1,
     OriginalSourcePlanEvidenceV1,
 )
-from .preparation_runner import SOURCE_PREPARATION_PLAN
+from .source_plan_contracts import SOURCE_PREPARATION_PLAN
 from .replay import ArtifactRecordV1
 from .serialization import canonical_bytes
 

@@ -9,7 +9,7 @@ from pydantic import ValidationError
 from fundamental_service.contracts import CallerApprovalEnvelopeV1
 from fundamental_service.automatic_source_mapping import AutomaticSecIngestionRequestV1
 from fundamental_service.facts import FilesystemCanonicalFactRepository
-from fundamental_service.preparation_runner import (
+from fundamental_service.source_plan_contracts import (
     AutomaticSourcePreparationPlanV1,
     SOURCE_PREPARATION_PLAN,
 )

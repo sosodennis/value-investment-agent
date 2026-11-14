@@ -36,7 +36,7 @@ from .original_preparation import OriginalPreparation
 from .quote_admission import QUOTE_METRIC
 from .quote_source_plan import AutomaticDailyQuoteRequestTemplateV1
 from .policies import initial_model_specs
-from .preparation_runner import AutomaticSourcePreparationPlanV1
+from .source_plan_contracts import AutomaticSourcePreparationPlanV1
 from .replay import ArtifactPublicationV1
 from .serialization import canonical_bytes, sha256_digest
 from .snapshots import SnapshotError

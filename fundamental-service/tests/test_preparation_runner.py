@@ -44,10 +44,10 @@ from fundamental_service.metadata import (
 )
 from fundamental_service.preparation_runner import (
     SourcePreparationEvidenceV1,
-    SourcePreparationPlanV2,
     SourcePreparationRunner,
     main,
 )
+from fundamental_service.source_plan_contracts import SourcePreparationPlanV2
 from fundamental_service.release_runner import DataReleaseCanaryRunner
 from fundamental_service.quote_sources import default_quote_providers
 from fundamental_service.quote_admission import QUOTE_ADMISSION_ROLE, QUOTE_TERMS_ROLE

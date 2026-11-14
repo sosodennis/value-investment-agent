@@ -47,3 +47,25 @@ def test_guard_retains_legacy_marker_and_docker_composition_checks(tmp_path):
     failures = check(tmp_path)
     assert any("legacy authentication marker" in failure for failure in failures)
     assert any("internal-contract package" in failure for failure in failures)
+
+
+@pytest.mark.parametrize(
+    "module",
+    ["source_plan_contracts", "current_preparation", "original_source_plan"],
+)
+@pytest.mark.parametrize(
+    "statement",
+    [
+        "from .preparation_runner import SourcePreparationPlanV2",
+        "import fundamental_service.preparation_runner",
+        "from fundamental_service import preparation_runner",
+        "from . import preparation_runner",
+    ],
+)
+def test_source_plan_policy_cannot_depend_on_runtime_composition(
+    tmp_path, module, statement
+):
+    source = tmp_path / "src/fundamental_service" / f"{module}.py"
+    source.parent.mkdir(parents=True)
+    source.write_text(statement + "\n")
+    assert any("imports runtime composition" in failure for failure in check(tmp_path))

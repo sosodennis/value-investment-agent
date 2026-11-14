@@ -32,10 +32,8 @@ from fundamental_service.issuer_market_preparation import (
     IssuerMarketPreparationEvidenceV1,
     IssuerMarketPreparationRequestV1,
 )
-from fundamental_service.preparation_runner import (
-    SOURCE_PREPARATION_PLAN,
-    SourcePreparationRunner,
-)
+from fundamental_service.preparation_runner import SourcePreparationRunner
+from fundamental_service.source_plan_contracts import SOURCE_PREPARATION_PLAN
 from fundamental_service.replay import ArtifactStore
 from fundamental_service.sec_classification_snapshot import (
     SecSnapshotClassificationSources,

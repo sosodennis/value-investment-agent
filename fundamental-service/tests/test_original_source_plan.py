@@ -48,10 +48,10 @@ from fundamental_service.original_source_plan import (
     OriginalSourcePlanRequestV1,
 )
 from fundamental_service.preparation_runner import (
-    SOURCE_PREPARATION_PLAN,
     SourcePreparationEvidenceV1,
     SourcePreparationRunner,
 )
+from fundamental_service.source_plan_contracts import SOURCE_PREPARATION_PLAN
 from fundamental_service.replay import ArtifactStore
 from fundamental_service.sec_source import SecSourceError
 from fundamental_service.serialization import canonical_bytes, sha256_digest

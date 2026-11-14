@@ -10,7 +10,7 @@ from fundamental_service.current_preparation import (
     CurrentSourcePreparationRequestV1,
     CurrentSourcePreparationPublicationV1,
 )
-from fundamental_service.preparation_runner import SOURCE_PREPARATION_PLAN
+from fundamental_service.source_plan_contracts import SOURCE_PREPARATION_PLAN
 from fundamental_service.public_acquisition import PublicSourceCutoffV1
 from fundamental_service.snapshots import SnapshotError
 from test_preparation_runner import (

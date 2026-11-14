@@ -13,11 +13,13 @@ from fundamental_service.contracts import CallerApprovalEnvelopeV1
 from fundamental_service.data_releases import DataReleaseError
 from fundamental_service.operations import ServiceError
 from fundamental_service.preparation_runner import (
-    AutomaticSourcePreparationPlanV1,
-    SOURCE_PREPARATION_PLAN,
     SourcePreparationEvidenceV1,
     SourcePreparationRunner,
     main,
+)
+from fundamental_service.source_plan_contracts import (
+    AutomaticSourcePreparationPlanV1,
+    SOURCE_PREPARATION_PLAN,
 )
 from fundamental_service.serialization import canonical_bytes
 from test_automatic_source_acquisition import acquisition_case

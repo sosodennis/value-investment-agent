@@ -11,7 +11,7 @@ from typing import Literal, Protocol
 from pydantic import model_validator
 
 from .contracts import StrictModel
-from .preparation_runner import SOURCE_PREPARATION_PLAN, SourcePreparationPlan
+from .source_plan_contracts import SOURCE_PREPARATION_PLAN, SourcePreparationPlan
 from .public_acquisition import (
     CURRENT_REQUEST_WINDOW,
     PublicSourceAcquisitionEvidenceV1,
