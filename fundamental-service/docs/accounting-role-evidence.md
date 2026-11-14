@@ -78,6 +78,15 @@ that supported current-location representation is present. A submitted direct
 proposal cannot bypass its component and representation conflict checks. Direct
 lease rules remain available when the classified representation is absent.
 
+Policy `source-bound-us-gaap-v20` additionally checks the same base lease concept
+at standard `OtherNoncurrentLiabilitiesMember` against the derived residual.
+It selects representations per instant: supported direct operating lease facts
+at instants without a classified current observation remain separate scoped
+mappings. Direct proposals must pass all overlapping classification checks and
+exclude instants already supplied by the classified mapping. Historical note
+presentation therefore cannot suppress a newer supported direct observation or
+permit two mappings to supply the same instant.
+
 The exact treasury-stock calculation refuses an exercise-price concept ending
 in `WeightedAverageExercisePrice`, including retained accounting-role inputs,
 with `DILUTION_AGGREGATE_STRIKE_UNRESOLVED`. Averaging strikes before applying

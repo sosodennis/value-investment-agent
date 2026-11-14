@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import re
 from dataclasses import asdict, dataclass
+from datetime import date
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Literal, Protocol
@@ -58,8 +59,8 @@ from .serialization import sha256_digest
 from .taxonomy_evidence import require_original_taxonomy
 
 AUTOMATIC_MAPPING_INPUT_ROLE = "automatic-mapping-input-v1"
-AutomaticMappingPolicyVersion = Literal["source-bound-us-gaap-v19"]
-AUTOMATIC_MAPPING_POLICY: AutomaticMappingPolicyVersion = "source-bound-us-gaap-v19"
+AutomaticMappingPolicyVersion = Literal["source-bound-us-gaap-v20"]
+AUTOMATIC_MAPPING_POLICY: AutomaticMappingPolicyVersion = "source-bound-us-gaap-v20"
 _GAAP_NAMESPACE = re.compile(
     r"http://(?:fasb\.org|xbrl\.us)/us-gaap/\d{4}(?:-\d{2}-\d{2})?"
 )
@@ -307,6 +308,28 @@ def automatic_mapping_proposals(
         if rule is not None and primary.source_concept == rule.concept
         else (primary.source_concept,)
     )
+    if rule is not None and primary.source_concept == lease_liability_concept(
+        original, normalized_field
+    ):
+        leases = select_lease_liability(original, normalized_field)
+        classified_instants = (
+            {p.period.period_end for p in leases.rules.periods}
+            if leases.rules is not None
+            else set()
+        )
+        concepts = (
+            primary.source_concept,
+            *(
+                concept
+                for concept in rule.concepts
+                if any(
+                    fact.concept == concept
+                    and not fact.dimensions
+                    and fact.instant not in classified_instants
+                    for fact in original.report.facts
+                )
+            ),
+        )
     proposals = []
     for concept in sorted(concepts):
         if concept == primary.source_concept:
@@ -512,13 +535,13 @@ def evaluate_automatic_mapping(
         or proposal.accounting_rules is not None
         or proposal.observation_scope is not None
         or proposal.status != "provisional"
-        or (lease_concept is not None and not lease_liability)
     ):
         reasons.add("MAPPING_AUTOMATIC_RULE_UNSUPPORTED")
     selected: list[ParsedXbrlFactV1] = []
     rejected: list[MappingObservationRejectionV1] = []
     accounting_rules = None
-    if lease_liability:
+    classified_lease_instants: set[date] = set()
+    if lease_concept is not None:
         leases = select_lease_liability(
             original,
             proposal.normalized_field,
@@ -529,8 +552,13 @@ def evaluate_automatic_mapping(
             ),
         )
         reasons.update(leases.reason_codes)
-        selected.extend(leases.selected)
-        accounting_rules = leases.rules
+        if lease_liability:
+            selected.extend(leases.selected)
+            accounting_rules = leases.rules
+        elif leases.rules is not None:
+            classified_lease_instants.update(
+                p.period.period_end for p in leases.rules.periods
+            )
     if liability_residual:
         liabilities = select_registered_liability_residual(
             original,
@@ -660,6 +688,14 @@ def evaluate_automatic_mapping(
             or lease_liability
             or fact.concept != proposal.source_concept
         ):
+            continue
+        if fact.instant in classified_lease_instants:
+            rejected.append(
+                MappingObservationRejectionV1(
+                    observation_digest=sha256_digest(fact),
+                    reason_code="MAPPING_LEASE_CLASSIFIED_REPRESENTATION_REQUIRED",
+                )
+            )
             continue
         reason = (
             "MAPPING_AUTOMATIC_RULE_UNSUPPORTED"

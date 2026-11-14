@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 import re
+from typing import Literal
 
 from .accounting_roles import (
     AccountingComponentV1,
@@ -21,6 +22,14 @@ from .serialization import sha256_digest
 _CURRENT_LOCATION = (
     ("us-gaap:BalanceSheetLocationAxis", "us-gaap:OtherCurrentLiabilitiesMember"),
 )
+_NONCURRENT_LOCATION = (
+    ("us-gaap:BalanceSheetLocationAxis", "us-gaap:OtherNoncurrentLiabilitiesMember"),
+)
+_LOCATIONS = {
+    None: (),
+    "current": _CURRENT_LOCATION,
+    "noncurrent": _NONCURRENT_LOCATION,
+}
 _CONCEPTS = {
     "current_finance_lease_liabilities": "us-gaap:FinanceLeaseLiability",
     "long_term_finance_lease_liabilities": "us-gaap:FinanceLeaseLiability",
@@ -49,7 +58,12 @@ class LeaseLiabilitySelection:
     reason_codes: tuple[str, ...] = ()
 
 
-def _eligible(fact: ParsedXbrlFactV1, cik: str, *, current: bool) -> bool:
+def _eligible(
+    fact: ParsedXbrlFactV1,
+    cik: str,
+    *,
+    location: Literal["current", "noncurrent"] | None,
+) -> bool:
     try:
         amount = Decimal(fact.value)
     except InvalidOperation:
@@ -62,10 +76,10 @@ def _eligible(fact: ParsedXbrlFactV1, cik: str, *, current: bool) -> bool:
         and fact.instant is not None
         and fact.period_start is None
         and fact.period_end is None
-        and fact.dimensions == (_CURRENT_LOCATION if current else ())
-        and fact.consolidation_scope == ("segmented" if current else "consolidated")
+        and fact.dimensions == _LOCATIONS[location]
+        and fact.consolidation_scope == ("segmented" if location else "consolidated")
         and fact.security_scope
-        in ({"segmented"} if current else {"issuer", "consolidated", "unspecified"})
+        in ({"segmented"} if location else {"issuer", "consolidated", "unspecified"})
         and fact.entity_scheme == "http://www.sec.gov/CIK"
         and re.fullmatch(r"[0-9]{1,10}", fact.entity_identifier or "") is not None
         and (fact.entity_identifier or "").lstrip("0") == cik.lstrip("0")
@@ -82,11 +96,14 @@ def _eligible(fact: ParsedXbrlFactV1, cik: str, *, current: bool) -> bool:
 
 
 def _one(
-    matches: tuple[ParsedXbrlFactV1, ...], cik: str, *, current: bool
+    matches: tuple[ParsedXbrlFactV1, ...],
+    cik: str,
+    *,
+    location: Literal["current", "noncurrent"] | None = None,
 ) -> tuple[ParsedXbrlFactV1 | None, str | None]:
     if not matches:
         return None, "MAPPING_LEASE_COMPONENT_MISSING"
-    if any(not _eligible(fact, cik, current=current) for fact in matches):
+    if any(not _eligible(fact, cik, location=location) for fact in matches):
         return None, "MAPPING_LEASE_COMPONENT_INVALID"
     if len({(Decimal(f.value), f.decimals, f.namespace_uri) for f in matches}) != 1:
         return None, "MAPPING_OBSERVATION_CONFLICT"
@@ -111,7 +128,9 @@ def select_lease_liability(
         for fact in facts
         if fact.concept == concept and fact.dimensions == _CURRENT_LOCATION
     )
-    if any(not _eligible(f, original.source.cik, current=True) for f in current_facts):
+    if any(
+        not _eligible(f, original.source.cik, location="current") for f in current_facts
+    ):
         return LeaseLiabilitySelection(
             reason_codes=("MAPPING_LEASE_COMPONENT_INVALID",)
         )
@@ -125,7 +144,7 @@ def select_lease_liability(
         current, reason = _one(
             tuple(f for f in current_facts if f.instant == instant),
             original.source.cik,
-            current=True,
+            location="current",
         )
         if reason is not None:
             return LeaseLiabilitySelection(reason_codes=(reason,))
@@ -147,7 +166,6 @@ def select_lease_liability(
             total, reason = _one(
                 totals,
                 original.source.cik,
-                current=False,
             )
             if reason is not None:
                 return LeaseLiabilitySelection(reason_codes=(reason,))
@@ -199,15 +217,22 @@ def select_lease_liability(
             return LeaseLiabilitySelection(
                 reason_codes=("MAPPING_LEASE_RESIDUAL_INVALID",)
             )
-        direct = tuple(
-            f
-            for f in facts
-            if f.concept == direct_concept
-            and f.instant == period.period.period_end
-            and not f.dimensions
+        alternatives: tuple[tuple[str, Literal["noncurrent"] | None], ...] = (
+            ((direct_concept, None), (concept, "noncurrent"))
+            if noncurrent
+            else ((direct_concept, None),)
         )
-        if direct:
-            observation, reason = _one(direct, original.source.cik, current=False)
+        for alternate_concept, location in alternatives:
+            matches = tuple(
+                f
+                for f in facts
+                if f.concept == alternate_concept
+                and f.instant == period.period.period_end
+                and f.dimensions == _LOCATIONS[location]
+            )
+            if not matches:
+                continue
+            observation, reason = _one(matches, original.source.cik, location=location)
             if reason is not None:
                 return LeaseLiabilitySelection(reason_codes=(reason,))
             assert observation is not None

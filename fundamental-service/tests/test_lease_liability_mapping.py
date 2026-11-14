@@ -10,6 +10,7 @@ from fundamental_service.arelle_parser import fact_semantic_digest
 from fundamental_service.automatic_mapping import (
     AutomaticMappingDecisionV1,
     automatic_mapping_proposal,
+    automatic_mapping_proposals,
     verify_automatic_mapping_replay,
 )
 from fundamental_service.data_releases import ArtifactRefV1, AutomaticMappingApprovalV1
@@ -307,7 +308,7 @@ def test_direct_proposal_cannot_bypass_conflicting_current_location(
     )
     decision = evaluate(request, store)
     assert decision.status == "abstain" and decision.mapping is None
-    assert "MAPPING_AUTOMATIC_RULE_UNSUPPORTED" in decision.reason_codes
+    assert "MAPPING_OBSERVATION_CONFLICT" in decision.reason_codes
 
 
 def test_arbitrary_segment_is_not_reclassified_as_current(tmp_path):
@@ -322,6 +323,78 @@ def test_arbitrary_segment_is_not_reclassified_as_current(tmp_path):
     selection = select_lease_liability(request.original, role)
     assert selection.rules is None and not selection.selected
     assert selection.reason_codes == ("MAPPING_LEASE_SCOPE_UNSUPPORTED",)
+
+
+@pytest.mark.parametrize("kind", ["finance", "operating"])
+@pytest.mark.parametrize("conflict", [False, True])
+def test_standard_noncurrent_location_must_agree_with_derived_residual(
+    tmp_path, kind, conflict
+):
+    _, _, _, _, total, _ = lease_case(tmp_path / "base", kind=kind)
+    noncurrent = total.model_copy(
+        update={
+            "value": "79" if conflict else "80",
+            "dimensions": (
+                (
+                    "us-gaap:BalanceSheetLocationAxis",
+                    "us-gaap:OtherNoncurrentLiabilitiesMember",
+                ),
+            ),
+            "consolidation_scope": "segmented",
+            "security_scope": "segmented",
+        }
+    )
+    request, store, _, _, _, _ = lease_case(
+        tmp_path / "comparison", kind=kind, noncurrent=True, extra=(noncurrent,)
+    )
+    decision = evaluate(request, store)
+    assert decision.status == ("abstain" if conflict else "approved")
+    if conflict:
+        assert "MAPPING_OBSERVATION_CONFLICT" in decision.reason_codes
+
+
+@pytest.mark.parametrize("noncurrent", [False, True])
+def test_historical_classification_retains_newer_supported_direct_observation(
+    tmp_path, noncurrent
+):
+    _, _, _, _, total, _ = lease_case(tmp_path / "base", kind="operating")
+    historical = total.instant.replace(year=total.instant.year - 1)
+    direct = total.model_copy(
+        update={
+            "concept": total.concept + ("Noncurrent" if noncurrent else "Current"),
+            "value": "33",
+        }
+    )
+    request, store, _, role, _, _ = lease_case(
+        tmp_path / "mixed",
+        kind="operating",
+        noncurrent=noncurrent,
+        change={"instant": historical},
+        extra=(total.model_copy(update={"instant": historical}), direct),
+    )
+    proposals = automatic_mapping_proposals(
+        role,
+        mapping_version=request.proposal.mapping_version,
+        original=request.original,
+    )
+    assert len(proposals) == 2
+    values = {}
+    for proposal in proposals:
+        decision = evaluate(request.model_copy(update={"proposal": proposal}), store)
+        assert decision.status == "approved", decision.reason_codes
+        for candidate in parsed_facts_to_candidates(
+            request.original.report,
+            source=request.original.source,
+            issuer_id=request.original.source.cik,
+            normalized_field=role,
+            mapping=decision.mapping,
+        ):
+            assert candidate.instant not in values
+            values[candidate.instant] = candidate.value
+    assert values == {
+        historical: Decimal("80" if noncurrent else "20"),
+        total.instant: Decimal("33"),
+    }
 
 
 def test_component_evaluation_uses_formal_decimal_context_and_security_binding(
