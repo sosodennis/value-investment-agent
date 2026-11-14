@@ -74,6 +74,7 @@ assets match the approved inputs.
 | --- | --- | --- |
 | `FUNDAMENTAL_SEC_TAXONOMY_CACHE_HOST_DIR`, `FUNDAMENTAL_SEC_EDGAR_PLUGIN_HOST_DIR`, `FUNDAMENTAL_SEC_XULE_PLUGIN_HOST_DIR` | Host directories mounted read-only into the Fundamental service | Obtain the approved offline bundles for the target parser release. Use absolute paths in the worktree runtime manifest. |
 | `FUNDAMENTAL_SEC_DQC_RULESET_HOST_PATH` | Host path to the pinned DQC ruleset file | Obtain the approved ruleset file. Use an absolute path in the runtime manifest. |
+| `FUNDAMENTAL_SEC_DQC_RULESET_CATALOG_PATH` | Optional in-container path to a full DQC taxonomy ruleset catalog | Bind-mount the catalog and every pinned ruleset read-only. The catalog selects by the loaded US GAAP namespace; missing, mixed or unbound namespaces refuse. See `fundamental-service/README.md`. |
 | `FUNDAMENTAL_SEC_TAXONOMY_CACHE_SHA256`, `FUNDAMENTAL_SEC_EDGAR_PLUGIN_SHA256`, `FUNDAMENTAL_SEC_XULE_PLUGIN_SHA256` | Directory digests | Compute them with the Fundamental service `_directory_hash` algorithm. That algorithm includes relative file names and bytes and ignores `__pycache__`, `.pyc`, and `.pyo` files. |
 | `FUNDAMENTAL_SEC_DQC_RULESET_SHA256` | DQC ruleset file digest | Compute `shasum -a 256 <path>` or `sha256sum <path>` on the exact mounted file. |
 | `FUNDAMENTAL_SEC_HISTORICAL_DQC_HOST_DIR` | Official DQC v1 package directory for the issue 361 overlay | Supply the 15 unchanged official files documented in `fundamental-service/docs/issue361-historical-validation.md`. The overlay pins their directory digest. |
@@ -186,6 +187,7 @@ consumer. A key that exists only in an example is not a supported setting.
 - `FUNDAMENTAL_DATA_RELEASE_TRUST_ROOTS_HOST_FILE`
 - `FUNDAMENTAL_MODEL_TRUST_ROOTS_HOST_FILE`
 - `FUNDAMENTAL_POSTGRES_HOST_PORT`
+- `FUNDAMENTAL_SEC_DQC_RULESET_CATALOG_PATH`
 - `FUNDAMENTAL_SEC_DQC_RULESET_HOST_PATH`
 - `FUNDAMENTAL_SEC_DQC_RULESET_SHA256`
 - `FUNDAMENTAL_SEC_EDGAR_PLUGIN_HOST_DIR`
