@@ -1,0 +1,246 @@
+{
+  "changes": [
+    "Compile deployment-owned source templates at the original-derived valuation timestamp through existing public acquisition and admission contracts.",
+    "Deduplicate shared captures, pin provider/source/use-policy identities, and preserve existing market-template serialization.",
+    "Delegate market completeness, eligibility, permissions and financial decisions to existing evaluators; preserve source and terms failures."
+  ],
+  "failed_harnesses": [
+    "Standalone audit initially omitted finance-agent-core from sys.path; corrected before exact-commit checks.",
+    "Initial missing-source test expected only SOURCE_HTTP_NOT_FOUND; existing admission correctly also retains SOURCE_ADMISSION_CAPTURE_FAILED."
+  ],
+  "issue": 361,
+  "owner": "Fundamental Service original-source-plan compiler",
+  "protocol": "issue-361-market-source-template-checkpoint-v1",
+  "pull_request": 370,
+  "scope": "Synthetic source-plan and owner-boundary evidence only. M1.5b and M1.6b remain incomplete until SEC-enabled installed-service acceptance, including current capture cutoff. Real issuer valuation and final delivery remain open.",
+  "verification": {
+    "implementation_commit": "616579c9ba0cb88b19ca93cd3bfd94ba2652776e",
+    "input_digest": "1446338d0a1b52ccc4ad86667b368b7bb518fcb6ae939f1e1ee5754d7c1370d5",
+    "inputs": {
+      "commands": [
+        [
+          "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/fundamental-service/.venv/bin/python3",
+          "-B",
+          "-m",
+          "pytest",
+          "fundamental-service/tests/test_original_source_plan.py",
+          "fundamental-service/tests/test_issuer_preparation_runner.py",
+          "fundamental-service/tests/test_preparation_runner.py",
+          "fundamental-service/tests/test_public_acquisition.py",
+          "fundamental-service/tests/test_public_admission.py",
+          "fundamental-service/tests/test_automatic_market_policy.py",
+          "-q",
+          "-rs",
+          "-p",
+          "no:cacheprovider"
+        ],
+        [
+          "uvx",
+          "--from",
+          "ruff==0.14.10",
+          "ruff",
+          "check",
+          "fundamental-service/src",
+          "fundamental-service/tests"
+        ],
+        [
+          "uvx",
+          "--from",
+          "ruff==0.14.10",
+          "ruff",
+          "format",
+          "--check",
+          "fundamental-service/src/fundamental_service/original_source_plan.py",
+          "fundamental-service/tests/test_original_source_plan.py"
+        ],
+        [
+          "uv",
+          "run",
+          "--frozen",
+          "--project",
+          "fundamental-service",
+          "--with",
+          "mypy==1.19.1",
+          "mypy",
+          "--no-incremental",
+          "--follow-imports=silent",
+          "--ignore-missing-imports",
+          "fundamental-service/src/fundamental_service/original_source_plan.py"
+        ],
+        [
+          "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/fundamental-service/.venv/bin/python3",
+          "-B",
+          "scripts/architecture_guard.py"
+        ],
+        [
+          "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/fundamental-service/.venv/bin/python3",
+          "-B",
+          "-m",
+          "fundamental_service.architecture_guard"
+        ],
+        [
+          "git",
+          "diff",
+          "--check",
+          "HEAD^",
+          "HEAD"
+        ]
+      ],
+      "exact_commit": "616579c9ba0cb88b19ca93cd3bfd94ba2652776e",
+      "files": {
+        "fundamental-service/README.md": "d4cafd4859653a0ea69f5ee3db1abfdf8a54bad1c17bcd067756ba06b6207597",
+        "fundamental-service/src/fundamental_service/original_source_plan.py": "778deeb9ffdbe1935121a9b3948395637501d33d5956b0c1eb69540c507e02d5",
+        "fundamental-service/tests/test_original_source_plan.py": "4346c0d53bfbbf820f5a4745606ab937cfd9b810d27b4f323e64ab62332dec96",
+        "fundamental-service/uv.lock": "229bc76c75019d54df8c1cba240839bacf01e56d7493f4bc615e058c4e5f6f11"
+      },
+      "runtime": {
+        "arelle-release": "2.47.4",
+        "pydantic": "2.14.2",
+        "pytest": "9.2.0",
+        "python": "3.11.15",
+        "pythonhashseed": "0"
+      }
+    },
+    "issue": 361,
+    "limitations": [
+      "Synthetic owner acceptance; no live SEC or market HTTP numerical acceptance in this checkpoint",
+      "7 PostgreSQL tests skipped without isolated test database",
+      "M1/M2/M3 remain incomplete; supported_history_threshold remains null"
+    ],
+    "next_step": "Integrate current capture cutoff into the issuer entrypoint, then SEC-enabled service acceptance of the generated source plan",
+    "output_digest": "1c538edadc97488db2f4aa6f5cb7f4b191bf248f5df4410ef62a2e2e293de438",
+    "outputs": {
+      "checks": [
+        {
+          "command": [
+            "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/fundamental-service/.venv/bin/python3",
+            "-B",
+            "-m",
+            "pytest",
+            "fundamental-service/tests/test_original_source_plan.py",
+            "fundamental-service/tests/test_issuer_preparation_runner.py",
+            "fundamental-service/tests/test_preparation_runner.py",
+            "fundamental-service/tests/test_public_acquisition.py",
+            "fundamental-service/tests/test_public_admission.py",
+            "fundamental-service/tests/test_automatic_market_policy.py",
+            "-q",
+            "-rs",
+            "-p",
+            "no:cacheprovider"
+          ],
+          "exit_code": 0,
+          "input_digest": "4decb85fdda63782e11a910e055c821809824d0436d444b3c651a4e5060b218d",
+          "log": "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/.audit/issue-361-market-source-template/616579c9ba0cb88b19ca93cd3bfd94ba2652776e/2e37cd9a266e3d0c5f44819e7bff4b5a5790148aeec1fbe172e2ee03f6dbaf0f.log",
+          "log_sha256": "2e37cd9a266e3d0c5f44819e7bff4b5a5790148aeec1fbe172e2ee03f6dbaf0f",
+          "output_digest": "60e87ef8794e73b32609526d78312d9ecce58836545f79746d8df759864320b8"
+        },
+        {
+          "command": [
+            "uvx",
+            "--from",
+            "ruff==0.14.10",
+            "ruff",
+            "check",
+            "fundamental-service/src",
+            "fundamental-service/tests"
+          ],
+          "exit_code": 0,
+          "input_digest": "9d80bdb07b1a8938d0d435be8c78c8153a3a9f6c58b228e619d7dea02ee79e1c",
+          "log": "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/.audit/issue-361-market-source-template/616579c9ba0cb88b19ca93cd3bfd94ba2652776e/82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18.log",
+          "log_sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
+          "output_digest": "d9d010dc02bdaa3a1598b5a009e35fa0c47bab9cf41dbeba0285581621ace9af"
+        },
+        {
+          "command": [
+            "uvx",
+            "--from",
+            "ruff==0.14.10",
+            "ruff",
+            "format",
+            "--check",
+            "fundamental-service/src/fundamental_service/original_source_plan.py",
+            "fundamental-service/tests/test_original_source_plan.py"
+          ],
+          "exit_code": 0,
+          "input_digest": "050f700984cbcec1fd6870795605284fbdd2f30bdfb9a737dca01ca6b1132593",
+          "log": "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/.audit/issue-361-market-source-template/616579c9ba0cb88b19ca93cd3bfd94ba2652776e/3bc53bf3e981a98a34a852e175bf9b77af841edea74fca595d9aedcbaf9a4938.log",
+          "log_sha256": "3bc53bf3e981a98a34a852e175bf9b77af841edea74fca595d9aedcbaf9a4938",
+          "output_digest": "ebabcdbe8fd9c8fd720105a8f01f91d6ab341bcec040f4a33387cd9ec2a9e079"
+        },
+        {
+          "command": [
+            "uv",
+            "run",
+            "--frozen",
+            "--project",
+            "fundamental-service",
+            "--with",
+            "mypy==1.19.1",
+            "mypy",
+            "--no-incremental",
+            "--follow-imports=silent",
+            "--ignore-missing-imports",
+            "fundamental-service/src/fundamental_service/original_source_plan.py"
+          ],
+          "exit_code": 0,
+          "input_digest": "211e833dfc06581f40120f189963d54a980869fcc36295f6b5bd181e8b655376",
+          "log": "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/.audit/issue-361-market-source-template/616579c9ba0cb88b19ca93cd3bfd94ba2652776e/5d4b6d285b77932e3d08212c3b4974d0a803f98ec60408ac6ccf6a063fa6c19e.log",
+          "log_sha256": "5d4b6d285b77932e3d08212c3b4974d0a803f98ec60408ac6ccf6a063fa6c19e",
+          "output_digest": "a70950c97813acebd961a74f4cd2d58354cf9087b291d6cbd4a790225c51c382"
+        },
+        {
+          "command": [
+            "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/fundamental-service/.venv/bin/python3",
+            "-B",
+            "scripts/architecture_guard.py"
+          ],
+          "exit_code": 0,
+          "input_digest": "459c1e425d80c77f61036b25a2646d8bd28ca0c90e48922451522c747033ae65",
+          "log": "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/.audit/issue-361-market-source-template/616579c9ba0cb88b19ca93cd3bfd94ba2652776e/6c8e024ff94859e9781de1f4a3201c70e338bc90774702d8ac83afc8a9a15ab9.log",
+          "log_sha256": "6c8e024ff94859e9781de1f4a3201c70e338bc90774702d8ac83afc8a9a15ab9",
+          "output_digest": "86d15f261f2513214b816a21a95477de45689b8150b1c7500b34830d906352ad"
+        },
+        {
+          "command": [
+            "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/fundamental-service/.venv/bin/python3",
+            "-B",
+            "-m",
+            "fundamental_service.architecture_guard"
+          ],
+          "exit_code": 0,
+          "input_digest": "0d00536f2e4c38f3c3076bc6aba07c1d41e2b6a4487d1b77b931bf4b45c64067",
+          "log": "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/.audit/issue-361-market-source-template/616579c9ba0cb88b19ca93cd3bfd94ba2652776e/e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855.log",
+          "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "output_digest": "84d954bc02eceeb6108edd2ccbb085568b8aa2e43e2c27ff42247a4255bb46ab"
+        },
+        {
+          "command": [
+            "git",
+            "diff",
+            "--check",
+            "HEAD^",
+            "HEAD"
+          ],
+          "exit_code": 0,
+          "input_digest": "3f4ce65425aefd61a9a52e82a3091694570c402fd25e8453a419c077dcf1ed8b",
+          "log": "/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-replay-evidence/.audit/issue-361-market-source-template/616579c9ba0cb88b19ca93cd3bfd94ba2652776e/e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855.log",
+          "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "output_digest": "84d954bc02eceeb6108edd2ccbb085568b8aa2e43e2c27ff42247a4255bb46ab"
+        }
+      ],
+      "replay": {
+        "admissions": 7,
+        "all_existing_files_unchanged": true,
+        "captures": 7,
+        "exact_commit": "616579c9ba0cb88b19ca93cd3bfd94ba2652776e",
+        "input_digest": "039db9bd1c762ba61cdc2daccdf1bac5fc0559cc102aa3a15bdf291e3fa449ea",
+        "output_digest": "324758339f93e2a2dd88b8639dff807d65a4cd5152fe8ee48e57221b7563804f",
+        "plan_digest": "3cef9658b4759956f8d329edbc29a76266c092eb71b6af0bb38cdb78264f5cff",
+        "real_numerical_acceptance": false,
+        "repeat_wrote": false,
+        "synthetic": true,
+        "zero_extra_provider_or_parser_calls": true
+      }
+    }
+  }
+}

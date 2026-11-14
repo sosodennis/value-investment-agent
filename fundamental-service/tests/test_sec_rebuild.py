@@ -14,7 +14,7 @@ from fundamental_service.arelle_parser import (
     parse_filing_offline,
 )
 from fundamental_service.contracts import IdentityV1, SourceRecordV1, SourceRole
-from fundamental_service.facts import CanonicalMappingV1
+from fundamental_service.facts import CanonicalMappingV1, select_fact_groups
 from fundamental_service.sec_rebuild import (
     parsed_facts_to_candidates,
     select_canonical_fact,
@@ -113,6 +113,40 @@ def test_issuer_mismatch_prevents_fact_rebuild():
             normalized_field="revenue",
         )
     assert error.value.code == "ISSUER_MISMATCH"
+
+
+@pytest.mark.parametrize("unit", ["iso4217:USD", "iso4217:USD/xbrli:shares"])
+def test_rebuild_retains_currency_numerator_and_original_unit(unit):
+    source = _rebuild_source("b" * 64)
+    report = _rebuild_report(
+        source.content_hash,
+        facts=(
+            ParsedXbrlFactV1(
+                concept="us-gaap:ShareBasedCompensationArrangementByShareBasedPaymentAwardOptionsOutstandingWeightedAverageExercisePrice",
+                value="8.25",
+                context_id="synthetic-option-class",
+                unit=unit,
+                entity_identifier="0000320193",
+                instant=datetime(2024, 6, 30).date(),
+                is_numeric=True,
+                consolidation_scope="segmented",
+                security_scope="segmented",
+                dimensions=(("us-gaap:AwardTypeAxis", "synthetic:Options"),),
+            ),
+        ),
+    )
+    candidates = parsed_facts_to_candidates(
+        report,
+        source=source,
+        issuer_id="0000320193",
+        normalized_field="equity_award_exercise_price",
+    )
+    selection = select_fact_groups(candidates, source.available_at)[0]
+    assert selection.fact is not None
+    assert selection.fact.unit == unit
+    assert selection.fact.currency == "USD"
+    assert selection.fact.security_scope == "segmented"
+    assert selection.fact.value == Decimal("8.25")
 
 
 def test_selection_filters_unavailable_newer_period_before_selecting_latest():

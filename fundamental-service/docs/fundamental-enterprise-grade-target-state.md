@@ -900,12 +900,12 @@ The following decisions are binding for `us-gaap-public-v1`; implementation does
 | Historical operating baseline | Candidate rule only: use the latest five fiscal years available as of the request and require at least three complete, comparable annual periods. The rule grants at most `provisional` until model-specific representative coverage and chronological out-of-sample evidence validates it. An underpowered cohort leaves the supported threshold unset. Quarterly facts may support freshness checks but do not silently replace missing annual history. |
 | Forecast horizon | Five explicit annual forecast periods followed by a steady-state terminal period. Every year-level driver is an explicit traceable assumption; no LLM-generated numeric value or silent default is permitted. |
 | Terminal value | Gordon growth on normalized year-six FCFF. Require positive normalized FCFF, `WACC > terminal_growth`, terminal growth no greater than the trailing ten-year nominal U.S. GDP CAGR available in the same ALFRED vintage (a conservative ceiling, not a forecast), and explicit convergence of margin, reinvestment, and return on invested capital. At the base case, terminal value may contribute at most 85% of enterprise value for `verified`; a contribution above 85% and at most 90% is `provisional` with a warning; above 90% returns `abstain`. Failure returns `abstain`; no alternate terminal formula is selected implicitly. |
-| Cost of capital | Calculate WACC from explicit, traceable components: 10-year U.S. Treasury par yield at or before valuation time; a public U.S. equity-risk-premium and industry-beta reference release available by that time; issuer debt cost and tax treatment; and market-value capital weights. Industry selection uses a versioned SIC-to-reference-industry mapping; ambiguous industry classification requires reviewer selection. A source requiring payment is forbidden. If lawful free market capitalization or a defensible debt-cost input is unavailable, accept only a reviewer-supplied assumption package with source, date, method, and sensitivity; otherwise abstain. No default WACC or current-vintage value may leak into historical replay. |
-| Tax policy | Forecast cash taxes explicitly. A temporary or negative effective tax rate is not extrapolated as steady state; the normalized tax assumption must have a dated, reviewed source and be shown separately from reported tax facts. |
+| Cost of capital | Calculate WACC from explicit, traceable components: 10-year U.S. Treasury par yield at or before valuation time; a dated public U.S. equity-risk-premium and industry-beta reference release; issuer debt cost and tax treatment; and market-value capital weights. A versioned deterministic Fundamental policy automatically approves only complete, source-profile-matched, point-in-time evidence. It abstains on ambiguous SIC mapping, unlicensed use, missing observations, or unsupported methods; no per-candidate human or AI approval is required. No default WACC or current-vintage value may leak into historical replay. |
+| Tax policy | Forecast cash taxes explicitly. A temporary or negative effective tax rate is not extrapolated as steady state; a versioned deterministic policy resolves the normalized tax assumption from dated issuer and jurisdiction evidence and shows it separately from reported tax facts. Missing geographic or period scope abstains; a fixed country rate is not silently assigned to a multinational issuer. |
 | Share-based compensation | Keep SBC as an operating expense in FCFF and set the V1 SBC add-back to zero. Include dated award dilution under the treasury-stock method and separately identified non-SBC share changes. Do not add forecast dilution for the same SBC expense. If award data or share scope is unknown, abstain. |
 | Capital bridge | Report cash, gross debt, lease liabilities, preferred claims, non-controlling interests, and other declared adjustments separately. Every component is `present`, `confirmed_absent`, `unknown`, or `unsupported`; any `unknown` component capable of changing equity value blocks `verified` status. |
 | Reconciliation tolerance | After unit and currency normalization, a reported accounting residual must be no greater than the greater of one unit of the least precise contributing fact, USD 1, or 1e-9 times the largest absolute side. A larger residual needs a named presentation, FX, rounding, or mapping exception and cannot be `verified` without reviewer approval. |
-| Arithmetic | Use the released `decimal-50-end-of-year-v1` policy (`Decimal` precision 50 and `ROUND_HALF_EVEN`); changing precision requires a separately versioned numerical/model policy and replay evidence; preserve full precision through the calculation and round only for display. Same-runtime golden replay must match the canonical serialized result exactly. Independent challenger tolerance is at most the greater of USD 1 absolute or 1e-9 relative for equity value, and USD 0.000001 per share. |
+| Arithmetic | Released FCFF V1 uses `decimal-50-end-of-year-v1`: `Decimal` precision 50 and `ROUND_HALF_EVEN` in a fixed service-local context (Emin -999999, Emax 999999, clamp 0; InvalidOperation, DivisionByZero and Overflow traps), restored after each call. Preserve that precision through the calculation and round only for display. This reconciles the prior 34-digit target with the V1 model inventory; adopting 34 digits requires a new numerical/model policy and replay evidence, without rewriting existing artifacts. Same-runtime golden replay must match the canonical serialized result exactly. Independent challenger tolerance is at most the greater of USD 1 absolute or 1e-9 relative for equity value, and USD 0.000001 per share. |
 | Calibration | Forecast calibration is not required to activate the first release. For V1 revenue-growth and operating-margin targets, the primary metric is MAE in percentage points and the interval is an 80% central interval. Calibration remains inactive until its predeclared, time-separated OOS cohort contains at least 30 eligible labels for the target and model, at least 10 labels in each promoted industry cohort, improves the raw and naive baselines by at least 10% on the primary metric with a two-sided 95% bootstrap interval for the improvement above zero, and has an observed interval coverage whose two-sided 95% Wilson interval has a lower bound of at least 70%. The report still shows raw and naive metrics and uncertainty. The 20-case engineering corpus is never calibration evidence. |
 | Human approval | Approval belongs to the caller's workflow. The caller may send an optional `CallerApprovalEnvelopeV1` containing the exact `input_digest`, approver identity, decision, and authorization evidence. The service may validate and echo that envelope, but it does not persist, transition, or manage approval state. A digest mismatch is rejected; the calculator itself remains stateless and never waits for or creates approval. |
 | Free-data rule | No paid API, subscription, or data license is required. If a free source's terms do not permit the intended use, it is excluded; the service degrades or abstains instead of scraping around the restriction. |
@@ -935,7 +935,7 @@ Historical facts and historical derived metrics are read-only. Correct a source 
 | Income before tax, tax expense, and net income (`fcff_dcf`, `transition_fcff_dcf`) | SEC duration facts; `SEC-observed`; reported effective tax is `income_tax_expense / income_before_tax`. Normalized marginal tax is a separately reviewed assumption under `tax-policy-v1`, never the reported ratio relabeled as normalized. | Annual facts are aligned to the same fiscal period and filing availability time. Quality checks identify tax benefits, loss periods, discrete items, jurisdiction changes, and conflicting concepts. | Negative/zero/near-zero pretax income or a temporary/negative effective rate cannot be extrapolated. Resolve normalized tax from a dated reviewed source with sensitivity; if unavailable, request the minimum reviewer-supplied tax input or abstain. Preserve reported facts unchanged. |
 | Depreciation and amortization (`fcff_dcf`, `transition_fcff_dcf`) | SEC duration facts and reviewed mappings; `SEC-observed`; `annual-history-metrics-v1`, with source fact IDs for each component and aggregate. | Annual duration matching revenue/EBIT periods; validate units, signs, acquired-intangible treatment, and duplicate/overlapping facts. | Missing or conflicting D&A blocks the reinvestment derivation; do not set it to zero. A reviewer may resolve a mapping or provide a permitted, cited assumption, but cannot relabel it as a filing fact. |
 | Capital expenditure (`fcff_dcf`, `transition_fcff_dcf`) | SEC cash-flow duration facts for property/equipment and any explicitly included capitalized software; `SEC-observed`; `annual-history-metrics-v1`. Normalize cash outflow sign once and retain each component fact ID. | Annual duration and availability must match the operating period. Check investing/cash-flow classification, unit, signs, and extension mappings. | Unmapped or absent material CapEx blocks reinvestment and the verified baseline. Do not use an industrial-extension-only value or current-period placeholder. Any allowed inclusion/exclusion is a versioned mapping/formula policy, not an edit to the fact. |
-| Operating working-capital components (`fcff_dcf`, `transition_fcff_dcf`) | SEC instant facts for current operating assets and liabilities; `SEC-observed`; `operating-working-capital-v1`. Include explicitly mapped receivables, inventory, contract assets, payables, accrued operating liabilities, and deferred revenue as specified by policy. `OWC = operating_current_assets - operating_current_liabilities`; `change_OWC_t = OWC_t - OWC_(t-1)`. | Instant facts at each comparable fiscal period end, selected as available at the valuation timestamp. Require the same consolidation scope and a complete component set. | Exclude cash, interest-bearing debt, lease financing, and other financing balances; do not use total current assets minus total current liabilities as a proxy. Missing/conflicting components block reinvestment; no manual fact edit or silent zero. |
+| Operating working-capital components (`fcff_dcf`, `transition_fcff_dcf`) | Exact path: SEC instant facts for current operating assets and liabilities; `SEC-observed`; `operating-working-capital-v1`. Include explicitly mapped receivables, inventory, contract assets, payables, accrued operating liabilities, and deferred revenue. `OWC = operating_current_assets - operating_current_liabilities`; `change_OWC_t = OWC_t - OWC_(t-1)`. Separate evaluated estimate: `composite-noncash-working-capital-v3`, with source-bound gross totals, explicit exclusions, issuer-specific residual fractions, rationale, and deterministic sensitivity. Both use the #352 composer and FCFF formula. | Instant facts at each comparable fiscal period end, selected as available at the valuation timestamp. The exact path requires the complete component set. The composite path requires one original source/accession and mapping version per period, explicit treatment of cash, marketable investments, current debt, current lease financing, ordered residual scenarios, and no unresolved source/scope/unit conflicts. | Exclude cash, interest-bearing debt, lease financing, and other financing balances; the exact path never uses total current assets minus total current liabilities as a proxy. Composite estimates do not classify every residual as operating: fractions must be explicit assumptions, sensitivity is not a confidence interval, and unknown required exclusions abstain. Estimated history remains provisional; no silent zero or threshold promotion. See [composite working-capital policy V3](composite-working-capital-v2.md). |
 | NOPAT and reinvestment (`fcff_dcf`, `transition_fcff_dcf`) | `Computed`; `historical-metrics-v1`; `NOPAT_t = EBIT_t - normalized_cash_taxes_t`; `reinvestment_t = CapEx_t - D&A_t + change_OWC_t`. `reinvestment_rate = reinvestment_t / NOPAT_t` is defined only when NOPAT is positive and outside the versioned near-zero denominator limit. Retain periods, formula, units, signs, and all input fact IDs. | Derived only from facts and reviewed normalized-tax inputs aligned to the same fiscal periods and pinned policy version. | Do not infer a ratio from loss-making or near-zero NOPAT. The dollar components remain visible, but a forecast requiring an undefined ratio is provisional/abstained until a supported policy resolves it. No current-assets-minus-current-liabilities proxy. |
 | Stock-based compensation, award instruments, and dilution (`fcff_dcf`, `transition_fcff_dcf`) | SEC filing facts and dated award/share evidence; `SEC-observed` plus `sbc-dilution-v1`. SBC remains an operating expense and add-back is zero; existing awards use the treasury-stock method at an approved valuation-date quote. | Expense is annual duration; awards and common shares are point-in-time and available by valuation timestamp. Preserve instrument class, exercise price, quantity, and quote identity/time. | No double counting or automatic future dilution for the same SBC expense. Missing award detail, quote, or share scope blocks verified per-share value; request reviewer evidence or abstain. A supported assumption edit retains the automatic value/evidence and ManualProvenance. |
 | Cash, non-operating cash, current/long-term interest-bearing debt, and other senior claims (`fcff_dcf`, `transition_fcff_dcf`) | SEC instant facts; `SEC-observed`; `capital-bridge-v1`. Preserve cash, restricted cash, short- and long-term borrowings, preferred claims, non-controlling interest, and other claims separately. | Latest eligible balance-sheet facts at or before the valuation timestamp, as of their reported period end. Check currency, scope, amendments, classification, reconciliation, and the versioned freshness limit. | Every component is `present`, `confirmed_absent`, `unknown`, or `unsupported`. Unknown value-changing claims block verified valuation. Do not convert missing claims to zero or treat cash as operating working capital. Caller may clarify a genuinely ambiguous classification; otherwise abstain. |
@@ -943,7 +943,7 @@ Historical facts and historical derived metrics are read-only. Correct a source 
 | Basic and diluted weighted-average shares; point-in-time common shares and dilutive instruments (`fcff_dcf`, `transition_fcff_dcf`) | SEC duration facts for EPS/share metrics and SEC DEI/filing facts for point-in-time shares; `SEC-observed`; `share-scope-v1`. Keep weighted-average shares distinct from as-of diluted shares used for equity value. | Weighted-average facts align to the annual income period; outstanding shares and instruments are instant facts with publication no later than valuation time. | Reject mixed periods/classes or nonpositive counts. Missing split adjustment, award detail, or class allocation blocks per-share value. No substitution of weighted-average shares for point-in-time shares without an explicit policy. |
 | Five-year revenue, margin, tax, and reinvestment forecast vectors (`fcff_dcf`, `transition_fcff_dcf`) | `Model-derived`, owned by Fundamental service; `fcff-history-forecast-v1` or `transition-history-forecast-v1` must pin anchor, normalization/fade, bounds, convergence, and input periods. The forecast formulas are the model formulas in sections 13.2 and 24.4.3; every forecast period links to historical computed metrics and policy version. | Five annual forecast periods begin from the latest eligible filed period and are followed by the normalized sixth-year terminal period. As-of is the valuation timestamp; no future filing is an input. | No forecast is an observed fact. If history, model policy, or transition path is insufficient, return the policy's provisional/abstain reason; do not use hidden defaults or ask the user to re-enter routine values when the policy is valid. A supported override records ManualProvenance and changes the digest. |
 | Transition-model filed operating evidence (`transition_fcff_dcf` only) | Pinned SEC filing evidence selected by accession; `SEC-observed` when the fact is structured and mapped, otherwise a cited filing passage is evidence for reviewer interpretation under `transition-evidence-v1`. Search/LLM is outside the default path. | Evidence must be in the pinned snapshot, published by the valuation timestamp, identify metric/unit/fiscal period, and pass filing and extraction quality checks. | Missing or ambiguous path-to-normalized-margin evidence triggers the minimum necessary reviewer clarification, provisional result, or abstention as the transition policy declares. No analyst consensus, peer fact, or uncited narrative is substituted. |
-| Risk-free rate (`fcff_dcf`, `transition_fcff_dcf`) | Market-observed U.S. Treasury 10-year par yield; Fundamental public-source registry and `wacc-policy-v1`; preserve URI, terms reference, publication/availability time, captured bytes, and hash. | Observation date must be no later than valuation timestamp and satisfy the WACC freshness limit. For replay, use the pinned historical observation, never today's yield. | Treasury capture is registered, but registration alone does not prove automatic WACC resolution. If no permitted, fresh observation is pinned, require a dated reviewer assumption with sensitivity or abstain. Never use a static rate as an observation. |
+| Risk-free rate (`fcff_dcf`, `transition_fcff_dcf`) | Market-observed U.S. Treasury 10-year par yield; Fundamental public-source registry and `wacc-policy-v1`; preserve URI, terms reference, publication/availability time, captured bytes, and hash. | Observation date must be no later than valuation timestamp and satisfy the WACC freshness limit. For replay, use a retained historical observation, never today's yield. | A live capture is not historical availability evidence. The executable policy must verify the published observation and freshness; otherwise it abstains. Never use a static rate as an observation. |
 | Equity risk premium, industry beta, and industry mapping (`fcff_dcf`, `transition_fcff_dcf`) | Reference assumptions from a dated Damodaran U.S. release under `wacc-policy-v1`; service source registry records the source and terms URL. Beta is mapped through the versioned SIC-to-reference-industry mapping; it is an assumption, not an issuer fact. | Select only a release available by the valuation timestamp. Preserve release date, mapping version, industry resolution, URI, and content hash. | The provider is registered for public-source capture but is not in the active FCFF model source register or automatic assumption resolution. Its terms URL is not legal-use approval. Until both source rights and wiring are verified, require reviewed manual components or abstain; ambiguous industry requires reviewer selection. |
 | Cost of debt, normalized marginal tax, debt/equity weights, and market capitalization (`fcff_dcf`, `transition_fcff_dcf`) | `Policy-resolved` only from reviewed assumption packages with source/method/version; `market-observed` equity value requires point-in-time common shares and an approved lawful free closing quote. `D` includes interest-bearing debt and finance leases; `E = shares * quote`; `WACC = E/(D+E)*Re + D/(D+E)*Rd*(1-tax)`. | Inputs are tied to the valuation timestamp and each provider's publication time/freshness. Preserve price vendor, quote date, terms, currency, and hashes. | A closing-price source is not registered in the current Fundamental source catalog. Trailing interest expense/average debt is diagnostic only. Without a permitted quote or defensible marginal cost of debt, require a cited reviewer assumption package or abstain; do not silently assign beta 1.0, default WACC, or current market inputs to a historical replay. |
 | Terminal growth and normalized year-six state (`fcff_dcf`, `transition_fcff_dcf`) | `Policy-resolved`/`Computed`, never SEC-observed; `terminal-policy-v1`. Growth is bounded by WACC and the trailing ten-year nominal U.S. GDP CAGR from the same eligible ALFRED vintage. Year-six FCFF records margin, reinvestment, and return-on-invested-capital convergence. | Macro vintage and model policy must be available by valuation timestamp; annual terminal state follows forecast year five. | Missing macro vintage or explicit terminal policy, nonpositive normalized FCFF, or `growth >= WACC` abstains. Enforce the section 24.4.3 terminal-value share limits. A reviewer may provide a sourced assumption only within the same bounds; no company fact or static growth default. |
@@ -965,7 +965,7 @@ The three-of-five annual-history rule in section 24.4.3 remains an unvalidated c
 
 Keep the delivery order #351, #352, #353, #354, and #355. #351 accepts the source and quality matrix, the provisional-only candidate rule, and explicit abstention conditions. It does not claim that any numerical history threshold has been validated. Do not change the candidate from three of five to five years without evidence.
 
-After #352 supplies the canonical Fundamental Service forecast composer, use that same service logic for the historical replay tracked by #361. For each model, evaluate predeclared candidate history lengths in chronological walk-forward order. At each decision date, select only SEC facts available by that date and label forecasts with the first subsequent original filing that meets the declared criteria. Report forecast error, cohort coverage, independent issuer counts, and uncertainty. Retain failed or incomplete cases in the predeclared denominator. If the evidence remains underpowered, keep the threshold null and results provisional or abstained. This follow-up does not change the fixed delivery order.
+The merged #352 supplies the canonical Fundamental Service forecast composer. Use that same service logic for the historical replay now tracked by #376; #361 owns the persistent source-preparation and valuation flow. For each model, evaluate predeclared candidate history lengths in chronological walk-forward order. At each decision date, select only SEC facts available by that date and label forecasts with the first subsequent original filing that meets the declared criteria. Report forecast error, cohort coverage, independent issuer counts, and uncertainty. Retain failed or incomplete cases in the predeclared denominator. If the evidence remains underpowered, keep the threshold null and results provisional or abstained. This follow-up does not change the fixed delivery order.
 
 Before a revenue concept can support a verified result, review its issuer, fiscal period, unit, currency, dimensions, and reporting scope against the filing and version the mapping decision. `us-gaap:Revenues` and other exact-tag candidates remain unapproved until that review passes. The #361 candidate-tag screen is not canonical mapping evidence. An unreviewed or conflicting mapping cannot feed verified eligibility.
 
@@ -982,6 +982,135 @@ Current wiring and intended-use status at the #351 review baseline:
 | Company guidance, analyst estimates, Search/LLM | Optional forward reference only. | Not part of the default valuation source register or required request path; separately governed by #355. | No call occurs in a normal request. Missing credentials or evidence cannot degrade an otherwise qualified baseline. |
 
 Source registration and a terms URL do not establish legal permission for retention or the intended commercial use. The source owner must record the actual terms decision, rate limits, retention conditions, and intended use in the versioned release evidence before a source can support `verified` inputs.
+
+### Automatic market-policy admission
+
+This target policy supersedes human-review requirements in older WACC implementation notes. Fundamental Service must use a pinned deterministic evaluator to approve source and assumption evidence automatically. The evaluator is not yet wired for the complete market-input set, so no complete market policy is admitted today. A future decision must bind source bytes, parser and policy versions, timestamps, issuer scope, and input digest. Missing or conflicting evidence abstains; approval of an assumption never changes its quality status to `verified`. AI checking may be added as a separate future control, but it is not required for this policy.
+
+| Input | Free-source policy | Automatic decision |
+| --- | --- | --- |
+| Risk-free rate | U.S. Treasury's dated 10-year par-yield curve, captured with the published observation date, source URI, bytes, and hash. | Approve only when observation availability and freshness are proven at the valuation timestamp. A later capture of a historical table alone cannot backdate availability. |
+| ERP and beta | Damodaran's dated U.S. aggregate ERP and industry beta downloads/archive. The issuer SIC comes from its SEC filing and resolves through a pinned industry mapping. | Approve only a pre-valuation release and reproducible selected cells. Keep only the published aggregate values needed for calculation and attribution; do not copy underlying commercial company-level records. Ambiguous SIC mapping abstains. |
+| Borrowing cost | SEC facility terms plus the exact contracted benchmark and tenor. TLF discloses CME Term SOFR + 210 basis points. The New York Fed official API is available for overnight SOFR, but overnight SOFR is not Term SOFR. | Require an exact benchmark match, dated observation, and preserved contract accession. The New York Fed capture path retains an exact single-date response with retrieval-time availability; it cannot establish historical publication time. Do not substitute overnight SOFR, Treasury yield, or trailing interest expense. If the term benchmark is not admitted, the complete policy abstains. |
+| Capital weights | SEC interest-bearing debt and finance-lease facts; SEC point-in-time common shares; and a lawful, dated free-source closing quote. | Derive weights deterministically from eligible inputs. Missing quote rights, security identity, share scope, or availability abstains; weights must sum to one. |
+| Normalized tax | SEC tax reconciliation and jurisdiction evidence under a versioned tax policy. Damodaran's U.S. country-tax reference is not automatically the issuer's worldwide marginal tax rate. | Approve only when the policy can resolve the issuer's applicable tax scope. Never silently use a fixed 25% rate for a multinational. |
+| Terminal growth ceiling | A BEA archived GDP release or ALFRED vintage available by valuation time; derive the declared ten-year nominal GDP CAGR ceiling from that same vintage. | Require an explicit versioned terminal-growth rule, the historical GDP vintage, and `growth < WACC`. Missing vintage or rule abstains; no static two-percent default. |
+
+Even when every source check passes, the resulting valuation assumptions remain policy-approved assumptions with sensitivity evidence. Forecast and valuation calculations continue to use the formal #352 Fundamental Service composer.
+
+### Provider-neutral macro evidence
+
+`macro_series.MacroSeriesProviderPort` is the injected source boundary for macro
+vintages. `reproduce_macro_vintage` supplies an explicit canonical series ID to
+the port and checks series/provider identity and each original artifact's hash,
+version, URI, terms and capture time. The requested series is part of the
+provider call, so one adapter can support multiple series without caller-side
+provider switches. `MacroSeriesVintageV1` carries chronologically ordered
+observations with periods and units and source artifacts in canonical order;
+canonical serialization identifies the immutable vintage. Source adapters never
+choose a valuation formula, approve a market policy or write storage.
+
+`BeaNominalGdpVintageProvider` and `NewYorkFedSofrVintageProvider` implement the
+same port. BEA's bounded profile reads NIPA table 1.1.5 annual nominal USD GDP
+from a Q4 third-estimate archive and binds its published date to the official GDP
+release page. The archive directory can be dated after the news release. The
+profile therefore waits until the archive day has ended before allowing the full
+history, while rejecting date conflicts, incomplete/corrupt tables and unknown
+formats. The SOFR provider reproduces the existing single-date overnight profile
+and retains capture-time availability; it does not supply CME Term SOFR.
+
+Provider-neutral `select_macro_vintage` applies the valuation cutoff and rejects
+conflicting latest releases. `NominalGdpGrowthCeilingV1.derive` computes a nominal
+GDP CAGR from eleven consecutive annual observations over ten years in the
+existing fixed Decimal context. Its digest binds the selected vintage, policy
+version, cutoff and result. This produces a ceiling, not a terminal-growth
+assumption or market approval. The implementation does not yet wire a complete
+market-policy evaluator into preparation; the numerical flow remains blocked.
+
+Future providers implement the same port and canonical series identity, periods,
+units and availability evidence. They can reuse selection and the GDP ceiling
+policy without provider-specific branches in either policy or the #352 composer.
+Alternative-provider tests prove that GDP policy accepts the same canonical
+series from a second provider, rejects a provider that changes series/source
+identity, and is unaffected by source input order. SOFR and BEA also exercise
+the shared contract. HTTP capture, immutable content storage, source-use
+admission and release signing remain separate owning boundaries.
+
+`TreasuryParYieldVintageProvider` and `AlfredTreasuryVintageProvider` also
+implement the macro port for `us.treasury_par_yield_10y`. The Treasury XML profile
+uses retained capture availability; ALFRED verifies the exact vintage header.
+`MarketReferenceProviderPort` separately covers country and industry tables;
+`DamodaranReferenceProvider` reproduces industry unlevered beta, rating-based
+country ERP and country tax references. Its canonical rows retain missing values,
+cell locators, original numeric encodings, display formats, formula caches and
+source-update context. Workbook update dates never backdate capture availability.
+Reference providers do not choose an issuer's industry or normalized tax mix.
+Neither macro nor reference ports provide CME Term SOFR.
+
+### Source-use admission and release reproduction
+
+`source_admission` combines the existing injected macro/reference ports with a
+trusted `SourceUsePolicyV1`. The request contains original bytes, identity,
+valuation timestamp and intended use; it contains no expected numeric value or
+approval flag. The source-use policy matches provider, canonical metric,
+population, source profile and terms identity. It requires exact retained terms
+bytes and preserves notices and a per-original decision, including missing,
+changed, conflicting or unsupported evidence. Failed parser and future-vintage
+cases are retained with stable refusal codes. Canonical requests and results
+have separate content digests. Replay re-executes the provider and trusted rules;
+recalculating a declaration's digest cannot authorize altered source values.
+
+`free_source_policy` is the composition-owned catalog for the bounded public
+Damodaran aggregates, BEA's own public GDP tables/releases, Treasury's own par
+yields and New York Fed overnight SOFR. It records the actual publisher terms
+or the scoped U.S. Government works basis, with exact evidence hashes and required
+attribution. The catalog does not grant raw-data redistribution, third-party
+company datasets, reference-rate substitution, or a quote license. ALFRED remains
+unadmitted by this catalog until its source-use evidence is established. A terms
+capture establishes the evidence used for the current intended-use decision; it
+does not establish that a data vintage existed at an earlier valuation date.
+
+The release canary and serving preparation both call
+`load_release_source_admissions`. A `market_source_admission` artifact requires
+its original source and terms bytes in the same pinned release, under
+`market_source_original` and `market_source_terms`. Both boundaries inject the
+same provider ports and a trusted catalog; missing/ambiguous providers, different
+catalogs, corrupt/noncanonical evidence and refused admissions fail. The existing
+artifact store owns atomic immutable persistence; no request-path network call or
+new database is added. Reproduction of an admission checks its declared source
+metadata and parser output; trusted acquisition receipts and release provenance
+remain necessary to establish the actual capture identity.
+
+This source-use decision is a prerequisite for a complete market-policy evaluator,
+not its replacement. Existing policy records do not yet require admissions for
+all seven market roles, and this increment does not link an admission to issuer
+classification, tax, capital weights, debt cost or terminal growth. The complete
+automatic market-policy and real numerical acceptance gates remain open. It does
+not promote accounting/forecast quality or `supported_history_threshold`.
+
+### Provider-neutral quote evidence
+
+`quote_providers.QuoteSourceProviderPort` reproduces a common-share quote from
+retained bytes and selection metadata. The request deliberately excludes the
+expected price. `reproduce_quote_source` selects exactly one configured provider
+by source ID and source version, verifies the original content hash, and compares
+the entire reproduced quote with the release declaration. Unknown profiles,
+ambiguous providers, changed prices, currencies, identities and timestamps fail.
+No provider performs a download or chooses a valuation assumption here.
+
+`NasdaqHistoricalCloseProvider` adapts the existing bounded Nasdaq transcription
+profile. `create_app` and the release CLI assemble the supported provider tuple;
+the preparation CLI gives its canary the application's same tuple. Serving and
+the release canary depend on the port through the dilution-evidence loader.
+Explicitly supplying an empty tuple supports no quote format. Adding an adapter
+requires explicit composition, with no fallback to another vendor or series.
+Source-use admission and historical availability remain separate checks; a
+configured parser does not authorize its vendor's data.
+
+Synthetic alternate-vendor tests exercise both serving preparation and release
+canary validation through the same composer. Only provenance/input identities
+change when the quote source changes. No valuation formula or HTTP schema is
+changed by this source-boundary module addition.
 
 The first schemas use strict unknown-field rejection and no implicit defaults. Their minimum field groups are:
 
@@ -1188,7 +1317,40 @@ No phase may introduce a temporary field that is absent from the target contract
 
 The binding decisions for the initial service release are recorded in section 24.4.3. There are no unresolved architecture or product-scope decisions that block implementation. Each model release still must publish its own numeric tolerances, quality profile, calibration threshold, and lawful source register before its cohort evaluation; these are versioned release artifacts, not discretionary implementation defaults.
 
-Ownership is fixed as follows: contracts and canonical facts remain under the Fundamental service until another service has a demonstrated need for a shared contract; mapping changes require a Fundamental data-domain reviewer who did not author the mapping; the independent challenger must be maintained separately from production calculation code and reviewed by someone other than the model implementer; raw snapshots remain immutable while any valuation or calibration artifact references them, and unreferenced failed/preparation snapshots may be removed after 90 days. Source-specific terms take precedence over this retention rule.
+Ownership is fixed as follows: contracts and canonical facts remain under the Fundamental service until another service has a demonstrated need for a shared contract; mapping approval belongs to the Fundamental data domain and uses a versioned deterministic policy, a separately identified trusted machine key, and source-bound observation scopes; supported automatic decisions must be reproduced by the read-only release canary; unsupported, missing and conflicting evidence abstains; retained independent human reviews remain valid historical evidence but are not a mandatory mapping gate; the independent challenger must be maintained separately from production calculation code and reviewed by someone other than the model implementer; raw snapshots remain immutable while any valuation or calibration artifact references them, and unreferenced failed/preparation snapshots may be removed after 90 days. Source-specific terms take precedence over this retention rule.
+
+### 25.10 Non-operating assets in the FCFF bridge
+
+The current `fcff_dcf-v2` and `transition_fcff_dcf-v2` models use
+`calculator-v2` and `fcff-forecast-composer-v5`. Requirements profiles v3 add
+the required instant role `non_operating_assets`; the full FCFF profile has
+32 scalar roles and transition FCFF additionally requires filed operating
+evidence. No history threshold is promoted by this change.
+
+`non_operating_assets` means the complete classified amount outside both cash
+and operating working capital. It is a required, finite, nonnegative currency
+amount; it has no zero default. Formal preparation selects a verified,
+release-bound fact at the cash balance date and from the same original. The
+assumption retains its fact ID, source hash, policy and date. Unknown scope,
+missing facts, future evidence and conflicting values abstain.
+
+Preparation rejects reuse of a positive cash or working-capital observation,
+including observations retained inside a computed accounting role. An explicit
+negative cash component in an approved total-minus-cash classification is an
+exclusion rather than a second positive asset. Structural overlap checks do not
+establish semantic completeness: the mapping policy must establish all included
+and excluded asset classes, investment receivables, and any cash-included funds
+from original evidence. The current direct automatic mapping policy has no rule
+that approves a complete non-operating asset role; it retains abstention.
+
+The existing calculator adds this amount once after operating enterprise value.
+The independent challenger and conservation check include the same declared
+bridge term. New model and policy identities prevent prior approvals from
+authorizing the changed inputs. Retained records are not rewritten; old model
+versions cannot be executed as the current graph. Synthetic bridge amounts and
+zero assumptions in engineering fixtures do not approve an actual issuer's
+classification or absence. #381 and #361 require real-source completion and
+independent review before closure.
 
 ## 26. Isolated service architecture decision
 

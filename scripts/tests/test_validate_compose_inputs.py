@@ -100,3 +100,24 @@ def test_rejects_placeholder_sec_user_agent(tmp_path: Path, monkeypatch) -> None
     )
 
     assert any("non-placeholder contact string" in error for error in errors)
+
+
+def test_ordered_env_files_use_last_value_and_reject_shell_drift(tmp_path, monkeypatch):
+    compose = _compose(tmp_path, "services:\n  app:\n    image: ${A:?required}\n")
+    first = _env(tmp_path, "A=first\n")
+    second = tmp_path / "overlay.env"
+    second.write_text("A=last\n")
+    monkeypatch.setenv("A", "last")
+    args = dict(
+        label="fundamental",
+        env_file=None,
+        env_files=[first, second],
+        compose_files=[compose],
+        require_paths=False,
+        require_sec_user_agent=False,
+    )
+    assert validator.validate(**args) == []
+    monkeypatch.setenv("A", "first")
+    assert any(
+        "shell environment overrides A" in error for error in validator.validate(**args)
+    )

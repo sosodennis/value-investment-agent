@@ -22,11 +22,24 @@ from .contracts import (
     PeriodType,
     QualityStatus,
     Severity,
+    SecIntegrityEvidenceV1,
+    SecHistoryIntegrityEvidenceV1,
     SourceProvenanceV1,
     SourceSnapshotV1,
     XbrlContextV1,
 )
 from .serialization import canonical_bytes, sha256_digest
+from .accounting_roles import (
+    AccountingRoleEvidenceV1,
+    AccountingRoleRules,
+    IssuerAccountingRoleRuleSetV1,
+)
+from .arelle_parser import fact_semantic_digest
+from .original_issuer import (
+    IssuerOperatingSourceV1,
+    fact_matches_operating_identity,
+    fact_matches_original_source,
+)
 from .snapshots import SnapshotError
 
 
@@ -63,7 +76,7 @@ class CanonicalFactRepository(Protocol):
     def resolve(
         self,
         *,
-        snapshot: "SourceSnapshotV1",
+        snapshot: SourceSnapshotV1 | IssuerOperatingSourceV1,
         valuation_timestamp: datetime,
         required_fields: tuple[str, ...],
     ) -> tuple[CanonicalFactV1, ...]: ...
@@ -122,7 +135,7 @@ class FilesystemCanonicalFactRepository:
     def resolve(
         self,
         *,
-        snapshot: "SourceSnapshotV1",
+        snapshot: SourceSnapshotV1 | IssuerOperatingSourceV1,
         valuation_timestamp: datetime,
         required_fields: tuple[str, ...],
     ) -> tuple[CanonicalFactV1, ...]:
@@ -137,11 +150,20 @@ class FilesystemCanonicalFactRepository:
 class PinnedValidationProfile(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    profile_id: Literal["sec-efm-us-gaap-v1"] = "sec-efm-us-gaap-v1"
+    profile_id: Literal["sec-efm-us-gaap-v1", "sec-efm-us-dqc-v1.0.0-historical"] = (
+        "sec-efm-us-gaap-v1"
+    )
     arelle_version: Literal["2.47.4"] = "2.47.4"
-    dqc_version: Literal["v31.0.3"] = "v31.0.3"
+    dqc_version: Literal["v31.0.3", "v1.0.0"] = "v31.0.3"
     xule_version: Literal["30055"] = "30055"
     profile_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+    @model_validator(mode="after")
+    def dqc_version_matches_profile(self) -> "PinnedValidationProfile":
+        historical = self.profile_id == "sec-efm-us-dqc-v1.0.0-historical"
+        if self.dqc_version != ("v1.0.0" if historical else "v31.0.3"):
+            raise ValueError("DQC version must match the pinned profile")
+        return self
 
 
 class TaxonomyPackageV1(BaseModel):
@@ -177,6 +199,30 @@ class ValidationFindingV1(BaseModel):
     blocks_verified: bool
 
 
+class MappingObservationScopeV1(BaseModel):
+    """Exact original and observations authorized by a machine mapping decision."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    issuer_id: str = Field(pattern=r"^[0-9]{10}$")
+    accession_number: str = Field(pattern=r"^[0-9]{10}-[0-9]{2}-[0-9]{6}$")
+    raw_content_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    parser_input_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    parser_replay_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    observation_digests: tuple[str, ...] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def observations_are_canonical(self) -> MappingObservationScopeV1:
+        if self.observation_digests != tuple(sorted(set(self.observation_digests))):
+            raise ValueError("mapping observations must be ordered and unique")
+        if any(
+            len(value) != 64 or any(c not in "0123456789abcdef" for c in value)
+            for value in self.observation_digests
+        ):
+            raise ValueError("mapping observations require SHA-256 digests")
+        return self
+
+
 class CanonicalMappingV1(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -191,9 +237,29 @@ class CanonicalMappingV1(BaseModel):
     reviewer: str | None = None
     reviewed_at: datetime | None = None
     status: Literal["approved", "provisional", "ambiguous", "rejected"]
+    accounting_rules: AccountingRoleRules | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
+    observation_scope: MappingObservationScopeV1 | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
 
     @model_validator(mode="after")
     def extension_review(self) -> "CanonicalMappingV1":
+        if self.observation_scope is not None and self.accounting_rules is not None:
+            raise ValueError("direct observation scope cannot authorize computed roles")
+        if (
+            self.source_concept.startswith("computed:")
+            and self.accounting_rules is None
+        ):
+            raise ValueError("computed accounting roles require an explicit rule set")
+        if self.accounting_rules is not None and (
+            self.accounting_rules.normalized_field != self.normalized_field
+            or self.source_concept != f"computed:{self.normalized_field}"
+        ):
+            raise ValueError(
+                "accounting rules must identify their computed financial role"
+            )
         is_extension = (
             ":" in self.source_concept
             and not self.source_concept.startswith("us-gaap:")
@@ -209,6 +275,61 @@ class CanonicalMappingV1(BaseModel):
         if self.confidence == "unresolved" and self.status == "approved":
             raise ValueError("unresolved mappings cannot be approved")
         return self
+
+
+def verify_accounting_role_evidence(
+    fact: CanonicalFactV1,
+    mapping: CanonicalMappingV1,
+    snapshot: SourceSnapshotV1 | IssuerOperatingSourceV1,
+) -> None:
+    evidence = fact.accounting_evidence
+    if evidence is None and mapping.accounting_rules is None:
+        return
+    if evidence is None or evidence.rule_set != mapping.accounting_rules:
+        raise SnapshotError(
+            "ACCOUNTING_ROLE_MAPPING_MISMATCH",
+            "computed accounting evidence differs from its released mapping",
+        )
+    rules = evidence.rule_set
+    if isinstance(snapshot, IssuerOperatingSourceV1):
+        if not isinstance(rules, IssuerAccountingRoleRuleSetV1) or not any(
+            item.source.content_hash == rules.raw_content_hash
+            and item.source.accession_number == rules.accession_number
+            and item.source.parser_input_hash == rules.parser_input_hash
+            and fact_semantic_digest(item.report) == rules.parser_fact_digest
+            and rules.issuer_id == snapshot.identity.issuer_id
+            for item in snapshot.originals
+        ):
+            raise SnapshotError(
+                "ACCOUNTING_ROLE_INTEGRITY_MISMATCH",
+                "issuer accounting rules differ from their exact original",
+            )
+        return
+    if isinstance(rules, IssuerAccountingRoleRuleSetV1):
+        raise SnapshotError(
+            "ACCOUNTING_ROLE_SCOPE_MISMATCH",
+            "issuer-only rules cannot authorize security-bound facts",
+        )
+    integrity = snapshot.sec_integrity_evidence
+    originals = (
+        (integrity,)
+        if isinstance(integrity, SecIntegrityEvidenceV1)
+        else tuple(item.integrity for item in integrity.components)
+        if isinstance(integrity, SecHistoryIntegrityEvidenceV1)
+        else ()
+    )
+    if not any(
+        item.raw_content_hash == rules.raw_content_hash
+        and item.accession_number == rules.accession_number
+        and item.parser_input_hash == rules.parser_input_hash
+        and item.normalized_fact_digest == rules.parser_fact_digest
+        and item.quality_decision == "pass"
+        for item in originals
+    ):
+        raise SnapshotError(
+            "ACCOUNTING_ROLE_INTEGRITY_MISMATCH",
+            "computed accounting evidence differs from its validated original",
+        )
 
 
 class FactCandidateV1(BaseModel):
@@ -248,6 +369,9 @@ class FactCandidateV1(BaseModel):
     source: SourceProvenanceV1
     taxonomy_version: str = Field(min_length=1)
     mapping: CanonicalMappingV1 | None = None
+    accounting_evidence: AccountingRoleEvidenceV1 | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
 
     @model_validator(mode="after")
     def validate_period(self) -> "FactCandidateV1":
@@ -280,6 +404,8 @@ class FactCandidateV1(BaseModel):
     def canonical_fact(
         self, *, quality: QualityStatus, issue_codes: tuple[str, ...] = ()
     ) -> CanonicalFactV1:
+        period_end = self.period_end or self.instant
+        assert period_end is not None
         context = XbrlContextV1(
             concept_qname=self.concept,
             period_type=self.period_type,
@@ -295,6 +421,7 @@ class FactCandidateV1(BaseModel):
         )
         return CanonicalFactV1(
             contract_version="fundamental.v1",
+            accounting_evidence=self.accounting_evidence,
             fact_id=self.candidate_id,
             issuer_id=self.issuer_id,
             security_id=self.security_id,
@@ -305,7 +432,7 @@ class FactCandidateV1(BaseModel):
             scale=self.scale,
             currency=self.currency,
             period_start=self.period_start,
-            period_end=self.period_end or self.instant,
+            period_end=period_end,
             instant=self.instant,
             context=context,
             as_of=self.as_of,
@@ -594,10 +721,17 @@ def select_fact_groups(
     return tuple(select_fact(items, valuation_timestamp) for items in grouped.values())
 
 
+def is_consolidated_fact(fact: CanonicalFactV1) -> bool:
+    return (
+        not fact.context.dimensions
+        and fact.context.consolidation_scope == "consolidated"
+    )
+
+
 def resolve_canonical_facts(
     candidates: Iterable[CanonicalFactV1],
     *,
-    snapshot: SourceSnapshotV1,
+    snapshot: SourceSnapshotV1 | IssuerOperatingSourceV1,
     valuation_timestamp: datetime,
     required_fields: tuple[str, ...],
 ) -> tuple[CanonicalFactV1, ...]:
@@ -615,8 +749,13 @@ def resolve_canonical_facts(
         if fact.issuer_id != snapshot.identity.issuer_id:
             rejected_reasons[fact.fact_id] = "issuer_mismatch"
             continue
-        if fact.security_id not in {None, snapshot.identity.security_id}:
+        if not fact_matches_operating_identity(fact, snapshot):
             rejected_reasons[fact.fact_id] = "security_mismatch"
+            continue
+        if isinstance(
+            snapshot, IssuerOperatingSourceV1
+        ) and not fact_matches_original_source(fact, snapshot):
+            rejected_reasons[fact.fact_id] = "original_source_mismatch"
             continue
         if fact.quality is not QualityStatus.VERIFIED:
             rejected_reasons[fact.fact_id] = "fact_quality_not_verified"
@@ -650,9 +789,7 @@ def resolve_canonical_facts(
         consolidated_candidates = tuple(
             fact
             for fact in eligible
-            if fact.normalized_field == field
-            and not fact.context.dimensions
-            and fact.context.consolidation_scope == "consolidated"
+            if fact.normalized_field == field and is_consolidated_fact(fact)
         )
         if not consolidated_candidates:
             raise SnapshotError(
@@ -742,10 +879,8 @@ def resolve_canonical_facts(
 def _select_latest_period_in_filing(
     candidates: list[CanonicalFactV1],
 ) -> tuple[CanonicalFactV1, dict[str, str]]:
-    latest_end = max(fact.period_end or fact.instant for fact in candidates)
-    latest_period = tuple(
-        fact for fact in candidates if (fact.period_end or fact.instant) == latest_end
-    )
+    latest_end = max(fact.period_end for fact in candidates)
+    latest_period = tuple(fact for fact in candidates if fact.period_end == latest_end)
     durations = {
         fact.fact_id: (
             (fact.period_end - fact.period_start).days
@@ -855,14 +990,16 @@ def _select_canonical_fact_key(
 
 
 def _canonical_fact_key(
-    fact: CanonicalFactV1, snapshot: SourceSnapshotV1
+    fact: CanonicalFactV1, snapshot: SourceSnapshotV1 | IssuerOperatingSourceV1
 ) -> tuple[object, ...]:
     dimensions = tuple(
         sorted((item.name, item.member) for item in fact.context.dimensions)
     )
     return (
         fact.issuer_id,
-        fact.security_id or snapshot.identity.security_id,
+        None
+        if isinstance(snapshot, IssuerOperatingSourceV1)
+        else fact.security_id or snapshot.identity.security_id,
         fact.concept,
         fact.context.period_type,
         fact.period_start,
@@ -873,7 +1010,9 @@ def _canonical_fact_key(
         dimensions,
         fact.context.entity_scope,
         fact.context.consolidation_scope,
-        fact.security_scope or snapshot.identity.share_class,
+        "issuer"
+        if isinstance(snapshot, IssuerOperatingSourceV1)
+        else fact.security_scope or snapshot.identity.share_class,
     )
 
 

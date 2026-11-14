@@ -10,6 +10,9 @@ from .contracts import (
     AssumptionsV1,
     CapitalBridgeAssumptionsV1,
     ForecastAssumptionsV1,
+    IdentityV1,
+    ProvenanceInputV1,
+    QualityInputV1,
     QualityStatus,
     TraceV1,
     UncertaintyV1,
@@ -22,15 +25,15 @@ from .contracts import (
 def make_valuation() -> ValuationInputV1:
     return ValuationInputV1(
         contract_version="fundamental.v1",
-        identity={
-            "issuer_id": "CIK1",
-            "issuer_name": "Example Corp",
-            "domicile": "US",
-            "reporting_basis": "us-gaap",
-            "security_id": "COMMON",
-            "share_class": "common",
-            "currency": "USD",
-        },
+        identity=IdentityV1(
+            issuer_id="CIK1",
+            issuer_name="Example Corp",
+            domicile="US",
+            reporting_basis="us-gaap",
+            security_id="COMMON",
+            share_class="common",
+            currency="USD",
+        ),
         valuation_context=ValuationContextV1(
             valuation_timestamp=datetime(2026, 1, 1, tzinfo=timezone.utc),
             data_snapshot_id="snapshot-1",
@@ -57,6 +60,7 @@ def make_valuation() -> ValuationInputV1:
             terminal_growth=Decimal("0.02"),
             capital_bridge=CapitalBridgeAssumptionsV1(
                 cash=Decimal("10"),
+                non_operating_assets=Decimal("0"),
                 debt=Decimal("5"),
                 preferred_stock=Decimal("0"),
                 lease_liabilities=Decimal("0"),
@@ -66,15 +70,15 @@ def make_valuation() -> ValuationInputV1:
             trace=TraceV1(description="fixture assumptions"),
         ),
         uncertainty=UncertaintyV1(mode="none"),
-        quality={"status": QualityStatus.VERIFIED},
-        provenance={
-            "snapshot_id": "snapshot-1",
-            "mapping_version": "mapping-v1",
-            "parser_version": "parser-v1",
-            "taxonomy_version": "taxonomy-v1",
-        },
+        quality=QualityInputV1(status=QualityStatus.VERIFIED),
+        provenance=ProvenanceInputV1(
+            snapshot_id="snapshot-1",
+            mapping_version="mapping-v1",
+            parser_version="parser-v1",
+            taxonomy_version="taxonomy-v1",
+        ),
         model_id="fcff_dcf",
-        model_version="fcff_dcf-v1",
+        model_version="fcff_dcf-v2",
     )
 
 

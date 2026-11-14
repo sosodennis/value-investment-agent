@@ -3,7 +3,7 @@ import hashlib
 import json
 import socket
 import urllib.request
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
@@ -59,7 +59,7 @@ from fundamental_service.policies import (
 )
 from fundamental_service.replay import ArtifactStore, replay_calculation
 from fundamental_service.serialization import sha256_digest
-from fundamental_service.snapshots import FilesystemContentStore
+from fundamental_service.snapshots import FilesystemContentStore, SnapshotError
 from fundamental_service.source_acquisition import SecIdentityResolutionUseCase
 from fundamental_service.testsupport import (
     TEST_SERVICE_TOKEN,
@@ -109,6 +109,7 @@ class _SnapshotRepository:
             policy_version="source-policy-v1",
             coverage_status=QualityStatus.VERIFIED,
             issues=(),
+            sec_integrity_evidence=None,
         )
 
     def get(self, snapshot_id: str):
@@ -133,6 +134,12 @@ class _ReleaseSnapshotRepository(_ResolvingSnapshotRepository):
     def __init__(self, *snapshots):
         self.snapshots = snapshots
         self.snapshot = snapshots[0]
+
+    def get(self, snapshot_id: str):
+        for snapshot in self.snapshots:
+            if snapshot.snapshot_id == snapshot_id:
+                return snapshot
+        raise SnapshotError("SNAPSHOT_NOT_FOUND", "test snapshot is unavailable")
 
     def find(self, *, identity, valuation_timestamp):
         return tuple(
@@ -222,7 +229,7 @@ def _release_manifest_for(snapshot, facts):
     fact_refs = tuple(
         FactRefV1(
             fact_id=fact.fact_id,
-            fact_digest=sha256_digest(fact.model_dump(mode="json")),
+            fact_digest=canonical_fact_digest(fact),
         )
         for fact in facts
     )
@@ -379,7 +386,7 @@ def _policy_with_assumptions(assumptions) -> PolicyRecordV1:
         "policy_version": "fcff-policy-version-1",
         "profile_id": "us-gaap-public-v1",
         "model_id": "fcff_dcf",
-        "model_version": "fcff_dcf-v1",
+        "model_version": "fcff_dcf-v2",
         "assumptions": assumptions,
         "source_refs": ("public-policy-fixture",),
         "effective_at": datetime(1970, 1, 1, tzinfo=UTC),
@@ -444,6 +451,7 @@ def test_snapshot_resolution_returns_service_owned_snapshot_and_fact_refs():
         taxonomy_manifest_id="taxonomy-v1",
         policy_version="policy-v1",
         source_records=(),
+        sec_integrity_evidence=None,
     )
     client = TestClient(
         create_app(
@@ -483,6 +491,7 @@ def test_snapshot_resolution_returns_immutable_snapshot_timestamp():
         taxonomy_manifest_id="taxonomy-v1",
         policy_version="policy-v1",
         source_records=(),
+        sec_integrity_evidence=None,
     )
     client = TestClient(
         create_app(
@@ -548,13 +557,13 @@ def test_policy_read_returns_exact_version_and_unknown_policy_is_not_found():
     client = TestClient(create_app())
     response = client.request(
         "GET",
-        "/v1/policies/fcff_dcf-us-gaap-public-v1",
+        "/v1/policies/fcff_dcf-us-gaap-public-v3",
         headers=auth_headers(),
         json=make_internal_envelope({}),
     )
     assert response.status_code == 200
-    assert response.json()["result"]["policy_id"] == "fcff_dcf-us-gaap-public-v1"
-    assert response.json()["result"]["policy_version"] == "fcff_dcf-v1-quality-v1"
+    assert response.json()["result"]["policy_id"] == "fcff_dcf-us-gaap-public-v3"
+    assert response.json()["result"]["policy_version"] == "fcff_dcf-v2-quality-v2"
     operation = client.app.openapi()["paths"]["/v1/policies/{policy_id}"]["get"]
     assert "requestBody" in operation
     assert "PolicyRecordV1" in str(operation["responses"]["200"])
@@ -738,7 +747,7 @@ def test_policy_calculation_missing_release_and_unresolved_assumptions_are_stabl
 
     unsupported = base.model_dump(mode="json")
     unsupported["assumptions"] = {"terminal_growth": "0.02"}
-    unsupported["policy_id"] = "fcff_dcf-us-gaap-public-v1"
+    unsupported["policy_id"] = "fcff_dcf-us-gaap-public-v3"
     incomplete_validation = client.post(
         "/v1/valuation/validate-with-policy",
         headers=auth_headers(),
@@ -906,7 +915,7 @@ def test_rejected_caller_approval_never_executes_calculation():
     payload["caller_approval"] = {
         "input_digest": valuation.input_digest,
         "decision": "rejected",
-        "caller_id": "test-agent",
+        "caller_id": "subject-test",
         "decided_at": datetime.now(UTC).isoformat(),
     }
     response = TestClient(
@@ -919,6 +928,60 @@ def test_rejected_caller_approval_never_executes_calculation():
 
     assert response.status_code == 422
     assert response.json()["error"]["code"] == "CALLER_APPROVAL_REJECTED"
+
+
+@pytest.mark.parametrize(
+    "route,method",
+    [
+        ("calculate", "calculate_valuation"),
+        ("calculate-with-policy", "calculate_with_policy"),
+        ("uncertainty", "uncertainty_valuation"),
+    ],
+)
+@pytest.mark.parametrize("decision", ["approved", "rejected"])
+@pytest.mark.parametrize("invalid", ["caller", "future"])
+def test_calculation_rejects_unbound_approval_before_application_execution(
+    monkeypatch, route, method, decision, invalid
+):
+    reached = []
+
+    def execute(*args, **kwargs):
+        reached.append(method)
+        raise AssertionError("invalid approval reached calculation")
+
+    monkeypatch.setattr(FundamentalApplication, method, execute)
+    valuation = _bind_initial_policy(make_valuation())
+    if route == "uncertainty":
+        valuation = _with_uncertainty_digest(valuation.model_dump(mode="json"))
+    payload = valuation.model_dump(mode="json")
+    payload["caller_approval"] = {
+        "input_digest": valuation.input_digest,
+        "decision": decision,
+        "caller_id": "someone-else" if invalid == "caller" else "subject-test",
+        "decided_at": (
+            datetime.now(UTC) + timedelta(days=1)
+            if invalid == "future"
+            else datetime.now(UTC)
+        ).isoformat(),
+    }
+    response = TestClient(create_app()).post(
+        f"/v1/valuation/{route}",
+        headers=auth_headers(),
+        json=make_internal_envelope(payload),
+    )
+
+    assert response.status_code == 403, response.text
+    assert response.json()["error"] == {
+        "code": "CALLER_APPROVAL_IDENTITY_MISMATCH"
+        if invalid == "caller"
+        else "CALLER_APPROVAL_NOT_YET_DECIDED",
+        "message": "caller approval must match the authenticated subject"
+        if invalid == "caller"
+        else "caller approval cannot be decided after receipt",
+        "retryable": False,
+        "retry_after_ms": None,
+    }
+    assert reached == []
 
 
 def test_policy_calculation_rejects_unsupported_model_family():
@@ -1023,7 +1086,7 @@ def test_policy_lookup_without_registry_is_retryable_unavailable():
 def test_new_internal_routes_reject_missing_or_invalid_signed_context():
     client = TestClient(create_app())
     missing_context = client.get(
-        "/v1/policies/fcff_dcf-us-gaap-public-v1",
+        "/v1/policies/fcff_dcf-us-gaap-public-v3",
         headers=auth_headers(),
     )
     assert missing_context.status_code == 400
@@ -1033,7 +1096,7 @@ def test_new_internal_routes_reject_missing_or_invalid_signed_context():
     invalid_context["context"]["signature"] = "0" * 64
     response = client.request(
         "GET",
-        "/v1/policies/fcff_dcf-us-gaap-public-v1",
+        "/v1/policies/fcff_dcf-us-gaap-public-v3",
         headers=auth_headers(),
         json=invalid_context,
     )
@@ -1188,7 +1251,7 @@ def test_uncertainty_approval_digest_covers_sampling_and_scenario_controls():
     payload["caller_approval"] = {
         "input_digest": request.input_digest,
         "decision": "approved",
-        "caller_id": "test-agent",
+        "caller_id": "subject-test",
         "decided_at": datetime.now(UTC).isoformat(),
     }
     response = TestClient(
@@ -1254,7 +1317,7 @@ def test_calculate_executes_explicit_monte_carlo_controls_with_optional_approval
             "caller_approval": CallerApprovalEnvelopeV1(
                 input_digest=valuation.input_digest,
                 decision="approved",
-                caller_id="test-agent",
+                caller_id="subject-test",
                 decided_at=datetime.now(UTC),
             )
         }
@@ -1299,7 +1362,7 @@ def test_calculate_returns_version_bound_replayable_evidence():
             "caller_approval": CallerApprovalEnvelopeV1(
                 input_digest=validation.input_digest,
                 decision="approved",
-                caller_id="test-agent",
+                caller_id="subject-test",
                 decided_at=datetime.now(UTC),
             )
         }
@@ -1367,7 +1430,7 @@ def test_uncertainty_accepts_the_validated_request_and_same_caller_approval():
     payload["caller_approval"] = {
         "input_digest": request.input_digest,
         "decision": "approved",
-        "caller_id": "test-agent",
+        "caller_id": "subject-test",
         "decided_at": datetime.now(UTC).isoformat(),
     }
     response = TestClient(
@@ -1756,7 +1819,7 @@ def test_valuation_evidence_read_uses_profile_roles_and_abstains_on_missing_fact
     assert result["facts"][0]["fact_id"] == fact.fact_id
     assert "cash_and_equivalents" in result["missing_fields"]
     assert "DATA_RELEASE_FIELDS_UNAVAILABLE" in result["issue_codes"]
-    assert result["profile_id"] == "fcff-valuation-requirements-v1"
+    assert result["profile_id"] == "fcff-valuation-requirements-v4"
 
     preparation = TestClient(app).post(
         "/v1/valuation/prepare",

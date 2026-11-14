@@ -6,6 +6,9 @@ import ast
 from pathlib import Path
 
 FORBIDDEN_PREFIXES = ("src.agents", "finance_agent_core", "agents")
+SOURCE_PLAN_MODULES = frozenset(
+    {"source_plan_contracts.py", "current_preparation.py", "original_source_plan.py"}
+)
 LEGACY_AUTH_MARKERS = (
     "FUNDAMENTAL_SERVICE_" + "AUTH_TOKEN",
     "FUNDAMENTAL_SERVICE_" + "SIGNING_KEY",
@@ -29,13 +32,29 @@ def check(root: Path | None = None) -> list[str]:
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):
                 names = tuple(alias.name for alias in node.names)
+                composition_names = names
             elif isinstance(node, ast.ImportFrom) and node.module:
                 names = (node.module,)
+                composition_names = (
+                    node.module,
+                    *(f"{node.module}.{alias.name}" for alias in node.names),
+                )
+            elif isinstance(node, ast.ImportFrom):
+                names = tuple(alias.name for alias in node.names)
+                composition_names = names
             else:
                 continue
             for name in names:
                 if name.startswith(FORBIDDEN_PREFIXES):
                     failures.append(f"{path}: forbidden import {name}")
+            for name in composition_names:
+                if (
+                    path.name in SOURCE_PLAN_MODULES
+                    and name.rsplit(".", 1)[-1] == "preparation_runner"
+                ):
+                    failures.append(
+                        f"{path}: source-plan policy imports runtime composition {name}"
+                    )
         for marker in LEGACY_AUTH_MARKERS:
             if marker in source:
                 failures.append(f"{path}: legacy authentication marker {marker}")

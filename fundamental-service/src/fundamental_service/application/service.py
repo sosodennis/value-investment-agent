@@ -6,7 +6,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from dataclasses import field as dataclass_field
 from datetime import datetime
-from typing import Any
+from typing import Any, overload
 
 from pydantic import model_validator
 
@@ -26,6 +26,7 @@ from ..contracts import (
     FiscalPeriodSelectorV1,
     PolicyValuationInputV1,
     QualityStatus,
+    ResolvedFiscalPeriodV1,
     SnapshotResolutionRequestV1,
     SnapshotResolutionV1,
     SourceSnapshotV1,
@@ -46,9 +47,31 @@ from ..data_releases import (
     DataReleaseVerificationV1,
     ReleaseResolutionCacheKeyV1,
 )
-from ..facts import CanonicalFactRepository, canonical_fact_digest
+from ..facts import (
+    CanonicalFactRepository,
+    canonical_fact_digest,
+    verify_accounting_role_evidence,
+)
+from ..equity_award_evidence import load_release_dilution_evidence
+from ..equity_dilution import DilutionError
+from ..quote_providers import QuoteSourceProviderPort
+from ..macro_series import MacroSeriesProviderPort
+from ..market_reference import MarketReferenceProviderPort
+from ..source_admission import SourceAdmissionV1, SourceUsePolicyV1
+from ..source_admission_evidence import load_release_source_admissions
+from ..market_source_selection import MarketSourceError, verify_observed_market_inputs
+from ..market_reference_evidence import load_release_market_reference_selection
+from ..automatic_market_policy_evidence import load_release_automatic_market_policy
+from ..market_reference_selection import (
+    IssuerMarketReferenceSelectionV1,
+    MarketReferenceSelectionError,
+)
+from ..terminal_growth import TerminalGrowthSelectionV1
+from ..terminal_growth_evidence import load_release_terminal_growth_selection
+from ..industry_capital import verify_industry_capital_policy
 from ..fiscal_periods import resolve_fiscal_periods
 from ..governance import ModelInventory
+from ..history_composition import verify_history_components
 from ..operations import (
     OperationalMetrics,
     OperationsConfig,
@@ -94,7 +117,10 @@ from ..valuation_preparation import (
 )
 from ..valuation_requirements import (
     select_released_facts,
-    valuation_requirements_profile,
+)
+from ..valuation_release_inputs import (
+    valuation_release_requirements,
+    valuation_release_working_capital_inputs,
 )
 
 
@@ -140,6 +166,10 @@ def _approved_market_policy(
     policy: PolicyRecordV1 | None,
     *,
     valuation_timestamp: datetime | None = None,
+    currency: str | None = None,
+    source_admissions: tuple[SourceAdmissionV1, ...] = (),
+    reference_selection: IssuerMarketReferenceSelectionV1 | None = None,
+    terminal_selection: TerminalGrowthSelectionV1 | None = None,
 ) -> ApprovedMarketPolicyInputsV1 | None:
     """Translate a complete released market policy into preparation evidence."""
 
@@ -150,8 +180,34 @@ def _approved_market_policy(
         item.available_at > valuation_timestamp for item in market_inputs.evidence
     ):
         return None
+    observed_traces: dict[str, TraceV1] = {}
+    try:
+        industry_traces = verify_industry_capital_policy(
+            market_inputs, reference_selection
+        )
+    except MarketReferenceSelectionError as error:
+        raise MarketSourceError(error.code, str(error)) from error
+    if any(item.method == "observed_source" for item in market_inputs.evidence):
+        if valuation_timestamp is None or currency is None:
+            raise MarketSourceError(
+                "MARKET_RATE_CONTEXT_MISSING",
+                "observed market inputs require valuation time and currency",
+            )
+        observed_traces = verify_observed_market_inputs(
+            market_inputs,
+            admissions=source_admissions,
+            valuation_at=valuation_timestamp,
+            currency=currency,
+            reference_selection=reference_selection,
+        )
 
     def trace_for(role: str) -> TraceV1:
+        if role == "terminal_growth" and terminal_selection is not None:
+            return terminal_selection.trace
+        if role in industry_traces:
+            return industry_traces[role]
+        if role in observed_traces:
+            return observed_traces[role]
         evidence = next(
             (item for item in market_inputs.evidence if item.role == role), None
         )
@@ -200,7 +256,10 @@ def normalize_uncertainty_payload(raw: Mapping[str, object]) -> dict[str, object
     """Fold transport wrappers into the canonical uncertainty group before decode."""
 
     data = dict(raw)
-    uncertainty = dict(data.get("uncertainty") or {})
+    raw_uncertainty = data.get("uncertainty")
+    if raw_uncertainty and not isinstance(raw_uncertainty, Mapping):
+        raise ValueError("uncertainty must be an object")
+    uncertainty = dict(raw_uncertainty) if isinstance(raw_uncertainty, Mapping) else {}
     monte_carlo = data.get("monte_carlo")
     if isinstance(monte_carlo, Mapping):
         monte_spec = monte_carlo.get("uncertainty")
@@ -219,6 +278,16 @@ def normalize_uncertainty_payload(raw: Mapping[str, object]) -> dict[str, object
 
 
 def _snapshot_error(error: SnapshotError) -> ServiceError:
+    if error.code in {
+        "ACCOUNTING_ROLE_MAPPING_MISMATCH",
+        "ACCOUNTING_ROLE_INTEGRITY_MISMATCH",
+    }:
+        return ServiceError(
+            error.code,
+            "accounting evidence conflicts with its released mapping or original",
+            status_code=409,
+            retryable=False,
+        )
     if error.code in {
         "SNAPSHOT_NOT_FOUND",
         "ARTIFACT_NOT_FOUND",
@@ -314,6 +383,10 @@ class FundamentalApplication:
     require_metadata: bool = False
     policy_registry: PolicyRegistry | None = None
     model_inventory: ModelInventory | None = None
+    quote_providers: tuple[QuoteSourceProviderPort, ...] = ()
+    macro_providers: tuple[MacroSeriesProviderPort, ...] = ()
+    reference_providers: tuple[MarketReferenceProviderPort, ...] = ()
+    source_use_policy: SourceUsePolicyV1 | None = None
     release_cache: CacheLifecycle = dataclass_field(
         default_factory=lambda: CacheLifecycle(max_entries=256),
         repr=False,
@@ -347,9 +420,7 @@ class FundamentalApplication:
                 status_code=503,
                 retryable=True,
             )
-        snapshot = self.snapshot_repository.get(
-            value.valuation_context.data_snapshot_id
-        )
+        snapshot = self.snapshot(value.valuation_context.data_snapshot_id)
         source_hashes = {record.content_hash for record in snapshot.source_records}
         facts = []
         for fact_id in value.historical_facts:
@@ -387,6 +458,14 @@ class FundamentalApplication:
                 tuple(facts),
                 required_fields=(),
             )
+
+    @overload
+    def _data_release_manifest(self, manifest_digest: str) -> DataReleaseManifestV1: ...
+
+    @overload
+    def _data_release_manifest(
+        self, manifest_digest: str | None
+    ) -> DataReleaseManifestV1 | None: ...
 
     def _data_release_manifest(
         self, manifest_digest: str | None
@@ -628,6 +707,8 @@ class FundamentalApplication:
                 model_version=value.model_version,
                 valuation_timestamp=value.valuation_context.valuation_timestamp,
                 policy_id=value.policy_id,
+                issuer_id=value.identity.issuer_id,
+                data_release_manifest_digest=value.valuation_context.data_release_manifest_digest,
             )
             if (
                 value.provenance.policy_version is not None
@@ -664,6 +745,8 @@ class FundamentalApplication:
                 model_version=value.model_version,
                 valuation_timestamp=value.valuation_context.valuation_timestamp,
                 policy_id=value.policy_id,
+                issuer_id=value.identity.issuer_id,
+                data_release_manifest_digest=value.valuation_context.data_release_manifest_digest,
             )
             return resolve_policy_overrides(request=value, policy=policy)
         except PolicyError as error:
@@ -705,6 +788,7 @@ class FundamentalApplication:
                 quality_status = QualityStatus.PROVISIONAL
             issue_codes = (*issue_codes, "POLICY_NOT_PINNED_EXPLORATORY")
             missing_evidence = (*missing_evidence, "caller_pinned_policy_id")
+        assert value.input_digest is not None
         return ValidationResponseV1(
             contract_version="fundamental.v1",
             input=value,
@@ -943,7 +1027,9 @@ class FundamentalApplication:
                 retryable=True,
             )
         try:
-            return self.snapshot_repository.get(snapshot_id)
+            snapshot = self.snapshot_repository.get(snapshot_id)
+            verify_history_components(snapshot, self.snapshot_repository)
+            return snapshot
         except SnapshotError as error:
             self.metrics.increment("source_health_failures_total")
             raise _snapshot_error(error) from error
@@ -1009,7 +1095,12 @@ class FundamentalApplication:
             )
         snapshot = self.snapshot(request.snapshot_id)
         manifest = self._data_release_manifest(request.data_release_manifest_digest)
-        profile = valuation_requirements_profile(request.model_id)
+        try:
+            profile = valuation_release_requirements(manifest, request.model_id)
+        except DataReleaseError as error:
+            raise ServiceError(
+                error.code, str(error), status_code=422, retryable=False
+            ) from error
         declared_snapshot = next(
             (
                 reference
@@ -1028,6 +1119,15 @@ class FundamentalApplication:
                 status_code=409,
                 retryable=False,
             )
+
+        try:
+            working_capital_inputs = valuation_release_working_capital_inputs(
+                manifest, snapshot
+            )
+        except DataReleaseError as error:
+            raise ServiceError(
+                error.code, str(error), status_code=422, retryable=False
+            ) from error
 
         facts = []
         declared_digests = {
@@ -1060,6 +1160,9 @@ class FundamentalApplication:
             profile=profile,
             snapshot=snapshot,
             valuation_timestamp=snapshot.valuation_timestamp,
+            additional_fact_ids=tuple(
+                fact_id for item in working_capital_inputs for fact_id in item.fact_ids
+            ),
         )
         missing = set(selection.missing_fields)
         issue_codes = list(selection.issue_codes)
@@ -1077,6 +1180,60 @@ class FundamentalApplication:
             if issue_codes
             else QualityStatus.PROVISIONAL
         )
+        mapping_version = None
+        mapping_reader = getattr(self.metadata_store, "get_mapping", None)
+        if callable(mapping_reader):
+            assert manifest is not None
+            try:
+                mappings = tuple(
+                    mapping_reader(ref.mapping_id) for ref in manifest.mapping_refs
+                )
+            except SnapshotError as error:
+                raise _snapshot_error(error) from error
+            if any(
+                mapping.decision_id != ref.mapping_id
+                or sha256_digest(mapping) != ref.mapping_digest
+                or mapping.status != "approved"
+                for mapping, ref in zip(mappings, manifest.mapping_refs, strict=True)
+            ):
+                raise ServiceError(
+                    "DATA_RELEASE_MAPPING_MISMATCH",
+                    "a canonical mapping differs from the pinned release",
+                    status_code=409,
+                    retryable=False,
+                )
+            versions = {mapping.mapping_version for mapping in mappings}
+            mapping_by_id = {mapping.decision_id: mapping for mapping in mappings}
+            if len(versions) != 1 or any(
+                fact.mapping_decision_id not in mapping_by_id
+                or mapping_by_id[fact.mapping_decision_id].source_concept
+                != fact.concept
+                or mapping_by_id[fact.mapping_decision_id].normalized_field
+                != fact.normalized_field
+                for fact in selection.facts
+            ):
+                raise ServiceError(
+                    "DATA_RELEASE_MAPPING_FACT_MISMATCH",
+                    "release facts must bind one coherent reviewed mapping version",
+                    status_code=409,
+                    retryable=False,
+                )
+            mapping_version = next(iter(versions))
+            for fact in selection.facts:
+                assert fact.mapping_decision_id is not None
+                try:
+                    verify_accounting_role_evidence(
+                        fact, mapping_by_id[fact.mapping_decision_id], snapshot
+                    )
+                except SnapshotError as error:
+                    raise _snapshot_error(error) from error
+        elif self.require_metadata:
+            raise ServiceError(
+                "DATA_RELEASE_MAPPING_UNAVAILABLE",
+                "release mapping metadata is unavailable",
+                status_code=503,
+                retryable=True,
+            )
         return ValuationEvidenceReadResponseV1(
             contract_version="fundamental.v1",
             snapshot_id=snapshot.snapshot_id,
@@ -1091,6 +1248,7 @@ class FundamentalApplication:
             issue_codes=tuple(dict.fromkeys(issue_codes)),
             missing_fields=tuple(sorted(missing)),
             rejected_fact_ids=selection.rejected_fact_ids,
+            mapping_version=mapping_version,
             facts=selection.facts,
         )
 
@@ -1101,7 +1259,37 @@ class FundamentalApplication:
 
         evidence = self.read_valuation_evidence(request)
         snapshot = self.snapshot(request.snapshot_id)
-        model_version = f"{request.model_id}-v1"
+        manifest = self._data_release_manifest(request.data_release_manifest_digest)
+        working_capital_inputs = valuation_release_working_capital_inputs(
+            manifest, snapshot
+        )
+        declared_input_policy = manifest.valuation_working_capital_policy
+        if (
+            declared_input_policy is not None
+            and evidence.mapping_version != declared_input_policy.mapping_version
+        ):
+            raise ServiceError(
+                "DATA_RELEASE_MAPPING_VERSION_MISMATCH",
+                "valuation working-capital inputs require the release mapping version",
+                status_code=422,
+                retryable=False,
+            )
+        try:
+            source_admissions = load_release_source_admissions(
+                self._data_release_manifest(request.data_release_manifest_digest),
+                artifacts=self.artifact_store,
+                policy=self.source_use_policy,
+                macro_providers=self.macro_providers,
+                reference_providers=self.reference_providers,
+            )
+        except (DataReleaseError, SnapshotError, ValueError) as error:
+            raise ServiceError(
+                getattr(error, "code", "SOURCE_ADMISSION_INVALID"),
+                str(error),
+                status_code=422,
+                retryable=False,
+            ) from error
+        model_version = f"{request.model_id}-v2"
         policy = None
         if self.policy_registry is not None:
             try:
@@ -1110,6 +1298,8 @@ class FundamentalApplication:
                     model_version=model_version,
                     valuation_timestamp=snapshot.valuation_timestamp,
                     policy_id=None,
+                    issuer_id=snapshot.identity.issuer_id,
+                    data_release_manifest_digest=manifest.manifest_digest,
                 )
             except PolicyError as error:
                 raise ServiceError(
@@ -1122,13 +1312,59 @@ class FundamentalApplication:
         policy_id = (
             policy.policy_id
             if policy is not None
-            else (f"{request.model_id}-us-gaap-public-v1")
+            else (f"{request.model_id}-us-gaap-public-v3")
         )
         policy_version = policy.policy_version if policy is not None else "unresolved"
-        market_policy = _approved_market_policy(
-            policy,
-            valuation_timestamp=snapshot.valuation_timestamp,
-        )
+        try:
+            load_release_automatic_market_policy(
+                self._data_release_manifest(request.data_release_manifest_digest),
+                snapshot=snapshot,
+                policy=policy,
+                admissions=source_admissions,
+                artifacts=self.artifact_store,
+            )
+            reference_selection = load_release_market_reference_selection(
+                self._data_release_manifest(request.data_release_manifest_digest),
+                snapshot=snapshot,
+                policy=policy,
+                admissions=source_admissions,
+                artifacts=self.artifact_store,
+            )
+            terminal_selection = load_release_terminal_growth_selection(
+                self._data_release_manifest(request.data_release_manifest_digest),
+                snapshot=snapshot,
+                policy=policy,
+                admissions=source_admissions,
+                artifacts=self.artifact_store,
+            )
+            market_policy = _approved_market_policy(
+                policy,
+                valuation_timestamp=snapshot.valuation_timestamp,
+                currency=snapshot.identity.currency,
+                source_admissions=source_admissions,
+                reference_selection=reference_selection,
+                terminal_selection=terminal_selection,
+            )
+        except (MarketSourceError, DataReleaseError, SnapshotError) as error:
+            raise ServiceError(
+                error.code, str(error), status_code=422, retryable=False
+            ) from error
+        try:
+            dilution = load_release_dilution_evidence(
+                self._data_release_manifest(request.data_release_manifest_digest),
+                snapshot=snapshot,
+                artifacts=self.artifact_store,
+                released_facts=evidence.facts,
+                quote_providers=self.quote_providers,
+                source_use_policy=self.source_use_policy,
+            )
+        except (DilutionError, SnapshotError, ValueError) as error:
+            raise ServiceError(
+                getattr(error, "code", "DILUTION_EVIDENCE_INVALID"),
+                str(error),
+                status_code=422,
+                retryable=False,
+            ) from error
         return prepare_automatic_valuation(
             evidence.facts,
             snapshot=snapshot,
@@ -1140,6 +1376,9 @@ class FundamentalApplication:
             policy_version=policy_version,
             data_release_manifest_digest=request.data_release_manifest_digest,
             market_policy=market_policy,
+            mapping_version=evidence.mapping_version or "sec-canonical-mapping-v1",
+            equity_dilution_evidence=dilution,
+            working_capital_inputs=working_capital_inputs,
         )
 
     def apply_manual_override(
@@ -1296,6 +1535,7 @@ class FundamentalApplication:
             if cache_status == "hit" and isinstance(
                 cached_resolution, SnapshotResolutionV1
             ):
+                self.snapshot(cached_resolution.snapshot_id)
                 self.metrics.increment("cache_hit_total")
                 return cached_resolution
             if cache_status == "hit":
@@ -1334,6 +1574,7 @@ class FundamentalApplication:
             )
         selector_requested = request.fiscal_period_selector is not None
         for snapshot in candidates:
+            snapshot = self.snapshot(snapshot.snapshot_id)
             declared_snapshot = (
                 None
                 if declared_snapshots is None
@@ -1360,7 +1601,7 @@ class FundamentalApplication:
                     continue
                 raise _snapshot_error(error) from error
             period_resolution = None
-            resolved_periods = ()
+            resolved_periods: tuple[ResolvedFiscalPeriodV1, ...] = ()
             if selector_requested:
                 list_facts = getattr(self.fact_repository, "list", None)
                 if not callable(list_facts):
@@ -1389,6 +1630,7 @@ class FundamentalApplication:
                     )
                 facts = selection.facts
             if declared_snapshot is not None:
+                assert active_release is not None
                 self._verify_release_snapshot_and_facts(
                     active_release.manifest,
                     snapshot,
@@ -1644,7 +1886,7 @@ class FundamentalApplication:
                 status_code=422,
                 retryable=False,
             ) from error
-        if report.status.value in {"abstain", "degraded"}:
+        if report.status == "abstain":
             self.metrics.increment("abstention_total")
         return report
 
@@ -1725,6 +1967,8 @@ class FundamentalApplication:
                 resolved,
                 correlation_id="uncertainty-base",
             )
+            if isinstance(base, UncertaintyReportV1):
+                base = base.base
             result = run_uncertainty(
                 resolved_value,
                 monte_carlo=monte_carlo,

@@ -7,10 +7,22 @@ from decimal import Decimal
 from enum import Enum
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    TypeAdapter,
+    field_validator,
+    model_validator,
+)
 
+from .historical_dqc import V1_PROFILE, V3_PROFILE, V3_2013_PROFILE
 from .numerical_policy import using_valuation_context
 from .serialization import is_digest, sha256_digest
+from .accounting_roles import AccountingRoleEvidenceV1, accounting_reported_decimals
+from .dqc_applicability import DqcFilingContextV1, DqcRuleApplicabilityV1
+
+_MANIFEST_STRINGS = TypeAdapter(tuple[str, ...])
 
 # The public contract names every model family that may appear in a governed
 # inventory.  Only released families are accepted by the calculator; the
@@ -491,12 +503,22 @@ class ArelleFindingEvidenceV1(StrictModel):
     code: str = Field(min_length=1)
     severity: Literal["warning", "error", "critical", "fatal"]
     blocks: bool
+    rule_severity: Literal["warning", "error", "critical", "fatal"] | None = None
+    rule_effective_date: date | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
+    rule_applicability: DqcRuleApplicabilityV1 | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
 
 
 class SecIntegrityEvidenceV1(StrictModel):
     """Reproducible link from SEC response bytes to parser and fact evidence."""
 
     accession_number: str = Field(min_length=1)
+    dqc_filing_context: DqcFilingContextV1 | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
     primary_document_uri: str = Field(min_length=1)
     captured_at: datetime
     archive_index_uri: str = Field(min_length=1)
@@ -550,7 +572,11 @@ class SecIntegrityEvidenceV1(StrictModel):
             raise ValueError("SEC integrity evidence requires EFM and DQC engines")
         if not {
             "strict-sec-efm-profile-selected",
-            "dqc-dqcrt-checks-completed",
+            {
+                V1_PROFILE.dqc_version: V1_PROFILE.completion_marker,
+                V3_PROFILE.dqc_version: V3_PROFILE.completion_marker,
+                V3_2013_PROFILE.dqc_version: V3_2013_PROFILE.completion_marker,
+            }.get(self.dqc_version, "dqc-dqcrt-checks-completed"),
         }.issubset(self.validation_evidence):
             raise ValueError("SEC integrity evidence requires EFM and DQC evidence")
         if self.normalized_fact_count != self.archive_fact_count:
@@ -567,6 +593,39 @@ class SecIntegrityEvidenceV1(StrictModel):
             not self.normalization_policy_id or not self.normalization_rule_signature
         ):
             raise ValueError("normalized integrity requires a signed policy")
+        return self
+
+
+class SecHistoryComponentV1(StrictModel):
+    """An immutable original snapshot and its own parser-bound integrity."""
+
+    snapshot_id: str = Field(min_length=1)
+    manifest_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    integrity: SecIntegrityEvidenceV1
+
+
+class SecHistoryIntegrityEvidenceV1(StrictModel):
+    """Evidence for a composition of independently validated original filings."""
+
+    protocol: Literal["sec-original-history-v1"] = "sec-original-history-v1"
+    components: tuple[SecHistoryComponentV1, ...] = Field(min_length=2, max_length=6)
+    quality_decision: Literal["pass"] = "pass"
+
+    @model_validator(mode="after")
+    def original_components_are_unique(self) -> SecHistoryIntegrityEvidenceV1:
+        ids = tuple(component.snapshot_id for component in self.components)
+        accessions = tuple(
+            component.integrity.accession_number for component in self.components
+        )
+        if ids != tuple(sorted(set(ids))) or len(accessions) != len(set(accessions)):
+            raise ValueError(
+                "history components must be sorted, unique original snapshots"
+            )
+        if any(
+            component.integrity.quality_decision != "pass"
+            for component in self.components
+        ):
+            raise ValueError("every history original must pass its own integrity gates")
         return self
 
 
@@ -651,7 +710,9 @@ class SourceSnapshotV1(StrictModel):
     policy_version: str = Field(min_length=1)
     coverage_status: QualityStatus
     issues: tuple[IssueV1, ...] = ()
-    sec_integrity_evidence: SecIntegrityEvidenceV1 | None = None
+    sec_integrity_evidence: (
+        SecIntegrityEvidenceV1 | SecHistoryIntegrityEvidenceV1 | None
+    ) = None
     manifest_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
 
     @model_validator(mode="after")
@@ -684,6 +745,41 @@ class SourceSnapshotV1(StrictModel):
             and self.coverage_status is QualityStatus.VERIFIED
         ):
             raise ValueError("verified snapshots must cover every source capture time")
+        return self
+
+    @model_validator(mode="after")
+    def history_integrity_covers_each_original(self) -> SourceSnapshotV1:
+        evidence = self.sec_integrity_evidence
+        if not isinstance(evidence, SecHistoryIntegrityEvidenceV1):
+            return self
+        originals = {
+            component.integrity.accession_number: component.integrity
+            for component in evidence.components
+        }
+        filing_sources = tuple(
+            source for source in self.source_records if source.source_id == "sec-filing"
+        )
+        if {source.accession_number for source in filing_sources} != set(originals):
+            raise ValueError(
+                "history must cover exactly the declared original accessions"
+            )
+        for source in filing_sources:
+            if source.accession_number is None:
+                raise ValueError("history filing must identify its original accession")
+            integrity = originals[source.accession_number]
+            if (
+                source.content_hash != integrity.raw_content_hash
+                or source.parser_input_hash != integrity.parser_input_hash
+                or source.uri != integrity.primary_document_uri
+                or source.is_amendment
+                or source.form != "10-K"
+                or source.available_at > self.valuation_timestamp
+                or integrity.captured_at > self.captured_at
+                or integrity.validation_profile_digest != self.validation_profile_digest
+            ):
+                raise ValueError(
+                    "history filing source differs from its original integrity evidence"
+                )
         return self
 
 
@@ -803,9 +899,56 @@ class CanonicalFactV1(StrictModel):
     rejected_candidate_reasons: tuple[CandidateRejectionV1, ...] = ()
     point_in_time_policy: str | None = None
     selection_reason: str | None = None
+    accounting_evidence: AccountingRoleEvidenceV1 | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
 
     @model_validator(mode="after")
     def point_in_time_order(self) -> CanonicalFactV1:
+        evidence = self.accounting_evidence
+        if self.concept.startswith("computed:") and evidence is None:
+            raise ValueError("computed accounting roles require their source evidence")
+        if evidence is not None:
+            rules, period = evidence.rule_set, evidence.period_rule.period
+            if (
+                evidence.value is None
+                or self.value != evidence.value
+                or self.issuer_id != rules.issuer_id
+                or self.security_id != rules.security_id
+                or self.normalized_field != rules.normalized_field
+                or self.concept != f"computed:{rules.normalized_field}"
+                or self.unit != rules.unit
+                or self.currency != rules.currency
+                or self.period_start != period.period_start
+                or self.period_end != period.period_end
+                or self.instant != (period.period_end if period.instant else None)
+                or self.source.content_hash != rules.raw_content_hash
+                or self.source.accession_number != rules.accession_number
+                or self.source.available_at != self.available_at
+                or self.accession_number != rules.accession_number
+                or self.is_amendment
+                or self.available_at.date() < period.period_end
+                or any(
+                    (fact.instant or fact.period_end or period.period_end)
+                    > self.available_at.date()
+                    for fact in evidence.source_facts
+                )
+                or self.context.concept_qname != self.concept
+                or self.context.unit_qname != self.unit
+                or self.context.dimensions
+                or self.context.consolidation_scope != "consolidated"
+                or self.context.start_date != period.period_start
+                or self.context.instant != self.instant
+                or self.context.end_date
+                != (None if period.instant else period.period_end)
+                or self.decimals
+                != accounting_reported_decimals(
+                    evidence.period_rule, evidence.source_facts
+                )
+            ):
+                raise ValueError(
+                    "computed role fact differs from its source-bound accounting evidence"
+                )
         for earlier, later, name in (
             (self.available_at, self.captured_at, "available_at/captured_at"),
         ):
@@ -880,6 +1023,7 @@ class ValuationEvidenceReadResponseV1(StrictModel):
     issue_codes: tuple[str, ...] = ()
     missing_fields: tuple[str, ...] = ()
     rejected_fact_ids: tuple[str, ...] = ()
+    mapping_version: str | None = Field(default=None, min_length=1)
     facts: tuple[CanonicalFactV1, ...] = ()
 
     @field_validator("valuation_timestamp")
@@ -914,13 +1058,17 @@ class SecMappingReferenceV1(StrictModel):
     normalized_field: str = Field(min_length=1, max_length=128)
 
 
-class SecIngestionRequestV1(StrictModel):
-    """Versioned, service-owned request for bounded SEC filing acquisition."""
+SecIdentityBasis = Literal["current-sec-ticker-v1", "original-filing-dei-v1"]
+
+
+class SecSourceRequestV1(StrictModel):
+    """Shared identity, source selection and runtime pins for SEC acquisition."""
 
     contract_version: Literal["fundamental.v1"]
     identity: IdentityV1
     cik: str = Field(pattern=r"^\d{10}$")
     ticker: str = Field(pattern=r"^[A-Z0-9][A-Z0-9.-]{0,14}$")
+    identity_basis: SecIdentityBasis = "current-sec-ticker-v1"
     valuation_timestamp: datetime
     fiscal_period_selector: FiscalPeriodSelectorV1 = FiscalPeriodSelectorV1(
         mode="latest_complete", count=3
@@ -928,13 +1076,17 @@ class SecIngestionRequestV1(StrictModel):
     # Transition FCFF includes the base evidence set plus filed operating
     # evidence, so the canonical request must accept more than 32 fields.
     required_fields: tuple[str, ...] = Field(min_length=1, max_length=64)
-    mappings: tuple[SecMappingReferenceV1, ...] = Field(min_length=1, max_length=64)
     source_selection_policy: Literal["sec-pit-v1"]
+    supplemental_filing_policy: (
+        Literal["sec-equity-award-proxy.v1", "sec-equity-award-proxy.v2"] | None
+    ) = None
     coverage_profile: str = Field(min_length=1, max_length=128)
     legal_use_profile: Literal["sec-public-us-v1"]
     filing: SecFilingSelectorV1
     parser_version: Literal["2.47.4"]
-    validation_profile_id: Literal["sec-efm-us-dqc-v31.0.3"]
+    validation_profile_id: Literal[
+        "sec-efm-us-dqc-v31.0.3", "sec-efm-us-dqc-v1.0.0-historical"
+    ]
     taxonomy_manifest_id: str = Field(min_length=1, max_length=128)
     taxonomy_version: str = Field(min_length=1, max_length=128)
     policy_version: str = Field(min_length=1, max_length=128)
@@ -947,21 +1099,35 @@ class SecIngestionRequestV1(StrictModel):
         return value
 
     @model_validator(mode="after")
-    def request_is_canonical(self) -> "SecIngestionRequestV1":
+    def source_is_canonical(self) -> "SecSourceRequestV1":
+        if self.identity_basis == "original-filing-dei-v1" and (
+            self.filing.accession_number is None or self.filing.forms != ("10-K",)
+        ):
+            raise ValueError("original filing identity requires a pinned original 10-K")
         if len(self.required_fields) != len(set(self.required_fields)):
             raise ValueError("required_fields must be unique")
-        if set(self.required_fields) != {
-            item.normalized_field for item in self.mappings
-        }:
-            raise ValueError("each required field needs exactly one mapping")
-        if len({item.normalized_field for item in self.mappings}) != len(self.mappings):
-            raise ValueError("mappings must contain one reference per field")
         normalized_cik = str(int(self.cik))
         normalized_issuer = self.identity.issuer_id.lstrip("0") or "0"
         if not self.identity.issuer_id.isdigit() or normalized_issuer != normalized_cik:
             raise ValueError("CIK must match the canonical issuer identity")
         if self.identity.domicile != "US":
             raise ValueError("SEC ingestion requires a US issuer identity")
+        return self
+
+
+class SecIngestionRequestV1(SecSourceRequestV1):
+    """Bounded acquisition with explicit pre-existing mapping decisions."""
+
+    mappings: tuple[SecMappingReferenceV1, ...] = Field(min_length=1, max_length=64)
+
+    @model_validator(mode="after")
+    def mappings_are_complete(self) -> "SecIngestionRequestV1":
+        if set(self.required_fields) != {
+            item.normalized_field for item in self.mappings
+        }:
+            raise ValueError("each required field needs exactly one mapping")
+        if len({item.normalized_field for item in self.mappings}) != len(self.mappings):
+            raise ValueError("mappings must contain one reference per field")
         return self
 
 
@@ -991,6 +1157,10 @@ class SecIngestionResponseV1(StrictModel):
     manifest_digest: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
     canonical_fact_ids: tuple[str, ...] = ()
     source_evidence: tuple[SecIngestionSourceV1, ...] = ()
+    identity_evidence_ref: str | None = Field(default=None, min_length=1)
+    mapping_evidence_ref: str | None = Field(
+        default=None, min_length=1, exclude_if=lambda value: value is None
+    )
     quality_status: QualityStatus
     issue_codes: tuple[str, ...] = ()
     missing_evidence: tuple[str, ...] = ()
@@ -1047,6 +1217,10 @@ class WaccAssumptionsV1(StrictModel):
 
 class CapitalBridgeAssumptionsV1(StrictModel):
     cash: Decimal
+    non_operating_assets: Decimal = Field(
+        ge=0,
+        description="Complete non-operating assets excluding cash and operating working capital",
+    )
     debt: Decimal
     preferred_stock: Decimal
     lease_liabilities: Decimal
@@ -1350,6 +1524,12 @@ class ProvenanceInputV1(StrictModel):
     parser_version: str = Field(min_length=1)
     taxonomy_version: str = Field(min_length=1)
     policy_version: str | None = None
+    preparation_version: str | None = Field(
+        default=None, min_length=1, exclude_if=lambda value: value is None
+    )
+    equity_dilution_evidence_digest: str | None = Field(
+        default=None, pattern=r"^[0-9a-f]{64}$", exclude_if=lambda value: value is None
+    )
 
 
 class CallerApprovalEnvelopeV1(StrictModel):
@@ -1357,6 +1537,13 @@ class CallerApprovalEnvelopeV1(StrictModel):
     decision: Literal["approved", "rejected"]
     caller_id: str = Field(min_length=1)
     decided_at: datetime
+
+    @field_validator("decided_at")
+    @classmethod
+    def decision_has_timezone(cls, value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("decided_at must include a timezone")
+        return value
 
 
 class ValuationInputV1(StrictModel):
@@ -1459,6 +1646,7 @@ class WaccAssumptionOverridesV1(StrictModel):
 
 class CapitalBridgeAssumptionOverridesV1(StrictModel):
     cash: Decimal | None = None
+    non_operating_assets: Decimal | None = Field(default=None, ge=0)
     debt: Decimal | None = None
     preferred_stock: Decimal | None = None
     lease_liabilities: Decimal | None = None
@@ -1691,7 +1879,7 @@ class ReleaseManifestV1(StrictModel):
     )
     @classmethod
     def normalize_hashes(cls, value: object) -> tuple[str, ...]:
-        values = tuple(value or ())
+        values = _MANIFEST_STRINGS.validate_python(value or ())
         if any(not is_digest(item) for item in values):
             raise ValueError("manifest hash fields must contain SHA-256 digests")
         return tuple(sorted(set(values)))
@@ -1699,7 +1887,7 @@ class ReleaseManifestV1(StrictModel):
     @field_validator("artifact_hashes", mode="before")
     @classmethod
     def preserve_artifact_hash_order(cls, value: object) -> tuple[str, ...]:
-        values = tuple(value or ())
+        values = _MANIFEST_STRINGS.validate_python(value or ())
         if any(not is_digest(item) for item in values):
             raise ValueError("manifest hash fields must contain SHA-256 digests")
         if len(values) != len(set(values)):
@@ -1718,12 +1906,12 @@ class ReleaseManifestV1(StrictModel):
     )
     @classmethod
     def normalize_identifiers(cls, value: object) -> tuple[str, ...]:
-        return tuple(sorted(set(value or ())))
+        return tuple(sorted(set(_MANIFEST_STRINGS.validate_python(value or ()))))
 
     @field_validator("artifact_ids", mode="before")
     @classmethod
     def preserve_artifact_order(cls, value: object) -> tuple[str, ...]:
-        values = tuple(value or ())
+        values = _MANIFEST_STRINGS.validate_python(value or ())
         if len(values) != len(set(values)):
             raise ValueError("artifact_ids must be unique")
         return values

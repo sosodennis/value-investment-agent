@@ -49,6 +49,86 @@ principal organization and membership, correlation ID, and absolute deadline.
 Error responses use the shared `InternalErrorResponse`; they never include
 credentials, provider responses, filesystem paths, or raw filing content.
 
+## Add a market data provider
+
+Source acquisition, source reproduction and financial selection have separate
+contracts. Implement the appropriate provider port for a new publisher:
+
+| Evidence | Port | Canonical result |
+| --- | --- | --- |
+| GDP, benchmark rates or other macro series | `MacroSeriesProviderPort` | `MacroSeriesVintageV1` |
+| Published country or industry tables | `MarketReferenceProviderPort` | `MarketReferenceVintageV1` |
+| Common-share quote | `QuoteSourceProviderPort` | `CommonShareQuoteV1` |
+| Public HTTP request and capture timing | `PublicSourceCaptureProfilePort` | `SourceCaptureTimes` |
+
+Providers reproduce retained bytes through pure methods. Preserve source
+identity, original units/precision, period, publication/availability/capture
+times, terms and content digests. The public HTTP adapter owns transport,
+allowlists and retries; immutable storage owns artifact publication and reuse.
+
+Register the capture profile in `public_source_catalog.py`, and inject the
+provider into the release canary and serving composition. The default macro and
+reference implementations are assembled in `free_source_policy.py`. Add a
+versioned source-use rule with retained terms evidence for each intended use.
+Registration and parsing do not approve an issuer's financial assumptions.
+
+Shared selectors consume canonical evidence. For example,
+`market_source_selection.py` selects the rate by series, currency, availability,
+units and freshness, without branching on a publisher or endpoint. A second
+provider for the same metric reuses that selector. A different economic metric
+requires its own identity and an explicit selection policy: overnight SOFR,
+Term SOFR and a Treasury auction yield are distinct inputs.
+
+Exercise a second provider through the shared path, plus source/identity/time
+mismatches, ambiguous registration, retained refusals and deterministic repeat
+and restart. The #352 composer/calculator continues to own valuation formulas.
+
+For issuer-specific country ERP selection, include one canonical
+`issuer_market_reference_plan` artifact in the signed release. The effective
+deployment policy must pin its content hash in `source_refs`; the plan's
+`policy_id`, issuer and valuation timestamp must match preparation. Each request
+names an exact metric, population, country/industry row and maximum source age.
+The selector consumes reproduced admissions, chooses the latest available
+vintage, and retains missing cells and conflicts. It never fills a missing
+latest row from an older table. Country/industry classification is explicit
+policy authority; source admission alone does not establish risk exposure.
+
+Serving and the independent release canary verify the same selected ERP value
+and original-source trace. The canary takes the same `PolicyRegistry` dependency;
+its CLI accepts `--policies-root` for the deployment-owned immutable registry.
+A plan without this authority refuses before activation. Canary evidence binds
+the effective policy digest and reproduced selection digest. Unlevered industry
+beta remains a reference, and country tax cannot replace the #352 composer's
+historical normalized tax. Complete beta, debt-cost, capital-weight and terminal
+policies still require their own evidence.
+
+Policies may carry an immutable `issuer_id` scope. Preparation, calculation and
+the independent canary pass the valuation issuer into `PolicyRegistry`; a
+matching eligible issuer policy takes precedence, foreign policies are ignored,
+and same-scope ambiguity refuses. A policy pinning an issuer market-reference
+or terminal-growth plan must carry that same issuer scope. Unscoped legacy
+policies omit the optional field from canonical serialization, preserving their
+existing content digests. Keep generic policies only for assumptions genuinely
+shared across issuers.
+
+For source-derived stable terminal growth, release one canonical
+`issuer_terminal_growth_plan` and pin its hash in the effective deployment
+policy's `source_refs`. The plan binds issuer, USD currency, valuation timestamp,
+GDP horizon, maximum annual-period age and the long-term rate-selection rule.
+The `nominal-gdp-riskfree-ceiling-v1` rule chooses the lower of the admitted
+nominal GDP CAGR and long-term risk-free rate. It uses the existing macro ports
+and GDP derivation, independently of the provider. The same observed risk-free
+value must be used by WACC; the #352 composer retains its growth/discount checks.
+
+This terminal value is an explicit policy assumption. Its evidence uses
+`approved_policy`, preserves original and selection/plan digests, and does not
+claim observed issuer growth or a supported history threshold. Both serving and
+the independent canary reproduce the plan and sources; changed values, traces,
+unapproved/missing plans and unavailable/stale/conflicting GDP or rates refuse.
+An incomplete latest GDP vintage cannot fall back to an older complete one.
+Use `terminal_growth_evidence(selection)` when constructing the immutable
+deployment policy; supplying a self-hashed value alone cannot satisfy this path.
+
 ## SEC ingestion contract
 
 `POST /v1/data/ingestions` is the authenticated, synchronous `fundamental.v1`
@@ -105,7 +185,473 @@ but it cannot publish a snapshot or verified fact set. Authorized attempts
 record principal, organization, correlation ID, hashes when known, and outcome
 in the service-owned audit table.
 
+An award inventory must explicitly supply `instruments`. An empty array means
+the reviewed complete inventory confirms no outstanding awards at that instant;
+it still requires dated original coverage, snapshot/release bindings, a quote
+and the quote policy. It cannot hide any released award observations. Missing
+inventory remains missing evidence; do not manufacture zero-valued award facts.
+
+## Automatic mapping approval
+
+For an empty-store source preparation, run `fundamental-prepare-source` with an
+`AutomaticSourcePreparationPlanV1` (`automatic-source-preparation-v1`). It pins
+one exact source revision, model and requirements profile, mapping policy and
+evaluator across one to six original annual requests. No manual mapping refs
+are accepted. Configure the normal PostgreSQL/content storage, authorized SEC
+organization, taxonomy/validation assets and data-release trust roots, then pass
+`--machine-private-key <Ed25519-PEM-path>` and
+`--runtime-source-revision <installed-commit>` as deployment inputs. Keep the
+private key outside source control and report artifacts.
+
+The authority/key, policy and revision must match before provider I/O. Existing
+acquisition locks and runtime keys own capture and reuse. Ingestion invokes the
+mapping batch only after original byte integrity, EFM/DQC and historical issuer
+identity validation, then publishes mappings through the current metadata store
+and facts through the existing normalizer. The source report retains the full
+batch decision reference and canonical plan. Missing/unsupported/conflicting
+aggregate model requirements remain blocked; no release or calculation is attempted. A report-write
+interruption can be retried against the completed acquisition without fetching
+or parsing again. Repeated identical reports return `wrote=false`.
+The source command requests read-only reuse of a completed acquisition, after
+the same authority, organization, taxonomy and acquisition-lock checks. It adds
+no duplicate source-audit row for that completed result. New acquisitions and
+refusals remain audited. HTTP ingestion keeps its default per-request reuse
+audit, independently of command artifact identity.
+
+For a multi-original plan, source integrity and individual model completeness
+are separate evidence. An acquisition may abstain for missing roles while its
+original-source snapshot independently passes integrity. All requested sources
+must have eligible integrity snapshots before composition; an invalid or missing
+source is retained and blocks the plan. The runner selects only the plan's exact
+accession/source/mapping facts, then uses the existing model requirements and
+annual-history resolver on the combined evidence. A latest capital role may come
+from a later eligible original without requiring it on every older filing. Future
+facts, incomplete aggregate history and conflicts still refuse. Individual
+acquisition quality, missing roles and diagnostics are never promoted or removed.
+Single-original plans retain their existing completeness gate.
+
+Canonical acquisition outcomes are stored under the pinned plan identity and
+retained across release, preparation and calculation reports, including restarts.
+Invalid or changed outcome evidence refuses before release resolution. Repeated
+outcomes and reports reuse their artifacts without new writes. This source check
+does not approve a release, establish award/market completeness, supply caller
+approval or promote the history threshold.
+
+For supported combined evidence, the runner checks the retained batch input,
+model, policy, evaluator, source and per-role decisions against the immutable
+release. `--candidate` still requires the independent release canary and
+authorization. `--approval` still requires the caller's decision for the exact
+prepared input. The command does not infer either approval from a machine
+mapping certificate. Existing `source-preparation-v2` manual plans remain valid.
+
+Supplied valuation approvals must identify the authenticated request subject.
+The calculation, policy-calculation and uncertainty HTTP endpoints reject another
+`caller_id` or a decision later than receipt before invoking the application.
+`decided_at` must include a timezone. Direct calculation retains optional
+approval; `fundamental-prepare-source` requires approval of its exact prepared
+input before calculation and applies the same actor/time check before source or
+release access. Approval remains outside persisted public calculation evidence.
+
+Mapping approval uses Fundamental Service's `source-bound-us-gaap-v25` policy.
+It handles a narrow table of direct role/QName combinations, including
+consolidated current-assets/current-liabilities totals for the composite
+working-capital profile, and the bounded
+annual stock-compensation disclosure below. Missing balances, unsupported
+computed partitions, awards, aggregate D&A conflicts and financial assumptions
+retain abstentions until a supported policy and evidence cover them. AI
+verification is future scope.
+Human reviews remain readable historical records; they are no longer required
+for new automatic mappings.
+
+For a complete model mapping pass, use an `AutomaticMappingBatchRequestV1`
+with protocol `fundamental.automatic-mapping-batch-input.v1`. Supply the retained
+original/integrity/source references, exact source revision, evaluator ID,
+mapping version, current model version, and the complete
+`valuation_requirements_profile(model_id)` as `requirements`. The service rejects
+a caller-modified profile, an old model version or a promoted history threshold.
+Use the same command and storage configuration below. No per-role proposals
+are needed: the service's existing rule table creates supported proposals.
+
+The batch retains every required and supporting SEC role once in sorted order.
+When one role uses different supported representations at different instants,
+its `additional_decisions` retain the other proposal outcomes and certificates.
+This tuple is omitted when empty. The SEC resolver publishes every approved
+mapping, reports every abstained outcome, and the batch artifact depends on
+all child decisions and certificates for invalidation and replay.
+A known rule with no eligible observation keeps its decision and missing reason;
+an unsupported classification keeps an explicit abstention without inventing a
+concept, fact, zero or certificate. Market assumptions remain separately listed
+in the pinned profile and receive no SEC mapping approval. The batch decision
+references the exact child decisions and certificates. Its content digest excludes
+write receipts, so complete repeats preserve the report bytes and return aggregate
+`wrote=false`. Partial writes can be resumed through the existing immutable stores.
+Mapping coverage alone does not establish complete periods, a trusted release,
+valuation readiness or caller approval.
+
+Create an `AutomaticMappingRequestV1` from retained original issuer evidence,
+its matching SEC integrity record, a provisional mapping proposal and ordered
+source artifact references. Retain the raw filing, parser input, SEC index,
+archive and taxonomy bytes in the evidence store. Binary artifacts use
+`put_bytes_with_receipt`, which hashes exact bytes without JSON encoding.
+Existing canonical JSON publication is unchanged. Original 10-K identity,
+amendment status, available-at cutoff, strict offline validation and byte
+integrity must pass before approval.
+
+When the parser pins a taxonomy directory digest, retain a deterministic ZIP
+with role `sec-taxonomy-cache-archive-v1`. `build_taxonomy_cache_archive` preserves
+the parser's member order and exact bytes with fixed ZIP metadata. Verification
+streams members through the same path + NUL + bytes digest without extraction
+or network access. It rejects duplicate/unsafe paths, symlinks, noncanonical
+ordering and excessive counts/size. The archive blob digest and original cache
+tree digest remain distinct. The same verifier serves automatic mapping and
+issuer release canaries; source/report pins are preserved.
+
+Provision a separate Ed25519 machine key in PKCS8 PEM format and configure its
+public key under `automatic_mapping_evaluators` in deployment trust roots. Each
+entry pins `public_key_ed25519_base64` and `policy_digest`. Keep the private key
+outside Git. Obtain the current digest with:
+
+```sh
+fundamental-approve-mapping --print-policy-digest
+```
+
+The digest covers the rules and executable policy dependencies. A policy/code
+change requires an explicit deployment trust update. The machine identity must
+not claim to be Dennis or an independent human reviewer.
+
+```sh
+fundamental-approve-mapping \
+  --request /preparation/automatic-mapping-input.json \
+  --trust-roots /run/config/data-release-trust-roots.json \
+  --private-key /run/secrets/automatic-mapping.pem
+```
+
+The command uses configured service PostgreSQL/content storage without
+migrating it. `--artifacts-root` selects an explicit offline evidence store.
+It retains canonical inputs and decisions for both approvals and abstentions.
+Only approved decisions receive `AutomaticMappingApprovalV1` certificates.
+Receipts record exact `source_revision`, input/output digests and separate
+publication results. Identical inputs and retained evidence return `wrote=false`
+after repeat, restart or empty-store restore. Writes use the existing atomic
+immutable stores. Missing source evidence retains abstention; invalid keys,
+trust configuration or command input return a redacted error and exit 2.
+
+Approved mappings identify `automatic:<evaluator_id>`; no human review time is
+invented. The observation scope pins CIK, accession, raw/parser hashes, parser
+report digest and eligible observation digests. The ingestion mapper enforces
+that scope. Dimensional, wrong-issuer, invalid and conflicting observations
+remain in the retained input/audit.
+
+The decision artifact contains the approved mapping. Existing ingestion/release
+assembly consumes it and its certificate. The release canary checks the trusted
+signature/policy, re-evaluates retained inputs and verifies that released facts
+reproduce approved observations. A signature alone cannot admit a fabricated
+mapping. Optional `security_identity` checks the exact original's historical DEI
+before producing security-bound disclosure rules. That binding does not establish
+complete economic-class or award coverage. This command does not activate
+releases, grant exact-input caller approval or run a valuation. History thresholds
+remain null.
+
+## Sign an independent mapping review
+
+This optional path retains existing human review evidence. Automatic mapping
+approval above is the current default.
+
+After an authorized independent reviewer has completed the semantic review, use
+the service's operator command to sign their existing statement. The statement
+uses `MappingReviewStatementV1`: mapping ID/digest, author/reviewer IDs, an explicit
+timezone-aware `reviewed_at`, retained `evidence_refs`, and the canonical JSON
+fixture's `fixture_digest`. It contains no signature. The mapping must already be
+approved and name the same reviewer and review time. The signer does not create
+approvals, keys, reviewer identities, trust roots or missing evidence.
+
+Use the deployment's existing immutable trust-roots file and the reviewer's
+Ed25519 private key in unencrypted PKCS8 PEM format. Keep the private key and the
+generated evidence outside Git. The command checks the mapping digest, canonical
+fixture digest and each retained evidence artifact's hash, media type, valid
+status and evidence retention before signing. The key must match that reviewer's
+configured trusted public key, and reviewer and author must differ.
+
+```sh
+fundamental-sign-mapping-review \
+  --statement /reviews/statement.json \
+  --mapping /reviews/mapping.json \
+  --fixture /reviews/fixture.json \
+  --trust-roots /run/config/data-release-trust-roots.json \
+  --private-key /run/secrets/mapping-reviewer.pem \
+  --source-revision "$VERIFIED_IMPLEMENTATION_COMMIT"
+```
+
+By default, this command uses the same `FUNDAMENTAL_SERVICE_DATABASE_URL` and
+`FUNDAMENTAL_SERVICE_DATA_ROOT/content` as the running service. The database must
+already have the installed schema; signing does not run migrations, seed policies
+or activate releases. It closes database resources after success or failure.
+Service readers and the existing export/restore commands can retrieve the signed
+artifact directly from that data plane. For an offline canary artifact store,
+pass `--artifacts-root /reviews/offline-artifacts` explicitly. Both adapters use
+the same signed bytes, content identity and publication receipt contract.
+
+The canonical receipt records the supplied implementation revision, input/output
+digests and artifact publication. The signed artifact uses the unchanged
+`MappingReviewEvidenceV1` contract and a content-derived ID. It is published
+through the existing atomic immutable store; rerunning the same inputs, including
+after process restart, returns `publication.wrote=false` without rewriting the
+artifact or index. Failures return exit 2 with a stable error code and do not
+publish signed evidence or print private keys, source bytes or validation values.
+The statement's time is supplied by the reviewer, never generated by the command.
+
+This command does not run semantic review or the release canary, activate a
+release, approve financial policy, supply caller approval, or verify an estimated
+history threshold. Continue with the existing signed release verification and
+canary workflow; an authentic signature alone does not establish those gates.
+
+### Automatic mapping approval
+
+`fundamental-approve-mapping` uses the configured service database and content
+root, with `--artifacts-root` available for an explicitly offline evidence store:
+
+```sh
+fundamental-approve-mapping \
+  --request /preparation/automatic-mapping-batch.json \
+  --trust-roots /run/config/data-release-trust-roots.json \
+  --private-key /run/secrets/automatic-mapping.pem
+```
+
+The key must match the request's trusted automatic evaluator and current
+`--print-policy-digest`. It does not represent a person. The batch request pins
+the implementation revision, exact original/integrity/evidence references,
+mapping version, model version and service-owned requirements. It retains every
+required and supporting role once, including unsupported and missing roles.
+The canonical receipt reports input/output digests and `wrote`; repeats preserve
+all artifact bytes and publication identities. Batch reports depend on every
+referenced child decision and approval digest.
+
+Policy `source-bound-us-gaap-v6` carries forward the bounded accounting
+disclosure case:
+an annual consolidated USD share-compensation text fact containing the exact
+sentence `Stock-based compensation expense was $<integer> in fiscal <year>
+and $<integer> in fiscal <prior-year>.` The current year must equal that original
+text fact's annual period end; the comparison must be the preceding year.
+The service transcribes only the current-period amount, preserving the exact
+sentence, offsets, dollar unit, unscaled integer precision and source digest
+through the existing accounting-role evaluator. It does not assign a duration
+to the comparative amount. Unknown phrasing, partial expense, scaled/rounded
+amounts, conflicting disclosures, foreign/dimensional/future evidence abstain.
+This supplies annual expense only; award inventory and dilution remain separate.
+
+The optional `security_identity` on single and batch requests must reproduce the
+existing historical DEI identity check against the exact original, including
+issuer, paired ticker/share class, domicile, report period and USD GAAP scope.
+It does not consult a current ticker directory. Successful disclosure decisions
+then use the existing security-bound accounting rule contract. Missing or
+conflicting identity evidence abstains without a certificate. Omitting the field
+preserves issuer-only input bytes and rules; such rules cannot be consumed as
+security-bound evidence. Neither mode proves complete economic share classes,
+award coverage, market policy or release readiness. Record and trust the new
+executable policy digest before running this version.
+
+This version also requires a registered, source/period-bound continuing scope
+for cash capex. NEWMARKET's mixed 2012/2013 cash-flow totals remain rejected;
+the later registered continuing periods retain their original amounts. Other
+originals return `MAPPING_CAPEX_SCOPE_UNREVIEWED` until classified. Treat this as
+missing accounting evidence, not a parser or signing error. Review the retained
+original and add a versioned classification in the owning Service policy; do
+not force an approval or reuse an earlier automatic policy certificate.
+
+The release canary reproduces the policy evaluation and accounting facts before
+accepting machine approval. Unsupported classifications and absence claims still
+abstain; a machine signature does not fill evidence gaps. Release verification,
+authentic caller approval, numerical acceptance and PR review remain required.
+
 ## Recovery checks
+
+### Export and restore the persistent data plane
+
+`fundamental-persistence` is an offline operator command. Stop every API and
+acquisition/preparation writer using the source database and content root before
+export, and keep all writers off the target until restore completes. The command
+locks the Fundamental tables and rejects observed content changes. It does not
+provide a coordinated live backup across independently running filesystem
+writers. Run it with the same installed release, migrations and PostgreSQL major
+version as the source. It uses `FUNDAMENTAL_SERVICE_DATABASE_URL` and
+`FUNDAMENTAL_SERVICE_DATA_ROOT`; neither credentials nor source bytes are printed.
+
+```sh
+fundamental-persistence export \
+  --source-revision "$VERIFIED_IMPLEMENTATION_COMMIT" \
+  --destination /backups/fundamental
+```
+
+The receipt identifies `/backups/fundamental/<manifest_digest>/manifest.json`.
+Copy the complete directory to retained storage outside the disposable service
+volume. The canonical manifest pins the implementation revision, migration and
+schema digests, PostgreSQL major version, every table's columns/row count/file
+digest, and every source/content file's digest and length. Source bytes from
+failed ingestion are included even if registration was interrupted. Missing or
+corrupt snapshot/fact/artifact source bytes refuse publication. Table values are
+exported as sorted canonical JSON lines containing PostgreSQL text values;
+timestamps retain their original UTC values. Operational audit rows remain part
+of the backup, separate from valuation identity.
+
+The complete backup is staged, verified and atomically renamed to its digest.
+Re-exporting identical state and revision returns `wrote=false` without touching
+the existing directory. An existing corrupt backup is rejected, never replaced.
+Record the receipt and exact command in acceptance evidence. Export is not an
+independent mapping review or a release signature.
+
+Point the environment at a **new, isolated database and content root**, then use
+the recorded digest, obtained independently of the backup's current contents:
+
+```sh
+fundamental-persistence restore \
+  --bundle /backups/fundamental/<manifest_digest> \
+  --manifest-digest <manifest_digest>
+```
+
+Restore checks the entire inventory, referenced bytes, schema and runtime
+compatibility before importing rows. It initializes the owned schema only when
+absent. An existing target must be empty apart from schema bootstrap records, or
+already contain exactly the backed-up metadata; unrelated data is refused. The
+content root may contain only a matching subset of the backup's objects. Bytes
+are published atomically before a single metadata transaction imports all rows
+in foreign-key order. Failure rolls back the metadata transaction; already
+restored matching bytes are retained for retry. Temporary copy bytes stay in
+`.restore-pending`, which is outside the published
+content inventory; a killed copy cannot publish a partial object or block retry.
+Uncommitted staging bytes are retained locally and excluded from export.
+The acquisition-audit sequence continues beyond restored IDs. The transaction verifies the restored table
+digests before commit. Repeating a complete restore returns `wrote=false` and
+does not modify existing content files.
+
+Deployment secrets, trust roots, parser/taxonomy assets and service configuration
+are not data backup contents. Restore their separately pinned deployment inputs
+before starting the service; existing release-trust and caller-approval checks
+remain enforced. After restore, check `/readyz`, retrieve a known snapshot and
+valuation artifact, and rerun its pinned preparation/calculation. Compare all
+source/input/output digests with the recorded evidence. A successful copy alone
+does not establish full-flow acceptance.
+
+The current FCFF models are `fcff_dcf-v2` and `transition_fcff_dcf-v2`, with
+policy IDs `fcff_dcf-us-gaap-public-v3` and
+`transition_fcff_dcf-us-gaap-public-v3`. The graph is `calculator-v2`; requirements
+profiles `fcff-valuation-requirements-v3` and
+`transition-fcff-valuation-requirements-v3` add required `non_operating_assets`.
+Supply a complete classified amount excluding cash and operating working capital
+from the same original and instant as cash. Missing scope remains missing;
+never seed a zero to make an old release usable. The direct automatic mapper
+does not approve this aggregate role. Preserve its abstention until an owning
+classification policy is supported. Preparation rejects positive observation
+overlap with cash/working capital; these checks do not infer complete semantics.
+Existing artifacts and policies remain retained under their original identities.
+Old model versions are refused by the current graph. Prepare the new model input
+and obtain its exact caller approval before calculation.
+
+The v3 initial policies supply eligibility metadata with no default assumptions
+or market inputs. The earlier v2 bootstrap market inputs asserted approval
+without actual evidence (#369). Their exact policy digests are revoked during
+selection, including explicit pins; retain their original bytes and rows for
+audit/backup. Startup adds new policy IDs and does not rewrite old immutable
+records. Without separately admitted market evidence the formal composer returns
+`requires_input` / `MARKET_POLICY_INPUTS_MISSING`. Automatic policy approval must
+reproduce source/selection/time evidence before signing; generating a signature
+cannot substitute for that evaluation.
+
+Automatic FCFF inputs identify `fcff-forecast-composer-v5` in
+`provenance.preparation_version`, which participates in the input digest and
+caller approval. This composer implements the declared `lease-treatment-v1`:
+only current/noncurrent finance lease obligations enter the equity-bridge lease
+deduction. Operating lease costs remain in FCFF; operating lease balances remain
+required source observations without a second equity deduction. The lease
+assumption's formula and fact IDs identify only the finance lease obligations.
+Existing artifacts and approvals retain their original identities; prepare and
+approve the corrected input before calculating it. Unknown lease roles still
+abstain, and history thresholds remain unset.
+
+Composer v5 retains the isolation of historical metrics, automatic preparation, manual
+overrides and uncertainty estimation from caller/thread Decimal state. Calculator
+and uncertainty execution use the declared `decimal-50-end-of-year-v1` policy:
+50 digits, HALF_EVEN, exponent bounds -999999 to 999999, clamp 0, and traps for
+InvalidOperation, DivisionByZero and Overflow. Each synchronous boundary gets a
+fresh local context, restores caller settings/flags even on refusal, and never
+changes the importing thread's context. Same-runtime result bytes under the
+previous intended 50-digit context remain unchanged for the same calculator inputs.
+The preparation version changes the prepared input identity, so existing approvals
+cannot authorize a newly prepared input. The prior target-table precision34 was inconsistent with the released
+model inventory; moving to 34 requires a separately versioned numerical/model
+policy and replay evidence. Stored artifacts are never rewritten.
+
+Earlier requirements profiles `fcff-valuation-requirements-v2` and
+`transition-fcff-valuation-requirements-v2` replaced the precomputed numeric
+`dilutive_instruments` input with a release-bound award inventory. Raw observations
+use `equity_award_quantity`, `equity_award_unrecognized_compensation`, and, for
+options, `equity_award_exercise_price`. Each class retains its original facts and
+dimensions. An inventory cannot count equivalent contexts twice or combine a
+consolidated total with its class components.
+
+Original parser scope remains intact: an undimensioned observation may retain
+`security_scope=unspecified`; an `AwardTypeAxis` observation may retain
+`security_scope=segmented`. The signed inventory binds those observations to the
+snapshot's reviewed security. Other security IDs, unknown scopes, and stock-class
+or entity dimensions remain unsupported. Currency for a divided monetary unit
+comes from its numerator (`iso4217:USD/xbrli:shares` retains `USD` and the exact
+original unit); source facts are not rewritten to resemble prepared inputs.
+
+Publish canonical `EquityDilutionEvidenceV1` as an artifact with role
+`equity-dilution-evidence-v1`, and include the quote's original bytes as an artifact
+with role `equity-dilution-quote-source-v1` in the same signed data release. The
+bundle binds one snapshot manifest, issuer/security/currency, complete reviewed
+inventory, dated quote and explicit versioned freshness policy. Every inventory
+fact must match the release's reviewed fact and mapping; every released award
+observation must appear in the inventory. The read-only release canary and serving
+path reject mismatches and missing source bytes. The formal composer applies the
+treasury-stock method under the existing Decimal policy and preserves per-class
+anti-dilution exclusions. Unknown performance conditions, missing inventory or
+quote, stale/future evidence and unsupported share scope refuse per-share preparation.
+The full bundle digest participates in the prepared input and caller approval;
+equal numerical share counts do not make different quote evidence interchangeable.
+These contracts provide no independent review or release authority themselves.
+
+### Inspect retained ownership filings
+
+Use `scripts/inspect_sec_ownership.py` to transcribe accession-bound Form 3/4/5
+originals and amendments already saved by `RetainedSecSourceAdapter`. This is an
+offline source inspection step before inventory reconciliation. It makes no HTTP
+requests, publishes no snapshot and grants no mapping or release approval.
+
+The external `SecOwnershipRequestV1` manifest pins the exact clean commit, issuer
+CIK, valuation cutoff and ordered, distinct sources. Each source supplies its
+accession, form, original SHA-256, acceptance timestamp, filing date and retained
+capture timestamp. The content root is the existing `FilesystemContentStore`
+root containing those original `.bin` objects. Keep this manifest, source bytes
+and generated reports outside Git.
+
+```sh
+PYTHONPATH=fundamental-service/src:scripts \
+  uv run --frozen --project fundamental-service python scripts/inspect_sec_ownership.py \
+  --manifest /absolute/evidence/ownership-manifest.json \
+  --content-root /absolute/evidence/content \
+  --output-directory /absolute/evidence/ownership-reports
+```
+
+The source parser checks header/XML issuer, accession, form, reporting owners and
+period and converts SEC header acceptance from America/New_York. Parser profile
+`sec-ownership-source-v2` retains separate filing/change/document/header dates;
+later envelope dates retain a warning and conservatively delay availability until
+the following local midnight. An envelope date before the change date refuses.
+Unsafe XML and ambiguous
+documents refuse. Every source remains in the result, including missing bytes,
+future originals, amendments and filings with no derivative rows. XML locators,
+verbatim field values/codes, owner totals, footnote references and text retain
+their original meaning. A transaction date or A code does not establish a new
+grant; post-transaction holdings do not establish per-strike quantities.
+
+The report records exact commit, runtime versions, input/output digests and both
+full-submission/XML digests. Publication uses the existing locked temporary-file
+and atomic-rename publisher; identical repeats return `wrote=false` without
+rewriting artifacts. `parsed` establishes source transcription only. The report
+always retains `complete_inventory=false`, `mapping_approved=false` and a null
+history threshold. Insider filings alone do not establish company-wide coverage,
+and an amendment requires reconciliation with its original before financial use.
 
 - A missing snapshot or artifact returns `SOURCE_UNAVAILABLE` or a stable
   not-found code. The caller receives an unavailable/degraded result and must

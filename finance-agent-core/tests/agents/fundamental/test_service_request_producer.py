@@ -146,7 +146,7 @@ class _Client:
                     "data_release_manifest_digest"
                 ],
                 "source_selection_policy": "pit-v1",
-                "coverage_profile": "fcff-valuation-requirements-v1",
+                "coverage_profile": "fcff-valuation-requirements-v3",
             },
             "historical_facts": list(self.ingestion["canonical_fact_ids"]),
             "assumptions": {
@@ -164,8 +164,8 @@ class _Client:
                 "policy_version": "sec-public-pit-v1",
             },
             "model_id": input_payload["model_id"],
-            "model_version": "fcff_dcf-v1",
-            "policy_id": "fcff_dcf-us-gaap-public-v1",
+            "model_version": "fcff_dcf-v2",
+            "policy_id": "fcff_dcf-us-gaap-public-v2",
             "input_digest": None,
         }
         self.calls.append(("prepare_valuation", dict(input_payload)))
@@ -174,11 +174,11 @@ class _Client:
                 "contract_version": "fundamental.v1",
                 "status": "prepared",
                 "model_id": input_payload["model_id"],
-                "model_version": "fcff_dcf-v1",
-                "profile_id": "fcff-valuation-requirements-v1",
+                "model_version": "fcff_dcf-v2",
+                "profile_id": "fcff-valuation-requirements-v3",
                 "profile_digest": "d" * 64,
-                "policy_id": "fcff_dcf-us-gaap-public-v1",
-                "policy_version": "fcff_dcf-v1-quality-v1",
+                "policy_id": "fcff_dcf-us-gaap-public-v2",
+                "policy_version": "fcff_dcf-v2-quality-v1",
                 "quality_status": "provisional",
                 "issue_codes": ["HISTORY_THRESHOLD_UNVALIDATED"],
                 "missing_evidence": [],
@@ -260,8 +260,8 @@ def _request() -> dict[str, object]:
             "policy_version": "sec-public-pit-v1",
         },
         "model_id": "fcff_dcf",
-        "model_version": "fcff_dcf-v1",
-        "policy_id": "fcff_dcf-us-gaap-public-v1",
+        "model_version": "fcff_dcf-v2",
+        "policy_id": "fcff_dcf-us-gaap-public-v2",
     }
 
 
@@ -312,6 +312,7 @@ async def test_producer_resolves_identity_then_ingests_and_pins_request() -> Non
         "accrued_operating_liabilities",
         "deferred_revenue",
         "cash_and_equivalents",
+        "non_operating_assets",
         "current_interest_bearing_debt",
         "long_term_interest_bearing_debt",
         "current_operating_lease_liabilities",
@@ -322,7 +323,6 @@ async def test_producer_resolves_identity_then_ingests_and_pins_request() -> Non
         "noncontrolling_interests",
         "convertible_instruments",
         "common_shares_outstanding",
-        "dilutive_instruments",
         "other_share_classes",
     ]
     assert prepared.snapshot_selector["identity"] == prepared.identity
@@ -355,8 +355,8 @@ async def test_producer_enriches_compact_caller_request_without_inventing_inputs
         "service-owned fixture assumptions"
     )
     assert prepared.valuation_request["model_id"] == "fcff_dcf"
-    assert prepared.valuation_request["model_version"] == "fcff_dcf-v1"
-    assert prepared.valuation_request["policy_id"] == "fcff_dcf-us-gaap-public-v1"
+    assert prepared.valuation_request["model_version"] == "fcff_dcf-v2"
+    assert prepared.valuation_request["policy_id"] == "fcff_dcf-us-gaap-public-v2"
     assert prepared.valuation_request["quality"] == {"status": "provisional"}
     assert prepared.valuation_request["provenance"] == {
         "snapshot_id": "snapshot-aapl-1",
@@ -372,7 +372,7 @@ async def test_producer_enriches_compact_caller_request_without_inventing_inputs
         "data_snapshot_id": "snapshot-aapl-1",
         "data_release_manifest_digest": "b" * 64,
         "source_selection_policy": "pit-v1",
-        "coverage_profile": "fcff-valuation-requirements-v1",
+        "coverage_profile": "fcff-valuation-requirements-v3",
     }
     assert [operation for operation, _ in client.calls] == [
         "resolve_identity",
@@ -424,9 +424,11 @@ async def test_producer_routes_manual_override_back_through_fundamental_service(
 @pytest.mark.asyncio
 async def test_transition_request_adds_filed_evidence_to_complete_profile() -> None:
     client = _Client(ingestion=_ingestion())
+    request = _compact_request()
+    request["model_id"] = "transition_fcff_dcf"
 
     await prepare_service_valuation_request(
-        _state(request=_compact_request(), model_type="dcf_growth"),
+        _state(request=request, model_type="dcf_growth"),
         client=client,
         principal=_principal(),
         correlation_id="correlation-1",
@@ -555,6 +557,7 @@ async def test_facts_only_projection_uses_base_evidence_for_growth_model() -> No
         "accrued_operating_liabilities",
         "deferred_revenue",
         "cash_and_equivalents",
+        "non_operating_assets",
         "current_interest_bearing_debt",
         "long_term_interest_bearing_debt",
         "current_operating_lease_liabilities",
@@ -565,7 +568,6 @@ async def test_facts_only_projection_uses_base_evidence_for_growth_model() -> No
         "noncontrolling_interests",
         "convertible_instruments",
         "common_shares_outstanding",
-        "dilutive_instruments",
         "other_share_classes",
     ]
     assert [operation for operation, _ in client.calls] == ["resolve_identity"]
@@ -621,3 +623,36 @@ async def test_producer_rejects_missing_ticker_without_service_calls() -> None:
 
     assert error.value.code == "FUNDAMENTAL_TICKER_MISSING"
     assert client.calls == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("invalid", [float("nan"), {1: "invalid-key"}, object()])
+async def test_producer_refuses_non_json_service_evidence(invalid) -> None:
+    client = _Client(ingestion={**_ingestion(), "unsupported_metadata": invalid})
+    with pytest.raises(FundamentalServiceFailure) as error:
+        await prepare_service_valuation_request(
+            _state(request=_request()),
+            client=client,
+            principal=_principal(),
+            correlation_id="correlation-1",
+            deadline_at=datetime(2026, 11, 7, tzinfo=UTC),
+        )
+    assert error.value.code == "UPSTREAM_MALFORMED"
+
+
+@pytest.mark.asyncio
+async def test_producer_normalizes_verified_fact_ids_to_json_without_losing_lineage() -> (
+    None
+):
+    ingestion = _ingestion()
+    ids = tuple(ingestion["canonical_fact_ids"])
+    client = _Client(ingestion={**ingestion, "canonical_fact_ids": ids})
+    result = await prepare_service_valuation_request(
+        _state(request=_request()),
+        client=client,
+        principal=_principal(),
+        correlation_id="correlation-1",
+        deadline_at=datetime(2026, 11, 7, tzinfo=UTC),
+    )
+    assert result.ingestion["canonical_fact_ids"] == list(ids)
+    assert result.valuation_request["historical_facts"] == list(ids)

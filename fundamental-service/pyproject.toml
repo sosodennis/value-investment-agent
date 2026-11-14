@@ -10,7 +10,7 @@ requires-python = ">=3.11"
 dependencies = [
   "cryptography>=44.0",
   "fastapi>=0.110",
-  "pydantic>=2.6",
+  "pydantic>=2.12",
   "arelle-release==2.47.4",
   "aniso8601>=10.0.1,<11",
   "holidays>=0.85,<1",
@@ -18,20 +18,33 @@ dependencies = [
   "uvicorn>=0.30",
   "SQLAlchemy[asyncio]>=2.0.36",
   "asyncpg>=0.30.0",
+  "xlrd==2.0.2",
 ]
 
 [project.scripts]
 fundamental-data-release-canary = "fundamental_service.release_runner:main"
+fundamental-prepare-source = "fundamental_service.preparation_runner:main"
+fundamental-persistence = "fundamental_service.persistence_recovery:main"
+fundamental-sign-mapping-review = "fundamental_service.mapping_review_signer:main"
+fundamental-approve-mapping = "fundamental_service.automatic_mapping_runner:main"
+fundamental-research-enterprise = "fundamental_service.enterprise_research_runner:main"
+fundamental-discover-annuals = "fundamental_service.annual_discovery_runner:main"
+fundamental-prepare-issuer = "fundamental_service.issuer_preparation_runner:main"
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0", "httpx>=0.27", "httpx2>=2.0"]
+dev = [
+    "pytest>=8.0",
+    "httpx>=0.27",
+    "httpx2>=2.0",
+    "xlwt==1.3.0",
+]
 parser = []
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.package-data]
-fundamental_service = ["migrations/*.sql"]
+fundamental_service = ["migrations/*.sql", "resources/*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

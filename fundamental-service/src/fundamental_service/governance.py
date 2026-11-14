@@ -22,7 +22,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from .calibration import CalibrationArtifactV1
 from .policies import ModelSpecV1
-from .public_source import PUBLIC_SOURCE_SPECS
+from .public_source_catalog import PUBLIC_SOURCE_SPECS
 from .sec_source import SEC_TERMS
 from .serialization import canonical_bytes, sha256_digest
 
@@ -123,7 +123,7 @@ class ModelReleaseEvidenceV1(BaseModel):
         artifact_ids = [artifact.artifact_id for artifact in self.artifacts]
         if len(artifact_ids) != len(set(artifact_ids)):
             raise ValueError("model release evidence artifact IDs must be unique")
-        roles = [artifact.role for artifact in self.artifacts]
+        roles: list[str] = [artifact.role for artifact in self.artifacts]
         required_roles = {
             "positive_golden",
             "negative_golden",
@@ -499,14 +499,16 @@ class ModelInventory:
                     expected_host, expected_path = sec_prefixes[artifact.source_id]
                     host_allowed = observed.hostname == expected_host
                     path_allowed = observed.path.startswith(expected_path)
+                    expected_terms = SEC_TERMS
                 else:
+                    assert spec is not None
                     host_allowed = (
                         allowed is not None and observed.hostname == allowed.hostname
                     )
                     path_allowed = allowed is not None and observed.path.startswith(
                         allowed.path
                     )
-                expected_terms = SEC_TERMS if sec_source else spec.terms_reference
+                    expected_terms = spec.terms_reference
                 if (
                     observed.scheme != "https"
                     or not host_allowed
@@ -521,6 +523,8 @@ class ModelInventory:
                         "release evidence source URI or legal terms do not match "
                         "register"
                     )
+                assert artifact.available_at is not None
+                assert artifact.captured_at is not None
                 if artifact.available_at > artifact.captured_at:
                     raise ValueError(
                         "public-source artifact has invalid point-in-time ordering"
@@ -549,8 +553,8 @@ class ModelInventory:
                 }
                 if set(model.required_release_gates) != set(gate_roles):
                     raise ValueError("model declares an unsupported release gate")
-                for gate_id, gate in report.gates.items():
-                    if not set(gate.artifact_ids) <= set(artifacts_by_id):
+                for gate_id, gate_evidence in report.gates.items():
+                    if not set(gate_evidence.artifact_ids) <= set(artifacts_by_id):
                         raise ValueError(
                             f"quality gate {gate_id} references missing evidence"
                         )
@@ -628,43 +632,43 @@ class ModelInventory:
                     raise ValueError(
                         f"{artifact.role} does not pass its required assertions"
                     )
-                if any(
-                    not isinstance(attestation.metrics.get(name), int)
-                    or isinstance(attestation.metrics.get(name), bool)
-                    or attestation.metrics[name] < minimum
-                    for name, minimum in minimum_metrics.items()
-                ):
-                    raise ValueError(
-                        f"{artifact.role} is missing required cohort or node counts"
+                for name, minimum in minimum_metrics.items():
+                    metric = attestation.metrics.get(name)
+                    if (
+                        not isinstance(metric, int)
+                        or isinstance(metric, bool)
+                        or metric < minimum
+                    ):
+                        raise ValueError(
+                            f"{artifact.role} is missing required cohort or node counts"
+                        )
+                if artifact.role == "negative_golden":
+                    abstention_count = attestation.metrics.get(
+                        "expected_abstention_count"
                     )
-                if artifact.role == "negative_golden" and not isinstance(
-                    attestation.metrics.get("expected_abstention_count"), int
-                ):
-                    raise ValueError(
-                        "negative golden evidence requires abstention counts"
-                    )
-                if (
-                    artifact.role == "negative_golden"
-                    and attestation.metrics["expected_abstention_count"] <= 0
-                ):
-                    raise ValueError(
-                        "negative golden evidence requires abstention cases"
-                    )
+                    if not isinstance(abstention_count, int):
+                        raise ValueError(
+                            "negative golden evidence requires abstention counts"
+                        )
+                    if abstention_count <= 0:
+                        raise ValueError(
+                            "negative golden evidence requires abstention cases"
+                        )
                 if (
                     artifact.role == "challenger_report"
                     and attestation.metrics.get("mismatch_count") != 0
                 ):
                     raise ValueError("independent challenger reported node mismatches")
+                owner = attestation.metrics.get("owner")
                 if artifact.role == "monitoring_plan" and not (
-                    isinstance(attestation.metrics.get("owner"), str)
-                    and attestation.metrics["owner"].strip()
+                    isinstance(owner, str) and owner.strip()
                 ):
                     raise ValueError(
                         "monitoring plan must identify its accountable owner"
                     )
+                rollback_target = attestation.metrics.get("rollback_target_release")
                 if artifact.role == "rollback_manifest" and not (
-                    isinstance(attestation.metrics.get("rollback_target_release"), str)
-                    and attestation.metrics["rollback_target_release"].strip()
+                    isinstance(rollback_target, str) and rollback_target.strip()
                 ):
                     raise ValueError(
                         "rollback manifest must name a prior release or unsupported "
@@ -819,15 +823,15 @@ class ModelInventory:
         existing = self._evidence.get(key)
         if existing is not None and existing != evidence:
             raise ValueError("model release evidence is immutable by model version")
-        release_manifest = evidence.artifact("release_manifest")
-        if release_manifest is None:  # validated by ModelReleaseEvidenceV1
+        manifest_artifact = evidence.artifact("release_manifest")
+        if manifest_artifact is None:  # validated by ModelReleaseEvidenceV1
             raise ValueError("model promotion requires a release manifest")
         self._evidence[key] = evidence
         self._active[model.model_id] = model.model_version
         return model.model_copy(
             update={
                 "lifecycle": "active",
-                "release_manifest": release_manifest.artifact_id,
+                "release_manifest": manifest_artifact.artifact_id,
                 "approval_date": evidence.approved_at,
                 "review_date": evidence.expires_at,
             }

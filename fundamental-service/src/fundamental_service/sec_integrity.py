@@ -10,12 +10,31 @@ import posixpath
 import re
 import stat
 from dataclasses import dataclass
+from typing import Literal, Protocol
 from urllib.parse import unquote, urlsplit
+from xml.etree import ElementTree
 from zipfile import BadZipFile, ZipFile, ZipInfo
 
 from .contracts import RemovedByteRangeV1
 from .serialization import sha256_digest
-from .snapshots import CapturedSource, SnapshotError
+from .snapshots import SnapshotError
+
+
+class FilingIntegritySource(Protocol):
+    """Byte evidence consumed by the policy; HTTP authority is checked separately."""
+
+    @property
+    def uri(self) -> str: ...
+
+    @property
+    def content(self) -> bytes: ...
+
+    @property
+    def accession_number(self) -> str | None: ...
+
+    @property
+    def response_headers(self) -> tuple[tuple[str, str], ...]: ...
+
 
 _EDGE_SCRIPT_AT_END = re.compile(
     rb'(?P<script><script type="text/javascript"\s+'
@@ -28,7 +47,63 @@ _NORMALIZATION_RULE = (
     "document only when archive index size, Akamai response metadata, and "
     "the exact archive member independently prove the representation delta"
 )
+_SCRIPT_ONLY_POLICY_ID = "sec-edgar-akamai-script-only-v1"
+_SCRIPT_ONLY_RULE = (
+    "remove one terminal SEC edge script only when the accession index size, "
+    "Akamai response metadata and exact ZIP member prove that every remaining "
+    "byte, including the original terminal LF, is unchanged"
+)
+_HTML_TAG_PADDING_POLICY_ID = "sec-edgar-html-tag-line-padding-v1"
+_HTML_TAG_PADDING_RULE = (
+    "reconstruct the unchanged accession-matched HTML archive member only when "
+    "removing ASCII SP/TAB before LF on blank or tag-ending lines, appending "
+    "one terminal LF and the exact terminal Akamai script reproduces every "
+    "direct-response byte; the SEC index corroborates the script-free size"
+)
+_HTML_TAG_NBSP_PADDING_POLICY_ID = "sec-edgar-html-tag-line-padding-nbsp-v1"
+_HTML_TAG_NBSP_PADDING_RULE = (
+    "reconstruct the unchanged accession-matched HTML archive member only when "
+    "removing ASCII SP/TAB before LF on blank, tag-ending or exact &#160; "
+    "layout-reference suffixes following a tag, appending one terminal LF and "
+    "the exact terminal Akamai script reproduces every direct-response byte; "
+    "preserve the character references and corroborate the script-free size "
+    "with the SEC index"
+)
+_HTML_TAG_NBSP_SUFFIX = re.compile(rb">(?:[ \t]*&#160;)+$")
 _MAX_STAGED_GRAPHICS_BYTES = 32 * 1024 * 1024
+_XML_LINE_END_POLICY_ID = "sec-edgar-xbrl-xml10-line-ends-v1"
+_XML_LINE_END_RULE = (
+    "reconstruct the original archive XML 1.0 XBRL instance from its direct LF "
+    "representation only when replacing archive CRLF pairs with LF reproduces "
+    "the exact direct response and its indexed size; insert CR bytes only; "
+    "preserve all original bytes and validate the reconstructed archive instance"
+)
+_XML_FINAL_LF_POLICY_ID = "sec-edgar-xbrl-xml10-terminal-lf-v1"
+_XML_FINAL_LF_RULE = (
+    "remove exactly one direct-response terminal LF after an XML 1.0 XBRL "
+    "closing element only when the SEC index confirms the full direct size "
+    "and the remaining bytes equal the accession-matched ZIP member exactly; "
+    "preserve both representations and validate the unchanged archive instance"
+)
+_XML_COMBINED_LF_POLICY_ID = "sec-edgar-xbrl-xml10-line-ends-terminal-lf-v1"
+_XML_COMBINED_LF_RULE = (
+    "reconstruct the unchanged accession-matched archive XML 1.0 XBRL instance "
+    "only when replacing its CRLF pairs with LF and appending exactly one LF "
+    "after its closing root reproduces every indexed direct-response byte; "
+    "retain both representations, the removed LF offset and inserted CR count"
+)
+
+
+def _is_xml10_xbrl(content: bytes) -> bool:
+    if not re.match(rb"<\?xml\s+version\s*=\s*(['\"])1\.0\1(?:\s|\?>)", content):
+        return False
+    if b"<!DOCTYPE" in content:
+        return False
+    try:
+        root = next(ElementTree.iterparse(io.BytesIO(content), events=("start",)))[1]
+    except (ElementTree.ParseError, StopIteration):
+        return False
+    return root.tag == "{http://www.xbrl.org/2003/instance}xbrl"
 
 
 class _ImageSourceParser(HTMLParser):
@@ -134,9 +209,9 @@ def extract_referenced_graphics(
 
 @dataclass(frozen=True)
 class SecIntegrityAssessment:
-    relation: str
+    relation: Literal["exact", "normalized"]
     normalized_content: bytes
-    archive_index_entry: dict[str, object]
+    declared_primary_size: int
     archive_member_name: str
     archive_member: bytes
     raw_content_hash: str
@@ -154,19 +229,119 @@ def _digest(content: bytes) -> str:
     return hashlib.sha256(content).hexdigest()
 
 
+def _html_tag_line_padding(
+    *,
+    raw_response: FilingIntegritySource,
+    archive_index: FilingIntegritySource,
+    archive: FilingIntegritySource,
+    member_name: str,
+    member: bytes,
+    declared_size: int,
+) -> SecIntegrityAssessment | None:
+    raw = raw_response.content
+    if (
+        not raw_response.uri.endswith((".htm", ".html"))
+        or dict(raw_response.response_headers).get("x-akamai-transformed") != "0 - 0 -"
+        or b"\r" in member
+        or not member.endswith((b"</body></html>", b"</body>\n</html>"))
+    ):
+        return None
+    match = _EDGE_SCRIPT_AT_END.search(raw)
+    if match is None:
+        return None
+    script_start, script_end = match.span("script")
+    without_script = raw[:script_start] + raw[script_end:]
+    if len(without_script) != declared_size:
+        return None
+
+    chunks = []
+    padding_ranges = []
+    position = 0
+    has_nbsp_suffix = False
+    for padding in re.finditer(rb"[ \t]+(?=\n)", member):
+        start, end = padding.span()
+        line_start = member.rfind(b"\n", 0, start) + 1
+        prefix = member[line_start:start]
+        if prefix and not prefix.endswith(b">"):
+            if _HTML_TAG_NBSP_SUFFIX.search(prefix) is None:
+                return None
+            has_nbsp_suffix = True
+        chunks.append(member[position:start])
+        padding_ranges.append((start, end, _digest(padding.group())))
+        position = end
+    if not padding_ranges:
+        return None
+    chunks.append(member[position:])
+    if b"".join(chunks) + b"\n" != without_script:
+        return None
+
+    raw_hash = _digest(raw)
+    index_hash = _digest(archive_index.content)
+    archive_hash = _digest(archive.content)
+    member_hash = _digest(member)
+    policy_id, rule = (
+        (_HTML_TAG_NBSP_PADDING_POLICY_ID, _HTML_TAG_NBSP_PADDING_RULE)
+        if has_nbsp_suffix
+        else (_HTML_TAG_PADDING_POLICY_ID, _HTML_TAG_PADDING_RULE)
+    )
+    rule_payload = {
+        "policy_id": policy_id,
+        "rule": rule,
+        "accession": raw_response.accession_number,
+        "primary_document": raw_response.uri.rsplit("/", 1)[-1],
+        "declared_size": declared_size,
+        "required_header": ("x-akamai-transformed", "0 - 0 -"),
+        "script_shape": _EDGE_SCRIPT_AT_END.pattern.decode("ascii"),
+        "raw_content_hash": raw_hash,
+        "archive_index_hash": index_hash,
+        "archive_hash": archive_hash,
+        "archive_member_hash": member_hash,
+        "archive_padding_ranges": padding_ranges,
+    }
+    if has_nbsp_suffix:
+        rule_payload["permitted_nbsp_suffix"] = _HTML_TAG_NBSP_SUFFIX.pattern.decode(
+            "ascii"
+        )
+    return SecIntegrityAssessment(
+        relation="normalized",
+        normalized_content=member,
+        declared_primary_size=declared_size,
+        archive_member_name=member_name,
+        archive_member=member,
+        raw_content_hash=raw_hash,
+        archive_index_hash=index_hash,
+        archive_hash=archive_hash,
+        archive_member_hash=member_hash,
+        normalized_content_hash=member_hash,
+        removed_ranges=(
+            RemovedByteRangeV1(
+                start=script_start,
+                end=script_end,
+                content_hash=_digest(match.group("script")),
+            ),
+            RemovedByteRangeV1(
+                start=len(raw) - 1, end=len(raw), content_hash=_digest(b"\n")
+            ),
+        ),
+        normalization_policy_id=policy_id,
+        normalization_rule_signature=sha256_digest(rule_payload),
+        normalization_reason=rule,
+    )
+
+
 def assess_filing_response(
     *,
-    raw_response: CapturedSource,
-    archive_index: CapturedSource,
-    archive: CapturedSource,
+    raw_response: FilingIntegritySource,
+    archive_index: FilingIntegritySource,
+    archive: FilingIntegritySource,
 ) -> SecIntegrityAssessment:
     """Match raw response, SEC archive index, and XBRL ZIP member.
 
-    Normalization is limited to a single terminal Akamai script and a final
-    terminal script and final LF. The closing tags may use the exact line break
-    present in the canonical archive member. The removal must produce the
-    accession index's declared size and exact archive member bytes. Every other
-    mismatch is a blocking error.
+    Versioned rules cover a terminal Akamai script/final LF and the exact
+    XML 1.0 CRLF/LF, terminal LF and their exact combined representation
+    differences. They reconstruct the original accession-matched archive bytes.
+    HTML tag-line padding has a separate exact archive reconstruction rule.
+    Every other mismatch blocks.
     """
     try:
         index_data = json.loads(archive_index.content)
@@ -246,6 +421,113 @@ def assess_filing_response(
     archive_hash = _digest(archive.content)
     member_hash = _digest(member)
     index_hash = _digest(archive_index.content)
+    if (
+        primary_name.endswith(".xml")
+        and len(raw) == declared_size
+        and raw == member + b"\n"
+        and re.search(rb"</(?:[A-Za-z_][A-Za-z0-9_.-]*:)?xbrl>$", member)
+        and _is_xml10_xbrl(member)
+    ):
+        return SecIntegrityAssessment(
+            relation="normalized",
+            normalized_content=member,
+            declared_primary_size=declared_size,
+            archive_member_name=member_name,
+            archive_member=member,
+            raw_content_hash=raw_hash,
+            archive_index_hash=index_hash,
+            archive_hash=archive_hash,
+            archive_member_hash=member_hash,
+            normalized_content_hash=member_hash,
+            removed_ranges=(
+                RemovedByteRangeV1(
+                    start=len(member), end=len(raw), content_hash=_digest(b"\n")
+                ),
+            ),
+            normalization_policy_id=_XML_FINAL_LF_POLICY_ID,
+            normalization_rule_signature=sha256_digest(
+                {
+                    "policy_id": _XML_FINAL_LF_POLICY_ID,
+                    "rule": _XML_FINAL_LF_RULE,
+                    "accession": expected_accession,
+                    "primary_document": primary_name,
+                    "declared_size": declared_size,
+                    "raw_content_hash": raw_hash,
+                    "archive_index_hash": index_hash,
+                    "archive_hash": archive_hash,
+                    "archive_member_hash": member_hash,
+                    "removed_lf_offset": len(member),
+                }
+            ),
+            normalization_reason=_XML_FINAL_LF_RULE,
+        )
+    line_ended_member = member.replace(b"\r\n", b"\n")
+    combined_lf = (
+        raw == line_ended_member + b"\n"
+        and re.search(rb"</(?:[A-Za-z_][A-Za-z0-9_.-]*:)?xbrl>$", member) is not None
+    )
+    if (
+        primary_name.endswith(".xml")
+        and len(raw) == declared_size
+        and b"\r\n" in member
+        and b"\r" not in raw
+        and (raw == line_ended_member or combined_lf)
+        and _is_xml10_xbrl(raw)
+    ):
+        policy_id = (
+            _XML_COMBINED_LF_POLICY_ID if combined_lf else _XML_LINE_END_POLICY_ID
+        )
+        rule = _XML_COMBINED_LF_RULE if combined_lf else _XML_LINE_END_RULE
+        return SecIntegrityAssessment(
+            relation="normalized",
+            normalized_content=member,
+            declared_primary_size=declared_size,
+            archive_member_name=member_name,
+            archive_member=member,
+            raw_content_hash=raw_hash,
+            archive_index_hash=index_hash,
+            archive_hash=archive_hash,
+            archive_member_hash=member_hash,
+            normalized_content_hash=member_hash,
+            removed_ranges=(
+                (
+                    RemovedByteRangeV1(
+                        start=len(raw) - 1,
+                        end=len(raw),
+                        content_hash=_digest(b"\n"),
+                    ),
+                )
+                if combined_lf
+                else ()
+            ),
+            normalization_policy_id=policy_id,
+            normalization_rule_signature=sha256_digest(
+                {
+                    "policy_id": policy_id,
+                    "rule": rule,
+                    "accession": expected_accession,
+                    "primary_document": primary_name,
+                    "declared_size": declared_size,
+                    "raw_content_hash": raw_hash,
+                    "archive_index_hash": index_hash,
+                    "archive_hash": archive_hash,
+                    "archive_member_hash": member_hash,
+                    "inserted_cr_count": member.count(b"\r\n"),
+                    **({"removed_lf_offset": len(raw) - 1} if combined_lf else {}),
+                }
+            ),
+            normalization_reason=rule,
+        )
+    html_padding = _html_tag_line_padding(
+        raw_response=raw_response,
+        archive_index=archive_index,
+        archive=archive,
+        member_name=member_name,
+        member=member,
+        declared_size=declared_size,
+    )
+    if html_padding is not None:
+        return html_padding
     if len(member) > declared_size or declared_size - len(member) > 1:
         raise SnapshotError(
             "SOURCE_ARCHIVE_SIZE_MISMATCH",
@@ -260,7 +542,7 @@ def assess_filing_response(
         return SecIntegrityAssessment(
             relation="exact",
             normalized_content=raw,
-            archive_index_entry=entry,
+            declared_primary_size=declared_size,
             archive_member_name=member_name,
             archive_member=member,
             raw_content_hash=raw_hash,
@@ -296,28 +578,37 @@ def assess_filing_response(
             "SOURCE_INTEGRITY_MISMATCH",
             "SEC index size does not corroborate the exact script removal",
         )
-    final_lf_start = len(raw) - 1
-    normalized = without_script[:-1]
-    removed_ranges = (
+    policy_id = _NORMALIZATION_POLICY_ID
+    rule = _NORMALIZATION_RULE
+    normalized = without_script
+    removed_ranges: tuple[RemovedByteRangeV1, ...] = (
         RemovedByteRangeV1(
             start=script_start,
             end=script_end,
             content_hash=_digest(script),
         ),
-        RemovedByteRangeV1(
-            start=final_lf_start,
-            end=final_lf_start + 1,
-            content_hash=_digest(b"\n"),
-        ),
     )
+    if without_script == member:
+        policy_id = _SCRIPT_ONLY_POLICY_ID
+        rule = _SCRIPT_ONLY_RULE
+    else:
+        normalized = without_script[:-1]
+        removed_ranges = (
+            *removed_ranges,
+            RemovedByteRangeV1(
+                start=len(raw) - 1,
+                end=len(raw),
+                content_hash=_digest(b"\n"),
+            ),
+        )
     if normalized != member:
         raise SnapshotError(
             "SOURCE_INTEGRITY_MISMATCH",
             "approved SEC response normalization does not reproduce archive bytes",
         )
     rule_payload = {
-        "policy_id": _NORMALIZATION_POLICY_ID,
-        "rule": _NORMALIZATION_RULE,
+        "policy_id": policy_id,
+        "rule": rule,
         "script_shape": _EDGE_SCRIPT_AT_END.pattern.decode("ascii"),
         "accession": raw_response.accession_number,
         "primary_document": primary_name,
@@ -325,10 +616,19 @@ def assess_filing_response(
         "declared_size": declared_size,
         "archive_member_hash": member_hash,
     }
+    if policy_id == _SCRIPT_ONLY_POLICY_ID:
+        rule_payload.update(
+            raw_content_hash=raw_hash,
+            archive_index_hash=index_hash,
+            archive_hash=archive_hash,
+            removed_script_start=script_start,
+            removed_script_end=script_end,
+            removed_script_hash=_digest(script),
+        )
     return SecIntegrityAssessment(
         relation="normalized",
         normalized_content=normalized,
-        archive_index_entry=entry,
+        declared_primary_size=declared_size,
         archive_member_name=member_name,
         archive_member=member,
         raw_content_hash=raw_hash,
@@ -337,7 +637,7 @@ def assess_filing_response(
         archive_member_hash=member_hash,
         normalized_content_hash=_digest(normalized),
         removed_ranges=removed_ranges,
-        normalization_policy_id=_NORMALIZATION_POLICY_ID,
+        normalization_policy_id=policy_id,
         normalization_rule_signature=sha256_digest(rule_payload),
-        normalization_reason=_NORMALIZATION_RULE,
+        normalization_reason=rule,
     )

@@ -43,6 +43,16 @@ from .data_releases import (
     DataReleaseTrustRootsV1,
 )
 from .facts import CanonicalFactRepository
+from .quote_providers import QuoteSourceProviderPort
+from .quote_sources import default_quote_providers
+from .free_source_policy import (
+    default_macro_providers,
+    default_reference_providers,
+    free_market_source_policy,
+)
+from .macro_series import MacroSeriesProviderPort
+from .market_reference import MarketReferenceProviderPort
+from .source_admission import SourceUsePolicyV1
 from .governance import ModelInventory
 from .interface.transport import (
     EmptyOperationInputV1,
@@ -69,6 +79,7 @@ from .operations import (
     ServiceError,
     correlation_id,
     guard_body_size,
+    guard_caller_approval,
 )
 from .policies import (
     MetadataModelRepository,
@@ -162,6 +173,10 @@ def create_app(
     model_inventory: ModelInventory | None = None,
     sec_acquisition: SecAcquisitionUseCase | None = None,
     identity_resolution: SecIdentityResolutionUseCase | None = None,
+    quote_providers: tuple[QuoteSourceProviderPort, ...] | None = None,
+    macro_providers: tuple[MacroSeriesProviderPort, ...] | None = None,
+    reference_providers: tuple[MarketReferenceProviderPort, ...] | None = None,
+    source_use_policy: SourceUsePolicyV1 | None = None,
 ) -> FastAPI:
     """Assemble transport, application use cases, and runtime resources."""
 
@@ -195,6 +210,18 @@ def create_app(
         require_metadata=require_metadata,
         policy_registry=policy_registry,
         model_inventory=model_inventory,
+        quote_providers=(
+            default_quote_providers() if quote_providers is None else quote_providers
+        ),
+        macro_providers=default_macro_providers()
+        if macro_providers is None
+        else macro_providers,
+        reference_providers=default_reference_providers()
+        if reference_providers is None
+        else reference_providers,
+        source_use_policy=free_market_source_policy()
+        if source_use_policy is None
+        else source_use_policy,
     )
 
     @asynccontextmanager
@@ -324,7 +351,7 @@ def create_app(
             return response
         except ServiceError as error:
             status_code = error.status_code
-            context = getattr(request.state, "context", None)
+            failed_context = getattr(request.state, "context", None)
             LOGGER.warning(
                 "fundamental_request_failed path=%s status_code=%s error_code=%s "
                 "error_message=%s organization_id=%s",
@@ -332,7 +359,9 @@ def create_app(
                 error.status_code,
                 error.code,
                 error.message,
-                getattr(getattr(context, "principal", None), "organization_id", None),
+                getattr(
+                    getattr(failed_context, "principal", None), "organization_id", None
+                ),
             )
             if (
                 error.code.startswith("internal_auth")
@@ -777,10 +806,12 @@ def create_app(
     async def validate_valuation(request: Request) -> JSONResponse:
         raw_input = request.state.operation_input
         if any(key in raw_input for key in ("scenarios", "sensitivity", "monte_carlo")):
-            value = UncertaintyRequestV1.model_validate_json(
+            uncertainty_value = UncertaintyRequestV1.model_validate_json(
                 json.dumps(normalize_uncertainty_payload(raw_input))
             )
-            return success_response(request, application.validate_uncertainty(value))
+            return success_response(
+                request, application.validate_uncertainty(uncertainty_value)
+            )
         value = decode_input(request, ValuationInputV1)
         return success_response(request, application.validate_valuation(value))
 
@@ -830,6 +861,11 @@ def create_app(
     )
     async def calculate_valuation(request: Request) -> JSONResponse:
         value = decode_input(request, ValuationInputV1)
+        guard_caller_approval(
+            value.caller_approval,
+            caller_id=request.state.context.principal.subject_id,
+            received_at=datetime.now(UTC),
+        )
         result = application.calculate_valuation(
             value, correlation_id=request.state.correlation_id
         )
@@ -858,6 +894,11 @@ def create_app(
     )
     async def calculate_with_policy(request: Request) -> JSONResponse:
         value = decode_input(request, PolicyValuationInputV1)
+        guard_caller_approval(
+            value.caller_approval,
+            caller_id=request.state.context.principal.subject_id,
+            received_at=datetime.now(UTC),
+        )
         result = application.calculate_with_policy(
             value, correlation_id=request.state.correlation_id
         )
@@ -872,6 +913,11 @@ def create_app(
     async def uncertainty_valuation(request: Request) -> JSONResponse:
         value = UncertaintyRequestV1.model_validate_json(
             json.dumps(normalize_uncertainty_payload(request.state.operation_input))
+        )
+        guard_caller_approval(
+            value.caller_approval,
+            caller_id=request.state.context.principal.subject_id,
+            received_at=datetime.now(UTC),
         )
         return success_response(request, application.uncertainty_valuation(value))
 
@@ -950,7 +996,7 @@ def create_app(
         app.openapi_schema = schema
         return schema
 
-    app.openapi = openapi_with_typed_internal_envelopes
+    setattr(app, "openapi", openapi_with_typed_internal_envelopes)
     return app
 
 
@@ -1014,6 +1060,11 @@ def create_runtime_app() -> FastAPI:
         edgar_plugin_sha256=edgar_plugin_sha256,
         xule_plugin_sha256=xule_plugin_sha256,
         dqc_ruleset_sha256=dqc_ruleset_sha256,
+        dqc_ruleset_catalog_path=os.getenv("FUNDAMENTAL_SEC_DQC_RULESET_CATALOG_PATH")
+        or None,
+        historical_dqc_dir=os.getenv("FUNDAMENTAL_SEC_HISTORICAL_DQC_DIR") or None,
+        historical_dqc_sha256=os.getenv("FUNDAMENTAL_SEC_HISTORICAL_DQC_SHA256")
+        or None,
         supported_filing_years=supported_filing_years,
         supported_filing_forms=supported_filing_forms,
         authorized_organizations=config.ingestion_authorized_organizations,

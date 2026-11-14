@@ -1,22 +1,29 @@
-from datetime import UTC, datetime
+from dataclasses import replace
+from datetime import UTC, date, datetime
 from decimal import Decimal
 
 import pytest
+from fundamental_service.annual_history import resolve_annual_history
 from fundamental_service.application.service import _approved_market_policy
+from fundamental_service.calculator import calculate
 from fundamental_service.contracts import (
     IdentityV1,
     PeriodType,
     QualityStatus,
     SourceRole,
     TraceV1,
+    UncertaintyV1,
 )
-from fundamental_service.policies import initial_policy_records
+from fundamental_service.policies import PolicyRecordV1, initial_policy_records
+from fundamental_service.serialization import sha256_digest
+from market_policy_fixtures import synthetic_market_inputs
 from fundamental_service.valuation_preparation import (
     ApprovedMarketPolicyInputsV1,
     ForwardReferenceProvenanceV1,
     ManualProvenanceV1,
     PreparationError,
     apply_manual_override,
+    derive_historical_metrics,
     prepare_automatic_valuation,
 )
 from fundamental_service.uncertainty import run_uncertainty
@@ -26,6 +33,7 @@ from fundamental_service.valuation_requirements import (
 )
 from test_api import _canonical_fact
 from test_postgres_metadata import _snapshot
+from equity_award_fixtures import award_evidence
 
 VALUATION_TIME = datetime(2026, 3, 1, tzinfo=UTC)
 RELEASE_DIGEST = "d" * 64
@@ -45,6 +53,7 @@ def _fact(
     base = _canonical_fact(fact_id or f"{field}-{year}", field)
     return base.model_copy(
         update={
+            "issuer_id": "0000000001",
             "concept": f"us-gaap:{field}",
             "value": Decimal(value),
             "period_start": period_start,
@@ -94,6 +103,7 @@ def _facts() -> tuple:
     )
     point_fields = (
         "cash_and_equivalents",
+        "non_operating_assets",
         "current_interest_bearing_debt",
         "long_term_interest_bearing_debt",
         "current_operating_lease_liabilities",
@@ -104,7 +114,6 @@ def _facts() -> tuple:
         "noncontrolling_interests",
         "convertible_instruments",
         "common_shares_outstanding",
-        "dilutive_instruments",
         "other_share_classes",
     )
     facts = []
@@ -167,27 +176,30 @@ def _prepare(
     market_policy=None,
     model_id: str = "fcff_dcf",
 ):
-    return prepare_automatic_valuation(
-        facts,
-        snapshot=_snapshot(
-            "valuation-preparation",
-            identity=IdentityV1(
-                issuer_id="CIK1",
-                issuer_name="Example Co",
-                domicile="US",
-                reporting_basis="us-gaap",
-                security_id="COMMON",
-                share_class="common",
-                currency="USD",
-            ),
-            valuation_timestamp=VALUATION_TIME,
+    snapshot = _snapshot(
+        "valuation-preparation",
+        identity=IdentityV1(
+            issuer_id="0000000001",
+            issuer_name="Example Co",
+            domicile="US",
+            reporting_basis="us-gaap",
+            security_id="COMMON",
+            share_class="common",
+            currency="USD",
         ),
+        valuation_timestamp=VALUATION_TIME,
+    )
+    dilution = award_evidence(snapshot)
+    return prepare_automatic_valuation(
+        (*facts, *dilution.facts),
+        snapshot=snapshot,
         model_id=model_id,
-        model_version=f"{model_id}-v1",
-        policy_id="fcff_dcf-us-gaap-public-v1",
-        policy_version="fcff_dcf-v1-quality-v1",
+        model_version=f"{model_id}-v2",
+        policy_id="fcff_dcf-us-gaap-public-v3",
+        policy_version="fcff_dcf-v2-quality-v2",
         data_release_manifest_digest=RELEASE_DIGEST,
         market_policy=market_policy,
+        equity_dilution_evidence=dilution,
     )
 
 
@@ -214,6 +226,264 @@ def test_complete_history_prepares_provisional_input_with_lineage_and_digest() -
         result.preparation_digest
         == _prepare(_facts(), market_policy=_market_policy()).preparation_digest
     )
+
+
+@pytest.mark.parametrize("model_id", ("fcff_dcf", "transition_fcff_dcf"))
+@pytest.mark.parametrize(
+    "diagnostic",
+    (
+        "cost_of_revenue",
+        "net_income",
+        "operating_lease_cost",
+        "finance_lease_cost",
+        "stock_based_compensation",
+        "basic_weighted_average_shares",
+        "diluted_weighted_average_shares",
+    ),
+)
+def test_annual_diagnostics_are_retained_without_becoming_formula_prerequisites(
+    model_id, diagnostic
+):
+    facts = _facts()
+    if model_id == "transition_fcff_dcf":
+        facts = (
+            *facts,
+            _fact("filed_operating_evidence", 2025, "1").model_copy(
+                update={"value": "filed evidence"}
+            ),
+        )
+    variants = (
+        facts,
+        tuple(f for f in facts if f.normalized_field != diagnostic),
+        tuple(
+            f.model_copy(update={"value": Decimal("1234567")})
+            if f.normalized_field == diagnostic
+            else f
+            for f in facts
+        ),
+    )
+    prepared = tuple(
+        _prepare(f, market_policy=_market_policy(), model_id=model_id) for f in variants
+    )
+    assert all(p.status == "prepared" and p.input is not None for p in prepared)
+    assert all(p.quality_status is QualityStatus.PROVISIONAL for p in prepared)
+    numerical_assumptions = tuple(
+        p.input.assumptions.model_dump(exclude={"trace"}) for p in prepared
+    )
+    assert (
+        numerical_assumptions[0] == numerical_assumptions[1] == numerical_assumptions[2]
+    )
+    assert (
+        prepared[0].historical_metrics.metrics == prepared[1].historical_metrics.metrics
+    )
+    assert (
+        prepared[0].historical_metrics.metrics == prepared[2].historical_metrics.metrics
+    )
+    calculated = tuple(
+        calculate(
+            p.input.model_copy(
+                update={"uncertainty": UncertaintyV1(mode="none")}
+            ).with_digest(),
+            allow_provisional=True,
+        )
+        for p in prepared
+    )
+    assert len({r.intrinsic_value for r in calculated}) == 1
+    assert len({r.per_share_value for r in calculated}) == 1
+    assert {f.fact_id for f in facts if f.normalized_field == diagnostic} <= set(
+        prepared[0].input.historical_facts
+    )
+    assert not any(
+        f.normalized_field == diagnostic
+        and f.fact_id in prepared[1].input.historical_facts
+        for f in facts
+    )
+
+
+@pytest.mark.parametrize("model_id", ("fcff_dcf", "transition_fcff_dcf"))
+@pytest.mark.parametrize(
+    "dependency",
+    (
+        "revenue",
+        "operating_income",
+        "income_before_tax",
+        "income_tax_expense",
+        "capital_expenditure",
+        "depreciation_and_amortization",
+        "convertible_instruments",
+        "preferred_claims",
+        "other_share_classes",
+    ),
+)
+def test_missing_formula_dependencies_and_claims_still_abstain(model_id, dependency):
+    facts = tuple(f for f in _facts() if f.normalized_field != dependency)
+    if model_id == "transition_fcff_dcf":
+        facts = (
+            *facts,
+            _fact("filed_operating_evidence", 2025, "1").model_copy(
+                update={"value": "filed evidence"}
+            ),
+        )
+    result = _prepare(facts, market_policy=_market_policy(), model_id=model_id)
+    assert result.status == "abstained" and result.input is None
+    assert any(dependency in reason for reason in result.missing_evidence)
+
+
+@pytest.mark.parametrize("model_id", ("fcff_dcf", "transition_fcff_dcf"))
+@pytest.mark.parametrize(
+    "conflict,code",
+    (
+        ("period", "HISTORY_PERIOD_ALIGNMENT_CONFLICT"),
+        ("mapping", "HISTORY_MAPPING_CONFLICT"),
+        ("value", "HISTORY_FACT_CONFLICT"),
+        ("amendment", "FACT_AMENDMENT_SCOPE_UNKNOWN"),
+    ),
+)
+def test_history_conflicts_abstain_with_a_stable_reason(model_id, conflict, code):
+    facts = _facts()
+    conflicting = _fact("revenue", 2025, "999", fact_id="conflicting-revenue")
+    if conflict == "period":
+        conflicting = conflicting.model_copy(
+            update={
+                "period_start": date(2025, 1, 2),
+                "context": conflicting.context.model_copy(
+                    update={"start_date": date(2025, 1, 2)}
+                ),
+            }
+        )
+    elif conflict == "mapping":
+        conflicting = conflicting.model_copy(
+            update={
+                "concept": "issuer:AlternateRevenue",
+                "context": conflicting.context.model_copy(
+                    update={"concept_qname": "issuer:AlternateRevenue"}
+                ),
+            }
+        )
+    elif conflict == "amendment":
+        conflicting = conflicting.model_copy(
+            update={"is_amendment": True, "amendment_scope": "unknown"}
+        )
+    if model_id == "transition_fcff_dcf":
+        facts = (
+            *facts,
+            _fact("filed_operating_evidence", 2025, "1").model_copy(
+                update={"value": "filed evidence"}
+            ),
+        )
+    facts = (*facts, conflicting)
+
+    result = _prepare(facts, market_policy=_market_policy(), model_id=model_id)
+    repeated = _prepare(
+        tuple(reversed(facts)), market_policy=_market_policy(), model_id=model_id
+    )
+
+    assert result.status == "abstained"
+    assert result.quality_status is QualityStatus.ABSTAIN
+    assert result.input is None
+    assert result.issue_codes == (code,)
+    assert result.historical_metrics.issue_codes == (code,)
+    assert result.preparation_digest == repeated.preparation_digest
+    assert result == repeated
+
+
+@pytest.mark.parametrize("model_id", ("fcff_dcf", "transition_fcff_dcf"))
+def test_operating_lease_balances_are_disclosed_without_an_equity_deduction(model_id):
+    facts = _facts()
+    if model_id == "transition_fcff_dcf":
+        facts = (
+            *facts,
+            _fact("filed_operating_evidence", 2025, "1").model_copy(
+                update={"value": "filed evidence"}
+            ),
+        )
+    baseline = _prepare(facts, market_policy=_market_policy(), model_id=model_id)
+    changed = _prepare(
+        tuple(
+            fact.model_copy(update={"value": fact.value + Decimal("500")})
+            if fact.normalized_field
+            in {
+                "current_operating_lease_liabilities",
+                "long_term_operating_lease_liabilities",
+            }
+            else fact
+            for fact in facts
+        ),
+        market_policy=_market_policy(),
+        model_id=model_id,
+    )
+    assert baseline.input is not None and changed.input is not None
+    results = tuple(
+        calculate(
+            prepared.input.model_copy(
+                update={"uncertainty": UncertaintyV1(mode="none")}
+            ).with_digest(),
+            allow_provisional=True,
+        )
+        for prepared in (baseline, changed)
+    )
+    assert results[0].intrinsic_value == results[1].intrinsic_value
+    assert results[0].per_share_value == results[1].per_share_value
+    assert changed.input.assumptions.capital_bridge.lease_liabilities == Decimal("20")
+    assert changed.input.provenance.preparation_version == "fcff-forecast-composer-v5"
+    lease_evidence = next(
+        item
+        for item in changed.assumptions_evidence
+        if item.path == "assumptions.capital_bridge.lease_liabilities"
+    )
+    assert set(lease_evidence.fact_ids) == {
+        "current_finance_lease_liabilities-2025",
+        "long_term_finance_lease_liabilities-2025",
+    }
+    assert lease_evidence.formula == (
+        "current_finance_lease_liabilities + long_term_finance_lease_liabilities"
+    )
+    assert {
+        "current_operating_lease_liabilities-2025",
+        "long_term_operating_lease_liabilities-2025",
+    } <= set(changed.input.historical_facts)
+
+
+@pytest.mark.parametrize(
+    "field",
+    (
+        "current_operating_lease_liabilities",
+        "long_term_operating_lease_liabilities",
+        "current_finance_lease_liabilities",
+        "long_term_finance_lease_liabilities",
+    ),
+)
+def test_unknown_lease_principal_still_abstains(field):
+    result = _prepare(
+        tuple(fact for fact in _facts() if fact.normalized_field != field),
+        market_policy=_market_policy(),
+    )
+    assert result.status == "abstained"
+    assert result.input is None
+    assert field in result.missing_evidence
+
+
+def test_finance_lease_increase_reduces_equity_by_the_reported_amount():
+    baseline = _prepare(_facts(), market_policy=_market_policy())
+    changed = _prepare(
+        tuple(
+            fact.model_copy(update={"value": fact.value + Decimal("100")})
+            if fact.normalized_field == "current_finance_lease_liabilities"
+            else fact
+            for fact in _facts()
+        ),
+        market_policy=_market_policy(),
+    )
+    results = tuple(
+        calculate(
+            prepared.input.model_copy(
+                update={"uncertainty": UncertaintyV1(mode="none")}
+            ).with_digest(),
+            allow_provisional=True,
+        )
+        for prepared in (baseline, changed)
+    )
+    assert results[0].intrinsic_value - results[1].intrinsic_value == Decimal("100")
 
 
 def test_prepared_input_runs_service_owned_monte_carlo_as_provisional():
@@ -248,8 +518,10 @@ def test_prepared_input_runs_service_owned_monte_carlo_as_provisional():
     assert transition_report.quantile_contract["bear"] == "p05"
 
 
-def test_released_market_policy_prepares_without_caller_assumptions() -> None:
-    policy = initial_policy_records()[0]
+def test_synthetic_market_policy_prepares_without_caller_assumptions() -> None:
+    payload = initial_policy_records()[0].model_dump(exclude={"policy_digest"})
+    payload["market_inputs"] = synthetic_market_inputs()
+    policy = PolicyRecordV1(**payload, policy_digest=sha256_digest(payload))
     market_policy = _approved_market_policy(
         policy,
         valuation_timestamp=VALUATION_TIME,
@@ -265,10 +537,10 @@ def test_released_market_policy_prepares_without_caller_assumptions() -> None:
         if item.path == "assumptions.wacc.risk_free_rate"
     )
     assert risk_free.source_refs == (
-        "1cf8c2d38f773142b58b772bde5028d12f00dfd72bf37b40c2327e15d418ea28",
+        synthetic_market_inputs().evidence[0].content_hash,
     )
     assert risk_free.as_of == datetime(2025, 1, 3, tzinfo=UTC)
-    assert risk_free.method == "approved_source"
+    assert risk_free.method == "approved_policy"
     assert (
         next(
             item
@@ -277,6 +549,19 @@ def test_released_market_policy_prepares_without_caller_assumptions() -> None:
         ).method
         == "approved_policy"
     )
+
+
+@pytest.mark.parametrize("policy", initial_policy_records(), ids=lambda p: p.model_id)
+def test_initial_policy_cannot_prepare_even_after_capture_date(policy) -> None:
+    result = _prepare(
+        _facts(),
+        market_policy=_approved_market_policy(
+            policy, valuation_timestamp=datetime(2027, 1, 1, tzinfo=UTC)
+        ),
+    )
+    assert result.status == "requires_input"
+    assert result.input is None
+    assert "MARKET_POLICY_INPUTS_MISSING" in result.issue_codes
 
 
 def test_missing_market_policy_requires_input_without_default_values() -> None:
@@ -332,7 +617,7 @@ def test_transition_filing_evidence_can_be_non_numeric_but_remains_release_bound
         snapshot=_snapshot(
             "transition-evidence",
             identity=IdentityV1(
-                issuer_id="CIK1",
+                issuer_id="0000000001",
                 issuer_name="Example Co",
                 domicile="US",
                 reporting_basis="us-gaap",
@@ -484,3 +769,95 @@ def test_manual_override_rejects_wrong_automatic_digest_or_unsupported_path() ->
             value=Decimal("1"),
             provenance=valid_provenance,
         )
+
+
+@pytest.mark.parametrize(
+    "field", ["inventory", "capital_expenditure", "depreciation_and_amortization"]
+)
+def test_non_numeric_reinvestment_facts_abstain_with_reason(field: str) -> None:
+    snapshot = _snapshot(
+        "valuation-preparation",
+        identity=IdentityV1(
+            issuer_id="0000000001",
+            issuer_name="Example Co",
+            domicile="US",
+            reporting_basis="us-gaap",
+            security_id="COMMON",
+            share_class="common",
+            currency="USD",
+        ),
+        valuation_timestamp=VALUATION_TIME,
+    )
+    history = resolve_annual_history(
+        _facts(),
+        snapshot=snapshot,
+        valuation_timestamp=VALUATION_TIME,
+        profile=valuation_requirements_profile("fcff_dcf"),
+    )
+    last = history.periods[-1]
+    changed = replace(
+        last,
+        duration_facts=tuple(
+            fact.model_copy(update={"value": "unavailable"})
+            if fact.normalized_field == field
+            else fact
+            for fact in last.duration_facts
+        ),
+        instant_facts=tuple(
+            fact.model_copy(update={"value": "unavailable"})
+            if fact.normalized_field == field
+            else fact
+            for fact in last.instant_facts
+        ),
+    )
+    result = derive_historical_metrics(
+        replace(history, periods=(*history.periods[:-1], changed))
+    )
+    assert result.quality_status is QualityStatus.ABSTAIN
+    assert "METRIC_NON_NUMERIC_VALUE" in result.issue_codes
+    assert not any(
+        metric.metric_id == "realized_fcff" and metric.fiscal_year == last.fiscal_year
+        for metric in result.metrics
+    )
+
+
+def test_missing_prior_working_capital_retains_reason_without_partial_fcff() -> None:
+    snapshot = _snapshot(
+        "valuation-preparation",
+        identity=IdentityV1(
+            issuer_id="0000000001",
+            issuer_name="Example Co",
+            domicile="US",
+            reporting_basis="us-gaap",
+            security_id="COMMON",
+            share_class="common",
+            currency="USD",
+        ),
+        valuation_timestamp=VALUATION_TIME,
+    )
+    history = resolve_annual_history(
+        _facts(),
+        snapshot=snapshot,
+        valuation_timestamp=VALUATION_TIME,
+        profile=valuation_requirements_profile("fcff_dcf"),
+    )
+    prior = replace(
+        history.periods[-2],
+        instant_facts=tuple(
+            fact
+            for fact in history.periods[-2].instant_facts
+            if fact.normalized_field != "inventory"
+        ),
+    )
+    result = derive_historical_metrics(
+        replace(history, periods=(*history.periods[:-2], prior, history.periods[-1]))
+    )
+    assert "METRIC_REQUIRED_FIELDS_MISSING" in result.issue_codes
+    assert (
+        f"{history.periods[-1].fiscal_year}:prior_inventory" in result.missing_evidence
+    )
+    assert not any(
+        metric.metric_id == "realized_fcff"
+        and metric.fiscal_year == history.periods[-1].fiscal_year
+        for metric in result.metrics
+    )

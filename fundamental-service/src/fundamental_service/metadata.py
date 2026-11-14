@@ -9,6 +9,7 @@ calculator or the existing repository protocols.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 from concurrent.futures import Future
 from dataclasses import dataclass
@@ -46,8 +47,9 @@ from .facts import (
     canonical_fact_digest,
     resolve_canonical_facts,
 )
+from .original_issuer import IssuerOperatingSourceV1
 from .policies import ModelSpecV1, PolicyRecordV1
-from .replay import ArtifactRecordV1
+from .replay import ArtifactPublicationV1, ArtifactRecordV1
 from .serialization import canonical_bytes, sha256_digest
 from .snapshots import SnapshotError, SnapshotRepository
 
@@ -575,42 +577,7 @@ class PostgresMetadataStore:
                 )
 
             for fact in facts:
-                fact_payload = fact.model_dump(mode="json")
-                fact_digest = canonical_fact_digest(fact)
-                await connection.execute(
-                    text(
-                        "INSERT INTO fundamental.canonical_facts "
-                        "(fact_id, fact_digest, payload) "
-                        "VALUES (:fact_id, :digest, CAST(:payload AS jsonb)) "
-                        "ON CONFLICT (fact_id) DO NOTHING"
-                    ),
-                    {
-                        "fact_id": fact.fact_id,
-                        "digest": fact_digest,
-                        "payload": self._payload_json(fact_payload),
-                    },
-                )
-                stored_fact = (
-                    (
-                        await connection.execute(
-                            text(
-                                "SELECT fact_digest, payload FROM "
-                                "fundamental.canonical_facts WHERE fact_id=:fact_id"
-                            ),
-                            {"fact_id": fact.fact_id},
-                        )
-                    )
-                    .mappings()
-                    .first()
-                )
-                if (
-                    stored_fact is None
-                    or stored_fact["fact_digest"] != fact_digest
-                    or not self._payload_equal(stored_fact["payload"], fact_payload)
-                ):
-                    raise SnapshotError(
-                        "METADATA_IMMUTABLE", "canonical fact is already different"
-                    )
+                await self._publish_fact_in_transaction(connection, fact)
                 await connection.execute(
                     text(
                         "INSERT INTO fundamental.snapshot_facts (snapshot_id, fact_id) "
@@ -647,16 +614,58 @@ class PostgresMetadataStore:
 
     def publish_fact(self, fact: CanonicalFactV1) -> None:
         self._require_ready()
-        self._runner.run(
-            self._immutable_put(
-                table="canonical_facts",
-                key_column="fact_id",
-                key=fact.fact_id,
-                digest_column="fact_digest",
-                digest=sha256_digest(fact.model_dump(mode="json")),
-                payload=fact.model_dump(mode="json"),
-            )
+        self._runner.run(self._publish_fact(fact))
+
+    async def _publish_fact(self, fact: CanonicalFactV1) -> None:
+        async with self._runner._engine.begin() as connection:
+            await self._publish_fact_in_transaction(connection, fact)
+
+    async def _publish_fact_in_transaction(
+        self, connection: AsyncConnection, fact: CanonicalFactV1
+    ) -> None:
+        """Keep the first complete view; source identity excludes PIT annotations."""
+        digest = canonical_fact_digest(fact)
+        await connection.execute(
+            text(
+                "INSERT INTO fundamental.canonical_facts "
+                "(fact_id, fact_digest, payload) "
+                "VALUES (:fact_id, :digest, CAST(:payload AS jsonb)) "
+                "ON CONFLICT (fact_id) DO NOTHING"
+            ),
+            {
+                "fact_id": fact.fact_id,
+                "digest": digest,
+                "payload": self._payload_json(fact.model_dump(mode="json")),
+            },
         )
+        stored = (
+            (
+                await connection.execute(
+                    text(
+                        "SELECT fact_digest, payload FROM fundamental.canonical_facts WHERE fact_id=:fact_id"
+                    ),
+                    {"fact_id": fact.fact_id},
+                )
+            )
+            .mappings()
+            .first()
+        )
+        if stored is None or stored["fact_digest"] != digest:
+            raise SnapshotError(
+                "METADATA_IMMUTABLE", "canonical fact is already different"
+            )
+        try:
+            retained = CanonicalFactV1.model_validate_json(
+                canonical_bytes(stored["payload"])
+            )
+        except ValueError as error:
+            raise SnapshotError(
+                "METADATA_CORRUPT", "canonical fact metadata is invalid"
+            ) from error
+        if canonical_fact_digest(retained) != digest:
+            raise SnapshotError(
+                "METADATA_IMMUTABLE", "canonical fact is already different"
+            )
 
     def get_fact(self, fact_id: str) -> CanonicalFactV1:
         try:
@@ -1403,11 +1412,11 @@ class PostgresMetadataStore:
                 },
             )
 
-    def publish_artifact(self, record: ArtifactRecordV1) -> None:
+    def publish_artifact(self, record: ArtifactRecordV1) -> bool:
         self._require_ready()
-        self._runner.run(self._publish_artifact(record))
+        return bool(self._runner.run(self._publish_artifact(record)))
 
-    async def _publish_artifact(self, record: ArtifactRecordV1) -> None:
+    async def _publish_artifact(self, record: ArtifactRecordV1) -> bool:
         async with self._runner._engine.begin() as connection:
             existing = (
                 (
@@ -1428,19 +1437,21 @@ class PostgresMetadataStore:
                     existing["content_hash"] != record.content_hash
                     or existing["media_type"] != record.media_type
                     or tuple(existing["dependency_hashes"]) != record.dependency_hashes
+                    or existing["status"] != record.status
+                    or existing["retention"] != record.retention
                 ):
                     raise SnapshotError(
                         "ARTIFACT_ID_REUSED", "artifact IDs are immutable"
                     )
-                return
-            await connection.execute(
+                return False
+            inserted = await connection.execute(
                 text(
                     "INSERT INTO fundamental.artifact_references"
                     "(artifact_id, content_hash, media_type, dependency_hashes, "
                     "status, retention) "
                     "VALUES (:artifact_id, :content_hash, :media_type, "
                     "CAST(:dependency_hashes AS jsonb), :status, :retention) "
-                    "ON CONFLICT (artifact_id) DO NOTHING"
+                    "ON CONFLICT (artifact_id) DO NOTHING RETURNING artifact_id"
                 ),
                 {
                     "artifact_id": record.artifact_id,
@@ -1469,8 +1480,11 @@ class PostgresMetadataStore:
                 existing["content_hash"] != record.content_hash
                 or existing["media_type"] != record.media_type
                 or tuple(existing["dependency_hashes"]) != record.dependency_hashes
+                or existing["status"] != record.status
+                or existing["retention"] != record.retention
             ):
                 raise SnapshotError("ARTIFACT_ID_REUSED", "artifact IDs are immutable")
+            return inserted.scalar_one_or_none() is not None
 
     def get_artifact(self, artifact_id: str) -> ArtifactRecordV1:
         self._require_ready()
@@ -1645,7 +1659,7 @@ class PostgresCanonicalFactRepository(CanonicalFactRepository):
     def resolve(
         self,
         *,
-        snapshot: SourceSnapshotV1,
+        snapshot: SourceSnapshotV1 | IssuerOperatingSourceV1,
         valuation_timestamp: datetime,
         required_fields: tuple[str, ...],
     ) -> tuple[CanonicalFactV1, ...]:
@@ -1675,8 +1689,41 @@ class PostgresArtifactStore:
         media_type: str = "application/json",
         retention: Literal["evidence", "operational_cache"] = "evidence",
     ) -> ArtifactRecordV1:
-        payload = canonical_bytes(value)
-        content_hash = self._content.put(payload, media_type=media_type)
+        return self.put_with_receipt(
+            artifact_id,
+            value,
+            dependency_hashes,
+            media_type=media_type,
+            retention=retention,
+        ).artifact
+
+    def put_with_receipt(
+        self,
+        artifact_id: str,
+        value: object,
+        dependency_hashes: tuple[str, ...] = (),
+        *,
+        media_type: str = "application/json",
+        retention: Literal["evidence", "operational_cache"] = "evidence",
+    ) -> ArtifactPublicationV1:
+        return self.put_bytes_with_receipt(
+            artifact_id,
+            canonical_bytes(value),
+            dependency_hashes,
+            media_type=media_type,
+            retention=retention,
+        )
+
+    def put_bytes_with_receipt(
+        self,
+        artifact_id: str,
+        payload: bytes,
+        dependency_hashes: tuple[str, ...] = (),
+        *,
+        media_type: str = "application/octet-stream",
+        retention: Literal["evidence", "operational_cache"] = "evidence",
+    ) -> ArtifactPublicationV1:
+        content_hash = hashlib.sha256(payload).hexdigest()
         record = ArtifactRecordV1(
             artifact_id=artifact_id,
             content_hash=content_hash,
@@ -1684,8 +1731,23 @@ class PostgresArtifactStore:
             media_type=media_type,
             retention=retention,
         )
-        self._metadata.publish_artifact(record)
-        return record
+        try:
+            previous = self._metadata.get_artifact(artifact_id)
+        except SnapshotError as error:
+            if error.code != "ARTIFACT_NOT_FOUND":
+                raise
+        else:
+            if previous != record:
+                raise SnapshotError("ARTIFACT_ID_REUSED", "artifact IDs are immutable")
+            if self.read(artifact_id) != payload:
+                raise SnapshotError(
+                    "ARTIFACT_BYTES_UNAVAILABLE",
+                    "published artifact bytes failed verification",
+                )
+            return ArtifactPublicationV1(artifact=previous, wrote=False)
+        self._content.put(payload, media_type=media_type)
+        wrote = self._metadata.publish_artifact(record)
+        return ArtifactPublicationV1(artifact=record, wrote=wrote)
 
     def get(self, artifact_id: str) -> ArtifactRecordV1:
         return self._metadata.get_artifact(artifact_id)

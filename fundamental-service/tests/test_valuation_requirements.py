@@ -20,6 +20,7 @@ def test_released_fcff_profiles_share_sec_evidence_and_keep_history_provisional(
     assert "capital_expenditure" in fcff.annual_duration_fields
     assert "inventory" in fcff.annual_instant_fields
     assert "cash_and_equivalents" in fcff.point_in_time_fact_fields
+    assert "non_operating_assets" in fcff.point_in_time_fact_fields
     assert "marginal_cost_of_debt" in fcff.market_policy_input_roles
     assert fcff.supported_history_threshold is None
     assert transition.supported_history_threshold is None

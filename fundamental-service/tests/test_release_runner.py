@@ -1,7 +1,9 @@
 import base64
 import hashlib
-from datetime import UTC, datetime
+import json
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+from pathlib import Path
 
 import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
@@ -29,9 +31,15 @@ from fundamental_service.data_releases import (
     sign_data_release_verification,
     sign_mapping_review_evidence,
 )
-from fundamental_service.facts import CanonicalMappingV1, canonical_fact_digest
-from fundamental_service.release_runner import DataReleaseCanaryRunner
-from fundamental_service.serialization import sha256_digest
+from fundamental_service.facts import (
+    CanonicalMappingV1,
+    FilesystemCanonicalFactRepository,
+    canonical_fact_digest,
+)
+from fundamental_service.release_runner import DataReleaseCanaryRunner, main
+from fundamental_service.replay import ArtifactStore
+from fundamental_service.serialization import canonical_bytes, sha256_digest
+from fundamental_service.snapshots import FilesystemSnapshotRepository
 
 
 class _Snapshots:
@@ -51,6 +59,10 @@ class _Facts:
         _ = snapshot, valuation_timestamp
         assert required_fields == (self.fact.normalized_field,)
         return (self.fact,)
+
+    def get(self, fact_id):
+        assert fact_id == self.fact.fact_id
+        return self.fact
 
 
 class _Mappings:
@@ -120,20 +132,12 @@ def _fact() -> CanonicalFactV1:
             terms_reference="SEC fair access policy",
         ),
         quality=QualityStatus.VERIFIED,
+        mapping_decision_id="mapping-revenue",
+        mapping_confidence="high",
     )
 
 
-def _candidate() -> (
-    tuple[
-        DataReleaseManifestV1,
-        object,
-        _Snapshots,
-        _Facts,
-        _Mappings,
-        _Artifacts,
-        DataReleaseTrustRootsV1,
-    ]
-):
+def _candidate():
     fact = _fact()
     mapping = CanonicalMappingV1(
         contract_version="fundamental.v1",
@@ -296,6 +300,123 @@ def test_release_canary_replays_exact_digests_without_activation() -> None:
     assert len(first.checked_fact_digests) == 1
 
 
+def _history_candidate(
+    tmp_path: Path, transform=None, *, conflicting=False, wrong_digest=False
+):
+    manifest, verification, snapshots, facts, mappings, artifacts, roots = _candidate()
+    current = facts.fact
+    older = current.model_copy(
+        update={
+            "fact_id": "fact-revenue-2024",
+            "period_start": datetime(2024, 1, 1).date(),
+            "period_end": datetime(2024, 12, 31).date(),
+            "value": Decimal(90),
+            "context": current.context.model_copy(
+                update={
+                    "context_id": "ctx-revenue-2024",
+                    "start_date": datetime(2024, 1, 1).date(),
+                    "end_date": datetime(2024, 12, 31).date(),
+                }
+            ),
+        }
+    )
+    if transform is not None:
+        older = transform(older, snapshots.snapshot)
+    historical = (older, current)
+    if conflicting:
+        historical += (
+            older.model_copy(update={"fact_id": "conflict-2024", "value": Decimal(91)}),
+        )
+    repository = FilesystemCanonicalFactRepository(tmp_path / "facts")
+    for fact in historical:
+        repository.publish(fact)
+    references = tuple(
+        FactRefV1(
+            fact_id=fact.fact_id,
+            fact_digest="0" * 64
+            if wrong_digest and fact == older
+            else canonical_fact_digest(fact),
+        )
+        for fact in historical
+    )
+    snapshot_ref = manifest.snapshot_refs[0].model_copy(
+        update={"facts": references, "fact_set_digest": sha256_digest(references)}
+    )
+    manifest_payload = manifest.model_dump(exclude={"manifest_digest"})
+    manifest_payload["snapshot_refs"] = (snapshot_ref,)
+    manifest = DataReleaseManifestV1(
+        **manifest_payload, manifest_digest=sha256_digest(manifest_payload)
+    )
+    verification_payload = verification.model_dump(
+        exclude={"verification_digest", "signature"}
+    )
+    verification_payload["manifest_digest"] = manifest.manifest_digest
+    verification = sign_data_release_verification(
+        verification_payload,
+        Ed25519PrivateKey.from_private_bytes(b"verifier-key".ljust(32, b"0")),
+    )
+    runner = DataReleaseCanaryRunner(
+        snapshot_repository=snapshots,
+        fact_repository=repository,
+        mapping_reader=mappings,
+        artifact_reader=artifacts,
+        trust_roots=roots,
+    )
+
+    return runner, manifest, verification, repository
+
+
+def test_release_canary_retains_all_declared_annual_periods(tmp_path: Path) -> None:
+    runner, manifest, verification, repository = _history_candidate(tmp_path)
+    report = runner.validate(manifest, verification)
+
+    assert report.checked_fact_digests == tuple(
+        sorted(canonical_fact_digest(fact) for fact in repository.list())
+    )
+
+
+@pytest.mark.parametrize(
+    "transform",
+    [
+        lambda fact, snapshot: fact.model_copy(
+            update={"available_at": snapshot.valuation_timestamp + timedelta(days=1)}
+        ),
+        lambda fact, snapshot: fact.model_copy(update={"issuer_id": "CIK2"}),
+        lambda fact, snapshot: fact.model_copy(
+            update={"source": fact.source.model_copy(update={"content_hash": "b" * 64})}
+        ),
+        lambda fact, snapshot: fact.model_copy(
+            update={"mapping_decision_id": "unreleased-mapping"}
+        ),
+        lambda fact, snapshot: fact.model_copy(
+            update={"is_amendment": True, "amendment_scope": "unknown"}
+        ),
+    ],
+    ids=[
+        "future",
+        "foreign-issuer",
+        "foreign-source",
+        "unreleased-mapping",
+        "unknown-amendment",
+    ],
+)
+def test_release_canary_rejects_ineligible_older_history(tmp_path, transform):
+    runner, manifest, verification, _ = _history_candidate(tmp_path, transform)
+    with pytest.raises(DataReleaseError):
+        runner.validate(manifest, verification)
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [{"conflicting": True}, {"wrong_digest": True}],
+    ids=["conflict", "corrupt-digest"],
+)
+def test_release_canary_rejects_conflicting_or_corrupt_older_history(tmp_path, kwargs):
+    runner, manifest, verification, _ = _history_candidate(tmp_path, **kwargs)
+    with pytest.raises(DataReleaseError):
+        runner.validate(manifest, verification)
+
+
 def test_release_canary_ignores_point_in_time_selection_annotations() -> None:
     manifest, verification, snapshots, facts, mappings, artifacts, roots = _candidate()
     facts.fact = facts.fact.model_copy(
@@ -348,3 +469,69 @@ def test_release_canary_blocks_point_in_time_fact_mismatch() -> None:
     with pytest.raises(DataReleaseError) as error:
         runner.validate(manifest, verification)
     assert error.value.code == "DATA_RELEASE_FACT_MISMATCH"
+
+
+@pytest.mark.parametrize("corruption", [None, "signature", "digest", "envelope"])
+def test_cli_reads_canonical_json_and_repeats_or_refuses_tampering(
+    tmp_path, capsys, corruption
+):
+    manifest, verification, snapshots, facts, mappings, artifacts, roots = _candidate()
+    FilesystemSnapshotRepository(tmp_path / "snapshots").publish(snapshots.snapshot)
+    FilesystemCanonicalFactRepository(tmp_path / "facts").publish(facts.fact)
+    mapping_root = tmp_path / "mappings"
+    mapping_root.mkdir()
+    (mapping_root / f"{mappings.mapping.decision_id}.json").write_bytes(
+        canonical_bytes(mappings.mapping)
+    )
+    artifact_store = ArtifactStore(tmp_path / "artifacts")
+    artifact_store.put_bytes_with_receipt(
+        "release-evidence", artifacts.content, media_type="application/json"
+    )
+    trust_file = tmp_path / "trust-roots.json"
+    trust_file.write_bytes(canonical_bytes(roots))
+    expected = DataReleaseCanaryRunner(
+        snapshot_repository=snapshots,
+        fact_repository=facts,
+        mapping_reader=mappings,
+        artifact_reader=artifacts,
+        trust_roots=roots,
+    ).validate(manifest, verification)
+    payload = json.loads(
+        canonical_bytes({"manifest": manifest, "verification": verification})
+    )
+    if corruption == "signature":
+        payload["verification"]["signature"] = base64.b64encode(
+            b"invalid".ljust(64, b"0")
+        ).decode()
+    elif corruption == "digest":
+        payload["manifest"]["manifest_digest"] = "0" * 64
+    elif corruption == "envelope":
+        payload["unexpected"] = True
+    candidate_file = tmp_path / "candidate.json"
+    candidate_file.write_bytes(canonical_bytes(payload))
+    argv = [
+        "--candidate",
+        str(candidate_file),
+        "--snapshots-root",
+        str(tmp_path / "snapshots"),
+        "--facts-root",
+        str(tmp_path / "facts"),
+        "--mappings-root",
+        str(mapping_root),
+        "--artifacts-root",
+        str(tmp_path / "artifacts"),
+        "--trust-roots",
+        str(trust_file),
+    ]
+    if corruption is not None:
+        assert main(argv) == 2
+        captured = capsys.readouterr()
+        assert captured.out == ""
+        assert "data release canary failed:" in captured.err
+        return
+    assert main(argv) == 0
+    first = capsys.readouterr()
+    assert first.err == ""
+    assert first.out == canonical_bytes(expected).decode() + "\n"
+    assert main(argv) == 0
+    assert capsys.readouterr() == first

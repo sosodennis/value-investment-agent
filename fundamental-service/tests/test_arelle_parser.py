@@ -3,6 +3,8 @@ import json
 import os
 import queue
 import socket
+import subprocess
+import sys
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from zipfile import ZipFile
@@ -12,10 +14,13 @@ from fundamental_service.arelle_parser import (
     ArelleFindingV1,
     ArelleParseReportV1,
     ArelleParserError,
+    ArelleValidationFailureV1,
     ArelleValidationProfileV1,
     ParserResourcePolicy,
     _directory_hash,
     _dqc_validation_completed,
+    _finding_from_log,
+    _missing_dqc_error,
     _parser_slot,
     _unlogged_model_error_findings,
     fact_semantic_digest,
@@ -120,6 +125,38 @@ def test_parser_resource_policy_rejects_invalid_limits():
     with pytest.raises(ArelleParserError) as failure:
         ParserResourcePolicy(max_memory_bytes=1).validate()
     assert failure.value.code == "PARSER_RESOURCE_POLICY_INVALID"
+
+
+@pytest.mark.skipif(sys.platform != "linux", reason="Linux worker memory enforcement")
+@pytest.mark.parametrize("inherited", ["unlimited", "stricter", "stricter-soft"])
+def test_worker_enforces_memory_budget_without_raising_inherited_limits(inherited):
+    script = """
+import json, resource, sys
+from fundamental_service.arelle_parser import _apply_worker_memory_limit
+budget = 512 * 1024 * 1024
+if sys.argv[1] == "stricter":
+    resource.setrlimit(resource.RLIMIT_AS, (budget * 3 // 4, budget * 3 // 4))
+elif sys.argv[1] == "stricter-soft":
+    resource.setrlimit(resource.RLIMIT_AS, (budget * 3 // 4, budget))
+before = resource.getrlimit(resource.RLIMIT_AS)
+_apply_worker_memory_limit(budget)
+print(json.dumps({"before": before, "after": resource.getrlimit(resource.RLIMIT_AS)}))
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", script, inherited],
+        check=True,
+        capture_output=True,
+        text=True,
+        env={**os.environ, "PYTHONPATH": str(Path(__file__).parents[1] / "src")},
+    )
+    observation = json.loads(result.stdout)
+    budget = 512 * 1024 * 1024
+    soft, hard = observation["after"]
+    assert 0 < soft <= hard <= budget
+    for old, new in zip(observation["before"], observation["after"], strict=True):
+        assert old == -1 or new <= old
+    if inherited != "unlimited":
+        assert soft == budget * 3 // 4
 
 
 def test_parser_concurrency_budget_fails_closed():
@@ -338,6 +375,165 @@ def test_dqc_completion_requires_a_dqc_finding_or_dqcrt_activity():
             },
         ),
     )
+
+
+@pytest.mark.parametrize(
+    ("level", "severity"),
+    [("warning-semantic", "warning"), ("error-semantic", "error")],
+)
+def test_semantic_validation_findings_remain_in_the_report(level: str, severity: str):
+    finding = _finding_from_log(
+        {
+            "level": level,
+            "code": "EFM.semantic",
+            "message": {"text": "semantic finding"},
+        }
+    )
+    assert finding is not None and finding.severity == severity
+
+
+@pytest.mark.parametrize("serialized", [False, True])
+def test_xule_debug_exception_retains_stable_terminal_cause(serialized: bool):
+    reason = "xule.XuleRunTime.XuleProcessingError: Rule: DQC.US.0236.10933 - Index value of 0 is out of range for the list with length of 1"
+    findings = []
+    for temporary_root in ("/tmp/first-run", "/tmp/second-run"):
+        trace = [
+            "Traceback (most recent call last):\n",
+            f'  File "{temporary_root}/plugins/xule/XuleProperties.py", line 151\n',
+            reason + "\n",
+        ]
+        finding = _finding_from_log(
+            {
+                "level": "debug",
+                "code": "xule:ValidationException",
+                "message": {
+                    "text": "An unexpected exception occurred in XULE\n" + repr(trace),
+                    "args": {"traceback": repr(trace) if serialized else trace},
+                },
+            }
+        )
+        assert finding is not None
+        assert finding.severity == "error"
+        assert finding.message == reason
+        findings.append(finding)
+    assert findings[0] == findings[1]
+
+
+@pytest.mark.parametrize("trace", [None, "not a traceback", "[]", "[1]", "x" * 65537])
+def test_xule_unreadable_exception_keeps_a_stable_diagnostic(trace):
+    finding = _finding_from_log(
+        {
+            "level": "debug",
+            "code": "xule:ValidationException",
+            "message": {"args": {"traceback": trace}},
+        }
+    )
+    assert finding is not None
+    assert (
+        finding.message
+        == "XULE validation raised an exception without a readable terminal cause"
+    )
+
+
+def test_other_debug_records_do_not_become_validation_errors():
+    assert _finding_from_log({"level": "debug", "code": "xule:ruleTrace"}) is None
+
+
+@pytest.mark.parametrize(
+    "failure_code",
+    [
+        "DQC.US.0001.1.incomplete",
+        "xule.ValidationIncomplete",
+        "xule:ValidationException",
+        "arelle:dqcrtException",
+    ],
+)
+def test_partial_dqc_findings_cannot_certify_completed_validation(failure_code: str):
+    class Handler:
+        @staticmethod
+        def recordToJson(record: dict[str, object]) -> dict[str, object]:
+            return record
+
+    records = ({"code": "DQC.US.0004.1"}, {"code": failure_code})
+    assert not _dqc_validation_completed(Handler(), records)
+    assert not _dqc_validation_completed(Handler(), tuple(reversed(records)))
+
+
+@pytest.mark.parametrize(
+    ("namespaces", "expected"),
+    [
+        (("http://fasb.org/us-gaap/2014-01-31",), "DQC_TAXONOMY_UNSUPPORTED"),
+        (("http://fasb.org/us-gaap/2019",), "DQC_TAXONOMY_UNSUPPORTED"),
+        (("http://fasb.org/us-gaap/2020",), "DQC_VALIDATION_UNAVAILABLE"),
+        (("http://fasb.org/us-gaap/2024",), "DQC_VALIDATION_UNAVAILABLE"),
+        (
+            ("http://fasb.org/us-gaap/2014-01-31", "http://fasb.org/us-gaap/2024"),
+            "DQC_VALIDATION_UNAVAILABLE",
+        ),
+        (("http://example.com/us-gaap/2014-01-31",), "DQC_VALIDATION_UNAVAILABLE"),
+        ((), "DQC_VALIDATION_UNAVAILABLE"),
+    ],
+)
+def test_missing_dqc_retains_findings_and_actual_taxonomy(
+    namespaces: tuple[str, ...], expected: str
+):
+    findings = (
+        ArelleFindingV1(code="EFM.6.05.42", severity="warning", message="deprecated"),
+        ArelleFindingV1(code="EFM.6.05.20", severity="error", message="invalid"),
+    )
+    error = _missing_dqc_error(
+        ArelleValidationProfileV1(profile_id="historical-diagnostic-v1"),
+        "1" * 64,
+        namespaces,
+        findings,
+    )
+    assert error.code == expected
+    diagnostic = error.validation_failure
+    assert diagnostic is not None
+    assert set(diagnostic.findings) == set(findings)
+    assert diagnostic.taxonomy_namespaces == tuple(sorted(set(namespaces)))
+    assert diagnostic.validation_engines == ("sec-efm",)
+    assert "dqc-not-completed" in diagnostic.validation_evidence
+    reordered = diagnostic.model_copy(
+        update={
+            "findings": tuple(reversed(diagnostic.findings)),
+            "taxonomy_namespaces": tuple(reversed(namespaces)),
+        }
+    )
+    assert reordered.replay_digest() == diagnostic.replay_digest()
+    assert (
+        ArelleValidationFailureV1.model_validate_json(diagnostic.model_dump_json())
+        == diagnostic
+    )
+
+
+def test_historical_dqc_failure_survives_the_offline_worker_boundary():
+    instance = os.environ.get("ISSUE361_HISTORICAL_INSTANCE_PATH")
+    cache = os.environ.get("ISSUE361_HISTORICAL_TAXONOMY_CACHE_DIR")
+    if not instance or not cache:
+        pytest.skip("captured historical diagnostic instance/cache are not configured")
+    profile, _ = _configured_sec_profile()
+    profile = profile.model_copy(update={"profile_id": "historical-diagnostic-v1"})
+    source_hash = hashlib.sha256(Path(instance).read_bytes()).hexdigest()
+    diagnostics = []
+    for _ in range(2):
+        with pytest.raises(ArelleParserError) as failure:
+            parse_filing_offline(
+                Path(instance),
+                profile=profile,
+                taxonomy_version="us-gaap-2014",
+                taxonomy_cache_dir=Path(cache),
+                source_content_hash=source_hash,
+            )
+        assert failure.value.code == "DQC_TAXONOMY_UNSUPPORTED"
+        diagnostic = failure.value.validation_failure
+        assert diagnostic is not None
+        assert diagnostic.source_content_hash == source_hash
+        assert "http://fasb.org/us-gaap/2014-01-31" in diagnostic.taxonomy_namespaces
+        assert "EFM.6.05.42" in {finding.code for finding in diagnostic.findings}
+        assert "dqc-us" not in diagnostic.validation_engines
+        diagnostics.append(diagnostic.replay_digest())
+    assert diagnostics[0] == diagnostics[1]
 
 
 def test_captured_sec_filing_rebuilds_with_pinned_taxonomy_cache_without_network(

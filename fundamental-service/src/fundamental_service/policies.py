@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timezone
 from decimal import Decimal
 from pathlib import Path
-from typing import Literal, Protocol
+from typing import Literal, Protocol, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
@@ -18,7 +18,6 @@ from .contracts import (
     CapitalBridgeAssumptionsV1,
     EligibilityReportV1,
     ForecastAssumptionsV1,
-    MarketPolicyEvidenceV1,
     MarketPolicyInputsV1,
     ModelId,
     PolicyResolutionV1,
@@ -31,6 +30,17 @@ from .contracts import (
 from .numerical_policy import VALUATION_NUMERICAL_POLICY
 from .serialization import canonical_bytes, sha256_digest
 from .snapshots import SnapshotError
+
+AssumptionGroup = TypeVar("AssumptionGroup", bound=BaseModel)
+
+# Refs #369: immutable bootstrap records asserted approval without evidence.
+# Keep their bytes readable for audit/restore, but never authorize their use.
+_REVOKED_POLICY_DIGESTS = frozenset(
+    {
+        "7a29bfe009d13bc477ec50e893dfaa7691e5a1af8e684e83d4c9ec16de80980b",
+        "988d0abf08aea447e858b440abf0817f99f983373a16232d9bbafc6a53ef12d6",
+    }
+)
 
 
 class ModelSpecV1(BaseModel):
@@ -121,6 +131,14 @@ class PolicyRecordV1(BaseModel):
     profile_id: str = Field(min_length=1)
     model_id: ModelId
     model_version: str = Field(min_length=1)
+    issuer_id: str | None = Field(
+        default=None, min_length=1, exclude_if=lambda value: value is None
+    )
+    data_release_manifest_digest: str | None = Field(
+        default=None,
+        pattern=r"^[0-9a-f]{64}$",
+        exclude_if=lambda value: value is None,
+    )
     assumptions: AssumptionsV1 | None
     market_inputs: MarketPolicyInputsV1 | None = None
     source_refs: tuple[str, ...] = Field(min_length=1)
@@ -136,7 +154,9 @@ class PolicyRecordV1(BaseModel):
         if self.policy_digest == sha256_digest(payload):
             return self
         legacy_payload = self.model_dump(exclude={"policy_digest", "market_inputs"})
-        if self.policy_digest != sha256_digest(legacy_payload):
+        if self.market_inputs is not None or self.policy_digest != sha256_digest(
+            legacy_payload
+        ):
             raise ValueError("policy_digest does not match policy content")
         return self
 
@@ -149,7 +169,9 @@ class PolicyRegistry:
         model_repository: ModelRepository | None = None,
         repository: PolicyRepository | None = None,
     ) -> None:
-        self._models = {(item.model_id, item.model_version): item for item in models}
+        self._models: dict[tuple[str, str], ModelSpecV1] = {
+            (item.model_id, item.model_version): item for item in models
+        }
         self._policies = {item.policy_id: item for item in policies}
         self._model_repository = model_repository
         self._repository = repository
@@ -210,16 +232,24 @@ class PolicyRegistry:
         model_version: str,
         valuation_timestamp: datetime,
         policy_id: str | None,
+        issuer_id: str | None = None,
+        data_release_manifest_digest: str | None = None,
     ) -> PolicyRecordV1:
         model = self.model(model_id, model_version)
         if model is None:
             raise PolicyError(
                 "MODEL_UNSUPPORTED", "requested model version is not active"
             )
+        candidates: tuple[PolicyRecordV1, ...]
         if policy_id is not None:
             policy = self.policy(policy_id)
             if policy is None:
                 raise PolicyError("POLICY_NOT_FOUND", "policy release was not found")
+            if policy.policy_digest in _REVOKED_POLICY_DIGESTS:
+                raise PolicyError(
+                    "POLICY_REVOKED",
+                    "bootstrap market assumptions lack approval evidence (#369)",
+                )
             candidates = (policy,)
         else:
             candidates = tuple(
@@ -228,12 +258,60 @@ class PolicyRegistry:
                 if item.model_id == model_id
                 and item.model_version == model_version
                 and item.status == "active"
+                and item.policy_digest not in _REVOKED_POLICY_DIGESTS
+                and (item.issuer_id is None or item.issuer_id == issuer_id)
+                and (
+                    item.data_release_manifest_digest is None
+                    or item.data_release_manifest_digest == data_release_manifest_digest
+                )
                 and item.effective_at <= valuation_timestamp
+                and (
+                    item.market_inputs is None
+                    or all(
+                        evidence.available_at <= valuation_timestamp
+                        for evidence in item.market_inputs.evidence
+                    )
+                )
             )
+            if candidates:
+                release_scoped = tuple(
+                    item
+                    for item in candidates
+                    if item.data_release_manifest_digest is not None
+                )
+                if release_scoped:
+                    candidates = release_scoped
+                issuer_scoped = tuple(
+                    item for item in candidates if item.issuer_id is not None
+                )
+                if issuer_scoped:
+                    candidates = issuer_scoped
+                latest = max(item.effective_at for item in candidates)
+                candidates = tuple(
+                    item for item in candidates if item.effective_at == latest
+                )
         if len(candidates) != 1:
             code = "POLICY_NOT_FOUND" if not candidates else "POLICY_AMBIGUOUS"
             raise PolicyError(code, "no unique effective policy release is available")
         policy = candidates[0]
+        if (
+            policy.data_release_manifest_digest is not None
+            and policy.data_release_manifest_digest != data_release_manifest_digest
+        ):
+            raise PolicyError(
+                "POLICY_DATA_RELEASE_MISMATCH",
+                "policy is bound to a different or unspecified data release",
+            )
+        if policy.issuer_id is not None and issuer_id is None:
+            raise PolicyError(
+                "POLICY_ISSUER_REQUIRED",
+                "issuer-scoped policy requires valuation issuer context",
+            )
+        if policy.issuer_id is not None and policy.issuer_id != issuer_id:
+            raise PolicyError(
+                "POLICY_ISSUER_MISMATCH",
+                "issuer-scoped policy does not cover the valuation issuer",
+            )
         if policy.model_id != model_id or policy.model_version != model_version:
             raise PolicyError(
                 "POLICY_MODEL_MISMATCH",
@@ -243,6 +321,14 @@ class PolicyRegistry:
             raise PolicyError(
                 "POLICY_NOT_EFFECTIVE",
                 "policy release is not active at the valuation timestamp",
+            )
+        if policy.market_inputs is not None and any(
+            item.available_at > valuation_timestamp
+            for item in policy.market_inputs.evidence
+        ):
+            raise PolicyError(
+                "POLICY_NOT_EFFECTIVE",
+                "policy market evidence is unavailable at the valuation timestamp",
             )
         if model.lifecycle != "active" and policy.assumptions is not None:
             raise PolicyError(
@@ -283,7 +369,7 @@ class ModelRepository(Protocol):
     def publish_model(self, model: ModelSpecV1) -> None: ...
 
 
-class PolicyRepository:
+class PolicyRepository(Protocol):
     def list(self) -> tuple[PolicyRecordV1, ...]: ...
 
     def get(self, policy_id: str) -> PolicyRecordV1: ...
@@ -291,10 +377,28 @@ class PolicyRepository:
     def publish(self, policy: PolicyRecordV1) -> None: ...
 
 
+class ModelMetadataPort(Protocol):
+    def list_models(self) -> tuple[ModelSpecV1, ...]: ...
+
+    def get_model(self, model_id: str, model_version: str) -> ModelSpecV1: ...
+
+    def publish_model(
+        self, model: object, *, model_id: str, model_version: str
+    ) -> None: ...
+
+
+class PolicyMetadataPort(Protocol):
+    def list_policies(self) -> tuple[PolicyRecordV1, ...]: ...
+
+    def publish_policy(
+        self, policy: object, *, policy_id: str, policy_version: str
+    ) -> None: ...
+
+
 class MetadataModelRepository:
     """Adapter for the service-owned metadata persistence port."""
 
-    def __init__(self, metadata: object) -> None:
+    def __init__(self, metadata: ModelMetadataPort) -> None:
         self._metadata = metadata
 
     def list_models(self) -> tuple[ModelSpecV1, ...]:
@@ -317,7 +421,7 @@ class MetadataModelRepository:
 class MetadataPolicyRepository:
     """Adapter for immutable policy releases stored by the service."""
 
-    def __init__(self, metadata: object) -> None:
+    def __init__(self, metadata: PolicyMetadataPort) -> None:
         self._metadata = metadata
 
     def list(self) -> tuple[PolicyRecordV1, ...]:
@@ -399,174 +503,35 @@ class FilesystemPolicyRepository:
         return tuple(policies)
 
 
-_FCFF_MARKET_POLICY_VERSION = "fcff-market-policy-2025-v1"
-_FCFF_MARKET_POLICY_AS_OF = datetime(2025, 1, 3, tzinfo=UTC)
-_FCFF_MARKET_POLICY_CAPTURED_AT = datetime(2026, 11, 3, tzinfo=UTC)
-_FRED_DGS10_FIXTURE_HASH = (
-    "1cf8c2d38f773142b58b772bde5028d12f00dfd72bf37b40c2327e15d418ea28"
-)
-
-
-def _market_policy_evidence(
-    role: str,
-    value: Decimal,
-    *,
-    method: Literal["observed_source", "approved_policy"],
-    source_id: str,
-    source_uri: str,
-    source_version: str,
-    terms_reference: str,
-    content_hash: str | None = None,
-    rationale: str,
-) -> MarketPolicyEvidenceV1:
-    if content_hash is None:
-        content_hash = sha256_digest(
-            {
-                "policy_version": _FCFF_MARKET_POLICY_VERSION,
-                "role": role,
-                "value": value,
-                "source_version": source_version,
-            }
-        )
-    return MarketPolicyEvidenceV1(
-        role=role,
-        method=method,
-        value=value,
-        source_id=source_id,
-        source_uri=source_uri,
-        content_hash=content_hash,
-        source_version=source_version,
-        terms_reference=terms_reference,
-        as_of=_FCFF_MARKET_POLICY_AS_OF,
-        available_at=_FCFF_MARKET_POLICY_AS_OF,
-        captured_at=_FCFF_MARKET_POLICY_CAPTURED_AT,
-        rationale=rationale,
-    )
-
-
-def _initial_market_inputs() -> MarketPolicyInputsV1:
-    policy_uri = (
-        f"in-repository://fundamental-service/policy/{_FCFF_MARKET_POLICY_VERSION}"
-    )
-    policy_terms = (
-        "fundamental-service/docs/fundamental-enterprise-grade-target-state.md#24.4.4"
-    )
-    evidence = (
-        _market_policy_evidence(
-            "risk_free_rate",
-            Decimal("0.046"),
-            method="observed_source",
-            source_id="fred-observations",
-            source_uri=(
-                "https://fred.stlouisfed.org/graph/fredgraph.csv"
-                "?id=DGS10&cosd=2025-01-03&coed=2025-01-03"
-            ),
-            source_version="DGS10@2025-01-03",
-            terms_reference="https://fred.stlouisfed.org/terms-of-use/",
-            content_hash=_FRED_DGS10_FIXTURE_HASH,
-            rationale="10-year U.S. Treasury par yield observed in the pinned FRED vintage",
-        ),
-        _market_policy_evidence(
-            "beta",
-            Decimal("1.1"),
-            method="approved_policy",
-            source_id="fundamental-market-policy",
-            source_uri=policy_uri,
-            source_version=_FCFF_MARKET_POLICY_VERSION,
-            terms_reference=policy_terms,
-            rationale="reviewed explicit beta assumption; not an issuer fact",
-        ),
-        _market_policy_evidence(
-            "equity_risk_premium",
-            Decimal("0.05"),
-            method="approved_policy",
-            source_id="fundamental-market-policy",
-            source_uri=policy_uri,
-            source_version=_FCFF_MARKET_POLICY_VERSION,
-            terms_reference=policy_terms,
-            rationale="reviewed explicit equity risk premium assumption",
-        ),
-        _market_policy_evidence(
-            "pre_tax_cost_of_debt",
-            Decimal("0.05"),
-            method="approved_policy",
-            source_id="fundamental-market-policy",
-            source_uri=policy_uri,
-            source_version=_FCFF_MARKET_POLICY_VERSION,
-            terms_reference=policy_terms,
-            rationale="reviewed marginal debt-cost assumption; trailing interest is diagnostic only",
-        ),
-        _market_policy_evidence(
-            "debt_weight",
-            Decimal("0.2"),
-            method="approved_policy",
-            source_id="fundamental-market-policy",
-            source_uri=policy_uri,
-            source_version=_FCFF_MARKET_POLICY_VERSION,
-            terms_reference=policy_terms,
-            rationale="reviewed capital-weight policy used when issuer market value is unavailable",
-        ),
-        _market_policy_evidence(
-            "equity_weight",
-            Decimal("0.8"),
-            method="approved_policy",
-            source_id="fundamental-market-policy",
-            source_uri=policy_uri,
-            source_version=_FCFF_MARKET_POLICY_VERSION,
-            terms_reference=policy_terms,
-            rationale="reviewed capital-weight policy used when issuer market value is unavailable",
-        ),
-        _market_policy_evidence(
-            "terminal_growth",
-            Decimal("0.02"),
-            method="approved_policy",
-            source_id="fundamental-market-policy",
-            source_uri=policy_uri,
-            source_version=_FCFF_MARKET_POLICY_VERSION,
-            terms_reference=policy_terms,
-            rationale="reviewed terminal-growth ceiling policy; must remain below discount rates",
-        ),
-    )
-    return MarketPolicyInputsV1(
-        policy_version=_FCFF_MARKET_POLICY_VERSION,
-        risk_free_rate=Decimal("0.046"),
-        beta=Decimal("1.1"),
-        equity_risk_premium=Decimal("0.05"),
-        pre_tax_cost_of_debt=Decimal("0.05"),
-        debt_weight=Decimal("0.2"),
-        equity_weight=Decimal("0.8"),
-        terminal_growth=Decimal("0.02"),
-        evidence=evidence,
-    )
-
-
 def initial_policy_records() -> tuple[PolicyRecordV1, ...]:
     return tuple(
-        PolicyRecordV1(
-            **(
-                payload := {
-                    "contract_version": "fundamental.v1",
-                    "policy_id": f"{model_id}-us-gaap-public-v1",
-                    "policy_version": f"{model_version}-quality-v1",
-                    "profile_id": "us-gaap-public-v1",
-                    "model_id": model_id,
-                    "model_version": model_version,
-                    "assumptions": None,
-                    "market_inputs": _initial_market_inputs(),
-                    "source_refs": (
-                        "fundamental-service/docs/fundamental-enterprise-grade-target-state.md#24.4.3",
-                    ),
-                    # The first released policy is effective for every supported
-                    # historical snapshot; later releases supersede it by version.
-                    "effective_at": datetime(1970, 1, 1, tzinfo=UTC),
-                    "status": "active",
-                }
-            ),
-            policy_digest=sha256_digest(payload),
+        PolicyRecordV1.model_validate(
+            {
+                **(
+                    payload := {
+                        "contract_version": "fundamental.v1",
+                        "policy_id": f"{model_id}-us-gaap-public-v3",
+                        "policy_version": f"{model_version}-quality-v2",
+                        "profile_id": "us-gaap-public-v1",
+                        "model_id": model_id,
+                        "model_version": model_version,
+                        "assumptions": None,
+                        "market_inputs": None,
+                        "source_refs": (
+                            "fundamental-service/docs/fundamental-enterprise-grade-target-state.md#24.4.3",
+                        ),
+                        # This seed supplies eligibility metadata only. Market
+                        # preparation requires separately admitted input evidence.
+                        "effective_at": datetime(1970, 1, 1, tzinfo=UTC),
+                        "status": "active",
+                    }
+                ),
+                "policy_digest": sha256_digest(payload),
+            }
         )
         for model_id, model_version in (
-            ("fcff_dcf", "fcff_dcf-v1"),
-            ("transition_fcff_dcf", "transition_fcff_dcf-v1"),
+            ("fcff_dcf", "fcff_dcf-v2"),
+            ("transition_fcff_dcf", "transition_fcff_dcf-v2"),
         )
     )
 
@@ -590,6 +555,8 @@ def resolve_policy(
         or policy.model_version != request.model_version
     ):
         raise ValueError("policy model ID/version does not match request")
+    resolved: dict[str, object]
+    precedence: dict[str, Literal["caller", "policy"]]
     if policy.assumptions is None:
         assumptions = request.assumptions
         resolved = _flatten_assumptions(assumptions.model_dump())
@@ -610,6 +577,7 @@ def resolve_policy(
                 "CALLER_APPROVAL_CONFLICT",
                 "caller approval is bound to a different resolved input_digest",
             )
+        assert resolved_input.input_digest is not None
         return resolved_input, PolicyResolutionV1(
             contract_version="fundamental.v1",
             policy_id=policy.policy_id,
@@ -624,13 +592,14 @@ def resolve_policy(
     defaults = policy.assumptions.model_dump()
     if request.model_id not in {"fcff_dcf", "transition_fcff_dcf"}:
         raise ValueError("policy resolution is not released for this model family")
-    if any(
+    capital_bridge = policy.assumptions.capital_bridge
+    if capital_bridge is None or any(
         defaults.get(group) is None
         for group in ("forecast", "wacc", "capital_bridge", "trace")
     ):
         raise ValueError("policy does not contain a complete FCFF assumption set")
-    resolved: dict[str, object] = {}
-    precedence: dict[str, Literal["caller", "policy"]] = {}
+    resolved = {}
+    precedence = {}
     for group, values in defaults.items():
         if not isinstance(values, dict):
             key = f"assumptions.{group}"
@@ -662,7 +631,7 @@ def resolve_policy(
             if caller.get("terminal_growth") is not None
             else defaults["terminal_growth"]
         ),
-        capital_bridge=policy.assumptions.capital_bridge.model_copy(
+        capital_bridge=capital_bridge.model_copy(
             update=caller.get("capital_bridge", {})
         ),
         trace=request.assumptions.trace,
@@ -685,6 +654,7 @@ def resolve_policy(
             "CALLER_APPROVAL_CONFLICT",
             "caller approval is bound to a different resolved input_digest",
         )
+    assert resolved_input.input_digest is not None
     resolution = PolicyResolutionV1(
         contract_version="fundamental.v1",
         policy_id=policy.policy_id,
@@ -731,7 +701,7 @@ def resolve_policy_overrides(
     resolved_fields: dict[str, object] = {}
     precedence: dict[str, Literal["caller", "policy"]] = {}
 
-    def resolve_group(name: str, model_type: type[BaseModel]) -> BaseModel:
+    def resolve_group(name: str, model_type: type[AssumptionGroup]) -> AssumptionGroup:
         default_group = getattr(defaults, name)
         caller_group = getattr(overrides, name)
         default_values = (
@@ -810,7 +780,7 @@ def resolve_policy_overrides(
         "policy_id": policy.policy_id,
     }
     try:
-        resolved = ValuationInputV1(**payload).with_digest()
+        resolved = ValuationInputV1.model_validate({**payload}).with_digest()
     except ValidationError as error:
         raise PolicyError(
             "POLICY_ASSUMPTIONS_INVALID",
@@ -837,6 +807,7 @@ def resolve_policy_overrides(
             update={"caller_approval": request.caller_approval}
         )
 
+    assert resolved.input_digest is not None
     return resolved, PolicyResolutionV1(
         contract_version="fundamental.v1",
         policy_id=policy.policy_id,
@@ -931,16 +902,11 @@ def evaluate_eligibility(
 
 
 def initial_model_specs() -> tuple[ModelSpecV1, ...]:
+    required_fields = ("revenue", "operating_income", "cash", "debt", "diluted_shares")
     common = {
         "contract_version": "fundamental.v1",
         "profile_id": "us-gaap-public-v1",
-        "required_fields": (
-            "revenue",
-            "operating_income",
-            "cash",
-            "debt",
-            "diluted_shares",
-        ),
+        "required_fields": required_fields,
         "supported_archetypes": ("mature_non_financial",),
         "owner": "fundamental-service",
         "validator": "quality-policy-v1",
@@ -951,7 +917,7 @@ def initial_model_specs() -> tuple[ModelSpecV1, ...]:
         "accounting_bases": ("us-gaap",),
         "required_evidence": ("issuer-filings", "capital-bridge", "golden-cohort"),
         "assumption_policy": "policy-v1-explicit-caller-assumptions",
-        "formula_graph": "calculator-v1-fcff",
+        "formula_graph": "calculator-v2-fcff",
         "numerical_policy": VALUATION_NUMERICAL_POLICY,
         "eligibility_policy": "quality-policy-v1",
         "abstention_policy": "abstain-on-missing-or-unverified-evidence-v1",
@@ -969,7 +935,7 @@ def initial_model_specs() -> tuple[ModelSpecV1, ...]:
         ),
         "source_register": ("sec-companyfacts", "sec-filing", "treasury-yields"),
         "capital_bridge_policy": (
-            "enterprise-value-plus-cash-minus-debt-and-dilution-v1"
+            "enterprise-value-plus-cash-and-nonoperating-assets-minus-claims-v2"
         ),
         "golden_cohort": "fundamental-engineering-cohort-v1",
         "challenger": "independent-verification-v1",
@@ -984,17 +950,21 @@ def initial_model_specs() -> tuple[ModelSpecV1, ...]:
         ),
     }
     return (
-        ModelSpecV1(model_id="fcff_dcf", model_version="fcff_dcf-v1", **common),
-        ModelSpecV1(
-            model_id="transition_fcff_dcf",
-            model_version="transition_fcff_dcf-v1",
-            required_fields=(*common["required_fields"], "filed_operating_evidence"),
-            supported_archetypes=("high_growth_non_financial",),
-            **{
-                key: value
-                for key, value in common.items()
-                if key not in {"required_fields", "supported_archetypes"}
-            },
+        ModelSpecV1.model_validate(
+            {"model_id": "fcff_dcf", "model_version": "fcff_dcf-v2", **common}
+        ),
+        ModelSpecV1.model_validate(
+            {
+                "model_id": "transition_fcff_dcf",
+                "model_version": "transition_fcff_dcf-v2",
+                "required_fields": (*required_fields, "filed_operating_evidence"),
+                "supported_archetypes": ("high_growth_non_financial",),
+                **{
+                    key: value
+                    for key, value in common.items()
+                    if key not in {"required_fields", "supported_archetypes"}
+                },
+            }
         ),
     )
 
@@ -1378,57 +1348,51 @@ def expansion_model_specs() -> tuple[ModelSpecV1, ...]:
         },
     )
     return tuple(
-        ModelSpecV1(
-            contract_version="fundamental.v1",
-            model_id=family["model_id"],
-            model_version=f"{family['model_id']}-v1",
-            profile_id=family["profile_id"],
-            required_fields=family["required_fields"],
-            forbidden_conditions=family["forbidden_conditions"],
-            supported_archetypes=(family["archetype"],),
-            owner="fundamental-service",
-            validator="independent-model-validation",
-            lifecycle="exploratory",
-            economic_purpose=family["economic_purpose"],
-            valuation_basis=family["valuation_basis"],
-            jurisdictions=("US",),
-            accounting_bases=(
-                ("ifrs",) if family["model_id"] == "ifrs_fcff_dcf" else ("us-gaap",)
-            ),
-            required_evidence=family["evidence"],
-            assumption_policy=family["assumption_policy"],
-            formula_graph=family["formula_graph"],
-            numerical_policy=VALUATION_NUMERICAL_POLICY,
-            eligibility_policy=(
-                "model-required-facts-forbidden-conditions-and-quality-v1"
-            ),
-            abstention_policy=(
-                "abstain-on-any-required-evidence-or-entity-scope-failure-v1"
-            ),
-            uncertainty_policy=family["uncertainty_policy"],
-            calibration_policy="chronological-point-in-time-oos-before-promotion-v1",
-            calibration_targets=family["calibration_targets"],
-            calibration_required_for_promotion=True,
-            required_release_gates=(
-                "public-source-coverage",
-                "point-in-time-accounting",
-                "positive-negative-golden-cohorts",
-                "independent-node-challenger",
-                "calibration-oos",
-                "replay-reproducibility",
-            ),
-            source_register=family["sources"],
-            capital_bridge_policy=family["capital_bridge_policy"],
-            golden_cohort=f"{family['model_id']}-positive-negative-golden-cohort-v1",
-            challenger=f"{family['model_id']}-independent-node-challenger-v1",
-            independent_validator="independent-model-validation",
-            retirement_trigger=(
-                "source-loss-drift-validation-failure-or-expired-review-v1"
-            ),
-            rollback_policy="restore-last-promoted-release-manifest-and-replay-v1",
-            monitoring_policy=(
-                "monthly-source-health-drift-missingness-and-abstention-v1"
-            ),
+        ModelSpecV1.model_validate(
+            {
+                "contract_version": "fundamental.v1",
+                "model_id": family["model_id"],
+                "model_version": f"{family['model_id']}-v1",
+                "profile_id": family["profile_id"],
+                "required_fields": family["required_fields"],
+                "forbidden_conditions": family["forbidden_conditions"],
+                "supported_archetypes": (family["archetype"],),
+                "owner": "fundamental-service",
+                "validator": "independent-model-validation",
+                "lifecycle": "exploratory",
+                "economic_purpose": family["economic_purpose"],
+                "valuation_basis": family["valuation_basis"],
+                "jurisdictions": ("US",),
+                "accounting_bases": ("ifrs",)
+                if family["model_id"] == "ifrs_fcff_dcf"
+                else ("us-gaap",),
+                "required_evidence": family["evidence"],
+                "assumption_policy": family["assumption_policy"],
+                "formula_graph": family["formula_graph"],
+                "numerical_policy": VALUATION_NUMERICAL_POLICY,
+                "eligibility_policy": "model-required-facts-forbidden-conditions-and-quality-v1",
+                "abstention_policy": "abstain-on-any-required-evidence-or-entity-scope-failure-v1",
+                "uncertainty_policy": family["uncertainty_policy"],
+                "calibration_policy": "chronological-point-in-time-oos-before-promotion-v1",
+                "calibration_targets": family["calibration_targets"],
+                "calibration_required_for_promotion": True,
+                "required_release_gates": (
+                    "public-source-coverage",
+                    "point-in-time-accounting",
+                    "positive-negative-golden-cohorts",
+                    "independent-node-challenger",
+                    "calibration-oos",
+                    "replay-reproducibility",
+                ),
+                "source_register": family["sources"],
+                "capital_bridge_policy": family["capital_bridge_policy"],
+                "golden_cohort": f"{family['model_id']}-positive-negative-golden-cohort-v1",
+                "challenger": f"{family['model_id']}-independent-node-challenger-v1",
+                "independent_validator": "independent-model-validation",
+                "retirement_trigger": "source-loss-drift-validation-failure-or-expired-review-v1",
+                "rollback_policy": "restore-last-promoted-release-manifest-and-replay-v1",
+                "monitoring_policy": "monthly-source-health-drift-missingness-and-abstention-v1",
+            }
         )
         for family in families
     )
@@ -1453,5 +1417,9 @@ def expansion_policy_records() -> tuple[PolicyRecordV1, ...]:
             "effective_at": datetime(1970, 1, 1, tzinfo=UTC),
             "status": "active",
         }
-        policies.append(PolicyRecordV1(**payload, policy_digest=sha256_digest(payload)))
+        policies.append(
+            PolicyRecordV1.model_validate(
+                {**payload, "policy_digest": sha256_digest(payload)}
+            )
+        )
     return tuple(policies)

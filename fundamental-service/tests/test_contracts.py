@@ -40,6 +40,7 @@ def assumptions() -> AssumptionsV1:
         terminal_growth=Decimal("0.02"),
         capital_bridge=CapitalBridgeAssumptionsV1(
             cash=Decimal("10"),
+            non_operating_assets=Decimal("0"),
             debt=Decimal("5"),
             preferred_stock=Decimal("0"),
             lease_liabilities=Decimal("0"),
@@ -79,7 +80,7 @@ def valuation() -> ValuationInputV1:
             "taxonomy_version": "taxonomy-v1",
         },
         model_id="fcff_dcf",
-        model_version="fcff_dcf-v1",
+        model_version="fcff_dcf-v2",
     )
 
 
@@ -97,6 +98,36 @@ def test_digest_is_stable_and_approval_binds_to_exact_input():
         }
     )
     assert approved.caller_approval is not None
+
+
+def test_caller_approval_requires_an_unambiguous_decision_time():
+    payload = {
+        "input_digest": "a" * 64,
+        "decision": "approved",
+        "caller_id": "caller",
+        "decided_at": datetime(2026, 1, 1, 12),
+    }
+    with pytest.raises(ValidationError, match="decided_at must include a timezone"):
+        CallerApprovalEnvelopeV1.model_validate(payload)
+    payload["decided_at"] = datetime.fromisoformat("2026-01-01T12:00:00+08:00")
+    approval = CallerApprovalEnvelopeV1.model_validate(payload)
+    assert approval.decided_at.utcoffset().total_seconds() == 8 * 3600
+
+
+def test_preparation_version_is_bound_to_input_digest_and_roundtrips():
+    caller_input = valuation().with_digest()
+    assert "preparation_version" not in caller_input.provenance.model_dump()
+    prepared = caller_input.model_copy(
+        update={
+            "provenance": caller_input.provenance.model_copy(
+                update={"preparation_version": "fcff-forecast-composer-v2"}
+            )
+        }
+    ).with_digest()
+    assert prepared.input_digest != caller_input.input_digest
+    restored = ValuationInputV1.model_validate_json(prepared.model_dump_json())
+    assert restored.input_digest == prepared.input_digest
+    assert restored.provenance.preparation_version == "fcff-forecast-composer-v2"
 
 
 def test_unknown_fields_and_invalid_digest_are_rejected():

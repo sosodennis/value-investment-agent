@@ -6,11 +6,20 @@ import hashlib
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 
-from .arelle_parser import ArelleParseReportV1, ParsedXbrlFactV1
+from .arelle_parser import ArelleParseReportV1, ParsedXbrlFactV1, fact_semantic_digest
+from .accounting_roles import (
+    AccountingRoleError,
+    AccountingRoleEvidenceV1,
+    accounting_reported_decimals,
+    IssuerAccountingRoleRuleSetV1,
+    evaluate_period_rule,
+)
+from .serialization import sha256_digest
 from .contracts import (
     CandidateRejectionV1,
     DimensionV1,
     IssueV1,
+    PeriodType,
     Severity,
     SourceProvenanceV1,
     SourceRecordV1,
@@ -19,19 +28,35 @@ from .facts import (
     CanonicalMappingV1,
     FactCandidateV1,
     FactSelection,
+    select_fact,
     select_fact_groups,
 )
 from .snapshots import SnapshotError
+from .original_issuer import OriginalOperatingSourceV1
+from .operating_disclosures import scoped_operating_text
 
 
 def _candidate_id(
     fact: ParsedXbrlFactV1,
     *,
-    source: SourceRecordV1,
+    source: SourceRecordV1 | OriginalOperatingSourceV1,
     normalized_field: str,
     security_id: str | None,
     mapping: CanonicalMappingV1 | None,
 ) -> str:
+    if isinstance(source, OriginalOperatingSourceV1):
+        return "sec-issuer-fact-" + sha256_digest(
+            {
+                "protocol": "issuer-original-fact-v1",
+                "issuer_id": source.cik,
+                "accession": source.accession_number,
+                "source_hash": source.content_hash,
+                "parser_input_hash": source.parser_input_hash,
+                "fact": fact,
+                "normalized_field": normalized_field,
+                "mapping": mapping,
+            }
+        )
     payload = "|".join(
         (
             source.content_hash,
@@ -61,17 +86,17 @@ def _decimal_value(value: str) -> Decimal | None:
 def parsed_facts_to_candidates(
     report: ArelleParseReportV1,
     *,
-    source: SourceRecordV1,
+    source: SourceRecordV1 | OriginalOperatingSourceV1,
     issuer_id: str,
     normalized_field: str,
     mapping: CanonicalMappingV1 | None = None,
     security_id: str | None = None,
 ) -> tuple[FactCandidateV1, ...]:
-    """Convert numeric facts in an offline parser report into candidates.
+    """Convert numeric facts and explicitly scoped operating text to candidates.
 
-    Facts without a typed period, unit, or finite numeric value are excluded
-    instead of being silently normalized. The caller can inspect the parser
-    report and source manifest for the exclusion context.
+    Monetary candidates require a typed period, unit and finite number.
+    The scoped operating-disclosure role retains original text verbatim.
+    Excluded observations remain in the parser report.
     """
     if not report.offline:
         raise SnapshotError(
@@ -82,9 +107,29 @@ def parsed_facts_to_candidates(
         raise SnapshotError(
             "SOURCE_HASH_MISMATCH", "parser report is not bound to source bytes"
         )
+    context = report.dqc_filing_context
+    if context is not None and (
+        context.issuer_id != issuer_id
+        or context.accession_number != source.accession_number
+    ):
+        raise SnapshotError(
+            "DQC_FILING_CONTEXT_MISMATCH",
+            "DQC filing-date evidence belongs to another original",
+        )
+    if isinstance(source, OriginalOperatingSourceV1) and (
+        source.cik != issuer_id or security_id is not None
+    ):
+        raise SnapshotError(
+            "ISSUER_SCOPE_MISMATCH", "issuer rebuild cannot assert a security"
+        )
+    parser_version = (
+        report.parser_version
+        if isinstance(source, OriginalOperatingSourceV1)
+        else source.parser_version
+    )
     if (
-        report.parser_version != source.parser_version
-        and source.parser_version != f"arelle-release=={report.parser_version}"
+        report.parser_version != parser_version
+        and parser_version != f"arelle-release=={report.parser_version}"
     ):
         raise SnapshotError(
             "PARSER_VERSION_MISMATCH",
@@ -100,6 +145,20 @@ def parsed_facts_to_candidates(
             "MAPPING_FIELD_MISMATCH",
             "canonical mapping does not target the requested normalized field",
         )
+    observation_scope = mapping.observation_scope if mapping is not None else None
+    if observation_scope is not None:
+        if (
+            observation_scope.issuer_id != issuer_id
+            or observation_scope.accession_number != source.accession_number
+            or observation_scope.raw_content_hash != source.content_hash
+            or observation_scope.parser_input_hash != expected_parser_hash
+        ):
+            return ()
+        if observation_scope.parser_replay_digest != report.replay_digest():
+            raise SnapshotError(
+                "MAPPING_REPORT_MISMATCH",
+                "scoped mapping requires its exact approved parser report",
+            )
     normalized_issuer = issuer_id.lstrip("0") or "0"
     candidates: list[FactCandidateV1] = []
     provenance = SourceProvenanceV1(
@@ -110,11 +169,25 @@ def parsed_facts_to_candidates(
         available_at=source.available_at,
         filed_at=source.filed_at,
         accession_number=source.accession_number,
-        parser_version=source.parser_version,
+        parser_version=parser_version,
         taxonomy_version=report.taxonomy_version,
         terms_reference=source.terms_reference,
     )
+    if mapping is not None and mapping.accounting_rules is not None:
+        return _accounting_candidates(
+            report,
+            source=source,
+            provenance=provenance,
+            mapping=mapping,
+            issuer_id=issuer_id,
+            security_id=security_id,
+        )
     for fact in report.facts:
+        if (
+            observation_scope is not None
+            and sha256_digest(fact) not in observation_scope.observation_digests
+        ):
+            continue
         if mapping is not None and fact.concept != mapping.source_concept:
             continue
         if (
@@ -125,11 +198,19 @@ def parsed_facts_to_candidates(
                 "ISSUER_MISMATCH",
                 "parsed XBRL entity does not match the requested issuer",
             )
-        value = _decimal_value(fact.value) if fact.is_numeric else None
-        if value is None or not fact.unit:
+        text_observation = scoped_operating_text(fact, mapping)
+        value = (
+            fact.value
+            if text_observation
+            else _decimal_value(fact.value)
+            if fact.is_numeric
+            else None
+        )
+        unit = "text" if text_observation else fact.unit
+        if value is None or not unit:
             continue
         if fact.period_start is not None and fact.period_end is not None:
-            period_type = "duration"
+            period_type = PeriodType.DURATION
             period_start = fact.period_start
             period_end = fact.period_end
             instant = None
@@ -137,7 +218,7 @@ def parsed_facts_to_candidates(
                 period_end, datetime.min.time(), tzinfo=timezone.utc
             )
         elif fact.instant is not None:
-            period_type = "instant"
+            period_type = PeriodType.INSTANT
             period_start = None
             period_end = None
             instant = fact.instant
@@ -145,7 +226,9 @@ def parsed_facts_to_candidates(
         else:
             continue
         currency = (
-            fact.unit.rsplit(":", 1)[-1] if fact.unit.startswith("iso4217:") else None
+            unit.partition("/")[0].removeprefix("iso4217:")
+            if unit.startswith("iso4217:")
+            else None
         )
         dimensions = tuple(
             DimensionV1(name=name, member=member) for name, member in fact.dimensions
@@ -164,7 +247,7 @@ def parsed_facts_to_candidates(
                 concept=fact.concept,
                 normalized_field=normalized_field,
                 value=value,
-                unit=fact.unit,
+                unit=unit,
                 scale=fact.scale,
                 currency=currency,
                 period_type=period_type,
@@ -193,11 +276,180 @@ def parsed_facts_to_candidates(
                     else None
                 ),
                 context_id=fact.context_id,
-                unit_qname=fact.unit,
-                measure=fact.unit,
+                unit_qname=unit,
+                measure=unit,
                 source=provenance,
                 taxonomy_version=report.taxonomy_version,
                 mapping=mapping,
+            )
+        )
+    return tuple(candidates)
+
+
+def _accounting_candidates(
+    report: ArelleParseReportV1,
+    *,
+    source: SourceRecordV1 | OriginalOperatingSourceV1,
+    provenance: SourceProvenanceV1,
+    mapping: CanonicalMappingV1,
+    issuer_id: str,
+    security_id: str | None,
+) -> tuple[FactCandidateV1, ...]:
+    rules = mapping.accounting_rules
+    assert rules is not None
+    if (
+        isinstance(source, OriginalOperatingSourceV1)
+        != isinstance(rules, IssuerAccountingRoleRuleSetV1)
+        or rules.issuer_id != issuer_id
+        or rules.security_id != security_id
+        or rules.accession_number != source.accession_number
+        or rules.raw_content_hash != source.content_hash
+        or rules.parser_input_hash != report.source_content_hash
+        or rules.parser_fact_digest != fact_semantic_digest(report)
+        or source.is_amendment
+        or source.form != "10-K"
+        or report.validation_profile.validation_mode != "sec-efm-dqc"
+        or not {"sec-efm", "dqc-us"}.issubset(report.validation_engines)
+    ):
+        raise SnapshotError(
+            "ACCOUNTING_ROLE_SOURCE_MISMATCH",
+            "accounting rules require their exact validated original and issuer",
+        )
+    by_digest = {sha256_digest(fact): fact for fact in report.facts}
+    candidates = []
+    for rule in rules.periods:
+        if rule.period.period_end > source.available_at.date():
+            raise SnapshotError(
+                "ACCOUNTING_ROLE_FUTURE_PERIOD",
+                "accounting rule cannot assert a future financial period",
+            )
+        if rule.disposition in {"unknown", "unsupported"}:
+            continue
+        references = rule.source_references()
+        try:
+            source_facts = tuple(
+                sorted((by_digest[key] for key in set(references)), key=sha256_digest)
+            )
+        except KeyError as error:
+            raise SnapshotError(
+                "ACCOUNTING_ROLE_SOURCE_MISMATCH",
+                "accounting source observation is unavailable",
+            ) from error
+        if any(
+            (fact.instant or fact.period_end or rule.period.period_end)
+            > source.available_at.date()
+            for fact in source_facts
+        ):
+            raise SnapshotError(
+                "ACCOUNTING_ROLE_FUTURE_PERIOD",
+                "accounting source cannot disclose a future financial period",
+            )
+        if rule.disposition in {"derived", "classified"}:
+            for selected in source_facts:
+                if not selected.is_numeric:
+                    continue
+                comparable = tuple(
+                    fact
+                    for fact in report.facts
+                    if fact.concept == selected.concept
+                    and fact.entity_identifier == selected.entity_identifier
+                    and fact.period_start == selected.period_start
+                    and fact.period_end == selected.period_end
+                    and fact.instant == selected.instant
+                    and fact.unit == selected.unit
+                    and fact.dimensions == selected.dimensions
+                    and fact.consolidation_scope == selected.consolidation_scope
+                )
+                observations = parsed_facts_to_candidates(
+                    report.model_copy(update={"facts": comparable}),
+                    source=source,
+                    issuer_id=issuer_id,
+                    security_id=security_id,
+                    normalized_field=selected.concept,
+                )
+                selection = select_fact(observations, source.available_at)
+                if selection.fact is None:
+                    raise SnapshotError(
+                        "ACCOUNTING_COMPONENT_CONFLICT",
+                        "original contains conflicting accounting observations",
+                    )
+                selected_observations = parsed_facts_to_candidates(
+                    report.model_copy(update={"facts": (selected,)}),
+                    source=source,
+                    issuer_id=issuer_id,
+                    security_id=security_id,
+                    normalized_field=selected.concept,
+                )
+                if (
+                    len(selected_observations) != 1
+                    or selected_observations[0].decimals != selection.fact.decimals
+                    or selected_observations[0].value != selection.fact.value
+                ):
+                    raise SnapshotError(
+                        "ACCOUNTING_COMPONENT_NOT_SELECTED",
+                        "accounting component must use the highest-precision original observation",
+                    )
+        try:
+            value = evaluate_period_rule(rules, rule, source_facts)
+            evidence = AccountingRoleEvidenceV1(
+                rule_set=rules, period_rule=rule, source_facts=source_facts, value=value
+            )
+        except AccountingRoleError as error:
+            raise SnapshotError(error.code, str(error)) from error
+        assert value is not None
+        period = rule.period
+        candidates.append(
+            FactCandidateV1(
+                candidate_id="sec-role-"
+                + sha256_digest(
+                    {
+                        "mapping": sha256_digest(mapping),
+                        "evidence": evidence,
+                        "source": source,
+                        "provenance": provenance,
+                        "issuer_id": issuer_id,
+                        "security_id": security_id,
+                        "taxonomy_version": report.taxonomy_version,
+                    }
+                ),
+                issuer_id=issuer_id,
+                security_id=security_id,
+                concept=mapping.source_concept,
+                normalized_field=mapping.normalized_field,
+                value=value,
+                unit=rules.unit,
+                scale=0,
+                decimals=accounting_reported_decimals(rule, source_facts),
+                currency=rules.currency,
+                period_type=PeriodType.INSTANT
+                if period.instant
+                else PeriodType.DURATION,
+                period_start=period.period_start,
+                period_end=None if period.instant else period.period_end,
+                instant=period.period_end if period.instant else None,
+                dimensions=(),
+                entity_scope=issuer_id,
+                consolidation_scope="consolidated",
+                security_scope="issuer"
+                if isinstance(source, OriginalOperatingSourceV1)
+                else "security",
+                as_of=datetime.combine(
+                    period.period_end, datetime.min.time(), tzinfo=timezone.utc
+                ),
+                available_at=source.available_at,
+                filed_at=source.filed_at,
+                captured_at=source.captured_at,
+                accession_number=source.accession_number,
+                filing_version=source.filing_version
+                or source.accession_number
+                or "unknown",
+                context_id=f"computed-{sha256_digest(evidence)}",
+                unit_qname=rules.unit,
+                measure=rules.unit,
+                source=provenance,
+                taxonomy_version=report.taxonomy_version,
+                mapping=mapping,
+                accounting_evidence=evidence,
             )
         )
     return tuple(candidates)
@@ -288,7 +540,7 @@ def select_canonical_fact(
                 for key, value in sorted(rejected_reasons.items())
             ),
         )
-    filing_groups: dict[tuple[str | None, str, str], list] = {}
+    filing_groups: dict[tuple[str | None, str | None, str], list] = {}
     for fact in selected:
         filing_key = (
             fact.accession_number,

@@ -43,6 +43,7 @@
       },
       "terminal_growth": "0.02",
       "capital_bridge": {
+        "non_operating_assets": "0",
         "cash": "30000000000",
         "debt": "100000000000",
         "preferred_stock": "0",
@@ -63,7 +64,7 @@
       "policy_version": "quality-policy-v1"
     },
     "model_id": "fcff_dcf",
-    "model_version": "fcff_dcf-v1",
+    "model_version": "fcff_dcf-v2",
     "policy_id": "policy-fcff-v1",
     "input_digest": null
   },
@@ -132,7 +133,7 @@
       "source_fixture": "../sec-edgar/apple-2024-original-aapl-20240928.htm",
       "source_sha256": "a14d584e9804a87e92ddbd2446ade975e926a494671292403c811c1f4fc4b846",
       "features": ["guarded-transition", "filed-operating-evidence"],
-      "request_overrides": {"model_id": "transition_fcff_dcf", "model_version": "transition_fcff_dcf-v1", "policy_id": "policy-transition-v1", "historical_facts": ["revenue", "operating_income", "cash", "debt", "diluted_shares", "filed_operating_evidence"]}
+      "request_overrides": {"model_id": "transition_fcff_dcf", "model_version": "transition_fcff_dcf-v2", "policy_id": "policy-transition-v1", "historical_facts": ["revenue", "operating_income", "cash", "debt", "diluted_shares", "filed_operating_evidence"]}
     },
     {
       "case_id": "positive-transition-consumer",
@@ -143,7 +144,7 @@
       "source_fixture": "../sec-edgar/apple-2024-original-aapl-20240928.htm",
       "source_sha256": "a14d584e9804a87e92ddbd2446ade975e926a494671292403c811c1f4fc4b846",
       "features": ["guarded-transition", "sbc"],
-      "request_overrides": {"model_id": "transition_fcff_dcf", "model_version": "transition_fcff_dcf-v1", "policy_id": "policy-transition-v1", "historical_facts": ["revenue", "operating_income", "cash", "debt", "diluted_shares", "filed_operating_evidence", "sbc_expense"], "assumptions": {"forecast": {"revenue_growth": ["0.08"], "operating_margin": ["0.18"]}}}
+      "request_overrides": {"model_id": "transition_fcff_dcf", "model_version": "transition_fcff_dcf-v2", "policy_id": "policy-transition-v1", "historical_facts": ["revenue", "operating_income", "cash", "debt", "diluted_shares", "filed_operating_evidence", "sbc_expense"], "assumptions": {"forecast": {"revenue_growth": ["0.08"], "operating_margin": ["0.18"]}}}
     },
     {
       "case_id": "positive-transition-healthcare",
@@ -154,7 +155,7 @@
       "source_fixture": "../sec-edgar/apple-2024-original-aapl-20240928.htm",
       "source_sha256": "a14d584e9804a87e92ddbd2446ade975e926a494671292403c811c1f4fc4b846",
       "features": ["guarded-transition", "dilution", "share-class"],
-      "request_overrides": {"model_id": "transition_fcff_dcf", "model_version": "transition_fcff_dcf-v1", "policy_id": "policy-transition-v1", "historical_facts": ["revenue", "operating_income", "cash", "debt", "diluted_shares", "filed_operating_evidence", "sbc_dilution"], "assumptions": {"forecast": {"revenue_growth": ["0.09"], "operating_margin": ["0.17"]}}}
+      "request_overrides": {"model_id": "transition_fcff_dcf", "model_version": "transition_fcff_dcf-v2", "policy_id": "policy-transition-v1", "historical_facts": ["revenue", "operating_income", "cash", "debt", "diluted_shares", "filed_operating_evidence", "sbc_dilution"], "assumptions": {"forecast": {"revenue_growth": ["0.09"], "operating_margin": ["0.17"]}}}
     },
     {
       "case_id": "positive-transition-industrials",
@@ -165,7 +166,7 @@
       "source_fixture": "../sec-edgar/tesla-2025-amendment-tm252787d2_10ka.htm",
       "source_sha256": "ac21201742aa3e815678e0f1dad7605b9f659423966981497b1e1e285233a432",
       "features": ["guarded-transition", "amended-filing", "restatement-diagnostic"],
-      "request_overrides": {"model_id": "transition_fcff_dcf", "identity": {"issuer_id": "0001318605", "issuer_name": "Tesla, Inc.", "security_id": "TSLA-COMMON"}, "valuation_context": {"data_snapshot_id": "tesla-2025-amendment", "valuation_timestamp": "2025-05-10T00:00:00Z"}, "assumptions": {"forecast": {"base_revenue": "97673000000", "revenue_growth": ["0.13"], "operating_margin": ["0.12"]}}, "historical_facts": ["revenue", "operating_income", "cash", "debt", "diluted_shares", "filed_operating_evidence", "amendment_diagnostic"], "provenance": {"snapshot_id": "tesla-2025-amendment", "fact_ids": ["sec-tsla-revenue-2024-amended"]}, "model_version": "transition_fcff_dcf-v1", "policy_id": "policy-transition-v1"}
+      "request_overrides": {"model_id": "transition_fcff_dcf", "identity": {"issuer_id": "0001318605", "issuer_name": "Tesla, Inc.", "security_id": "TSLA-COMMON"}, "valuation_context": {"data_snapshot_id": "tesla-2025-amendment", "valuation_timestamp": "2025-05-10T00:00:00Z"}, "assumptions": {"forecast": {"base_revenue": "97673000000", "revenue_growth": ["0.13"], "operating_margin": ["0.12"]}}, "historical_facts": ["revenue", "operating_income", "cash", "debt", "diluted_shares", "filed_operating_evidence", "amendment_diagnostic"], "provenance": {"snapshot_id": "tesla-2025-amendment", "fact_ids": ["sec-tsla-revenue-2024-amended"]}, "model_version": "transition_fcff_dcf-v2", "policy_id": "policy-transition-v1"}
     },
     {
       "case_id": "positive-transition-automotive",
@@ -176,7 +177,7 @@
       "source_fixture": "../sec-edgar/tesla-2025-amendment-tm252787d2_10ka.htm",
       "source_sha256": "ac21201742aa3e815678e0f1dad7605b9f659423966981497b1e1e285233a432",
       "features": ["guarded-transition", "leases", "capital-bridge", "amendment"],
-      "request_overrides": {"model_id": "transition_fcff_dcf", "identity": {"issuer_id": "0001318605", "issuer_name": "Tesla, Inc.", "security_id": "TSLA-COMMON"}, "valuation_context": {"data_snapshot_id": "tesla-2025-amendment", "valuation_timestamp": "2025-05-10T00:00:00Z"}, "assumptions": {"forecast": {"base_revenue": "97673000000", "revenue_growth": ["0.10"], "operating_margin": ["0.13"]}}, "historical_facts": ["revenue", "operating_income", "cash", "debt", "diluted_shares", "filed_operating_evidence", "lease_liabilities"], "provenance": {"snapshot_id": "tesla-2025-amendment", "fact_ids": ["sec-tsla-revenue-2024-amended"]}, "model_version": "transition_fcff_dcf-v1", "policy_id": "policy-transition-v1"}
+      "request_overrides": {"model_id": "transition_fcff_dcf", "identity": {"issuer_id": "0001318605", "issuer_name": "Tesla, Inc.", "security_id": "TSLA-COMMON"}, "valuation_context": {"data_snapshot_id": "tesla-2025-amendment", "valuation_timestamp": "2025-05-10T00:00:00Z"}, "assumptions": {"forecast": {"base_revenue": "97673000000", "revenue_growth": ["0.10"], "operating_margin": ["0.13"]}}, "historical_facts": ["revenue", "operating_income", "cash", "debt", "diluted_shares", "filed_operating_evidence", "lease_liabilities"], "provenance": {"snapshot_id": "tesla-2025-amendment", "fact_ids": ["sec-tsla-revenue-2024-amended"]}, "model_version": "transition_fcff_dcf-v2", "policy_id": "policy-transition-v1"}
     },
     {
       "case_id": "abstain-unsupported-sector",
@@ -260,7 +261,7 @@
       "source_sha256": "450428c73c70775ccc288b2ac48ac2d6b81a128357fe6e92f0cf3ab76a05322e",
       "features": ["guarded-transition", "missing-filed-evidence"],
       "expected_refusal_code": "QUALITY_NOT_VERIFIED",
-      "request_overrides": {"model_id": "transition_fcff_dcf", "identity": {"issuer_id": "0001318605", "issuer_name": "Tesla, Inc.", "security_id": "TSLA-COMMON"}, "valuation_context": {"data_snapshot_id": "tesla-2024-original", "valuation_timestamp": "2024-02-15T00:00:00Z"}, "model_version": "transition_fcff_dcf-v1", "policy_id": "policy-transition-v1", "quality": {"status": "provisional", "missing_evidence": ["filed_operating_evidence"]}, "assumptions": {"forecast": {"base_revenue": "96773000000"}}, "provenance": {"snapshot_id": "tesla-2024-original", "fact_ids": ["sec-tsla-revenue-2023"]}}
+      "request_overrides": {"model_id": "transition_fcff_dcf", "identity": {"issuer_id": "0001318605", "issuer_name": "Tesla, Inc.", "security_id": "TSLA-COMMON"}, "valuation_context": {"data_snapshot_id": "tesla-2024-original", "valuation_timestamp": "2024-02-15T00:00:00Z"}, "model_version": "transition_fcff_dcf-v2", "policy_id": "policy-transition-v1", "quality": {"status": "provisional", "missing_evidence": ["filed_operating_evidence"]}, "assumptions": {"forecast": {"base_revenue": "96773000000"}}, "provenance": {"snapshot_id": "tesla-2024-original", "fact_ids": ["sec-tsla-revenue-2023"]}}
     },
     {
       "case_id": "abstain-unsupported-ifrs",
