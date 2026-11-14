@@ -3041,3 +3041,64 @@ repeat/concurrency/restart/restore. Independent review and merge/main validation
 remain. Keep #361/#369/#394/#376/#377 OPEN and PR #370 draft. Threshold null;
 incomplete real valuations abstain, eligible estimates provisional, history
 research underpowered. All existing WIP commits and checkpoints remain.
+
+### Disclosed option-pool conditional bounds — 52fa2513
+
+Implementation `52fa25137d4cca4884ba3fca5c01a8e9480234df` adds the pure
+Fundamental Service [research method](../../fundamental-service/docs/disclosed-option-pool-bounds.md)
+for a source-bound disclosed option pool. Explicit conventional one-share,
+nonnegative-strike/compensation, price, reporting-error and optional compensation
+cap assumptions produce conditional bounds. Unknown compensation remains unknown;
+no missing capital claim becomes zero. The exact dilution function, formal
+composer, release gate and model versions remain unchanged. This report cannot
+satisfy a complete inventory or authorize valuation.
+
+Exact checks pass **2,839 Service/PostgreSQL tests** (17 external parser-resource
+skips and one expected duplicate-ZIP warning), **146 installed focused tests**,
+full Service Ruff/format, changed-source mypy, both architecture guards, patch/
+diff and SEC preflight. All [12 executed CI jobs](https://github.com/sosodennis/value-investment-agent/actions/runs/43535236771)
+pass; release gate skipped. An initial incorrect pytest8.4.2 override caused
+eight history-window fixture errors; frozen pytest9.2.0 passes the targeted30
+and full2839 tests. The failed command/log remains; no production waiver or test
+removal. Host runtime is Python3.11.15; the installed service uses Python3.12.16,
+Arelle2.47.4 and Pydantic2.14.2. All129 installed Python/SQL files match the exact
+commit; image `sha256:4272780d31dafbd50ad8d22c80dfd9bef5250851e72ebedf000e7e9a472716a1`.
+
+The isolated `value-investment-agent-361-option-bounds` project used20771/20772
+and10.231.92.0/28. Both genuine NVE originals reproduce retained SEC integrity
+bytes and the selected quantity/average facts. Nine explicitly hypothetical
+price/cost scenarios and four missing-fact/future-period refusals remain.
+Without a compensation cap, the disclosed-pool bounds are0–34,500 shares for
+2023 and0–36,000 for2024. Price50/75/100 and the optional2024 cost cap4181.5 are
+conditional assumptions, not admitted prices or approved pool compensation.
+The648 synthetic per-strike comparisons use the existing official dilution
+function. None establishes company-wide materiality or an issuer valuation.
+
+Ordinary, concurrent, fresh-process, service-restart and copied-filesystem-restore
+repeats preserve17 artifacts' bytes/sizes/mtimes and return `wrote=false`.
+Input `cca3675e1e707673036c32fe2f56e3f660d45fde75154ba1bfa0c1c3f16bc38a`;
+output `76747a17f0154dbb7c3e185d6ea7115e50ed2f6de40ef29074106d7d7514fe51`.
+This is research persistence, not PostgreSQL recovery or numerical HTTP full-flow.
+
+The incorporated2002 NVE Articles were retained as7411 bytes, SHA256
+`e603758006c9f674964f50225aa33c45c0c49213a1c416366d9bcdd3970aefe8`.
+They confirm authorized common/undesignated shares and board-created classes;
+they do not establish2023/2024 outstanding claims. Offline reuse performs zero
+downloads and preserves the source. No absence mapping was approved.
+
+The ignored atomic `.audit/issue-361-capital-bounds/checkpoint-report.json`
+retains exact command results, runtime, source/harness digests and diagnostics.
+Input `dde1dac3789577ba605b4de27e90835789b6f300db3a7e8a3b98aa34c631b090`;
+output `645f4b112301a0392dd96ec57d8e18d48fb9922c64c594ce65afff27bbf01e21`;
+artifact SHA256 `42c0dc18a3d7c1c864cf7985b343145ce5b448302b47c67661812f4e27b22bd6`.
+Its second write is unchanged. Generated sources/scripts/reports and verified
+host backup remain outside Git. Only this increment's two containers, network
+and two disposable volumes were removed; all60 baseline containers, older source
+stack, images and cache remain unchanged.
+
+Next: complete real capital/award scope and entitled dated quote/configuration,
+current issuer/date policy, trusted complete release and authentic exact-input
+approval; then actual numerical full-flow/repeat/concurrency/restart/restore and
+independent review/main delivery. Keep #361/#369/#394/#376/#377 OPEN and PR#370
+draft. Threshold null; pool research provisional, invalid/incomplete valuations
+abstained, history research underpowered. All prior WIP/checkpoints remain.
