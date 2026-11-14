@@ -1,0 +1,372 @@
+"""Deployment-owned verification and deterministic trusted release signing."""
+
+from __future__ import annotations
+
+import hashlib
+import sys
+from importlib.metadata import version
+from pathlib import Path
+from typing import Literal
+
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from pydantic import Field
+
+from .automatic_release_evidence import require_automatic_release_sources
+from .command_artifacts import EvidenceArtifactStore
+from .contracts import InitialModelId
+from .data_releases import (
+    REQUIRED_DATA_RELEASE_GATES,
+    ArtifactRefV1,
+    DataReleaseContentRequestV1,
+    DataReleaseError,
+    DataReleaseManifestV1,
+    DataReleaseTrustRootsV1,
+    DataReleaseVerificationV1,
+    IssuerOperatingReleaseManifestV1,
+    ReleaseModel,
+    sign_data_release_verification,
+)
+from .facts import CanonicalFactRepository
+from .macro_series import MacroSeriesProviderPort
+from .market_reference import MarketReferenceProviderPort
+from .policies import PolicyRegistry, initial_model_specs
+from .quote_providers import QuoteSourceProviderPort
+from .release_runner import (
+    DataReleaseCanaryRunner,
+    ReleaseMappingReader,
+    ReleaseSnapshotReader,
+)
+from .replay import ArtifactPublicationV1
+from .serialization import canonical_bytes, sha256_digest
+from .snapshots import SnapshotError
+from .source_admission import SourceUsePolicyV1
+from .valuation_release_inputs import valuation_release_requirements
+from .valuation_requirements import (
+    composite_working_capital_requirements_profile,
+    operating_forecast_requirements_profile,
+)
+
+
+def automatic_release_suite_digest() -> str:
+    """A deployment trust root pins the executable suite, including its owners."""
+    root = Path(__file__).parent
+    return sha256_digest(
+        {
+            "protocol": "automatic-data-release-suite-v1",
+            "runtime": {
+                "python": sys.version,
+                **{
+                    package: version(package)
+                    for package in ("arelle-release", "cryptography", "pydantic")
+                },
+            },
+            "sources": {
+                path.relative_to(root).as_posix(): hashlib.sha256(
+                    path.read_bytes()
+                ).hexdigest()
+                for path in sorted(root.rglob("*.py"))
+            },
+        }
+    )
+
+
+class AutomaticDataReleasePolicyV1(ReleaseModel):
+    protocol: Literal["automatic-data-release-policy-v1"] = (
+        "automatic-data-release-policy-v1"
+    )
+    profile_id: str = Field(min_length=1)
+    scope: Literal["security", "issuer-operating"]
+    model_id: InitialModelId
+    model_version: str = Field(min_length=1)
+    mapping_version: str = Field(min_length=1)
+    requirements_profile_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    parser_version: str = Field(min_length=1)
+    quality_profile_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    validation_profile_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    verifier_id: str = Field(min_length=1)
+    workflow_identity: str = Field(min_length=1)
+
+
+class AutomaticDataReleaseRequestV1(ReleaseModel):
+    manifest: IssuerOperatingReleaseManifestV1 | DataReleaseManifestV1
+    content: DataReleaseContentRequestV1
+
+
+class AutomaticDataReleaseCandidateV1(ReleaseModel):
+    manifest: IssuerOperatingReleaseManifestV1 | DataReleaseManifestV1
+    verification: DataReleaseVerificationV1
+
+
+class AutomaticDataReleaseDecisionV1(ReleaseModel):
+    input_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    status: Literal["passed", "blocked"]
+    issue_codes: tuple[str, ...] = ()
+    content_report_digest: str | None = None
+    regulatory_evidence_digests: tuple[str, ...] = ()
+
+
+class AutomaticDataReleaseReceiptV1(ReleaseModel):
+    input_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    output_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    decision: AutomaticDataReleaseDecisionV1
+    input_publication: ArtifactPublicationV1
+    decision_publication: ArtifactPublicationV1
+    candidate_publication: ArtifactPublicationV1 | None
+    canary_publication: ArtifactPublicationV1 | None
+    wrote: bool
+
+
+class AutomaticDataReleaseService:
+    """Sign checked immutable candidates; never activate or approve a valuation."""
+
+    def __init__(
+        self,
+        *,
+        snapshots: ReleaseSnapshotReader,
+        facts: CanonicalFactRepository,
+        mappings: ReleaseMappingReader,
+        artifacts: EvidenceArtifactStore,
+        trust_roots: DataReleaseTrustRootsV1,
+        policy: AutomaticDataReleasePolicyV1,
+        private_key: Ed25519PrivateKey,
+        source_revision: str,
+        quote_providers: tuple[QuoteSourceProviderPort, ...] = (),
+        macro_providers: tuple[MacroSeriesProviderPort, ...] = (),
+        reference_providers: tuple[MarketReferenceProviderPort, ...] = (),
+        source_use_policy: SourceUsePolicyV1 | None = None,
+        policy_registry: PolicyRegistry | None = None,
+    ) -> None:
+        self._snapshots, self._mappings, self._artifacts = (
+            snapshots,
+            mappings,
+            artifacts,
+        )
+        self._roots = DataReleaseTrustRootsV1.model_validate_json(
+            canonical_bytes(trust_roots)
+        )
+        self._policy = AutomaticDataReleasePolicyV1.model_validate_json(
+            canonical_bytes(policy)
+        )
+        self._key = private_key
+        self._revision = source_revision
+        self._runner = DataReleaseCanaryRunner(
+            snapshot_repository=snapshots,
+            fact_repository=facts,
+            mapping_reader=mappings,
+            artifact_reader=artifacts,
+            trust_roots=self._roots,
+            quote_providers=quote_providers,
+            macro_providers=macro_providers,
+            reference_providers=reference_providers,
+            source_use_policy=source_use_policy,
+            policy_registry=policy_registry,
+        )
+
+    def _require_policy(self, request: AutomaticDataReleaseRequestV1) -> None:
+        policy, manifest = self._policy, request.manifest
+        verifier = self._roots.verifiers.get(policy.verifier_id)
+        if (
+            verifier is None
+            or verifier.workflow_identity != policy.workflow_identity
+            or verifier.verification_suite_digest != automatic_release_suite_digest()
+            or verifier.public_key() != self._key.public_key().public_bytes_raw()
+        ):
+            raise DataReleaseError(
+                "AUTOMATIC_RELEASE_AUTHORITY_MISMATCH",
+                "machine release requires its own trusted key, workflow and executable suite",
+            )
+        if request.content.source_revision != self._revision:
+            raise DataReleaseError(
+                "AUTOMATIC_RELEASE_REVISION_MISMATCH",
+                "request revision must match the installed deployment",
+            )
+        issuer_scope = isinstance(manifest, IssuerOperatingReleaseManifestV1)
+        if isinstance(manifest, IssuerOperatingReleaseManifestV1):
+            profile = (
+                composite_working_capital_requirements_profile(policy.model_id)
+                if manifest.working_capital_inputs
+                else operating_forecast_requirements_profile(policy.model_id)
+            )
+            version: str | None = manifest.model_version
+            if manifest.model_id != policy.model_id:
+                raise DataReleaseError(
+                    "AUTOMATIC_RELEASE_POLICY_MISMATCH",
+                    "issuer model must match deployment policy",
+                )
+        else:
+            profile = valuation_release_requirements(manifest, policy.model_id)
+            versions = {
+                item.model_version for item in manifest.conditional_capital_policies
+            }
+            working = manifest.valuation_working_capital_policy
+            if working is not None:
+                versions.add(working.model_version)
+            version = next(iter(versions)) if len(versions) == 1 else None
+        if (
+            issuer_scope != (policy.scope == "issuer-operating")
+            or manifest.profile_id != policy.profile_id
+            or profile.digest != policy.requirements_profile_digest
+            or manifest.required_fields != profile.required_fact_fields
+            or version != policy.model_version
+            or not any(
+                (model.model_id, model.model_version)
+                == (policy.model_id, policy.model_version)
+                for model in initial_model_specs()
+            )
+            or manifest.parser_version != policy.parser_version
+            or manifest.quality_profile_digest != policy.quality_profile_digest
+            or any(
+                self._mappings.get_mapping(ref.mapping_id).mapping_version
+                != policy.mapping_version
+                for ref in manifest.mapping_refs
+            )
+        ):
+            raise DataReleaseError(
+                "AUTOMATIC_RELEASE_POLICY_MISMATCH",
+                "release must match the complete installed model, source and field profile",
+            )
+
+    def verify_and_sign(
+        self, request: AutomaticDataReleaseRequestV1
+    ) -> AutomaticDataReleaseReceiptV1:
+        request = AutomaticDataReleaseRequestV1.model_validate_json(
+            canonical_bytes(request)
+        )
+        payload = {"policy": self._policy, "request": request}
+        input_digest = sha256_digest(payload)
+        input_pub = self._artifacts.put_with_receipt(
+            "automatic-release-input-" + input_digest,
+            payload,
+            dependency_hashes=(
+                request.manifest.manifest_digest,
+                sha256_digest(self._policy),
+            ),
+        )
+        publications = [input_pub]
+        candidate_pub = canary_pub = None
+        try:
+            self._require_policy(request)
+            content = self._runner.validate_content(request.manifest, request.content)
+            if self._policy.scope == "security" and len(
+                content.market_policy_checks
+            ) != len(request.manifest.snapshot_refs):
+                raise DataReleaseError(
+                    "AUTOMATIC_RELEASE_MARKET_POLICY_MISSING",
+                    "security signing requires a checked deployment market policy for every snapshot",
+                )
+            regulatory = require_automatic_release_sources(
+                request.manifest,
+                request.content,
+                snapshots=self._snapshots,
+                mappings=self._mappings,
+                artifacts=self._artifacts,
+                validation_profile_digest=self._policy.validation_profile_digest,
+            )
+            content_pub = self._artifacts.put_with_receipt(
+                "automatic-release-content-" + content.digest,
+                content,
+                dependency_hashes=(input_digest, *content.checked_artifact_digests),
+            )
+            publications.append(content_pub)
+            decision = AutomaticDataReleaseDecisionV1(
+                input_digest=input_digest,
+                status="passed",
+                content_report_digest=content.digest,
+                regulatory_evidence_digests=regulatory,
+            )
+            decision_pub = self._publish_decision(decision)
+            publications.append(decision_pub)
+            evidence = tuple(
+                ArtifactRefV1(
+                    artifact_id=publication.artifact.artifact_id,
+                    content_hash=publication.artifact.content_hash,
+                    media_type=publication.artifact.media_type,
+                    role=role,
+                )
+                for publication, role in (
+                    (input_pub, "automatic-release-input-v1"),
+                    (content_pub, "automatic-release-content-v1"),
+                    (decision_pub, "automatic-release-decision-v1"),
+                )
+            )
+            verification = sign_data_release_verification(
+                {
+                    "manifest_digest": request.manifest.manifest_digest,
+                    "verification_suite_digest": automatic_release_suite_digest(),
+                    "source_revision": self._revision,
+                    "verification_run_id": "automatic-release-" + input_digest,
+                    "workflow_identity": self._policy.workflow_identity,
+                    "verifier_id": self._policy.verifier_id,
+                    "passed_gate_ids": tuple(sorted(REQUIRED_DATA_RELEASE_GATES)),
+                    "evidence_refs": (*request.content.evidence_refs, *evidence),
+                    "mapping_reviews": request.content.mapping_reviews,
+                },
+                self._key,
+            )
+            canary = self._runner.validate(request.manifest, verification)
+            canary_pub = self._artifacts.put_with_receipt(
+                "automatic-release-canary-" + canary.canary_digest,
+                canary,
+                dependency_hashes=(
+                    sha256_digest(decision),
+                    verification.verification_digest,
+                ),
+            )
+            publications.append(canary_pub)
+            candidate = AutomaticDataReleaseCandidateV1(
+                manifest=request.manifest, verification=verification
+            )
+            candidate_pub = self._artifacts.put_with_receipt(
+                "automatic-release-candidate-" + sha256_digest(candidate),
+                candidate,
+                dependency_hashes=(
+                    canary.canary_digest,
+                    verification.verification_digest,
+                ),
+            )
+            publications.append(candidate_pub)
+        except (DataReleaseError, SnapshotError, ValueError) as error:
+            decision = AutomaticDataReleaseDecisionV1(
+                input_digest=input_digest,
+                status="blocked",
+                issue_codes=(
+                    getattr(error, "code", "AUTOMATIC_RELEASE_EVIDENCE_INVALID"),
+                ),
+            )
+            decision_pub = self._publish_decision(decision)
+            publications.append(decision_pub)
+        return AutomaticDataReleaseReceiptV1(
+            input_digest=input_digest,
+            output_digest=sha256_digest(
+                {
+                    "decision": decision,
+                    "candidate": candidate_pub.artifact.content_hash
+                    if candidate_pub
+                    else None,
+                    "canary": canary_pub.artifact.content_hash if canary_pub else None,
+                }
+            ),
+            decision=decision,
+            input_publication=input_pub,
+            decision_publication=decision_pub,
+            candidate_publication=candidate_pub,
+            canary_publication=canary_pub,
+            wrote=any(item.wrote for item in publications),
+        )
+
+    def _publish_decision(
+        self, decision: AutomaticDataReleaseDecisionV1
+    ) -> ArtifactPublicationV1:
+        return self._artifacts.put_with_receipt(
+            "automatic-release-decision-" + sha256_digest(decision),
+            decision,
+            dependency_hashes=(
+                decision.input_digest,
+                *decision.regulatory_evidence_digests,
+                *(
+                    (decision.content_report_digest,)
+                    if decision.content_report_digest
+                    else ()
+                ),
+            ),
+        )
