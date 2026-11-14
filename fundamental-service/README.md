@@ -78,6 +78,16 @@ keys. Recovery reuses already captured bytes and completed validations. Terminal
 refusals repeat unchanged; new source/runtime inputs require a new request.
 This stage publishes no snapshot, mapping, release or valuation.
 
+SEC HTML representation profiles preserve the unchanged accession ZIP member.
+`sec-edgar-html-tag-line-padding-nbsp-v1` additionally recognizes line-end ASCII
+SP/TAB after a tag followed only by exact `&#160;` layout references. It keeps
+those character references. The complete direct response must equal the ZIP
+member with only the permitted padding removed, one terminal LF appended and
+the exact terminal SEC/Akamai script inserted. The accession index must confirm
+both the ZIP size and script-free response size, and Akamai response metadata
+must match. Any other text, value, entity, byte or metadata difference refuses.
+Ordinary tag-ending padding retains its existing profile and evidence identity.
+
 The command can compile these saved originals into the existing automatic
 source-plan format with deployment configuration. The configuration contains
 `model_id`, `release_profile_id`, `coverage_profile`, `evaluator_id`,

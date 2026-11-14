@@ -60,6 +60,16 @@ _HTML_TAG_PADDING_RULE = (
     "one terminal LF and the exact terminal Akamai script reproduces every "
     "direct-response byte; the SEC index corroborates the script-free size"
 )
+_HTML_TAG_NBSP_PADDING_POLICY_ID = "sec-edgar-html-tag-line-padding-nbsp-v1"
+_HTML_TAG_NBSP_PADDING_RULE = (
+    "reconstruct the unchanged accession-matched HTML archive member only when "
+    "removing ASCII SP/TAB before LF on blank, tag-ending or exact &#160; "
+    "layout-reference suffixes following a tag, appending one terminal LF and "
+    "the exact terminal Akamai script reproduces every direct-response byte; "
+    "preserve the character references and corroborate the script-free size "
+    "with the SEC index"
+)
+_HTML_TAG_NBSP_SUFFIX = re.compile(rb">(?:[ \t]*&#160;)+$")
 _MAX_STAGED_GRAPHICS_BYTES = 32 * 1024 * 1024
 _XML_LINE_END_POLICY_ID = "sec-edgar-xbrl-xml10-line-ends-v1"
 _XML_LINE_END_RULE = (
@@ -247,12 +257,15 @@ def _html_tag_line_padding(
     chunks = []
     padding_ranges = []
     position = 0
+    has_nbsp_suffix = False
     for padding in re.finditer(rb"[ \t]+(?=\n)", member):
         start, end = padding.span()
         line_start = member.rfind(b"\n", 0, start) + 1
         prefix = member[line_start:start]
         if prefix and not prefix.endswith(b">"):
-            return None
+            if _HTML_TAG_NBSP_SUFFIX.search(prefix) is None:
+                return None
+            has_nbsp_suffix = True
         chunks.append(member[position:start])
         padding_ranges.append((start, end, _digest(padding.group())))
         position = end
@@ -266,9 +279,14 @@ def _html_tag_line_padding(
     index_hash = _digest(archive_index.content)
     archive_hash = _digest(archive.content)
     member_hash = _digest(member)
+    policy_id, rule = (
+        (_HTML_TAG_NBSP_PADDING_POLICY_ID, _HTML_TAG_NBSP_PADDING_RULE)
+        if has_nbsp_suffix
+        else (_HTML_TAG_PADDING_POLICY_ID, _HTML_TAG_PADDING_RULE)
+    )
     rule_payload = {
-        "policy_id": _HTML_TAG_PADDING_POLICY_ID,
-        "rule": _HTML_TAG_PADDING_RULE,
+        "policy_id": policy_id,
+        "rule": rule,
         "accession": raw_response.accession_number,
         "primary_document": raw_response.uri.rsplit("/", 1)[-1],
         "declared_size": declared_size,
@@ -280,6 +298,10 @@ def _html_tag_line_padding(
         "archive_member_hash": member_hash,
         "archive_padding_ranges": padding_ranges,
     }
+    if has_nbsp_suffix:
+        rule_payload["permitted_nbsp_suffix"] = _HTML_TAG_NBSP_SUFFIX.pattern.decode(
+            "ascii"
+        )
     return SecIntegrityAssessment(
         relation="normalized",
         normalized_content=member,
@@ -301,9 +323,9 @@ def _html_tag_line_padding(
                 start=len(raw) - 1, end=len(raw), content_hash=_digest(b"\n")
             ),
         ),
-        normalization_policy_id=_HTML_TAG_PADDING_POLICY_ID,
+        normalization_policy_id=policy_id,
         normalization_rule_signature=sha256_digest(rule_payload),
-        normalization_reason=_HTML_TAG_PADDING_RULE,
+        normalization_reason=rule,
     )
 
 

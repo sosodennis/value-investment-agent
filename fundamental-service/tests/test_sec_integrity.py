@@ -452,6 +452,84 @@ def test_html_tag_line_padding_reconstructs_unchanged_original_archive():
     )
 
 
+def test_html_padding_after_exact_nbsp_reference_preserves_original_archive():
+    member = b"<html><body> \n<p><em>no</em> discontinued operations.</p> &#160; \t\n</body>\n</html>"
+    script = b'<script type="text/javascript" src="/edge/path/token"></script>'
+    direct = (
+        b"<html><body>\n<p><em>no</em> discontinued operations.</p> &#160;\n"
+        + script
+        + b"</body>\n</html>\n"
+    )
+    raw, index, archive = _fixtures(
+        direct=direct,
+        member=member,
+        declared_size=len(direct) - len(script),
+        headers=(("x-akamai-transformed", "0 - 0 -"),),
+    )
+
+    first = assess_filing_response(
+        raw_response=raw, archive_index=index, archive=archive
+    )
+    second = assess_filing_response(
+        raw_response=raw, archive_index=index, archive=archive
+    )
+
+    assert first == second
+    assert first.normalization_policy_id == "sec-edgar-html-tag-line-padding-nbsp-v1"
+    assert first.normalized_content == first.archive_member == member
+    assert first.normalized_content_hash == hashlib.sha256(member).hexdigest()
+    assert tuple(
+        raw.content[item.start : item.end] for item in first.removed_ranges
+    ) == (script, b"\n")
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        "financial-text",
+        "entity-change",
+        "unapproved-entity",
+        "text-before-entity",
+        "header",
+        "index-size",
+        "no-script",
+        "partial-padding",
+    ],
+)
+def test_nbsp_padding_rule_requires_exact_bytes_and_independent_metadata(mutation):
+    member = b"<html><body> \n<p>123</p> &#160; \n</body>\n</html>"
+    script = b'<script type="text/javascript" src="/edge/path/token"></script>'
+    direct = b"<html><body>\n<p>123</p> &#160;\n" + script + b"</body>\n</html>\n"
+    headers = (("x-akamai-transformed", "0 - 0 -"),)
+    if mutation == "financial-text":
+        direct = direct.replace(b"123", b"124")
+    elif mutation == "entity-change":
+        direct = direct.replace(b"&#160;", b"&#161;")
+    elif mutation == "unapproved-entity":
+        member = member.replace(b"&#160;", b"&nbsp;")
+        direct = direct.replace(b"&#160;", b"&nbsp;")
+    elif mutation == "text-before-entity":
+        member = member.replace(b"</p> &#160;", b"</p> revenue &#160;")
+        direct = direct.replace(b"</p> &#160;", b"</p> revenue &#160;")
+    elif mutation == "header":
+        headers = ()
+    elif mutation == "partial-padding":
+        direct = direct.replace(b"<body>\n", b"<body> \n")
+    elif mutation == "no-script":
+        direct = direct.replace(script, b"")
+    declared_size = len(direct) - (len(script) if script in direct else 0)
+    if mutation == "index-size":
+        declared_size += 1
+    raw, index, archive = _fixtures(
+        direct=direct,
+        member=member,
+        declared_size=declared_size,
+        headers=headers,
+    )
+    with pytest.raises(SnapshotError):
+        assess_filing_response(raw_response=raw, archive_index=index, archive=archive)
+
+
 @pytest.mark.parametrize(
     ("member", "direct_body"),
     (
