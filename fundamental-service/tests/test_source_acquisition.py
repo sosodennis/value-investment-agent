@@ -564,6 +564,7 @@ def _runtime_settings() -> SimpleNamespace:
         edgar_plugin_sha256="a" * 64,
         xule_plugin_sha256="b" * 64,
         dqc_ruleset_sha256="d" * 64,
+        dqc_ruleset_catalog=None,
         supported_filing_forms=("10-K",),
         historical_dqc_dir=None,
         historical_dqc_sha256=None,

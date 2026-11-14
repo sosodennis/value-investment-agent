@@ -19,6 +19,7 @@ from lxml import etree, html
 from pydantic import BaseModel, ConfigDict, ValidationError
 
 from .arelle_parser import ArelleParserError, ArelleValidationProfileV1, _directory_hash
+from .dqc_rulesets import DqcRulesetCatalogV1
 from .automatic_source_mapping import (
     AutomaticSecIngestionRequestV1,
     AutomaticSourceMappingAuthority,
@@ -112,8 +113,11 @@ class SecAcquisitionSettings:
     supported_filing_forms: tuple[str, ...]
     historical_dqc_dir: Path | None = None
     historical_dqc_sha256: str | None = None
+    dqc_ruleset_catalog: DqcRulesetCatalogV1 | None = None
 
     def __post_init__(self) -> None:
+        if self.dqc_ruleset_catalog is not None:
+            self.dqc_ruleset_catalog.verify_files()
         if (self.historical_dqc_dir is None) != (self.historical_dqc_sha256 is None):
             raise ValueError(
                 "historical DQC source and hash must be configured together"
@@ -523,6 +527,9 @@ class SecAcquisitionUseCase:
             edgar_plugin_sha256=self.settings.edgar_plugin_sha256,
             xule_plugin_sha256=self.settings.xule_plugin_sha256,
             dqc_ruleset_sha256=self.settings.dqc_ruleset_sha256,
+            dqc_ruleset_catalog=self.settings.dqc_ruleset_catalog
+            if not historical
+            else None,
             dqc_version=historical.dqc_version if historical else "v31.0.3",
             historical_dqc_dir=self.settings.historical_dqc_dir if historical else None,
             historical_dqc_sha256=self.settings.historical_dqc_sha256
@@ -2090,6 +2097,7 @@ def build_runtime_sec_acquisition(
     authorized_organizations: frozenset[str],
     historical_dqc_dir: str | None = None,
     historical_dqc_sha256: str | None = None,
+    dqc_ruleset_catalog_path: str | None = None,
 ) -> SecAcquisitionUseCase | None:
     values = (
         service_token,
@@ -2124,6 +2132,11 @@ def build_runtime_sec_acquisition(
         supported_filing_forms=supported_filing_forms or (),
         historical_dqc_dir=Path(historical_dqc_dir) if historical_dqc_dir else None,
         historical_dqc_sha256=historical_dqc_sha256,
+        dqc_ruleset_catalog=DqcRulesetCatalogV1.model_validate_json(
+            Path(dqc_ruleset_catalog_path).read_bytes()
+        )
+        if dqc_ruleset_catalog_path
+        else None,
     )
     adapter = SecEdgarSourceAdapter(
         policy=SecRequestPolicy(user_agent=user_agent or ""),

@@ -32,3 +32,32 @@ def require_sec_validation_evidence(report: ArelleParseReportV1) -> None:
             "OFFLINE_NETWORK_ATTEMPT",
             "SEC parser report records a network attempt",
         )
+    catalog = report.validation_profile.dqc_ruleset_catalog
+    if catalog is not None:
+        try:
+            selected = catalog.select(
+                tuple(
+                    sorted(
+                        {
+                            fact.namespace_uri
+                            for fact in report.facts
+                            if fact.namespace_uri
+                        }
+                    )
+                )
+            )
+        except ValueError as error:
+            raise SnapshotError(
+                "DQC_TAXONOMY_RULESET_UNAVAILABLE", str(error)
+            ) from error
+        marker = (
+            "dqc-full-taxonomy-ruleset-v1:"
+            + selected.taxonomy_namespace
+            + ":"
+            + selected.sha256
+        )
+        if marker not in report.validation_evidence:
+            raise SnapshotError(
+                "VALIDATION_EVIDENCE_MISSING",
+                "full DQC taxonomy selection evidence is missing",
+            )

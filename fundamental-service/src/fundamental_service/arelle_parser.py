@@ -27,6 +27,7 @@ from .historical_dqc import (
     historical_profile,
 )
 from .serialization import sha256_digest
+from .dqc_rulesets import DqcRulesetCatalogV1
 
 _NON_BLOCKING_ARELLE_CODES = frozenset(
     {
@@ -171,6 +172,9 @@ class ArelleValidationProfileV1(BaseModel):
     edgar_plugin_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
     xule_plugin_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
     dqc_ruleset_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    dqc_ruleset_catalog: DqcRulesetCatalogV1 | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
     historical_dqc_dir: Path | None = None
     historical_dqc_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
     historical_dqc_axis_config: Path | None = Field(
@@ -184,6 +188,10 @@ class ArelleValidationProfileV1(BaseModel):
         if self.efm_profile != "efm-strict-all-years":
             raise ValueError("SEC validation requires strict all-years EFM")
         historical = historical_profile(self.profile_id)
+        if self.dqc_ruleset_catalog is not None and (
+            historical is not None or self.validation_mode != "sec-efm-dqc"
+        ):
+            raise ValueError("DQC taxonomy catalogs require modern SEC validation")
         if (self.historical_dqc_axis_config is not None) != bool(
             historical and historical.axis_config_sha256
         ):
@@ -241,6 +249,11 @@ class ArelleValidationProfileV1(BaseModel):
 
     def digest(self) -> str:
         payload = self.model_dump(mode="json")
+        if self.dqc_ruleset_catalog is not None:
+            payload["dqc_ruleset_catalog"]["bindings"] = [
+                {**item, "path": Path(item["path"]).name}
+                for item in payload["dqc_ruleset_catalog"]["bindings"]
+            ]
         for name in (
             "edgar_plugin_dir",
             "xule_plugin_dir",
@@ -681,6 +694,13 @@ def _parse_in_process(
             "SEC validation plugins and DQC rules are required",
         )
     validation_enabled = profile.validation_mode == "sec-efm-dqc"
+    if profile.dqc_ruleset_catalog is not None:
+        try:
+            profile.dqc_ruleset_catalog.verify_files()
+        except ValueError as error:
+            raise ArelleParserError(
+                "VALIDATION_RESOURCE_HASH_MISMATCH", str(error)
+            ) from error
     if has_validation_resources:
         assert (
             profile.edgar_plugin_dir
@@ -763,6 +783,19 @@ def _parse_in_process(
             }
             plugin_names = ["EDGAR/validate", "validate/DQC"]
             diagnostic_evidence: tuple[str, ...] = ()
+            if profile.dqc_ruleset_catalog is not None:
+                ruleset_plugin = str(Path(__file__).with_name("dqc_ruleset_plugin.py"))
+                loaded_plugin = controller._pluginManager.addPluginModule(
+                    ruleset_plugin
+                )
+                if loaded_plugin is None:
+                    raise ArelleParserError(
+                        "DQC_PLUGIN_UNAVAILABLE",
+                        "DQC taxonomy ruleset selection did not load",
+                    )
+                controller.preloadedPlugins[ruleset_plugin] = loaded_plugin
+                plugin_names.append(ruleset_plugin)
+                controller._pluginManager.pluginMethodsForClasses.clear()
             if (
                 profile.efm_release == "26.3"
                 and profile.efm_validation_version == "1.26.3"
@@ -808,6 +841,13 @@ def _parse_in_process(
                     "xule_bypass_packages": False,
                     **(
                         {
+                            "fundamental_dqc_ruleset_catalog": profile.dqc_ruleset_catalog.model_dump_json()
+                        }
+                        if profile.dqc_ruleset_catalog is not None
+                        else {}
+                    ),
+                    **(
+                        {
                             "fundamental_historical_dqc_root": str(
                                 profile.historical_dqc_dir
                             ),
@@ -833,6 +873,9 @@ def _parse_in_process(
                 keepOpen=True,
                 disablePersistentConfig=True,
                 logLevel="DEBUG",
+                parameters="dqcRuleFilter=XULE:2000 XULE_RUN_ALL"
+                if profile.dqc_ruleset_catalog is not None
+                else None,
             )
             for extender in controller.plugins.hooks("CntlrCmdLine.Options"):
                 extender(ParserForDynamicPlugins(options))
@@ -896,6 +939,21 @@ def _parse_in_process(
                     historical_execution,
                 )
             validation_engines = ("sec-efm", "dqc-us")
+            selected_binding = getattr(
+                controller, "fundamental_dqc_ruleset_binding", None
+            )
+            if profile.dqc_ruleset_catalog is not None:
+                if selected_binding is None:
+                    raise ArelleParserError(
+                        "DQC_TAXONOMY_RULESET_UNAVAILABLE",
+                        "DQC taxonomy selection did not execute",
+                    )
+                diagnostic_evidence += (
+                    "dqc-full-taxonomy-ruleset-v1:"
+                    + selected_binding.taxonomy_namespace
+                    + ":"
+                    + selected_binding.sha256,
+                )
             selected_historical = historical_profile(profile.profile_id)
             validation_evidence = (
                 "strict-sec-efm-profile-selected",

@@ -353,3 +353,23 @@ to the complete canonical source plan. Its content hash equals `plan_digest`.
 Read it through the existing artifact metadata/content endpoints to reconstruct
 the exact requests, including requests whose acquisition failed before publishing
 a snapshot. Identical runs reuse both the input plan and output report.
+
+### Full DQC rulesets for multiple taxonomy years
+
+`FUNDAMENTAL_SEC_DQC_RULESET_CATALOG_PATH` optionally names a deployment JSON
+catalog. Bind-mount the catalog and its official full DQC v31.0.3 ruleset files
+read-only. Each catalog binding contains `taxonomy_namespace`, `path`, and
+`sha256`. The catalog protocol is `dqc-us-full-ruleset-catalog-v1`; its
+`dqc_version` is `v31.0.3`. Sort bindings by namespace and use unique filenames.
+Capture the files from a pinned official DataQualityCommittee release commit.
+Keep the original bytes and capture receipts outside Git.
+
+The runtime verifies every file hash. After Arelle loads the original DTS, it
+selects the one exact US GAAP namespace binding and runs the full ruleset with
+strict EFM validation. Missing, mixed or unbound namespaces refuse. The profile
+digest includes the catalog and file hashes; the report records the selected
+namespace and hash, and serving requires that evidence. An empty setting keeps
+the existing single-ruleset profile. Adding supported filing years requires
+matching taxonomy dependencies and rulesets; changing the year list alone does
+not establish support. This setting grants no source-use permission or caller
+approval.

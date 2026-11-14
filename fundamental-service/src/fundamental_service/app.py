@@ -1060,6 +1060,8 @@ def create_runtime_app() -> FastAPI:
         edgar_plugin_sha256=edgar_plugin_sha256,
         xule_plugin_sha256=xule_plugin_sha256,
         dqc_ruleset_sha256=dqc_ruleset_sha256,
+        dqc_ruleset_catalog_path=os.getenv("FUNDAMENTAL_SEC_DQC_RULESET_CATALOG_PATH")
+        or None,
         historical_dqc_dir=os.getenv("FUNDAMENTAL_SEC_HISTORICAL_DQC_DIR") or None,
         historical_dqc_sha256=os.getenv("FUNDAMENTAL_SEC_HISTORICAL_DQC_SHA256")
         or None,
