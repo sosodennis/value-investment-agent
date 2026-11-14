@@ -465,3 +465,30 @@ def test_full_join_refuses_ambiguous_incomplete_or_leaking_evidence(
         conditional["arm_summaries"][0]["issuer_id"] = "CIK:9999999999"
     with pytest.raises(audit.DesignError):
         audit.audit_readiness(manifest, tmp_path, archive, conditional)
+
+
+def test_strict_evidence_index_accepts_json_tuple_arrays_and_rejects_duplicate_keys() -> (
+    None
+):
+    reference = {"path": "artifact.json", "sha256": "a" * 64}
+    document = {
+        "schema_version": "history-study-evidence-index.v1",
+        "fixed_manifest_digest": "b" * 64,
+        "runtime": {
+            "python": "3.11.15",
+            "implementation": "CPython",
+            "machine": "arm64",
+            "system": "Darwin",
+            "packages": {},
+            "uv_lock_digest": "c" * 64,
+        },
+        "entries": [
+            {"request": reference, "forecast": reference, "comparison": reference}
+        ],
+    }
+    raw = audit.canonical_bytes(document)
+    assert len(audit.decode_evidence_index(raw).entries) == 1
+    with pytest.raises(audit.DesignError, match="canonical JSON"):
+        audit.decode_evidence_index(json.dumps(document).encode())
+    with pytest.raises(audit.DesignError, match="duplicate JSON"):
+        audit.decode_evidence_index(b'{"entries":[],"entries":[]}')

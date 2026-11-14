@@ -391,6 +391,14 @@ def audit_readiness(
     }
 
 
+def decode_evidence_index(raw: bytes) -> EvidenceIndex:
+    document = decode_json(raw)
+    if canonical_bytes(document) != raw:
+        raise DesignError("evidence index must be canonical JSON")
+    # Strict Pydantic accepts JSON arrays for tuple fields only at its JSON boundary.
+    return EvidenceIndex.model_validate_json(raw)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     for name in (
@@ -416,9 +424,7 @@ def main() -> int:
         if canonical_bytes(manifest) != manifest_raw:
             raise DesignError("fixed manifest must be canonical JSON")
         index_raw = args.evidence_index.read_bytes()
-        index = EvidenceIndex.model_validate(decode_json(index_raw))
-        if canonical_bytes(index.model_dump(mode="json")) != index_raw:
-            raise DesignError("evidence index must be canonical JSON")
+        index = decode_evidence_index(index_raw)
         conditional = export_evidence(manifest, index, args.evidence_index.parent)
         reference_path = ROOT / "docs/acceptance/issue-361-research-archive.json"
         reference = object_value(decode_json(reference_path.read_bytes()))
