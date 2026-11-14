@@ -273,6 +273,11 @@ Use the same command and storage configuration below. No per-role proposals
 are needed: the service's existing rule table creates supported proposals.
 
 The batch retains every required and supporting SEC role once in sorted order.
+When one role uses different supported representations at different instants,
+its `additional_decisions` retain the other proposal outcomes and certificates.
+This tuple is omitted when empty. The SEC resolver publishes every approved
+mapping, reports every abstained outcome, and the batch artifact depends on
+all child decisions and certificates for invalidation and replay.
 A known rule with no eligible observation keeps its decision and missing reason;
 an unsupported classification keeps an explicit abstention without inventing a
 concept, fact, zero or certificate. Market assumptions remain separately listed

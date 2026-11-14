@@ -271,32 +271,33 @@ class _AutomaticSourceMappingResolver:
         issues: list[IssueV1] = []
         missing: list[str] = []
         for role_decision in batch.roles:
-            if role_decision.status == "abstain":
-                missing.append(role_decision.normalized_field)
-                issues.extend(
-                    IssueV1(
-                        code=code,
-                        field=role_decision.normalized_field,
-                        severity=Severity.ERROR,
-                        message="automatic source mapping abstained for this original",
+            for outcome in role_decision.proposal_decisions():
+                if outcome.status == "abstain":
+                    missing.append(role_decision.normalized_field)
+                    issues.extend(
+                        IssueV1(
+                            code=code,
+                            field=role_decision.normalized_field,
+                            severity=Severity.ERROR,
+                            message="automatic source mapping abstained for this original",
+                        )
+                        for code in outcome.reason_codes
                     )
-                    for code in role_decision.reason_codes
-                )
-                continue
-            assert role_decision.decision is not None
-            raw = authority.artifacts.read(role_decision.decision.artifact_id)
-            if hashlib.sha256(raw).hexdigest() != role_decision.decision.content_hash:
-                raise DataReleaseError(
-                    "MAPPING_AUTOMATIC_DECISION_HASH_MISMATCH",
-                    "retained role decision differs from its digest",
-                )
-            decision = AutomaticMappingDecisionV1.model_validate_json(raw)
-            assert decision.mapping is not None
-            authority.metadata.publish_mapping(decision.mapping)
-            mappings.append(decision.mapping)
+                    continue
+                assert outcome.decision is not None
+                raw = authority.artifacts.read(outcome.decision.artifact_id)
+                if hashlib.sha256(raw).hexdigest() != outcome.decision.content_hash:
+                    raise DataReleaseError(
+                        "MAPPING_AUTOMATIC_DECISION_HASH_MISMATCH",
+                        "retained role decision differs from its digest",
+                    )
+                decision = AutomaticMappingDecisionV1.model_validate_json(raw)
+                assert decision.mapping is not None
+                authority.metadata.publish_mapping(decision.mapping)
+                mappings.append(decision.mapping)
         return IngestionMappingResolutionV1(
             mappings=tuple(mappings),
             evidence_ref=receipt.decision_publication.artifact.artifact_id,
-            missing_fields=tuple(missing),
+            missing_fields=tuple(sorted(set(missing))),
             issues=tuple(issues),
         )

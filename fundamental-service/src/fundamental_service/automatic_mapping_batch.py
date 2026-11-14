@@ -42,21 +42,30 @@ class AutomaticMappingBatchRequestV1(AutomaticMappingSourceV1):
         return self
 
 
-class AutomaticMappingRoleDecisionV1(ReleaseModel):
-    normalized_field: str = Field(min_length=1)
+class AutomaticMappingProposalDecisionV1(ReleaseModel):
     status: Literal["approved", "abstain"]
     reason_codes: tuple[str, ...]
     decision: ArtifactRefV1 | None
     approval: ArtifactRefV1 | None
 
     @model_validator(mode="after")
-    def approval_requires_a_decision(self) -> AutomaticMappingRoleDecisionV1:
+    def approval_requires_a_decision(self) -> AutomaticMappingProposalDecisionV1:
         if self.status == "approved":
             if self.reason_codes or self.decision is None or self.approval is None:
                 raise ValueError("approved roles require a decision and certificate")
         elif not self.reason_codes or self.approval is not None:
             raise ValueError("abstained roles require reasons without a certificate")
         return self
+
+
+class AutomaticMappingRoleDecisionV1(AutomaticMappingProposalDecisionV1):
+    normalized_field: str = Field(min_length=1)
+    additional_decisions: tuple[AutomaticMappingProposalDecisionV1, ...] = Field(
+        default=(), exclude_if=lambda value: not value
+    )
+
+    def proposal_decisions(self) -> tuple[AutomaticMappingProposalDecisionV1, ...]:
+        return (self, *self.additional_decisions)
 
 
 class AutomaticMappingBatchDecisionV1(ReleaseModel):

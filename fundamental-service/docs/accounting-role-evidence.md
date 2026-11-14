@@ -87,6 +87,17 @@ exclude instants already supplied by the classified mapping. Historical note
 presentation therefore cannot suppress a newer supported direct observation or
 permit two mappings to supply the same instant.
 
+Policy `source-bound-us-gaap-v21` carries these disjoint proposals through the
+automatic batch and SEC ingestion resolver. Each role retains its primary
+decision and an optional `additional_decisions` tuple, omitted when empty.
+Every observed supported proposal gets its own retained decision and certificate;
+when no observation is present the primary missing-source decision is still
+retained. Batch dependencies include every child certificate. The resolver
+publishes every approved mapping and retains any abstention as missing evidence.
+The executable digest includes the batch, runner and resolver, so a signing
+policy pin also binds this orchestration. This is an additive internal artifact
+field and does not establish complete financial coverage.
+
 The exact treasury-stock calculation refuses an exercise-price concept ending
 in `WeightedAverageExercisePrice`, including retained accounting-role inputs,
 with `DILUTION_AGGREGATE_STRIKE_UNRESOLVED`. Averaging strikes before applying

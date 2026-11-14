@@ -59,8 +59,8 @@ from .serialization import sha256_digest
 from .taxonomy_evidence import require_original_taxonomy
 
 AUTOMATIC_MAPPING_INPUT_ROLE = "automatic-mapping-input-v1"
-AutomaticMappingPolicyVersion = Literal["source-bound-us-gaap-v20"]
-AUTOMATIC_MAPPING_POLICY: AutomaticMappingPolicyVersion = "source-bound-us-gaap-v20"
+AutomaticMappingPolicyVersion = Literal["source-bound-us-gaap-v21"]
+AUTOMATIC_MAPPING_POLICY: AutomaticMappingPolicyVersion = "source-bound-us-gaap-v21"
 _GAAP_NAMESPACE = re.compile(
     r"http://(?:fasb\.org|xbrl\.us)/us-gaap/\d{4}(?:-\d{2}-\d{2})?"
 )
@@ -158,6 +158,9 @@ def automatic_mapping_policy_digest() -> str:
                 name: hashlib.sha256((root / name).read_bytes()).hexdigest()
                 for name in (
                     "automatic_mapping.py",
+                    "automatic_mapping_batch.py",
+                    "automatic_mapping_runner.py",
+                    "automatic_source_mapping.py",
                     "automatic_mapping_disclosures.py",
                     "registered_depreciation.py",
                     "registered_capital_expenditure.py",
@@ -295,6 +298,7 @@ def automatic_mapping_proposals(
     *,
     mapping_version: str,
     original: OriginalIssuerEvidenceV1,
+    observed_only: bool = False,
 ) -> tuple[CanonicalMappingV1, ...]:
     """Expose declared alternatives for review without approving observations."""
     primary = automatic_mapping_proposal(
@@ -332,6 +336,12 @@ def automatic_mapping_proposals(
         )
     proposals = []
     for concept in sorted(concepts):
+        if (
+            observed_only
+            and concept != lease_liability_concept(original, normalized_field)
+            and not any(f.concept == concept for f in original.report.facts)
+        ):
+            continue
         if concept == primary.source_concept:
             proposals.append(primary)
             continue
@@ -345,7 +355,7 @@ def automatic_mapping_proposals(
                 }
             )
         )
-    return tuple(proposals)
+    return tuple(proposals) or (primary,)
 
 
 class MappingObservationRejectionV1(ReleaseModel):

@@ -19,12 +19,13 @@ from .automatic_mapping import (
     AutomaticMappingRequestV1,
     AutomaticMappingSourceV1,
     automatic_mapping_policy_digest,
-    automatic_mapping_proposal,
+    automatic_mapping_proposals,
     evaluate_automatic_mapping,
 )
 from .automatic_mapping_batch import (
     AutomaticMappingBatchDecisionV1,
     AutomaticMappingBatchRequestV1,
+    AutomaticMappingProposalDecisionV1,
     AutomaticMappingRoleDecisionV1,
 )
 from .command_artifacts import EvidenceArtifactStore, command_artifacts
@@ -206,12 +207,13 @@ def approve_mapping_batch(
         set(request.requirements.required_fact_fields)
         | set(request.requirements.supporting_fact_fields)
     ):
-        proposal = automatic_mapping_proposal(
+        proposals = automatic_mapping_proposals(
             role,
             mapping_version=request.mapping_version,
             original=request.original,
+            observed_only=True,
         )
-        if proposal is None:
+        if not proposals:
             roles.append(
                 AutomaticMappingRoleDecisionV1(
                     normalized_field=role,
@@ -222,45 +224,54 @@ def approve_mapping_batch(
                 )
             )
             continue
-        single = AutomaticMappingRequestV1(
-            source_revision=request.source_revision,
-            evaluator_id=request.evaluator_id,
-            original=request.original,
-            integrity=request.integrity,
-            evidence_refs=request.evidence_refs,
-            security_identity=request.security_identity,
-            proposal=proposal,
-        )
-        receipt = approve_mapping(
-            single,
-            artifacts=artifacts,
-            trust_roots=trust_roots,
-            private_key=private_key,
-        )
-        decision = AutomaticMappingDecisionV1.model_validate_json(
-            artifacts.read(receipt.decision_publication.artifact.artifact_id)
-        )
-        if sha256_digest(decision) != receipt.output_digest:
-            raise DataReleaseError(
-                "MAPPING_AUTOMATIC_DECISION_HASH_MISMATCH",
-                "retained mapping decision differs from its published digest",
+        outcomes = []
+        for proposal in proposals:
+            single = AutomaticMappingRequestV1(
+                source_revision=request.source_revision,
+                evaluator_id=request.evaluator_id,
+                original=request.original,
+                integrity=request.integrity,
+                evidence_refs=request.evidence_refs,
+                security_identity=request.security_identity,
+                proposal=proposal,
             )
-        receipts.append(receipt)
+            receipt = approve_mapping(
+                single,
+                artifacts=artifacts,
+                trust_roots=trust_roots,
+                private_key=private_key,
+            )
+            decision = AutomaticMappingDecisionV1.model_validate_json(
+                artifacts.read(receipt.decision_publication.artifact.artifact_id)
+            )
+            if sha256_digest(decision) != receipt.output_digest:
+                raise DataReleaseError(
+                    "MAPPING_AUTOMATIC_DECISION_HASH_MISMATCH",
+                    "retained mapping decision differs from its published digest",
+                )
+            receipts.append(receipt)
+            outcomes.append(
+                AutomaticMappingProposalDecisionV1(
+                    status=decision.status,
+                    reason_codes=decision.reason_codes,
+                    decision=_artifact_ref(
+                        receipt.decision_publication, "automatic-mapping-decision-v1"
+                    ),
+                    approval=(
+                        _artifact_ref(
+                            receipt.approval_publication,
+                            "automatic-mapping-approval-v1",
+                        )
+                        if receipt.approval_publication is not None
+                        else None
+                    ),
+                )
+            )
         roles.append(
             AutomaticMappingRoleDecisionV1(
                 normalized_field=role,
-                status=decision.status,
-                reason_codes=decision.reason_codes,
-                decision=_artifact_ref(
-                    receipt.decision_publication, "automatic-mapping-decision-v1"
-                ),
-                approval=(
-                    _artifact_ref(
-                        receipt.approval_publication, "automatic-mapping-approval-v1"
-                    )
-                    if receipt.approval_publication is not None
-                    else None
-                ),
+                **outcomes[0].model_dump(),
+                additional_decisions=tuple(outcomes[1:]),
             )
         )
     batch_decision = AutomaticMappingBatchDecisionV1(
@@ -278,9 +289,10 @@ def approve_mapping_batch(
         request.requirements.digest,
     }
     for role_decision in roles:
-        for ref in (role_decision.decision, role_decision.approval):
-            if ref is not None:
-                dependencies.add(ref.content_hash)
+        for outcome in role_decision.proposal_decisions():
+            for ref in (outcome.decision, outcome.approval):
+                if ref is not None:
+                    dependencies.add(ref.content_hash)
     decision_publication = artifacts.put_with_receipt(
         "automatic-mapping-batch-decision-" + output_digest,
         batch_decision,

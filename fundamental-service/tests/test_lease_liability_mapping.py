@@ -1,6 +1,7 @@
 """Synthetic boundary tests; real filing acceptance is recorded separately."""
 
 from datetime import date
+from dataclasses import replace
 from decimal import Decimal, Inexact, localcontext
 
 import pytest
@@ -13,14 +14,20 @@ from fundamental_service.automatic_mapping import (
     automatic_mapping_proposals,
     verify_automatic_mapping_replay,
 )
+from fundamental_service.automatic_mapping_batch import (
+    AutomaticMappingBatchRequestV1,
+    AutomaticMappingBatchDecisionV1,
+)
+from fundamental_service.automatic_mapping_runner import approve_mapping_batch
 from fundamental_service.data_releases import ArtifactRefV1, AutomaticMappingApprovalV1
 from fundamental_service.lease_liability_mapping import select_lease_liability
 from fundamental_service.original_issuer import evaluate_original_issuer
 from fundamental_service.replay import ArtifactStore
 from fundamental_service.sec_rebuild import parsed_facts_to_candidates
 from fundamental_service.serialization import canonical_bytes, sha256_digest
-from test_automatic_mapping import approve, case, evaluate
+from test_automatic_mapping import approve, case, evaluate, MACHINE_KEY
 from test_issuer_operating_release import inventory
+from fundamental_service.valuation_requirements import valuation_requirements_profile
 
 
 def lease_case(
@@ -31,8 +38,14 @@ def lease_case(
     change=None,
     extra=(),
     omit_total=False,
+    security=False,
 ):
-    request, store, roots, _ = case(tmp_path)
+    if security:
+        from test_automatic_mapping_security import security_case
+
+        request, store, roots = security_case(tmp_path)
+    else:
+        request, store, roots, _ = case(tmp_path)
     concept = (
         "us-gaap:"
         + ("Finance" if kind == "finance" else "Operating")
@@ -395,6 +408,103 @@ def test_historical_classification_retains_newer_supported_direct_observation(
         historical: Decimal("80" if noncurrent else "20"),
         total.instant: Decimal("33"),
     }
+
+
+def test_automatic_batch_retains_both_lease_periods_and_reuses_all_artifacts(tmp_path):
+    _, _, _, _, total, _ = lease_case(tmp_path / "base", kind="operating")
+    historical = total.instant.replace(year=total.instant.year - 1)
+    direct = total.model_copy(
+        update={"concept": total.concept + "Current", "value": "33"}
+    )
+    request, store, roots, role, _, _ = lease_case(
+        tmp_path / "mixed",
+        kind="operating",
+        change={"instant": historical},
+        extra=(direct,),
+    )
+    batch = AutomaticMappingBatchRequestV1(
+        **request.model_dump(exclude={"protocol", "proposal"}),
+        mapping_version=request.proposal.mapping_version,
+        model_version="fcff_dcf-v2",
+        requirements=valuation_requirements_profile("fcff_dcf"),
+    )
+    receipt = approve_mapping_batch(
+        batch, artifacts=store, trust_roots=roots, private_key=MACHINE_KEY
+    )
+    values = {}
+    for child in receipt.mapping_receipts:
+        decision = AutomaticMappingDecisionV1.model_validate_json(
+            store.read(child.decision_publication.artifact.artifact_id)
+        )
+        if decision.mapping is not None and decision.mapping.normalized_field == role:
+            for candidate in parsed_facts_to_candidates(
+                request.original.report,
+                source=request.original.source,
+                issuer_id=request.original.source.cik,
+                normalized_field=role,
+                mapping=decision.mapping,
+            ):
+                assert candidate.instant not in values
+                values[candidate.instant] = candidate.value
+    assert values == {historical: Decimal("20"), total.instant: Decimal("33")}
+    retained = AutomaticMappingBatchDecisionV1.model_validate_json(
+        store.read(receipt.decision_publication.artifact.artifact_id)
+    )
+    outcome = next(r for r in retained.roles if r.normalized_field == role)
+    assert len(outcome.additional_decisions) == 1
+    before = inventory(store.root)
+    repeated = approve_mapping_batch(
+        batch, artifacts=store, trust_roots=roots, private_key=MACHINE_KEY
+    )
+    assert not repeated.wrote and repeated.output_digest == receipt.output_digest
+    assert inventory(store.root) == before
+    extra = outcome.additional_decisions[0].approval
+    affected = store.invalidate_dependency(extra.content_hash)
+    assert receipt.decision_publication.artifact.artifact_id in affected
+
+
+def test_sec_resolver_publishes_both_mixed_period_mappings(tmp_path):
+    from test_automatic_source_mapping import source_case
+    from test_automatic_mapping_security import security_source
+
+    _, _, _, _, total, _ = lease_case(
+        tmp_path / "base", kind="operating", security=True
+    )
+    historical = total.instant.replace(year=total.instant.year - 1)
+    direct = total.model_copy(
+        update={"concept": total.concept + "Current", "value": "33"}
+    )
+    single, store, roots, role, _, _ = lease_case(
+        tmp_path / "mixed",
+        kind="operating",
+        security=True,
+        change={"instant": historical},
+        extra=(direct,),
+    )
+    request, authority, validated, _, mappings = source_case(tmp_path / "resolver")
+    authority = replace(authority, artifacts=store, trust_roots=roots)
+    validated = replace(validated, original=single.original, integrity=single.integrity)
+    result = authority.resolver_for(request).resolve(validated)
+    values = {}
+    selected = [m for m in result.mappings if m.normalized_field == role]
+    assert len(selected) == 2
+    assert role not in result.missing_fields
+    for mapping in selected:
+        assert mappings[mapping.decision_id] == mapping
+        for candidate in parsed_facts_to_candidates(
+            single.original.report,
+            source=security_source(single),
+            issuer_id=single.original.source.cik,
+            security_id=single.security_identity.security_id,
+            normalized_field=role,
+            mapping=mapping,
+        ):
+            assert candidate.instant not in values
+            values[candidate.instant] = candidate.value
+    assert values == {historical: Decimal("20"), total.instant: Decimal("33")}
+    before = inventory(store.root)
+    assert authority.resolver_for(request).resolve(validated) == result
+    assert inventory(store.root) == before
 
 
 def test_component_evaluation_uses_formal_decimal_context_and_security_binding(
