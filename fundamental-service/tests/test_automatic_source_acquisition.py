@@ -235,6 +235,7 @@ def acquisition_case(
         edgar_plugin_sha256=report.validation_profile.edgar_plugin_sha256,
         xule_plugin_sha256=report.validation_profile.xule_plugin_sha256,
         dqc_ruleset_sha256=report.validation_profile.dqc_ruleset_sha256,
+        dqc_ruleset_catalog=None,
         taxonomy_cache_dir=tmp_path / "synthetic-taxonomy",
         historical_dqc_dir=None,
     )

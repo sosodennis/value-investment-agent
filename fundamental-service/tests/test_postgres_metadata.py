@@ -235,6 +235,7 @@ def _test_sec_acquisition_settings(request: SecIngestionRequestV1) -> SimpleName
         edgar_plugin_sha256="a" * 64,
         xule_plugin_sha256="b" * 64,
         dqc_ruleset_sha256="d" * 64,
+        dqc_ruleset_catalog=None,
     )
 
 
