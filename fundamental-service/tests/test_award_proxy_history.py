@@ -16,7 +16,8 @@ from fundamental_service.sec_source import (
 )
 from fundamental_service.serialization import canonical_bytes
 from fundamental_service.snapshots import FilesystemContentStore
-from fundamental_service.source_acquisition import SecAcquisitionUseCase, _Submissions
+from fundamental_service.source_acquisition import SecAcquisitionUseCase
+from fundamental_service.sec_submissions import SecSubmissionsV1
 
 CIK = "0000320193"
 FILENAME = f"CIK{CIK}-submissions-001.json"
@@ -85,7 +86,7 @@ def setup_case(tmp_path, *, files=True, mutate=None):
         source_selection_policy="sec-pit-v1",
         supplemental_filing_policy="sec-equity-award-proxy.v2",
     )
-    return use_case, request, _Submissions.model_validate(data), calls
+    return use_case, request, SecSubmissionsV1.model_validate(data), calls
 
 
 def capture(use_case, request, submissions):
