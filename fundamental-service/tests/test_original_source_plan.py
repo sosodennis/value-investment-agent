@@ -3,15 +3,23 @@
 import json
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 from decimal import Decimal
 from types import SimpleNamespace
 
 import pytest
 
 from fundamental_service.automatic_mapping import automatic_mapping_policy_digest
+from fundamental_service.classification_crosswalk import ClassificationCrosswalkPolicyV1
+from fundamental_service.issuer_country_crosswalk import CountryCrosswalkPolicyV1
+from fundamental_service.issuer_market_policy_plan import (
+    IssuerMarketReferencePlanPolicyV1,
+)
+from fundamental_service.market_source_selection import USD_RISK_FREE_POLICY
 from fundamental_service.arelle_parser import ArelleParserError
 from fundamental_service.operations import ServiceError
 from fundamental_service.original_source_plan import (
+    AutomaticIssuerMarketPolicyTemplateV1,
     AutomaticWorkingCapitalRecipeTemplateV1,
     AutomaticSourcePlanConfigurationV1,
     OriginalSourcePlan,
@@ -25,6 +33,10 @@ from fundamental_service.preparation_runner import (
 from fundamental_service.replay import ArtifactStore
 from fundamental_service.sec_source import SecSourceError
 from fundamental_service.serialization import canonical_bytes
+from fundamental_service.sec_sic_damodaran_crosswalk import (
+    SecSicDamodaranIndustryCrosswalk,
+)
+from fundamental_service.sec_state_country_crosswalk import SecStateCountryCrosswalk
 from fundamental_service.snapshots import SnapshotError
 from fundamental_service.valuation_requirements import (
     composite_working_capital_requirements_profile,
@@ -37,9 +49,15 @@ from fundamental_service.working_capital_preparation import (
 from test_annual_discovery_service import _inventory
 from test_automatic_source_preparation import run
 from test_original_preparation import case, execute
+from test_automatic_market_policy import _market_policy
 
 
-def configuration(model_id="fcff_dcf", *, working_capital_recipe_template=None):
+def configuration(
+    model_id="fcff_dcf",
+    *,
+    working_capital_recipe_template=None,
+    issuer_market_policy_template=None,
+):
     return AutomaticSourcePlanConfigurationV1(
         model_id=model_id,
         release_profile_id="automatic-original-fcff",
@@ -48,6 +66,7 @@ def configuration(model_id="fcff_dcf", *, working_capital_recipe_template=None):
         mapping_version="automatic-source-v1",
         policy_version="source-preparation-v1",
         working_capital_recipe_template=working_capital_recipe_template,
+        issuer_market_policy_template=issuer_market_policy_template,
     )
 
 
@@ -83,6 +102,37 @@ def working_capital_recipe_template():
             rationale="Expose a deterministic liability residual sensitivity range.",
         ),
         perimeter_rationale="Apply the configured operating perimeter to each retained annual filing.",
+    )
+
+
+def issuer_market_policy_template():
+    country = SecStateCountryCrosswalk()
+    industry = SecSicDamodaranIndustryCrosswalk()
+    market = _market_policy(datetime(2026, 11, 13, tzinfo=UTC))
+    return AutomaticIssuerMarketPolicyTemplateV1(
+        classification_provider_id="sec-submissions-classification-v1",
+        country_policy=CountryCrosswalkPolicyV1(
+            provider_id=country.provider_id,
+            mapping_version=country.mapping_version,
+            mapping_digest=country.mapping_digest,
+            source_scheme="sec-state-country-v1",
+            target_taxonomy=country.target_taxonomy,
+        ),
+        industry_policy=ClassificationCrosswalkPolicyV1(
+            provider_id=industry.provider_id,
+            mapping_version=industry.mapping_version,
+            mapping_digest=industry.mapping_digest,
+            source_scheme="sec-sic-v1",
+            target_taxonomy=industry.target_taxonomy,
+        ),
+        reference_policy=IssuerMarketReferencePlanPolicyV1(),
+        market_policy_version=market.policy_version,
+        risk_free_policy=USD_RISK_FREE_POLICY,
+        terminal_growth_policy_id=market.terminal_growth_plan.policy_id,
+        gdp_horizon_years=market.terminal_growth_plan.gdp_horizon_years,
+        maximum_gdp_period_age_days=(
+            market.terminal_growth_plan.maximum_gdp_period_age_days
+        ),
     )
 
 
@@ -236,6 +286,56 @@ def test_recipe_template_expands_saved_original_and_pins_composite_requirements(
     )
     assert result.plan.requirements_profile == source_preparation_requirements_profile(
         request.configuration.model_id, composite_inputs=True
+    )
+    assert not compiler.execute(request)[1].wrote
+
+
+def test_issuer_market_template_derives_identity_accession_and_date_from_saved_original(
+    tmp_path, monkeypatch
+):
+    value = case(tmp_path, monkeypatch)
+    prepared, _ = execute(value)
+    template = issuer_market_policy_template()
+    compiler, request = compiler_case(
+        value,
+        prepared,
+        configuration(issuer_market_policy_template=template),
+    )
+
+    result, publication = compiler.execute(request)
+
+    assert publication.wrote and not result.issue_codes
+    assert result.plan is not None
+    market_request = result.plan.issuer_market_policy
+    assert market_request is not None
+    identity = prepared.filings[0].identity
+    original = value.service.read_validation(
+        prepared.filings[0].validation.artifact_id
+    ).request
+    assert market_request.source_revision == request.runtime_source_revision
+    assert market_request.classification_request.issuer_id == identity.issuer_id
+    assert market_request.classification_request.accession_number == (
+        original.filing.accession_number
+    )
+    assert market_request.classification_request.report_period_end == (
+        original.filing.report_period_end
+    )
+    assert market_request.classification_request.valuation_at == (
+        original.valuation_timestamp
+    )
+    assert market_request.country_policy == template.country_policy
+    assert market_request.industry_policy == template.industry_policy
+    assert market_request.reference_policy == template.reference_policy
+    assert market_request.market_policy.currency == identity.currency
+    assert market_request.market_policy.policy_version == template.market_policy_version
+    assert market_request.market_policy.terminal_growth_plan.policy_id == (
+        template.terminal_growth_policy_id
+    )
+    assert market_request.market_policy.terminal_growth_plan.issuer_id == (
+        identity.issuer_id
+    )
+    assert market_request.market_policy.terminal_growth_plan.valuation_at == (
+        original.valuation_timestamp
     )
     assert not compiler.execute(request)[1].wrote
 

@@ -116,6 +116,21 @@ acquired canonical facts and retains missing, ambiguous or unsupported evidence
 as a refusal. The compiler supplies no default residual fractions or absence
 decisions.
 
+An optional deployment-owned `issuer_market_policy_template` pins the
+classification and crosswalk provider IDs/versions/digests, reference policy,
+risk-free policy and terminal-growth selection policy. When configured, the
+compiler derives the `IssuerMarketPreparationRequestV1` issuer, latest original
+accession/report period and valuation timestamp from the validated originals.
+The resulting plan carries those exact service policy pins into the existing
+issuer-market preparation owner; conflicting original identities and
+non-USD identities refuse compilation. Templates do not contain market values,
+capture receipts, source-use permissions or issuer-specific selections.
+
+This compiler stage does not yet acquire and admit every market reference and
+macro source from the template. Missing sources remain refusals in the existing
+preparation path; generating an issuer/date policy request is not evidence that
+its market inputs are available or approved.
+
 An existing saved preparation can be compiled with a separately pinned runtime
 revision. This verifies and reads retained original artifacts without running
 annual discovery or SEC I/O:
@@ -133,9 +148,9 @@ validation's historical source revision. The installed runner binds its
 automatic authority to the same revision before acquisition.
 
 Without the optional recipe template, this compiler stage uses standard direct
-accounting requirements. Public/issuer-market configuration assembly remains
-pending; a compiled source plan alone does not establish complete valuation
-inputs.
+accounting requirements. Automatic market source acquisition/admission assembly
+remains pending; a compiled source plan alone does not establish complete
+valuation inputs.
 
 `fundamental-prepare-issuer` is the company/date entrypoint. It delegates catalog
 selection, saved original validation and identity resolution, source-plan

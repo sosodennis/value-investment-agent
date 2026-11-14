@@ -12,6 +12,7 @@ from pydantic import Field, model_validator
 
 from .automatic_mapping import automatic_mapping_policy_digest
 from .automatic_source_mapping import AutomaticSecIngestionRequestV1
+from .classification_crosswalk import ClassificationCrosswalkPolicyV1
 from .command_artifacts import EvidenceArtifactStore
 from .contracts import (
     FiscalPeriodSelectorV1,
@@ -20,6 +21,12 @@ from .contracts import (
     StrictModel,
 )
 from .data_releases import ArtifactRefV1
+from .issuer_country_crosswalk import CountryCrosswalkPolicyV1
+from .issuer_classification import IssuerClassificationRequestV1
+from .issuer_market_policy_plan import IssuerMarketReferencePlanPolicyV1
+from .issuer_market_preparation import IssuerMarketPreparationRequestV1
+from .automatic_market_policy import AutomaticMarketPolicyPolicyV1
+from .market_source_selection import DailyMarketRatePolicyV1
 from .original_preparation import OriginalPreparation
 from .policies import initial_model_specs
 from .preparation_runner import AutomaticSourcePreparationPlanV1
@@ -40,6 +47,7 @@ from .working_capital_preparation import (
     WorkingCapitalExclusionRecipeV1,
     WorkingCapitalPeriodRecipeV1,
 )
+from .terminal_growth import TerminalGrowthPlanV1
 
 
 class AutomaticWorkingCapitalRecipeTemplateV1(StrictModel):
@@ -72,6 +80,31 @@ class AutomaticWorkingCapitalRecipeTemplateV1(StrictModel):
         return self
 
 
+class AutomaticIssuerMarketPolicyTemplateV1(StrictModel):
+    """Deployment-owned provider and policy pins for issuer/date market planning."""
+
+    classification_provider_id: str = Field(min_length=1)
+    country_policy: CountryCrosswalkPolicyV1
+    industry_policy: ClassificationCrosswalkPolicyV1
+    reference_policy: IssuerMarketReferencePlanPolicyV1
+    market_policy_version: str = Field(min_length=1)
+    risk_free_policy: DailyMarketRatePolicyV1
+    terminal_growth_policy_id: str = Field(min_length=1)
+    gdp_horizon_years: int = Field(ge=1, le=100)
+    maximum_gdp_period_age_days: int = Field(ge=0)
+
+    @model_validator(mode="after")
+    def supported_terminal_rate(self) -> AutomaticIssuerMarketPolicyTemplateV1:
+        if (
+            self.risk_free_policy.currency != "USD"
+            or self.risk_free_policy.series_id != "us.treasury_par_yield_10y"
+        ):
+            raise ValueError(
+                "issuer market template requires the configured USD long-term rate"
+            )
+        return self
+
+
 class AutomaticSourcePlanConfigurationV1(StrictModel):
     """Deployment choices, without caller-supplied issuer or filing identity."""
 
@@ -86,6 +119,9 @@ class AutomaticSourcePlanConfigurationV1(StrictModel):
     policy_version: str = Field(min_length=1, max_length=128)
     working_capital_recipe_template: AutomaticWorkingCapitalRecipeTemplateV1 | None = (
         Field(default=None, exclude_if=lambda value: value is None)
+    )
+    issuer_market_policy_template: AutomaticIssuerMarketPolicyTemplateV1 | None = Field(
+        default=None, exclude_if=lambda value: value is None
     )
 
     @model_validator(mode="after")
@@ -230,6 +266,8 @@ class OriginalSourcePlan:
             runtime = prepared.request.runtime
             ingestions = []
             recipe_filings: list[tuple[str, date]] = []
+            market_context = None
+            market_original: tuple[str, date] | None = None
             for item in prepared.filings:
                 validated = self._originals.read_validation(item.validation.artifact_id)
                 original = validated.request
@@ -272,6 +310,28 @@ class OriginalSourcePlan:
                         requirements_digest=profile.digest,
                     )
                 )
+                market_template = configuration.issuer_market_policy_template
+                if market_template is not None:
+                    if identity.currency != "USD":
+                        codes.add("ISSUER_MARKET_POLICY_CURRENCY_UNSUPPORTED")
+                    if market_context is not None and market_context != (
+                        identity.issuer_id,
+                        original.valuation_timestamp,
+                    ):
+                        codes.add("ORIGINAL_HISTORY_MARKET_CONTEXT_CONFLICT")
+                    market_context = (
+                        identity.issuer_id,
+                        original.valuation_timestamp,
+                    )
+                    original_identity = (
+                        original.filing.accession_number,
+                        original.filing.report_period_end,
+                    )
+                    if (
+                        market_original is None
+                        or original_identity[1] > market_original[1]
+                    ):
+                        market_original = original_identity
                 if recipe_template is not None:
                     recipe_filings.append(
                         (
@@ -314,18 +374,61 @@ class OriginalSourcePlan:
             if codes:
                 plan = None
             else:
-                plan = AutomaticSourcePreparationPlanV1(
-                    source_revision=request.runtime_source_revision,
-                    release_profile_id=configuration.release_profile_id,
-                    model_id=configuration.model_id,
-                    ingestions=tuple(
-                        sorted(
-                            ingestions,
-                            key=lambda item: item.filing.accession_number or "",
-                        )
-                    ),
-                    valuation_working_capital_recipe=recipe,
-                )
+                market_policy_request = None
+                market_template = configuration.issuer_market_policy_template
+                if market_template is not None:
+                    assert market_context is not None
+                    assert market_original is not None
+                    issuer_id, valuation_at = market_context
+                    accession, period_end = market_original
+                    terminal_plan = TerminalGrowthPlanV1(
+                        issuer_id=issuer_id,
+                        policy_id=market_template.terminal_growth_policy_id,
+                        valuation_at=valuation_at,
+                        currency="USD",
+                        gdp_horizon_years=market_template.gdp_horizon_years,
+                        maximum_gdp_period_age_days=(
+                            market_template.maximum_gdp_period_age_days
+                        ),
+                        risk_free_policy=market_template.risk_free_policy,
+                    )
+                    classification_request = IssuerClassificationRequestV1(
+                        issuer_id=issuer_id,
+                        accession_number=accession,
+                        report_period_end=period_end,
+                        valuation_at=valuation_at,
+                    )
+                    market_policy = AutomaticMarketPolicyPolicyV1(
+                        policy_version=market_template.market_policy_version,
+                        currency="USD",
+                        risk_free_policy=market_template.risk_free_policy,
+                        terminal_growth_plan=terminal_plan,
+                    )
+                    market_policy_request = IssuerMarketPreparationRequestV1(
+                        source_revision=request.runtime_source_revision,
+                        classification_provider_id=(
+                            market_template.classification_provider_id
+                        ),
+                        classification_request=classification_request,
+                        country_policy=market_template.country_policy,
+                        industry_policy=market_template.industry_policy,
+                        reference_policy=market_template.reference_policy,
+                        market_policy=market_policy,
+                    )
+                if not codes:
+                    plan = AutomaticSourcePreparationPlanV1(
+                        source_revision=request.runtime_source_revision,
+                        release_profile_id=configuration.release_profile_id,
+                        model_id=configuration.model_id,
+                        ingestions=tuple(
+                            sorted(
+                                ingestions,
+                                key=lambda item: item.filing.accession_number or "",
+                            )
+                        ),
+                        valuation_working_capital_recipe=recipe,
+                        issuer_market_policy=market_policy_request,
+                    )
         return OriginalSourcePlanEvidenceV1(
             request=request,
             plan=plan,
