@@ -392,6 +392,53 @@ def test_semantic_validation_findings_remain_in_the_report(level: str, severity:
     assert finding is not None and finding.severity == severity
 
 
+@pytest.mark.parametrize("serialized", [False, True])
+def test_xule_debug_exception_retains_stable_terminal_cause(serialized: bool):
+    reason = "xule.XuleRunTime.XuleProcessingError: Rule: DQC.US.0236.10933 - Index value of 0 is out of range for the list with length of 1"
+    findings = []
+    for temporary_root in ("/tmp/first-run", "/tmp/second-run"):
+        trace = [
+            "Traceback (most recent call last):\n",
+            f'  File "{temporary_root}/plugins/xule/XuleProperties.py", line 151\n',
+            reason + "\n",
+        ]
+        finding = _finding_from_log(
+            {
+                "level": "debug",
+                "code": "xule:ValidationException",
+                "message": {
+                    "text": "An unexpected exception occurred in XULE\n" + repr(trace),
+                    "args": {"traceback": repr(trace) if serialized else trace},
+                },
+            }
+        )
+        assert finding is not None
+        assert finding.severity == "error"
+        assert finding.message == reason
+        findings.append(finding)
+    assert findings[0] == findings[1]
+
+
+@pytest.mark.parametrize("trace", [None, "not a traceback", "[]", "[1]", "x" * 65537])
+def test_xule_unreadable_exception_keeps_a_stable_diagnostic(trace):
+    finding = _finding_from_log(
+        {
+            "level": "debug",
+            "code": "xule:ValidationException",
+            "message": {"args": {"traceback": trace}},
+        }
+    )
+    assert finding is not None
+    assert (
+        finding.message
+        == "XULE validation raised an exception without a readable terminal cause"
+    )
+
+
+def test_other_debug_records_do_not_become_validation_errors():
+    assert _finding_from_log({"level": "debug", "code": "xule:ruleTrace"}) is None
+
+
 @pytest.mark.parametrize(
     "failure_code",
     [

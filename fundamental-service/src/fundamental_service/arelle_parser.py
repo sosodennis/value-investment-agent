@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import hashlib
 import multiprocessing
 import os
@@ -446,9 +447,29 @@ def _validation_plugin_root(profile: "ArelleValidationProfileV1") -> Path:
 def _finding_from_log(record: dict[str, Any]) -> ArelleFindingV1 | None:
     level = str(record.get("level", "")).lower()
     level = {"warning-semantic": "warning", "error-semantic": "error"}.get(level, level)
+    code = str(record.get("code") or "arelle:unknown")
+    if code == "xule:ValidationException":
+        message = record.get("message")
+        details = message.get("args") if isinstance(message, dict) else None
+        trace = details.get("traceback") if isinstance(details, dict) else None
+        if isinstance(trace, str) and len(trace) <= 65536:
+            try:
+                trace = ast.literal_eval(trace)
+            except (ValueError, SyntaxError, RecursionError):
+                trace = None
+        reason = (
+            trace[-1].strip()
+            if isinstance(trace, list) and trace and isinstance(trace[-1], str)
+            else ""
+        )
+        return ArelleFindingV1(
+            code=code,
+            severity="error",
+            message=reason[:2048]
+            or "XULE validation raised an exception without a readable terminal cause",
+        )
     if level not in {"error", "critical", "warning", "fatal"}:
         return None
-    code = str(record.get("code") or "arelle:unknown")
     if code in _NON_BLOCKING_ARELLE_CODES:
         level = "warning"
     message = record.get("message")
