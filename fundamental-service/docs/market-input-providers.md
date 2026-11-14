@@ -356,6 +356,21 @@ source register without HTTP access. Neither mode grants source-use permission,
 creates an issuer market policy, approves a release or bypasses exact-input
 caller approval. Current data never establishes historical availability.
 
+If current selection fails, the command also acquires or reuses the compiled SEC
+requests at the original requested time. Its `source_acquisitions_publication`
+references the retained `SourcePreparationAcquisitionsV1`; the issuer entrypoint
+exposes that receipt as `source_acquisitions` and adds `source_acquisition` to its
+stage lineage. This evidence records independent accounting failures without
+selecting an effective valuation time or preparing a valuation.
+
+Completed SEC snapshot outcomes use `source-preparation-acquisitions:<plan-digest>`.
+Failures without a snapshot append the receipt's content hash, preserving each
+attempt while permitting the same plan to resume after repair. Reuse still calls
+the SEC acquisition owner to enforce organization access and runtime checks.
+Ordinary source preparation also retains independent SEC outcomes alongside
+public-source refusals when acquisition is configured and no matching release
+or candidate snapshot already supplies them.
+
 Every declared source's outcome appears in `public_source_outcomes`, including
 failures and originals captured after the cutoff. A failed required source or
 `SOURCE_NOT_AVAILABLE_AT_VALUATION` blocks preparation. Permanent provider

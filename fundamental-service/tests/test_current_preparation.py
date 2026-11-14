@@ -13,6 +13,7 @@ from fundamental_service.current_preparation import (
 from fundamental_service.source_plan_contracts import SOURCE_PREPARATION_PLAN
 from fundamental_service.public_acquisition import PublicSourceCutoffV1
 from fundamental_service.snapshots import SnapshotError
+from fundamental_service.serialization import sha256_digest
 from test_preparation_runner import (
     VALUATION_TIME,
     _fixture,
@@ -146,6 +147,62 @@ def test_current_freezes_after_capture_and_formal_composer_still_requires_exact_
             plan,
             approval=approval.model_copy(update={"input_digest": "0" * 64}),
         )
+
+
+@pytest.mark.parametrize(
+    "tamper", (None, "plan", "dependencies", "status", "successful_selection")
+)
+def test_failed_current_selection_retains_requested_time_sec_receipt(tmp_path, tamper):
+    from datetime import UTC, datetime
+    from fundamental_service.contracts import QualityStatus
+    from fundamental_service.preparation_runner import SourcePreparationAcquisitionsV1
+    from test_preparation_runner import _acquisition
+
+    fixture = current_fixture(tmp_path)
+    if tamper != "successful_selection":
+        fixture.provider.error = SnapshotError(
+            "SOURCE_USE_POLICY_MISSING", "quote permission"
+        )
+    selected, selection = select(fixture)
+    runner = _runner(
+        fixture.baseline,
+        acquisition=_acquisition(fixture.baseline, quality=QualityStatus.ABSTAIN),
+    )
+    acquisitions = runner.acquire_sources(
+        fixture.request.template,
+        actor_id="operator",
+        organization_id="operators",
+        correlation_id="failed-current",
+        deadline_at=datetime.now(UTC) + timedelta(minutes=2),
+    )
+    report = SourcePreparationAcquisitionsV1.model_validate_json(
+        fixture.artifacts.read(acquisitions.artifact.artifact_id)
+    )
+    assert report.source_outcomes[0].request_digest == sha256_digest(
+        fixture.request.template.ingestions[0]
+    )
+    payload = dict(
+        artifact=selection.artifact,
+        wrote=selection.wrote,
+        current_selection=selected,
+        current_selection_publication=selection,
+        source_acquisitions_publication=acquisitions.model_dump(),
+    )
+    record = payload["source_acquisitions_publication"]["artifact"]
+    if tamper == "plan":
+        record["artifact_id"] = "source-preparation-acquisitions:" + "a" * 64
+    elif tamper == "dependencies":
+        record["dependency_hashes"] = ("a" * 64,)
+    elif tamper == "status":
+        record["status"] = "invalidated"
+    if tamper is not None:
+        with pytest.raises(ValueError):
+            CurrentSourcePreparationPublicationV1.model_validate(payload)
+    else:
+        receipt = CurrentSourcePreparationPublicationV1.model_validate(payload)
+        assert receipt.source_acquisitions_publication == acquisitions
+        assert receipt.current_selection.plan is None
+        assert receipt.current_selection.issue_codes == ("SOURCE_USE_POLICY_MISSING",)
 
 
 def test_historical_template_keeps_cutoff_and_late_original_refusal(tmp_path):

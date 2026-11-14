@@ -669,16 +669,38 @@ class SourcePreparationRunner:
             if error.code != "ARTIFACT_NOT_FOUND":
                 raise
             return ()
-        if record.status != "valid" or record.retention != "evidence":
+        if (
+            record.status != "valid"
+            or record.retention != "evidence"
+            or record.media_type != "application/json"
+            or record.dependency_hashes != (plan.digest,)
+        ):
             raise ValueError("retained acquisitions require valid evidence")
-        retained = SourcePreparationAcquisitionsV1.model_validate_json(
-            self._application.artifact_store.read(acquisitions_id)
-        )
+        raw = self._application.artifact_store.read(acquisitions_id)
+        retained = SourcePreparationAcquisitionsV1.model_validate_json(raw)
+        if (
+            canonical_bytes(retained) != raw
+            or sha256_digest(retained) != record.content_hash
+        ):
+            raise ValueError("retained acquisitions differ from their canonical digest")
         if retained.plan_digest != plan.digest or tuple(
             outcome.request_digest for outcome in retained.source_outcomes
         ) != tuple(sha256_digest(request) for request in plan.ingestions):
             raise ValueError("retained acquisitions differ from source plan")
         return retained.source_outcomes
+
+    def _persist_acquisitions(
+        self,
+        plan: SourcePreparationPlan,
+        outcomes: tuple[SourceAcquisitionOutcomeV1, ...],
+    ) -> ArtifactPublicationV1:
+        evidence = SourcePreparationAcquisitionsV1(
+            plan_digest=plan.digest, source_outcomes=outcomes
+        )
+        artifact_id = f"source-preparation-acquisitions:{plan.digest}"
+        if any(outcome.snapshot_id is None for outcome in outcomes):
+            artifact_id += f":{sha256_digest(evidence)}"
+        return self._artifacts.put_with_receipt(artifact_id, evidence, (plan.digest,))
 
     def _persist(
         self, plan: SourcePreparationPlan, evidence: SourcePreparationEvidenceV1
@@ -745,13 +767,7 @@ class SourcePreparationRunner:
                 role=binding.protocol,
             )
         if evidence.source_outcomes:
-            self._artifacts.put_with_receipt(
-                f"source-preparation-acquisitions:{plan.digest}",
-                SourcePreparationAcquisitionsV1(
-                    plan_digest=plan.digest, source_outcomes=evidence.source_outcomes
-                ),
-                (plan.digest,),
-            )
+            self._persist_acquisitions(plan, evidence.source_outcomes)
         evidence = SourcePreparationEvidenceV1.model_validate(
             {
                 **evidence.model_dump(),
@@ -811,6 +827,30 @@ class SourcePreparationRunner:
             dependencies,
         )
 
+    def acquire_sources(
+        self,
+        plan: SourcePreparationPlan,
+        *,
+        actor_id: str,
+        organization_id: str,
+        correlation_id: str,
+        deadline_at: datetime,
+    ) -> ArtifactPublicationV1:
+        """Retain independent SEC outcomes when current source selection fails."""
+        if not actor_id.strip() or not organization_id.strip():
+            raise ValueError("runner requires an actor and organization")
+        if deadline_at.tzinfo is None or deadline_at <= datetime.now(UTC):
+            raise ValueError("runner deadline must be an unexpired zoned timestamp")
+        _, outcomes = self._acquire_sources(
+            plan,
+            actor_id=actor_id,
+            organization_id=organization_id,
+            correlation_id=correlation_id,
+            deadline_at=deadline_at,
+        )
+        self._artifacts.put_with_receipt(f"source-preparation-plan:{plan.digest}", plan)
+        return self._persist_acquisitions(plan, outcomes)
+
     def _acquire_sources(
         self,
         plan: SourcePreparationPlan,
@@ -839,19 +879,22 @@ class SourcePreparationRunner:
                     audit_reuse=False,
                 )
                 snapshot = None
-                if acquired.quality_status is QualityStatus.VERIFIED or (
-                    len(plan.ingestions) > 1 and acquired.snapshot_id is not None
-                ):
-                    if acquired.snapshot_id is None:
-                        raise ValueError(
-                            "verified acquisition must identify a stored snapshot"
-                        )
-                    snapshot = self._application.snapshot(acquired.snapshot_id)
-                    if snapshot.manifest_digest != acquired.manifest_digest:
+                if acquired.snapshot_id is not None:
+                    retained_snapshot = self._application.snapshot(acquired.snapshot_id)
+                    if retained_snapshot.manifest_digest != acquired.manifest_digest:
                         raise SnapshotError(
                             "ACQUIRED_SNAPSHOT_MISMATCH",
                             "acquisition differs from its retained snapshot",
                         )
+                    if (
+                        acquired.quality_status is QualityStatus.VERIFIED
+                        or len(plan.ingestions) > 1
+                    ):
+                        snapshot = retained_snapshot
+                elif acquired.quality_status is QualityStatus.VERIFIED:
+                    raise ValueError(
+                        "verified acquisition must identify a stored snapshot"
+                    )
             except ServiceError as error:
                 if error.retryable or error.status_code != 422:
                     raise
@@ -1200,13 +1243,49 @@ class SourcePreparationRunner:
             )
         )
         if public_issues:
+            if self._acquisition is not None and (
+                bool(outcomes)
+                or (
+                    self._resolve(plan) is None
+                    and not (
+                        candidate is not None
+                        and self._candidate_snapshot_available(plan, candidate)
+                    )
+                )
+            ):
+                _, outcomes = self._acquire_sources(
+                    plan,
+                    actor_id=actor_id,
+                    organization_id=organization_id,
+                    correlation_id=correlation_id,
+                    deadline_at=deadline_at,
+                )
             return self._persist(
                 plan,
                 SourcePreparationEvidenceV1(
                     source_revision=plan.source_revision,
                     plan_digest=plan.digest,
                     status="blocked",
-                    issue_codes=public_issues,
+                    issue_codes=tuple(
+                        sorted(
+                            set(public_issues)
+                            | {
+                                code
+                                for outcome in outcomes
+                                for code in outcome.issue_codes
+                            }
+                        )
+                    ),
+                    missing_evidence=tuple(
+                        sorted(
+                            {
+                                field
+                                for outcome in outcomes
+                                for field in outcome.missing_evidence
+                            }
+                        )
+                    ),
+                    source_outcomes=outcomes,
                     public_source_outcomes=public_outcomes,
                     public_source_cutoff=plan.public_source_cutoff,
                     source_admission_outcomes=admission_outcomes,
@@ -1831,11 +1910,19 @@ async def _run_command(args: argparse.Namespace) -> ArtifactPublicationV1:
                 deadline_at=deadline_at,
             )
             if selected.plan is None:
+                acquisitions = runner.acquire_sources(
+                    plan,
+                    actor_id=args.actor,
+                    organization_id=args.organization,
+                    correlation_id=f"source-preparation:{plan.digest[:32]}",
+                    deadline_at=deadline_at,
+                )
                 return CurrentSourcePreparationPublicationV1(
                     artifact=selection_publication.artifact,
                     wrote=selection_publication.wrote,
                     current_selection=selected,
                     current_selection_publication=selection_publication,
+                    source_acquisitions_publication=acquisitions,
                 )
             plan = selected.plan
         publication = runner.run(

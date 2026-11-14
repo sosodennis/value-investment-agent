@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 from hashlib import sha256
 from typing import Literal, Protocol
 
-from pydantic import model_validator
+from pydantic import Field, model_validator
 
 from .contracts import StrictModel
 from .source_plan_contracts import SOURCE_PREPARATION_PLAN, SourcePreparationPlan
@@ -140,10 +140,28 @@ class CurrentSourcePreparationPublicationV1(ArtifactPublicationV1):
 
     current_selection: CurrentSourcePreparationSelectionV1
     current_selection_publication: ArtifactPublicationV1
+    source_acquisitions_publication: ArtifactPublicationV1 | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
 
     @model_validator(mode="after")
     def exact_selection_receipt(self) -> CurrentSourcePreparationPublicationV1:
         selection = self.current_selection
+        acquisitions = self.source_acquisitions_publication
+        if acquisitions is not None and (
+            selection.plan is not None
+            or acquisitions.artifact.artifact_id
+            not in {
+                f"source-preparation-acquisitions:{selection.request.template.digest}",
+                f"source-preparation-acquisitions:{selection.request.template.digest}:{acquisitions.artifact.content_hash}",
+            }
+            or acquisitions.artifact.dependency_hashes
+            != (selection.request.template.digest,)
+            or acquisitions.artifact.status != "valid"
+            or acquisitions.artifact.retention != "evidence"
+            or acquisitions.artifact.media_type != "application/json"
+        ):
+            raise ValueError("blocked source acquisitions must bind the exact template")
         record = self.current_selection_publication.artifact
         if (
             record.artifact_id != selection.artifact_id

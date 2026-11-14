@@ -232,7 +232,13 @@ def test_current_issuer_entry_joins_real_selection_and_effective_plan_lineage(
         )
         if selected.plan is None:
             final = selected_receipt
+            acquisitions = original_case.artifacts.put_with_receipt(
+                f"source-preparation-acquisitions:{template.digest}",
+                {"plan_digest": template.digest, "scope": "synthetic source receipt"},
+                (template.digest,),
+            )
         else:
+            acquisitions = None
             # The preparation owner is independently exercised by current-owner tests.
             # This fixture tests only the CLI join to its effective-plan receipt.
             report = {"plan_digest": selected.plan.digest, "status": "blocked"}
@@ -246,6 +252,7 @@ def test_current_issuer_entry_joins_real_selection_and_effective_plan_lineage(
             wrote=final.wrote,
             current_selection=selected,
             current_selection_publication=selected_receipt,
+            source_acquisitions_publication=acquisitions,
         ).model_dump(mode="json")
 
     monkeypatch.setattr(
@@ -266,6 +273,13 @@ def test_current_issuer_entry_joins_real_selection_and_effective_plan_lineage(
         assert result["status"] == "blocked" and result["preparation"] is None
         assert "SOURCE_HTTP_NOT_FOUND" in result["current_source_issue_codes"]
         assert "source_preparation" not in result["lineage"]
+        source = result["lineage"]["source_acquisition"]
+        assert source["input_digest"] == source["source_digest"] == template.digest
+        assert (
+            source["output_digest"]
+            == result["source_acquisitions"].artifact.content_hash
+        )
+        assert not repeated["lineage"]["source_acquisition"]["wrote"]
     else:
         assert result["status"] == "preparation_attempted"
         effective_ref = result["effective_source_plan_ref"]

@@ -295,6 +295,17 @@ def _execute(args: argparse.Namespace) -> dict[str, object]:
         }
         current_fields["current_source_issue_codes"] = selected.issue_codes
         if selected.plan is None:
+            acquisitions = current.source_acquisitions_publication
+            if acquisitions is not None:
+                effective_lineage["source_acquisition"] = {
+                    "artifact_id": acquisitions.artifact.artifact_id,
+                    "input_digest": plan.digest,
+                    "output_digest": acquisitions.artifact.content_hash,
+                    "wrote": acquisitions.wrote,
+                    "source_artifact_id": plan_ref.artifact_id,
+                    "source_digest": plan.digest,
+                }
+                current_fields["source_acquisitions"] = acquisitions
             return {
                 **shared,
                 **current_fields,

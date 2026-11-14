@@ -1844,6 +1844,235 @@ def test_public_sources_require_configured_acquisition(tmp_path):
     assert failure.value.code == "PUBLIC_SOURCE_ACQUISITION_UNAVAILABLE"
 
 
+def test_public_refusal_retains_independent_sec_failures_and_reuses_report(tmp_path):
+    from test_public_acquisition import inventory
+
+    fixture = _fixture(tmp_path, released=False)
+    provider, public, plan = _public_source_fixture(fixture, tmp_path)
+    provider.error = SnapshotError("SOURCE_USE_POLICY_MISSING", "quote permission")
+    acquisition = _acquisition(fixture, quality=QualityStatus.ABSTAIN)
+    runner = _runner(fixture, acquisition=acquisition, public_acquisition=public)
+    first = _run(runner, plan)
+    report = _reader(fixture, first)
+    assert report.status == "blocked" and report.preparation is None
+    assert report.calculation is None and fixture.state.publications == 0
+    assert report.issue_codes == ("MAPPING_MISSING", "SOURCE_USE_POLICY_MISSING")
+    assert report.missing_evidence == ("revenue",)
+    assert report.source_outcomes[0].quality_status is QualityStatus.ABSTAIN
+    assert report.source_outcomes[0].request_digest == sha256_digest(plan.ingestions[0])
+    assert report.public_source_outcomes[0].status == "failed"
+    before = inventory(tmp_path)
+    repeated = _run(runner, plan)
+    assert repeated.artifact == first.artifact and not repeated.wrote
+    assert inventory(tmp_path) == before
+    assert len(acquisition.calls) == 2
+    assert len(provider.calls) == 1
+
+
+@pytest.mark.parametrize("failure", ("interrupted", "corrupt", "none"))
+def test_independent_source_receipt_resumes_without_publishing_a_release(
+    tmp_path, failure
+):
+    fixture = _fixture(tmp_path, released=False)
+    acquisition = _acquisition(fixture, quality=QualityStatus.ABSTAIN)
+    execute = acquisition.execute
+    interrupted = failure != "none"
+
+    def acquire(request, **kwargs):
+        nonlocal interrupted
+        if interrupted:
+            interrupted = False
+            raise SnapshotError(
+                "SOURCE_RATE_LIMITED"
+                if failure == "interrupted"
+                else "CONTENT_HASH_MISMATCH",
+                "fixture failure",
+                retryable=failure == "interrupted",
+            )
+        return execute(request, **kwargs)
+
+    acquisition.execute = acquire
+    runner = _runner(fixture, acquisition=acquisition)
+    kwargs = dict(
+        actor_id="operator",
+        organization_id="operators",
+        correlation_id="source-only",
+        deadline_at=datetime.now(UTC) + timedelta(minutes=2),
+    )
+    if failure == "interrupted":
+        with pytest.raises(SnapshotError, match="fixture failure"):
+            runner.acquire_sources(fixture.plan, **kwargs)
+        with pytest.raises(SnapshotError) as missing:
+            fixture.artifacts.get(
+                f"source-preparation-acquisitions:{fixture.plan.digest}"
+            )
+        assert missing.value.code == "ARTIFACT_NOT_FOUND"
+    first = runner.acquire_sources(fixture.plan, **kwargs)
+    from fundamental_service.preparation_runner import SourcePreparationAcquisitionsV1
+
+    report = SourcePreparationAcquisitionsV1.model_validate_json(
+        fixture.artifacts.read(first.artifact.artifact_id)
+    )
+    assert report.plan_digest == fixture.plan.digest
+    assert report.source_outcomes[0].issue_codes == (
+        ("CONTENT_HASH_MISMATCH",) if failure == "corrupt" else ("MAPPING_MISSING",)
+    )
+    assert fixture.state.publications == 0
+    assert not fixture.state.active
+    repaired = runner.acquire_sources(fixture.plan, **kwargs)
+    assert repaired.wrote is (failure == "corrupt")
+    if failure == "corrupt":
+        assert repaired.artifact != first.artifact
+        assert first.artifact.artifact_id.endswith(first.artifact.content_hash)
+        assert fixture.artifacts.read(first.artifact.artifact_id) == canonical_bytes(
+            report
+        )
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        repeats = list(
+            pool.map(lambda _: runner.acquire_sources(fixture.plan, **kwargs), range(2))
+        )
+    assert all(
+        not receipt.wrote and receipt.artifact == repaired.artifact
+        for receipt in repeats
+    )
+
+
+def test_public_refusal_resumes_repaired_sec_bytes_and_preserves_failure(tmp_path):
+    fixture = _fixture(tmp_path, released=False)
+    provider, public, plan = _public_source_fixture(fixture, tmp_path)
+    provider.error = SnapshotError("SOURCE_USE_POLICY_MISSING", "quote permission")
+    acquisition = _acquisition(fixture, quality=QualityStatus.ABSTAIN)
+    execute = acquisition.execute
+    corrupt = True
+
+    def acquire(request, **kwargs):
+        if corrupt:
+            raise SnapshotError("CONTENT_HASH_MISMATCH", "source corruption")
+        return execute(request, **kwargs)
+
+    acquisition.execute = acquire
+    runner = _runner(fixture, acquisition=acquisition, public_acquisition=public)
+    failed = _run(runner, plan)
+    original = _reader(fixture, failed)
+    assert original.issue_codes == (
+        "CONTENT_HASH_MISMATCH",
+        "SOURCE_USE_POLICY_MISSING",
+    )
+    corrupt = False
+    resumed = _run(runner, plan)
+    repaired = _reader(fixture, resumed)
+    assert repaired.issue_codes == ("MAPPING_MISSING", "SOURCE_USE_POLICY_MISSING")
+    assert repaired.source_outcomes[0].snapshot_id is not None
+    assert _reader(fixture, failed) == original
+    assert _run(runner, plan).artifact == resumed.artifact
+
+
+@pytest.mark.parametrize("public_refusal", (False, True))
+def test_independent_source_receipt_keeps_acquisition_authorization_on_reuse(
+    tmp_path, public_refusal
+):
+    fixture = _fixture(tmp_path, released=False)
+    acquisition = _acquisition(fixture)
+    execute = acquisition.execute
+
+    def acquire(request, **kwargs):
+        if kwargs["organization_id"] != "operators":
+            raise ServiceError(
+                "INGESTION_NOT_AUTHORIZED",
+                "organization denied",
+                status_code=403,
+                retryable=False,
+            )
+        return execute(request, **kwargs)
+
+    acquisition.execute = acquire
+    public = None
+    plan = fixture.plan
+    if public_refusal:
+        provider, public, plan = _public_source_fixture(fixture, tmp_path)
+        provider.error = SnapshotError("SOURCE_USE_POLICY_MISSING", "quote permission")
+    runner = _runner(fixture, acquisition=acquisition, public_acquisition=public)
+    execute_plan = runner.run if public_refusal else runner.acquire_sources
+    kwargs = dict(
+        actor_id="operator",
+        correlation_id="source-only",
+        deadline_at=datetime.now(UTC) + timedelta(minutes=2),
+    )
+    first = execute_plan(plan, organization_id="operators", **kwargs)
+    with pytest.raises(ServiceError) as denied:
+        execute_plan(plan, organization_id="untrusted", **kwargs)
+    assert denied.value.code == "INGESTION_NOT_AUTHORIZED"
+    repeated = execute_plan(plan, organization_id="operators", **kwargs)
+    assert repeated.artifact == first.artifact and not repeated.wrote
+
+
+@pytest.mark.parametrize("damage", ("missing", "corrupt", "manifest"))
+@pytest.mark.parametrize("public_refusal", (False, True))
+def test_abstained_source_reuse_revalidates_retained_snapshot(
+    tmp_path, damage, public_refusal
+):
+    fixture = _fixture(tmp_path, released=False)
+    acquisition = _acquisition(fixture, quality=QualityStatus.ABSTAIN)
+    cached = acquisition.execute(fixture.plan.ingestions[0], correlation_id="cached")
+    acquisition.execute = lambda *args, **kwargs: cached
+    public = None
+    plan = fixture.plan
+    if public_refusal:
+        provider, public, plan = _public_source_fixture(fixture, tmp_path)
+        provider.error = SnapshotError("SOURCE_USE_POLICY_MISSING", "quote permission")
+    runner = _runner(fixture, acquisition=acquisition, public_acquisition=public)
+    execute_plan = runner.run if public_refusal else runner.acquire_sources
+    kwargs = dict(
+        actor_id="operator",
+        organization_id="operators",
+        correlation_id="revalidate",
+        deadline_at=datetime.now(UTC) + timedelta(minutes=2),
+    )
+    first = execute_plan(plan, **kwargs)
+    path = fixture.snapshots.root / (fixture.snapshot.snapshot_id + ".json")
+    original = path.read_bytes()
+    if damage == "missing":
+        path.unlink()
+    elif damage == "corrupt":
+        path.write_bytes(b"damaged snapshot")
+    else:
+        payload = fixture.snapshot.model_dump(mode="json", exclude={"manifest_digest"})
+        payload["parser_version"] = "changed"
+        payload["manifest_digest"] = sha256_digest(
+            {k: v for k, v in payload.items() if k != "snapshot_id"}
+        )
+        path.write_bytes(
+            canonical_bytes(
+                type(fixture.snapshot).model_validate_json(canonical_bytes(payload))
+            )
+        )
+    if damage == "manifest":
+        from fundamental_service.preparation_runner import (
+            SourcePreparationAcquisitionsV1,
+        )
+
+        failed = execute_plan(plan, **kwargs)
+        if public_refusal:
+            assert "ACQUIRED_SNAPSHOT_MISMATCH" in _reader(fixture, failed).issue_codes
+        else:
+            report = SourcePreparationAcquisitionsV1.model_validate_json(
+                fixture.artifacts.read(failed.artifact.artifact_id)
+            )
+            assert report.source_outcomes[0].issue_codes == (
+                "ACQUIRED_SNAPSHOT_MISMATCH",
+            )
+        assert failed.artifact != first.artifact
+    else:
+        with pytest.raises(ServiceError) as refused:
+            execute_plan(plan, **kwargs)
+        assert refused.value.code == (
+            "SNAPSHOT_NOT_FOUND" if damage == "missing" else "source_unavailable"
+        )
+    path.write_bytes(original)
+    resumed = execute_plan(plan, **kwargs)
+    assert resumed.artifact == first.artifact and not resumed.wrote
+
+
 @pytest.mark.parametrize("kind", ["duplicate", "date"])
 def test_public_source_plan_rejects_duplicates_and_mixed_valuation_dates(
     tmp_path, kind

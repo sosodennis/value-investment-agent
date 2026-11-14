@@ -252,7 +252,7 @@ approval; `fundamental-prepare-source` requires approval of its exact prepared
 input before calculation and applies the same actor/time check before source or
 release access. Approval remains outside persisted public calculation evidence.
 
-Mapping approval uses Fundamental Service's `source-bound-us-gaap-v6` policy.
+Mapping approval uses Fundamental Service's `source-bound-us-gaap-v25` policy.
 It handles a narrow table of direct role/QName combinations, including
 consolidated current-assets/current-liabilities totals for the composite
 working-capital profile, and the bounded
