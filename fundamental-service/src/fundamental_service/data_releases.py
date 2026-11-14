@@ -214,6 +214,19 @@ class AutomaticMappingApprovalV1(ReleaseModel):
         return canonical_bytes(self.model_dump(mode="python", exclude={"signature"}))
 
 
+class DataReleaseContentRequestV1(ReleaseModel):
+    """Inputs for read-only validation, without release publication authority."""
+
+    protocol: Literal["data-release-content-validation-v1"] = (
+        "data-release-content-validation-v1"
+    )
+    source_revision: str = Field(pattern=r"^[0-9a-f]{40}$")
+    evidence_refs: tuple[ArtifactRefV1, ...] = Field(min_length=1)
+    mapping_reviews: tuple[
+        MappingReviewEvidenceV1 | AutomaticMappingApprovalV1, ...
+    ] = ()
+
+
 class DataReleaseVerificationV1(ReleaseModel):
     manifest_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
     verification_suite_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
@@ -445,11 +458,23 @@ def verify_data_release_candidate(
         )
     verify_data_release_verification(verification, trust_roots)
 
+    verify_release_mapping_approvals(
+        manifest, verification.mapping_reviews, trust_roots
+    )
+
+
+def verify_release_mapping_approvals(
+    manifest: DataReleaseManifestV1,
+    reviews: tuple[MappingReviewEvidenceV1 | AutomaticMappingApprovalV1, ...],
+    trust_roots: DataReleaseTrustRootsV1,
+) -> None:
+    """Check mapping authority independently of a release verifier signature."""
+
     expected_reviews = {
         mapping.mapping_id: mapping.mapping_digest for mapping in manifest.mapping_refs
     }
     actual_reviews: dict[str, str] = {}
-    for review in verification.mapping_reviews:
+    for review in reviews:
         if review.mapping_id in actual_reviews:
             raise DataReleaseError(
                 "DATA_RELEASE_MAPPING_REVIEW_DUPLICATE",
@@ -590,6 +615,7 @@ __all__ = [
     "DataReleaseActivationRequestV1",
     "DataReleaseCandidatePublishRequestV1",
     "DataReleaseCandidateReceiptV1",
+    "DataReleaseContentRequestV1",
     "DataReleaseError",
     "DataReleaseManifestV1",
     "DataReleaseRepository",
@@ -606,4 +632,5 @@ __all__ = [
     "verify_data_release_verification",
     "verify_data_release_candidate",
     "verify_mapping_review_evidence",
+    "verify_release_mapping_approvals",
 ]

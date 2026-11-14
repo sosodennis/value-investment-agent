@@ -11,7 +11,7 @@ import argparse
 import hashlib
 import sys
 from pathlib import Path
-from typing import Protocol
+from typing import Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -30,6 +30,7 @@ from .automatic_market_policy_evidence import (
 )
 from .data_releases import (
     DataReleaseCandidatePublishRequestV1,
+    DataReleaseContentRequestV1,
     DataReleaseError,
     AutomaticMappingApprovalV1,
     DataReleaseManifestV1,
@@ -39,6 +40,7 @@ from .data_releases import (
     MappingRefV1,
     IssuerOperatingReleaseManifestV1,
     verify_data_release_candidate,
+    verify_release_mapping_approvals,
 )
 from .facts import (
     CanonicalFactRepository,
@@ -164,6 +166,26 @@ class DataReleaseCanaryReportV1(BaseModel):
         return self
 
 
+class DataReleaseContentReportV1(BaseModel):
+    """Reproducible content checks; not a signed release verification."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    protocol: Literal["data-release-content-report-v1"] = (
+        "data-release-content-report-v1"
+    )
+    candidate_manifest_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    request_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    checked_snapshot_ids: tuple[str, ...]
+    checked_fact_digests: tuple[str, ...]
+    checked_artifact_digests: tuple[str, ...]
+    market_policy_checks: tuple[str, ...] = ()
+
+    @property
+    def digest(self) -> str:
+        return sha256_digest(self)
+
+
 class DataReleaseCanaryRunner:
     """Validate one candidate without resolving or mutating active release state."""
 
@@ -198,6 +220,48 @@ class DataReleaseCanaryRunner:
         verification: DataReleaseVerificationV1,
     ) -> DataReleaseCanaryReportV1:
         verify_data_release_candidate(manifest, verification, self._trust_roots)
+        content = self.validate_content(
+            manifest,
+            DataReleaseContentRequestV1(
+                source_revision=verification.source_revision,
+                evidence_refs=verification.evidence_refs,
+                mapping_reviews=verification.mapping_reviews,
+            ),
+        )
+        canary_payload = {
+            "manifest_digest": manifest.manifest_digest,
+            "verification_digest": verification.verification_digest,
+            "source_revision": verification.source_revision,
+            "snapshots": content.checked_snapshot_ids,
+            "facts": content.checked_fact_digests,
+            "artifacts": content.checked_artifact_digests,
+        }
+        if content.market_policy_checks:
+            canary_payload["market_policy_checks"] = content.market_policy_checks
+        return DataReleaseCanaryReportV1(
+            verification=verification,
+            candidate_manifest_digest=manifest.manifest_digest,
+            checked_snapshot_ids=content.checked_snapshot_ids,
+            checked_fact_digests=content.checked_fact_digests,
+            checked_artifact_digests=content.checked_artifact_digests,
+            market_policy_checks=content.market_policy_checks,
+            canary_digest=sha256_digest(canary_payload),
+        )
+
+    def validate_content(
+        self,
+        manifest: DataReleaseManifestV1,
+        request: DataReleaseContentRequestV1,
+    ) -> DataReleaseContentReportV1:
+        """Run owning validators before a trusted workflow signs their result."""
+        # Preserve issuer-operating subtype validation at this internal boundary.
+        manifest = type(manifest).model_validate_json(canonical_bytes(manifest))
+        request = DataReleaseContentRequestV1.model_validate_json(
+            canonical_bytes(request)
+        )
+        verify_release_mapping_approvals(
+            manifest, request.mapping_reviews, self._trust_roots
+        )
         if isinstance(manifest, IssuerOperatingReleaseManifestV1):
             require_issuer_release_profile(manifest)
         if manifest.valuation_working_capital_policy is not None:
@@ -208,7 +272,7 @@ class DataReleaseCanaryRunner:
             valuation_release_requirements(
                 manifest, manifest.conditional_capital_policies[0].model_id
             )
-        self._verify_artifacts(manifest, verification)
+        self._verify_artifacts(manifest, request)
         admissions = load_release_source_admissions(
             manifest,
             artifacts=self._artifacts,
@@ -264,7 +328,7 @@ class DataReleaseCanaryRunner:
                         policy=effective,
                         admissions=admissions,
                         artifacts=self._artifacts,
-                        expected_source_revision=verification.source_revision,
+                        expected_source_revision=request.source_revision,
                     )
                     load_release_terminal_growth_selection(
                         manifest,
@@ -320,7 +384,7 @@ class DataReleaseCanaryRunner:
                         policy=policy,
                         admissions=admissions,
                         artifacts=self._artifacts,
-                        expected_source_revision=verification.source_revision,
+                        expected_source_revision=request.source_revision,
                     )
                     selection = load_release_market_reference_selection(
                         manifest,
@@ -371,40 +435,25 @@ class DataReleaseCanaryRunner:
                 except (PolicyError, MarketSourceError) as error:
                     raise DataReleaseError(error.code, str(error)) from error
         mappings = self._verify_mappings(manifest.mapping_refs)
-        self._verify_automatic_mappings(manifest, verification, mappings)
+        self._verify_automatic_mappings(manifest, request, mappings)
         checked_snapshots, checked_facts = self._verify_snapshots_and_facts(
             manifest, mappings
         )
         self._verify_equity_dilution(manifest)
 
-        canary_payload = {
-            "manifest_digest": manifest.manifest_digest,
-            "verification_digest": verification.verification_digest,
-            "source_revision": verification.source_revision,
-            "snapshots": checked_snapshots,
-            "facts": checked_facts,
-            "artifacts": self._artifact_digests(manifest, verification),
-        }
-        if market_policy_checks:
-            canary_payload["market_policy_checks"] = tuple(
-                sorted(set(market_policy_checks))
-            )
-        canary_digest = sha256_digest(canary_payload)
-        report_payload = {
-            "verification": verification,
-            "candidate_manifest_digest": manifest.manifest_digest,
-            "checked_snapshot_ids": checked_snapshots,
-            "checked_fact_digests": checked_facts,
-            "checked_artifact_digests": canary_payload["artifacts"],
-            "canary_digest": canary_digest,
-            "market_policy_checks": tuple(sorted(set(market_policy_checks))),
-        }
-        return DataReleaseCanaryReportV1.model_validate(report_payload)
+        return DataReleaseContentReportV1(
+            candidate_manifest_digest=manifest.manifest_digest,
+            request_digest=sha256_digest(request),
+            checked_snapshot_ids=checked_snapshots,
+            checked_fact_digests=checked_facts,
+            checked_artifact_digests=self._artifact_digests(manifest, request),
+            market_policy_checks=tuple(sorted(set(market_policy_checks))),
+        )
 
     def _verify_automatic_mappings(
         self,
         manifest: DataReleaseManifestV1,
-        verification: DataReleaseVerificationV1,
+        verification: DataReleaseContentRequestV1,
         mappings: dict[str, CanonicalMappingV1],
     ) -> None:
         for review in verification.mapping_reviews:
@@ -590,7 +639,7 @@ class DataReleaseCanaryRunner:
     def _verify_artifacts(
         self,
         manifest: DataReleaseManifestV1,
-        verification: DataReleaseVerificationV1,
+        verification: DataReleaseContentRequestV1,
     ) -> None:
         refs = (
             *manifest.taxonomy_refs,
@@ -629,7 +678,7 @@ class DataReleaseCanaryRunner:
     def _artifact_digests(
         self,
         manifest: DataReleaseManifestV1,
-        verification: DataReleaseVerificationV1,
+        verification: DataReleaseContentRequestV1,
     ) -> tuple[str, ...]:
         refs = (
             *manifest.taxonomy_refs,
