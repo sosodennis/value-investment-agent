@@ -61,7 +61,10 @@ fundamental-discover-annuals --artifact-id original-validation:<request-digest>
 ```
 
 Validation identities pin the actual Python/Pydantic/Arelle versions, taxonomy
-digest, validation profile and configured year/form support. Both original bytes
+digest, validation profile, configured year/form support and SEC response budgets.
+The generic response limit is 24 MB; accession-matched full-submission `.txt`
+files have a separate 64 MB limit because they include the filing and exhibits.
+Both limits retain bounded reads and deadline enforcement. Both original bytes
 and validation receipts are verified on every read. Repeats reuse successful
 validation without provider or parser I/O; changing `--ticker` or `--share-class`
 reuses the same parsed original. Multiple securities or reused tickers retain a

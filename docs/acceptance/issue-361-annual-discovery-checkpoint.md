@@ -143,3 +143,56 @@ acceptance. Next wire frozen discovery and retained original identity into the
 existing automatic preparation runner, then complete the real caller-approved
 numerical flow. The remaining accounting/award/dated-market evidence and parent
 review/main gates above still apply; threshold stays null and issues stay open.
+
+## Persistent original preparation — 9de81bbd
+
+Implementation `9de81bbdf5dc4bc6ecf90faa5847482570d0b098` adds the saved original
+validation/identity stage to `fundamental-discover-annuals --prepare-originals`.
+The owning-layer design preceded implementation in
+[#394](https://github.com/sosodennis/value-investment-agent/issues/394#issuecomment-6872387302).
+It reuses existing capture/content/artifact stores and locks. Security selectors
+do not participate in parser identity; retryable attempts leave terminal keys
+free. Reads verify original bytes, receipt artifacts, integrity, runtime and
+reproduced security decisions. No snapshot/mapping/release is published.
+
+At exact `9de81bbd`, 155 owner tests pass (3 optional resource skips), including
+provider/parser-free repeats, concurrency, interrupted publication, retry
+recovery, per-original failure retention, corrupt-source/receipt refusal and
+saved CLI retrieval. **3,024 Service/PostgreSQL tests pass** (17 external
+parser-resource skips; expected duplicate-ZIP warning). Ruff 0.14.10 check/format,
+mypy 1.19.1 on the four changed production modules, both architecture guards and
+diff pass. [CI 43563423528](https://github.com/sosodennis/value-investment-agent/actions/runs/43563423528)
+passes 12 applicable jobs; the release gate is skipped.
+
+| Exact command group | Input digest | Output digest |
+| --- | --- | --- |
+| Owner/static/architecture | `0c47b0f8ed743ff5a65505cf4bc3a78d1db79b32a209dab9e8c4ac8aa8f1bc58` | `4719485762db6326fc061842e46eaa47924ae1830aa0624800cc63f5f655a206` |
+| Service/PostgreSQL | `eb4f33fb9a961fd9a5a4eb8045880ebf95b9b144d7bd5ff06bf103dc6f0569e3` | `0b3bfde486b8a9d9b4d5f19e80a1cba0cb7540957cc9a4ac33a45920ff2fa35a` |
+
+Commands, zero exits, pins, executor/source hashes and full outputs remain in
+`/Users/denniswong/Desktop/Project/value-investment-agent-issue-361-original-bootstrap-evidence/`.
+Reports are canonical and atomically published. Ignored
+`.audit/issue-361-original-bootstrap/` preserves the corrected test fixture
+assumptions and diagnostic harness failures.
+
+The isolated SEC-enabled project `value-investment-agent-361-original-bootstrap`
+uses 21371/21372 and `10.231.98.0/28`. Its 137 installed Python/SQL files match
+`9de81bbd`, source digest
+`935f3b401c3999e7267491940a61f7b56cde05f00c59727275532c15459abfe8`;
+Python/Pydantic/Arelle are 3.12.16/2.14.2/2.47.4. Exact preflight passes with
+SEC identity configured. Preflight input/output are
+`eb1c7f9059fc7941428f7fc3edd524e6866e12b5db3666472d50943e0857c32c` /
+`822a95882cbda88ce139cbc9239171dddcf6f6af88151a297d1732952bb901f8`.
+
+Genuine full-submission capture exposes a remaining transport budget gap:
+MSFT 2023/2024 `.txt` originals are 40,966,463/30,375,960 bytes, exceeding the
+generic 24 MB cap. The original response fails `SOURCE_RESPONSE_TOO_LARGE`
+before parsing. Larger-budget diagnostic captures retain exact source bytes
+and receipts outside Git; they do not establish installed bootstrap acceptance.
+The [source-bound correction design](https://github.com/sosodennis/value-investment-agent/issues/394#issuecomment-6872703185)
+was recorded before its implementation. It preserves the generic cap and gives
+only accession-matched full-submission text its own bounded budget, pinning both
+budgets in validation identity. Next verify the corrected exact commit against
+these real originals, then compile automatic source plans and complete genuine
+caller-approved numerical/recovery acceptance. Parent issues stay open, PR370
+draft and threshold null; the stage is not complete valuation acceptance.

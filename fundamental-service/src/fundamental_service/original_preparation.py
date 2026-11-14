@@ -45,6 +45,8 @@ class OriginalValidationRuntimeV1(StrictModel):
     ] = "sec-efm-us-dqc-v31.0.3"
     supported_filing_years: tuple[int, ...]
     supported_filing_forms: tuple[str, ...]
+    source_max_response_bytes: int = Field(gt=0)
+    source_max_submission_bytes: int = Field(gt=0)
     python_version: str = Field(min_length=1)
     pydantic_version: str = Field(min_length=1)
     arelle_version: Literal["2.47.4"] = "2.47.4"

@@ -1,5 +1,6 @@
 import hashlib
 import json
+from io import BytesIO
 from contextlib import nullcontext
 from datetime import datetime, timezone
 from email.message import Message
@@ -41,6 +42,71 @@ class FakeResponse:
 
     def __exit__(self, *_args):
         return False
+
+
+@pytest.mark.parametrize("chunked", [False, True])
+@pytest.mark.parametrize("size", [16, 20, 21])
+def test_full_submission_uses_its_own_bounded_budget(tmp_path, chunked, size):
+    payload = b"s" * size
+
+    def opener(request, timeout):
+        response = FakeResponse(payload)
+        if chunked:
+            response.read = BytesIO(payload).read
+        return response
+
+    provider = SecEdgarSourceAdapter(
+        SecRequestPolicy(
+            user_agent="value-agent test@example.com",
+            min_interval_seconds=0,
+            max_response_bytes=10,
+            max_submission_bytes=20,
+        ),
+        opener=opener,
+    )
+    artifacts = ArtifactStore(tmp_path / "artifacts")
+    adapter = RetainedSecSourceAdapter(
+        provider,
+        scope=SecCaptureScopeV1(
+            cik="0000000001",
+            accession_number="0000000001-26-000001",
+            valuation_timestamp=datetime(2026, 2, 1, tzinfo=timezone.utc),
+            source_profile="submission-budget-test-v1",
+        ),
+        receipts=artifacts,
+        content=FilesystemContentStore(tmp_path / "content"),
+        capture_lock=lambda _: nullcontext(),
+    )
+    before = {p: p.read_bytes() for p in tmp_path.rglob("*") if p.is_file()}
+    params = {
+        "cik": "0000000001",
+        "accession_number": "0000000001-26-000001",
+        "filed_at": datetime(2026, 1, 1, tzinfo=timezone.utc),
+    }
+    if size <= 20:
+        assert adapter.capture_filing_submission(**params).content == payload
+        assert len(adapter.observed_responses) == 1
+    else:
+        with pytest.raises(SecSourceError) as raised:
+            adapter.capture_filing_submission(**params)
+        assert raised.value.code == "SOURCE_RESPONSE_TOO_LARGE"
+        assert not adapter.observed_responses
+        assert {p: p.read_bytes() for p in tmp_path.rglob("*") if p.is_file()} == before
+    for capture in (
+        lambda: adapter.capture_filing(**params, primary_document="primary.htm"),
+        lambda: adapter.capture_submissions("0000000001"),
+    ):
+        with pytest.raises(SecSourceError) as raised:
+            capture()
+        assert raised.value.code == "SOURCE_RESPONSE_TOO_LARGE"
+
+
+@pytest.mark.parametrize("budget", [0, -1])
+def test_submission_budget_must_be_positive(budget):
+    with pytest.raises(ValueError):
+        SecRequestPolicy(
+            user_agent="value-agent test@example.com", max_submission_bytes=budget
+        )
 
 
 def test_companyfacts_capture_is_public_and_hashable():

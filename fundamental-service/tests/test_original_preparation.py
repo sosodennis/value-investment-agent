@@ -3,6 +3,7 @@
 import json
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
@@ -378,6 +379,29 @@ def test_requested_taxonomy_cannot_override_service_runtime(tmp_path, monkeypatc
         execute(value, request)
     assert raised.value.code == "ORIGINAL_VALIDATION_RUNTIME_MISMATCH"
     assert value.state.provider_calls == 1 and value.state.parser_calls == 0
+
+
+def test_transport_budget_change_has_a_new_validation_identity(tmp_path, monkeypatch):
+    value = case(tmp_path, monkeypatch)
+    first, _ = execute(value)
+    calls = value.state.provider_calls, value.state.parser_calls
+    value.acquisition.adapter.policy = replace(
+        value.acquisition.adapter.policy, max_submission_bytes=32_000_000
+    )
+    request = value.request.model_copy(
+        update={
+            "runtime": value.acquisition.original_validation_runtime(
+                declared_source_revision=value.annual_request.declared_source_revision
+            )
+        }
+    )
+    assert request.digest != value.request.digest
+    result, publication = execute(value, request)
+    assert publication.wrote and not result.issue_codes
+    assert first.filings[0].validation != result.filings[0].validation
+    assert value.state.provider_calls == calls[0]
+    assert value.state.parser_calls == calls[1] + 1
+    assert value.service.read(first.artifact_id) == first
 
 
 def test_existing_command_prepares_originals_and_retrieves_without_io(

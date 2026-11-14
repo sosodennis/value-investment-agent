@@ -593,6 +593,8 @@ class SecAcquisitionUseCase:
             validation_profile_id=validation_profile_id,
             supported_filing_years=self.settings.supported_filing_years,
             supported_filing_forms=self.settings.supported_filing_forms,
+            source_max_response_bytes=self.adapter.policy.max_response_bytes,
+            source_max_submission_bytes=self.adapter.policy.max_submission_bytes,
             python_version=platform.python_version(),
             pydantic_version=version("pydantic"),
         )

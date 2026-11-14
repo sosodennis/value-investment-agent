@@ -46,6 +46,7 @@ class SecRequestPolicy:
     max_attempts: int = 3
     timeout_seconds: float = 30.0
     max_response_bytes: int = 24_000_000
+    max_submission_bytes: int = 64_000_000
     base_url: str = "https://data.sec.gov"
 
     def __post_init__(self) -> None:
@@ -58,6 +59,7 @@ class SecRequestPolicy:
             or self.max_attempts < 1
             or self.timeout_seconds <= 0
             or self.max_response_bytes < 1
+            or self.max_submission_bytes < 1
         ):
             raise ValueError("invalid SEC request policy")
         parsed = urlsplit(self.base_url)
@@ -67,6 +69,16 @@ class SecRequestPolicy:
             or parsed.path.rstrip("/")
         ):
             raise ValueError("SEC base_url must be https://data.sec.gov")
+
+    def response_limit(self, uri: str) -> int:
+        submission = re.fullmatch(
+            r"https://www\.sec\.gov/Archives/edgar/data/[0-9]+/"
+            r"([0-9]{18})/([0-9]{10}-[0-9]{2}-[0-9]{6})\.txt",
+            uri,
+        )
+        if submission and submission[1] == submission[2].replace("-", ""):
+            return self.max_submission_bytes
+        return self.max_response_bytes
 
 
 @dataclass(frozen=True)
@@ -376,7 +388,9 @@ class SecEdgarSourceAdapter:
                             "SEC source redirects are not permitted",
                             retryable=False,
                         )
-                    payload = self._read_bounded(response, deadline_at)
+                    payload = self._read_bounded(
+                        response, deadline_at, self.policy.response_limit(uri)
+                    )
                     media_type = response.headers.get_content_type()
                     available_at = self._clock()
                     response_headers = tuple(
@@ -442,7 +456,9 @@ class SecEdgarSourceAdapter:
             "SOURCE_UNAVAILABLE", "SEC request failed", retryable=True
         ) from last_error
 
-    def _read_bounded(self, response: object, deadline_at: datetime | None) -> bytes:
+    def _read_bounded(
+        self, response: object, deadline_at: datetime | None, max_bytes: int
+    ) -> bytes:
         read = getattr(response, "read")
         chunks: list[bytes] = []
         total = 0
@@ -454,12 +470,10 @@ class SecEdgarSourceAdapter:
                     retryable=True,
                 )
             try:
-                chunk = read(
-                    min(1024 * 1024, self.policy.max_response_bytes + 1 - total)
-                )
+                chunk = read(min(1024 * 1024, max_bytes + 1 - total))
             except TypeError:
                 chunk = read()
-                if len(chunk) > self.policy.max_response_bytes:
+                if len(chunk) > max_bytes:
                     raise SecSourceError(
                         "SOURCE_RESPONSE_TOO_LARGE",
                         "SEC response exceeds the configured evidence limit",
@@ -470,7 +484,7 @@ class SecEdgarSourceAdapter:
                 return b"".join(chunks)
             chunks.append(chunk)
             total += len(chunk)
-            if total > self.policy.max_response_bytes:
+            if total > max_bytes:
                 raise SecSourceError(
                     "SOURCE_RESPONSE_TOO_LARGE",
                     "SEC response exceeds the configured evidence limit",
