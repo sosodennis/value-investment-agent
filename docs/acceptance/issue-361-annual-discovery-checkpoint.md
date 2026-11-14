@@ -196,3 +196,68 @@ budgets in validation identity. Next verify the corrected exact commit against
 these real originals, then compile automatic source plans and complete genuine
 caller-approved numerical/recovery acceptance. Parent issues stay open, PR370
 draft and threshold null; the stage is not complete valuation acceptance.
+
+## Bounded original preparation and recovery — 90c6e544
+
+Implementation `90c6e54493e3d5e3e810e427bdd7af8bb3961bf1` corrects that transport
+boundary, retaining the generic 24 MB budget and a separate 64 MB full-submission
+budget. Both effective limits participate in validation identity. Chunked and
+legacy reads enforce exact limits, oversize responses leave no receipt, and
+changed budgets reuse captured bytes while obtaining a new validation identity.
+No valuation arithmetic, parser/regulatory gate, mapping authority or quality
+status changed.
+
+Exact checks pass **3,033 Service/PostgreSQL tests** (17 external parser-resource
+skips; expected duplicate-ZIP warning), **186 owner tests** (3 optional skips),
+full Ruff 0.14.10 check/format, changed-source mypy 1.19.1, both architecture
+guards and diff. The isolated 21371/21372 project matches the exact source and
+passes SEC-configured preflight. Its frozen genuine nine-response input manifest
+is `bdf171ce7a4ad8411762477fe66738de1e9b1716496d76f6d134b29b53d523e7`.
+
+Both MSFT 2023/2024 originals now pass installed strict validation, preserving
+1,839/1,856 facts. Initial execution reads nine frozen genuine responses and
+runs four direct/ZIP parser validations. Reused-ticker ambiguity is retained;
+the explicit original common-stock title resolves both securities. Changing
+selectors reuses the saved validations with **zero provider/parser calls**.
+Ordinary/concurrent/restart repeats and aggregate/per-original CLI retrieval
+return identical evidence, `wrote=false`. All 94 metadata rows and 44 content
+objects, including complete rows and hashes/sizes/mtimes, remain unchanged.
+
+An empty-database/content restore reproduces all 94 rows/44 objects. Restored
+selection runs with provider/parser forbidden and changes no bytes or mtimes.
+Backup export, restore and canonical acceptance reports also repeat with
+`wrote=false`. These are source/identity persistence checks, not numerical
+valuation or full parent acceptance.
+
+| Exact evidence | Input digest | Output digest |
+| --- | --- | --- |
+| Owner/static/architecture | `0b6c00d3a7f0d4b83553d74b4a46dba02c595efd92f5f217b806f20589dbca87` | `4719485762db6326fc061842e46eaa47924ae1830aa0624800cc63f5f655a206` |
+| Service/PostgreSQL | `b21b55fe65109ab8b2a1e6ff21ecba1c53a7fd80f8cadf7b937792c9579ced89` | `92ccae41a64bf69ff2454e340fb06804f1489f7f465c9479ea754f5be5b48035` |
+| Installed repeats | `fdf41b616ef57ba307e068126b5a5b05b505233ef7275c89584636b38d860824` | `dd6828393f926a4ede8fafa4c96e4b7e325545c7da95d5ccba30cc1020b89ef0` |
+| Empty-store restore | `eba20faa0994a9254f78932bd220070542dade71611db8eec3ba19866b3fabfc` | `dcad1795572ee6b85a277bb1147ab360265ec02cfb06cfaa8920e3ba8ad36706` |
+
+Installed-repeat/restore report digests are
+`9d1dc22e916aea3359ca900247e3797817e6594e117d44855870e46c4767860f` /
+`3807863acbb48c56c31baed0b434912070506c53608d34b20ef24656d6246e39`.
+Complete commands, runtime/executor digests, original bytes and reports remain
+outside Git in the original-bootstrap evidence directory. Failed harnesses are
+retained: raw-byte versus canonical-object hashing and an unguarded executable
+module re-entered by parser subprocess startup. Guarding the executable fixes
+the harness without changing production validation or replacing its refusal.
+The first refused dataset remains alongside the corrected isolated database.
+
+A verified 193-file host backup and PostgreSQL cluster dump preserve the whole
+increment, including failed/accepted datasets and the tested restore. Canonical
+backup manifest is
+`4792b8c28ab8a0eb4025621f8652ef3826f0e8b72574e24ef76c26a6ed971757`;
+dump digest is
+`3e6645ae45aecfc787b81dacb1d211c2d3582948febb0cafc95d867248d8ca2a`.
+All 60 baseline container identities/images/start/status remain unchanged. The
+issue-owned stack is retained briefly for ordinary integration verification.
+
+Next sync the serial child integration with an ordinary merge, verify that
+commit, then compile saved discovery/identity into automatic source plans. Real
+accounting/award/dated-market completeness, trusted release, authentic exact-input
+caller approval, numerical recovery, independent parent review and main delivery
+remain incomplete. Threshold stays null, incomplete valuations abstain and
+eligible estimates remain provisional; #361/#376/#377 and blockers stay open.
