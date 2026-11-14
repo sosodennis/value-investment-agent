@@ -29,7 +29,14 @@ def _run_module(
     module: str, arguments: list[str], *, timeout_seconds: float
 ) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        [sys.executable, "-m", module, *arguments],
+        [
+            sys.executable,
+            "-c",
+            "import importlib\nimport sys\n"
+            "raise SystemExit(importlib.import_module(sys.argv[1]).main(sys.argv[2:]))",
+            module,
+            *arguments,
+        ],
         check=False,
         capture_output=True,
         text=True,

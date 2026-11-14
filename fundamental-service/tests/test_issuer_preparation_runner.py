@@ -1,6 +1,7 @@
 """Issuer-entry workflow delegates to the existing source owners."""
 
 import json
+import os
 import subprocess
 from datetime import timedelta
 from pathlib import Path
@@ -369,3 +370,33 @@ def test_child_timeout_is_bounded_and_classified(monkeypatch):
         raise AssertionError("timed-out child was accepted")
 
     assert observed == {"timeout": 2.5}
+
+
+def test_real_child_preserves_typed_contracts_shared_with_its_consumers(
+    tmp_path, monkeypatch
+):
+    (tmp_path / "typed_preparation_child.py").write_text(
+        "from pydantic import BaseModel\n"
+        "import sys\n"
+        "class Plan(BaseModel):\n"
+        "    values: tuple[str, ...]\n"
+        "def main(argv=None):\n"
+        "    from typed_preparation_consumer import Request\n"
+        "    plan = Plan(values=sys.argv[1:] if argv is None else argv)\n"
+        "    print(Request(plan=plan).model_dump_json())\n"
+        "    return 0\n"
+        "if __name__ == '__main__':\n"
+        "    raise SystemExit(main())\n"
+    )
+    (tmp_path / "typed_preparation_consumer.py").write_text(
+        "from pydantic import BaseModel\n"
+        "from typed_preparation_child import Plan\n"
+        "class Request(BaseModel):\n"
+        "    plan: Plan\n"
+    )
+    monkeypatch.setenv("PYTHONPATH", str(tmp_path), prepend=os.pathsep)
+    arguments = ["--current", "literal spaces; $value", "line one\nline two"]
+
+    result = _run_child("typed_preparation_child", arguments, timeout_seconds=10)
+
+    assert result == {"plan": {"values": arguments}}
