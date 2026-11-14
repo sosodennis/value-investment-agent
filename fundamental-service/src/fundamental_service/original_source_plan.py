@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 from collections.abc import Callable
 from contextlib import AbstractContextManager
+from datetime import date
 from typing import Literal
 
 from pydantic import Field, model_validator
@@ -25,7 +26,50 @@ from .preparation_runner import AutomaticSourcePreparationPlanV1
 from .replay import ArtifactPublicationV1
 from .serialization import canonical_bytes, sha256_digest
 from .snapshots import SnapshotError
-from .valuation_requirements import source_preparation_requirements_profile
+from .valuation_requirements import (
+    composite_working_capital_requirements_profile,
+    source_preparation_requirements_profile,
+)
+from .working_capital import (
+    WORKING_CAPITAL_REQUIRED_EXCLUSIONS,
+    InclusionScenariosV1,
+    working_capital_exclusion_coverage,
+)
+from .working_capital_preparation import (
+    ValuationWorkingCapitalRecipeV1,
+    WorkingCapitalExclusionRecipeV1,
+    WorkingCapitalPeriodRecipeV1,
+)
+
+
+class AutomaticWorkingCapitalRecipeTemplateV1(StrictModel):
+    """Deployment-owned recipe policy expanded over retained annual originals."""
+
+    exclusions: tuple[WorkingCapitalExclusionRecipeV1, ...]
+    asset_residual: InclusionScenariosV1
+    liability_residual: InclusionScenariosV1
+    perimeter_rationale: str = Field(min_length=16)
+
+    @model_validator(mode="after")
+    def explicit_perimeter(self) -> AutomaticWorkingCapitalRecipeTemplateV1:
+        keys = tuple(item.account_class for item in self.exclusions)
+        classes = [
+            name
+            for item in self.exclusions
+            for name in working_capital_exclusion_coverage(item.mapped_fact_role)[1]
+        ]
+        if (
+            keys != tuple(sorted(set(keys)))
+            or len(classes) != len(set(classes))
+            or set(classes) != set(WORKING_CAPITAL_REQUIRED_EXCLUSIONS)
+        ):
+            raise ValueError("recipe template must cover each exclusion class once")
+        if all(
+            item.low == item.high
+            for item in (self.asset_residual, self.liability_residual)
+        ):
+            raise ValueError("recipe template residuals require explicit sensitivity")
+        return self
 
 
 class AutomaticSourcePlanConfigurationV1(StrictModel):
@@ -40,10 +84,17 @@ class AutomaticSourcePlanConfigurationV1(StrictModel):
     evaluator_id: str = Field(min_length=1, max_length=128)
     mapping_version: str = Field(min_length=1, max_length=128)
     policy_version: str = Field(min_length=1, max_length=128)
+    working_capital_recipe_template: AutomaticWorkingCapitalRecipeTemplateV1 | None = (
+        Field(default=None, exclude_if=lambda value: value is None)
+    )
 
     @model_validator(mode="after")
     def supported_model(self) -> AutomaticSourcePlanConfigurationV1:
         source_preparation_requirements_profile(self.model_id)
+        if self.working_capital_recipe_template is not None:
+            composite_working_capital_requirements_profile(
+                self.model_id, operating_only=False
+            )
         return self
 
     @property
@@ -166,7 +217,11 @@ class OriginalSourcePlan:
         plan = None
         if not codes:
             configuration = request.configuration
-            profile = source_preparation_requirements_profile(configuration.model_id)
+            recipe_template = configuration.working_capital_recipe_template
+            profile = source_preparation_requirements_profile(
+                configuration.model_id,
+                composite_inputs=recipe_template is not None,
+            )
             model = next(
                 model
                 for model in initial_model_specs()
@@ -174,6 +229,7 @@ class OriginalSourcePlan:
             )
             runtime = prepared.request.runtime
             ingestions = []
+            recipe_filings: list[tuple[str, date]] = []
             for item in prepared.filings:
                 validated = self._originals.read_validation(item.validation.artifact_id)
                 original = validated.request
@@ -216,16 +272,60 @@ class OriginalSourcePlan:
                         requirements_digest=profile.digest,
                     )
                 )
-            plan = AutomaticSourcePreparationPlanV1(
-                source_revision=request.runtime_source_revision,
-                release_profile_id=configuration.release_profile_id,
-                model_id=configuration.model_id,
-                ingestions=tuple(
-                    sorted(
-                        ingestions, key=lambda item: item.filing.accession_number or ""
+                if recipe_template is not None:
+                    recipe_filings.append(
+                        (
+                            original.filing.accession_number,
+                            original.filing.report_period_end,
+                        )
                     )
-                ),
-            )
+            recipe = None
+            if recipe_template is not None:
+                if any(
+                    period > ingestions[0].valuation_timestamp.date()
+                    for _, period in recipe_filings
+                ):
+                    codes.add("ORIGINAL_HISTORY_PERIOD_NOT_AVAILABLE")
+                if len({period for _, period in recipe_filings}) != len(recipe_filings):
+                    codes.add("ORIGINAL_HISTORY_PERIOD_CONFLICT")
+                if not codes:
+                    periods = tuple(
+                        WorkingCapitalPeriodRecipeV1(
+                            accession_number=accession,
+                            period_end=period,
+                            exclusions=recipe_template.exclusions,
+                            asset_residual=recipe_template.asset_residual,
+                            liability_residual=recipe_template.liability_residual,
+                            perimeter_rationale=recipe_template.perimeter_rationale,
+                        )
+                        for accession, period in sorted(
+                            recipe_filings, key=lambda item: item[1]
+                        )
+                    )
+                    recipe = ValuationWorkingCapitalRecipeV1(
+                        model_id=configuration.model_id,
+                        model_version=model.model_version,
+                        requirements_profile_digest=composite_working_capital_requirements_profile(
+                            configuration.model_id, operating_only=False
+                        ).digest,
+                        mapping_version=configuration.mapping_version,
+                        periods=periods,
+                    )
+            if codes:
+                plan = None
+            else:
+                plan = AutomaticSourcePreparationPlanV1(
+                    source_revision=request.runtime_source_revision,
+                    release_profile_id=configuration.release_profile_id,
+                    model_id=configuration.model_id,
+                    ingestions=tuple(
+                        sorted(
+                            ingestions,
+                            key=lambda item: item.filing.accession_number or "",
+                        )
+                    ),
+                    valuation_working_capital_recipe=recipe,
+                )
         return OriginalSourcePlanEvidenceV1(
             request=request,
             plan=plan,

@@ -82,7 +82,9 @@ The command can compile these saved originals into the existing automatic
 source-plan format with deployment configuration. The configuration contains
 `model_id`, `release_profile_id`, `coverage_profile`, `evaluator_id`,
 `mapping_version` and `policy_version`; it supplies no company, ticker, accession,
-model version or financial values. Its protocol is
+model version or financial values. An optional deployment-owned
+`working_capital_recipe_template` contains explicit exclusions and residual
+scenarios. Its protocol is
 `automatic-source-plan-configuration-v1`. Pin its canonical SHA-256:
 
 ```sh
@@ -105,6 +107,15 @@ existing mapping/release/caller gates remain required. Identical compilation and
 saved retrieval return the same evidence and `wrote=false` without source/parser
 I/O. Interrupted publication reuses completed artifacts; corruption refuses.
 
+When the optional recipe template is present, compilation selects composite
+requirements and expands the configured exclusions and explicit asset/liability
+scenarios over each validated original's accession and report period. The recipe
+pins the service model version, composite requirements digest and configured
+mapping version. It has no fact IDs; the existing preparation runner binds it to
+acquired canonical facts and retains missing, ambiguous or unsupported evidence
+as a refusal. The compiler supplies no default residual fractions or absence
+decisions.
+
 An existing saved preparation can be compiled with a separately pinned runtime
 revision. This verifies and reads retained original artifacts without running
 annual discovery or SEC I/O:
@@ -121,10 +132,10 @@ The new plan records this current runtime revision separately from each original
 validation's historical source revision. The installed runner binds its
 automatic authority to the same revision before acquisition.
 
-This first compiler stage uses the standard direct accounting requirements.
-Automatic composite working-capital recipes and public/issuer-market configuration
-assembly remain pending; a compiled source plan alone does not establish complete
-valuation inputs.
+Without the optional recipe template, this compiler stage uses standard direct
+accounting requirements. Public/issuer-market configuration assembly remains
+pending; a compiled source plan alone does not establish complete valuation
+inputs.
 
 `fundamental-prepare-issuer` is the company/date entrypoint. It delegates catalog
 selection, saved original validation and identity resolution, source-plan

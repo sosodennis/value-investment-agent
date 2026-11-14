@@ -3,6 +3,7 @@
 import json
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
+from decimal import Decimal
 from types import SimpleNamespace
 
 import pytest
@@ -11,6 +12,7 @@ from fundamental_service.automatic_mapping import automatic_mapping_policy_diges
 from fundamental_service.arelle_parser import ArelleParserError
 from fundamental_service.operations import ServiceError
 from fundamental_service.original_source_plan import (
+    AutomaticWorkingCapitalRecipeTemplateV1,
     AutomaticSourcePlanConfigurationV1,
     OriginalSourcePlan,
     OriginalSourcePlanRequestV1,
@@ -24,12 +26,20 @@ from fundamental_service.replay import ArtifactStore
 from fundamental_service.sec_source import SecSourceError
 from fundamental_service.serialization import canonical_bytes
 from fundamental_service.snapshots import SnapshotError
+from fundamental_service.valuation_requirements import (
+    composite_working_capital_requirements_profile,
+    source_preparation_requirements_profile,
+)
+from fundamental_service.working_capital import InclusionScenariosV1
+from fundamental_service.working_capital_preparation import (
+    WorkingCapitalExclusionRecipeV1,
+)
 from test_annual_discovery_service import _inventory
 from test_automatic_source_preparation import run
 from test_original_preparation import case, execute
 
 
-def configuration(model_id="fcff_dcf"):
+def configuration(model_id="fcff_dcf", *, working_capital_recipe_template=None):
     return AutomaticSourcePlanConfigurationV1(
         model_id=model_id,
         release_profile_id="automatic-original-fcff",
@@ -37,6 +47,42 @@ def configuration(model_id="fcff_dcf"):
         evaluator_id="machine-evaluator",
         mapping_version="automatic-source-v1",
         policy_version="source-preparation-v1",
+        working_capital_recipe_template=working_capital_recipe_template,
+    )
+
+
+def working_capital_recipe_template():
+    return AutomaticWorkingCapitalRecipeTemplateV1(
+        exclusions=tuple(
+            WorkingCapitalExclusionRecipeV1(
+                account_class=role,
+                mapped_fact_role=role,
+                state="reported",
+                rationale=f"Use the source-mapped {role.replace('_', ' ')} amount.",
+            )
+            for role in sorted(
+                (
+                    "cash_and_equivalents",
+                    "current_interest_bearing_debt",
+                    "current_finance_lease_liabilities",
+                    "current_operating_lease_liabilities",
+                    "short_term_investments",
+                )
+            )
+        ),
+        asset_residual=InclusionScenariosV1(
+            low=Decimal("0"),
+            central=Decimal("0.5"),
+            high=Decimal("1"),
+            rationale="Expose a deterministic asset residual sensitivity range.",
+        ),
+        liability_residual=InclusionScenariosV1(
+            low=Decimal("0"),
+            central=Decimal("0.5"),
+            high=Decimal("1"),
+            rationale="Expose a deterministic liability residual sensitivity range.",
+        ),
+        perimeter_rationale="Apply the configured operating perimeter to each retained annual filing.",
     )
 
 
@@ -137,6 +183,61 @@ def test_repeat_reopened_and_concurrent_compilers_publish_once_without_io(
     again, publication = reopened.execute(request)
     assert again == expected and not publication.wrote
     assert _inventory(tmp_path) == before
+
+
+def test_recipe_template_expands_saved_original_and_pins_composite_requirements(
+    tmp_path, monkeypatch
+):
+    value = case(tmp_path, monkeypatch)
+    prepared, _ = execute(value)
+    template = working_capital_recipe_template()
+    compiler, request = compiler_case(
+        value,
+        prepared,
+        configuration(working_capital_recipe_template=template),
+    )
+
+    result, publication = compiler.execute(request)
+
+    assert publication.wrote and not result.issue_codes
+    assert result.plan is not None
+    recipe = result.plan.valuation_working_capital_recipe
+    assert recipe is not None
+    assert recipe.model_version == "fcff_dcf-v2"
+    assert recipe.mapping_version == request.configuration.mapping_version
+    assert recipe.requirements_profile_digest == (
+        composite_working_capital_requirements_profile(
+            request.configuration.model_id, operating_only=False
+        ).digest
+    )
+    expected_filings = tuple(
+        sorted(
+            [
+                (
+                    value.service.read_validation(
+                        item.validation.artifact_id
+                    ).request.filing.accession_number,
+                    value.service.read_validation(
+                        item.validation.artifact_id
+                    ).request.filing.report_period_end,
+                )
+                for item in prepared.filings
+            ],
+            key=lambda item: item[1],
+        )
+    )
+    assert (
+        tuple((item.accession_number, item.period_end) for item in recipe.periods)
+        == expected_filings
+    )
+    assert all(
+        request.requirements_digest == result.plan.requirements_profile.digest
+        for request in result.plan.ingestions
+    )
+    assert result.plan.requirements_profile == source_preparation_requirements_profile(
+        request.configuration.model_id, composite_inputs=True
+    )
+    assert not compiler.execute(request)[1].wrote
 
 
 @pytest.mark.parametrize("stage", ["configuration", "plan", "evidence"])
