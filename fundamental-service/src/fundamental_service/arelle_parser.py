@@ -789,8 +789,8 @@ def _parse_in_process(
                 "xule": xule_plugin,
                 "EDGAR/validate": edgar_plugin,
             }
-            # EDGAR owns DQC registration; the standalone validator duplicates it.
-            plugin_names = ["EDGAR/validate", "xule"]
+            # Listing XULE directly registers a second validator alongside EDGAR's.
+            plugin_names = ["EDGAR/validate"]
             diagnostic_evidence: tuple[str, ...] = ()
             if profile.dqc_ruleset_catalog is not None:
                 ruleset_plugin = str(Path(__file__).with_name("dqc_ruleset_plugin.py"))
