@@ -1,5 +1,11 @@
 # Fixed100 methods review boundary (#376/#377)
 
+The subsequent [analysis decision](issue-377-analysis-freeze.md) freezes these
+definitions for exploratory execution and rejects the proposed numerical limits
+as release authority. Its canonical v1 manifest and verifier bind the executable
+dependencies. This resolves operational analysis definitions; it does not supply
+the independent/business approval required for a supported threshold below.
+
 The existing v4 methods are a frozen **exploratory review candidate**. They do
 not authorize `supported_history_threshold`. NEWMARKET's conditional outcomes
 were inspected before v4; NEWMARKET is an inspected pilot. A subsequent review
