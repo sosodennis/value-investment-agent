@@ -5,12 +5,14 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import platform
 import re
 from contextlib import contextmanager
 from collections.abc import Iterator
 from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
+from importlib.metadata import version
 from typing import Literal
 
 from lxml import etree, html
@@ -35,7 +37,7 @@ from .contracts import (
     Severity,
     SourceRole,
 )
-from .data_releases import DataReleaseError
+from .data_releases import ArtifactRefV1, DataReleaseError
 from .facts import CanonicalFactRepository, CanonicalMappingV1
 from .historical_dqc import historical_profile
 from .ingestion import SecIngestionService
@@ -46,6 +48,12 @@ from .issuer_identity import (
 )
 from .metadata import PostgresArtifactStore, PostgresContentStore, PostgresMetadataStore
 from .operations import ServiceError
+from .original_preparation import (
+    OriginalValidationEvidenceV1,
+    OriginalValidationRequestV1,
+    OriginalValidationRuntimeV1,
+)
+from .original_issuer import OriginalOperatingSourceV1, evaluate_original_issuer
 from .sec_capture import RetainedSecSourceAdapter, SecCaptureScopeV1, SecCaptureStore
 from .sec_submissions import SecRecentFilingsV1, SecSubmissionsV1
 from .sec_source import (
@@ -195,6 +203,15 @@ class _SelectedFiling:
     @property
     def is_amendment(self) -> bool:
         return self.form.endswith("/A")
+
+
+@dataclass(frozen=True)
+class _OriginalPackage:
+    index_source: CapturedSource
+    submission_source: CapturedSource
+    xbrl_entrypoint: str
+    dts_filenames: tuple[str, ...]
+    archive_filename: str
 
 
 class SecIdentityResolutionUseCase:
@@ -486,7 +503,10 @@ class SecAcquisitionUseCase:
     def _validation_profile(
         self, request: SecSourceRequestV1
     ) -> ArelleValidationProfileV1:
-        historical = historical_profile(request.validation_profile_id)
+        return self._profile_for_id(request.validation_profile_id)
+
+    def _profile_for_id(self, profile_id: str) -> ArelleValidationProfileV1:
+        historical = historical_profile(profile_id)
         if historical and self.settings.historical_dqc_dir is None:
             raise ServiceError(
                 "VALIDATION_RESOURCES_UNAVAILABLE",
@@ -495,7 +515,7 @@ class SecAcquisitionUseCase:
                 retryable=False,
             )
         return ArelleValidationProfileV1(
-            profile_id=request.validation_profile_id,
+            profile_id=profile_id,
             validation_mode="sec-efm-dqc",
             edgar_plugin_dir=self.settings.edgar_plugin_dir,
             xule_plugin_dir=self.settings.xule_plugin_dir,
@@ -547,6 +567,195 @@ class SecAcquisitionUseCase:
                 retryable=False,
             )
         return self.automatic_mapping_authority
+
+    def original_validation_runtime(
+        self,
+        *,
+        declared_source_revision: str,
+        validation_profile_id: Literal[
+            "sec-efm-us-dqc-v31.0.3", "sec-efm-us-dqc-v1.0.0-historical"
+        ] = "sec-efm-us-dqc-v31.0.3",
+    ) -> OriginalValidationRuntimeV1:
+        profile = self._profile_for_id(validation_profile_id)
+        if version("arelle-release") != "2.47.4":
+            raise ServiceError(
+                "ORIGINAL_VALIDATION_RUNTIME_MISMATCH",
+                "original validation requires the pinned Arelle runtime",
+                status_code=503,
+                retryable=False,
+            )
+        return OriginalValidationRuntimeV1(
+            declared_source_revision=declared_source_revision,
+            taxonomy_manifest_id=self.settings.taxonomy_manifest_id,
+            taxonomy_version=self.settings.taxonomy_version,
+            taxonomy_cache_sha256=self.settings.taxonomy_cache_sha256,
+            validation_profile_digest=profile.digest(),
+            validation_profile_id=validation_profile_id,
+            supported_filing_years=self.settings.supported_filing_years,
+            supported_filing_forms=self.settings.supported_filing_forms,
+            python_version=platform.python_version(),
+            pydantic_version=version("pydantic"),
+        )
+
+    def validate_original_filing(
+        self, request: OriginalValidationRequestV1, *, deadline_at: datetime
+    ) -> OriginalValidationEvidenceV1:
+        """Validate a frozen catalog original without assuming security identity."""
+        if self.capture_store is None:
+            raise ServiceError(
+                "SEC_CAPTURE_STORE_UNAVAILABLE",
+                "original preparation requires persistent capture receipts",
+                status_code=503,
+                retryable=False,
+            )
+        runtime = request.runtime
+        if runtime != self.original_validation_runtime(
+            declared_source_revision=runtime.declared_source_revision,
+            validation_profile_id=runtime.validation_profile_id,
+        ):
+            raise ServiceError(
+                "ORIGINAL_VALIDATION_RUNTIME_MISMATCH",
+                "original preparation pins differ from the configured runtime",
+                status_code=422,
+                retryable=False,
+            )
+        adapter = RetainedSecSourceAdapter(
+            self.adapter,
+            scope=request.scope,
+            receipts=self.capture_store,
+            content=self.content_store,
+            capture_lock=self._capture_lock,
+        )
+        try:
+            self._require_before_deadline(deadline_at)
+            annual = request.filing
+            if (
+                annual.accepted_at > request.valuation_timestamp
+                or annual.filing_date > request.valuation_timestamp.date()
+                or annual.filing_date.year not in runtime.supported_filing_years
+                or annual.form not in runtime.supported_filing_forms
+                or not annual.is_xbrl
+            ):
+                raise SnapshotError(
+                    "ORIGINAL_FILING_NOT_ELIGIBLE",
+                    "catalog original is unavailable at the cutoff or unsupported",
+                )
+            filing = _SelectedFiling(
+                accession_number=annual.accession_number,
+                form=annual.form,
+                filing_date=annual.filing_date,
+                accepted_at=annual.accepted_at,
+                primary_document=annual.primary_document,
+                is_inline_xbrl=annual.is_inline_xbrl,
+            )
+            package = self._capture_original_package(
+                adapter=adapter, cik=request.cik, filing=filing, deadline_at=deadline_at
+            )
+            captured_at = package.index_source.captured_at
+            if captured_at is None:
+                raise SnapshotError(
+                    "SEC_CAPTURE_IDENTITY_MISMATCH", "missing capture timestamp"
+                )
+            validated = self.ingestion.validate_filing(
+                source_adapter=adapter,
+                cik=request.cik,
+                accession_number=filing.accession_number,
+                primary_document=package.xbrl_entrypoint,
+                filing_archive_filename=package.archive_filename,
+                filed_at=filing.accepted_at,
+                accepted_at=filing.accepted_at,
+                captured_at=captured_at,
+                taxonomy_manifest_id=runtime.taxonomy_manifest_id,
+                taxonomy_version=runtime.taxonomy_version,
+                taxonomy_cache_dir=self.settings.taxonomy_cache_dir,
+                reference_sources=(package.index_source,),
+                submission_source=package.submission_source,
+                dts_filenames=package.dts_filenames,
+                profile=self._profile_for_id(runtime.validation_profile_id),
+                form=filing.form,
+                deadline_at=deadline_at,
+            )
+            if (
+                validated.parser_report.taxonomy_cache_hash
+                != runtime.taxonomy_cache_sha256
+            ):
+                raise SnapshotError(
+                    "TAXONOMY_PACKAGE_INVALID", "parser taxonomy release differs"
+                )
+            original = evaluate_original_issuer(
+                validated.parser_report,
+                source=OriginalOperatingSourceV1(
+                    cik=request.cik,
+                    accession_number=filing.accession_number,
+                    form=filing.form,
+                    uri=validated.source.uri,
+                    content_hash=validated.integrity_evidence.raw_content_hash,
+                    parser_input_hash=validated.integrity_evidence.parser_input_hash,
+                    available_at=filing.accepted_at,
+                    captured_at=captured_at,
+                    http_status=validated.source.http_status,
+                ),
+                decision_at=request.valuation_timestamp,
+            )
+            codes = set(original.issue_codes)
+            if (
+                original.status == "matched"
+                and original.report_period_end != annual.report_period_end
+            ):
+                codes.add("ORIGINAL_CATALOG_PERIOD_MISMATCH")
+            return OriginalValidationEvidenceV1(
+                request=request,
+                responses=adapter.observed_responses,
+                captured_sources=validated.captured_sources,
+                original=original,
+                integrity=validated.integrity_evidence,
+                primary_media_type=validated.source.media_type,
+                issue_codes=tuple(sorted(codes)),
+            )
+        except (
+            SecSourceError,
+            SnapshotError,
+            ArelleParserError,
+            ServiceError,
+        ) as error:
+            failure = None
+            if isinstance(error, SnapshotError) and error.evidence_ref is not None:
+                record = self.capture_store.get(error.evidence_ref)
+                failure = ArtifactRefV1(
+                    artifact_id=record.artifact_id,
+                    content_hash=record.content_hash,
+                    media_type=record.media_type,
+                    role="sec-original-validation-failure-v1",
+                )
+            if (
+                isinstance(error, ArelleParserError)
+                and error.validation_failure is not None
+            ):
+                record = self.ingestion.audit_store.put(
+                    "original-parser-failure:"
+                    + sha256_digest(error.validation_failure),
+                    error.validation_failure,
+                    retention="evidence",
+                )
+                failure = ArtifactRefV1(
+                    artifact_id=record.artifact_id,
+                    content_hash=record.content_hash,
+                    media_type=record.media_type,
+                    role="sec-original-validation-failure-v1",
+                )
+            retryable = (
+                error.code
+                in {"PARSER_CONCURRENCY_EXHAUSTED", "PARSER_RESOURCE_EXHAUSTED"}
+                if isinstance(error, ArelleParserError)
+                else error.retryable
+            )
+            return OriginalValidationEvidenceV1(
+                request=request,
+                responses=adapter.observed_responses,
+                failure_evidence=failure,
+                issue_codes=(error.code,),
+                retryable=retryable,
+            )
 
     def retained_acquisition(
         self, request: SecIngestionRequestV1 | AutomaticSecIngestionRequestV1
@@ -864,58 +1073,14 @@ class SecAcquisitionUseCase:
                 content=self.content_store,
                 capture_lock=self._capture_lock,
             )
-        index_source = adapter.capture_filing_index(
-            cik=request.cik,
-            accession_number=filing.accession_number,
-            deadline_at=deadline_at,
+        package = self._capture_original_package(
+            adapter=adapter, cik=request.cik, filing=filing, deadline_at=deadline_at
         )
-        submission_source = adapter.capture_filing_submission(
-            cik=request.cik,
-            accession_number=filing.accession_number,
-            filed_at=filing.accepted_at,
-            accepted_at=filing.accepted_at,
-            filing_date=filing.filing_date,
-            form=filing.form,
-            is_amendment=filing.is_amendment,
-            amendment_scope="unknown" if filing.is_amendment else None,
-            deadline_at=deadline_at,
-        )
-        index_source = replace(
-            index_source,
-            available_at=filing.accepted_at,
-            publication_at=filing.accepted_at,
-            filed_at=filing.accepted_at,
-            accession_number=filing.accession_number,
-            form=filing.form,
-            filing_version=filing.accession_number,
-            is_amendment=filing.is_amendment,
-            amendment_scope="unknown" if filing.is_amendment else None,
-        )
-        xbrl_entrypoint = self._select_xbrl_entrypoint(
-            index_source.content,
-            filing.primary_document,
-            is_inline_xbrl=filing.is_inline_xbrl,
-        )
-        schema_filename = None
-        if Path(xbrl_entrypoint).suffix.lower() in {".htm", ".html", ".xhtml"}:
-            primary_source = adapter.capture_filing(
-                cik=request.cik,
-                accession_number=filing.accession_number,
-                primary_document=xbrl_entrypoint,
-                filed_at=filing.accepted_at,
-                accepted_at=filing.accepted_at,
-                form=filing.form,
-                is_amendment=filing.is_amendment,
-                amendment_scope="unknown" if filing.is_amendment else None,
-                deadline_at=deadline_at,
-            )
-            schema_filename = self._inline_schema_filename(primary_source.content)
-        dts_filenames = self._select_dts_filenames(
-            index_source.content, xbrl_entrypoint, schema_filename=schema_filename
-        )
-        filing_archive_filename = self._select_filing_archive_filename(
-            index_source.content, filing.accession_number
-        )
+        index_source = package.index_source
+        submission_source = package.submission_source
+        xbrl_entrypoint = package.xbrl_entrypoint
+        dts_filenames = package.dts_filenames
+        filing_archive_filename = package.archive_filename
         mappings = (
             self._resolve_mappings(request, correlation_id=correlation_id)
             if isinstance(request, SecIngestionRequestV1)
@@ -1043,6 +1208,74 @@ class SecAcquisitionUseCase:
             result=result,
             caller_principal=caller_principal,
             organization_id=organization_id,
+        )
+
+    def _capture_original_package(
+        self,
+        *,
+        adapter: SecSourceCapturePort,
+        cik: str,
+        filing: _SelectedFiling,
+        deadline_at: datetime,
+    ) -> _OriginalPackage:
+        index_source = adapter.capture_filing_index(
+            cik=cik,
+            accession_number=filing.accession_number,
+            deadline_at=deadline_at,
+        )
+        submission_source = adapter.capture_filing_submission(
+            cik=cik,
+            accession_number=filing.accession_number,
+            filed_at=filing.accepted_at,
+            accepted_at=filing.accepted_at,
+            filing_date=filing.filing_date,
+            form=filing.form,
+            is_amendment=filing.is_amendment,
+            amendment_scope="unknown" if filing.is_amendment else None,
+            deadline_at=deadline_at,
+        )
+        index_source = replace(
+            index_source,
+            available_at=filing.accepted_at,
+            publication_at=filing.accepted_at,
+            filed_at=filing.accepted_at,
+            accession_number=filing.accession_number,
+            form=filing.form,
+            filing_version=filing.accession_number,
+            is_amendment=filing.is_amendment,
+            amendment_scope="unknown" if filing.is_amendment else None,
+        )
+        xbrl_entrypoint = self._select_xbrl_entrypoint(
+            index_source.content,
+            filing.primary_document,
+            is_inline_xbrl=filing.is_inline_xbrl,
+        )
+        schema_filename = None
+        if Path(xbrl_entrypoint).suffix.lower() in {".htm", ".html", ".xhtml"}:
+            primary_source = adapter.capture_filing(
+                cik=cik,
+                accession_number=filing.accession_number,
+                primary_document=xbrl_entrypoint,
+                filed_at=filing.accepted_at,
+                accepted_at=filing.accepted_at,
+                form=filing.form,
+                is_amendment=filing.is_amendment,
+                amendment_scope="unknown" if filing.is_amendment else None,
+                deadline_at=deadline_at,
+            )
+            schema_filename = self._inline_schema_filename(primary_source.content)
+        dts_filenames = self._select_dts_filenames(
+            index_source.content, xbrl_entrypoint, schema_filename=schema_filename
+        )
+        filing_archive_filename = self._select_filing_archive_filename(
+            index_source.content, filing.accession_number
+        )
+        return _OriginalPackage(
+            index_source=index_source,
+            submission_source=submission_source,
+            xbrl_entrypoint=xbrl_entrypoint,
+            dts_filenames=dts_filenames,
+            archive_filename=filing_archive_filename,
         )
 
     def _resolve_mappings(
