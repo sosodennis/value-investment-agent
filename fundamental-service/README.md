@@ -48,7 +48,33 @@ reproduced selection, returning the same digest with `wrote=false`. Interrupted 
 transient attempts reuse successful captures; retryable failures retain their own
 content identities. Catalog evidence does not approve mappings, prove complete
 accounting coverage, authorize a release/caller input or calculate a valuation.
-Automatic compilation into a complete source preparation plan remains pending.
+
+Add `--prepare-originals` to capture and strictly validate each selected original
+before resolving its security identity from original DEI facts:
+
+```sh
+fundamental-discover-annuals \
+  --cik 0000724910 --valuation-timestamp 2025-06-01T00:00:00Z \
+  --source-revision <installed-source-commit> --prepare-originals
+fundamental-discover-annuals --artifact-id original-preparation:<request-digest>
+fundamental-discover-annuals --artifact-id original-validation:<request-digest>
+```
+
+Validation identities pin the actual Python/Pydantic/Arelle versions, taxonomy
+digest, validation profile and configured year/form support. Both original bytes
+and validation receipts are verified on every read. Repeats reuse successful
+validation without provider or parser I/O; changing `--ticker` or `--share-class`
+reuses the same parsed original. Multiple securities or reused tickers retain a
+refusal until an explicit selector matches the original evidence. Inspect the
+per-filing validation artifact for original security facts before selecting.
+
+Every selected original and its failure remains in the saved preparation.
+Retryable failures retain content-addressed `original-validation-attempt:` and
+`original-preparation-attempt:` artifacts without reserving the terminal success
+keys. Recovery reuses already captured bytes and completed validations. Terminal
+refusals repeat unchanged; new source/runtime inputs require a new request.
+This stage publishes no snapshot, mapping, release or valuation. Automatic
+compilation into a complete source preparation plan remains pending.
 
 ## Source preparation command
 
