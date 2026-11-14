@@ -52,3 +52,34 @@ requests/reports by digest, using its locks and temporary-file/atomic-rename
 writer. The research functions perform no I/O, signing, release activation,
 caller approval or HTTP orchestration. This is a callable research method;
 it is not automatically substituted into production valuation preparation.
+
+`fundamental-research-enterprise` persists this method through the Service's
+existing evidence store. The default uses `FUNDAMENTAL_SERVICE_DATABASE_URL`
+and `FUNDAMENTAL_SERVICE_DATA_ROOT`; request, result and execution references
+then participate in the existing PostgreSQL/content backup and restore. An
+explicit `--artifacts-root` selects offline storage. Missing Service storage
+configuration fails without creating an implicit local cache.
+
+```sh
+fundamental-research-enterprise --request /outside-checkout/request.json \
+  --request-digest <canonical-request-sha256> --source-revision <exact-commit>
+```
+
+The request file must contain exactly the canonical serialization of
+`EnterpriseResearchRequestV1`. Validation, digest checking and official
+evaluation complete before the command opens storage. Valid abstentions are
+saved alongside successful scenarios. The receipt returns immutable request,
+result and execution artifact references. Exact repeats return `wrote=false`
+without rewriting prior artifacts; interrupted publication can resume from
+already saved artifacts. Existing corrupt evidence refuses without repair.
+
+Execution identity binds the canonical request, declared source revision,
+actual installed Service source digest and Python/package/platform pins.
+The source revision is an operator declaration, not an authenticated Git or
+release assertion; exact-commit acceptance must separately establish that the
+installed source matches the claimed commit. A changed revision, source or
+runtime produces a different execution identity, even when the numerical result
+is reusable. Output paths, run IDs, wall time and random values do not define
+identity. This command grants no source rights, mapping/release authority,
+caller approval or threshold promotion, and does not turn a research result
+into a complete equity valuation.
