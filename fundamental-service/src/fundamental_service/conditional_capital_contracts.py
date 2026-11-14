@@ -96,6 +96,63 @@ class CapitalHypothesisV1(_CapitalModel):
         return self
 
 
+def require_capital_hypothesis_sensitivity(
+    scenarios: tuple[CapitalHypothesisV1, ...], limitations: tuple[str, ...]
+) -> None:
+    if any(len(text.strip()) < 40 for text in limitations):
+        raise ValueError("conditional capital requires explicit limitations")
+    if {item.name for item in scenarios} != {"base", "downside", "upside"}:
+        raise ValueError("capital scenarios must be distinct base, downside and upside")
+    sensitivity: dict[str, set[Decimal] | set[tuple[Decimal, Decimal]]] = {
+        "preferred_claims": {item.preferred_claims for item in scenarios},
+        "convertible": {_convertible_exposure(item.convertible) for item in scenarios},
+        "other_common_equivalent_shares": {
+            item.other_common_equivalent_shares for item in scenarios
+        },
+        "incremental_award_shares": {
+            item.incremental_award_shares for item in scenarios
+        },
+    }
+    for field, values in sensitivity.items():
+        if len(values) < 2:
+            raise ValueError(
+                f"unresolved capital role requires scenario sensitivity: {field}"
+            )
+
+
+class ConditionalCapitalRecipeV1(_CapitalModel):
+    """Deployment hypotheses awaiting exact issuer, snapshot and fact bindings."""
+
+    protocol: Literal["conditional-capital-recipe-v1"] = "conditional-capital-recipe-v1"
+    model_id: Literal["fcff_dcf", "transition_fcff_dcf"]
+    model_version: str = Field(min_length=1)
+    mapping_version: str = Field(min_length=1)
+    max_quote_age_seconds: int = Field(gt=0)
+    limitations: tuple[str, ...] = Field(min_length=1)
+    scenarios: tuple[CapitalHypothesisV1, ...] = Field(min_length=3, max_length=3)
+
+    @field_validator("scenarios")
+    @classmethod
+    def canonical_scenarios(
+        cls, values: tuple[CapitalHypothesisV1, ...]
+    ) -> tuple[CapitalHypothesisV1, ...]:
+        order = {"base": 0, "downside": 1, "upside": 2}
+        return tuple(sorted(values, key=lambda item: order[item.name]))
+
+    @model_validator(mode="after")
+    def supported_hypotheses(self) -> ConditionalCapitalRecipeV1:
+        if self.model_version != f"{self.model_id}-v2":
+            raise ValueError(
+                "conditional capital requires the supported FCFF model version"
+            )
+        require_capital_hypothesis_sensitivity(self.scenarios, self.limitations)
+        return self
+
+    @property
+    def digest(self) -> str:
+        return sha256_digest(self)
+
+
 class ConditionalCapitalPolicyV1(_CapitalModel):
     protocol: Literal["conditional-capital-hypotheses-v1"] = CONDITIONAL_CAPITAL_POLICY
     interpretation: Literal["conditional_hypotheses_not_estimates_or_bounds"] = (
@@ -160,29 +217,7 @@ class ConditionalCapitalPolicyV1(_CapitalModel):
             raise ValueError(
                 "conditional capital must retain every unresolved claim and award role"
             )
-        if any(len(text.strip()) < 40 for text in self.limitations):
-            raise ValueError("conditional capital requires explicit limitations")
-        if {item.name for item in self.scenarios} != {"base", "downside", "upside"}:
-            raise ValueError(
-                "capital scenarios must be distinct base, downside and upside"
-            )
-        sensitivity: dict[str, set[Decimal] | set[tuple[Decimal, Decimal]]] = {
-            "preferred_claims": {item.preferred_claims for item in self.scenarios},
-            "convertible": {
-                _convertible_exposure(item.convertible) for item in self.scenarios
-            },
-            "other_common_equivalent_shares": {
-                item.other_common_equivalent_shares for item in self.scenarios
-            },
-            "incremental_award_shares": {
-                item.incremental_award_shares for item in self.scenarios
-            },
-        }
-        for field, values in sensitivity.items():
-            if len(values) < 2:
-                raise ValueError(
-                    f"unresolved capital role requires scenario sensitivity: {field}"
-                )
+        require_capital_hypothesis_sensitivity(self.scenarios, self.limitations)
         return self
 
     @property

@@ -41,8 +41,8 @@ from test_preparation_runner import _reviewed_candidate
 from test_valuation_release_inputs import _valuation_fixture, _manifest_with
 
 
-def _conditional_fixture(tmp_path):
-    fixture = _valuation_fixture(tmp_path)
+def _conditional_fixture(tmp_path, *, sec_profile=False):
+    fixture = _valuation_fixture(tmp_path, sec_profile=sec_profile)
     payload = fixture.snapshot.model_dump(exclude={"manifest_digest"})
     payload["source_records"] = tuple(
         source.model_copy(update={"source_id": "sec-filing"})

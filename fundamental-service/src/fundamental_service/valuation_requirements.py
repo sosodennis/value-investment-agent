@@ -341,25 +341,39 @@ def conditional_capital_requirements_profile(
 
 
 def source_preparation_requirements_profile(
-    model_id: str, *, composite_inputs: bool = False
+    model_id: str, *, composite_inputs: bool = False, conditional_capital: bool = False
 ) -> ValuationRequirementsProfileV1:
     """Acquire optional exclusion roles while retaining every unsupported role."""
 
-    if not composite_inputs:
+    if not composite_inputs and not conditional_capital:
         return valuation_requirements_profile(model_id)
-    profile = composite_working_capital_requirements_profile(
-        model_id, operating_only=False
+    profile = (
+        conditional_capital_requirements_profile(
+            model_id, composite_inputs=composite_inputs
+        )
+        if conditional_capital
+        else composite_working_capital_requirements_profile(
+            model_id, operating_only=False
+        )
     )
     return ValuationRequirementsProfileV1.model_validate(
         profile.model_dump()
         | {
-            "profile_id": f"{model_id}-composite-source-requirements-v1",
-            "profile_version": "composite-source-requirements-v1",
+            "profile_id": f"{profile.profile_id}-source-requirements-v1"
+            if conditional_capital
+            else f"{model_id}-composite-source-requirements-v1",
+            "profile_version": "conditional-capital-source-requirements-v1"
+            if conditional_capital
+            else "composite-source-requirements-v1",
             "supporting_fact_fields": tuple(
                 sorted(
                     set(profile.supporting_fact_fields)
                     | (
-                        set(WORKING_CAPITAL_EXCLUSION_FIELDS)
+                        (
+                            set(WORKING_CAPITAL_EXCLUSION_FIELDS)
+                            if composite_inputs
+                            else set()
+                        )
                         - set(profile.required_fact_fields)
                     )
                 )
@@ -374,11 +388,14 @@ def automatic_source_requirements_profile(
     """Resolve a digest against the service-owned source profiles only."""
 
     for composite_inputs in (False, True):
-        profile = source_preparation_requirements_profile(
-            model_id, composite_inputs=composite_inputs
-        )
-        if profile.digest == requirements_digest:
-            return profile
+        for conditional_capital in (False, True):
+            profile = source_preparation_requirements_profile(
+                model_id,
+                composite_inputs=composite_inputs,
+                conditional_capital=conditional_capital,
+            )
+            if profile.digest == requirements_digest:
+                return profile
     raise ValueError("automatic acquisition requires exact service model requirements")
 
 

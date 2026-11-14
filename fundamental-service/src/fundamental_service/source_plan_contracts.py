@@ -7,6 +7,7 @@ from typing import Annotated, Generic, Literal, TypeAlias, TypeVar
 from pydantic import Field, TypeAdapter, model_validator
 
 from .automatic_source_mapping import AutomaticSecIngestionRequestV1
+from .conditional_capital_contracts import ConditionalCapitalRecipeV1
 from .contracts import (
     InitialModelId,
     SecIngestionRequestV1,
@@ -57,6 +58,9 @@ class _SourcePreparationPlan(StrictModel, Generic[SourceRequestT]):
     valuation_working_capital_recipe: ValuationWorkingCapitalRecipeV1 | None = Field(
         default=None, exclude_if=lambda value: value is None
     )
+    conditional_capital_recipe: ConditionalCapitalRecipeV1 | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
 
     @property
     def working_capital_spec(
@@ -72,12 +76,29 @@ class _SourcePreparationPlan(StrictModel, Generic[SourceRequestT]):
         return source_preparation_requirements_profile(
             self.model_id,
             composite_inputs=self.working_capital_spec is not None,
+            conditional_capital=self.conditional_capital_recipe is not None,
         )
 
     @model_validator(mode="after")
     def requirements_match(self) -> _SourcePreparationPlan[SourceRequestT]:
         profile = self.requirements_profile
         recipe = self.valuation_working_capital_recipe
+        capital = self.conditional_capital_recipe
+        if capital is not None:
+            mapping_versions = set()
+            for request in self.ingestions:
+                if isinstance(request, AutomaticSecIngestionRequestV1):
+                    mapping_versions.add(request.mapping_version)
+                elif isinstance(request, SecIngestionRequestV1):
+                    mapping_versions.update(
+                        mapping.mapping_version for mapping in request.mappings
+                    )
+            if capital.model_id != self.model_id or mapping_versions != {
+                capital.mapping_version
+            }:
+                raise ValueError(
+                    "capital recipe must pin the plan model and mapping version"
+                )
         if recipe is not None and (
             self.valuation_working_capital_policy is not None
             or recipe.model_id != self.model_id

@@ -81,6 +81,10 @@ from .public_admission import (
 )
 from .valuation_preparation import AutomaticValuationPreparationV1
 from .valuation_requirements import select_released_facts
+from .conditional_capital_preparation import (
+    ConditionalCapitalBindingV1,
+    bind_conditional_capital_recipe,
+)
 from .valuation_release_inputs import valuation_input_requirements
 from .working_capital import assess_composite_working_capital
 from .working_capital_preparation import (
@@ -145,6 +149,9 @@ class SourcePreparationEvidenceV1(StrictModel):
     working_capital_binding_ref: ArtifactRefV1 | None = Field(
         default=None, exclude_if=lambda value: value is None
     )
+    conditional_capital_binding_ref: ArtifactRefV1 | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
     issuer_market_preparation_ref: ArtifactRefV1 | None = Field(
         default=None, exclude_if=lambda value: value is None
     )
@@ -178,6 +185,13 @@ class SourcePreparationEvidenceV1(StrictModel):
 
     @model_validator(mode="after")
     def outcome_matches_evidence(self) -> SourcePreparationEvidenceV1:
+        capital = self.conditional_capital_binding_ref
+        if capital is not None and (
+            capital.role != "conditional-capital-binding-v1"
+            or capital.media_type != "application/json"
+            or self.snapshot_id is None
+        ):
+            raise ValueError("capital binding requires its snapshot and JSON artifact")
         deployment = self.market_policy_deployment_ref
         if deployment is not None and (
             deployment.role != "market-policy-deployment-v1"
@@ -418,7 +432,11 @@ class SourcePreparationRunner:
         return resolution if self._matches_release(plan, snapshot, manifest) else None
 
     def _matches_release_mappings(
-        self, plan: SourcePreparationPlan, manifest: DataReleaseManifestV1
+        self,
+        plan: SourcePreparationPlan,
+        manifest: DataReleaseManifestV1,
+        *,
+        require_capital_binding: bool = True,
     ) -> bool:
         policy = manifest.valuation_working_capital_policy
         recipe = plan.valuation_working_capital_recipe
@@ -471,6 +489,39 @@ class SourcePreparationRunner:
                     assert binding is not None
                     if binding.policy is None or binding.policy != policy:
                         return False
+        capital_recipe = plan.conditional_capital_recipe
+        if capital_recipe is None:
+            if manifest.conditional_capital_policies:
+                return False
+        else:
+            recipe_payload = capital_recipe.model_dump(exclude={"protocol"})
+            if not manifest.conditional_capital_policies or any(
+                policy.model_dump(include=set(recipe_payload)) != recipe_payload
+                for policy in manifest.conditional_capital_policies
+            ):
+                return False
+            if not require_capital_binding:
+                return True
+            matched = False
+            for snapshot_ref in manifest.snapshot_refs:
+                try:
+                    snapshot = self._application.snapshot(snapshot_ref.snapshot_id)
+                except ServiceError as error:
+                    if error.code != "SNAPSHOT_NOT_FOUND":
+                        raise
+                    continue
+                if self._matches_plan(plan, snapshot):
+                    capital_binding = self._bind_conditional_capital(plan, snapshot)
+                    assert capital_binding is not None
+                    if (
+                        capital_binding.policy is None
+                        or capital_binding.policy
+                        not in manifest.conditional_capital_policies
+                    ):
+                        return False
+                    matched = True
+            if not matched:
+                return False
         return True
 
     def _matches_release(
@@ -766,12 +817,55 @@ class SourcePreparationRunner:
                 media_type=bound.artifact.media_type,
                 role=binding.protocol,
             )
+        capital_ref = None
+        if (
+            plan.conditional_capital_recipe is not None
+            and evidence.snapshot_id is not None
+            and self._plan_mappings(plan) is not None
+        ):
+            capital = self._bind_conditional_capital(
+                plan, self._application.snapshot(evidence.snapshot_id)
+            )
+            assert capital is not None
+            bound_capital = self._artifacts.put_with_receipt(
+                f"conditional-capital-binding:{capital.digest}",
+                capital,
+                (
+                    plan.digest,
+                    capital.recipe_digest,
+                    capital.snapshot_manifest_digest,
+                    *capital.input_fact_digests,
+                ),
+            )
+            capital_ref = ArtifactRefV1(
+                artifact_id=bound_capital.artifact.artifact_id,
+                content_hash=bound_capital.artifact.content_hash,
+                media_type=bound_capital.artifact.media_type,
+                role=capital.protocol,
+            )
+            if capital.issue_codes:
+                evidence = SourcePreparationEvidenceV1.model_validate(
+                    evidence.model_dump()
+                    | {
+                        "status": "blocked",
+                        "issue_codes": tuple(
+                            sorted(set(evidence.issue_codes) | set(capital.issue_codes))
+                        ),
+                        "missing_evidence": tuple(
+                            sorted(
+                                set(evidence.missing_evidence)
+                                | set(capital.missing_evidence)
+                            )
+                        ),
+                    }
+                )
         if evidence.source_outcomes:
             self._persist_acquisitions(plan, evidence.source_outcomes)
         evidence = SourcePreparationEvidenceV1.model_validate(
             {
                 **evidence.model_dump(),
                 "working_capital_binding_ref": binding_ref,
+                "conditional_capital_binding_ref": capital_ref,
                 "source_plan_ref": ArtifactRefV1(
                     artifact_id=publication.artifact.artifact_id,
                     content_hash=publication.artifact.content_hash,
@@ -794,6 +888,8 @@ class SourcePreparationRunner:
             dependencies += tuple(ref.content_hash for ref in admission.release_refs)
         if binding_ref is not None:
             dependencies += (binding_ref.content_hash,)
+        if capital_ref is not None:
+            dependencies += (capital_ref.content_hash,)
         if evidence.issuer_market_preparation_ref is not None:
             dependencies += (evidence.issuer_market_preparation_ref.content_hash,)
         if evidence.market_policy_deployment_ref is not None:
@@ -993,6 +1089,9 @@ class SourcePreparationRunner:
     def _assess_history_requirements(
         self, plan: SourcePreparationPlan, snapshot: SourceSnapshotV1
     ) -> tuple[tuple[str, ...], tuple[str, ...]]:
+        capital = self._bind_conditional_capital(plan, snapshot)
+        if capital is not None and capital.issue_codes:
+            return capital.issue_codes, capital.missing_evidence
         binding = self._bind_working_capital(plan, snapshot)
         if binding is not None and binding.missing_evidence:
             return (
@@ -1042,6 +1141,17 @@ class SourcePreparationRunner:
                 f"{year}:{field}" for year, field in history.missing_fields
             )
         return (), ()
+
+    def _bind_conditional_capital(
+        self, plan: SourcePreparationPlan, snapshot: SourceSnapshotV1
+    ) -> ConditionalCapitalBindingV1 | None:
+        if plan.conditional_capital_recipe is None:
+            return None
+        return bind_conditional_capital_recipe(
+            plan.conditional_capital_recipe,
+            self._plan_facts(plan, snapshot),
+            snapshot=snapshot,
+        )
 
     def _mapping_evidence_ref(self, artifact_id: str | None) -> ArtifactRefV1 | None:
         if artifact_id is None:
@@ -1159,7 +1269,9 @@ class SourcePreparationRunner:
             or not set(plan.resolution_request().required_fields).issubset(
                 candidate.manifest.required_fields
             )
-            or not self._matches_release_mappings(plan, candidate.manifest)
+            or not self._matches_release_mappings(
+                plan, candidate.manifest, require_capital_binding=False
+            )
         ):
             raise ValueError(
                 "candidate does not match the plan profile, revision and mappings"
@@ -1366,6 +1478,7 @@ class SourcePreparationRunner:
                 if (
                     len(snapshots) > 1
                     or plan.valuation_working_capital_recipe is not None
+                    or plan.conditional_capital_recipe is not None
                 ):
                     issues, missing = self._assess_history_requirements(plan, snapshot)
                     if issues:

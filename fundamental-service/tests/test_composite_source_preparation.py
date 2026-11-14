@@ -36,7 +36,7 @@ from test_valuation_release_inputs import (
 from test_issuer_operating_release import inventory
 
 
-def _plan(fixture):
+def _plan(fixture, *, conditional_capital_recipe=None):
     snapshot = fixture.snapshot
     base = _sec_ingestion_request()
     request = type(base)(
@@ -87,6 +87,7 @@ def _plan(fixture):
         model_id="fcff_dcf",
         ingestions=(request,),
         valuation_working_capital_policy=fixture.manifest.valuation_working_capital_policy,
+        conditional_capital_recipe=conditional_capital_recipe,
     )
 
 
