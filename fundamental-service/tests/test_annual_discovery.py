@@ -142,6 +142,70 @@ def test_malformed_original_is_retained_and_blocks_selection(change):
     )
 
 
+def test_old_missing_primary_document_retains_failure_without_blocking_recent_originals():
+    old = row(
+        1996,
+        accessionNumber="0000950134-96-000590",
+        filingDate="1996-02-29",
+        acceptanceDateTime="1996-02-29T05:00:00.000Z",
+        reportDate="1995-12-31",
+        primaryDocument="",
+        isXBRL=0,
+        isInlineXBRL=0,
+    )
+    result = select(request(), source(old, row(2024), row(2025)))
+    assert [filing.report_period_end.year for filing in result.selected] == [2024, 2025]
+    assert result.issue_codes == ()
+    retained = next(
+        d for d in result.dispositions if d.accession_number == old["accessionNumber"]
+    )
+    assert retained.filing is None
+    assert retained.issue_codes == (
+        "ANNUAL_METADATA_INVALID",
+        "ANNUAL_OUTSIDE_LOOKBACK",
+    )
+    assert retained.source_digests
+
+
+@pytest.mark.parametrize(
+    "dates",
+    [
+        {"acceptanceDateTime": None},
+        {"acceptanceDateTime": "1996-05-01T16:00:00"},
+        {"acceptanceDateTime": "2025-05-01T16:00:00Z"},
+        {"filingDate": "2025-05-01"},
+        {"reportDate": "2025-03-31"},
+        {"reportDate": ""},
+    ],
+)
+def test_malformed_original_without_coherent_old_dates_still_blocks(dates):
+    result = select(
+        request(),
+        source(row(1996, primaryDocument="", **dates), row(2024), row(2025)),
+    )
+    assert result.selected == ()
+    assert "ANNUAL_METADATA_INVALID" in result.issue_codes
+
+
+def test_old_malformed_duplicate_does_not_hide_current_accession_conflict():
+    old = row(1996, accessionNumber=row(2025)["accessionNumber"], primaryDocument="")
+    result = select(request(), source(old, row(2024), row(2025)))
+    assert result.selected == ()
+    assert "ANNUAL_ACCESSION_CONFLICT" in result.issue_codes
+
+
+def test_malformed_original_on_the_lookback_boundary_still_blocks():
+    result = select(
+        request(lookback_days=31, original_count=1),
+        source(row(2025, primaryDocument="")),
+    )
+    assert result.selected == ()
+    assert result.issue_codes == (
+        "ANNUAL_METADATA_INVALID",
+        "ANNUAL_SOURCE_COUNT_INSUFFICIENT",
+    )
+
+
 def test_conflicting_duplicate_accessions_and_periods_are_not_replaced():
     s = source(
         row(2023), row(2024), row(2025), row(2025, primaryDocument="different.htm")

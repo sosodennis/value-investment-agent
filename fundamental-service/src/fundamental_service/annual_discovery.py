@@ -8,11 +8,30 @@ from collections.abc import Iterable
 from datetime import UTC, date, timedelta
 from typing import Literal
 
-from pydantic import AwareDatetime, Field, field_validator
+from pydantic import AwareDatetime, Field, TypeAdapter, field_validator
 
 from .contracts import StrictModel
 from .sec_submissions import SecRecentFilingsV1, SecSubmissionsV1
 from .serialization import canonical_bytes, sha256_digest
+
+_ANNUAL_SCOPE_DATES = TypeAdapter(tuple[date, AwareDatetime, date])
+
+
+def _provably_before_lookback(record: dict[str, object], cutoff: date) -> bool:
+    try:
+        filed, accepted, period = _ANNUAL_SCOPE_DATES.validate_json(
+            canonical_bytes(
+                (
+                    record["filingDate"],
+                    record["acceptanceDateTime"],
+                    record.get("reportDate"),
+                )
+            )
+        )
+    except ValueError:
+        return False
+    accepted_day = accepted.astimezone(UTC).date()
+    return period <= min(filed, accepted_day) and max(filed, accepted_day) < cutoff
 
 
 class AnnualDiscoveryParametersV1(StrictModel):
@@ -207,7 +226,10 @@ def select_original_annuals(
             except ValueError:
                 filing = None
                 codes.add("ANNUAL_METADATA_INVALID")
-                issues.update(codes)
+                if _provably_before_lookback(record, cutoff):
+                    codes.add("ANNUAL_OUTSIDE_LOOKBACK")
+                else:
+                    issues.update(codes)
         dispositions.append(
             AnnualFilingDispositionV1(
                 accession_number=accession,
