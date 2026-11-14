@@ -580,6 +580,26 @@ cannot authorize a newly prepared input. The prior target-table precision34 was 
 model inventory; moving to 34 requires a separately versioned numerical/model
 policy and replay evidence. Stored artifacts are never rewritten.
 
+Explicit scenario and sensitivity execution also accepts
+`assumptions.capital_bridge.<field>` for cash, non-operating assets, debt,
+preferred stock, finance lease liabilities, noncontrolling interests and diluted
+shares. Use the exact field names from `CapitalBridgeAssumptionsV1`; values must
+be finite nonnegative numbers and diluted shares must be positive. All changes
+within one scenario (or Monte Carlo draw) are applied together before validating
+the resulting input and invoking the existing calculator. This permits paired
+debt/conversion hypotheses and coupled WACC weights without calculating an
+intermediate combination. Scenarios must name base, downside and upside exactly
+once; sensitivity paths must be distinct. One-at-a-time sensitivity cannot
+express a coupled hypothesis: use a scenario when operands must change together.
+
+The complete parent request binds every scenario and sensitivity value to its
+input digest and optional caller approval. Saved uncertainty evidence includes
+the full controls and resulting calculation artifacts; replay uses the pinned
+runtime. Provisional input quality remains provisional. These execution paths
+provide no source completeness, probability, claim bounds or release authority.
+Automatic preparation still requires its exact source, capital and award gates;
+a conditional policy needs its own versioned release/composer integration.
+
 Earlier requirements profiles `fcff-valuation-requirements-v2` and
 `transition-fcff-valuation-requirements-v2` replaced the precomputed numeric
 `dilutive_instruments` input with a release-bound award inventory. Raw observations

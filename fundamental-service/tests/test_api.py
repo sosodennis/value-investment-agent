@@ -1269,6 +1269,114 @@ def test_uncertainty_approval_digest_covers_sampling_and_scenario_controls():
     assert result["valid_samples"] == 10
 
 
+def test_capital_scenarios_bind_approval_and_retrieve_saved_evidence(tmp_path):
+    valuation = _bind_initial_policy(make_valuation())
+    payload = valuation.model_dump(mode="json")
+    payload["uncertainty"] = {
+        "mode": "scenarios",
+        "scenarios": [
+            {"name": "base", "assumptions": {}},
+            {
+                "name": "downside",
+                "assumptions": {
+                    "assumptions.capital_bridge.debt": "30",
+                    "assumptions.capital_bridge.diluted_shares": "100",
+                },
+            },
+            {
+                "name": "upside",
+                "assumptions": {
+                    "assumptions.capital_bridge.debt": "5",
+                    "assumptions.capital_bridge.diluted_shares": "125",
+                },
+            },
+        ],
+        "sensitivity": [
+            {
+                "path": "assumptions.capital_bridge.preferred_stock",
+                "values": ["0", "10"],
+            }
+        ],
+    }
+    payload.pop("input_digest")
+    validation = type(valuation).model_validate_json(json.dumps(payload)).with_digest()
+    payload = validation.model_dump(mode="json")
+    payload["caller_approval"] = {
+        "input_digest": validation.input_digest,
+        "decision": "approved",
+        "caller_id": "subject-test",
+        "decided_at": datetime.now(UTC).isoformat(),
+    }
+    client = TestClient(
+        create_app(
+            _SnapshotRepository(),
+            ArtifactStore(tmp_path / "artifacts"),
+            FilesystemContentStore(tmp_path / "content"),
+            fact_repository=_FactRepository(),
+        )
+    )
+    first = client.post(
+        "/v1/valuation/calculate",
+        headers=auth_headers(),
+        json=make_internal_envelope(payload),
+    )
+    assert first.status_code == 200, first.text
+    result = first.json()["result"]
+    reference = next(
+        item
+        for item in result["artifact_references"]
+        if item["artifact_type"] == "uncertainty_evidence"
+    )
+    url = f"/v1/artifacts/{reference['artifact_id']}/content"
+    assert (
+        client.request("GET", url, json=make_internal_envelope({})).status_code == 401
+    )
+    saved = client.request(
+        "GET", url, headers=auth_headers(), json=make_internal_envelope({})
+    )
+    assert saved.status_code == 200, saved.text
+    evidence = UncertaintyEvidenceV1.model_validate_json(saved.content)
+    assert evidence.report.input_digest == validation.input_digest
+    assert (
+        evidence.request["uncertainty"]
+        == validation.model_dump(mode="json")["uncertainty"]
+    )
+    assert "caller_approval" not in evidence.request
+    assert len(evidence.report.scenario_results) == 3
+    assert tuple(
+        item.assumptions.capital_bridge.debt
+        for item in evidence.report.scenario_results
+    ) == (Decimal("5"), Decimal("30"), Decimal("5"))
+    repeated = client.post(
+        "/v1/valuation/calculate",
+        headers=auth_headers(),
+        json=make_internal_envelope(payload),
+    )
+    assert repeated.status_code == 200, repeated.text
+    assert repeated.json()["result"]["result_hash"] == result["result_hash"]
+    assert (
+        repeated.json()["result"]["artifact_references"]
+        == result["artifact_references"]
+    )
+    payload["uncertainty"]["scenarios"][1]["assumptions"][
+        "assumptions.capital_bridge.debt"
+    ] = "31"
+    payload["input_digest"] = None
+    rejected = client.post(
+        "/v1/valuation/calculate",
+        headers=auth_headers(),
+        json=make_internal_envelope(payload),
+    )
+    assert rejected.status_code == 400
+    assert rejected.json()["error"]["code"] == "invalid_request"
+    assert (
+        client.request(
+            "GET", url, headers=auth_headers(), json=make_internal_envelope({})
+        ).content
+        == saved.content
+    )
+
+
 def test_calculate_executes_explicit_monte_carlo_controls_with_optional_approval():
     valuation = (
         make_valuation()

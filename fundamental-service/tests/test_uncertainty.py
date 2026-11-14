@@ -5,12 +5,15 @@ from fundamental_service.contracts import (
     DistributionProvenanceV1,
     QualityStatus,
     UncertaintyV1,
+    ScenarioInputV1,
 )
+from fundamental_service.calculator import calculate
 from fundamental_service.testsupport import make_valuation
 from fundamental_service.uncertainty import (
     MonteCarloRequestV1,
     SensitivityRequestV1,
     run_uncertainty,
+    validate_uncertainty_controls,
 )
 from fundamental_service.uncertainty_policy import build_default_uncertainty
 from fundamental_service.valuation_preparation import HistoricalMetricV1
@@ -50,6 +53,234 @@ def test_seeded_monte_carlo_reproduces_and_sensitivity_is_explicit():
         != first.sensitivity["assumptions.terminal_growth"][1]
     )
     assert first.dominant_drivers == ("assumptions.terminal_growth",)
+
+
+def test_joint_capital_scenarios_match_the_existing_calculator_and_replay():
+    request = make_valuation()
+    prefix = "assumptions.capital_bridge."
+    controls = UncertaintyV1(
+        mode="scenarios",
+        scenarios=(
+            ScenarioInputV1(name="base"),
+            ScenarioInputV1(
+                name="downside",
+                assumptions={
+                    prefix + "debt": "30",
+                    prefix + "preferred_stock": "10",
+                    prefix + "diluted_shares": "100",
+                },
+            ),
+            ScenarioInputV1(
+                name="upside",
+                assumptions={
+                    prefix + "debt": "5",
+                    prefix + "preferred_stock": "0",
+                    prefix + "diluted_shares": "125",
+                },
+            ),
+        ),
+        sensitivity=(
+            SensitivityRequestV1(path=prefix + "preferred_stock", values=("0", "10")),
+            SensitivityRequestV1(path=prefix + "diluted_shares", values=("100", "125")),
+        ),
+    )
+    request = request.model_copy(update={"uncertainty": controls}).with_digest()
+    original = request.model_dump()
+
+    first = run_uncertainty(request)
+    second = run_uncertainty(request)
+
+    assert request.model_dump() == original
+    assert first == second
+    assert first.input_digest == request.input_digest
+    for scenario, actual in zip(
+        controls.scenarios, first.scenario_results, strict=True
+    ):
+        payload = make_valuation().model_dump()
+        for path, value in scenario.assumptions.items():
+            payload["assumptions"]["capital_bridge"][path.removeprefix(prefix)] = (
+                Decimal(value)
+            )
+        expected = calculate(type(request).model_validate(payload).with_digest())
+        assert actual.result_hash == expected.result_hash
+        assert actual.per_share_value == expected.per_share_value
+        assert actual.nodes[:-2] == first.base.nodes[:-2]
+    assert (
+        first.sensitivity[prefix + "preferred_stock"][0]
+        > first.sensitivity[prefix + "preferred_stock"][1]
+    )
+    assert (
+        first.sensitivity[prefix + "diluted_shares"][0]
+        > first.sensitivity[prefix + "diluted_shares"][1]
+    )
+
+
+@pytest.mark.parametrize(
+    "field",
+    (
+        "cash",
+        "non_operating_assets",
+        "debt",
+        "preferred_stock",
+        "lease_liabilities",
+        "non_controlling_interest",
+        "diluted_shares",
+    ),
+)
+def test_capital_sensitivity_changes_only_the_declared_operand(field):
+    request = make_valuation()
+    path = f"assumptions.capital_bridge.{field}"
+    report = run_uncertainty(
+        request,
+        sensitivity=(SensitivityRequestV1(path=path, values=("20", "40")),),
+    )
+    expected = []
+    for value in (Decimal("20"), Decimal("40")):
+        payload = request.model_dump()
+        payload["assumptions"]["capital_bridge"][field] = value
+        expected.append(
+            calculate(type(request).model_validate(payload)).per_share_value
+        )
+    assert report.sensitivity[path] == tuple(expected)
+
+
+def test_joint_weight_changes_validate_once_after_the_complete_scenario():
+    request = make_valuation()
+    joint = {
+        "assumptions.wacc.debt_weight": "0.4",
+        "assumptions.wacc.equity_weight": "0.6",
+    }
+    scenarios = tuple(
+        ScenarioInputV1(name=name, assumptions=joint)
+        for name in ("base", "downside", "upside")
+    )
+    report = run_uncertainty(request, scenarios=scenarios)
+    assert all(
+        item.assumptions.wacc.debt_weight == Decimal("0.4")
+        for item in report.scenario_results
+    )
+    invalid = (
+        scenarios[0].model_copy(update={"assumptions": {next(iter(joint)): "0.4"}}),
+        *scenarios[1:],
+    )
+    with pytest.raises(ValueError, match="sum to 1"):
+        run_uncertainty(request, scenarios=invalid)
+
+
+def test_coupled_monte_carlo_operands_validate_as_one_draw():
+    request = make_valuation()
+    controls = MonteCarloRequestV1(
+        uncertainty=UncertaintyV1(
+            mode="monte_carlo",
+            samples=10,
+            seed=42,
+            invalid_draw_policy="reject",
+            parameters=tuple(
+                {
+                    "path": f"assumptions.wacc.{field}",
+                    "distribution": "uniform",
+                    "lower": Decimal(value),
+                    "upper": Decimal(value),
+                }
+                for field, value in (("debt_weight", "0.4"), ("equity_weight", "0.6"))
+            ),
+        )
+    )
+    report = run_uncertainty(request, monte_carlo=controls)
+    payload = request.model_dump()
+    payload["assumptions"]["wacc"].update(
+        debt_weight=Decimal("0.4"), equity_weight=Decimal("0.6")
+    )
+    expected = calculate(type(request).model_validate(payload)).per_share_value
+    assert report.valid_samples == 10
+    assert report.invalid_samples == 0
+    assert report.quantiles["p05"] == report.quantiles["p95"] == expected
+
+
+@pytest.mark.parametrize(
+    "value", ("NaN", "Infinity", "-Infinity", "not a number", None, {}, True)
+)
+def test_non_numeric_or_nonfinite_capital_controls_are_refused_before_execution(value):
+    with pytest.raises(ValueError, match="finite number"):
+        validate_uncertainty_controls(
+            make_valuation(),
+            sensitivity=(
+                SensitivityRequestV1(
+                    path="assumptions.capital_bridge.debt", values=("0", value)
+                ),
+            ),
+        )
+
+
+@pytest.mark.parametrize(
+    "field,value", (("debt", "-1"), ("diluted_shares", "-1"), ("diluted_shares", "0"))
+)
+def test_invalid_capital_operands_are_refused(field, value):
+    with pytest.raises(ValueError):
+        run_uncertainty(
+            make_valuation(),
+            sensitivity=(
+                SensitivityRequestV1(
+                    path=f"assumptions.capital_bridge.{field}", values=("1", value)
+                ),
+            ),
+        )
+
+
+@pytest.mark.parametrize(
+    "path",
+    (
+        "assumptions.capital_bridge.model_config",
+        "assumptions.capital_bridge.debt.amount",
+        "assumptions.wacc.model_config",
+        "assumptions.forecast.revenue_growth[-1]",
+        "assumptions.forecast.revenue_growth[00]",
+        "assumptions.forecast.revenue_growth[100]",
+        "assumptions.trace.description",
+        "quality.status",
+    ),
+)
+def test_unknown_or_noncanonical_sensitivity_paths_are_refused(path):
+    with pytest.raises(ValueError, match="unsupported assumption path"):
+        run_uncertainty(
+            make_valuation(),
+            sensitivity=(SensitivityRequestV1(path=path, values=("1", "2")),),
+        )
+
+
+def test_duplicate_scenario_names_and_sensitivity_paths_are_refused():
+    scenarios = tuple(
+        ScenarioInputV1(name=name) for name in ("base", "downside", "upside", "base")
+    )
+    with pytest.raises(ValueError, match="exactly once"):
+        run_uncertainty(make_valuation(), scenarios=scenarios)
+    sensitivity = SensitivityRequestV1(
+        path="assumptions.capital_bridge.debt", values=("0", "1")
+    )
+    with pytest.raises(ValueError, match="paths must be unique"):
+        run_uncertainty(make_valuation(), sensitivity=(sensitivity, sensitivity))
+
+
+def test_capital_scenarios_preserve_provisional_quality():
+    request = make_valuation()
+    request = request.model_copy(
+        update={
+            "quality": request.quality.model_copy(
+                update={"status": QualityStatus.PROVISIONAL}
+            )
+        }
+    )
+    report = run_uncertainty(
+        request,
+        sensitivity=(
+            SensitivityRequestV1(
+                path="assumptions.capital_bridge.debt", values=("0", "1")
+            ),
+        ),
+        allow_provisional=True,
+    )
+    assert report.status is QualityStatus.PROVISIONAL
+    assert report.base.quality_status is QualityStatus.PROVISIONAL
 
 
 def test_invalid_draws_are_accounted_for_and_abstain_explicitly():
