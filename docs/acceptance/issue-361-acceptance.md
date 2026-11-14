@@ -3152,3 +3152,14 @@ numerical valuation or numerical M3. Complete capital/award evidence or an
 explicit formal conditional policy, eligible entitled quote, trusted release,
 real exact-input caller approval and final delivery remain outstanding.
 Threshold stays null and PR370 stays draft.
+
+
+## Joint capital scenario execution — 34cdb91e
+
+Implementation `34cdb91ecbf7fbb58728d84c4982a91cd2ec3d0d` extends the existing Fundamental uncertainty executor with capital bridge paths. A complete joint hypothesis is validated before invoking the existing calculator; coupled debt/share and WACC changes do not calculate intermediate combinations. Invalid paths/values, nonpositive share denominators and duplicate controls refuse. Scenario reports preserve provisional quality. This prerequisite grants no source completeness or conditional release authority.
+
+Exact clean-commit verification: 134 focused owner/API/replay tests passed with zero skips; full PostgreSQL service suite 3,501 passed, 20 resource/platform skips and one expected duplicate-ZIP warning. Ruff, format, changed-owner mypy, both architecture guards and diff check passed. The disposable test DB was removed. Two independent read-only reviewers reported no scoped findings; neither ran tests or modified code. Their review does not approve the full PR.
+
+The authenticated API fixture persists/retrieves the full uncertainty controls and calculations (200; unsigned 401), repeats the same result/artifact IDs and refuses an original approval after a capital operand changes (400). This is synthetic engineering evidence, not real caller approval or numerical M2 acceptance. Provisional scenarios still require formal service-owned policy integration at the API boundary. The SEC runtime remains c6985291, so no new runtime acceptance is claimed.
+
+Evidence: [checkpoint](issue-361-capital-scenarios-checkpoint.json). Input `1b75e42626dff4d0491c2460d00f3f18273c8b4033384b5af3486d504f743813`, checks output `8a96b17a238ec6aa0bfcaaed3aaa8782425a6c411d0f8ea3a579c3a31696fcb3`. M1/M2/M3 remain incomplete; threshold remains null.
