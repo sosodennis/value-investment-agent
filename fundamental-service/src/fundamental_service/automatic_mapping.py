@@ -27,6 +27,7 @@ from .data_releases import (
 from .facts import CanonicalMappingV1, MappingObservationScopeV1
 from .issuer_release_evidence import verify_original_bytes, verify_original_integrity
 from .issuer_identity import IdentityResolutionError, validate_original_filing_identity
+from .lease_liability_mapping import lease_liability_concept, select_lease_liability
 from .original_issuer import OriginalIssuerEvidenceV1
 from .registered_capital_expenditure import (
     CAPITAL_EXPENDITURE,
@@ -57,8 +58,8 @@ from .serialization import sha256_digest
 from .taxonomy_evidence import require_original_taxonomy
 
 AUTOMATIC_MAPPING_INPUT_ROLE = "automatic-mapping-input-v1"
-AutomaticMappingPolicyVersion = Literal["source-bound-us-gaap-v17"]
-AUTOMATIC_MAPPING_POLICY: AutomaticMappingPolicyVersion = "source-bound-us-gaap-v17"
+AutomaticMappingPolicyVersion = Literal["source-bound-us-gaap-v18"]
+AUTOMATIC_MAPPING_POLICY: AutomaticMappingPolicyVersion = "source-bound-us-gaap-v18"
 _GAAP_NAMESPACE = re.compile(
     r"http://(?:fasb\.org|xbrl\.us)/us-gaap/\d{4}(?:-\d{2}-\d{2})?"
 )
@@ -162,6 +163,7 @@ def automatic_mapping_policy_digest() -> str:
                     "registered_investment_assets.py",
                     "registered_noncontrolling_equity.py",
                     "registered_liability_residuals.py",
+                    "lease_liability_mapping.py",
                     "accounting_roles.py",
                     "arelle_parser.py",
                     "facts.py",
@@ -216,7 +218,14 @@ def automatic_mapping_proposal(
     option_cost = normalized_field == "equity_award_unrecognized_compensation"
     investment_assets = normalized_field in INVESTMENT_ASSET_ROLES
     noncontrolling_equity = normalized_field == "noncontrolling_interests"
-    liability_residual = normalized_field in LIABILITY_RESIDUAL_ROLES
+    lease_concept = (
+        lease_liability_concept(original, normalized_field)
+        if original is not None
+        else None
+    )
+    liability_residual = (
+        normalized_field in LIABILITY_RESIDUAL_ROLES and lease_concept is None
+    )
     if option_cost and (
         original is None
         or select_option_compensation_disclosure(original).rules is None
@@ -245,16 +254,24 @@ def automatic_mapping_proposal(
         and not noncontrolling_equity
         and not liability_residual
         and not option_cost
+        and lease_concept is None
     ):
         return None
     concept = STOCK_COMPENSATION_DISCLOSURE
     if investment_assets:
         concept = investment_asset_concept(normalized_field)
-    if liability_residual:
+    if lease_concept is not None:
+        concept = lease_concept
+    elif liability_residual:
         concept = liability_residual_concept(normalized_field)
     elif noncontrolling_equity:
         concept = NONCONTROLLING_EQUITY
-    elif not disclosed and not investment_assets and not option_cost:
+    elif (
+        not disclosed
+        and not investment_assets
+        and not option_cost
+        and lease_concept is None
+    ):
         assert rule is not None
         concept = rule.concept
     if normalized_field == "depreciation_and_amortization" and original is not None:
@@ -468,6 +485,10 @@ def evaluate_automatic_mapping(
         proposal.normalized_field == "noncontrolling_interests"
         and proposal.source_concept == NONCONTROLLING_EQUITY
     )
+    lease_concept = lease_liability_concept(original, proposal.normalized_field)
+    lease_liability = (
+        lease_concept is not None and proposal.source_concept == lease_concept
+    )
     liability_residual = (
         proposal.normalized_field in LIABILITY_RESIDUAL_ROLES
         and proposal.source_concept
@@ -480,6 +501,7 @@ def evaluate_automatic_mapping(
         or noncontrolling_equity
         or liability_residual
         or option_cost
+        or lease_liability
     )
     if (
         (
@@ -495,6 +517,19 @@ def evaluate_automatic_mapping(
     selected: list[ParsedXbrlFactV1] = []
     rejected: list[MappingObservationRejectionV1] = []
     accounting_rules = None
+    if lease_liability:
+        leases = select_lease_liability(
+            original,
+            proposal.normalized_field,
+            security_id=(
+                request.security_identity.security_id
+                if request.security_identity is not None
+                else None
+            ),
+        )
+        reasons.update(leases.reason_codes)
+        selected.extend(leases.selected)
+        accounting_rules = leases.rules
     if liability_residual:
         liabilities = select_registered_liability_residual(
             original,
@@ -621,6 +656,7 @@ def evaluate_automatic_mapping(
             or noncontrolling_equity
             or liability_residual
             or option_cost
+            or lease_liability
             or fact.concept != proposal.source_concept
         ):
             continue
@@ -703,6 +739,9 @@ def evaluate_automatic_mapping(
                 anchor = NONCONTROLLING_EQUITY
             elif liability_residual:
                 anchor = liability_residual_concept(proposal.normalized_field)
+            elif lease_liability:
+                assert lease_concept is not None
+                anchor = lease_concept
             payload.update(
                 {
                     "anchor_concept": anchor,

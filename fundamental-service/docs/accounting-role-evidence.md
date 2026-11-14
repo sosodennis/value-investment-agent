@@ -52,6 +52,27 @@ the issuer, accession, original bytes, parser input and exact observation scope.
 They do not establish a complete award inventory, classify other award types,
 or assert that unsupported awards or claims are absent.
 
+Policy `source-bound-us-gaap-v18` selects standard operating/finance lease
+liabilities reported at exactly `BalanceSheetLocationAxis` with
+`OtherCurrentLiabilitiesMember`. The existing accounting evaluator classifies
+that observation as current; noncurrent requires the same concept's consolidated
+total minus its current portion. Both original observations keep their dimensions,
+scope, reported precision and hashes. The rule binds the complete parsed report,
+issuer, accession, raw/parser inputs and optional security identity.
+
+This rule is reusable across issuers and does not require individual mapping
+approval or an accession allowlist. It requires numeric nonnegative USD amounts,
+the SEC issuer identifier, supported US GAAP namespace, an aligned instant no
+later than the original report end, and known reported precision. Conflicting
+duplicates, mismatched namespaces, a current portion exceeding its reported
+total, and disagreement with a directly reported current/noncurrent concept
+abstain. A missing total cannot supply a noncurrent amount. Additional dimensions
+and custom location members are outside this rule; missing observations never
+prove zero. Existing registered zero-residual rules remain available when this
+standard current-location representation is absent. This adds lease liability
+mapping only; debt, capital claims, expense scope and award completeness still
+require their own evidence.
+
 The exact treasury-stock calculation refuses an exercise-price concept ending
 in `WeightedAverageExercisePrice`, including retained accounting-role inputs,
 with `DILUTION_AGGREGATE_STRIKE_UNRESOLVED`. Averaging strikes before applying
