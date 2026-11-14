@@ -206,6 +206,21 @@ receipt references the effective plan. This freezes source availability; market
 admission, trusted release and exact-input caller approval still run through the
 existing owners.
 
+An optional `quote_source_template` in the source-plan configuration supplies
+the deployment's quote provider URI template, terms templates and source-use
+policy version/digest. Its `request.protocol` is
+`automatic-us-common-previous-weekday-quote-template-v1`. The credential-free
+`request.uri_template` must contain `{security_id}` and `{observation_date}`.
+The compiler takes the security from the verified SEC identity and selects the
+preceding complete weekday in New York. Weekends are excluded; holidays are
+not inferred. If that date has no provider observation, the existing capture or
+admission owner retains its refusal without substituting a price or date.
+The template supports USD securities. It emits the same public capture and
+exact quote-admission requests used by the existing runner, sharing identical
+terms captures with market inputs. Conflicting capture profiles refuse.
+The configuration grants no source-use rights: deployment still needs an
+entitled provider credential and an approved policy covering the intended use.
+
 ## Source preparation command
 
 The acquisition owner also accepts `AutomaticSecIngestionRequestV1` with exact

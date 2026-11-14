@@ -18,6 +18,7 @@ from .classification_crosswalk import ClassificationCrosswalkPolicyV1
 from .command_artifacts import EvidenceArtifactStore
 from .contracts import (
     FiscalPeriodSelectorV1,
+    IdentityV1,
     InitialModelId,
     SecFilingSelectorV1,
     StrictModel,
@@ -32,6 +33,8 @@ from .market_source_selection import DailyMarketRatePolicyV1
 from .public_acquisition import PublicSourceAcquisitionRequestV1
 from .public_admission import PublicSourceAdmissionRequestV1
 from .original_preparation import OriginalPreparation
+from .quote_admission import QUOTE_METRIC
+from .quote_source_plan import AutomaticDailyQuoteRequestTemplateV1
 from .policies import initial_model_specs
 from .preparation_runner import AutomaticSourcePreparationPlanV1
 from .replay import ArtifactPublicationV1
@@ -164,6 +167,23 @@ class AutomaticMarketSourceTemplateV1(StrictModel):
         return self
 
 
+class AutomaticQuoteSourceTemplateV1(StrictModel):
+    """Deployment quote provider, terms and source-use policy pins."""
+
+    request: AutomaticDailyQuoteRequestTemplateV1
+    terms: tuple[AutomaticPublicSourceRequestTemplateV1, ...] = Field(
+        min_length=1, max_length=8
+    )
+    source_use_policy_version: str = Field(min_length=1)
+    source_use_policy_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+    @model_validator(mode="after")
+    def unique_terms(self) -> AutomaticQuoteSourceTemplateV1:
+        if len({item.uri_template for item in self.terms}) != len(self.terms):
+            raise ValueError("quote source template repeats a terms URI")
+        return self
+
+
 class AutomaticMarketSourcesTemplateV1(StrictModel):
     """One pinned source-use policy and its configured provider requests."""
 
@@ -249,6 +269,43 @@ def _market_source_requests(
     )
 
 
+def _quote_source_requests(
+    template: AutomaticQuoteSourceTemplateV1,
+    *,
+    identity: IdentityV1,
+    valuation_at: datetime,
+) -> tuple[
+    tuple[PublicSourceAcquisitionRequestV1, ...], PublicSourceAdmissionRequestV1
+]:
+    source, selection = template.request.render(
+        identity=identity, valuation_at=valuation_at
+    )
+    terms = tuple(item.render(valuation_at) for item in template.terms)
+    admission = PublicSourceAdmissionRequestV1(
+        kind="quote",
+        provider_id=source.source_id,
+        metric_id=QUOTE_METRIC,
+        valuation_at=valuation_at,
+        policy_version=template.source_use_policy_version,
+        policy_digest=template.source_use_policy_digest,
+        source_request_digests=(source.digest,),
+        terms_request_digests=tuple(sorted(item.digest for item in terms)),
+        quote_selection=selection,
+    )
+    return (source, *terms), admission
+
+
+def _merge_public_sources(
+    sources: tuple[PublicSourceAcquisitionRequestV1, ...],
+) -> tuple[PublicSourceAcquisitionRequestV1, ...]:
+    captures: dict[tuple[str, str], PublicSourceAcquisitionRequestV1] = {}
+    for request in sources:
+        previous = captures.setdefault((request.source_id, request.uri), request)
+        if previous != request:
+            raise ValueError("public source URI has conflicting profile or terms")
+    return tuple(sorted(captures.values(), key=lambda item: item.digest))
+
+
 class AutomaticSourcePlanConfigurationV1(StrictModel):
     """Deployment choices, without caller-supplied issuer or filing identity."""
 
@@ -265,6 +322,9 @@ class AutomaticSourcePlanConfigurationV1(StrictModel):
         Field(default=None, exclude_if=lambda value: value is None)
     )
     issuer_market_policy_template: AutomaticIssuerMarketPolicyTemplateV1 | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
+    quote_source_template: AutomaticQuoteSourceTemplateV1 | None = Field(
         default=None, exclude_if=lambda value: value is None
     )
 
@@ -564,6 +624,27 @@ class OriginalSourcePlan:
                     )
                 else:
                     public_sources, source_admissions = (), ()
+                quote_template = configuration.quote_source_template
+                if (
+                    quote_template is not None
+                    and ingestions[0].identity.currency != "USD"
+                ):
+                    codes.add("QUOTE_SOURCE_CURRENCY_UNSUPPORTED")
+                if quote_template is not None and not codes:
+                    quote_sources, quote_admission = _quote_source_requests(
+                        quote_template,
+                        identity=ingestions[0].identity,
+                        valuation_at=ingestions[0].valuation_timestamp,
+                    )
+                    public_sources = _merge_public_sources(
+                        (*public_sources, *quote_sources)
+                    )
+                    source_admissions = tuple(
+                        sorted(
+                            (*source_admissions, quote_admission),
+                            key=lambda item: item.digest,
+                        )
+                    )
                 if not codes:
                     plan = AutomaticSourcePreparationPlanV1(
                         source_revision=request.runtime_source_revision,
