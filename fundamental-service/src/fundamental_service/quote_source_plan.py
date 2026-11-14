@@ -30,13 +30,17 @@ class AutomaticDailyQuoteRequestTemplateV1(StrictModel):
             fields = tuple(Formatter().parse(self.uri_template))
         except ValueError as error:
             raise ValueError("quote source URI template is malformed") from error
-        if {field for _, field, _, _ in fields if field is not None} != {
-            "security_id",
-            "observation_date",
-        } or any(spec or conversion for _, _, spec, conversion in fields):
-            raise ValueError("quote template requires only security and date fields")
+        names = {field for _, field, _, _ in fields if field is not None}
+        if names not in (
+            {"security_id", "observation_date"},
+            {"security_id", "observation_start_epoch", "observation_end_epoch"},
+        ) or any(spec or conversion for _, _, spec, conversion in fields):
+            raise ValueError("quote template requires security and one date format")
         example = self.uri_template.format(
-            security_id="EXAMPLE", observation_date="2000-01-03"
+            security_id="EXAMPLE",
+            observation_date="2000-01-03",
+            observation_start_epoch="946875600",
+            observation_end_epoch="946962000",
         )
         uri = urlsplit(example)
         if (
@@ -70,6 +74,14 @@ class AutomaticDailyQuoteRequestTemplateV1(StrictModel):
             uri=self.uri_template.format(
                 security_id=quote(identity.security_id, safe=""),
                 observation_date=day.isoformat(),
+                observation_start_epoch=str(int(selection.as_of.timestamp())),
+                observation_end_epoch=str(
+                    int(
+                        datetime.combine(
+                            day + timedelta(days=1), time.min, _NEW_YORK
+                        ).timestamp()
+                    )
+                ),
             ),
             source_profile=self.source_profile,
             terms_reference=self.terms_reference,

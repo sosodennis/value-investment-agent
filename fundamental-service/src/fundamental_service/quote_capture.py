@@ -28,8 +28,15 @@ from .twelve_quote_source import (
     TWELVE_TERMS,
     validate_twelve_data_daily_uri,
 )
+from .yahoo_quote_source import (
+    YAHOO_CLOSE_PROFILE,
+    YAHOO_CLOSE_SOURCE,
+    YAHOO_TERMS,
+    validate_yahoo_daily_uri,
+)
 
 TWELVE_TERMS_SOURCE = "twelve-data-terms"
+YAHOO_TERMS_SOURCE = "yahoo-finance-terms"
 _MAX_QUOTE_BYTES = 1024 * 1024
 
 
@@ -66,13 +73,16 @@ class _BufferedResponse:
 
 
 def _validate_terms_uri(uri: str) -> None:
-    if uri != TWELVE_TERMS:
+    if uri not in (TWELVE_TERMS, YAHOO_TERMS):
         raise SnapshotError(
             "SOURCE_URI_NOT_ALLOWED", "quote terms require the exact registered URI"
         )
 
 
 class _QuoteCaptureProfile:
+    def __init__(self, validate_uri: Callable[[str], None]) -> None:
+        self._validate_uri = validate_uri
+
     def validate_request(self, request: SourceCaptureRequest) -> None:
         if any(
             value is not None
@@ -87,7 +97,7 @@ class _QuoteCaptureProfile:
                 "quote availability requires actual capture",
             )
         try:
-            validate_twelve_data_daily_uri(request.uri)
+            self._validate_uri(request.uri)
         except ValueError as error:
             raise SnapshotError(
                 "SOURCE_URI_NOT_ALLOWED", "unsupported quote capture URI"
@@ -116,22 +126,38 @@ def quote_preparation_source_adapter(
     def open_source(
         request: Request, *, timeout: float
     ) -> Iterator[PublicResponsePort]:
-        if request.host != "api.twelvedata.com":
+        profiles = {
+            "api.twelvedata.com": (
+                TWELVE_CLOSE_SOURCE,
+                TWELVE_CLOSE_PROFILE,
+                TWELVE_TERMS,
+                validate_twelve_data_daily_uri,
+            ),
+            "query2.finance.yahoo.com": (
+                YAHOO_CLOSE_SOURCE,
+                YAHOO_CLOSE_PROFILE,
+                YAHOO_TERMS,
+                validate_yahoo_daily_uri,
+            ),
+        }
+        profile = profiles.get(request.host)
+        if profile is None:
             with public_opener(request, timeout=timeout) as response:
                 yield response
             return
-        validate_twelve_data_daily_uri(request.full_url)
+        source_id, source_version, terms_reference, validate_uri = profile
+        validate_uri(request.full_url)
         rules = (
             tuple(
                 rule
                 for rule in policy.rules
                 if (
-                    rule.provider_id == TWELVE_CLOSE_SOURCE
+                    rule.provider_id == source_id
                     and rule.metric_id == QUOTE_METRIC
                     and rule.population == QUOTE_POPULATION
-                    and rule.source_id == TWELVE_CLOSE_SOURCE
-                    and rule.source_version == TWELVE_CLOSE_PROFILE
-                    and rule.terms_reference == TWELVE_TERMS
+                    and rule.source_id == source_id
+                    and rule.source_version == source_version
+                    and rule.terms_reference == terms_reference
                 )
             )
             if policy is not None
@@ -151,32 +177,34 @@ def quote_preparation_source_adapter(
                 "quote capture requires valuation preparation permission",
                 retryable=True,
             )
-        try:
-            key = api_key_file.read_text().strip() if api_key_file else ""
-        except (OSError, UnicodeError):
-            raise SnapshotError(
-                "QUOTE_SOURCE_CREDENTIAL_UNAVAILABLE",
-                "quote credential file is unavailable",
-                retryable=True,
-            ) from None
-        if (
-            not key
-            or len(key) > 1024
-            or any(not 33 <= ord(char) <= 126 for char in key)
-        ):
-            raise SnapshotError(
-                "QUOTE_SOURCE_CREDENTIAL_UNAVAILABLE",
-                "quote requires a valid deployment credential file",
-                retryable=True,
-            )
-        request.add_header("Authorization", f"apikey {key}")
+        key = ""
+        if source_id == TWELVE_CLOSE_SOURCE:
+            try:
+                key = api_key_file.read_text().strip() if api_key_file else ""
+            except (OSError, UnicodeError):
+                raise SnapshotError(
+                    "QUOTE_SOURCE_CREDENTIAL_UNAVAILABLE",
+                    "quote credential file is unavailable",
+                    retryable=True,
+                ) from None
+            if (
+                not key
+                or len(key) > 1024
+                or any(not 33 <= ord(char) <= 126 for char in key)
+            ):
+                raise SnapshotError(
+                    "QUOTE_SOURCE_CREDENTIAL_UNAVAILABLE",
+                    "quote requires a valid deployment credential file",
+                    retryable=True,
+                )
+            request.add_header("Authorization", f"apikey {key}")
         with open_quote(request, timeout=timeout) as response:
             payload = response.read(_MAX_QUOTE_BYTES + 1)
             if len(payload) > _MAX_QUOTE_BYTES:
                 raise SnapshotError(
                     "QUOTE_SOURCE_TOO_LARGE", "quote response exceeds the capture limit"
                 )
-            if key.encode() in payload:
+            if key and key.encode() in payload:
                 raise SnapshotError(
                     "QUOTE_SOURCE_CREDENTIAL_ECHO_REFUSED",
                     "quote response contains credential material",
@@ -193,7 +221,29 @@ def quote_preparation_source_adapter(
                 TWELVE_TERMS,
                 "exact",
             ),
-            _QuoteCaptureProfile(),
+            _QuoteCaptureProfile(validate_twelve_data_daily_uri),
+        ),
+        PublicSourceRegistration(
+            PublicSourceSpec(
+                YAHOO_CLOSE_SOURCE,
+                SourceRole.REFERENCE,
+                "https://query2.finance.yahoo.com/v8/finance/chart/",
+                YAHOO_TERMS,
+                "prefix",
+            ),
+            _QuoteCaptureProfile(validate_yahoo_daily_uri),
+        ),
+        PublicSourceRegistration(
+            PublicSourceSpec(
+                YAHOO_TERMS_SOURCE,
+                SourceRole.REFERENCE,
+                YAHOO_TERMS,
+                YAHOO_TERMS,
+                "exact",
+            ),
+            RetainedAvailabilityCaptureProfile(
+                _validate_terms_uri, require_nonempty=True
+            ),
         ),
         PublicSourceRegistration(
             PublicSourceSpec(

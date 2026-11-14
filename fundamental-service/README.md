@@ -210,7 +210,10 @@ An optional `quote_source_template` in the source-plan configuration supplies
 the deployment's quote provider URI template, terms templates and source-use
 policy version/digest. Its `request.protocol` is
 `automatic-us-common-previous-weekday-quote-template-v1`. The credential-free
-`request.uri_template` must contain `{security_id}` and `{observation_date}`.
+`request.uri_template` must contain `{security_id}` and either
+`{observation_date}` or both `{observation_start_epoch}` and
+`{observation_end_epoch}`. Epoch values delimit the New York calendar day in
+UTC seconds, with an exclusive end.
 The compiler takes the security from the verified SEC identity and selects the
 preceding complete weekday in New York. Weekends are excluded; holidays are
 not inferred. If that date has no provider observation, the existing capture or
@@ -218,8 +221,8 @@ admission owner retains its refusal without substituting a price or date.
 The template supports USD securities. It emits the same public capture and
 exact quote-admission requests used by the existing runner, sharing identical
 terms captures with market inputs. Conflicting capture profiles refuse.
-The configuration grants no source-use rights: deployment still needs an
-entitled provider credential and an approved policy covering the intended use.
+The configuration grants no source-use rights. Deployment needs an approved
+policy covering the intended use and any credential required by that provider.
 
 The quote reproduction registry also accepts retained Yahoo chart bytes under
 `yahoo-us-equity-latest-completed-daily-close-capture-v1`. This profile preserves
@@ -231,8 +234,12 @@ capture time, so it cannot establish an earlier historical information set.
 Yahoo's older history is split-adjusted even when yfinance uses
 `auto_adjust=False`; this profile refuses earlier sessions and subsequent split
 events instead of claiming to reconstruct an unadjusted historical price.
-Source-use admission remains independent. Registering this decoder grants no
-Yahoo permission and does not configure a live capture adapter.
+The preparation HTTP adapter registers the same bounded Yahoo chart profile
+and exact Yahoo terms URI. Capture requires one deployment source-use rule
+covering valuation preparation before HTTP I/O. It needs no API key, refuses
+redirects and responses over 1 MiB, and reuses saved captures without I/O.
+Source-use admission separately checks the retained terms and policy. The
+built-in free market policy contains no Yahoo authorization.
 
 ## Source preparation command
 
