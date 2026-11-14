@@ -21,6 +21,35 @@ fixture and must not be used as a production trust root.
 
 The service will own its source snapshots, point-in-time facts, model definitions, deterministic calculations, calibration artifacts, replay, and cache. The existing agent will call the service through a versioned API after the service passes the release gate for its declared coverage profile. The service must not import the existing agent's private implementation or share its valuation database.
 
+## Frozen annual discovery
+
+The service can freeze an original annual filing catalog from a CIK and valuation
+timestamp, using its configured SEC runtime and PostgreSQL/content persistence:
+
+```sh
+fundamental-discover-annuals \
+  --cik 0000724910 --valuation-timestamp 2025-06-01T00:00:00Z \
+  --source-revision <installed-source-commit>
+fundamental-discover-annuals --artifact-id annual-discovery:<request-digest>
+```
+
+The request pins the selection protocol, issuer, cutoff, original count/lookback,
+declared revision and actual configured parser year/form limits. The revision is
+an operator declaration; installed-source acceptance checks it independently.
+Recent and relevant historical submissions pages are retained before decoding.
+The catalog retains all row dispositions, source hashes and refusals. Only
+original 10-K acceptance metadata determines eligibility; current ticker metadata
+does not establish historical identity. The latest eligible originals are selected
+before runtime compatibility is checked, so an unsupported newest original blocks
+instead of silently selecting older supported coverage.
+
+Repeats and retrieval verify the immutable request, receipts, original bytes and
+reproduced selection, returning the same digest with `wrote=false`. Interrupted or
+transient attempts reuse successful captures; retryable failures retain their own
+content identities. Catalog evidence does not approve mappings, prove complete
+accounting coverage, authorize a release/caller input or calculate a valuation.
+Automatic compilation into a complete source preparation plan remains pending.
+
 ## Source preparation command
 
 The acquisition owner also accepts `AutomaticSecIngestionRequestV1` with exact

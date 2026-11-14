@@ -19,7 +19,7 @@ from .sec_source import (
     SecRequestTransportPort,
     _SecResponse,
 )
-from .serialization import sha256_digest
+from .serialization import canonical_bytes, sha256_digest
 from .snapshots import ContentAddressedStore, SnapshotError
 
 
@@ -28,6 +28,14 @@ class SecCaptureScopeV1(StrictModel):
     accession_number: str = Field(pattern=r"^\d{10}-\d{2}-\d{6}$")
     valuation_timestamp: AwareDatetime
     source_profile: str = Field(min_length=1)
+
+
+class SecSubmissionsCaptureScopeV1(StrictModel):
+    protocol: Literal["sec-original-annual-discovery-v1"] = (
+        "sec-original-annual-discovery-v1"
+    )
+    cik: str = Field(pattern=r"^[0-9]{10}$")
+    valuation_timestamp: AwareDatetime
 
 
 class SecStoredResponseV1(StrictModel):
@@ -43,7 +51,7 @@ class SecStoredResponseV1(StrictModel):
 
 class SecResponseReceiptV1(SecStoredResponseV1):
     schema_version: Literal["sec-response-receipt.v1"] = "sec-response-receipt.v1"
-    scope: SecCaptureScopeV1
+    scope: SecCaptureScopeV1 | SecSubmissionsCaptureScopeV1
 
 
 class SecArchivedResponseReceiptV1(SecStoredResponseV1):
@@ -78,7 +86,7 @@ class RetainedSecSourceAdapter(SecEdgarSourceAdapter):
         self,
         delegate: SecRequestTransportPort,
         *,
-        scope: SecCaptureScopeV1,
+        scope: SecCaptureScopeV1 | SecSubmissionsCaptureScopeV1,
         receipts: SecCaptureStore,
         content: ContentAddressedStore,
         capture_lock: Callable[[str], AbstractContextManager[None]],
@@ -105,13 +113,8 @@ class RetainedSecSourceAdapter(SecEdgarSourceAdapter):
         artifact_id = f"sec-response:{key}"
         archive_key = self._archive_key(uri)
         with self._capture_lock(archive_key or key):
-            receipt = self._read_receipt(artifact_id, SecResponseReceiptV1)
+            receipt = self.read_retained_response(uri)
             if receipt is not None:
-                if receipt.scope != self.scope or receipt.uri != uri:
-                    raise SnapshotError(
-                        "SEC_CAPTURE_IDENTITY_MISMATCH",
-                        "retained SEC receipt differs from its key",
-                    )
                 return self._response(receipt)
 
             archive_id = f"sec-archived-response:{archive_key}"
@@ -122,7 +125,8 @@ class RetainedSecSourceAdapter(SecEdgarSourceAdapter):
             )
             if archived is not None:
                 if (
-                    archived.cik != self.scope.cik
+                    not isinstance(self.scope, SecCaptureScopeV1)
+                    or archived.cik != self.scope.cik
                     or archived.accession_number != self.scope.accession_number
                     or archived.uri != uri
                 ):
@@ -157,7 +161,9 @@ class RetainedSecSourceAdapter(SecEdgarSourceAdapter):
                     declared_size=response.declared_size,
                     received_size=len(response.content),
                 )
-                if archive_key is not None:
+                if archive_key is not None and isinstance(
+                    self.scope, SecCaptureScopeV1
+                ):
                     archived = SecArchivedResponseReceiptV1(
                         cik=self.scope.cik,
                         accession_number=self.scope.accession_number,
@@ -169,6 +175,8 @@ class RetainedSecSourceAdapter(SecEdgarSourceAdapter):
             return response
 
     def _archive_key(self, uri: str) -> str | None:
+        if not isinstance(self.scope, SecCaptureScopeV1):
+            return None
         prefix = (
             f"https://www.sec.gov/Archives/edgar/data/{int(self.scope.cik)}/"
             f"{self.scope.accession_number.replace('-', '')}/"
@@ -186,6 +194,21 @@ class RetainedSecSourceAdapter(SecEdgarSourceAdapter):
             }
         )
 
+    def read_retained_response(self, uri: str) -> SecResponseReceiptV1 | None:
+        """Read and verify a captured response without contacting the provider."""
+        key = sha256_digest(
+            {"protocol": "sec-response-receipt.v1", "scope": self.scope, "uri": uri}
+        )
+        receipt = self._read_receipt(f"sec-response:{key}", SecResponseReceiptV1)
+        if receipt is not None:
+            if receipt.scope != self.scope or receipt.uri != uri:
+                raise SnapshotError(
+                    "SEC_CAPTURE_IDENTITY_MISMATCH",
+                    "retained SEC receipt differs from its key",
+                )
+            self._response(receipt)
+        return receipt
+
     def _read_receipt(
         self, artifact_id: str, receipt_type: type[Receipt]
     ) -> Receipt | None:
@@ -195,12 +218,24 @@ class RetainedSecSourceAdapter(SecEdgarSourceAdapter):
             if error.code != "ARTIFACT_NOT_FOUND":
                 raise
             return None
-        if record.status != "valid" or record.retention != "evidence":
+        if (
+            record.status != "valid"
+            or record.retention != "evidence"
+            or record.media_type != "application/json"
+        ):
             raise SnapshotError(
                 "SEC_CAPTURE_INVALID", "retained SEC receipt is not valid evidence"
             )
         try:
-            return receipt_type.model_validate_json(self._receipts.read(artifact_id))
+            raw = self._receipts.read(artifact_id)
+            receipt = receipt_type.model_validate_json(raw)
+            if (
+                canonical_bytes(receipt) != raw
+                or hashlib.sha256(raw).hexdigest() != record.content_hash
+                or record.dependency_hashes != (receipt.content_hash,)
+            ):
+                raise ValueError("retained SEC receipt identity differs")
+            return receipt
         except ValueError as error:
             raise SnapshotError(
                 "SEC_CAPTURE_INVALID", "retained SEC receipt is invalid"

@@ -543,7 +543,7 @@ class SecEdgarSourceAdapter:
         payload = response.content
         try:
             json.loads(payload)
-        except json.JSONDecodeError as error:
+        except (json.JSONDecodeError, UnicodeDecodeError) as error:
             raise SecSourceError(
                 "SOURCE_PAYLOAD_INVALID", "SEC JSON payload is invalid"
             ) from error

@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Literal
 
 from lxml import etree, html
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, ValidationError
 
 from .arelle_parser import ArelleParserError, ArelleValidationProfileV1, _directory_hash
 from .automatic_source_mapping import (
@@ -47,6 +47,7 @@ from .issuer_identity import (
 from .metadata import PostgresArtifactStore, PostgresContentStore, PostgresMetadataStore
 from .operations import ServiceError
 from .sec_capture import RetainedSecSourceAdapter, SecCaptureScopeV1, SecCaptureStore
+from .sec_submissions import SecRecentFilingsV1, SecSubmissionsV1
 from .sec_source import (
     SecEdgarSourceAdapter,
     SecRequestPolicy,
@@ -71,34 +72,6 @@ _AWARD_PROXY_COMPANION_FORMS = frozenset({"DEF 14A/A", "DEFA14A", "DEFA14A/A"})
 
 class _SecPayload(BaseModel):
     model_config = ConfigDict(extra="allow")
-
-
-class _RecentFilings(_SecPayload):
-    accessionNumber: list[str]
-    filingDate: list[str]
-    acceptanceDateTime: list[str | None]
-    form: list[str]
-    primaryDocument: list[str]
-    isXBRL: list[int | str]
-    isInlineXBRL: list[int | str] | None = None
-
-
-class _SubmissionHistoryReference(_SecPayload):
-    name: str = Field(pattern=r"^CIK\d{10}-submissions-\d{3}\.json$")
-    filingCount: int = Field(ge=1)
-    filingFrom: date
-    filingTo: date
-
-
-class _SecFilings(_SecPayload):
-    recent: _RecentFilings
-    files: list[_SubmissionHistoryReference] | None = None
-
-
-class _Submissions(_SecPayload):
-    cik: int | str
-    tickers: list[str] = Field(default_factory=list)
-    filings: _SecFilings
 
 
 class _FilingIndexItem(_SecPayload):
@@ -1128,9 +1101,9 @@ class SecAcquisitionUseCase:
     @staticmethod
     def _decode_submissions(
         payload: bytes, request: SecSourceRequestV1
-    ) -> _Submissions:
+    ) -> SecSubmissionsV1:
         try:
-            submissions = _Submissions.model_validate_json(payload)
+            submissions = SecSubmissionsV1.model_validate_json(payload)
         except ValidationError as error:
             raise ServiceError(
                 "SOURCE_PAYLOAD_INVALID",
@@ -1175,7 +1148,7 @@ class SecAcquisitionUseCase:
 
     @staticmethod
     def _select_filing(
-        submissions: _Submissions,
+        submissions: SecSubmissionsV1,
         selector: SecFilingSelectorV1,
         valuation_timestamp: datetime,
         *,
@@ -1279,13 +1252,13 @@ class SecAcquisitionUseCase:
 
     @staticmethod
     def _select_award_proxy_filings(
-        submissions: _Submissions,
+        submissions: SecSubmissionsV1,
         valuation_timestamp: datetime,
         *,
-        history_rows: tuple[_RecentFilings, ...] = (),
+        history_rows: tuple[SecRecentFilingsV1, ...] = (),
     ) -> tuple[tuple[_SelectedFiling, ...], tuple[IssueV1, ...]]:
         row_sets = (submissions.filings.recent, *history_rows)
-        recent = _RecentFilings(
+        recent = SecRecentFilingsV1(
             accessionNumber=[
                 value for rows in row_sets for value in rows.accessionNumber
             ],
@@ -1409,7 +1382,7 @@ class SecAcquisitionUseCase:
     def _capture_award_proxy_sources(
         self,
         request: SecSourceRequestV1,
-        submissions: _Submissions,
+        submissions: SecSubmissionsV1,
         *,
         annual_accession: str,
         deadline_at: datetime,
@@ -1417,7 +1390,7 @@ class SecAcquisitionUseCase:
         if request.supplemental_filing_policy is None:
             return (), ()
         sources: list[CapturedSource] = []
-        history_rows: tuple[_RecentFilings, ...] = ()
+        history_rows: tuple[SecRecentFilingsV1, ...] = ()
         if request.supplemental_filing_policy == "sec-equity-award-proxy.v2":
             history_sources, history_rows = self._capture_award_proxy_history(
                 request,
@@ -1515,11 +1488,11 @@ class SecAcquisitionUseCase:
     def _capture_award_proxy_history(
         self,
         request: SecSourceRequestV1,
-        submissions: _Submissions,
+        submissions: SecSubmissionsV1,
         *,
         annual_accession: str,
         deadline_at: datetime,
-    ) -> tuple[tuple[CapturedSource, ...], tuple[_RecentFilings, ...]]:
+    ) -> tuple[tuple[CapturedSource, ...], tuple[SecRecentFilingsV1, ...]]:
         cutoff = request.valuation_timestamp.date() - timedelta(
             days=_AWARD_PROXY_LOOKBACK_DAYS
         )
@@ -1594,13 +1567,13 @@ class SecAcquisitionUseCase:
                 capture_lock=self._capture_lock,
             )
         sources: list[CapturedSource] = []
-        rows: list[_RecentFilings] = []
+        rows: list[SecRecentFilingsV1] = []
         for reference in overlapping:
             source = adapter.capture_submission_history(
                 cik=request.cik, filename=reference.name, deadline_at=deadline_at
             )
             try:
-                history = _RecentFilings.model_validate_json(source.content)
+                history = SecRecentFilingsV1.model_validate_json(source.content)
                 lengths = {
                     len(history.accessionNumber),
                     len(history.filingDate),
