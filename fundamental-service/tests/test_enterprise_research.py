@@ -78,6 +78,41 @@ def request(**changes):
 
 
 @pytest.mark.parametrize("model", ("fcff_dcf", "transition_fcff_dcf"))
+def test_research_without_a_complete_release_never_fabricates_its_reference(model):
+    filing = _fact("filed_operating_evidence", 2025, "1").model_copy(
+        update={"value": "filed evidence"}
+    )
+    facts = (
+        (*operating_facts(), filing)
+        if model == "transition_fcff_dcf"
+        else operating_facts()
+    )
+    inputs = request(
+        facts=facts,
+        model_id=model,
+        model_version=f"{model}-v2",
+        data_release_manifest_digest=None,
+    )
+    result = research_enterprise_value(inputs)
+    assert inputs.data_release_manifest_digest is None
+    assert result.operating_forecast.data_release_manifest_digest is None
+    assert (
+        result.operating_forecast.contract_version
+        == "fundamental.operating-forecast.v2"
+    )
+    assert result.results[0].status == "provisional_conditional_enterprise_value"
+    assert result.supported_history_threshold is None
+    assert "mapping_or_release_authentication" in result.unestablished_claims
+    assert _prepare(facts, market_policy=_market_policy(), model_id=model).input is None
+    referenced = research_enterprise_value(
+        inputs.model_copy(update={"data_release_manifest_digest": RELEASE_DIGEST})
+    )
+    assert result.input_digest != referenced.input_digest
+    assert result.output_digest != referenced.output_digest
+    assert result.results == referenced.results
+
+
+@pytest.mark.parametrize("model", ("fcff_dcf", "transition_fcff_dcf"))
 def test_shared_enterprise_stage_matches_full_calculator_nodes(model):
     filing = _fact("filed_operating_evidence", 2025, "1").model_copy(
         update={"value": "filed evidence"}

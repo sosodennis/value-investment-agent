@@ -15,7 +15,7 @@ from .contracts import (
 )
 from .enterprise_projection import project_enterprise_nodes
 from .numerical_policy import VALUATION_NUMERICAL_POLICY, using_valuation_context
-from .operating_forecast import OperatingForecastV1, prepare_operating_forecast
+from .operating_forecast import OperatingForecastV2, prepare_operating_forecast
 from .operating_projection import OperatingProjectionError, resolve_operating_model
 from .original_issuer import IssuerOperatingSourceV1
 from .serialization import canonical_bytes, sha256_digest
@@ -54,7 +54,7 @@ class EnterpriseResearchRequestV1(StrictModel):
     policy_id: str = Field(min_length=1)
     policy_version: str = Field(min_length=1)
     mapping_version: str = Field(min_length=1)
-    data_release_manifest_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    data_release_manifest_digest: str | None = Field(pattern=r"^[0-9a-f]{64}$")
     history_window_years: Literal[3, 4, 5] | None = None
     working_capital_inputs: tuple[CompositeWorkingCapitalInputV1, ...] = ()
     scenarios: tuple[EnterpriseDiscountScenarioV1, ...] = Field(
@@ -105,7 +105,7 @@ class EnterpriseResearchReportV1(StrictModel):
     numerical_policy: str = VALUATION_NUMERICAL_POLICY
     input_digest: str
     model_spec_digest: str
-    operating_forecast: OperatingForecastV1
+    operating_forecast: OperatingForecastV2
     results: tuple[EnterpriseScenarioResultV1, ...]
     supported_history_threshold: None = None
     unestablished_claims: tuple[str, ...] = (

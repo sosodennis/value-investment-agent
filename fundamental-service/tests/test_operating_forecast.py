@@ -18,7 +18,7 @@ from fundamental_service.contracts import (
     UncertaintyV1,
 )
 from fundamental_service.operating_forecast import (
-    OperatingForecastV1,
+    OperatingForecastV2,
     prepare_operating_forecast,
 )
 from fundamental_service.serialization import canonical_bytes, sha256_digest
@@ -63,7 +63,7 @@ def prepare(
     *,
     model_id="fcff_dcf",
     **changes,
-) -> OperatingForecastV1:
+) -> OperatingForecastV2:
     return prepare_operating_forecast(
         facts,
         **{
@@ -77,6 +77,31 @@ def prepare(
             **changes,
         },
     )
+
+
+def test_absent_release_reference_is_explicit_and_changes_research_identity():
+    released = prepare(operating_facts())
+    research = prepare(operating_facts(), data_release_manifest_digest=None)
+    assert research.contract_version == "fundamental.operating-forecast.v2"
+    assert research.data_release_manifest_digest is None
+    assert json.loads(canonical_bytes(research))["data_release_manifest_digest"] is None
+    assert research.status == "prepared"
+    assert research.quality_status is QualityStatus.PROVISIONAL
+    assert research.forecast == released.forecast
+    assert research.nodes == released.nodes
+    assert research.input_digest != released.input_digest
+    assert research.output_digest != released.output_digest
+    assert canonical_bytes(research) == canonical_bytes(
+        prepare(tuple(reversed(operating_facts())), data_release_manifest_digest=None)
+    )
+    with pytest.raises(ValidationError):
+        OperatingForecastV2.model_validate(
+            {
+                **research.model_dump(),
+                "contract_version": "fundamental.operating-forecast.v1",
+            }
+        )
+    assert _prepare(operating_facts(), market_policy=_market_policy()).input is None
 
 
 @pytest.mark.parametrize("model", ("fcff_dcf", "transition_fcff_dcf"))
@@ -299,7 +324,7 @@ def test_operating_contract_cannot_promote_quality_or_threshold():
         payload = result.model_dump(mode="json")
         payload.update(changes)
         with pytest.raises(ValidationError):
-            OperatingForecastV1.model_validate_json(json.dumps(payload))
+            OperatingForecastV2.model_validate_json(json.dumps(payload))
     full = valuation_requirements_profile("fcff_dcf")
     assert len(full.required_fact_fields) == 25
     assert full.market_policy_input_roles

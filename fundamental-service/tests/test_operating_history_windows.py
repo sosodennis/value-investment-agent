@@ -8,7 +8,7 @@ from pydantic import ValidationError
 from fundamental_service.contracts import QualityStatus
 from fundamental_service.data_releases import DataReleaseError
 from fundamental_service.issuer_operating_release import IssuerOperatingReleaseService
-from fundamental_service.operating_forecast import OperatingForecastV1
+from fundamental_service.operating_forecast import OperatingForecastV2
 from fundamental_service.replay import ArtifactStore
 from fundamental_service.serialization import canonical_bytes, sha256_digest
 from test_issuer_operating_release import fixture, inventory
@@ -164,7 +164,7 @@ def test_default_wire_shape_and_explicit_window_coherence():
         {"excluded_history_fact_ids": explicit.selected_fact_ids[:1]},
     ):
         with pytest.raises(ValidationError):
-            OperatingForecastV1.model_validate({**explicit.model_dump(), **changes})
+            OperatingForecastV2.model_validate({**explicit.model_dump(), **changes})
 
 
 def test_authenticated_release_window_repeat_retains_authority_and_artifact_inventory(

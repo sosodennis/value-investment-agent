@@ -8,7 +8,13 @@ remain unknown. Full valuation preparation retains all its existing gates.
 
 The request pins complete canonical facts, snapshot/operating-source identity,
 mapping and release references, model/policy versions, optional history window
-and composite working-capital inputs. It calls the existing #352
+and composite working-capital inputs. When no complete data release exists,
+the caller explicitly supplies a null release reference. The internal
+`fundamental.operating-forecast.v2` contract preserves that null in its input
+and output identity. A snapshot digest cannot stand in for a release manifest;
+a supplied release reference alone establishes no authority. Trusted full
+valuation preparation still requires its real release evidence.
+Research calls the existing #352
 `prepare_operating_forecast`, which selects eligible annual facts, derives
 metrics and composes the forecast. Tax comes from that preparation; a scenario
 cannot override it. Operating refusals remain in every requested scenario.

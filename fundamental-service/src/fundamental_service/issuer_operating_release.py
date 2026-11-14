@@ -15,7 +15,7 @@ from .data_releases import (
     IssuerOperatingReleaseManifestV1,
 )
 from .facts import CanonicalMappingV1, resolve_canonical_facts
-from .operating_forecast import OperatingForecastV1, prepare_operating_forecast
+from .operating_forecast import OperatingForecastV2, prepare_operating_forecast
 from .original_issuer import IssuerOperatingSourceV1
 from .release_runner import (
     DataReleaseCanaryReportV1,
@@ -69,7 +69,7 @@ class IssuerOperatingReleaseBundleV1(StrictModel):
 class ReleasedOperatingForecastV1(StrictModel):
     manifest_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
     canary: DataReleaseCanaryReportV1
-    forecast: OperatingForecastV1
+    forecast: OperatingForecastV2
 
     @model_validator(mode="after")
     def release_matches_forecast(self) -> ReleasedOperatingForecastV1:

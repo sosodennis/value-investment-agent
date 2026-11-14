@@ -53,11 +53,11 @@ HISTORY_WINDOW_POLICY: Literal["complete-trailing-annual-v1"] = (
 )
 
 
-class OperatingForecastV1(StrictModel):
+class OperatingForecastV2(StrictModel):
     """Provisional operating targets with complete input and metric lineage."""
 
-    contract_version: Literal["fundamental.operating-forecast.v1"] = (
-        "fundamental.operating-forecast.v1"
+    contract_version: Literal["fundamental.operating-forecast.v2"] = (
+        "fundamental.operating-forecast.v2"
     )
     scope: Literal["operating_targets_only"] = "operating_targets_only"
     composer_version: str = FORECAST_COMPOSER_VERSION
@@ -70,7 +70,7 @@ class OperatingForecastV1(StrictModel):
     mapping_version: str = Field(min_length=1)
     profile_id: str = Field(min_length=1)
     profile_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
-    data_release_manifest_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    data_release_manifest_digest: str | None = Field(pattern=r"^[0-9a-f]{64}$")
     snapshot_id: str = Field(min_length=1)
     quality_status: QualityStatus
     supported_history_threshold: None = None
@@ -96,7 +96,7 @@ class OperatingForecastV1(StrictModel):
     output_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
 
     @model_validator(mode="after")
-    def disposition_matches_targets(self) -> "OperatingForecastV1":
+    def disposition_matches_targets(self) -> "OperatingForecastV2":
         prepared = self.status == "prepared"
         if prepared != (
             self.forecast is not None and self.tax_rate is not None and bool(self.nodes)
@@ -137,14 +137,15 @@ def prepare_operating_forecast(
     policy_id: str,
     policy_version: str,
     mapping_version: str,
-    data_release_manifest_digest: str,
+    data_release_manifest_digest: str | None,
     history_window_years: Literal[3, 4, 5] | None = None,
     working_capital_inputs: tuple[CompositeWorkingCapitalInputV1, ...] = (),
-) -> OperatingForecastV1:
-    """Compose the formal operating stage from already released canonical facts.
+) -> OperatingForecastV2:
+    """Compose the formal operating stage from canonical evidence references.
 
     All supplied facts, including rejected inputs, bind input identity. This
     function performs no I/O, release verification, signing or quality promotion.
+    An absent release reference stays null; research cannot invent a manifest.
     """
 
     resolve_operating_model(model_id, model_version)
@@ -176,10 +177,10 @@ def _prepare(
     policy_id: str,
     policy_version: str,
     mapping_version: str,
-    data_release_manifest_digest: str,
+    data_release_manifest_digest: str | None,
     history_window_years: Literal[3, 4, 5] | None,
     working_capital_inputs: tuple[CompositeWorkingCapitalInputV1, ...],
-) -> OperatingForecastV1:
+) -> OperatingForecastV2:
     profile = (
         composite_working_capital_requirements_profile(model_id)
         if working_capital_inputs
@@ -196,7 +197,7 @@ def _prepare(
     )
     input_digest = sha256_digest(
         {
-            "contract_version": "fundamental.operating-forecast.v1",
+            "contract_version": "fundamental.operating-forecast.v2",
             "composer_version": FORECAST_COMPOSER_VERSION,
             "numerical_policy_version": VALUATION_NUMERICAL_POLICY,
             "facts": sorted(
@@ -372,7 +373,7 @@ def _prepare(
             )
             forecast, tax_rate, nodes = None, None, ()
     prepared = forecast is not None
-    result = OperatingForecastV1(
+    result = OperatingForecastV2(
         status="prepared" if prepared else "abstained",
         model_id=model_id,
         model_version=model_version,
