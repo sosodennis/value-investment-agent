@@ -125,7 +125,7 @@ def test_deterministic_order_and_identical_duplicate_accessions_keep_source_line
         {"acceptanceDateTime": "2025-05-01T16:00:00"},
         {"reportDate": ""},
         {"reportDate": "2025-06-01"},
-        {"filingDate": "2025-05-02"},
+        {"filingDate": "2025-03-30"},
         {"primaryDocument": "../foreign.htm"},
         {"isInlineXBRL": "unknown"},
         {"accessionNumber": "invalid-accession"},
@@ -233,3 +233,36 @@ def test_source_cik_columns_and_duplicate_keys_fail_at_decode():
         decode_history(canonical_bytes(malformed))
     with pytest.raises(ValueError, match="duplicate SEC JSON key"):
         decode_history(b'{"form":[],"form":[]}')
+
+
+def test_sec_after_hours_acceptance_and_official_filing_date_remain_distinct():
+    after_hours = row(
+        2008,
+        accessionNumber="0000724910-08-000006",
+        acceptanceDateTime="2008-05-19T21:33:41.000Z",
+        filingDate="2008-05-20",
+        reportDate="2008-03-31",
+        isXBRL=0,
+        isInlineXBRL=0,
+    )
+    evidence = source(after_hours, row(2023), row(2024))
+    result = select(
+        request(valuation_timestamp=datetime(2024, 6, 1, tzinfo=UTC)), evidence
+    )
+    assert not result.issue_codes
+    old = result.dispositions[0]
+    assert old.issue_codes == ("ANNUAL_OUTSIDE_LOOKBACK",)
+    assert old.filing.filing_date.isoformat() == "2008-05-20"
+    assert old.filing.accepted_at == datetime(2008, 5, 19, 21, 33, 41, tzinfo=UTC)
+    # A current after-hours original remains ineligible until both retained
+    # acceptance and official filing date satisfy the decision cutoff.
+    current = source(row(2023), row(2024, filingDate="2024-05-02"))
+    before = select(
+        request(valuation_timestamp=datetime(2024, 5, 1, 23, tzinfo=UTC)), current
+    )
+    assert before.issue_codes == ("ANNUAL_SOURCE_COUNT_INSUFFICIENT",)
+    assert before.dispositions[-1].issue_codes == ("ANNUAL_AFTER_VALUATION",)
+    after = select(
+        request(valuation_timestamp=datetime(2024, 5, 2, tzinfo=UTC)), current
+    )
+    assert not after.issue_codes

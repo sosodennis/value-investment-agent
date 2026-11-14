@@ -188,17 +188,20 @@ def select_original_annuals(
                 )
                 if filing.report_period_end > filing.filing_date:
                     raise ValueError("report period follows the filing date")
-                if filing.filing_date > filing.accepted_at.astimezone(UTC).date():
-                    raise ValueError("filing date follows its acceptance")
-                if filing.accepted_at > request.valuation_timestamp:
+                if filing.report_period_end > filing.accepted_at.astimezone(UTC).date():
+                    raise ValueError("report period follows the acceptance date")
+                # SEC 17 CFR 232.13(a)(2): after-hours submissions may have
+                # an official filing date on the next business day.
+                if (
+                    filing.accepted_at > request.valuation_timestamp
+                    or filing.filing_date > request.valuation_timestamp.date()
+                ):
                     codes.add("ANNUAL_AFTER_VALUATION")
                 elif filing.filing_date < cutoff:
                     codes.add("ANNUAL_OUTSIDE_LOOKBACK")
                 elif accession in conflicts:
                     codes.add("ANNUAL_ACCESSION_CONFLICT")
                     issues.update(codes)
-                elif filing.filing_date > request.valuation_timestamp.date():
-                    raise ValueError("filing date contradicts eligible acceptance")
                 else:
                     candidates.append(filing)
             except ValueError:
