@@ -63,6 +63,15 @@ class SecArchivedResponseReceiptV1(SecStoredResponseV1):
 Receipt = TypeVar("Receipt", bound=SecStoredResponseV1)
 
 
+def sec_response_artifact_id(
+    scope: SecCaptureScopeV1 | SecSubmissionsCaptureScopeV1, uri: str
+) -> str:
+    key = sha256_digest(
+        {"protocol": "sec-response-receipt.v1", "scope": scope, "uri": uri}
+    )
+    return f"sec-response:{key}"
+
+
 class SecCaptureStore(Protocol):
     def get(self, artifact_id: str) -> ArtifactRecordV1: ...
 
@@ -97,6 +106,12 @@ class RetainedSecSourceAdapter(SecEdgarSourceAdapter):
         self._receipts = receipts
         self._content = content
         self._capture_lock = capture_lock
+        self._observed: dict[str, SecResponseReceiptV1] = {}
+
+    @property
+    def observed_responses(self) -> tuple[SecResponseReceiptV1, ...]:
+        """Exact receipts used before success or failure of this attempt."""
+        return tuple(self._observed[uri] for uri in sorted(self._observed))
 
     def _request(
         self, uri: str, *, deadline_at: datetime | None = None
@@ -107,14 +122,13 @@ class RetainedSecSourceAdapter(SecEdgarSourceAdapter):
                 "SEC acquisition deadline expired",
                 retryable=True,
             )
-        key = sha256_digest(
-            {"protocol": "sec-response-receipt.v1", "scope": self.scope, "uri": uri}
-        )
-        artifact_id = f"sec-response:{key}"
+        artifact_id = sec_response_artifact_id(self.scope, uri)
+        key = artifact_id.removeprefix("sec-response:")
         archive_key = self._archive_key(uri)
         with self._capture_lock(archive_key or key):
             receipt = self.read_retained_response(uri)
             if receipt is not None:
+                self._observed[uri] = receipt
                 return self._response(receipt)
 
             archive_id = f"sec-archived-response:{archive_key}"
@@ -172,6 +186,7 @@ class RetainedSecSourceAdapter(SecEdgarSourceAdapter):
                     self._receipts.put(archive_id, archived, (content_hash,))
             receipt = SecResponseReceiptV1(scope=self.scope, **stored.model_dump())
             self._receipts.put(artifact_id, receipt, (stored.content_hash,))
+            self._observed[uri] = receipt
             return response
 
     def _archive_key(self, uri: str) -> str | None:
@@ -196,10 +211,9 @@ class RetainedSecSourceAdapter(SecEdgarSourceAdapter):
 
     def read_retained_response(self, uri: str) -> SecResponseReceiptV1 | None:
         """Read and verify a captured response without contacting the provider."""
-        key = sha256_digest(
-            {"protocol": "sec-response-receipt.v1", "scope": self.scope, "uri": uri}
+        receipt = self._read_receipt(
+            sec_response_artifact_id(self.scope, uri), SecResponseReceiptV1
         )
-        receipt = self._read_receipt(f"sec-response:{key}", SecResponseReceiptV1)
         if receipt is not None:
             if receipt.scope != self.scope or receipt.uri != uri:
                 raise SnapshotError(
