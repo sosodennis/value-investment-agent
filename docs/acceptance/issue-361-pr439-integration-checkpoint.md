@@ -7,7 +7,7 @@ Ordinary merge into `codex/issue-361-replay-evidence`:
 `5908ab0628afe8b8d053d3487a922446b909a14c` and the reviewed head.
 All three child checkpoints and parent WIP are retained.
 
-[Independent engineering review](https://github.com/sosodennis/value-investment-agent/pull/439#issuecomment-6869866634)
+[Independent engineering review](https://github.com/sosodennis/value-investment-agent/pull/439#issuecomment-6869362455)
 inspected the actual four-file diff, official Fundamental forecast/label calls,
 model-version binding, source/mapping/label lineage, failures and idempotency.
 No blocking findings remain. This review does not supply accounting or
