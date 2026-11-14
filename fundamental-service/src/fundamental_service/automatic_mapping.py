@@ -55,12 +55,17 @@ from .registered_liability_residuals import (
     ROLES as LIABILITY_RESIDUAL_ROLES,
     select_registered_liability_residual,
 )
+from .registered_revenue import (
+    CONTRACT_REVENUE,
+    registered_revenue_concept,
+    select_registered_revenue,
+)
 from .serialization import sha256_digest
 from .taxonomy_evidence import require_original_taxonomy
 
 AUTOMATIC_MAPPING_INPUT_ROLE = "automatic-mapping-input-v1"
-AutomaticMappingPolicyVersion = Literal["source-bound-us-gaap-v22"]
-AUTOMATIC_MAPPING_POLICY: AutomaticMappingPolicyVersion = "source-bound-us-gaap-v22"
+AutomaticMappingPolicyVersion = Literal["source-bound-us-gaap-v23"]
+AUTOMATIC_MAPPING_POLICY: AutomaticMappingPolicyVersion = "source-bound-us-gaap-v23"
 _GAAP_NAMESPACE = re.compile(
     r"http://(?:fasb\.org|xbrl\.us)/us-gaap/\d{4}(?:-\d{2}-\d{2})?"
 )
@@ -165,6 +170,7 @@ def automatic_mapping_policy_digest() -> str:
                     "automatic_mapping_disclosures.py",
                     "registered_depreciation.py",
                     "registered_capital_expenditure.py",
+                    "registered_revenue.py",
                     "registered_investment_assets.py",
                     "registered_noncontrolling_equity.py",
                     "registered_liability_residuals.py",
@@ -281,6 +287,8 @@ def automatic_mapping_proposal(
         concept = rule.concept
     if normalized_field == "depreciation_and_amortization" and original is not None:
         concept = registered_depreciation_concept(original)
+    if normalized_field == "revenue" and original is not None:
+        concept = registered_revenue_concept(original) or concept
     payload = {
         "contract_version": "fundamental.v1",
         "source_concept": concept,
@@ -509,6 +517,10 @@ def evaluate_automatic_mapping(
         proposal.normalized_field == "capital_expenditure"
         and proposal.source_concept == CAPITAL_EXPENDITURE
     )
+    registered_revenue = (
+        proposal.normalized_field == "revenue"
+        and proposal.source_concept == CONTRACT_REVENUE
+    )
     adjusted = depreciation and proposal.source_concept == ADJUSTED_DEPRECIATION
     investment_assets = (
         proposal.normalized_field in INVESTMENT_ASSET_ROLES
@@ -541,6 +553,7 @@ def evaluate_automatic_mapping(
         (
             not computed
             and not depreciation
+            and not registered_revenue
             and (rule is None or proposal.source_concept not in rule.concepts)
         )
         or proposal.accounting_rules is not None
@@ -687,11 +700,31 @@ def evaluate_automatic_mapping(
             )
             for fact, reason in capex.rejected
         )
+    if registered_revenue:
+        revenue = select_registered_revenue(original)
+        reasons.update(revenue.reason_codes)
+        for fact in revenue.selected:
+            reason = _observation_rejection(fact, request, _RULES["revenue"])
+            if reason is None:
+                selected.append(fact)
+            else:
+                rejected.append(
+                    MappingObservationRejectionV1(
+                        observation_digest=sha256_digest(fact), reason_code=reason
+                    )
+                )
+        rejected.extend(
+            MappingObservationRejectionV1(
+                observation_digest=sha256_digest(fact), reason_code=reason
+            )
+            for fact, reason in revenue.rejected
+        )
     for fact in sorted(original.report.facts, key=sha256_digest):
         if (
             disclosed
             or depreciation
             or capital_expenditure
+            or registered_revenue
             or investment_assets
             or noncontrolling_equity
             or liability_residual

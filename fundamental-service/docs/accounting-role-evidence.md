@@ -475,6 +475,39 @@ The Agent's fact projection preserves the JSON evidence as service-owned data;
 it evaluates no accounting or valuation rules. No Agent/UI workflow changes are
 part of this contract addition.
 
+### Registered Microsoft total revenue
+
+Automatic policy `source-bound-us-gaap-v23` classifies the consolidated
+`us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax` observations in
+the two Microsoft originals below as statement total revenue. Their complete
+consolidated income statements explicitly place these observations on the
+"Total revenue" row after product and service/other revenue. The 2025 statement
+covers July-to-June annual periods ending 2023–2025; the 2026 statement covers
+those ending 2024–2026. Original HTML, statement rows, context references and the
+complete source audit remain outside Git.
+
+| Original accession | Parser input SHA-256 | Complete parsed fact digest |
+| --- | --- | --- |
+| `0000950170-25-100235` | `7475ad82dc11fc5e27bdbea995b44da0545778b966725ba42524953e4ac9ce2c` | `f85516d9a48b94101325a022d724dc2176c27550ef604f3abfcabd3831cdb4ac` |
+| `0001193125-26-323660` | `4561138eb81082fd06a693e6a2036eeae14e321d0c75a77aee5c28f1d4dc6d1d` | `f9abe2c5126979fd28814e9ac4088241833cf4c957f91e363141bbc7ffbde0f7` |
+
+The [2026 FASB taxonomy definition](https://xbrl.fasb.org/us-gaap/2026/elts/us-gaap-doc-2026.xml)
+limits this concept to satisfied customer performance obligations excluding
+assessed taxes. It does not establish every issuer's total operating revenue.
+Matching gross-profit and operating-profit arithmetic cannot establish scope:
+an omitted revenue/cost branch can have zero net profit. The registry therefore
+pins the complete original and exact classified annual periods; it stores no
+revenue amounts and does not create a general alias. Changed bytes/facts,
+unregistered originals and unclassified periods abstain. Namespace, issuer,
+currency, finite amount, reported precision, annual duration, original cutoff
+and consolidated base-context validation still apply to each observation.
+
+The ordinary automatic batch proposes this registered concept, then uses the
+existing integrity/taxonomy verification, machine signature and replay checks.
+Canonical candidates retain the original values, concepts and scoped report
+digests. This adds no manual mapping queue, calculation formula, source-use
+permission, full financial coverage, trusted release or caller approval.
+
 ### Registered NVE noncontrolling equity
 
 Automatic policy `source-bound-us-gaap-v9` registers the same complete NVE 2023

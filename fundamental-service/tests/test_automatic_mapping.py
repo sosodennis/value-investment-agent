@@ -238,7 +238,7 @@ def test_option_facts_receive_scoped_replayable_machine_approval(tmp_path, field
         store.read(receipt.decision_publication.artifact.artifact_id)
     )
     assert decision.status == "approved" and not decision.reason_codes
-    assert decision.policy_version == "source-bound-us-gaap-v22"
+    assert decision.policy_version == "source-bound-us-gaap-v23"
     mapping = decision.mapping
     assert mapping.normalized_field == field
     assert mapping.observation_scope.issuer_id == request.original.source.cik
@@ -349,7 +349,7 @@ def test_gross_balance_approval_is_source_bound_and_reused_after_restart(
         store.read(first.decision_publication.artifact.artifact_id)
     )
     assert decision.status == "approved"
-    assert decision.policy_version == "source-bound-us-gaap-v22"
+    assert decision.policy_version == "source-bound-us-gaap-v23"
     mapping = decision.mapping
     scope = mapping.observation_scope
     assert scope.issuer_id == request.original.source.cik
