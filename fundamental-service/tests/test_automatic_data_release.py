@@ -24,6 +24,7 @@ from fundamental_service.automatic_release_evidence import (
     require_automatic_release_sources,
 )
 from fundamental_service.issuer_operating_release import _FactReader, _SourceReader
+from fundamental_service.policies import PolicyRegistry, initial_model_specs
 from fundamental_service.release_runner import DataReleaseCanaryRunner
 from fundamental_service.replay import ArtifactStore
 from fundamental_service.serialization import canonical_bytes, sha256_digest
@@ -31,6 +32,8 @@ from fundamental_service.snapshots import SnapshotError
 from test_conditional_capital_release import _conditional_fixture
 from test_issuer_operating_release import fixture, inventory
 from test_preparation_runner import _reviewed_candidate
+from market_policy_fixtures import synthetic_policy_registry
+from test_automatic_market_policy_evidence import _authorization, _bound
 
 
 KEY = Ed25519PrivateKey.from_private_bytes(b"synthetic-auto-release".ljust(32, b"0"))
@@ -293,3 +296,97 @@ def test_interrupted_candidate_write_resumes_checked_evidence(tmp_path, monkeypa
     replay = AutomaticDataReleaseService(**options).verify_and_sign(request)
     assert not replay.wrote and replay.output_digest == completed.output_digest
     assert inventory(store.root) == before
+
+
+def test_authorized_key_rotation_has_distinct_input_and_no_artifact_collision(tmp_path):
+    _, store, request, options = _case(tmp_path)
+    first = AutomaticDataReleaseService(**options).verify_and_sign(request)
+    key = Ed25519PrivateKey.generate()
+    policy = options["policy"]
+    roots = options["trust_roots"]
+    verifiers = dict(roots.verifiers)
+    verifiers[policy.verifier_id] = verifiers[policy.verifier_id].model_copy(
+        update={
+            "public_key_ed25519_base64": base64.b64encode(
+                key.public_key().public_bytes_raw()
+            ).decode()
+        }
+    )
+    rotated = options | {
+        "private_key": key,
+        "trust_roots": roots.model_copy(update={"verifiers": verifiers}),
+    }
+    second = AutomaticDataReleaseService(**rotated).verify_and_sign(request)
+    assert first.decision.status == second.decision.status == "passed"
+    assert first.input_digest != second.input_digest
+    assert first.output_digest != second.output_digest
+    assert (
+        first.candidate_publication.artifact.artifact_id
+        != second.candidate_publication.artifact.artifact_id
+    )
+    before = inventory(store.root)
+    assert not AutomaticDataReleaseService(**rotated).verify_and_sign(request).wrote
+    assert inventory(store.root) == before
+
+
+@pytest.mark.parametrize("exception", (KeyError, FileNotFoundError))
+def test_missing_mapping_adapter_retains_a_blocked_decision(tmp_path, exception):
+    _, _, request, options = _case(tmp_path)
+
+    class MissingMapping:
+        def get_mapping(self, mapping_id):
+            raise exception(mapping_id)
+
+    options["mappings"] = MissingMapping()
+    receipt = AutomaticDataReleaseService(**options).verify_and_sign(request)
+    assert receipt.decision.issue_codes == ("DATA_RELEASE_MAPPING_UNAVAILABLE",)
+    assert receipt.candidate_publication is None
+    assert not AutomaticDataReleaseService(**options).verify_and_sign(request).wrote
+
+
+def test_registry_load_order_preserves_full_input_and_candidate_identity(tmp_path):
+    _, store, request, options = _case(tmp_path)
+    registry = synthetic_policy_registry()
+    first = AutomaticDataReleaseService(
+        **(options | {"policy_registry": registry})
+    ).verify_and_sign(request)
+    before = inventory(store.root)
+    reordered = PolicyRegistry(
+        tuple(reversed(registry.models())), tuple(reversed(registry.policies()))
+    )
+    second = AutomaticDataReleaseService(
+        **(options | {"policy_registry": reordered})
+    ).verify_and_sign(request)
+    assert first.decision.status == second.decision.status == "passed"
+    assert first.input_digest == second.input_digest
+    assert first.output_digest == second.output_digest
+    assert not second.wrote and inventory(store.root) == before
+
+
+def test_security_market_plans_must_select_the_composers_effective_model(tmp_path):
+    _, store, _, options = _case(tmp_path / "machine")
+    fixture = _conditional_fixture(tmp_path / "conditional")
+    candidate, _ = _reviewed_candidate(fixture)
+    manifest, _, policy, _, contents, _ = _bound(
+        manifest=candidate.manifest, snapshot=fixture.snapshot
+    )
+    for artifact_id, raw in contents.items():
+        store.put_bytes_with_receipt(artifact_id, raw, media_type="application/json")
+    options.update(
+        snapshots=fixture.snapshots,
+        policy=options["policy"].model_copy(update={"scope": "security"}),
+    )
+    options["policy_registry"] = PolicyRegistry(initial_model_specs(), (policy,))
+    assert AutomaticDataReleaseService(**options)._require_market_model(manifest) == (
+        policy.policy_digest,
+    )
+    wrong = _authorization(
+        policy, model_id="transition_fcff_dcf", model_version="transition_fcff_dcf-v2"
+    )
+    effective = _authorization(policy, policy_id="correct-fcff-policy")
+    options["policy_registry"] = PolicyRegistry(
+        initial_model_specs(), (wrong, effective)
+    )
+    with pytest.raises(DataReleaseError) as caught:
+        AutomaticDataReleaseService(**options)._require_market_model(manifest)
+    assert caught.value.code == "AUTOMATIC_RELEASE_MARKET_MODEL_MISMATCH"

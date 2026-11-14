@@ -14,6 +14,7 @@ from pydantic import Field
 from .automatic_release_evidence import require_automatic_release_sources
 from .command_artifacts import EvidenceArtifactStore
 from .contracts import InitialModelId
+from .contracts import SourceSnapshotV1
 from .data_releases import (
     REQUIRED_DATA_RELEASE_GATES,
     ArtifactRefV1,
@@ -26,10 +27,12 @@ from .data_releases import (
     ReleaseModel,
     sign_data_release_verification,
 )
-from .facts import CanonicalFactRepository
+from .facts import CanonicalFactRepository, CanonicalMappingV1
 from .macro_series import MacroSeriesProviderPort
 from .market_reference import MarketReferenceProviderPort
-from .policies import PolicyRegistry, initial_model_specs
+from .market_reference_evidence import read_release_market_reference_plan
+from .terminal_growth_evidence import read_release_terminal_growth_plan
+from .policies import PolicyError, PolicyRegistry, initial_model_specs
 from .quote_providers import QuoteSourceProviderPort
 from .release_runner import (
     DataReleaseCanaryRunner,
@@ -103,6 +106,7 @@ class AutomaticDataReleaseDecisionV1(ReleaseModel):
     issue_codes: tuple[str, ...] = ()
     content_report_digest: str | None = None
     regulatory_evidence_digests: tuple[str, ...] = ()
+    market_policy_digests: tuple[str, ...] = ()
 
 
 class AutomaticDataReleaseReceiptV1(ReleaseModel):
@@ -149,6 +153,8 @@ class AutomaticDataReleaseService:
         )
         self._key = private_key
         self._revision = source_revision
+        self._source_use_policy = source_use_policy
+        self._policy_registry = policy_registry
         self._runner = DataReleaseCanaryRunner(
             snapshot_repository=snapshots,
             fact_repository=facts,
@@ -216,7 +222,7 @@ class AutomaticDataReleaseService:
             or manifest.parser_version != policy.parser_version
             or manifest.quality_profile_digest != policy.quality_profile_digest
             or any(
-                self._mappings.get_mapping(ref.mapping_id).mapping_version
+                self._read_mapping(ref.mapping_id).mapping_version
                 != policy.mapping_version
                 for ref in manifest.mapping_refs
             )
@@ -226,13 +232,90 @@ class AutomaticDataReleaseService:
                 "release must match the complete installed model, source and field profile",
             )
 
+    def _read_mapping(self, mapping_id: str) -> CanonicalMappingV1:
+        try:
+            return self._mappings.get_mapping(mapping_id)
+        except Exception as error:
+            raise DataReleaseError(
+                "DATA_RELEASE_MAPPING_UNAVAILABLE",
+                "release mapping is unavailable from its configured repository",
+            ) from error
+
+    def _require_market_model(self, manifest: DataReleaseManifestV1) -> tuple[str, ...]:
+        if self._policy.scope != "security":
+            return ()
+        plans = (
+            read_release_market_reference_plan(manifest, artifacts=self._artifacts),
+            read_release_terminal_growth_plan(manifest, artifacts=self._artifacts),
+        )
+        if self._policy_registry is None or any(plan is None for plan in plans):
+            raise DataReleaseError(
+                "AUTOMATIC_RELEASE_MARKET_POLICY_MISSING",
+                "machine security releases require both deployed market selection plans",
+            )
+        policy_ids = {plan.policy_id for plan in plans if plan is not None}
+        checked = []
+        for ref in manifest.snapshot_refs:
+            snapshot = self._snapshots.get(ref.snapshot_id)
+            if not isinstance(snapshot, SourceSnapshotV1):
+                raise DataReleaseError(
+                    "AUTOMATIC_RELEASE_POLICY_MISMATCH",
+                    "market policy requires a security snapshot",
+                )
+            try:
+                effective = self._policy_registry.select_policy(
+                    model_id=self._policy.model_id,
+                    model_version=self._policy.model_version,
+                    valuation_timestamp=snapshot.valuation_timestamp,
+                    policy_id=None,
+                    issuer_id=snapshot.identity.issuer_id,
+                    data_release_manifest_digest=manifest.manifest_digest,
+                )
+            except PolicyError as error:
+                raise DataReleaseError(error.code, str(error)) from error
+            if policy_ids != {effective.policy_id}:
+                raise DataReleaseError(
+                    "AUTOMATIC_RELEASE_MARKET_MODEL_MISMATCH",
+                    "release market plans must select the formal composer's exact effective model policy",
+                )
+            checked.append(effective.policy_digest)
+        return tuple(sorted(checked))
+
     def verify_and_sign(
         self, request: AutomaticDataReleaseRequestV1
     ) -> AutomaticDataReleaseReceiptV1:
         request = AutomaticDataReleaseRequestV1.model_validate_json(
             canonical_bytes(request)
         )
-        payload = {"policy": self._policy, "request": request}
+        payload = {
+            "policy": self._policy,
+            "request": request,
+            "deployment": {
+                "source_revision": self._revision,
+                "suite_digest": automatic_release_suite_digest(),
+                "trust_roots_digest": sha256_digest(self._roots),
+                "signing_public_key": self._key.public_key().public_bytes_raw().hex(),
+                "source_use_policy_digest": sha256_digest(self._source_use_policy),
+                "market_registry_digest": sha256_digest(
+                    {
+                        "policies": tuple(
+                            sorted(
+                                self._policy_registry.policies(),
+                                key=lambda item: item.policy_id,
+                            )
+                        ),
+                        "models": tuple(
+                            sorted(
+                                self._policy_registry.models(),
+                                key=lambda item: (item.model_id, item.model_version),
+                            )
+                        ),
+                    }
+                    if self._policy_registry is not None
+                    else None
+                ),
+            },
+        }
         input_digest = sha256_digest(payload)
         input_pub = self._artifacts.put_with_receipt(
             "automatic-release-input-" + input_digest,
@@ -247,6 +330,7 @@ class AutomaticDataReleaseService:
         try:
             self._require_policy(request)
             content = self._runner.validate_content(request.manifest, request.content)
+            market_policies = self._require_market_model(request.manifest)
             if self._policy.scope == "security" and len(
                 content.market_policy_checks
             ) != len(request.manifest.snapshot_refs):
@@ -265,7 +349,11 @@ class AutomaticDataReleaseService:
             content_pub = self._artifacts.put_with_receipt(
                 "automatic-release-content-" + content.digest,
                 content,
-                dependency_hashes=(input_digest, *content.checked_artifact_digests),
+                dependency_hashes=(
+                    content.request_digest,
+                    content.candidate_manifest_digest,
+                    *content.checked_artifact_digests,
+                ),
             )
             publications.append(content_pub)
             decision = AutomaticDataReleaseDecisionV1(
@@ -273,6 +361,7 @@ class AutomaticDataReleaseService:
                 status="passed",
                 content_report_digest=content.digest,
                 regulatory_evidence_digests=regulatory,
+                market_policy_digests=market_policies,
             )
             decision_pub = self._publish_decision(decision)
             publications.append(decision_pub)
