@@ -6,6 +6,15 @@ fact digest and policy version. `CanonicalFactV1.accounting_evidence` retains th
 rule, its exact parsed observations and resulting value. Direct observed facts
 and mappings omit these fields and preserve their existing canonical bytes.
 
+Computed fact identities bind the original source record, actual provenance,
+issuer/security, taxonomy version, mapping and evaluated accounting evidence.
+Recapturing an original or changing the parser can preserve the accounting
+amount while producing a distinct immutable fact with its own provenance.
+Repeating the same source and evaluation reuses the fact identity. Automatic
+policy `source-bound-us-gaap-v26` pins this identity rule. Retained earlier facts
+remain readable; replaying their automatic approval requires its original
+executable policy and runtime.
+
 New mappings use a supported deterministic automatic policy for semantic
 approval. Unsupported classifications retain abstentions; this document does
 not create a pending human approval step. Retained independent review records

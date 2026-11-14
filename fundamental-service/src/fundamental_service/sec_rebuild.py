@@ -400,7 +400,18 @@ def _accounting_candidates(
         period = rule.period
         candidates.append(
             FactCandidateV1(
-                candidate_id=f"sec-role-{sha256_digest({'mapping': sha256_digest(mapping), 'evidence': evidence})}",
+                candidate_id="sec-role-"
+                + sha256_digest(
+                    {
+                        "mapping": sha256_digest(mapping),
+                        "evidence": evidence,
+                        "source": source,
+                        "provenance": provenance,
+                        "issuer_id": issuer_id,
+                        "security_id": security_id,
+                        "taxonomy_version": report.taxonomy_version,
+                    }
+                ),
                 issuer_id=issuer_id,
                 security_id=security_id,
                 concept=mapping.source_concept,

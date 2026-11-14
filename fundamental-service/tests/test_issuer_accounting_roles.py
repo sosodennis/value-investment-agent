@@ -125,6 +125,41 @@ def test_issuer_accounting_reuses_evaluator_and_retains_sources(disposition, val
     assert candidates(view, mapping) == (candidate,)
 
 
+@pytest.mark.parametrize("disposition", ("derived", "disclosed", "confirmed_absent"))
+def test_issuer_accounting_parser_versions_preserve_distinct_fact_provenance(
+    tmp_path, disposition
+):
+    from fundamental_service.facts import FilesystemCanonicalFactRepository
+
+    view, mapping, _ = issuer_rule(disposition)
+    original = view.originals[0]
+    first = candidates(view, mapping)[0].canonical_fact(
+        quality=QualityStatus.PROVISIONAL
+    )
+    report = original.report.model_copy(update={"parser_version": "next-parser"})
+    assert fact_semantic_digest(report) == mapping.accounting_rules.parser_fact_digest
+    (candidate,) = parsed_facts_to_candidates(
+        report,
+        source=original.source,
+        issuer_id=view.identity.issuer_id,
+        normalized_field=mapping.normalized_field,
+        mapping=mapping,
+    )
+    second = candidate.canonical_fact(quality=QualityStatus.PROVISIONAL)
+    repository = FilesystemCanonicalFactRepository(tmp_path / "facts")
+    repository.publish(first)
+    repository.publish(second)
+    before = repository.list()
+    for value in (first, second):
+        repository.publish(value)
+        assert repository.get(value.fact_id) == value
+    assert repository.list() == before
+    assert first.fact_id != second.fact_id
+    assert first.accounting_evidence == second.accounting_evidence
+    assert first.source.parser_version == original.report.parser_version
+    assert second.source.parser_version == "next-parser"
+
+
 @pytest.mark.parametrize("disposition", ("unknown", "unsupported"))
 def test_unresolved_issuer_roles_preserve_disposition_without_numeric_placeholder(
     disposition,

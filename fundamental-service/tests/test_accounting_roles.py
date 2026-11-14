@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal, Inexact, ROUND_DOWN, localcontext
 import json
 
@@ -617,6 +617,69 @@ def test_accounting_value_keeps_sources_and_roundtrips(disposition, expected):
     verify_accounting_role_evidence(fact, mapping, snapshot)
     assert canonical_fact_digest(fact) == canonical_fact_digest(restored)
     assert _candidates(snapshot, report, mapping) == (candidate,)
+
+
+@pytest.mark.parametrize(
+    "disposition", ["derived", "disclosed", "classified", "dated_disclosure"]
+)
+@pytest.mark.parametrize("repository_kind", ["filesystem", "postgresql"])
+def test_accounting_recaptures_coexist_and_repeat_without_replacing_provenance(
+    tmp_path, disposition, repository_kind
+):
+    from fundamental_service.facts import FilesystemCanonicalFactRepository
+    from fundamental_service.metadata import (
+        PostgresCanonicalFactRepository,
+        PostgresMetadataStore,
+    )
+
+    if repository_kind == "postgresql" and not DATABASE_URL:
+        pytest.skip("isolated PostgreSQL is required")
+    snapshot, report, mapping = (
+        _classified_lease_fixture()
+        if disposition == "classified"
+        else _fixture(disposition=disposition)
+    )
+    source = snapshot.source_records[0]
+    later = _changed(
+        snapshot,
+        valuation_timestamp=snapshot.valuation_timestamp + timedelta(days=1),
+        captured_at=snapshot.captured_at + timedelta(hours=1),
+        source_records=(
+            source.model_copy(
+                update={"captured_at": source.captured_at + timedelta(hours=1)}
+            ),
+        ),
+    )
+    first = _candidates(snapshot, report, mapping)[0].canonical_fact(
+        quality=QualityStatus.VERIFIED
+    )
+    second = _candidates(later, report, mapping)[0].canonical_fact(
+        quality=QualityStatus.VERIFIED
+    )
+    store = None
+    if repository_kind == "postgresql":
+        store = PostgresMetadataStore(DATABASE_URL or "", auto_migrate=True)
+        store.start()
+        repository = PostgresCanonicalFactRepository(store)
+    else:
+        repository = FilesystemCanonicalFactRepository(tmp_path / "facts")
+    try:
+        repository.publish(first)
+        repository.publish(second)
+        before = tuple(repository.list())
+        for value in (first, second):
+            repository.publish(value)
+            assert repository.get(value.fact_id) == value
+        assert tuple(repository.list()) == before
+        assert first.fact_id != second.fact_id
+        assert first.value == second.value
+        assert first.accounting_evidence == second.accounting_evidence
+        assert first.source.captured_at == source.captured_at
+        assert second.source.captured_at == source.captured_at + timedelta(hours=1)
+        assert _candidates(later, report, mapping)[0].candidate_id == second.fact_id
+    finally:
+        if store is not None:
+            store.close()
 
 
 @pytest.mark.parametrize(
