@@ -67,7 +67,7 @@ _MAX_SEC_XBRL_RESOURCE_BYTES = 12_000_000
 _MAX_SEC_XBRL_SELECTED_BYTES = 48_000_000
 
 
-def _read_sec_xbrl_archive(
+def read_sec_xbrl_archive(
     content: bytes, *, primary_document: str, dts_filenames: tuple[str, ...]
 ) -> dict[str, bytes]:
     """Read only bounded, index-selected root members without extracting paths."""
@@ -369,7 +369,7 @@ class SecIngestionService:
             accepted_at=accepted_at,
             deadline_at=deadline_at,
         )
-        members = _read_sec_xbrl_archive(
+        members = read_sec_xbrl_archive(
             archive_source.content,
             primary_document=primary_document,
             dts_filenames=dts_filenames,

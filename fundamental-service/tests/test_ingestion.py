@@ -27,7 +27,7 @@ from fundamental_service.facts import (
     CanonicalMappingV1,
     FilesystemCanonicalFactRepository,
 )
-from fundamental_service.ingestion import SecIngestionService, _read_sec_xbrl_archive
+from fundamental_service.ingestion import SecIngestionService, read_sec_xbrl_archive
 from fundamental_service.replay import ArtifactStore
 from fundamental_service.sec_source import SecEdgarSourceAdapter, SecRequestPolicy
 from fundamental_service.snapshots import (
@@ -65,7 +65,7 @@ def test_sec_xbrl_archive_rejects_missing_or_duplicate_required_members():
         archive.writestr("aapl-20240928.xsd", b"<schema/>")
 
     with pytest.raises(SnapshotError, match="missing an index-selected member"):
-        _read_sec_xbrl_archive(
+        read_sec_xbrl_archive(
             archive_buffer.getvalue(),
             primary_document="aapl-20240928.htm",
             dts_filenames=("aapl-20240928.xsd",),
@@ -78,7 +78,7 @@ def test_sec_xbrl_archive_rejects_missing_or_duplicate_required_members():
             archive.writestr("aapl-20240928.htm", b"challenge-polluted")
             archive.writestr("aapl-20240928.xsd", b"<schema/>")
     with pytest.raises(SnapshotError, match="repeats a member name"):
-        _read_sec_xbrl_archive(
+        read_sec_xbrl_archive(
             duplicate_buffer.getvalue(),
             primary_document="aapl-20240928.htm",
             dts_filenames=("aapl-20240928.xsd",),
