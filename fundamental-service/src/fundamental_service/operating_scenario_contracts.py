@@ -33,14 +33,25 @@ from .operating_scenario_policy import (
 )
 
 
-class ScenarioPeriodV1(StrictModel):
+class ScenarioPeriodCalendarV1(StrictModel):
     fiscal_year: int = Field(ge=1900, le=2200)
     period_start: date
     period_end: date
-    fact_ids: dict[str, str]
     unconsumed_capex: UnconsumedBaselineCapexV1 | None = Field(
         default=None, exclude_if=lambda value: value is None
     )
+
+    @model_validator(mode="after")
+    def annual_calendar(self) -> "ScenarioPeriodCalendarV1":
+        if self.period_end.year != self.fiscal_year or not (
+            300 <= (self.period_end - self.period_start).days <= 380
+        ):
+            raise ValueError("scenario period must be an aligned annual period")
+        return self
+
+
+class ScenarioPeriodV1(ScenarioPeriodCalendarV1):
+    fact_ids: dict[str, str]
 
     @model_validator(mode="after")
     def complete_period(self) -> "ScenarioPeriodV1":
@@ -53,10 +64,6 @@ class ScenarioPeriodV1(StrictModel):
             )
         if len(set(self.fact_ids.values())) != len(self.fact_ids):
             raise ValueError("one observation cannot fill multiple accounting roles")
-        if self.period_end.year != self.fiscal_year or not (
-            300 <= (self.period_end - self.period_start).days <= 380
-        ):
-            raise ValueError("scenario period must be an aligned annual period")
         return self
 
 

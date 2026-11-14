@@ -60,12 +60,13 @@ from .operating_scenario_contracts import (
     ParentPartitionV1,
     ScenarioPeriodInputsV1,
     ScenarioPeriodV1,
+    ScenarioPeriodCalendarV1,
     ScenarioObservationSetV1,
 )
 
 
 def _latest_complete_original(
-    request: ScenarioObservationSetV1, period: ScenarioPeriodV1, roles: set[str]
+    request: ScenarioObservationSetV1, period: ScenarioPeriodCalendarV1, roles: set[str]
 ) -> str:
     source_roles: dict[tuple[datetime, str, str], set[str]] = {}
     for candidate in request.facts:
@@ -97,6 +98,67 @@ def _latest_complete_original(
             "equally available complete originals are ambiguous",
         )
     return latest[0][1]
+
+
+def _select_scenario_role(
+    request: ScenarioObservationSetV1,
+    period: ScenarioPeriodCalendarV1,
+    role: str,
+    source_hash: str,
+) -> CanonicalFactV1 | None:
+    return _select_period_fact(
+        tuple(
+            candidate
+            for candidate in request.facts
+            if candidate.normalized_field == role
+            and candidate.source.content_hash == source_hash
+            and candidate.period_end == period.period_end
+            and not candidate.context.dimensions
+            and candidate.context.consolidation_scope == "consolidated"
+        ),
+        fiscal_year=period.fiscal_year,
+        field=role,
+        expected_instant=period.period_end
+        if role in {"current_assets", "current_liabilities", "cash_and_equivalents"}
+        else None,
+    )
+
+
+def select_scenario_periods(
+    request: ScenarioObservationSetV1,
+    calendars: tuple[ScenarioPeriodCalendarV1, ...],
+) -> tuple[ScenarioPeriodV1, ...]:
+    """Select existing canonical observations without approving their semantics."""
+    request = ScenarioObservationSetV1.model_validate_json(canonical_bytes(request))
+    _validate_sources(request)
+    periods = []
+    for item in calendars:
+        calendar = ScenarioPeriodCalendarV1.model_validate_json(canonical_bytes(item))
+        roles = {*CORE_FIELDS, *PARENT_CONCEPTS}
+        if calendar.unconsumed_capex is not None:
+            roles.remove("capital_expenditure")
+        families = (
+            (set(CORE_FIELDS), roles - set(CORE_FIELDS))
+            if calendar.unconsumed_capex is not None
+            and request.source_selection_policy == BASELINE_SOURCE_POLICY
+            else (roles,)
+        )
+        selected = {}
+        for family in families:
+            source_hash = _latest_complete_original(request, calendar, family)
+            for role in sorted(family):
+                fact = _select_scenario_role(request, calendar, role, source_hash)
+                if fact is None:
+                    raise PreparationError(
+                        "SCENARIO_FACT_MISSING",
+                        "selected observation unavailable",
+                        missing=(role,),
+                    )
+                selected[role] = fact.fact_id
+        period = ScenarioPeriodV1(**calendar.model_dump(), fact_ids=selected)
+        _period_facts(request, period)
+        periods.append(period)
+    return tuple(periods)
 
 
 def _period_facts(
@@ -156,21 +218,7 @@ def _period_facts(
                 "source does not support the declared observation",
                 missing=(fact_id,),
             )
-        comparable = tuple(
-            candidate
-            for candidate in request.facts
-            if candidate.normalized_field == role
-            and candidate.source.content_hash == source_hashes[role]
-            and candidate.period_end == period.period_end
-            and not candidate.context.dimensions
-            and candidate.context.consolidation_scope == "consolidated"
-        )
-        chosen = _select_period_fact(
-            comparable,
-            fiscal_year=period.fiscal_year,
-            field=role,
-            expected_instant=period.period_end if instant else None,
-        )
+        chosen = _select_scenario_role(request, period, role, source_hashes[role])
         if chosen is None or chosen.fact_id != fact_id:
             raise PreparationError(
                 "SCENARIO_SELECTION_POLICY_MISMATCH",

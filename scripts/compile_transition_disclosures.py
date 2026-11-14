@@ -11,10 +11,14 @@ from pathlib import Path
 from fundamental_service.contracts import QualityStatus
 from fundamental_service.facts import CanonicalMappingV1, MappingObservationScopeV1
 from fundamental_service.operating_disclosures import (
-    DISCLOSURE_CONCEPTS,
+    DISCLOSURE_GROUPS,
+    DISCLOSURE_POLICY,
+    DISCLOSURE_GROUPS_POLICY,
+    DisclosurePolicy,
     ConditionalTransitionDisclosuresV1,
     conditional_transition_disclosures,
     disclosure_policy_digest,
+    select_disclosure_concepts,
 )
 from fundamental_service.operating_label_contracts import OperatingComparisonRequestV1
 from fundamental_service.accounting_fields import (
@@ -30,6 +34,8 @@ from plan_history_study_precision import ROOT, DesignError, digest, publish_repo
 
 def compile_disclosures(
     seed: OperatingComparisonRequestV1,
+    *,
+    policy_version: DisclosurePolicy = DISCLOSURE_POLICY,
 ) -> tuple[OperatingComparisonRequestV1, dict[str, object]]:
     decision = seed.decision
     if decision.transition_disclosures is not None or any(
@@ -49,7 +55,16 @@ def compile_disclosures(
     mappings = []
     facts = []
     observations = []
-    for concept in DISCLOSURE_CONCEPTS:
+    try:
+        concepts = select_disclosure_concepts(
+            original,
+            period_start=period.period_start,
+            period_end=period.period_end,
+            policy_version=policy_version,
+        )
+    except SnapshotError as error:
+        raise DesignError(str(error)) from error
+    for concept in concepts:
         retained = tuple(f for f in original.report.facts if f.concept == concept)
         selected = tuple(
             fact
@@ -80,7 +95,10 @@ def compile_disclosures(
             "confidence": "unresolved",
             "status": "provisional",
             "observation_scope": scope.model_dump(mode="json"),
-            "evidence_refs": (sha256_digest(original), disclosure_policy_digest()),
+            "evidence_refs": (
+                sha256_digest(original),
+                disclosure_policy_digest(policy_version),
+            ),
         }
         mapping = CanonicalMappingV1.model_validate(
             {**payload, "decision_id": f"disclosure-mapping-{sha256_digest(payload)}"}
@@ -121,7 +139,11 @@ def compile_disclosures(
         sorted((*decision.mappings, *mappings), key=lambda m: m.decision_id)
     )
     proof = ConditionalTransitionDisclosuresV1(
-        policy_digest=disclosure_policy_digest(),
+        contract_version="fundamental.conditional-transition-disclosures.v2"
+        if policy_version == DISCLOSURE_GROUPS_POLICY
+        else "fundamental.conditional-transition-disclosures.v1",
+        policy_version=policy_version,
+        policy_digest=disclosure_policy_digest(policy_version),
         fact_ids=tuple(sorted(fact.fact_id for fact in facts)),
     )
     updated = decision.model_copy(
@@ -171,12 +193,25 @@ def compile_disclosures(
         "complete_exact_study_cases": 0,
         "supported_history_threshold": None,
     }
+    if policy_version == DISCLOSURE_GROUPS_POLICY:
+        audit["schema_version"] = "conditional-transition-disclosure-audit.v2"
+        audit["alternative_observations"] = [
+            {"concept": fact.concept, "parsed_fact_digest": sha256_digest(fact)}
+            for fact in sorted(original.report.facts, key=sha256_digest)
+            if fact.concept
+            in {concept for group in DISCLOSURE_GROUPS for concept in group}
+        ]
     return result, audit
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--seed", type=Path, required=True)
+    parser.add_argument(
+        "--disclosure-policy",
+        choices=(DISCLOSURE_POLICY, DISCLOSURE_GROUPS_POLICY),
+        default=DISCLOSURE_POLICY,
+    )
     parser.add_argument("--exact-commit", required=True)
     parser.add_argument("--output-directory", type=Path, required=True)
     args = parser.parse_args()
@@ -192,7 +227,12 @@ def main() -> int:
         seed = OperatingComparisonRequestV1.model_validate_json(
             canonical_bytes(decode_json(raw))
         )
-        compiled, audit = compile_disclosures(seed)
+        policy: DisclosurePolicy = (
+            "unreviewed-filed-operating-disclosure-groups-v2"
+            if args.disclosure_policy == DISCLOSURE_GROUPS_POLICY
+            else "unreviewed-filed-operating-disclosures-v1"
+        )
+        compiled, audit = compile_disclosures(seed, policy_version=policy)
         inputs = {
             "exact_commit": head,
             "seed_bytes_digest": digest(raw),
