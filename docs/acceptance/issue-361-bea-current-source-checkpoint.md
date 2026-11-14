@@ -11,9 +11,9 @@ The captured admission below is a historical checkpoint under
 `free-market-source-use-v4`. The current policy is
 `free-market-source-use-v5`: it retains the original terms-page digest and
 pins the exact BEA citation article with an `exact-html-element-v1` scope.
-Replaying this evidence under v5 must use the retained original bytes and
-record both the whole-page and selected-article digests; this historical report
-is not a current v5 admission.
+The current v5 revalidation below uses the retained original bytes and records
+both whole-page and selected-article digests. The historical report itself
+remains unchanged.
 
 ## Captured source
 
@@ -79,3 +79,46 @@ were evaluated at the actual capture timestamp, where the source is available.
 No earlier availability is inferred. This source-only result does not complete
 the full numerical flow, does not change quality status, and leaves
 `supported_history_threshold=null`.
+
+
+## Current v5 revalidation — f611e37a
+
+Exact implementation `f611e37ab8dff8064b3461130467ba89d60e8f27` reuses the same
+workbook and original capture timestamp under `free-market-source-use-v5`,
+policy digest `e6b7b31dfd37f8d7c5b7c3547b4cccf86b24029db609ba05689e344b3fd2b597`.
+The provider reproduces the same 97 observations and GDP ceiling. Admission
+passes with digest
+`c1d5c84dc02a6116caef43675e861496576b34d9d4fb964c7546012bb39067ff`.
+
+The BEA terms check retains raw page SHA-256
+`362a0e376b235df1333aea67d3eb4d4cc103fd754d056d1a5950449bdc99b04f` and selected
+article SHA-256 `fa84365aa8063550b72f95fd50735201d26bd736fe7e13ee4da8cfd8a2bc721c`.
+The exact scope is `article[about="/help/guidelines-for-citing-bea"]`, protocol
+`exact-html-element-v1`; the existing Government Works requirement also passes.
+
+Command, exit 0, at the exact clean implementation commit:
+
+```sh
+fundamental-service/.venv/bin/python .audit/issue-361-bea-current-v5/verify.py
+```
+
+An offline opener fails if any download is attempted. Ordinary, two concurrent
+and fresh-process repeats make zero HTTP calls, reuse acquisition/report bytes
+with `wrote=false` and preserve hashes/sizes/mtimes of all 16 retained original
+files and three report files. Input/output:
+`7d9ad9b02820d6d2c5be4403155885360d59a4682a4873fec4360c53e09757fa` /
+`d1767d958b216687f8e5ae2091e47ce0efbb7d06707d011d96171de0cfadcfe3`.
+Host pins: Python 3.11.15, Pydantic 2.14.2; uv lock SHA-256
+`229bc76c75019d54df8c1cba240839bacf01e56d7493f4bc615e058c4e5f6f11`.
+A valuation one microsecond before capture retains
+`SOURCE_NOT_AVAILABLE_AT_VALUATION`. The original request's earlier-cutoff
+refusal remains; no historical availability is invented.
+
+The first verification harness incorrectly addressed a nonexistent terms-check
+attribute and stopped before report publication. It now uses
+`raw_content_sha256`; the failed log and reconstructed script remain outside Git.
+Corrected verifier SHA-256:
+`0044bf24255037663ca9fa11d84fdaceff3c37311db02f567f9a9af57da581e7`.
+This evidence updates current BEA source admission only. Issuer market-policy
+composition, quote entitlement, real numerical full-flow/recovery and independent
+review remain incomplete; supported history threshold stays null.

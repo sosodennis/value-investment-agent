@@ -2972,3 +2972,72 @@ numerical repeat/concurrency/restart/restore. Independent review/main delivery
 remain required. Keep #361/#369/#394/#376/#377 OPEN and PR#370 draft.
 `supported_history_threshold=null`; incomplete real valuations abstain, eligible
 estimates remain provisional and history research remains underpowered.
+
+
+### Exact option-strike scope and BEA v5 reuse — f611e37a
+
+Implementation `f611e37ab8dff8064b3461130467ba89d60e8f27` refuses known
+`WeightedAverageExercisePrice` concepts, including retained accounting-role
+source concepts, in the shared Fundamental treasury-stock function. Two options
+with strikes 5/15 at price 10 contribute 0.5 shares; the same quantity and average
+strike alone incorrectly gave zero. Both signed-release canary and official
+composer now retain `DILUTION_AGGREGATE_STRIKE_UNRESOLVED`. Individually evidenced
+strike arithmetic and model versions remain unchanged. This identifies known
+tagged averages; it does not prove every other concept is homogeneous or
+approve real inventory completeness.
+
+Exact checks pass **2,821 Service/PostgreSQL tests**, with 17 external parser
+resource skips and one expected duplicate-ZIP warning; **134 installed focused
+tests**, with 5 database skips; Service Ruff/format, changed-source mypy, both
+architecture guards, diff and SEC preflight pass. All
+[12 executed CI jobs](https://github.com/sosodennis/value-investment-agent/actions/runs/43530244930)
+pass; release gate skipped. The isolated project
+`value-investment-agent-361-aggregate-strike` used ports 20671/20672 and subnet
+10.231.91.0/28. Its 128 installed Python/SQL files match the exact commit; image
+`sha256:dbb42bf141868c1cf4ed6d9183fc26dc3d54551848e020860a62583cfb607c81`
+uses Python 3.12.16 / Arelle 2.47.4 / Pydantic 2.14.2.
+
+The explicitly synthetic signed exact-strike pipeline retains 114 facts and
+reproduces 2 incremental / 112 diluted shares through official preparation and
+calculation with synthetic approval. The average-strike case retains its own
+114 facts, abstains and never activates its candidate. Ordinary, two concurrent
+and fresh-process repeats preserve all 250 files' bytes/sizes/mtimes and return
+`wrote=false`. Replay input/output:
+`bd52fa509d435d1f6f1d9aef9d1419daa41b0592b4180a92bd3a1db67536b5f6` /
+`569d8d890de3d0ef3ce30d02a3d0a4fa73ba8374261f81dfc36ba3e6370cca9f`.
+This is synthetic filesystem evidence, not real issuer numerical/HTTP flow,
+authentic caller approval or a new PostgreSQL recovery case.
+
+Actual NVE Exhibit 4 authorizes common and undesignated shares; it cannot prove
+zero outstanding senior claims. The 2024 annual's purported Articles link instead
+returns Bylaws effective 2023-08-03. Both originals and that mismatch remain,
+without new absence mappings. An offline SEC repeat forbids network access and
+reuses both sources with unchanged bytes/sizes/mtimes. Source report input/output:
+`445acff645947b3171768ccf7615ba7258d95fe6d28d8b23f00979abf2ea04e5` /
+`23030bb1538ee1f5f511790eafc08ad4fdd8377f0940a243bbbd1e53747b4586`.
+
+The [current BEA checkpoint](issue-361-bea-current-source-checkpoint.md) now also
+revalidates the existing workbook under `free-market-source-use-v5`, retaining
+whole-page and selected-article terms hashes. Offline ordinary/concurrent/fresh
+process repeats perform zero downloads, preserve 16 original files and reuse
+three report files. Availability before actual capture still refuses. This
+completes that source-policy revalidation, not a full issuer market policy.
+
+The ignored atomic checkpoint `.audit/issue-361-capital-originals/checkpoint-report.json`
+records every exact command/exit code/receipt digest, runtime, input/output
+digests and exploratory failures. Its writer repeats `wrote=false`. Checkpoint
+input/output:
+`5fc5a2549200c2d97b2042838e3ab4e148c3da75acbc5110106fff6515bec70f` /
+`eb7edf02027d7fdb09101ccc0eb0752c7b4f892733193038807f9a14703858f0`;
+artifact SHA-256 `d7b3f6b3a3d8b21446da3beae4fd67ff02b884ab62181bf0a3829e986851a61c`.
+Generated sources, harnesses, reports and verified host backup stay outside Git.
+Only this increment's two containers/network/two disposable volumes were removed;
+all 60 baseline containers preserve ID/image/start/status, with images/cache and
+the older real-source stack retained.
+
+Next: complete real capital/award evidence and lawful dated quote/issuer market
+policy, trusted release, authentic exact-input approval and real numerical
+repeat/concurrency/restart/restore. Independent review and merge/main validation
+remain. Keep #361/#369/#394/#376/#377 OPEN and PR #370 draft. Threshold null;
+incomplete real valuations abstain, eligible estimates provisional, history
+research underpowered. All existing WIP commits and checkpoints remain.
