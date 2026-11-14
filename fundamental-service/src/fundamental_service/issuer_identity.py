@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from collections.abc import Mapping
 from datetime import date, datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 from .contracts import IdentityResolutionRequestV1, IdentityV1
 
@@ -27,6 +27,12 @@ _DEI_NAMESPACE = re.compile(r"http://xbrl\.(?:sec\.gov|us)/dei/\d{4}(?:-\d{2}-\d
 _GAAP_NAMESPACE = re.compile(
     r"http://(?:fasb\.org|xbrl\.us)/us-gaap/\d{4}(?:-\d{2}-\d{2})?"
 )
+OriginalSecuritySelectionPolicy = Literal["original-dei-single-common-stock-v1"]
+DEFAULT_ORIGINAL_SECURITY_POLICY: OriginalSecuritySelectionPolicy = (
+    "original-dei-single-common-stock-v1"
+)
+_SecurityContext = tuple[str, date | None, date | None, tuple[tuple[str, str], ...]]
+
 
 _US_INCORPORATION_STATES = frozenset(
     (
@@ -99,6 +105,42 @@ class IdentityResolutionError(ValueError):
         self.status_code = status_code
 
 
+def _single_standard_common_title(
+    facts: tuple[ParsedXbrlFactV1, ...], contexts: set[_SecurityContext]
+) -> str | None:
+    titles: dict[_SecurityContext, set[str]] = {context: set() for context in contexts}
+    for fact in facts:
+        if fact.concept != "dei:Security12bTitle":
+            continue
+        context = (fact.context_id, fact.period_start, fact.period_end, fact.dimensions)
+        if context not in titles:
+            return None
+        titles[context].add(" ".join(fact.value.split()))
+    if any(len(values) != 1 for values in titles.values()):
+        return None
+    common = tuple(
+        next(iter(values))
+        for context, values in titles.items()
+        if context[3]
+        == (("us-gaap:StatementClassOfStockAxis", "us-gaap:CommonStockMember"),)
+        and re.fullmatch(
+            r"common stock(?:, \$[0-9]+(?:\.[0-9]+)? par value per share)?",
+            next(iter(values)).casefold(),
+        )
+    )
+    if len(common) != 1 or any(
+        values != {common[0]}
+        and re.fullmatch(
+            r"[0-9]+(?:\.[0-9]+)?% notes due [0-9]{4}",
+            next(iter(values)).casefold(),
+        )
+        is None
+        for values in titles.values()
+    ):
+        return None
+    return common[0]
+
+
 def resolve_original_filing_identity(
     *,
     cik: str,
@@ -106,6 +148,7 @@ def resolve_original_filing_identity(
     facts: tuple[ParsedXbrlFactV1, ...],
     ticker: str | None = None,
     share_class: str | None = None,
+    security_selection_policy: OriginalSecuritySelectionPolicy | None = None,
 ) -> IdentityV1:
     """Resolve one security from original DEI evidence using the ingestion gate."""
 
@@ -117,6 +160,7 @@ def resolve_original_filing_identity(
         or accepted_at.tzinfo is None
         or accepted_at.utcoffset() is None
         or (share_class is not None and not share_class.strip())
+        or security_selection_policy not in (None, DEFAULT_ORIGINAL_SECURITY_POLICY)
     ):
         raise refuse(
             "HISTORICAL_IDENTITY_SCOPE_UNSUPPORTED",
@@ -162,6 +206,12 @@ def resolve_original_filing_identity(
         raise refuse(
             "HISTORICAL_IDENTITY_MISSING", "original security lacks a paired title"
         )
+    if (
+        share_class is None
+        and len(titles) > 1
+        and security_selection_policy == DEFAULT_ORIGINAL_SECURITY_POLICY
+    ):
+        share_class = _single_standard_common_title(facts, contexts)
     if share_class is not None:
         titles = {title for title in titles if _name(title) == _name(share_class)}
         if not titles:

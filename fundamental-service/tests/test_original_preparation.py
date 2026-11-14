@@ -13,6 +13,7 @@ from fundamental_service.annual_discovery import AnnualDiscoveryRequestV1
 from fundamental_service.annual_discovery_service import AnnualDiscovery
 from fundamental_service.arelle_parser import ArelleParserError
 from fundamental_service.operations import ServiceError
+from fundamental_service.issuer_identity import DEFAULT_ORIGINAL_SECURITY_POLICY
 from fundamental_service.original_preparation import (
     OriginalPreparation,
     OriginalPreparationRequestV1,
@@ -195,6 +196,33 @@ def test_changed_security_selector_reuses_original_validation_and_retains_refusa
     before = _inventory(tmp_path)
     _, repeat = execute(value, wrong)
     assert not repeat.wrote and _inventory(tmp_path) == before
+
+
+def test_versioned_security_policy_reuses_validation_and_preserves_legacy_request(
+    tmp_path, monkeypatch
+):
+    value = case(tmp_path, monkeypatch)
+    old_bytes = canonical_bytes(value.request)
+    assert "security_selection_policy" not in json.loads(old_bytes)
+    original, _ = execute(value)
+    calls = value.state.provider_calls, value.state.parser_calls
+    request = value.request.model_copy(
+        update={"security_selection_policy": DEFAULT_ORIGINAL_SECURITY_POLICY}
+    )
+    prepared, publication = execute(value, request)
+    assert publication.wrote and not prepared.issue_codes
+    assert request.digest != value.request.digest
+    assert prepared.filings == original.filings
+    assert (
+        prepared.request.security_selection_policy == DEFAULT_ORIGINAL_SECURITY_POLICY
+    )
+    assert (value.state.provider_calls, value.state.parser_calls) == calls
+    before = _inventory(tmp_path)
+    repeated, receipt = execute(value, request)
+    assert repeated == prepared and not receipt.wrote
+    assert value.service.read(original.artifact_id) == original
+    assert canonical_bytes(value.request) == old_bytes
+    assert _inventory(tmp_path) == before
 
 
 def test_concurrent_requests_publish_once_and_parse_once(tmp_path, monkeypatch):

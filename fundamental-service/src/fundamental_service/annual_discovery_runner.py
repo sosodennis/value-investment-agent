@@ -12,6 +12,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from .annual_discovery import AnnualDiscoveryParametersV1, AnnualDiscoveryRequestV1
 from .annual_discovery_service import AnnualDiscovery
+from .issuer_identity import DEFAULT_ORIGINAL_SECURITY_POLICY
 from .operations import ServiceError
 from .original_preparation import (
     OriginalPreparation,
@@ -289,7 +290,9 @@ def main(argv: list[str] | None = None) -> int:
             )
         )
         args.security_selection = OriginalSecuritySelectionV1(
-            ticker=args.ticker, share_class=args.share_class
+            ticker=args.ticker,
+            share_class=args.share_class,
+            security_selection_policy=DEFAULT_ORIGINAL_SECURITY_POLICY,
         )
         args.source_plan_configuration = (
             AutomaticSourcePlanConfigurationV1.model_validate_json(

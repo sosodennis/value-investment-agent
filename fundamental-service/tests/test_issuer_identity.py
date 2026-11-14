@@ -9,6 +9,7 @@ from fundamental_service.contracts import (
     IdentitySourceEvidenceV1,
 )
 from fundamental_service.issuer_identity import (
+    DEFAULT_ORIGINAL_SECURITY_POLICY,
     IdentityResolutionError,
     resolve_issuer_identity,
     resolve_original_filing_identity,
@@ -597,6 +598,132 @@ def test_multiple_original_securities_require_explicit_selection():
     with pytest.raises(IdentityResolutionError) as absent:
         _resolve_original(facts, ticker="CURRENT")
     assert absent.value.code == "HISTORICAL_IDENTITY_MISMATCH"
+
+
+def _common_and_reused_note():
+    facts = _class_scoped_original()
+    symbol = next(f for f in facts if f.concept == "dei:TradingSymbol")
+    note = facts[-1]
+    return (
+        *facts,
+        symbol.model_copy(
+            update={"context_id": note.context_id, "dimensions": note.dimensions}
+        ),
+    )
+
+
+@pytest.mark.parametrize(
+    "title", ["Common Stock", "Common stock, $0.00000625 par value per share"]
+)
+def test_versioned_common_policy_resolves_a_ticker_reused_by_fixed_coupon_notes(title):
+    facts = tuple(
+        fact.model_copy(update={"value": title})
+        if fact.concept == "dei:Security12bTitle" and fact.context_id == "common-class"
+        else fact
+        for fact in _common_and_reused_note()
+    )
+    with pytest.raises(IdentityResolutionError) as old:
+        _resolve_original(facts)
+    assert old.value.code == "HISTORICAL_SECURITY_SELECTION_REQUIRED"
+    identity = _resolve_original(
+        facts, security_selection_policy=DEFAULT_ORIGINAL_SECURITY_POLICY
+    )
+    assert identity.security_id == "AAPL" and identity.share_class == title
+    assert (
+        _resolve_original(
+            tuple(reversed((*facts, *facts))),
+            security_selection_policy=DEFAULT_ORIGINAL_SECURITY_POLICY,
+        )
+        == identity
+    )
+    assert (
+        _resolve_original(
+            facts,
+            share_class="2.000% Notes due 2027",
+            security_selection_policy=DEFAULT_ORIGINAL_SECURITY_POLICY,
+        ).share_class
+        == "2.000% Notes due 2027"
+    )
+
+
+@pytest.mark.parametrize(
+    "title",
+    ["Class B Common Stock", "Preferred Stock", "Unknown security", "Notes", ""],
+)
+def test_common_policy_keeps_other_or_unknown_classes_ambiguous(title):
+    facts = tuple(
+        fact.model_copy(update={"value": title})
+        if fact.concept == "dei:Security12bTitle" and fact.context_id == "listed-note"
+        else fact
+        for fact in _common_and_reused_note()
+    )
+    with pytest.raises(IdentityResolutionError) as error:
+        _resolve_original(
+            facts, security_selection_policy=DEFAULT_ORIGINAL_SECURITY_POLICY
+        )
+    assert error.value.code in {
+        "HISTORICAL_SECURITY_SELECTION_REQUIRED",
+        "HISTORICAL_IDENTITY_MISSING",
+    }
+
+
+@pytest.mark.parametrize("reuse_ticker", [False, True])
+def test_common_policy_does_not_choose_between_common_share_classes(reuse_ticker):
+    with pytest.raises(IdentityResolutionError) as error:
+        _resolve_original(
+            _two_original_securities(reuse_ticker=reuse_ticker),
+            security_selection_policy=DEFAULT_ORIGINAL_SECURITY_POLICY,
+        )
+    assert error.value.code == "HISTORICAL_SECURITY_SELECTION_REQUIRED"
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"namespace_uri": "http://example.test/dei/2024"},
+        {"entity_identifier": "0000320194"},
+        {"period_end": date(2023, 9, 28)},
+        {"period_start": None},
+        {"unit": "iso4217:USD"},
+        {"dimensions": (("us-gaap:StatementBusinessSegmentsAxis", "issuer:USA"),)},
+    ],
+)
+def test_common_policy_still_validates_the_unselected_note_context(change):
+    facts = tuple(
+        fact.model_copy(update=change) if fact.context_id == "listed-note" else fact
+        for fact in _common_and_reused_note()
+    )
+    with pytest.raises(IdentityResolutionError) as error:
+        _resolve_original(
+            facts, security_selection_policy=DEFAULT_ORIGINAL_SECURITY_POLICY
+        )
+    assert error.value.code == "HISTORICAL_IDENTITY_SCOPE_UNSUPPORTED"
+
+
+def test_common_policy_requires_the_standard_common_member_and_complete_pairs():
+    facts = _common_and_reused_note()
+    changed = tuple(
+        fact.model_copy(
+            update={
+                "dimensions": (
+                    ("us-gaap:StatementClassOfStockAxis", "issuer:CommonStockMember"),
+                )
+            }
+        )
+        if fact.context_id == "common-class"
+        else fact
+        for fact in facts
+    )
+    incomplete = (
+        *facts,
+        facts[-2].model_copy(update={"context_id": "unpaired-listed-note"}),
+    )
+    for observed in (changed, incomplete):
+        with pytest.raises(IdentityResolutionError) as error:
+            _resolve_original(
+                observed, security_selection_policy=DEFAULT_ORIGINAL_SECURITY_POLICY
+            )
+        assert error.value.code == "HISTORICAL_SECURITY_SELECTION_REQUIRED"
 
 
 def test_reused_original_ticker_requires_title_and_keeps_ambiguous_context_refusal():

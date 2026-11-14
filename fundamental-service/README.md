@@ -67,9 +67,17 @@ files have a separate 64 MB limit because they include the filing and exhibits.
 Both limits retain bounded reads and deadline enforcement. Both original bytes
 and validation receipts are verified on every read. Repeats reuse successful
 validation without provider or parser I/O; changing `--ticker` or `--share-class`
-reuses the same parsed original. Multiple securities or reused tickers retain a
-refusal until an explicit selector matches the original evidence. Inspect the
-per-filing validation artifact for original security facts before selecting.
+reuses the same parsed original. The issuer CLI records the versioned
+`original-dei-single-common-stock-v1` selection policy. For a reused ticker it
+can select exactly one standard `us-gaap:CommonStockMember` paired with a
+`Common stock` title (optionally its dollar par value), when all other paired
+titles are fixed-coupon `Notes due YYYY`. Every original namespace, issuer,
+period and security-context check still applies. This selects security identity;
+it grants no capital-claim completeness or source-use authority. Multiple common
+classes, unknown titles or incomplete/conflicting pairs retain a refusal.
+Explicit selectors still require an exact original match. Inspect the saved
+per-filing validation artifact for the original facts. Older requests without
+the policy retain their existing decisions and digests.
 
 Every selected original and its failure remains in the saved preparation.
 Retryable failures retain content-addressed `original-validation-attempt:` and

@@ -21,7 +21,11 @@ from .contracts import (
     StrictModel,
 )
 from .data_releases import ArtifactRefV1
-from .issuer_identity import IdentityResolutionError, resolve_original_filing_identity
+from .issuer_identity import (
+    IdentityResolutionError,
+    OriginalSecuritySelectionPolicy,
+    resolve_original_filing_identity,
+)
 from .original_issuer import OriginalIssuerEvidenceV1
 from .regulatory_validation import require_sec_validation_evidence
 from .replay import ArtifactPublicationV1
@@ -202,6 +206,9 @@ class OriginalValidationPort(Protocol):
 class OriginalSecuritySelectionV1(StrictModel):
     ticker: str | None = Field(default=None, pattern=r"^[A-Z0-9][A-Z0-9.-]{0,14}$")
     share_class: str | None = Field(default=None, min_length=1, max_length=512)
+    security_selection_policy: OriginalSecuritySelectionPolicy | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
 
 
 class OriginalPreparationRequestV1(OriginalSecuritySelectionV1):
@@ -435,6 +442,7 @@ class OriginalPreparation:
                         facts=validation.original.report.facts,
                         ticker=request.ticker,
                         share_class=request.share_class,
+                        security_selection_policy=request.security_selection_policy,
                     )
                 except IdentityResolutionError as error:
                     reasons.add(error.code)
