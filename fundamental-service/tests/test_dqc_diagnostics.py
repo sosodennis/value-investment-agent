@@ -187,7 +187,12 @@ def test_official_rule_severity_survives_efm_releveling(level):
 
     model = SimpleNamespace(log=efm_log)
     preserve_rule_severity(None, None, model)
-    model.log(level, "DQC.US.0090.9374", "official rule message", severity="warning")
+    model.log(
+        level=level,
+        codes="DQC.US.0090.9374",
+        msg="official rule message",
+        severity="warning",
+    )
     finding = _finding_from_log(records[0])
     assert finding.severity == "warning"
     assert finding.rule_severity == level.lower()

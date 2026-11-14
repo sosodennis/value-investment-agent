@@ -29,13 +29,11 @@ def preserve_rule_severity(
 ) -> None:
     original_log = model.log
 
-    def observed_log(
-        level: str, codes: object, message: str, **parameters: object
-    ) -> None:
+    def observed_log(level: str, codes: object, msg: str, **parameters: object) -> None:
         if isinstance(codes, str) and codes.startswith("DQC."):
             # EFM relevels DQC errors before the logging-parameter hooks run.
             parameters["fundamental_rule_severity"] = level.lower()
-        original_log(level, codes, message, **parameters)
+        original_log(level, codes, msg, **parameters)
 
     model.log = observed_log
 
