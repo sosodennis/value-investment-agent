@@ -76,8 +76,39 @@ Retryable failures retain content-addressed `original-validation-attempt:` and
 `original-preparation-attempt:` artifacts without reserving the terminal success
 keys. Recovery reuses already captured bytes and completed validations. Terminal
 refusals repeat unchanged; new source/runtime inputs require a new request.
-This stage publishes no snapshot, mapping, release or valuation. Automatic
-compilation into a complete source preparation plan remains pending.
+This stage publishes no snapshot, mapping, release or valuation.
+
+The command can compile these saved originals into the existing automatic
+source-plan format with deployment configuration. The configuration contains
+`model_id`, `release_profile_id`, `coverage_profile`, `evaluator_id`,
+`mapping_version` and `policy_version`; it supplies no company, ticker, accession,
+model version or financial values. Its protocol is
+`automatic-source-plan-configuration-v1`. Pin its canonical SHA-256:
+
+```sh
+fundamental-discover-annuals \
+  --cik 0000724910 --valuation-timestamp 2025-06-01T00:00:00Z \
+  --source-revision <installed-source-commit> --prepare-originals \
+  --source-plan-configuration /run/config/source-plan.json \
+  --configuration-digest <canonical-configuration-sha256>
+fundamental-discover-annuals --artifact-id original-source-plan:<request-digest>
+```
+
+Compilation verifies the saved original preparation and all original dependencies,
+derives identity/accession/date/parser pins from that evidence, and obtains model
+versions, requirements and mapping-policy digests from the existing service
+registries. It preserves every selected original and refuses the plan if any
+original fails or identities conflict. The receipt exposes `plan_ref` for the
+saved canonical `AutomaticSourcePreparationPlanV1` consumed by
+`fundamental-prepare-source`. Configuration is not approval or authority; the
+existing mapping/release/caller gates remain required. Identical compilation and
+saved retrieval return the same evidence and `wrote=false` without source/parser
+I/O. Interrupted publication reuses completed artifacts; corruption refuses.
+
+This first compiler stage uses the standard direct accounting requirements.
+Automatic composite working-capital recipes, public/issuer-market configuration
+assembly and the complete company/date preparation entrypoint remain pending;
+the compiled source plan alone does not establish complete valuation inputs.
 
 ## Source preparation command
 
