@@ -189,6 +189,23 @@ inspect its saved artifact for `blocked`, `release_required`,
 release or caller approval. Repeat requests reuse the existing content-addressed
 artifacts and return the underlying `wrote=false` dispositions.
 
+For an explicitly current request, add `--current` and supply a recent
+`--valuation-timestamp`. This mode requires configured public-source templates.
+The existing capture-before-cutoff owner first retains the public originals,
+then freezes the effective valuation timestamp at the last capture. Its saved
+selection is reused on repeat requests. The result retains the original
+`source_plan_ref`, the `effective_source_plan_ref` used by preparation, the
+effective timestamp and a `current_source_selection` lineage stage. Failed
+captures return their retained issues with `status=blocked` before preparation.
+Fixed historical requests keep their exact valuation timestamp.
+
+In current mode, `fundamental-prepare-source` also returns the typed
+`current_selection` and `current_selection_publication`. The issuer entrypoint
+checks that selection against its compiled template and verifies the preparation
+receipt references the effective plan. This freezes source availability; market
+admission, trusted release and exact-input caller approval still run through the
+existing owners.
+
 ## Source preparation command
 
 The acquisition owner also accepts `AutomaticSecIngestionRequestV1` with exact

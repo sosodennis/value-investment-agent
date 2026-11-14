@@ -2,14 +2,30 @@
 
 import json
 import subprocess
+from datetime import timedelta
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
+from fundamental_service.contracts import SourceRole
+from fundamental_service.current_preparation import (
+    CurrentSourcePreparation,
+    CurrentSourcePreparationPublicationV1,
+    CurrentSourcePreparationRequestV1,
+)
 from fundamental_service.issuer_preparation_runner import _execute, _run_child
 from fundamental_service.original_source_plan import OriginalSourcePlanEvidenceV1
-from fundamental_service.serialization import canonical_bytes
-from test_original_source_plan import compiler_case, configuration
+from fundamental_service.serialization import canonical_bytes, sha256_digest
+from fundamental_service.snapshots import CapturedSource, SnapshotError
+from fundamental_service.source_capture import SourceCaptureRequest
+from test_original_source_plan import (
+    compiler_case,
+    configuration,
+    issuer_market_policy_template,
+)
 from test_original_preparation import case, execute
+from test_public_acquisition import acquisition, file_lock, inventory
 
 
 def _args(tmp_path, annual_request):
@@ -19,6 +35,7 @@ def _args(tmp_path, annual_request):
     return SimpleNamespace(
         cik=annual_request.cik,
         valuation_timestamp=annual_request.valuation_timestamp.isoformat(),
+        current=False,
         source_revision=annual_request.declared_source_revision,
         source_plan_configuration=config_path,
         configuration_digest=config.digest,
@@ -142,6 +159,141 @@ def test_issuer_entry_compiles_then_runs_formal_preparation(tmp_path, monkeypatc
         == result["source_plan_compilation_digest"]
     )
     assert all(not stage["wrote"] for stage in repeated["lineage"].values())
+
+
+@pytest.mark.parametrize("mode", ("success", "missing", "different_template"))
+def test_current_issuer_entry_joins_real_selection_and_effective_plan_lineage(
+    tmp_path, monkeypatch, mode
+):
+    original_case = case(tmp_path / "original", monkeypatch)
+    prepared, _ = execute(original_case)
+    config = configuration(
+        issuer_market_policy_template=issuer_market_policy_template()
+    )
+    compiler, request = compiler_case(original_case, prepared, config)
+    compiled, _ = compiler.execute(request)
+    args = _args(tmp_path, original_case.annual_request)
+    args.current = True
+    args.source_plan_configuration.write_bytes(canonical_bytes(config))
+    args.configuration_digest = config.digest
+    template = compiled.plan
+    at = template.ingestions[0].valuation_timestamp
+    capture_time = at + timedelta(seconds=2)
+    by_uri = {item.uri: item for item in template.public_sources}
+
+    class Capture:
+        def __init__(self):
+            self.calls = 0
+
+        def validate_capture(self, source_id, uri):
+            item = by_uri[uri]
+            return SourceCaptureRequest(source_id, uri, item.terms_reference)
+
+        def capture(self, source_id, uri):
+            self.calls += 1
+            if mode == "missing":
+                raise SnapshotError("SOURCE_HTTP_NOT_FOUND", "selected source missing")
+            return CapturedSource(
+                source_id=source_id,
+                uri=uri,
+                role=SourceRole.REFERENCE,
+                content=b"synthetic retained source",
+                media_type="application/octet-stream",
+                http_status=200,
+                available_at=capture_time,
+                captured_at=capture_time,
+            )
+
+    provider = Capture()
+    public = acquisition(
+        tmp_path / "public", provider, artifacts=original_case.artifacts
+    )
+    selector = CurrentSourcePreparation(
+        acquisitions=public,
+        artifacts=original_case.artifacts,
+        selection_lock=lambda key: file_lock(tmp_path / "selection-locks", key),
+        clock=lambda: capture_time,
+    )
+
+    def invoke(module, arguments, *, timeout_seconds):
+        assert 0 < timeout_seconds <= 120
+        if module.endswith("annual_discovery_runner"):
+            return _discovery_result(compiled, prepared)
+        assert "--current" in arguments
+        selected_template = template
+        if mode == "different_template":
+            selected_template = template.model_copy(
+                update={"release_profile_id": "different-profile"}
+            )
+        selected, selected_receipt = selector.execute(
+            CurrentSourcePreparationRequestV1(template=selected_template),
+            deadline_at=capture_time + timedelta(minutes=1),
+        )
+        if selected.plan is None:
+            final = selected_receipt
+        else:
+            # The preparation owner is independently exercised by current-owner tests.
+            # This fixture tests only the CLI join to its effective-plan receipt.
+            report = {"plan_digest": selected.plan.digest, "status": "blocked"}
+            final = original_case.artifacts.put_with_receipt(
+                f"source-preparation:{sha256_digest(report)}",
+                report,
+                (selected.plan.digest,),
+            )
+        return CurrentSourcePreparationPublicationV1(
+            artifact=final.artifact,
+            wrote=final.wrote,
+            current_selection=selected,
+            current_selection_publication=selected_receipt,
+        ).model_dump(mode="json")
+
+    monkeypatch.setattr(
+        "fundamental_service.issuer_preparation_runner._run_child", invoke
+    )
+    if mode == "different_template":
+        with pytest.raises(ValueError, match="differs from the compiled plan"):
+            _execute(args)
+        return
+    result = _execute(args)
+    before = inventory(original_case.artifacts.root)
+    calls = provider.calls
+    repeated = _execute(args)
+    assert provider.calls == calls == len(template.public_sources)
+    assert inventory(original_case.artifacts.root) == before
+    assert not repeated["lineage"]["current_source_selection"]["wrote"]
+    if mode == "missing":
+        assert result["status"] == "blocked" and result["preparation"] is None
+        assert "SOURCE_HTTP_NOT_FOUND" in result["current_source_issue_codes"]
+        assert "source_preparation" not in result["lineage"]
+    else:
+        assert result["status"] == "preparation_attempted"
+        effective_ref = result["effective_source_plan_ref"]
+        assert effective_ref.content_hash != template.digest
+        assert result["effective_valuation_timestamp"] == capture_time
+        assert result["source_plan_ref"].content_hash == template.digest
+        assert result["lineage"]["source_preparation"]["input_digest"] == (
+            effective_ref.content_hash
+        )
+        assert result["lineage"]["source_preparation"]["source_artifact_id"] == (
+            effective_ref.artifact_id
+        )
+        assert not repeated["preparation"]["wrote"]
+
+
+def test_current_issuer_entry_requires_source_templates_before_discovery(
+    tmp_path, monkeypatch
+):
+    original_case = case(tmp_path / "original", monkeypatch)
+    args = _args(tmp_path, original_case.annual_request)
+    args.current = True
+    monkeypatch.setattr(
+        "fundamental_service.issuer_preparation_runner._run_child",
+        lambda *args, **kwargs: pytest.fail(
+            "unconfigured current mode contacted sources"
+        ),
+    )
+    with pytest.raises(ValueError, match="requires public-source templates"):
+        _execute(args)
 
 
 def test_incomplete_original_evidence_is_retained_without_running_preparation(

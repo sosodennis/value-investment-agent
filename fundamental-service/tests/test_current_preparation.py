@@ -8,6 +8,7 @@ import pytest
 from fundamental_service.current_preparation import (
     CurrentSourcePreparation,
     CurrentSourcePreparationRequestV1,
+    CurrentSourcePreparationPublicationV1,
 )
 from fundamental_service.preparation_runner import SOURCE_PREPARATION_PLAN
 from fundamental_service.public_acquisition import PublicSourceCutoffV1
@@ -68,6 +69,40 @@ def select(fixture, **kwargs):
     return fixture.selector(**kwargs).execute(
         fixture.request, deadline_at=fixture.deadline_at
     )
+
+
+@pytest.mark.parametrize("tamper", (None, "selection", "plan", "blocked_receipt"))
+def test_current_command_receipt_binds_selection_and_effective_preparation(
+    tmp_path, tamper
+):
+    fixture = current_fixture(tmp_path)
+    if tamper == "blocked_receipt":
+        fixture.provider.error = SnapshotError("SOURCE_HTTP_NOT_FOUND", "missing")
+    selected, selection_publication = select(fixture)
+    if selected.plan is None:
+        final = selection_publication
+    else:
+        final = _run(
+            _runner(fixture.baseline, public_acquisition=fixture.public), selected.plan
+        )
+    payload = {
+        **final.model_dump(),
+        "current_selection": selected.model_dump(),
+        "current_selection_publication": selection_publication.model_dump(),
+    }
+    if tamper == "selection":
+        payload["current_selection_publication"]["artifact"]["content_hash"] = "0" * 64
+    elif tamper == "plan":
+        payload["artifact"]["dependency_hashes"] = (fixture.request.template.digest,)
+    elif tamper == "blocked_receipt":
+        payload["wrote"] = not selection_publication.wrote
+    if tamper is not None:
+        with pytest.raises(ValueError):
+            CurrentSourcePreparationPublicationV1.model_validate(payload)
+    else:
+        receipt = CurrentSourcePreparationPublicationV1.model_validate(payload)
+        assert receipt.current_selection.plan == selected.plan
+        assert receipt.artifact == final.artifact
 
 
 def test_current_freezes_after_capture_and_formal_composer_still_requires_exact_approval(

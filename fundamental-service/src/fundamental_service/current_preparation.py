@@ -135,6 +135,43 @@ class CurrentSourcePreparationSelectionV1(StrictModel):
         )
 
 
+class CurrentSourcePreparationPublicationV1(ArtifactPublicationV1):
+    """Command receipt retaining the capture cutoff and the actual plan used."""
+
+    current_selection: CurrentSourcePreparationSelectionV1
+    current_selection_publication: ArtifactPublicationV1
+
+    @model_validator(mode="after")
+    def exact_selection_receipt(self) -> CurrentSourcePreparationPublicationV1:
+        selection = self.current_selection
+        record = self.current_selection_publication.artifact
+        if (
+            record.artifact_id != selection.artifact_id
+            or record.content_hash != selection.digest
+            or record.dependency_hashes != selection.dependencies
+            or record.status != "valid"
+            or record.retention != "evidence"
+            or record.media_type != "application/json"
+        ):
+            raise ValueError("current command selection receipt differs from evidence")
+        if selection.plan is None:
+            if (
+                self.artifact != record
+                or self.wrote != self.current_selection_publication.wrote
+            ):
+                raise ValueError("blocked current command must retain its selection")
+        elif (
+            selection.plan.digest not in self.artifact.dependency_hashes
+            or self.artifact.artifact_id
+            != f"source-preparation:{self.artifact.content_hash}"
+            or self.artifact.status != "valid"
+            or self.artifact.retention != "evidence"
+            or self.artifact.media_type != "application/json"
+        ):
+            raise ValueError("current preparation receipt must bind its effective plan")
+        return self
+
+
 class CurrentPublicAcquisitionPort(Protocol):
     def validate_request(self, request: PublicSourceAcquisitionRequestV1) -> None: ...
 

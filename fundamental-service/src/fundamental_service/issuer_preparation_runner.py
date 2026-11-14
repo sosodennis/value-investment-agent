@@ -13,6 +13,8 @@ from pathlib import Path
 from time import monotonic
 
 from .annual_discovery import AnnualDiscoveryParametersV1
+from .current_preparation import CurrentSourcePreparationPublicationV1
+from .data_releases import ArtifactRefV1
 from .original_preparation import OriginalSecuritySelectionV1
 from .original_source_plan import (
     AutomaticSourcePlanConfigurationV1,
@@ -93,6 +95,11 @@ def _execute(args: argparse.Namespace) -> dict[str, object]:
     )
     if configuration.digest != args.configuration_digest:
         raise ValueError("source-plan configuration digest differs")
+    if args.current and (
+        configuration.issuer_market_policy_template is None
+        or configuration.issuer_market_policy_template.source_plan_template is None
+    ):
+        raise ValueError("current issuer preparation requires public-source templates")
     selection = OriginalSecuritySelectionV1(
         ticker=args.ticker,
         share_class=args.share_class,
@@ -241,6 +248,8 @@ def _execute(args: argparse.Namespace) -> dict[str, object]:
             "--machine-private-key",
             str(args.machine_private_key),
         ]
+        if args.current:
+            preparation_arguments.append("--current")
         for flag, path in (
             ("--candidate", args.candidate),
             ("--approval", args.approval),
@@ -259,6 +268,44 @@ def _execute(args: argparse.Namespace) -> dict[str, object]:
             preparation_arguments,
             timeout_seconds=_remaining_seconds(deadline),
         )
+    effective_plan_ref = plan_ref
+    effective_lineage = dict(lineage)
+    current_fields: dict[str, object] = {}
+    if args.current:
+        current = CurrentSourcePreparationPublicationV1.model_validate_json(
+            canonical_bytes(preparation)
+        )
+        selected = current.current_selection
+        if selected.request.template != plan:
+            raise ValueError("current source selection differs from the compiled plan")
+        effective_lineage["current_source_selection"] = {
+            "artifact_id": selected.artifact_id,
+            "input_digest": selected.request.digest,
+            "output_digest": selected.digest,
+            "wrote": current.current_selection_publication.wrote,
+            "source_artifact_id": plan_ref.artifact_id,
+            "source_digest": plan.digest,
+        }
+        current_fields["current_source_issue_codes"] = selected.issue_codes
+        if selected.plan is None:
+            return {
+                **shared,
+                **current_fields,
+                "lineage": effective_lineage,
+                "status": "blocked",
+                "preparation": None,
+            }
+        plan = selected.plan
+        effective_plan_ref = ArtifactRefV1(
+            artifact_id=f"source-preparation-plan:{plan.digest}",
+            content_hash=plan.digest,
+            media_type="application/json",
+            role=plan.protocol,
+        )
+        current_fields["effective_source_plan_ref"] = effective_plan_ref
+        current_fields["effective_valuation_timestamp"] = plan.ingestions[
+            0
+        ].valuation_timestamp
     publication = preparation.get("artifact")
     if not isinstance(publication, dict):
         raise RuntimeError("source preparation omitted its artifact receipt")
@@ -268,18 +315,19 @@ def _execute(args: argparse.Namespace) -> dict[str, object]:
     ):
         raise ValueError("source preparation receipt does not reference its plan")
     complete_lineage = {
-        **lineage,
+        **effective_lineage,
         "source_preparation": {
             "artifact_id": publication_record.artifact_id,
             "input_digest": plan.digest,
             "output_digest": publication_record.content_hash,
             "wrote": preparation["wrote"],
-            "source_artifact_id": plan_ref.artifact_id,
+            "source_artifact_id": effective_plan_ref.artifact_id,
             "source_digest": plan.digest,
         },
     }
     return {
         **shared,
+        **current_fields,
         "lineage": complete_lineage,
         "status": "preparation_attempted",
         "preparation": preparation,
@@ -290,6 +338,11 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--cik", required=True)
     parser.add_argument("--valuation-timestamp", required=True)
+    parser.add_argument(
+        "--current",
+        action="store_true",
+        help="capture configured public sources, then freeze the current valuation cutoff",
+    )
     parser.add_argument("--source-revision", required=True)
     parser.add_argument("--source-plan-configuration", type=Path, required=True)
     parser.add_argument("--configuration-digest", required=True)

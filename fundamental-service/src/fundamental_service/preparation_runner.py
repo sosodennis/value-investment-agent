@@ -2081,15 +2081,18 @@ async def _run_command(args: argparse.Namespace) -> ArtifactPublicationV1:
             else None,
         )
         runner.validate_candidate(plan, candidate)
+        selected = None
+        selection_publication = None
         if args.current:
             from .current_preparation import (
                 CurrentSourcePreparation,
+                CurrentSourcePreparationPublicationV1,
                 CurrentSourcePreparationRequestV1,
             )
 
             if public_acquisition is None:
                 raise ValueError("current preparation requires public source requests")
-            selected, publication = CurrentSourcePreparation(
+            selected, selection_publication = CurrentSourcePreparation(
                 acquisitions=public_acquisition,
                 artifacts=application.artifact_store,
                 selection_lock=PostgresPublicCaptureLock(app.state.metadata_store),
@@ -2098,9 +2101,14 @@ async def _run_command(args: argparse.Namespace) -> ArtifactPublicationV1:
                 deadline_at=deadline_at,
             )
             if selected.plan is None:
-                return publication
+                return CurrentSourcePreparationPublicationV1(
+                    artifact=selection_publication.artifact,
+                    wrote=selection_publication.wrote,
+                    current_selection=selected,
+                    current_selection_publication=selection_publication,
+                )
             plan = selected.plan
-        return runner.run(
+        publication = runner.run(
             plan,
             actor_id=args.actor,
             organization_id=args.organization,
@@ -2110,6 +2118,15 @@ async def _run_command(args: argparse.Namespace) -> ArtifactPublicationV1:
             approval=approval,
             market_policy_authorization=authorization,
             market_policy_authorization_digest=args.market_policy_authorization_digest,
+        )
+        if selected is None:
+            return publication
+        assert selection_publication is not None
+        return CurrentSourcePreparationPublicationV1(
+            artifact=publication.artifact,
+            wrote=publication.wrote,
+            current_selection=selected,
+            current_selection_publication=selection_publication,
         )
 
 
