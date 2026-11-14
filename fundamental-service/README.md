@@ -126,10 +126,21 @@ issuer-market preparation owner; conflicting original identities and
 non-USD identities refuse compilation. Templates do not contain market values,
 capture receipts, source-use permissions or issuer-specific selections.
 
-This compiler stage does not yet acquire and admit every market reference and
-macro source from the template. Missing sources remain refusals in the existing
-preparation path; generating an issuer/date policy request is not evidence that
-its market inputs are available or approved.
+The same template pins the source-use policy and provider-neutral capture
+templates for nominal GDP, the selected risk-free series, country ERP, industry
+beta, pre-tax debt cost and capital weights. URI templates may substitute only
+the valuation year or date. Compilation expands them into canonical public
+capture and admission requests at the issuer's valuation timestamp; the existing
+source acquisition and admission owners retain originals, reproduce providers,
+and refuse ineligible or unapproved evidence. The existing market evaluator
+enforces completeness of the seven formal composer market roles. This removes
+issuer/date request authoring from the caller while keeping provider, source and
+policy choices deployment-owned.
+
+The compiler emits requests; the existing formal source-preparation runner
+performs their capture and admission. Missing or ineligible sources remain
+refusals, and a generated issuer/date request is not evidence that its market
+inputs are available or approved.
 
 An existing saved preparation can be compiled with a separately pinned runtime
 revision. This verifies and reads retained original artifacts without running
@@ -148,9 +159,9 @@ validation's historical source revision. The installed runner binds its
 automatic authority to the same revision before acquisition.
 
 Without the optional recipe template, this compiler stage uses standard direct
-accounting requirements. Automatic market source acquisition/admission assembly
-remains pending; a compiled source plan alone does not establish complete
-valuation inputs.
+accounting requirements. A compiled source plan alone does not establish complete
+valuation inputs; its sources must pass the existing acquisition, admission and
+issuer market evaluators.
 
 `fundamental-prepare-issuer` is the company/date entrypoint. It delegates catalog
 selection, saved original validation and identity resolution, source-plan

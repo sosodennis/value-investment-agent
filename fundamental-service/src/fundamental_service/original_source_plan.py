@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import hashlib
+from string import Formatter
 from collections.abc import Callable
 from contextlib import AbstractContextManager
-from datetime import date
+from datetime import UTC, date, datetime
 from typing import Literal
+from urllib.parse import urlsplit
 
-from pydantic import Field, model_validator
+from pydantic import Field, TypeAdapter, model_validator
 
 from .automatic_mapping import automatic_mapping_policy_digest
 from .automatic_source_mapping import AutomaticSecIngestionRequestV1
@@ -27,6 +29,8 @@ from .issuer_market_policy_plan import IssuerMarketReferencePlanPolicyV1
 from .issuer_market_preparation import IssuerMarketPreparationRequestV1
 from .automatic_market_policy import AutomaticMarketPolicyPolicyV1
 from .market_source_selection import DailyMarketRatePolicyV1
+from .public_acquisition import PublicSourceAcquisitionRequestV1
+from .public_admission import PublicSourceAdmissionRequestV1
 from .original_preparation import OriginalPreparation
 from .policies import initial_model_specs
 from .preparation_runner import AutomaticSourcePreparationPlanV1
@@ -80,6 +84,106 @@ class AutomaticWorkingCapitalRecipeTemplateV1(StrictModel):
         return self
 
 
+class AutomaticPublicSourceRequestTemplateV1(StrictModel):
+    """Deployment-owned public source URI template, without source values."""
+
+    source_id: str = Field(min_length=1)
+    uri_template: str = Field(min_length=1)
+    source_profile: str = Field(min_length=1)
+    terms_reference: str = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def safe_uri_template(self) -> AutomaticPublicSourceRequestTemplateV1:
+        try:
+            fields = tuple(Formatter().parse(self.uri_template))
+        except ValueError as error:
+            raise ValueError("public source URI template is malformed") from error
+        if any(
+            field not in {"valuation_year", "valuation_date"}
+            or format_spec
+            or conversion
+            for _, field, format_spec, conversion in fields
+            if field is not None
+        ):
+            raise ValueError("public source URI template has an unsupported field")
+        example = self.uri_template.format(
+            valuation_year="2000", valuation_date="2000-01-02"
+        )
+        parsed = urlsplit(example)
+        if (
+            parsed.scheme != "https"
+            or not parsed.hostname
+            or parsed.username is not None
+            or parsed.password is not None
+            or parsed.fragment
+        ):
+            raise ValueError("public source URI template must resolve to HTTPS")
+        return self
+
+    def render(self, valuation_at: datetime) -> PublicSourceAcquisitionRequestV1:
+        if valuation_at.tzinfo is None or valuation_at.utcoffset() is None:
+            raise ValueError("market source template requires a zoned valuation time")
+        valuation_at = valuation_at.astimezone(UTC)
+        valuation_date = valuation_at.date()
+        uri = self.uri_template.format(
+            valuation_year=f"{valuation_date.year:04d}",
+            valuation_date=valuation_date.isoformat(),
+        )
+        return PublicSourceAcquisitionRequestV1(
+            source_id=self.source_id,
+            uri=uri,
+            source_profile=self.source_profile,
+            terms_reference=self.terms_reference,
+            valuation_timestamp=valuation_at,
+        )
+
+
+class AutomaticMarketSourceTemplateV1(StrictModel):
+    """Provider-neutral capture and admission inputs for one market metric."""
+
+    kind: Literal["macro", "reference"]
+    provider_id: str = Field(min_length=1)
+    metric_id: str = Field(min_length=1)
+    sources: tuple[AutomaticPublicSourceRequestTemplateV1, ...] = Field(
+        min_length=1, max_length=8
+    )
+    terms: tuple[AutomaticPublicSourceRequestTemplateV1, ...] = Field(
+        default=(), max_length=8
+    )
+
+    @model_validator(mode="after")
+    def unique_requests(self) -> AutomaticMarketSourceTemplateV1:
+        if len({item.uri_template for item in self.sources}) != len(self.sources):
+            raise ValueError("market source template repeats a source URI")
+        if len({item.uri_template for item in self.terms}) != len(self.terms):
+            raise ValueError("market source template repeats a terms URI")
+        if self.kind == "reference":
+            from .market_reference import ReferenceMetric
+
+            TypeAdapter(ReferenceMetric).validate_python(self.metric_id)
+        return self
+
+
+class AutomaticMarketSourcesTemplateV1(StrictModel):
+    """One pinned source-use policy and its configured provider requests."""
+
+    source_use_policy_version: str = Field(min_length=1)
+    source_use_policy_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    market_sources: tuple[AutomaticMarketSourceTemplateV1, ...] = Field(
+        min_length=1, max_length=16
+    )
+
+    @model_validator(mode="after")
+    def canonical_sources(self) -> AutomaticMarketSourcesTemplateV1:
+        keys = tuple(
+            (item.kind, item.provider_id, item.metric_id)
+            for item in self.market_sources
+        )
+        if keys != tuple(sorted(set(keys))):
+            raise ValueError("issuer market source templates must be canonical")
+        return self
+
+
 class AutomaticIssuerMarketPolicyTemplateV1(StrictModel):
     """Deployment-owned provider and policy pins for issuer/date market planning."""
 
@@ -92,6 +196,9 @@ class AutomaticIssuerMarketPolicyTemplateV1(StrictModel):
     terminal_growth_policy_id: str = Field(min_length=1)
     gdp_horizon_years: int = Field(ge=1, le=100)
     maximum_gdp_period_age_days: int = Field(ge=0)
+    source_plan_template: AutomaticMarketSourcesTemplateV1 | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
 
     @model_validator(mode="after")
     def supported_terminal_rate(self) -> AutomaticIssuerMarketPolicyTemplateV1:
@@ -103,6 +210,43 @@ class AutomaticIssuerMarketPolicyTemplateV1(StrictModel):
                 "issuer market template requires the configured USD long-term rate"
             )
         return self
+
+
+def _market_source_requests(
+    template: AutomaticMarketSourcesTemplateV1 | None,
+    *,
+    valuation_at: datetime,
+) -> tuple[
+    tuple[PublicSourceAcquisitionRequestV1, ...],
+    tuple[PublicSourceAdmissionRequestV1, ...],
+]:
+    if template is None:
+        return (), ()
+    captures: dict[tuple[str, str], PublicSourceAcquisitionRequestV1] = {}
+    admissions = []
+    for market_source in template.market_sources:
+        sources = tuple(item.render(valuation_at) for item in market_source.sources)
+        terms = tuple(item.render(valuation_at) for item in market_source.terms)
+        for request in (*sources, *terms):
+            previous = captures.setdefault((request.source_id, request.uri), request)
+            if previous != request:
+                raise ValueError("market source URI has conflicting profile or terms")
+        admissions.append(
+            PublicSourceAdmissionRequestV1(
+                kind=market_source.kind,
+                provider_id=market_source.provider_id,
+                metric_id=market_source.metric_id,
+                valuation_at=valuation_at,
+                policy_version=template.source_use_policy_version,
+                policy_digest=template.source_use_policy_digest,
+                source_request_digests=tuple(sorted(item.digest for item in sources)),
+                terms_request_digests=tuple(sorted(item.digest for item in terms)),
+            )
+        )
+    return (
+        tuple(sorted(captures.values(), key=lambda item: item.digest)),
+        tuple(sorted(admissions, key=lambda item: item.digest)),
+    )
 
 
 class AutomaticSourcePlanConfigurationV1(StrictModel):
@@ -415,6 +559,11 @@ class OriginalSourcePlan:
                         reference_policy=market_template.reference_policy,
                         market_policy=market_policy,
                     )
+                    public_sources, source_admissions = _market_source_requests(
+                        market_template.source_plan_template, valuation_at=valuation_at
+                    )
+                else:
+                    public_sources, source_admissions = (), ()
                 if not codes:
                     plan = AutomaticSourcePreparationPlanV1(
                         source_revision=request.runtime_source_revision,
@@ -426,6 +575,8 @@ class OriginalSourcePlan:
                                 key=lambda item: item.filing.accession_number or "",
                             )
                         ),
+                        public_sources=public_sources,
+                        source_admissions=source_admissions,
                         valuation_working_capital_recipe=recipe,
                         issuer_market_policy=market_policy_request,
                     )

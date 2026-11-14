@@ -3,12 +3,25 @@
 import json
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
-from datetime import UTC, datetime
+from dataclasses import replace
+from datetime import UTC, datetime, timedelta, timezone
 from decimal import Decimal
 from types import SimpleNamespace
 
 import pytest
 
+from fundamental_service.bea_source import BEA_CURRENT_GDP_PROFILE, BEA_CURRENT_GDP_URI
+from fundamental_service.damodaran_source import (
+    DAMODARAN_CAPITAL_PROFILE,
+    DAMODARAN_COUNTRY_CURRENT_PROFILE,
+    DAMODARAN_SOURCE,
+    DAMODARAN_TERMS,
+)
+from fundamental_service.free_source_policy import (
+    DAMODARAN_USE_URI,
+    US_GOVERNMENT_WORKS_URI,
+    free_market_source_policy,
+)
 from fundamental_service.automatic_mapping import automatic_mapping_policy_digest
 from fundamental_service.classification_crosswalk import ClassificationCrosswalkPolicyV1
 from fundamental_service.issuer_country_crosswalk import CountryCrosswalkPolicyV1
@@ -16,9 +29,18 @@ from fundamental_service.issuer_market_policy_plan import (
     IssuerMarketReferencePlanPolicyV1,
 )
 from fundamental_service.market_source_selection import USD_RISK_FREE_POLICY
+from fundamental_service.bea_source import BEA_GDP_TERMS
+from fundamental_service.treasury_source import (
+    TREASURY_PROFILE,
+    TREASURY_SOURCE,
+    TREASURY_TERMS,
+)
 from fundamental_service.arelle_parser import ArelleParserError
 from fundamental_service.operations import ServiceError
 from fundamental_service.original_source_plan import (
+    AutomaticMarketSourceTemplateV1,
+    AutomaticMarketSourcesTemplateV1,
+    AutomaticPublicSourceRequestTemplateV1,
     AutomaticIssuerMarketPolicyTemplateV1,
     AutomaticWorkingCapitalRecipeTemplateV1,
     AutomaticSourcePlanConfigurationV1,
@@ -32,7 +54,7 @@ from fundamental_service.preparation_runner import (
 )
 from fundamental_service.replay import ArtifactStore
 from fundamental_service.sec_source import SecSourceError
-from fundamental_service.serialization import canonical_bytes
+from fundamental_service.serialization import canonical_bytes, sha256_digest
 from fundamental_service.sec_sic_damodaran_crosswalk import (
     SecSicDamodaranIndustryCrosswalk,
 )
@@ -50,6 +72,8 @@ from test_annual_discovery_service import _inventory
 from test_automatic_source_preparation import run
 from test_original_preparation import case, execute
 from test_automatic_market_policy import _market_policy
+from test_public_admission import admission_fixture
+from test_source_admission import METRIC, _source, _terms
 
 
 def configuration(
@@ -105,10 +129,98 @@ def working_capital_recipe_template():
     )
 
 
+def _public_request(source_id, uri, profile, terms_reference):
+    return AutomaticPublicSourceRequestTemplateV1(
+        source_id=source_id,
+        uri_template=uri,
+        source_profile=profile,
+        terms_reference=terms_reference,
+    )
+
+
+def _terms_request(source_id, uri):
+    return _public_request(source_id, uri, f"{source_id}-v1", uri)
+
+
+def _market_source(kind, metric_id, source, terms):
+    return AutomaticMarketSourceTemplateV1(
+        kind=kind,
+        provider_id=(
+            "bea-nipa-current"
+            if metric_id == "us.nominal_gdp"
+            else "us-treasury"
+            if metric_id == "us.treasury_par_yield_10y"
+            else "damodaran-public-aggregates"
+        ),
+        metric_id=metric_id,
+        sources=(source,),
+        terms=terms,
+    )
+
+
 def issuer_market_policy_template():
     country = SecStateCountryCrosswalk()
     industry = SecSicDamodaranIndustryCrosswalk()
     market = _market_policy(datetime(2026, 11, 13, tzinfo=UTC))
+    source_use = free_market_source_policy()
+    bea_terms = (
+        _terms_request("bea-citation-terms", BEA_GDP_TERMS),
+        _terms_request("us-government-works-terms", US_GOVERNMENT_WORKS_URI),
+    )
+    government_terms = (
+        _terms_request("us-government-works-terms", US_GOVERNMENT_WORKS_URI),
+    )
+    damodaran_terms = (_terms_request("damodaran-use-terms", DAMODARAN_USE_URI),)
+    capital_source = _public_request(
+        DAMODARAN_SOURCE,
+        "https://pages.stern.nyu.edu/~adamodar/pc/datasets/wacc.xls",
+        DAMODARAN_CAPITAL_PROFILE,
+        DAMODARAN_TERMS,
+    )
+    sources = (
+        _market_source(
+            "macro",
+            "us.nominal_gdp",
+            _public_request(
+                "bea-nipa-current",
+                BEA_CURRENT_GDP_URI,
+                BEA_CURRENT_GDP_PROFILE,
+                BEA_GDP_TERMS,
+            ),
+            bea_terms,
+        ),
+        _market_source(
+            "macro",
+            "us.treasury_par_yield_10y",
+            _public_request(
+                TREASURY_SOURCE,
+                "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/pages/xml?data=daily_treasury_yield_curve&field_tdr_date_value={valuation_year}",
+                TREASURY_PROFILE,
+                TREASURY_TERMS,
+            ),
+            government_terms,
+        ),
+        _market_source(
+            "reference",
+            "country.equity_risk_premium",
+            _public_request(
+                DAMODARAN_SOURCE,
+                "https://pages.stern.nyu.edu/~adamodar/pc/datasets/ctryprem.xlsx",
+                DAMODARAN_COUNTRY_CURRENT_PROFILE,
+                DAMODARAN_TERMS,
+            ),
+            damodaran_terms,
+        ),
+        *(
+            _market_source("reference", metric, capital_source, damodaran_terms)
+            for metric in (
+                "industry.equity_beta",
+                "industry.pre_tax_cost_of_debt",
+                "industry.debt_weight",
+                "industry.equity_weight",
+            )
+        ),
+    )
     return AutomaticIssuerMarketPolicyTemplateV1(
         classification_provider_id="sec-submissions-classification-v1",
         country_policy=CountryCrosswalkPolicyV1(
@@ -133,12 +245,78 @@ def issuer_market_policy_template():
         maximum_gdp_period_age_days=(
             market.terminal_growth_plan.maximum_gdp_period_age_days
         ),
+        source_plan_template=AutomaticMarketSourcesTemplateV1(
+            source_use_policy_version=source_use.policy_version,
+            source_use_policy_digest=source_use.digest,
+            market_sources=tuple(
+                sorted(
+                    sources,
+                    key=lambda item: (item.kind, item.provider_id, item.metric_id),
+                )
+            ),
+        ),
     )
 
 
 def test_configuration_rejects_models_without_an_automatic_source_policy():
     with pytest.raises(ValueError):
         configuration("bank_excess_return")
+
+
+@pytest.mark.parametrize(
+    "uri",
+    (
+        "https://example.com/{issuer_id}",
+        "https://example.com/{valuation_date.__class__}",
+        "https://example.com/{valuation_year!r}",
+        "https://example.com/{valuation_year:>4}",
+        "https://example.com/{valuation_date",
+        "http://example.com/{valuation_date}",
+        "https://secret@example.com/{valuation_date}",
+    ),
+)
+def test_public_source_template_rejects_unsupported_substitutions_and_uris(uri):
+    with pytest.raises(ValueError):
+        _public_request("configured", uri, "profile-v1", "https://example.com/terms")
+
+
+def test_public_source_template_uses_same_utc_date_for_equal_instants():
+    template = _public_request(
+        "configured",
+        "https://example.com/{valuation_year}/{valuation_date}",
+        "profile-v1",
+        "https://example.com/terms",
+    )
+    utc = datetime(2025, 12, 31, 23, tzinfo=UTC)
+    local = utc.astimezone(timezone(timedelta(hours=8)))
+    assert template.render(utc) == template.render(local)
+    assert template.render(local).uri == "https://example.com/2025/2025-12-31"
+    assert template.render(utc).digest == template.render(local).digest
+
+
+def test_market_template_rejects_duplicate_metrics_and_invalid_reference_roles():
+    template = issuer_market_policy_template().source_plan_template
+    payload = template.model_dump()
+    payload["market_sources"] = (
+        *payload["market_sources"],
+        payload["market_sources"][0],
+    )
+    with pytest.raises(ValueError, match="canonical"):
+        AutomaticMarketSourcesTemplateV1.model_validate(payload)
+    source = next(item for item in template.market_sources if item.kind == "reference")
+    with pytest.raises(ValueError):
+        AutomaticMarketSourceTemplateV1.model_validate(
+            {**source.model_dump(), "metric_id": "unknown.metric"}
+        )
+
+
+def test_market_request_template_without_source_configuration_keeps_retained_digest():
+    payload = issuer_market_policy_template().model_dump(
+        exclude={"source_plan_template"}
+    )
+    loaded = AutomaticIssuerMarketPolicyTemplateV1.model_validate(payload)
+    assert loaded.source_plan_template is None
+    assert canonical_bytes(loaded) == canonical_bytes(payload)
 
 
 def compiler_case(value, prepared, config=None):
@@ -206,12 +384,21 @@ def test_saved_original_supplies_identity_and_installed_model_pins(
     assert calls == (value.state.provider_calls, value.state.parser_calls)
 
 
+@pytest.mark.parametrize("with_market", (False, True))
 def test_repeat_reopened_and_concurrent_compilers_publish_once_without_io(
-    tmp_path, monkeypatch
+    tmp_path, monkeypatch, with_market
 ):
     value = case(tmp_path, monkeypatch)
     prepared, _ = execute(value)
-    compiler, request = compiler_case(value, prepared)
+    compiler, request = compiler_case(
+        value,
+        prepared,
+        configuration(
+            issuer_market_policy_template=(
+                issuer_market_policy_template() if with_market else None
+            )
+        ),
+    )
 
     def forbidden(*args, **kwargs):
         pytest.fail("compilation must not contact provider/parser")
@@ -337,7 +524,132 @@ def test_issuer_market_template_derives_identity_accession_and_date_from_saved_o
     assert market_request.market_policy.terminal_growth_plan.valuation_at == (
         original.valuation_timestamp
     )
+    assert len(result.plan.public_sources) == 7
+    assert len(result.plan.source_admissions) == 7
+    assert result.plan.source_admissions == tuple(
+        sorted(result.plan.source_admissions, key=lambda item: item.digest)
+    )
+    treasury = next(
+        item for item in result.plan.public_sources if item.source_id == TREASURY_SOURCE
+    )
+    assert "field_tdr_date_value=2026" in treasury.uri
+    assert all(
+        item.valuation_timestamp == original.valuation_timestamp
+        for item in result.plan.public_sources
+    )
+    capital_admissions = tuple(
+        item
+        for item in result.plan.source_admissions
+        if item.metric_id.startswith("industry.")
+    )
+    assert len({item.source_request_digests for item in capital_admissions}) == 1
+    assert all(
+        item.policy_digest == template.source_plan_template.source_use_policy_digest
+        and item.policy_version
+        == template.source_plan_template.source_use_policy_version
+        and item.valuation_at == original.valuation_timestamp
+        for item in result.plan.source_admissions
+    )
     assert not compiler.execute(request)[1].wrote
+
+
+@pytest.mark.parametrize(
+    "failure,expected_codes",
+    (
+        (None, ()),
+        ("missing", ("SOURCE_ADMISSION_CAPTURE_FAILED", "SOURCE_HTTP_NOT_FOUND")),
+        ("terms", ("SOURCE_USE_TERMS_CHANGED",)),
+        ("future", ("SOURCE_NOT_AVAILABLE_AT_VALUATION",)),
+    ),
+)
+def test_compiled_requests_execute_existing_source_owners_and_repeat_without_writes(
+    tmp_path, monkeypatch, failure, expected_codes
+):
+    value = case(tmp_path, monkeypatch)
+    prepared, _ = execute(value)
+    original = value.service.read_validation(prepared.filings[0].validation.artifact_id)
+    at = original.request.valuation_timestamp
+    public = admission_fixture(tmp_path / "public", at=at)
+    source, terms = _source(), _terms()
+    template = AutomaticIssuerMarketPolicyTemplateV1.model_validate(
+        {
+            **issuer_market_policy_template().model_dump(),
+            "source_plan_template": AutomaticMarketSourcesTemplateV1(
+                source_use_policy_version=public.policy.policy_version,
+                source_use_policy_digest=public.policy.digest,
+                market_sources=(
+                    AutomaticMarketSourceTemplateV1(
+                        kind="reference",
+                        provider_id="damodaran-public-aggregates",
+                        metric_id=METRIC,
+                        sources=(
+                            _public_request(
+                                source.source_id,
+                                source.uri,
+                                source.source_version,
+                                source.terms_reference,
+                            ),
+                        ),
+                        terms=(
+                            _public_request(
+                                terms.source_id,
+                                terms.uri,
+                                terms.source_version,
+                                terms.terms_reference,
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+        }
+    )
+    if failure == "missing":
+        public.capture.errors[source.uri] = SnapshotError(
+            "SOURCE_HTTP_NOT_FOUND", "selected source is missing"
+        )
+    elif failure == "terms":
+        public.capture.sources[terms.uri] = replace(
+            public.capture.sources[terms.uri], content=b"changed terms"
+        )
+    elif failure == "future":
+        public.capture.sources[source.uri] = replace(
+            public.capture.sources[source.uri],
+            captured_at=at + timedelta(seconds=1),
+            available_at=at + timedelta(seconds=1),
+        )
+    compiler, request = compiler_case(
+        value, prepared, configuration(issuer_market_policy_template=template)
+    )
+    compiled, _ = compiler.execute(request)
+    assert compiled.plan is not None
+    plan = compiled.plan
+    captures = tuple(
+        public.acquisition.read(public.acquisition.execute(item).artifact.artifact_id)
+        for item in plan.public_sources
+    )
+    decision, receipt = public.service.execute(plan.source_admissions[0], captures)
+    assert receipt.wrote and decision.issue_codes == expected_codes
+    if failure is None:
+        assert decision.admission.status == "admitted"
+    else:
+        assert decision.admission is None or decision.admission.status == "refused"
+    assert set(plan.source_admissions[0].source_request_digests) == {
+        item.request.digest for item in captures if item.request.uri == source.uri
+    }
+    before = _inventory(tmp_path)
+    calls = len(public.capture.calls)
+    compiled_again, compiled_receipt = compiler.execute(request)
+    assert not compiled_receipt.wrote and compiled_again.digest == compiled.digest
+    repeated_captures = tuple(
+        public.acquisition.read(public.acquisition.execute(item).artifact.artifact_id)
+        for item in plan.public_sources
+    )
+    repeated, repeated_receipt = public.service.execute(
+        plan.source_admissions[0], repeated_captures
+    )
+    assert not repeated_receipt.wrote and repeated == decision
+    assert sha256_digest(repeated) == sha256_digest(decision)
+    assert len(public.capture.calls) == calls and _inventory(tmp_path) == before
 
 
 @pytest.mark.parametrize("stage", ["configuration", "plan", "evidence"])
