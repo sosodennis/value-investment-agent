@@ -29,6 +29,7 @@ fundamental-sign-mapping-review = "fundamental_service.mapping_review_signer:mai
 fundamental-approve-mapping = "fundamental_service.automatic_mapping_runner:main"
 fundamental-research-enterprise = "fundamental_service.enterprise_research_runner:main"
 fundamental-discover-annuals = "fundamental_service.annual_discovery_runner:main"
+fundamental-prepare-issuer = "fundamental_service.issuer_preparation_runner:main"
 
 [project.optional-dependencies]
 dev = [

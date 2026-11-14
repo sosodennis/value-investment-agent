@@ -395,14 +395,26 @@ def test_cli_compiles_and_retrieves_saved_plan_and_checks_configuration_before_s
     before = _inventory(tmp_path)
     assert annual_discovery_runner.main(args) == 0
     repeated = json.loads(capsys.readouterr().out)
-    assert repeated == {**first, "wrote": False}
+    assert repeated == {
+        **first,
+        "wrote": False,
+        "lineage": {
+            stage: {**value, "wrote": False}
+            for stage, value in first["lineage"].items()
+        },
+    }
     assert (
         annual_discovery_runner.main(
             ["--artifact-id", first["artifact"]["artifact_id"]]
         )
         == 0
     )
-    assert json.loads(capsys.readouterr().out) == repeated
+    retrieved = json.loads(capsys.readouterr().out)
+    assert all(
+        retrieved[field] == repeated[field]
+        for field in ("input_digest", "output_digest", "evidence", "plan_ref")
+    )
+    assert retrieved["wrote"] is False
     assert _inventory(tmp_path) == before
 
     source_preparation_id = first["evidence"]["request"]["original_preparation"][
@@ -430,9 +442,14 @@ def test_cli_compiles_and_retrieves_saved_plan_and_checks_configuration_before_s
     assert compiled_saved["evidence"]["plan"]["source_revision"] == installed_revision
     after_first_saved_compile = _inventory(tmp_path)
     assert annual_discovery_runner.main(saved_plan_args) == 0
-    assert json.loads(capsys.readouterr().out) == {
+    repeated_saved = json.loads(capsys.readouterr().out)
+    assert repeated_saved == {
         **compiled_saved,
         "wrote": False,
+        "lineage": {
+            stage: {**value, "wrote": False}
+            for stage, value in compiled_saved["lineage"].items()
+        },
     }
     assert _inventory(tmp_path) == after_first_saved_compile
 

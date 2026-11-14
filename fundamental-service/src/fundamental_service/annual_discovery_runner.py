@@ -113,6 +113,24 @@ async def _run_command(args: argparse.Namespace) -> object:
                         "evidence": compiled,
                         "plan_ref": compiled.plan_ref,
                         "wrote": compiled_publication.wrote,
+                        "lineage": {
+                            "original_preparation": {
+                                "artifact_id": prepared.artifact_id,
+                                "input_digest": prepared.request.digest,
+                                "output_digest": prepared.digest,
+                                "wrote": False,
+                                "source_artifact_id": prepared.request.annual.artifact_id,
+                                "source_digest": prepared.request.annual.content_hash,
+                            },
+                            "source_plan_compilation": {
+                                "artifact_id": compiled.artifact_id,
+                                "input_digest": compiled.request.digest,
+                                "output_digest": compiled.digest,
+                                "wrote": compiled_publication.wrote,
+                                "source_artifact_id": compiled.request.original_preparation.artifact_id,
+                                "source_digest": compiled.request.original_preparation.content_hash,
+                            },
+                        },
                     }
                 return {
                     "artifact": application.artifact_store.get(args.artifact_id),
@@ -170,6 +188,30 @@ async def _run_command(args: argparse.Namespace) -> object:
                     "evidence": compiled,
                     "plan_ref": compiled.plan_ref,
                     "wrote": compilation_publication.wrote,
+                    "lineage": {
+                        "annual_discovery": {
+                            "artifact_id": evidence.artifact_id,
+                            "input_digest": evidence.request.digest,
+                            "output_digest": evidence.digest,
+                            "wrote": publication.wrote,
+                        },
+                        "original_preparation": {
+                            "artifact_id": prepared.artifact_id,
+                            "input_digest": original_request.digest,
+                            "output_digest": prepared.digest,
+                            "wrote": original_publication.wrote,
+                            "source_artifact_id": original_request.annual.artifact_id,
+                            "source_digest": original_request.annual.content_hash,
+                        },
+                        "source_plan_compilation": {
+                            "artifact_id": compiled.artifact_id,
+                            "input_digest": compiled_request.digest,
+                            "output_digest": compiled.digest,
+                            "wrote": compilation_publication.wrote,
+                            "source_artifact_id": compiled_request.original_preparation.artifact_id,
+                            "source_digest": compiled_request.original_preparation.content_hash,
+                        },
+                    },
                 }
             return {
                 "artifact": original_publication.artifact,

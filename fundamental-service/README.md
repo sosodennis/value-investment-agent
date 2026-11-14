@@ -122,9 +122,35 @@ validation's historical source revision. The installed runner binds its
 automatic authority to the same revision before acquisition.
 
 This first compiler stage uses the standard direct accounting requirements.
-Automatic composite working-capital recipes, public/issuer-market configuration
-assembly and the complete company/date preparation entrypoint remain pending;
-the compiled source plan alone does not establish complete valuation inputs.
+Automatic composite working-capital recipes and public/issuer-market configuration
+assembly remain pending; a compiled source plan alone does not establish complete
+valuation inputs.
+
+`fundamental-prepare-issuer` is the company/date entrypoint. It delegates catalog
+selection, saved original validation and identity resolution, source-plan
+compilation, and execution to the existing service commands and preparation
+runner. The deployment still supplies its pinned source-plan configuration and
+the existing preparation actor, organization and machine key:
+
+```sh
+fundamental-prepare-issuer \
+  --cik 0000724910 --valuation-timestamp 2025-06-01T00:00:00Z \
+  --source-revision <installed-source-commit> \
+  --source-plan-configuration /run/config/source-plan.json \
+  --configuration-digest <canonical-configuration-sha256> \
+  --actor <operator-id> --organization <authorized-organization> \
+  --machine-private-key /run/secrets/mapping-evaluator.pem
+```
+
+The canonical result links the annual discovery, original preparation,
+source-plan compilation and formal source-preparation receipts by artifact ID
+and input/output digest. Incomplete identity/original evidence returns
+`status=blocked` with its retained reasons and does not invoke source preparation.
+Otherwise `status=preparation_attempted` means the existing runner was called;
+inspect its saved artifact for `blocked`, `release_required`,
+`approval_required` or `calculated`. This command does not fabricate an approved
+release or caller approval. Repeat requests reuse the existing content-addressed
+artifacts and return the underlying `wrote=false` dispositions.
 
 ## Source preparation command
 
