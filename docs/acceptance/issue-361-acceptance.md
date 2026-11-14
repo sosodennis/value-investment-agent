@@ -3102,3 +3102,12 @@ approval; then actual numerical full-flow/repeat/concurrency/restart/restore and
 independent review/main delivery. Keep #361/#369/#394/#376/#377 OPEN and PR#370
 draft. Threshold null; pool research provisional, invalid/incomplete valuations
 abstained, history research underpowered. All prior WIP/checkpoints remain.
+
+
+### Independent source-stage runtime at 04450ac8
+
+Exact implementation `04450ac837bf3726c0563e540a9777b27e737484` is installed in the isolated SEC-enabled PostgreSQL runtime. The public CIK/date entrypoint automatically compiled and executed the fixed MSFT source plan; both original coverage results are verified, while nine accounting/capital roles and public-source eligibility remain unresolved. Authenticated source-report/plan reads reproduced exact content hashes and unauthenticated access refused. Three actual source-only replays reused every lineage artifact with `wrote=false`, no HTTP attempts and unchanged PostgreSQL data plus1332-file content/size/mtime inventory.
+
+A separate current request retained a new `METADATA_IMMUTABLE` engineering failure for both acquisitions, without snapshots. Its failed source receipt was also retrieved by the authenticated API. The fixed M2 manifest/date is unchanged. The failure is under root-cause investigation; neither immutable-store deletion nor suppression is accepted as a fix. See the existing source-plan-contracts checkpoint's `independent_source_stages_increment` for exact input/output digests.
+
+Exact checks:367 focused PostgreSQL tests passed without skips; full service suite3459 passed/20 skipped; Ruff, format, owner types, both architecture guards and diff passed. Scoped independent review found no remaining findings before runtime acceptance. CI12 jobs passed and the release gate was skipped. These are engineering/source evidence, not final delivery review or numerical acceptance. M1/M2/M3 remain incomplete; supported history threshold remains null.
