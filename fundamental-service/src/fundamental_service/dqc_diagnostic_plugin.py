@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import re
-from typing import Any
+from collections.abc import Callable
+from decimal import Decimal
+from typing import Any, Protocol
 
 from fundamental_service.arelle_parser import ArelleParserError
 
@@ -12,6 +14,30 @@ _SUM_CONCEPTS = {
     "DQC.US.0090.9374": "LesseeOperatingLeaseLiabilityPaymentsDue",
     "DQC.US.0090.9375": "FinanceLeaseLiabilityPaymentsDue",
 }
+
+
+class DqcModel(Protocol):
+    log: Callable[..., None]
+
+
+def preserve_rule_severity(
+    controller: object,
+    options: object,
+    model: DqcModel,
+    *args: object,
+    **kwargs: object,
+) -> None:
+    original_log = model.log
+
+    def observed_log(
+        level: str, codes: object, message: str, **parameters: object
+    ) -> None:
+        if isinstance(codes, str) and codes.startswith("DQC."):
+            # EFM relevels DQC errors before the logging-parameter hooks run.
+            parameters["fundamental_rule_severity"] = level.lower()
+        original_log(level, codes, message, **parameters)
+
+    model.log = observed_log
 
 
 def message_parameters(
@@ -35,8 +61,7 @@ def message_parameters(
         and not getattr(fact, "isNil", True)
     ]
     if (
-        parameters.get("name") != concept
-        or len(matches) != 1
+        len(matches) != 1
         or not getattr(matches[0], "contextID", None)
         or not getattr(matches[0], "unitID", None)
     ):
@@ -44,13 +69,33 @@ def message_parameters(
             "DQC_DIAGNOSTIC_BINDING_UNAVAILABLE",
             "lease reconciliation diagnostic has no unique referenced sum fact",
         )
-    parameters["contextID"] = matches[0].contextID
-    parameters["unitID"] = matches[0].unitID
+    fact = matches[0]
+    if "name" in parameters:
+        name_matches = parameters["name"] == concept
+    else:
+        value = getattr(fact, "xValue", None)
+        numeric = (
+            isinstance(value, int)
+            and not isinstance(value, bool)
+            or isinstance(value, Decimal)
+            and value.is_finite()
+        )
+        name_matches = numeric and message.startswith(
+            f"The element {fact.qname} with a value of {value:,} "
+        )
+    if not name_matches:
+        raise ArelleParserError(
+            "DQC_DIAGNOSTIC_BINDING_UNAVAILABLE",
+            "lease reconciliation message differs from its referenced sum fact",
+        )
+    parameters["contextID"] = fact.contextID
+    parameters["unitID"] = fact.unitID
     return message
 
 
 __pluginInfo__ = {
     "name": "Fundamental bound DQC lease diagnostics",
     "version": "1.0.0",
+    "CntlrCmdLine.Xbrl.Loaded": preserve_rule_severity,
     "Logging.Message.Parameters": message_parameters,
 }
