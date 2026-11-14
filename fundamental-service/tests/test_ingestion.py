@@ -23,6 +23,7 @@ from fundamental_service.contracts import (
     SourceRole,
 )
 from fundamental_service.historical_dqc import V1_PROFILE, V3_PROFILE
+from fundamental_service.dqc_applicability import dqc_applicability_policy_digest
 from fundamental_service.facts import (
     CanonicalMappingV1,
     FilesystemCanonicalFactRepository,
@@ -153,8 +154,11 @@ def test_sec_ingestion_connects_adapter_snapshot_parser_and_fact_selection(
         edgar_plugin_sha256=_directory_hash(edgar_dir),
         xule_plugin_sha256=_directory_hash(xule_dir),
         dqc_ruleset_sha256=hashlib.sha256(ruleset.read_bytes()).hexdigest(),
+        dqc_applicability_digest=None
+        if historical
+        else dqc_applicability_policy_digest(),
     )
-    parser_state = {"semantic_mismatch": False, "blocking": False}
+    parser_state = {"semantic_mismatch": False, "blocking": False, "future": False}
 
     def fake_parser(
         path,
@@ -188,14 +192,18 @@ def test_sec_ingestion_connects_adapter_snapshot_parser_and_fact_selection(
         finding = (
             (
                 ArelleFindingV1(
-                    code="DQC.US.0015.2098",
+                    code="DQC.US.0243.10944"
+                    if parser_state["future"]
+                    else "DQC.US.0015.2098",
                     severity="warning",
                     rule_severity="error",
-                    rule_effective_date=datetime(2016, 1, 1).date(),
+                    rule_effective_date=None
+                    if parser_state["future"]
+                    else date(2016, 1, 1),
                     message="fixture official DQC error demoted by EDGAR",
                 ),
             )
-            if parser_state["blocking"]
+            if parser_state["blocking"] or parser_state["future"]
             else ()
         )
         return ArelleParseReportV1(
@@ -481,6 +489,28 @@ def test_sec_ingestion_connects_adapter_snapshot_parser_and_fact_selection(
     )
     raw_hash = hashlib.sha256(filing_bytes).hexdigest()
     assert content_store.get(raw_hash, media_type="text/html") == filing_bytes
+
+    if not historical:
+        parser_state["future"] = True
+        parser_state["blocking"] = False
+        dated_args = {**validation_args, "filing_date": date(2024, 11, 1)}
+        validated = service.validate_filing(**dated_args)
+        evidence = validated.integrity_evidence
+        assert evidence.quality_decision == "pass"
+        assert evidence.dqc_filing_context.filing_date == date(2024, 11, 1)
+        assert evidence.dqc_filing_context.issuer_id == "0000320193"
+        assert evidence.findings[0].blocks is False
+        assert evidence.findings[0].rule_severity == "error"
+        assert evidence.findings[0].rule_applicability.status == "future"
+        assert validated.parser_report.findings[0].code == "DQC.US.0243.10944"
+        assert service.validate_filing(**dated_args).integrity_evidence == evidence
+        with pytest.raises(SnapshotError) as active_error:
+            service.validate_filing(**{**dated_args, "filing_date": date(2026, 9, 1)})
+        rejection = json.loads(audit_store.read(active_error.value.evidence_ref))
+        active = rejection["integrity_evidence"]["findings"][0]
+        assert active["blocks"] is True
+        assert active["rule_applicability"]["status"] == "active"
+        parser_state["future"] = False
 
     parser_state["blocking"] = False
     missing_field_mapping = ingestion_args["mapping"].model_copy(

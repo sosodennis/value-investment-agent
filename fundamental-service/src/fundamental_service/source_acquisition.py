@@ -20,6 +20,7 @@ from pydantic import BaseModel, ConfigDict, ValidationError
 
 from .arelle_parser import ArelleParserError, ArelleValidationProfileV1, _directory_hash
 from .dqc_rulesets import DqcRulesetCatalogV1
+from .dqc_applicability import dqc_applicability_policy_digest
 from .automatic_source_mapping import (
     AutomaticSecIngestionRequestV1,
     AutomaticSourceMappingAuthority,
@@ -531,6 +532,9 @@ class SecAcquisitionUseCase:
             if not historical
             else None,
             dqc_version=historical.dqc_version if historical else "v31.0.3",
+            dqc_applicability_digest=None
+            if historical
+            else dqc_applicability_policy_digest(),
             historical_dqc_dir=self.settings.historical_dqc_dir if historical else None,
             historical_dqc_sha256=self.settings.historical_dqc_sha256
             if historical
@@ -672,6 +676,7 @@ class SecAcquisitionUseCase:
                 primary_document=package.xbrl_entrypoint,
                 filing_archive_filename=package.archive_filename,
                 filed_at=filing.accepted_at,
+                filing_date=filing.filing_date,
                 accepted_at=filing.accepted_at,
                 captured_at=captured_at,
                 taxonomy_manifest_id=runtime.taxonomy_manifest_id,
@@ -1113,6 +1118,7 @@ class SecAcquisitionUseCase:
             primary_document=xbrl_entrypoint,
             filing_archive_filename=filing_archive_filename,
             filed_at=filing.accepted_at,
+            filing_date=filing.filing_date,
             accepted_at=filing.accepted_at,
             captured_at=captured_at,
             valuation_timestamp=request.valuation_timestamp,

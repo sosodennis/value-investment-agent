@@ -5,7 +5,7 @@ from __future__ import annotations
 import tempfile
 import zlib
 from dataclasses import dataclass, replace
-from datetime import datetime
+from datetime import date, datetime
 from io import BytesIO
 from pathlib import Path
 from typing import Literal, Protocol
@@ -36,7 +36,11 @@ from .facts import (
     FactSelection,
     select_fact_groups,
 )
-from .regulatory_validation import require_sec_validation_evidence
+from .regulatory_validation import (
+    bind_dqc_filing_context,
+    require_sec_validation_evidence,
+)
+from .dqc_applicability import DqcFilingContextV1, dqc_applicability_policy_digest
 from .issuer_identity import (
     ORIGINAL_IDENTITY_CONCEPTS,
     IdentityResolutionError,
@@ -252,6 +256,7 @@ class SecIngestionService:
         primary_document: str,
         filing_archive_filename: str | None = None,
         filed_at: datetime,
+        filing_date: date | None = None,
         captured_at: datetime,
         taxonomy_manifest_id: str | None,
         taxonomy_version: str,
@@ -451,6 +456,16 @@ class SecIngestionService:
                 deadline_at=deadline_at,
             )
             require_sec_validation_evidence(report)
+            if filing_date is not None and profile.dqc_applicability_digest is not None:
+                report = bind_dqc_filing_context(
+                    report,
+                    DqcFilingContextV1(
+                        issuer_id=cik,
+                        accession_number=accession_number,
+                        filing_date=filing_date,
+                        policy_digest=dqc_applicability_policy_digest(),
+                    ),
+                )
             archive_report = report
             if assessment.relation == "normalized":
                 archive_report = parse_filing_offline(
@@ -462,6 +477,10 @@ class SecIngestionService:
                     deadline_at=deadline_at,
                 )
                 require_sec_validation_evidence(archive_report)
+                if report.dqc_filing_context is not None:
+                    archive_report = bind_dqc_filing_context(
+                        archive_report, report.dqc_filing_context
+                    )
                 if fact_semantic_digest(report) != fact_semantic_digest(
                     archive_report
                 ) or self._finding_signature(report) != self._finding_signature(
@@ -483,6 +502,7 @@ class SecIngestionService:
             )
         integrity_evidence = SecIntegrityEvidenceV1(
             accession_number=accession_number,
+            dqc_filing_context=report.dqc_filing_context,
             primary_document_uri=source.uri,
             captured_at=source.captured_at or captured_at,
             archive_index_uri=index_source.uri,
@@ -535,6 +555,7 @@ class SecIngestionService:
                         "blocks": finding.code in blocking_codes,
                         "rule_severity": finding.rule_severity,
                         "rule_effective_date": finding.rule_effective_date,
+                        "rule_applicability": report.finding_applicability(finding),
                     }
                 )
                 for finding in report.findings
@@ -600,6 +621,7 @@ class SecIngestionService:
         primary_document: str,
         filing_archive_filename: str | None = None,
         filed_at: datetime,
+        filing_date: date | None = None,
         captured_at: datetime,
         valuation_timestamp: datetime,
         fiscal_period_selector: FiscalPeriodSelectorV1 | None = None,
@@ -646,6 +668,7 @@ class SecIngestionService:
             primary_document=primary_document,
             filing_archive_filename=filing_archive_filename,
             filed_at=filed_at,
+            filing_date=filing_date,
             captured_at=captured_at,
             taxonomy_manifest_id=taxonomy_manifest_id,
             taxonomy_version=taxonomy_version,
@@ -1226,11 +1249,19 @@ class SecIngestionService:
     @staticmethod
     def _finding_signature(
         report: ArelleParseReportV1,
-    ) -> tuple[tuple[str, str, bool], ...]:
+    ) -> tuple[tuple[str, str, str, str, bool], ...]:
         blocking = set(report.blocking_finding_codes())
         return tuple(
             sorted(
-                (item.code, item.severity, item.code in blocking)
+                (
+                    item.code,
+                    item.severity,
+                    item.rule_severity or "",
+                    item.rule_effective_date.isoformat()
+                    if item.rule_effective_date
+                    else "",
+                    item.code in blocking,
+                )
                 for item in report.findings
             )
         )

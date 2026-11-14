@@ -135,6 +135,14 @@ class OriginalValidationEvidenceV1(StrictModel):
             or integrity.normalized_fact_digest != fact_semantic_digest(report)
             or integrity.captured_at != source.captured_at
             or report.blocking_finding_codes()
+            or integrity.dqc_filing_context != report.dqc_filing_context
+            or report.dqc_filing_context is not None
+            and (
+                report.dqc_filing_context.issuer_id != request.cik
+                or report.dqc_filing_context.accession_number
+                != request.filing.accession_number
+                or report.dqc_filing_context.filing_date != request.filing.filing_date
+            )
             or report.validation_engines != integrity.validation_engines
             or report.validation_evidence != integrity.validation_evidence
         ):

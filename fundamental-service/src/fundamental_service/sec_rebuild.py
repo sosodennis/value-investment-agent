@@ -107,6 +107,15 @@ def parsed_facts_to_candidates(
         raise SnapshotError(
             "SOURCE_HASH_MISMATCH", "parser report is not bound to source bytes"
         )
+    context = report.dqc_filing_context
+    if context is not None and (
+        context.issuer_id != issuer_id
+        or context.accession_number != source.accession_number
+    ):
+        raise SnapshotError(
+            "DQC_FILING_CONTEXT_MISMATCH",
+            "DQC filing-date evidence belongs to another original",
+        )
     if isinstance(source, OriginalOperatingSourceV1) and (
         source.cik != issuer_id or security_id is not None
     ):

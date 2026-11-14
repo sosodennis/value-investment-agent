@@ -29,6 +29,12 @@ from .historical_dqc import (
 )
 from .serialization import sha256_digest
 from .dqc_rulesets import DqcRulesetCatalogV1
+from .dqc_applicability import (
+    DqcFilingContextV1,
+    DqcRuleApplicabilityV1,
+    evaluate_dqc_applicability,
+    dqc_applicability_policy_digest,
+)
 
 _NON_BLOCKING_ARELLE_CODES = frozenset(
     {
@@ -184,6 +190,9 @@ class ArelleValidationProfileV1(BaseModel):
     dqc_ruleset_catalog: DqcRulesetCatalogV1 | None = Field(
         default=None, exclude_if=lambda value: value is None
     )
+    dqc_applicability_digest: str | None = Field(
+        default=None, pattern=r"^[0-9a-f]{64}$", exclude_if=lambda value: value is None
+    )
     historical_dqc_dir: Path | None = None
     historical_dqc_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
     historical_dqc_axis_config: Path | None = Field(
@@ -197,6 +206,14 @@ class ArelleValidationProfileV1(BaseModel):
         if self.efm_profile != "efm-strict-all-years":
             raise ValueError("SEC validation requires strict all-years EFM")
         historical = historical_profile(self.profile_id)
+        if self.dqc_applicability_digest is not None and (
+            historical is not None
+            or self.validation_mode != "sec-efm-dqc"
+            or self.dqc_applicability_digest != dqc_applicability_policy_digest()
+        ):
+            raise ValueError(
+                "DQC applicability policy requires the pinned modern profile"
+            )
         if self.dqc_ruleset_catalog is not None and (
             historical is not None or self.validation_mode != "sec-efm-dqc"
         ):
@@ -348,6 +365,56 @@ class ArelleParseReportV1(BaseModel):
     network_attempt_count: int = Field(default=0, ge=0)
     source_content_hash: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
     taxonomy_cache_hash: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    dqc_filing_context: DqcFilingContextV1 | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
+
+    @model_validator(mode="after")
+    def bound_dqc_filing_context(self) -> "ArelleParseReportV1":
+        context = self.dqc_filing_context
+        markers = tuple(
+            value
+            for value in self.validation_evidence
+            if value.startswith("dqc-sec-filing-date-applicability-v1:")
+        )
+        if (
+            context is None
+            and markers
+            or context is not None
+            and (
+                self.validation_profile.validation_mode != "sec-efm-dqc"
+                or self.validation_profile.dqc_version != "v31.0.3"
+                or self.validation_profile.dqc_applicability_digest
+                != context.policy_digest
+                or markers != (context.evidence_marker(),)
+            )
+        ):
+            raise ValueError(
+                "DQC filing-date context lacks matching validation evidence"
+            )
+        return self
+
+    def finding_applicability(
+        self, finding: ArelleFindingV1
+    ) -> DqcRuleApplicabilityV1 | None:
+        if self.dqc_filing_context is None:
+            return None
+        return evaluate_dqc_applicability(
+            code=finding.code,
+            emitted_date=finding.rule_effective_date,
+            context=self.dqc_filing_context,
+        )
+
+    def finding_blocks(self, finding: ArelleFindingV1) -> bool:
+        if finding.code in _NON_BLOCKING_ARELLE_CODES or not (
+            finding.severity in {"error", "critical", "fatal"}
+            or finding.rule_severity in {"error", "critical", "fatal"}
+        ):
+            return False
+        if {finding.severity, finding.rule_severity} & {"critical", "fatal"}:
+            return True
+        applicability = self.finding_applicability(finding)
+        return applicability is None or applicability.status != "future"
 
     def blocking_finding_codes(self) -> tuple[str, ...]:
         if not self.findings:
@@ -360,11 +427,7 @@ class ArelleParseReportV1(BaseModel):
                 {
                     finding.code
                     for finding in self.findings
-                    if (
-                        finding.severity in {"error", "critical", "fatal"}
-                        or finding.rule_severity in {"error", "critical", "fatal"}
-                    )
-                    and finding.code not in _NON_BLOCKING_ARELLE_CODES
+                    if self.finding_blocks(finding)
                 }
             )
         )

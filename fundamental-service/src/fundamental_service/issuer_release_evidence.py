@@ -78,6 +78,12 @@ def verify_original_integrity(
         )
     if (
         integrity.quality_decision != "pass"
+        or integrity.dqc_filing_context != report.dqc_filing_context
+        or report.dqc_filing_context is not None
+        and (
+            report.dqc_filing_context.issuer_id != source.cik
+            or report.dqc_filing_context.accession_number != source.accession_number
+        )
         or integrity.accession_number != source.accession_number
         or integrity.primary_document_uri != source.uri
         or integrity.captured_at != source.captured_at

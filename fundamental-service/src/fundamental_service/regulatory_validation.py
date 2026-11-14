@@ -3,6 +3,25 @@
 from .arelle_parser import ArelleParseReportV1
 from .historical_dqc import historical_profile
 from .snapshots import SnapshotError
+from .dqc_applicability import DqcFilingContextV1
+
+
+def bind_dqc_filing_context(
+    report: ArelleParseReportV1, context: DqcFilingContextV1
+) -> ArelleParseReportV1:
+    """Bind the SEC catalog date after full official validation has completed."""
+    require_sec_validation_evidence(report)
+    if report.dqc_filing_context is not None:
+        if report.dqc_filing_context != context:
+            raise SnapshotError(
+                "DQC_FILING_CONTEXT_MISMATCH",
+                "DQC report belongs to another original filing",
+            )
+        return report
+    payload = report.model_dump(mode="json")
+    payload["dqc_filing_context"] = context.model_dump(mode="json")
+    payload["validation_evidence"].append(context.evidence_marker())
+    return ArelleParseReportV1.model_validate(payload)
 
 
 def require_sec_validation_evidence(report: ArelleParseReportV1) -> None:

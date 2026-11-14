@@ -44,7 +44,7 @@ parser = []
 where = ["src"]
 
 [tool.setuptools.package-data]
-fundamental_service = ["migrations/*.sql"]
+fundamental_service = ["migrations/*.sql", "resources/*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

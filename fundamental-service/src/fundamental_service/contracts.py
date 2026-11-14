@@ -20,6 +20,7 @@ from .historical_dqc import V1_PROFILE, V3_PROFILE, V3_2013_PROFILE
 from .numerical_policy import using_valuation_context
 from .serialization import is_digest, sha256_digest
 from .accounting_roles import AccountingRoleEvidenceV1, accounting_reported_decimals
+from .dqc_applicability import DqcFilingContextV1, DqcRuleApplicabilityV1
 
 _MANIFEST_STRINGS = TypeAdapter(tuple[str, ...])
 
@@ -506,12 +507,18 @@ class ArelleFindingEvidenceV1(StrictModel):
     rule_effective_date: date | None = Field(
         default=None, exclude_if=lambda value: value is None
     )
+    rule_applicability: DqcRuleApplicabilityV1 | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
 
 
 class SecIntegrityEvidenceV1(StrictModel):
     """Reproducible link from SEC response bytes to parser and fact evidence."""
 
     accession_number: str = Field(min_length=1)
+    dqc_filing_context: DqcFilingContextV1 | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
     primary_document_uri: str = Field(min_length=1)
     captured_at: datetime
     archive_index_uri: str = Field(min_length=1)

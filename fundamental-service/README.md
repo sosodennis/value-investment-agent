@@ -83,8 +83,28 @@ Parser diagnostics retain the official XULE `effectiveDate` as
 empty value or official `None` remains unknown; malformed dates refuse with
 `DQC_EFFECTIVE_DATE_INVALID`. Missing dates are omitted from serialization so
 existing retained evidence keeps its identity. This metadata does not itself
-change blocking decisions. Filing-date applicability and official documentation
-for rules with no emitted date still require separate validation evidence.
+change blocking decisions without filing-date evidence.
+
+The modern acquisition runtime pins `dqc-sec-filing-date-applicability-v1` in
+its validation profile. After full EFM/DQC completion, it binds the original
+SEC catalog's issuer, accession and filing date into the parser evidence.
+Rules whose official effective date is later than that filing date remain
+visible as advisory diagnostics. The comparison uses the filing date, never
+the valuation, capture or parser run date. Active errors, critical/fatal
+diagnostics, unknown dates and conflicting dates remain blocking. Missing
+filing context retains the conservative existing decision.
+
+For exact assertions whose XULE metadata omits a date, a small pinned catalog
+supplies explicit Final dates from official v31.0.3 rule documents at commit
+`cd82706519e384fb209d74f13ccbe535be42da4b`. It contains only assertion IDs
+listed individually in those documents; it does not infer dates for an entire
+rule family or select initial dates for revised historical rules. Reproduce
+the catalog with `scripts/build_dqc_effective_dates.py` using retained official
+documents and the complete official Git tree. The generator verifies each
+document's Git blob hash; the runtime verifies the resulting catalog hash.
+Original documents remain outside Git. Each decision retains its date source
+and document digest. A policy change creates a new validation profile digest
+and acquisition identity. Existing artifacts retain their recorded policy.
 
 SEC HTML representation profiles preserve the unchanged accession ZIP member.
 `sec-edgar-html-tag-line-padding-nbsp-v1` additionally recognizes line-end ASCII
