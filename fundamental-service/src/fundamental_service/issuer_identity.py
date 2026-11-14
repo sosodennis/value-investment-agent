@@ -99,6 +99,109 @@ class IdentityResolutionError(ValueError):
         self.status_code = status_code
 
 
+def resolve_original_filing_identity(
+    *,
+    cik: str,
+    accepted_at: datetime,
+    facts: tuple[ParsedXbrlFactV1, ...],
+    ticker: str | None = None,
+    share_class: str | None = None,
+) -> IdentityV1:
+    """Resolve one security from original DEI evidence using the ingestion gate."""
+
+    def refuse(code: str, message: str) -> IdentityResolutionError:
+        return IdentityResolutionError(code, message, status_code=422)
+
+    if (
+        not re.fullmatch(r"[0-9]{10}", cik)
+        or accepted_at.tzinfo is None
+        or accepted_at.utcoffset() is None
+        or (share_class is not None and not share_class.strip())
+    ):
+        raise refuse(
+            "HISTORICAL_IDENTITY_SCOPE_UNSUPPORTED",
+            "invalid original identity selector",
+        )
+
+    symbols = {
+        fact.value.strip() for fact in facts if fact.concept == "dei:TradingSymbol"
+    }
+    if not symbols or "" in symbols:
+        raise refuse(
+            "HISTORICAL_IDENTITY_MISSING", "original filing lacks a trading symbol"
+        )
+    if ticker is None:
+        if len(symbols) != 1:
+            raise refuse(
+                "HISTORICAL_SECURITY_SELECTION_REQUIRED",
+                "multiple original securities require an explicit ticker",
+            )
+        ticker = next(iter(symbols))
+    if not re.fullmatch(r"[A-Z0-9][A-Z0-9.-]{0,14}", ticker):
+        raise refuse(
+            "HISTORICAL_IDENTITY_SCOPE_UNSUPPORTED", "unsupported original ticker"
+        )
+    contexts = {
+        (fact.context_id, fact.period_start, fact.period_end, fact.dimensions)
+        for fact in facts
+        if fact.concept == "dei:TradingSymbol" and fact.value.strip() == ticker
+    }
+    if not contexts:
+        raise refuse(
+            "HISTORICAL_IDENTITY_MISMATCH",
+            "selected ticker does not occur in the original filing",
+        )
+    titles = {
+        " ".join(fact.value.split())
+        for fact in facts
+        if fact.concept == "dei:Security12bTitle"
+        and (fact.context_id, fact.period_start, fact.period_end, fact.dimensions)
+        in contexts
+    }
+    if not titles or "" in titles:
+        raise refuse(
+            "HISTORICAL_IDENTITY_MISSING", "original security lacks a paired title"
+        )
+    if share_class is not None:
+        titles = {title for title in titles if _name(title) == _name(share_class)}
+        if not titles:
+            raise refuse(
+                "HISTORICAL_IDENTITY_MISMATCH",
+                "selected title does not belong to the original ticker",
+            )
+    if len(titles) != 1:
+        raise refuse(
+            "HISTORICAL_SECURITY_SELECTION_REQUIRED",
+            "reused original ticker requires an explicit security title",
+        )
+    names = {
+        " ".join(fact.value.split())
+        for fact in facts
+        if fact.concept == "dei:EntityRegistrantName"
+    }
+    if not names or "" in names:
+        raise refuse(
+            "HISTORICAL_IDENTITY_MISSING", "original filing lacks its issuer name"
+        )
+    if len(names) != 1:
+        raise refuse("HISTORICAL_IDENTITY_CONFLICT", "original issuer names conflict")
+    identity = IdentityV1(
+        issuer_id=cik,
+        issuer_name=next(iter(names)),
+        security_id=ticker,
+        share_class=next(iter(titles)),
+        domicile="US",
+        reporting_basis="us-gaap",
+        currency="USD",
+    )
+    # The candidate is returned only after the same original scope, issuer,
+    # currency, period and class validation required by canonical ingestion.
+    validate_original_filing_identity(
+        identity, cik=cik, ticker=ticker, accepted_at=accepted_at, facts=facts
+    )
+    return identity
+
+
 def validate_original_filing_identity(
     identity: IdentityV1,
     *,

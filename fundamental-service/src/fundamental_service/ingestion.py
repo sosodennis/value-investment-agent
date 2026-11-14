@@ -199,6 +199,19 @@ class IngestionAuditStore(Protocol):
 
 
 @dataclass(frozen=True)
+class ValidatedSecFiling:
+    """Strictly validated original evidence; no identity or snapshot is assumed."""
+
+    source: CapturedSource
+    archive_source: CapturedSource
+    index_source: CapturedSource
+    dts_sources: tuple[CapturedSource, ...]
+    captured_sources: tuple[SecCapturedSourceEvidenceV1, ...]
+    parser_report: ArelleParseReportV1
+    integrity_evidence: SecIntegrityEvidenceV1
+
+
+@dataclass(frozen=True)
 class SecIngestionResult:
     snapshot: SourceSnapshotV1
     parser_report: ArelleParseReportV1
@@ -231,28 +244,19 @@ class SecIngestionService:
             content_store, snapshot_repository, sec_source_register()
         )
 
-    def prepare_filing(
+    def validate_filing(
         self,
         *,
-        identity: IdentityV1,
         cik: str,
         accession_number: str,
         primary_document: str,
         filing_archive_filename: str | None = None,
         filed_at: datetime,
         captured_at: datetime,
-        valuation_timestamp: datetime,
-        fiscal_period_selector: FiscalPeriodSelectorV1 | None = None,
-        parser_version: str,
-        policy_version: str,
         taxonomy_manifest_id: str | None,
         taxonomy_version: str,
-        acquisition_key: str | None = None,
         taxonomy_cache_dir: Path,
-        mappings: tuple[CanonicalMappingV1, ...],
-        mapping_resolver: IngestionMappingResolverPort | None = None,
         reference_sources: tuple[CapturedSource, ...] = (),
-        additional_issues: tuple[IssueV1, ...] = (),
         submission_source: CapturedSource | None = None,
         accepted_at: datetime | None = None,
         deadline_at: datetime | None = None,
@@ -263,24 +267,9 @@ class SecIngestionService:
         is_amendment: bool = False,
         amends_accession: str | None = None,
         amendment_scope: str | None = None,
-        identity_basis: SecIdentityBasis = "current-sec-ticker-v1",
-        identity_ticker: str | None = None,
-    ) -> SecIngestionResult:
+    ) -> ValidatedSecFiling:
+        """Validate original bytes and regulatory evidence before identity/publication."""
         adapter = source_adapter or self.source_adapter
-        if mapping_resolver is not None and (
-            mappings or identity_basis != "original-filing-dei-v1"
-        ):
-            raise SnapshotError(
-                "MAPPING_RESOLUTION_MODE_INVALID",
-                "automatic mapping requires original identity without manual mappings",
-            )
-        if identity_basis == "original-filing-dei-v1" and (
-            form != "10-K" or is_amendment or not identity_ticker or accepted_at is None
-        ):
-            raise SnapshotError(
-                "HISTORICAL_IDENTITY_SCOPE_UNSUPPORTED",
-                "original identity requires a pinned original 10-K, acceptance and ticker",
-            )
         if profile is None:
             raise SnapshotError(
                 "VALIDATION_PROFILE_REQUIRED",
@@ -591,6 +580,97 @@ class SecIngestionService:
         if not report.facts:
             raise SnapshotError("PARSER_FACTS_MISSING", "Arelle produced no XBRL facts")
 
+        return ValidatedSecFiling(
+            source=source,
+            archive_source=archive_source,
+            index_source=index_source,
+            dts_sources=dts_sources,
+            captured_sources=captured_sources,
+            parser_report=report,
+            integrity_evidence=integrity_evidence,
+        )
+
+    def prepare_filing(
+        self,
+        *,
+        identity: IdentityV1,
+        cik: str,
+        accession_number: str,
+        primary_document: str,
+        filing_archive_filename: str | None = None,
+        filed_at: datetime,
+        captured_at: datetime,
+        valuation_timestamp: datetime,
+        fiscal_period_selector: FiscalPeriodSelectorV1 | None = None,
+        parser_version: str,
+        policy_version: str,
+        taxonomy_manifest_id: str | None,
+        taxonomy_version: str,
+        acquisition_key: str | None = None,
+        taxonomy_cache_dir: Path,
+        mappings: tuple[CanonicalMappingV1, ...],
+        mapping_resolver: IngestionMappingResolverPort | None = None,
+        reference_sources: tuple[CapturedSource, ...] = (),
+        additional_issues: tuple[IssueV1, ...] = (),
+        submission_source: CapturedSource | None = None,
+        accepted_at: datetime | None = None,
+        deadline_at: datetime | None = None,
+        dts_filenames: tuple[str, ...] = (),
+        profile: ArelleValidationProfileV1 | None = None,
+        source_adapter: SecSourceCapturePort | None = None,
+        form: str = "10-K",
+        is_amendment: bool = False,
+        amends_accession: str | None = None,
+        amendment_scope: str | None = None,
+        identity_basis: SecIdentityBasis = "current-sec-ticker-v1",
+        identity_ticker: str | None = None,
+    ) -> SecIngestionResult:
+        if mapping_resolver is not None and (
+            mappings or identity_basis != "original-filing-dei-v1"
+        ):
+            raise SnapshotError(
+                "MAPPING_RESOLUTION_MODE_INVALID",
+                "automatic mapping requires original identity without manual mappings",
+            )
+        if identity_basis == "original-filing-dei-v1" and (
+            form != "10-K" or is_amendment or not identity_ticker or accepted_at is None
+        ):
+            raise SnapshotError(
+                "HISTORICAL_IDENTITY_SCOPE_UNSUPPORTED",
+                "original identity requires a pinned original 10-K, acceptance and ticker",
+            )
+        validated = self.validate_filing(
+            cik=cik,
+            accession_number=accession_number,
+            primary_document=primary_document,
+            filing_archive_filename=filing_archive_filename,
+            filed_at=filed_at,
+            captured_at=captured_at,
+            taxonomy_manifest_id=taxonomy_manifest_id,
+            taxonomy_version=taxonomy_version,
+            taxonomy_cache_dir=taxonomy_cache_dir,
+            reference_sources=reference_sources,
+            submission_source=submission_source,
+            accepted_at=accepted_at,
+            deadline_at=deadline_at,
+            dts_filenames=dts_filenames,
+            profile=profile,
+            source_adapter=source_adapter,
+            form=form,
+            is_amendment=is_amendment,
+            amends_accession=amends_accession,
+            amendment_scope=amendment_scope,
+        )
+        source = validated.source
+        archive_source = validated.archive_source
+        index_source = validated.index_source
+        dts_sources = validated.dts_sources
+        captured_sources = validated.captured_sources
+        report = validated.parser_report
+        integrity_evidence = validated.integrity_evidence
+        taxonomy_hash = integrity_evidence.taxonomy_manifest_hash
+        normalized_hash = integrity_evidence.normalized_content_hash
+
         identity_evidence_ref = None
         if identity_basis == "original-filing-dei-v1":
             identity_failure = None
@@ -612,7 +692,7 @@ class SecIngestionService:
                 "ticker": identity_ticker,
                 "accession_number": accession_number,
                 "available_at": accepted_at,
-                "source_hash": assessment.raw_content_hash,
+                "source_hash": integrity_evidence.raw_content_hash,
                 "parser_input_hash": report.source_content_hash,
                 "validation_profile_digest": report.validation_profile_digest,
                 "parser_replay_digest": report.replay_digest(),
@@ -635,7 +715,7 @@ class SecIngestionService:
                 f"sec-original-identity-{sha256_digest(identity_evidence)}",
                 identity_evidence,
                 (
-                    assessment.raw_content_hash,
+                    integrity_evidence.raw_content_hash,
                     normalized_hash,
                     report.validation_profile_digest,
                 ),
@@ -659,7 +739,7 @@ class SecIngestionService:
                     cik=cik,
                     accession_number=accession_number,
                     uri=source.uri,
-                    content_hash=assessment.raw_content_hash,
+                    content_hash=integrity_evidence.raw_content_hash,
                     parser_input_hash=report.source_content_hash or "",
                     form=form,
                     is_amendment=is_amendment,
@@ -704,7 +784,7 @@ class SecIngestionService:
             sources=sources,
             taxonomy_manifest_id=taxonomy_manifest_id or taxonomy_hash,
             acquisition_key=acquisition_key,
-            validation_profile_id=profile.profile_id,
+            validation_profile_id=report.validation_profile.profile_id,
             validation_profile_digest=report.validation_profile_digest,
             additional_issues=additional_issues,
             sec_integrity_evidence=integrity_evidence,

@@ -323,7 +323,36 @@ def test_sec_ingestion_connects_adapter_snapshot_parser_and_fact_selection(
     with pytest.raises(SnapshotError) as mismatch:
         service.prepare_filing(**mismatched_submission_args)
     assert mismatch.value.code == "SEC_SUBMISSION_SOURCE_MISMATCH"
+    # The bootstrap stage needs neither an invented identity nor a snapshot.
+    validation_args = {
+        key: value
+        for key, value in preparation_args.items()
+        if key
+        not in {
+            "identity",
+            "valuation_timestamp",
+            "parser_version",
+            "policy_version",
+            "acquisition_key",
+            "mappings",
+        }
+    }
+
+    def forbid_publication(*args, **kwargs):
+        raise AssertionError("original validation must not build or publish a snapshot")
+
+    with monkeypatch.context() as context:
+        context.setattr(service.builder, "prepare", forbid_publication)
+        validated = service.validate_filing(**validation_args)
+    assert validated.parser_report.facts
+    assert not tuple(snapshot_repository.root.glob("*.json"))
+    assert not tuple((tmp_path / "artifacts").rglob("*.json"))
     prepared = service.prepare_filing(**preparation_args)
+    assert prepared.integrity_evidence == validated.integrity_evidence
+    assert (
+        prepared.parser_report.replay_digest()
+        == validated.parser_report.replay_digest()
+    )
     assert prepared.facts and all(
         fact.quality.value == "provisional" for fact in prepared.facts
     )
@@ -420,6 +449,14 @@ def test_sec_ingestion_connects_adapter_snapshot_parser_and_fact_selection(
         rejected_service.ingest_filing(**ingestion_args)
     assert blocking_error.value.code == "PARSER_VALIDATION_BLOCKED"
     assert blocking_error.value.evidence_ref is not None
+    with pytest.raises(SnapshotError) as preparation_blocked:
+        rejected_service.prepare_filing(**preparation_args)
+    with pytest.raises(SnapshotError) as bootstrap_blocked:
+        rejected_service.validate_filing(**validation_args)
+    assert bootstrap_blocked.value.code == preparation_blocked.value.code
+    assert (
+        bootstrap_blocked.value.evidence_ref == preparation_blocked.value.evidence_ref
+    )
     rejection = json.loads(audit_store.read(blocking_error.value.evidence_ref))
     assert rejection["integrity_evidence"]["findings"] == [
         {
@@ -537,6 +574,16 @@ def test_sec_ingestion_connects_adapter_snapshot_parser_and_fact_selection(
     historical_args["identity"] = historical_args["identity"].model_copy(
         update={"share_class": "Common Stock"}
     )
+    original = rejected_service.validate_filing(**validation_args)
+    from fundamental_service.issuer_identity import resolve_original_filing_identity
+
+    discovered_identity = resolve_original_filing_identity(
+        cik=historical_args["cik"],
+        accepted_at=historical_args["accepted_at"],
+        facts=original.parser_report.facts,
+    )
+    assert discovered_identity == historical_args["identity"]
+    assert not tuple(rejected_repository.root.glob("*.json"))
     matched = rejected_service.prepare_filing(**historical_args)
     assert matched.identity_evidence_ref
     proof = json.loads(audit_store.read(matched.identity_evidence_ref))
