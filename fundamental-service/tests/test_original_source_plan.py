@@ -40,6 +40,11 @@ def configuration(model_id="fcff_dcf"):
     )
 
 
+def test_configuration_rejects_models_without_an_automatic_source_policy():
+    with pytest.raises(ValueError):
+        configuration("bank_excess_return")
+
+
 def compiler_case(value, prepared, config=None):
     compiler = OriginalSourcePlan(
         originals=value.service,
@@ -51,6 +56,7 @@ def compiler_case(value, prepared, config=None):
             prepared.artifact_id, "sec-original-preparation-v1"
         ),
         configuration=config or configuration(),
+        runtime_source_revision=value.annual_request.declared_source_revision,
     )
     return compiler, request
 
@@ -91,7 +97,8 @@ def test_saved_original_supplies_identity_and_installed_model_pins(
     assert (
         ingestion.taxonomy_manifest_id == prepared.request.runtime.taxonomy_manifest_id
     )
-    assert plan.source_revision == prepared.request.runtime.declared_source_revision
+    assert plan.source_revision == request.runtime_source_revision
+    assert plan.source_revision == value.annual_request.declared_source_revision
     assert plan.requirements_profile.supported_history_threshold is None
     assert value.artifacts.read(result.plan_ref.artifact_id) == canonical_bytes(plan)
     assert (
@@ -397,6 +404,37 @@ def test_cli_compiles_and_retrieves_saved_plan_and_checks_configuration_before_s
     )
     assert json.loads(capsys.readouterr().out) == repeated
     assert _inventory(tmp_path) == before
+
+    source_preparation_id = first["evidence"]["request"]["original_preparation"][
+        "artifact_id"
+    ]
+    installed_revision = "e" * 40
+    monkeypatch.setattr(
+        value.acquisition.adapter,
+        "_request",
+        lambda *args, **kwargs: pytest.fail("saved plan compilation used SEC I/O"),
+    )
+    saved_plan_args = [
+        "--artifact-id",
+        source_preparation_id,
+        "--source-revision",
+        installed_revision,
+        "--source-plan-configuration",
+        str(config_path),
+        "--configuration-digest",
+        config.digest,
+    ]
+    assert annual_discovery_runner.main(saved_plan_args) == 0
+    compiled_saved = json.loads(capsys.readouterr().out)
+    assert compiled_saved["wrote"] and compiled_saved["plan_ref"]
+    assert compiled_saved["evidence"]["plan"]["source_revision"] == installed_revision
+    after_first_saved_compile = _inventory(tmp_path)
+    assert annual_discovery_runner.main(saved_plan_args) == 0
+    assert json.loads(capsys.readouterr().out) == {
+        **compiled_saved,
+        "wrote": False,
+    }
+    assert _inventory(tmp_path) == after_first_saved_compile
 
     def forbidden(_):
         pytest.fail("invalid configuration opened service storage")

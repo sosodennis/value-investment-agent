@@ -57,6 +57,7 @@ class OriginalSourcePlanRequestV1(StrictModel):
     )
     original_preparation: ArtifactRefV1
     configuration: AutomaticSourcePlanConfigurationV1
+    runtime_source_revision: str = Field(pattern=r"^[0-9a-f]{40}$")
 
     @model_validator(mode="after")
     def original_reference(self) -> OriginalSourcePlanRequestV1:
@@ -156,6 +157,8 @@ class OriginalSourcePlan:
         }
         if len(identities) > 1:
             codes.add("ORIGINAL_HISTORY_IDENTITY_CONFLICT")
+        if prepared.retryable and not codes:
+            codes.add("ORIGINAL_SOURCE_PLAN_RETRYABLE")
         for item in prepared.filings:
             codes.update(item.issue_codes)
             if item.identity is None:
@@ -204,7 +207,7 @@ class OriginalSourcePlan:
                         taxonomy_manifest_id=runtime.taxonomy_manifest_id,
                         taxonomy_version=runtime.taxonomy_version,
                         policy_version=configuration.policy_version,
-                        source_revision=runtime.declared_source_revision,
+                        source_revision=request.runtime_source_revision,
                         evaluator_id=configuration.evaluator_id,
                         mapping_policy_digest=automatic_mapping_policy_digest(),
                         mapping_version=configuration.mapping_version,
@@ -214,7 +217,7 @@ class OriginalSourcePlan:
                     )
                 )
             plan = AutomaticSourcePreparationPlanV1(
-                source_revision=runtime.declared_source_revision,
+                source_revision=request.runtime_source_revision,
                 release_profile_id=configuration.release_profile_id,
                 model_id=configuration.model_id,
                 ingestions=tuple(

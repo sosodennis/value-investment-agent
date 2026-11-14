@@ -105,6 +105,22 @@ existing mapping/release/caller gates remain required. Identical compilation and
 saved retrieval return the same evidence and `wrote=false` without source/parser
 I/O. Interrupted publication reuses completed artifacts; corruption refuses.
 
+An existing saved preparation can be compiled with a separately pinned runtime
+revision. This verifies and reads retained original artifacts without running
+annual discovery or SEC I/O:
+
+```sh
+fundamental-discover-annuals \
+  --artifact-id original-preparation:<request-digest> \
+  --source-revision <installed-source-commit> \
+  --source-plan-configuration /run/config/source-plan.json \
+  --configuration-digest <canonical-configuration-sha256>
+```
+
+The new plan records this current runtime revision separately from each original
+validation's historical source revision. The installed runner binds its
+automatic authority to the same revision before acquisition.
+
 This first compiler stage uses the standard direct accounting requirements.
 Automatic composite working-capital recipes, public/issuer-market configuration
 assembly and the complete company/date preparation entrypoint remain pending;

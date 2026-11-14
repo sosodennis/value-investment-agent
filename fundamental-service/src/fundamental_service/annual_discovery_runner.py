@@ -97,6 +97,23 @@ async def _run_command(args: argparse.Namespace) -> object:
                 ("original-preparation:", "original-preparation-attempt:")
             ):
                 prepared = preparation.read(args.artifact_id)
+                if args.source_plan_configuration is not None:
+                    compiled_request = OriginalSourcePlanRequestV1(
+                        original_preparation=preparation.reference(
+                            prepared.artifact_id, "sec-original-preparation-v1"
+                        ),
+                        configuration=args.source_plan_configuration,
+                        runtime_source_revision=args.source_revision,
+                    )
+                    compiled, compiled_publication = compiler.execute(compiled_request)
+                    return {
+                        "artifact": compiled_publication.artifact,
+                        "input_digest": compiled_request.digest,
+                        "output_digest": compiled.digest,
+                        "evidence": compiled,
+                        "plan_ref": compiled.plan_ref,
+                        "wrote": compiled_publication.wrote,
+                    }
                 return {
                     "artifact": application.artifact_store.get(args.artifact_id),
                     "input_digest": prepared.request.digest,
@@ -143,6 +160,7 @@ async def _run_command(args: argparse.Namespace) -> object:
                         prepared.artifact_id, "sec-original-preparation-v1"
                     ),
                     configuration=args.source_plan_configuration,
+                    runtime_source_revision=args.source_revision,
                 )
                 compiled, compilation_publication = compiler.execute(compiled_request)
                 return {
@@ -190,16 +208,23 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if bool(args.source_plan_configuration) != bool(args.configuration_digest):
         parser.error("source plan configuration requires its canonical digest")
-    if args.source_plan_configuration and not args.prepare_originals:
+    if (
+        args.source_plan_configuration
+        and not args.prepare_originals
+        and not args.artifact_id
+    ):
         parser.error("source compilation requires --prepare-originals")
     if args.artifact_id:
-        if (
-            args.cik
-            or args.valuation_timestamp
-            or args.source_revision
-            or args.prepare_originals
-        ):
+        if args.cik or args.valuation_timestamp or args.prepare_originals:
             parser.error("retrieval cannot also request a new annual selection")
+        if bool(args.source_plan_configuration) != bool(args.source_revision):
+            parser.error("saved source compilation requires the runtime revision")
+        if args.source_plan_configuration and not args.artifact_id.startswith(
+            "original-preparation:"
+        ):
+            parser.error("source compilation requires a saved original preparation")
+        if args.source_revision and not args.source_plan_configuration:
+            parser.error("runtime revision requires source plan configuration")
     elif not args.cik or not args.valuation_timestamp or not args.source_revision:
         parser.error("discovery requires CIK, valuation timestamp and source revision")
     if not 1 <= args.timeout_seconds <= 900:
