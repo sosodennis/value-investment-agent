@@ -11,11 +11,15 @@ from typing import Literal
 
 from pydantic import Field
 
+from fundamental_service.accounting_fields import (
+    AccountingFieldRequestV1,
+    extract_accounting_fields,
+    field_extraction_policy_digest,
+)
 from fundamental_service.arelle_parser import ArelleParseReportV1
 from fundamental_service.automatic_mapping import (
     AUTOMATIC_MAPPING_POLICY,
     automatic_mapping_policy_digest,
-    automatic_mapping_proposals,
 )
 from fundamental_service.contracts import StrictModel
 from fundamental_service.operating_label_contracts import OperatingComparisonRequestV1
@@ -25,9 +29,7 @@ from fundamental_service.original_issuer import (
     OriginalOperatingSourceV1,
     evaluate_original_issuer,
 )
-from fundamental_service.sec_rebuild import parsed_facts_to_candidates
 from fundamental_service.serialization import canonical_bytes, sha256_digest
-from fundamental_service.snapshots import SnapshotError
 
 from analyze_history_study import (
     MODELS,
@@ -58,7 +60,7 @@ from read_history_originals import (
 )
 from replay_history_study_windows import WindowSeedIndex, prepare_windows
 
-PROTOCOL = "fixed100-original-candidate-batch-v1"
+PROTOCOL = "fixed100-original-candidate-batch-v2"
 MAPPING_VERSION = "fixed100-original-review-proposals-v1"
 
 
@@ -213,58 +215,6 @@ def check_original(
         )
 
 
-def candidate_packet(original: OriginalIssuerEvidenceV1) -> dict[str, object]:
-    """Retain observations for review; never infer complete accounting scope."""
-    rows = []
-    for name in (*CORE_FIELDS, *PARENT_CONCEPTS):
-        proposals = automatic_mapping_proposals(
-            name, mapping_version=MAPPING_VERSION, original=original
-        )
-        candidates = {}
-        codes = set(original.issue_codes)
-        if original.status != "matched":
-            codes.add("ORIGINAL_ISSUER_REFUSED")
-        elif original.report.blocking_finding_codes():
-            codes.add("PARSER_VALIDATION_BLOCKED")
-        else:
-            for proposal in proposals:
-                try:
-                    observations = parsed_facts_to_candidates(
-                        original.report,
-                        source=original.source,
-                        issuer_id=original.source.cik,
-                        normalized_field=name,
-                        mapping=proposal,
-                    )
-                except SnapshotError as error:
-                    codes.add(error.code)
-                    continue
-                for candidate in observations:
-                    candidates[candidate.candidate_id] = candidate
-        if not proposals:
-            codes.add("NO_EXECUTABLE_MAPPING_PROPOSAL")
-        if not candidates:
-            codes.add("NO_SOURCE_BOUND_CANDIDATE_IN_SUPPLIED_REPORT")
-        rows.append(
-            {
-                "field": name,
-                "proposals": proposals,
-                "candidates": [candidates[key] for key in sorted(candidates)],
-                "candidate_count": len(candidates),
-                "issue_codes": sorted(codes),
-                "status": "requires_semantic_review" if candidates else "unresolved",
-            }
-        )
-    return {
-        "original_evidence_digest": sha256_digest(original),
-        "parser_replay_digest": original.report.replay_digest(),
-        "parser_blocking_codes": original.report.blocking_finding_codes(),
-        "original_issue_codes": original.issue_codes,
-        "fields": rows,
-        "authority": "provisional_candidates_not_approved_mapping_or_model_inputs",
-    }
-
-
 def load_supplements(
     index: BatchIndex,
     directory: Path,
@@ -334,6 +284,7 @@ def prepare_batch(
         "mapping_version": MAPPING_VERSION,
         "mapping_policy_version": AUTOMATIC_MAPPING_POLICY,
         "mapping_policy_digest": automatic_mapping_policy_digest(),
+        "field_extraction_policy_digest": field_extraction_policy_digest(),
     }
     artifacts: dict[str, bytes] = {}
 
@@ -374,13 +325,18 @@ def prepare_batch(
             }
             if original is not None:
                 check_original(original, target)
-                packet = candidate_packet(original)
+                extraction = extract_accounting_fields(
+                    AccountingFieldRequestV1(
+                        original=original,
+                        normalized_fields=(*CORE_FIELDS, *PARENT_CONCEPTS),
+                        mapping_version=MAPPING_VERSION,
+                    )
+                )
                 entry.update(
                     {
-                        "candidate_packet_digest": retain(packet),
+                        "candidate_packet_digest": retain(extraction),
                         "candidate_count": sum(
-                            int(str(object_value(row)["candidate_count"]))
-                            for row in list_value(packet["fields"])
+                            row.candidate_count for row in extraction.fields
                         ),
                         "status": "original_issuer_refused"
                         if original.status != "matched"
@@ -424,7 +380,7 @@ def prepare_batch(
             if replay is None
             else replay["arm_summaries"]
         )
-        packet = {
+        packet: dict[str, object] = {
             "inputs": {
                 **pins,
                 "issuer": issuer,

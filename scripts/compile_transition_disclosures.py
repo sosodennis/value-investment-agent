@@ -17,7 +17,10 @@ from fundamental_service.operating_disclosures import (
     disclosure_policy_digest,
 )
 from fundamental_service.operating_label_contracts import OperatingComparisonRequestV1
-from fundamental_service.sec_rebuild import parsed_facts_to_candidates
+from fundamental_service.accounting_fields import (
+    AccountingFieldRequestV1,
+    extract_accounting_fields,
+)
 from fundamental_service.serialization import canonical_bytes, sha256_digest
 from fundamental_service.snapshots import SnapshotError
 
@@ -82,12 +85,17 @@ def compile_disclosures(
         mapping = CanonicalMappingV1.model_validate(
             {**payload, "decision_id": f"disclosure-mapping-{sha256_digest(payload)}"}
         )
-        candidates = parsed_facts_to_candidates(
-            original.report,
-            source=original.source,
-            issuer_id=decision.source.identity.issuer_id,
-            normalized_field="filed_operating_evidence",
-            mapping=mapping,
+        candidates = (
+            extract_accounting_fields(
+                AccountingFieldRequestV1(
+                    original=original,
+                    normalized_fields=("filed_operating_evidence",),
+                    mapping_version=decision.mapping_version,
+                    mappings=(mapping,),
+                )
+            )
+            .fields[0]
+            .candidates
         )
         if len(candidates) != 1:
             raise DesignError(

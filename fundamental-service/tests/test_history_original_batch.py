@@ -12,6 +12,10 @@ from pathlib import Path
 import pytest
 
 from fundamental_service.arelle_parser import ArelleFindingV1
+from fundamental_service.accounting_fields import (
+    AccountingFieldRequestV1,
+    extract_accounting_fields,
+)
 from fundamental_service.automatic_mapping import automatic_mapping_proposals
 from fundamental_service.original_issuer import evaluate_original_issuer
 from fundamental_service.serialization import canonical_bytes, sha256_digest
@@ -38,15 +42,18 @@ def test_declared_revenue_alternatives_are_provisional_and_source_bound():
         and p.confidence == "unresolved"
         for p in proposals
     )
-    packet = batch.candidate_packet(claim)
-    row = next(row for row in packet["fields"] if row["field"] == "revenue")
-    assert row["candidate_count"] == 1
-    fact = row["candidates"][0]
+    request = AccountingFieldRequestV1(
+        original=claim, normalized_fields=("revenue",), mapping_version="test-v1"
+    )
+    packet = extract_accounting_fields(request)
+    row = packet.fields[0]
+    assert row.candidate_count == 1
+    fact = row.candidates[0]
     assert fact.concept == "us-gaap:SalesRevenueNet" and fact.value == 100
     assert fact.source.content_hash == claim.source.content_hash
     assert fact.accession_number == claim.source.accession_number
     assert fact.mapping.status == "provisional" and fact.security_id is None
-    assert packet == batch.candidate_packet(claim)
+    assert packet == extract_accounting_fields(request)
 
 
 def test_conflicting_observations_and_dimensions_are_all_retained():
@@ -63,11 +70,17 @@ def test_conflicting_observations_and_dimensions_are_all_retained():
         source=source,
         decision_at=batch.timestamp("2026-03-01T00:00:00Z"),
     )
-    row = batch.candidate_packet(claim)["fields"][0]
-    assert row["candidate_count"] == 3
-    assert len({c.candidate_id for c in row["candidates"]}) == 3
-    assert {c.value for c in row["candidates"]} == {100, 999}
-    assert any(c.dimensions for c in row["candidates"])
+    row = extract_accounting_fields(
+        AccountingFieldRequestV1(
+            original=claim, normalized_fields=("revenue",), mapping_version="test-v1"
+        )
+    ).fields[0]
+    assert row.candidate_count == 3
+    assert len({c.candidate_id for c in row.candidates}) == 3
+    assert {c.value for c in row.candidates} == {100, 999}
+    assert any(c.dimensions for c in row.candidates)
+    assert len(row.conflicts) == 1
+    assert len(row.conflicts[0].candidate_ids) == 2
 
 
 def test_parser_blocker_prevents_mapping_but_retains_original_severity():
@@ -88,12 +101,16 @@ def test_parser_blocker_prevents_mapping_but_retains_original_severity():
         ),
         source,
     )
-    packet = batch.candidate_packet(claim)
-    assert packet["parser_blocking_codes"] == ("DQC.test",)
-    assert all(row["candidate_count"] == 0 for row in packet["fields"])
-    assert all(
-        "PARSER_VALIDATION_BLOCKED" in row["issue_codes"] for row in packet["fields"]
+    packet = extract_accounting_fields(
+        AccountingFieldRequestV1(
+            original=claim,
+            normalized_fields=(*batch.CORE_FIELDS, *batch.PARENT_CONCEPTS),
+            mapping_version="test-v1",
+        )
     )
+    assert packet.parser_blocking_codes == ("DQC.test",)
+    assert all(row.candidate_count == 0 for row in packet.fields)
+    assert all("PARSER_VALIDATION_BLOCKED" in row.issue_codes for row in packet.fields)
     assert claim.report.findings[0].rule_severity == "error"
 
 
