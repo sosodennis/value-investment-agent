@@ -27,6 +27,7 @@ fundamental-prepare-source = "fundamental_service.preparation_runner:main"
 fundamental-persistence = "fundamental_service.persistence_recovery:main"
 fundamental-sign-mapping-review = "fundamental_service.mapping_review_signer:main"
 fundamental-approve-mapping = "fundamental_service.automatic_mapping_runner:main"
+fundamental-research-enterprise = "fundamental_service.enterprise_research_runner:main"
 
 [project.optional-dependencies]
 dev = [
