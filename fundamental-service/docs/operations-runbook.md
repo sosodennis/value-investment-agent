@@ -600,6 +600,25 @@ provide no source completeness, probability, claim bounds or release authority.
 Automatic preparation still requires its exact source, capital and award gates;
 a conditional policy needs its own versioned release/composer integration.
 
+`conditional-capital-hypotheses-v1` defines that input policy's source-binding
+prerequisite. Its pure assessment retains exact verified balance observations,
+every released award observation, six unresolved claim/award roles and explicit
+limitations. Preferred claims, convertible treatment, other common-equivalent
+shares and award dilution each require differing numeric hypotheses across the
+three scenarios. These are hypothetical stresses with no probability or proven
+economic bounds. Debt and if-converted shares are mutually exclusive variants;
+changing only a zero-exposure variant's tag does not establish sensitivity.
+The policy asserts neither complete capital claims nor a complete award
+inventory. Observed roles cannot be replaced by hypotheses.
+
+The assessment validates snapshot/issuer/security/currency/date/mapping pins,
+canonical fact digests, source availability, instant context, units and latest
+eligible balances. Exact and conditional bridges share the same non-operating
+asset scope and positive-observation overlap policy, including computed assets.
+This contract is not yet enabled in release manifests, automatic source plans or
+the serving composer. It cannot sign, activate or authorize an estimate until
+that formal integration and its real-source acceptance pass.
+
 Earlier requirements profiles `fcff-valuation-requirements-v2` and
 `transition-fcff-valuation-requirements-v2` replaced the precomputed numeric
 `dilutive_instruments` input with a release-bound award inventory. Raw observations
