@@ -15,7 +15,7 @@ from .sec_submissions import SecRecentFilingsV1, SecSubmissionsV1
 from .serialization import canonical_bytes, sha256_digest
 
 
-class AnnualDiscoveryRequestV1(StrictModel):
+class AnnualDiscoveryParametersV1(StrictModel):
     protocol: Literal["sec-original-annual-discovery-v1"] = (
         "sec-original-annual-discovery-v1"
     )
@@ -24,9 +24,12 @@ class AnnualDiscoveryRequestV1(StrictModel):
     declared_source_revision: str = Field(pattern=r"^[0-9a-f]{40}$")
     original_count: int = Field(default=2, ge=1, le=6)
     lookback_days: int = Field(default=3650, ge=1, le=3650)
+    maximum_history_files: int = Field(default=16, ge=1, le=32)
+
+
+class AnnualDiscoveryRequestV1(AnnualDiscoveryParametersV1):
     supported_filing_years: tuple[int, ...] = Field(min_length=1)
     supported_filing_forms: tuple[Literal["10-K"], ...] = ("10-K",)
-    maximum_history_files: int = Field(default=16, ge=1, le=32)
 
     @field_validator("supported_filing_years")
     @classmethod
