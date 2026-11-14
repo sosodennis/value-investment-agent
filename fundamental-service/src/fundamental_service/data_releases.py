@@ -17,6 +17,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import (
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from .serialization import canonical_bytes, sha256_digest
+from .conditional_capital_contracts import ConditionalCapitalPolicyV1
 from .working_capital import (
     CompositeWorkingCapitalInputV1,
     ValuationWorkingCapitalPolicyV1,
@@ -95,6 +96,9 @@ class DataReleaseManifestV1(ReleaseModel):
     valuation_working_capital_policy: ValuationWorkingCapitalPolicyV1 | None = Field(
         default=None, exclude_if=lambda value: value is None
     )
+    conditional_capital_policies: tuple[ConditionalCapitalPolicyV1, ...] = Field(
+        default=(), exclude_if=lambda value: not value
+    )
     manifest_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
 
     @field_validator("created_at")
@@ -138,6 +142,10 @@ class IssuerOperatingReleaseManifestV1(DataReleaseManifestV1):
 
     @model_validator(mode="after")
     def composite_policy_matches_requirements(self) -> IssuerOperatingReleaseManifestV1:
+        if self.conditional_capital_policies:
+            raise ValueError(
+                "issuer operating releases cannot carry conditional equity inputs"
+            )
         if self.valuation_working_capital_policy is not None:
             raise ValueError(
                 "issuer operating releases require their operating input policy"

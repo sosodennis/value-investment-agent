@@ -12,6 +12,12 @@ from .contracts import CanonicalFactV1, PeriodType, QualityStatus, SourceRole, T
 from .numerical_policy import VALUATION_NUMERICAL_POLICY, using_valuation_context
 from .serialization import sha256_digest
 
+AWARD_FACT_FIELDS = (
+    "equity_award_quantity",
+    "equity_award_unrecognized_compensation",
+    "equity_award_exercise_price",
+)
+
 
 class DilutionError(ValueError):
     def __init__(self, code: str, message: str) -> None:

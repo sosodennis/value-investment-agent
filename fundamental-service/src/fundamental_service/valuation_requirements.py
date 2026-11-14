@@ -18,7 +18,11 @@ from .contracts import (
     StrictModel,
 )
 from .serialization import sha256_digest
-from .equity_award_evidence import AWARD_FACT_FIELDS
+from .equity_dilution import AWARD_FACT_FIELDS
+from .conditional_capital_contracts import (
+    CONDITIONAL_CAPITAL_POLICY,
+    UNRESOLVED_CAPITAL_FIELDS,
+)
 from .original_issuer import IssuerOperatingSourceV1, fact_matches_operating_identity
 from .working_capital import (
     WORKING_CAPITAL_EXCLUSION_FIELDS,
@@ -304,6 +308,34 @@ def composite_working_capital_requirements_profile(
             "profile_id": f"{exact.profile_id}-{WORKING_CAPITAL_INPUT_POLICY}",
             "profile_version": WORKING_CAPITAL_INPUT_POLICY,
             "annual_instant_fields": ("current_assets", "current_liabilities"),
+        }
+    )
+
+
+def conditional_capital_requirements_profile(
+    model_id: str, *, composite_inputs: bool = False
+) -> ValuationRequirementsProfileV1:
+    """Require observed balances while retaining unresolved claims as evidence."""
+
+    exact = (
+        composite_working_capital_requirements_profile(model_id, operating_only=False)
+        if composite_inputs
+        else valuation_requirements_profile(model_id)
+    )
+    return ValuationRequirementsProfileV1.model_validate(
+        exact.model_dump()
+        | {
+            "profile_id": f"{exact.profile_id}-{CONDITIONAL_CAPITAL_POLICY}",
+            "profile_version": CONDITIONAL_CAPITAL_POLICY,
+            "point_in_time_fact_fields": tuple(
+                field
+                for field in exact.point_in_time_fact_fields
+                if field not in UNRESOLVED_CAPITAL_FIELDS
+            ),
+            "supporting_fact_fields": (
+                *exact.supporting_fact_fields,
+                *UNRESOLVED_CAPITAL_FIELDS,
+            ),
         }
     )
 

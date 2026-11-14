@@ -50,11 +50,14 @@ from .facts import (
     select_fact_groups,
 )
 from .equity_award_evidence import (
-    AWARD_FACT_FIELDS,
     EQUITY_DILUTION_ARTIFACT_ROLE,
     load_release_dilution_evidence,
 )
-from .equity_dilution import DilutionError, compute_treasury_stock_dilution
+from .equity_dilution import (
+    AWARD_FACT_FIELDS,
+    DilutionError,
+    compute_treasury_stock_dilution,
+)
 from .quote_providers import QuoteSourceProviderPort
 from .macro_series import MacroSeriesProviderPort
 from .market_reference import MarketReferenceProviderPort
@@ -92,6 +95,7 @@ from .issuer_release_evidence import (
 )
 from .working_capital import assess_composite_working_capital
 from .valuation_release_inputs import (
+    valuation_release_conditional_capital,
     valuation_release_requirements,
     valuation_release_working_capital_inputs,
 )
@@ -198,6 +202,10 @@ class DataReleaseCanaryRunner:
         if manifest.valuation_working_capital_policy is not None:
             valuation_release_requirements(
                 manifest, manifest.valuation_working_capital_policy.model_id
+            )
+        if manifest.conditional_capital_policies:
+            valuation_release_requirements(
+                manifest, manifest.conditional_capital_policies[0].model_id
             )
         self._verify_artifacts(manifest, verification)
         admissions = load_release_source_admissions(
@@ -685,6 +693,21 @@ class DataReleaseCanaryRunner:
                     f"release snapshot {reference.snapshot_id} does not cover required fields",
                 )
             history = self._verify_declared_history(snapshot, reference.facts, mappings)
+            if manifest.conditional_capital_policies:
+                if not isinstance(snapshot, SourceSnapshotV1):
+                    raise DataReleaseError(
+                        "DATA_RELEASE_SOURCE_SCOPE_MISMATCH",
+                        "conditional capital requires a security snapshot",
+                    )
+                versions = {mapping.mapping_version for mapping in mappings.values()}
+                if len(versions) != 1:
+                    raise DataReleaseError(
+                        "DATA_RELEASE_MAPPING_VERSION_MISMATCH",
+                        "conditional capital requires one coherent release mapping",
+                    )
+                valuation_release_conditional_capital(
+                    manifest, snapshot, history, mapping_version=next(iter(versions))
+                )
             if isinstance(snapshot, IssuerOperatingSourceV1):
                 assert isinstance(manifest, IssuerOperatingReleaseManifestV1)
                 if any(
@@ -727,7 +750,9 @@ class DataReleaseCanaryRunner:
             if not isinstance(manifest, IssuerOperatingReleaseManifestV1):
                 allowed_supporting_fields.update(AWARD_FACT_FIELDS)
                 models = (
-                    (valuation_input_policy.model_id,)
+                    (manifest.conditional_capital_policies[0].model_id,)
+                    if manifest.conditional_capital_policies
+                    else (valuation_input_policy.model_id,)
                     if valuation_input_policy is not None
                     else tuple(model.model_id for model in initial_model_specs())
                 )

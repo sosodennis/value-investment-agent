@@ -9,6 +9,7 @@ from pydantic import Field
 from .contracts import CanonicalFactV1, QualityStatus, SourceRole, SourceSnapshotV1
 from .data_releases import DataReleaseManifestV1
 from .equity_dilution import (
+    AWARD_FACT_FIELDS,
     CommonShareQuoteV1,
     DilutionError,
     DilutionModel,
@@ -32,11 +33,6 @@ from .source_evidence import RetainedSourceV1
 
 EQUITY_DILUTION_ARTIFACT_ROLE: Literal["equity-dilution-evidence-v1"] = (
     "equity-dilution-evidence-v1"
-)
-AWARD_FACT_FIELDS = (
-    "equity_award_quantity",
-    "equity_award_unrecognized_compensation",
-    "equity_award_exercise_price",
 )
 
 

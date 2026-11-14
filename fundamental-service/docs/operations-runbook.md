@@ -615,9 +615,16 @@ The assessment validates snapshot/issuer/security/currency/date/mapping pins,
 canonical fact digests, source availability, instant context, units and latest
 eligible balances. Exact and conditional bridges share the same non-operating
 asset scope and positive-observation overlap policy, including computed assets.
-This contract is not yet enabled in release manifests, automatic source plans or
-the serving composer. It cannot sign, activate or authorize an estimate until
-that formal integration and its real-source acceptance pass.
+Full-valuation manifests may pin `conditional_capital_policies`, ordered by
+snapshot manifest digest, with exactly one policy per declared security snapshot.
+Each observation must match its declared fact digest. The canary checks the
+entire released fact set through the same assessor and requires the conditional
+requirements profile; only the three unresolved claim roles move to supporting
+evidence. All observed balances remain required. An absent policy preserves the
+existing manifest serialization. Issuer-only operating releases cannot carry
+conditional equity inputs. Existing exact award and entitled-quote canary gates
+remain mandatory. Automatic source-plan binding and the serving composer do not
+yet consume the conditional policy; this increment grants no valuation authority.
 
 Earlier requirements profiles `fcff-valuation-requirements-v2` and
 `transition-fcff-valuation-requirements-v2` replaced the precomputed numeric

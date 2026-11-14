@@ -4,15 +4,17 @@ from decimal import Decimal
 import pytest
 from pydantic import ValidationError
 
-from fundamental_service.conditional_capital import (
+from fundamental_service.conditional_capital_contracts import (
     CAPITAL_UNKNOWNS,
     OBSERVED_CAPITAL_FIELDS,
     CapitalHypothesisV1,
     CapitalObservationRefV1,
-    ConditionalCapitalError,
     ConditionalCapitalPolicyV1,
     HypotheticalConvertibleDebtV1,
     HypotheticalConversionV1,
+)
+from fundamental_service.conditional_capital import (
+    ConditionalCapitalError,
     assess_conditional_capital,
 )
 from fundamental_service.contracts import (
