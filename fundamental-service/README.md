@@ -326,6 +326,13 @@ responses carry shared correlation/error metadata around a service-owned
 `fundamental.v1` result. It never imports agent implementation modules or reads
 the agent database/cache.
 
+The Docker image limits native BLAS/OpenMP execution to one thread and glibc to
+two allocation arenas. These defaults reduce virtual address reservations inside
+the SEC parser's child memory budget; they do not change its memory ceiling,
+validation rules or parser concurrency. Full DQC rulesets still need an explicit
+deployment memory budget sized for the pinned taxonomy and ruleset. Inspect the
+retained validation outcome: a completed parser can still reject a filing.
+
 The parent integration branch is `codex/issue-270-integration` and its dedicated worktree is `../value-investment-agent-issue-270-integration`. Child changes are delivered serially from that tip according to `docs/issue-worktree-lifecycle.md`.
 
 ## Independent verification
