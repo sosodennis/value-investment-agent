@@ -284,6 +284,32 @@ def test_direct_representation_must_agree_with_classification(
         assert "MAPPING_OBSERVATION_CONFLICT" in decision.reason_codes
 
 
+@pytest.mark.parametrize("noncurrent", [False, True])
+def test_direct_proposal_cannot_bypass_conflicting_current_location(
+    tmp_path, noncurrent
+):
+    _, _, _, _, total, _ = lease_case(tmp_path / "base", kind="operating")
+    direct = total.model_copy(
+        update={
+            "concept": total.concept + ("Noncurrent" if noncurrent else "Current"),
+            "value": "99",
+        }
+    )
+    request, store, _, _, _, _ = lease_case(
+        tmp_path / "conflict", kind="operating", noncurrent=noncurrent, extra=(direct,)
+    )
+    request = request.model_copy(
+        update={
+            "proposal": request.proposal.model_copy(
+                update={"source_concept": direct.concept}
+            )
+        }
+    )
+    decision = evaluate(request, store)
+    assert decision.status == "abstain" and decision.mapping is None
+    assert "MAPPING_AUTOMATIC_RULE_UNSUPPORTED" in decision.reason_codes
+
+
 def test_arbitrary_segment_is_not_reclassified_as_current(tmp_path):
     request, _, _, role, _, _ = lease_case(
         tmp_path,

@@ -73,6 +73,11 @@ standard current-location representation is absent. This adds lease liability
 mapping only; debt, capital claims, expense scope and award completeness still
 require their own evidence.
 
+Policy `source-bound-us-gaap-v19` also requires the classified proposal when
+that supported current-location representation is present. A submitted direct
+proposal cannot bypass its component and representation conflict checks. Direct
+lease rules remain available when the classified representation is absent.
+
 The exact treasury-stock calculation refuses an exercise-price concept ending
 in `WeightedAverageExercisePrice`, including retained accounting-role inputs,
 with `DILUTION_AGGREGATE_STRIKE_UNRESOLVED`. Averaging strikes before applying

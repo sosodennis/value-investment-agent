@@ -58,8 +58,8 @@ from .serialization import sha256_digest
 from .taxonomy_evidence import require_original_taxonomy
 
 AUTOMATIC_MAPPING_INPUT_ROLE = "automatic-mapping-input-v1"
-AutomaticMappingPolicyVersion = Literal["source-bound-us-gaap-v18"]
-AUTOMATIC_MAPPING_POLICY: AutomaticMappingPolicyVersion = "source-bound-us-gaap-v18"
+AutomaticMappingPolicyVersion = Literal["source-bound-us-gaap-v19"]
+AUTOMATIC_MAPPING_POLICY: AutomaticMappingPolicyVersion = "source-bound-us-gaap-v19"
 _GAAP_NAMESPACE = re.compile(
     r"http://(?:fasb\.org|xbrl\.us)/us-gaap/\d{4}(?:-\d{2}-\d{2})?"
 )
@@ -512,6 +512,7 @@ def evaluate_automatic_mapping(
         or proposal.accounting_rules is not None
         or proposal.observation_scope is not None
         or proposal.status != "provisional"
+        or (lease_concept is not None and not lease_liability)
     ):
         reasons.add("MAPPING_AUTOMATIC_RULE_UNSUPPORTED")
     selected: list[ParsedXbrlFactV1] = []
