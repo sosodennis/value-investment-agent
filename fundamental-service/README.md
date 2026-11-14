@@ -78,6 +78,14 @@ keys. Recovery reuses already captured bytes and completed validations. Terminal
 refusals repeat unchanged; new source/runtime inputs require a new request.
 This stage publishes no snapshot, mapping, release or valuation.
 
+Parser diagnostics retain the official XULE `effectiveDate` as
+`rule_effective_date`, including in saved rejection findings. A missing date,
+empty value or official `None` remains unknown; malformed dates refuse with
+`DQC_EFFECTIVE_DATE_INVALID`. Missing dates are omitted from serialization so
+existing retained evidence keeps its identity. This metadata does not itself
+change blocking decisions. Filing-date applicability and official documentation
+for rules with no emitted date still require separate validation evidence.
+
 SEC HTML representation profiles preserve the unchanged accession ZIP member.
 `sec-edgar-html-tag-line-padding-nbsp-v1` additionally recognizes line-end ASCII
 SP/TAB after a tag followed only by exact `&#160;` layout references. It keeps

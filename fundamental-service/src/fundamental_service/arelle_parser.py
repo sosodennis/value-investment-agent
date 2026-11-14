@@ -306,6 +306,9 @@ class ArelleFindingV1(BaseModel):
     severity: str = Field(min_length=1)
     message: str = Field(min_length=1)
     rule_severity: Literal["warning", "error", "critical", "fatal"] | None = None
+    rule_effective_date: date | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
 
 
 class ArelleValidationFailureV1(BaseModel):
@@ -483,11 +486,27 @@ def _finding_from_log(record: dict[str, Any]) -> ArelleFindingV1 | None:
     )
     if rule_severity not in {"warning", "error", "critical", "fatal"}:
         rule_severity = None
+    effective_date = None
+    if re.fullmatch(r"DQC\.US\.[0-9]{4}\.[0-9]+", code) and isinstance(details, dict):
+        raw_date = details.get("effectiveDate")
+        if raw_date is not None and raw_date not in ("", "None"):
+            try:
+                if not isinstance(raw_date, str) or not re.fullmatch(
+                    r"[0-9]{4}-[0-9]{2}-[0-9]{2}", raw_date
+                ):
+                    raise ValueError("effective date must use the ISO date format")
+                effective_date = date.fromisoformat(raw_date)
+            except ValueError as error:
+                raise ArelleParserError(
+                    "DQC_EFFECTIVE_DATE_INVALID",
+                    "official DQC diagnostic has a malformed effective date",
+                ) from error
     return ArelleFindingV1(
         code=code,
         severity=level,
         message=message_text[:2048],
         rule_severity=rule_severity,
+        rule_effective_date=effective_date,
     )
 
 

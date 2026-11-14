@@ -503,6 +503,9 @@ class ArelleFindingEvidenceV1(StrictModel):
     severity: Literal["warning", "error", "critical", "fatal"]
     blocks: bool
     rule_severity: Literal["warning", "error", "critical", "fatal"] | None = None
+    rule_effective_date: date | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
 
 
 class SecIntegrityEvidenceV1(StrictModel):

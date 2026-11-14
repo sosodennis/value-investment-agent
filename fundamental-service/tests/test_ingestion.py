@@ -191,6 +191,7 @@ def test_sec_ingestion_connects_adapter_snapshot_parser_and_fact_selection(
                     code="DQC.US.0015.2098",
                     severity="warning",
                     rule_severity="error",
+                    rule_effective_date=datetime(2016, 1, 1).date(),
                     message="fixture official DQC error demoted by EDGAR",
                 ),
             )
@@ -463,6 +464,7 @@ def test_sec_ingestion_connects_adapter_snapshot_parser_and_fact_selection(
             "code": "DQC.US.0015.2098",
             "severity": "warning",
             "rule_severity": "error",
+            "rule_effective_date": "2016-01-01",
             "blocks": True,
         }
     ]

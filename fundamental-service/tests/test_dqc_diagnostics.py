@@ -1,5 +1,6 @@
 from decimal import Decimal
 from dataclasses import dataclass
+from datetime import date
 from types import SimpleNamespace
 
 import pytest
@@ -197,6 +198,64 @@ def test_official_rule_severity_survives_efm_releveling(level):
     assert finding.severity == "warning"
     assert finding.rule_severity == level.lower()
     assert finding.message == "official rule message"
+
+
+def test_official_rule_effective_date_survives_log_normalization():
+    record = {
+        "level": "warning",
+        "code": "DQC.US.0099.9533",
+        "message": {
+            "text": "official rule message",
+            "args": {
+                "fundamental_rule_severity": "error",
+                "effectiveDate": "2021-01-01",
+            },
+        },
+    }
+    finding = _finding_from_log(record)
+    assert finding.rule_effective_date == date(2021, 1, 1)
+    assert finding.rule_severity == "error"
+    assert finding.severity == "warning"
+    assert type(finding).model_validate_json(finding.model_dump_json()) == finding
+
+
+@pytest.mark.parametrize("value", [None, "", "None"])
+def test_unknown_official_rule_effective_date_stays_unknown(value):
+    finding = _finding_from_log(
+        {
+            "level": "warning",
+            "code": "DQC.US.0249.10961",
+            "message": {"args": {"effectiveDate": value}},
+        }
+    )
+    assert finding.rule_effective_date is None
+    assert "rule_effective_date" not in finding.model_dump(mode="json")
+
+
+@pytest.mark.parametrize(
+    "value", [True, 20260101, "2026-02-30", "20260101", "2026-01-01T00:00:00Z"]
+)
+def test_malformed_official_rule_effective_date_refuses(value):
+    with pytest.raises(ArelleParserError) as failure:
+        _finding_from_log(
+            {
+                "level": "warning",
+                "code": "DQC.US.0249.10961",
+                "message": {"args": {"effectiveDate": value}},
+            }
+        )
+    assert failure.value.code == "DQC_EFFECTIVE_DATE_INVALID"
+
+
+def test_non_dqc_message_parameter_cannot_assert_rule_effective_date():
+    finding = _finding_from_log(
+        {
+            "level": "error",
+            "code": "EFM.6.08.05.firstLetter",
+            "message": {"args": {"effectiveDate": "2099-01-01"}},
+        }
+    )
+    assert finding.rule_effective_date is None
 
 
 def test_unrelated_log_arguments_remain_unchanged():

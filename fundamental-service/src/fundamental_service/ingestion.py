@@ -534,6 +534,7 @@ class SecIngestionService:
                         "severity": finding.severity,
                         "blocks": finding.code in blocking_codes,
                         "rule_severity": finding.rule_severity,
+                        "rule_effective_date": finding.rule_effective_date,
                     }
                 )
                 for finding in report.findings
@@ -1073,6 +1074,7 @@ class SecIngestionService:
                     "severity": item.severity,
                     "blocks": item.code in blocking_codes,
                     "rule_severity": item.rule_severity,
+                    "rule_effective_date": item.rule_effective_date,
                 }
             )
             for item in parser_report.findings
