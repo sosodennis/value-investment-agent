@@ -137,8 +137,16 @@ def _apply_worker_memory_limit(max_memory_bytes: int) -> None:
         return
     try:
         current_soft, current_hard = resource.getrlimit(resource.RLIMIT_AS)
-        hard_limit = min(current_hard, max_memory_bytes)
-        soft_limit = min(current_soft, max_memory_bytes)
+        hard_limit = (
+            max_memory_bytes
+            if current_hard == resource.RLIM_INFINITY
+            else min(current_hard, max_memory_bytes)
+        )
+        soft_limit = (
+            hard_limit
+            if current_soft == resource.RLIM_INFINITY
+            else min(current_soft, hard_limit)
+        )
         if soft_limit != current_soft:
             resource.setrlimit(resource.RLIMIT_AS, (soft_limit, current_hard))
         if hard_limit != current_hard:

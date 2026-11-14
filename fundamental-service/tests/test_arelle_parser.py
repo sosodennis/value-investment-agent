@@ -3,6 +3,8 @@ import json
 import os
 import queue
 import socket
+import subprocess
+import sys
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from zipfile import ZipFile
@@ -123,6 +125,38 @@ def test_parser_resource_policy_rejects_invalid_limits():
     with pytest.raises(ArelleParserError) as failure:
         ParserResourcePolicy(max_memory_bytes=1).validate()
     assert failure.value.code == "PARSER_RESOURCE_POLICY_INVALID"
+
+
+@pytest.mark.skipif(sys.platform != "linux", reason="Linux worker memory enforcement")
+@pytest.mark.parametrize("inherited", ["unlimited", "stricter", "stricter-soft"])
+def test_worker_enforces_memory_budget_without_raising_inherited_limits(inherited):
+    script = """
+import json, resource, sys
+from fundamental_service.arelle_parser import _apply_worker_memory_limit
+budget = 512 * 1024 * 1024
+if sys.argv[1] == "stricter":
+    resource.setrlimit(resource.RLIMIT_AS, (budget * 3 // 4, budget * 3 // 4))
+elif sys.argv[1] == "stricter-soft":
+    resource.setrlimit(resource.RLIMIT_AS, (budget * 3 // 4, budget))
+before = resource.getrlimit(resource.RLIMIT_AS)
+_apply_worker_memory_limit(budget)
+print(json.dumps({"before": before, "after": resource.getrlimit(resource.RLIMIT_AS)}))
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", script, inherited],
+        check=True,
+        capture_output=True,
+        text=True,
+        env={**os.environ, "PYTHONPATH": str(Path(__file__).parents[1] / "src")},
+    )
+    observation = json.loads(result.stdout)
+    budget = 512 * 1024 * 1024
+    soft, hard = observation["after"]
+    assert 0 < soft <= hard <= budget
+    for old, new in zip(observation["before"], observation["after"], strict=True):
+        assert old == -1 or new <= old
+    if inherited != "unlimited":
+        assert soft == budget * 3 // 4
 
 
 def test_parser_concurrency_budget_fails_closed():
