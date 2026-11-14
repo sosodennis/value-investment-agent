@@ -10,8 +10,12 @@ from pydantic import Field, model_validator
 from .arelle_parser import ParsedXbrlFactV1
 from .contracts import CanonicalFactV1, QualityStatus, StrictModel
 from .facts import CanonicalMappingV1
-from .original_issuer import IssuerOperatingSourceV1, fact_matches_original_source
-from .serialization import sha256_digest
+from .original_issuer import (
+    IssuerOperatingSourceV1,
+    OriginalIssuerEvidenceV1,
+    fact_matches_original_source,
+)
+from .serialization import canonical_bytes, sha256_digest
 from .snapshots import SnapshotError
 
 DISCLOSURE_CONCEPTS = (
@@ -21,9 +25,34 @@ DISCLOSURE_CONCEPTS = (
 DISCLOSURE_POLICY: Literal["unreviewed-filed-operating-disclosures-v1"] = (
     "unreviewed-filed-operating-disclosures-v1"
 )
+DisclosurePolicy = Literal[
+    "unreviewed-filed-operating-disclosures-v1",
+    "unreviewed-filed-operating-disclosure-groups-v2",
+]
+DISCLOSURE_GROUPS_POLICY: DisclosurePolicy = (
+    "unreviewed-filed-operating-disclosure-groups-v2"
+)
+DISCLOSURE_GROUPS = (
+    (
+        DISCLOSURE_CONCEPTS[0],
+        "us-gaap:OrganizationConsolidationAndPresentationOfFinancialStatementsDisclosureAndSignificantAccountingPoliciesTextBlock",
+    ),
+    (DISCLOSURE_CONCEPTS[1],),
+)
 
 
-def disclosure_policy_digest() -> str:
+def disclosure_policy_digest(policy_version: str = DISCLOSURE_POLICY) -> str:
+    if policy_version == DISCLOSURE_GROUPS_POLICY:
+        return sha256_digest(
+            {
+                "version": DISCLOSURE_GROUPS_POLICY,
+                "groups": DISCLOSURE_GROUPS,
+                "selection": "first_present_concept_per_group_current_consolidated_annual_latest_original_unique_observation",
+                "authority": "filed_references_only_no_numeric_or_suitability_or_release_claim",
+            }
+        )
+    if policy_version != DISCLOSURE_POLICY:
+        raise ValueError("unsupported conditional disclosure policy")
     return sha256_digest(
         {
             "version": DISCLOSURE_POLICY,
@@ -37,22 +66,63 @@ def disclosure_policy_digest() -> str:
 
 
 class ConditionalTransitionDisclosuresV1(StrictModel):
-    contract_version: Literal["fundamental.conditional-transition-disclosures.v1"] = (
-        "fundamental.conditional-transition-disclosures.v1"
-    )
-    policy_version: Literal["unreviewed-filed-operating-disclosures-v1"] = (
-        DISCLOSURE_POLICY
-    )
+    contract_version: Literal[
+        "fundamental.conditional-transition-disclosures.v1",
+        "fundamental.conditional-transition-disclosures.v2",
+    ] = "fundamental.conditional-transition-disclosures.v1"
+    policy_version: DisclosurePolicy = DISCLOSURE_POLICY
     policy_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
     fact_ids: tuple[str, ...] = Field(min_length=2, max_length=2)
 
     @model_validator(mode="after")
     def pinned_policy(self) -> "ConditionalTransitionDisclosuresV1":
-        if self.policy_digest != disclosure_policy_digest():
+        if (
+            self.contract_version == "fundamental.conditional-transition-disclosures.v2"
+        ) != (self.policy_version == DISCLOSURE_GROUPS_POLICY):
+            raise ValueError("disclosure contract and policy versions must match")
+        if self.policy_digest != disclosure_policy_digest(self.policy_version):
             raise ValueError("conditional disclosure policy digest differs")
         if self.fact_ids != tuple(sorted(set(self.fact_ids))):
             raise ValueError("disclosure fact IDs must be distinct and ordered")
         return self
+
+
+def select_disclosure_concepts(
+    original: OriginalIssuerEvidenceV1,
+    *,
+    period_start: date,
+    period_end: date,
+    policy_version: DisclosurePolicy = DISCLOSURE_POLICY,
+) -> tuple[str, ...]:
+    """Choose explicit standard source-reference roles, without extracting claims."""
+    disclosure_policy_digest(policy_version)
+    groups = (
+        DISCLOSURE_GROUPS
+        if policy_version == DISCLOSURE_GROUPS_POLICY
+        else tuple((concept,) for concept in DISCLOSURE_CONCEPTS)
+    )
+    concepts = []
+    for group in groups:
+        eligible = {
+            concept: tuple(
+                fact
+                for fact in original.report.facts
+                if fact.concept == concept
+                and fact.period_start == period_start
+                and fact.period_end == period_end
+                and not fact.dimensions
+                and fact.consolidation_scope == "consolidated"
+            )
+            for concept in group
+        }
+        selected = next((concept for concept in group if eligible[concept]), None)
+        if selected is None or len(eligible[selected]) != 1:
+            raise SnapshotError(
+                "CONDITIONAL_TRANSITION_DISCLOSURES_INVALID",
+                "each disclosure group requires one current consolidated observation",
+            )
+        concepts.append(selected)
+    return tuple(concepts)
 
 
 class _Text(HTMLParser):
@@ -71,7 +141,8 @@ def scoped_operating_text(
     if (
         mapping is None
         or mapping.normalized_field != "filed_operating_evidence"
-        or mapping.source_concept not in DISCLOSURE_CONCEPTS
+        or mapping.source_concept
+        not in {concept for group in DISCLOSURE_GROUPS for concept in group}
         or fact.concept != mapping.source_concept
         or mapping.observation_scope is None
         or sha256_digest(fact) not in mapping.observation_scope.observation_digests
@@ -105,6 +176,9 @@ def conditional_transition_disclosures(
     period_end: date,
 ) -> tuple[CanonicalFactV1, ...]:
     """Check source references without authenticating accounting or suitability."""
+    proof = ConditionalTransitionDisclosuresV1.model_validate_json(
+        canonical_bytes(proof)
+    )
     evidence = tuple(
         f for f in facts if f.normalized_field == "filed_operating_evidence"
     )
@@ -114,13 +188,23 @@ def conditional_transition_disclosures(
         len(latest) != 1
         or latest[0].report_period_end != period_end
         or tuple(sorted(f.fact_id for f in evidence)) != proof.fact_ids
-        or sorted(f.concept for f in evidence) != sorted(DISCLOSURE_CONCEPTS)
     ):
         raise SnapshotError(
             "CONDITIONAL_TRANSITION_DISCLOSURES_INVALID",
             "both distinct operating disclosures must bind the latest decision original",
         )
     original = latest[0]
+    expected = select_disclosure_concepts(
+        original,
+        period_start=period_start,
+        period_end=period_end,
+        policy_version=proof.policy_version,
+    )
+    if sorted(f.concept for f in evidence) != sorted(expected):
+        raise SnapshotError(
+            "CONDITIONAL_TRANSITION_DISCLOSURES_INVALID",
+            "source reference concepts differ from the declared disclosure policy",
+        )
     by_mapping = {mapping.decision_id: mapping for mapping in mappings}
     for fact in evidence:
         mapping = by_mapping.get(fact.mapping_decision_id or "")

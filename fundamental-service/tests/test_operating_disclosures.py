@@ -9,7 +9,13 @@ from pydantic import ValidationError
 
 from fundamental_service.arelle_parser import ParsedXbrlFactV1
 from fundamental_service.contracts import QualityStatus
-from fundamental_service.operating_disclosures import DISCLOSURE_CONCEPTS
+from fundamental_service.operating_disclosures import (
+    DISCLOSURE_CONCEPTS,
+    DISCLOSURE_GROUPS,
+    DISCLOSURE_GROUPS_POLICY,
+    ConditionalTransitionDisclosuresV1,
+    disclosure_policy_digest,
+)
 from fundamental_service.operating_labels import replay_operating_comparison
 from fundamental_service.operating_scenarios import replay_operating_scenarios
 from fundamental_service.original_issuer import (
@@ -106,6 +112,89 @@ def test_real_mapper_preserves_verbatim_text_scope_and_provisional_quality():
     assert audit["supported_history_threshold"] is None
     assert audit["model_suitability_established"] is False
     assert canonical_bytes(compile_disclosures(seed)[0]) == canonical_bytes(compiled)
+
+
+def test_explicit_v2_standard_combined_consolidation_reference():
+    seed = seed_with_disclosures(changes={"concept": DISCLOSURE_GROUPS[0][1]})
+    with pytest.raises(ValueError):
+        compile_disclosures(seed)
+    compiled, audit = compile_disclosures(seed, policy_version=DISCLOSURE_GROUPS_POLICY)
+    assert audit["schema_version"] == "conditional-transition-disclosure-audit.v2"
+    proof = compiled.decision.transition_disclosures
+    assert proof.policy_version == DISCLOSURE_GROUPS_POLICY
+    assert proof.contract_version == "fundamental.conditional-transition-disclosures.v2"
+    assert proof.policy_digest != disclosure_policy_digest()
+    assert compiled.label == seed.label
+    result = replay_operating_comparison(compiled)
+    assert all(
+        r.status == "provisional_conditional_comparison" for r in result.comparisons
+    )
+    assert result.complete_exact_study_cases == 0
+    assert result.supported_history_threshold is None
+    assert all(f.quality is QualityStatus.PROVISIONAL for f in compiled.decision.facts)
+
+
+def test_v2_prefers_specific_consolidation_concept_and_retains_alternative():
+    seed = seed_with_disclosures()
+    original = seed.decision.source.originals[0]
+    narrow = next(
+        f for f in original.report.facts if f.concept == DISCLOSURE_CONCEPTS[0]
+    )
+    combined = narrow.model_copy(update={"concept": DISCLOSURE_GROUPS[0][1]})
+    original = evaluate_original_issuer(
+        original.report.model_copy(
+            update={"facts": (*original.report.facts, combined)}
+        ),
+        source=original.source,
+        decision_at=original.decision_at,
+    )
+    source = compose_issuer_operating_source(
+        (original,), valuation_timestamp=original.decision_at
+    )
+    decision = seed.decision.model_copy(update={"source": source})
+    seed = seed.model_copy(
+        update={"decision": decision, "decision_input_digest": sha256_digest(decision)}
+    )
+    compiled, audit = compile_disclosures(seed, policy_version=DISCLOSURE_GROUPS_POLICY)
+    assert {
+        f.concept
+        for f in compiled.decision.facts
+        if f.normalized_field == "filed_operating_evidence"
+    } == set(DISCLOSURE_CONCEPTS)
+    assert len(audit["alternative_observations"]) == 3
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"namespace_uri": "https://example.test/us-gaap/2015"},
+        {"is_numeric": True, "value": "42", "unit": "iso4217:USD"},
+        {"period_start": None},
+        {"value": "<p>12345</p>"},
+    ],
+)
+def test_v2_alternative_still_requires_real_current_standard_text(changes):
+    seed = seed_with_disclosures(
+        changes={"concept": DISCLOSURE_GROUPS[0][1], **changes}
+    )
+    with pytest.raises((ValueError, SnapshotError)):
+        compile_disclosures(seed, policy_version=DISCLOSURE_GROUPS_POLICY)
+
+
+def test_v2_cannot_claim_v1_contract_or_digest():
+    with pytest.raises(ValueError, match="versions must match"):
+        ConditionalTransitionDisclosuresV1(
+            policy_version=DISCLOSURE_GROUPS_POLICY,
+            policy_digest=disclosure_policy_digest(DISCLOSURE_GROUPS_POLICY),
+            fact_ids=("a", "b"),
+        )
+    with pytest.raises(ValueError, match="digest differs"):
+        ConditionalTransitionDisclosuresV1(
+            contract_version="fundamental.conditional-transition-disclosures.v2",
+            policy_version=DISCLOSURE_GROUPS_POLICY,
+            policy_digest=disclosure_policy_digest(),
+            fact_ids=("a", "b"),
+        )
 
 
 def test_explicit_conditional_execution_uses_shared_composer_and_retains_text_lineage():
