@@ -272,6 +272,42 @@ def automatic_mapping_proposal(
     )
 
 
+def automatic_mapping_proposals(
+    normalized_field: str,
+    *,
+    mapping_version: str,
+    original: OriginalIssuerEvidenceV1,
+) -> tuple[CanonicalMappingV1, ...]:
+    """Expose declared alternatives for review without approving observations."""
+    primary = automatic_mapping_proposal(
+        normalized_field, mapping_version=mapping_version, original=original
+    )
+    if primary is None:
+        return ()
+    rule = _RULES.get(normalized_field)
+    concepts = (
+        rule.concepts
+        if rule is not None and primary.source_concept == rule.concept
+        else (primary.source_concept,)
+    )
+    proposals = []
+    for concept in sorted(concepts):
+        if concept == primary.source_concept:
+            proposals.append(primary)
+            continue
+        payload = primary.model_dump(exclude={"decision_id"})
+        payload["source_concept"] = concept
+        proposals.append(
+            CanonicalMappingV1.model_validate(
+                {
+                    **payload,
+                    "decision_id": "automatic-proposal-" + sha256_digest(payload),
+                }
+            )
+        )
+    return tuple(proposals)
+
+
 class MappingObservationRejectionV1(ReleaseModel):
     observation_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
     reason_code: str = Field(min_length=1)
