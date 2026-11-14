@@ -11,6 +11,7 @@ from fundamental_service.contracts import (
 from fundamental_service.issuer_identity import (
     IdentityResolutionError,
     resolve_issuer_identity,
+    resolve_original_filing_identity,
     validate_original_filing_identity,
 )
 from fundamental_service.arelle_parser import ParsedXbrlFactV1
@@ -532,3 +533,198 @@ def test_resolution_digest_binds_identity_and_all_source_evidence():
     changed_payload["source_evidence"][0]["content_hash"] = "b" * 64
     with pytest.raises(ValidationError, match="resolution_digest"):
         IdentityResolutionV1.model_validate_json(json.dumps(changed_payload))
+
+
+def _resolve_original(facts=None, **selectors):
+    return resolve_original_filing_identity(
+        cik="0000320193",
+        accepted_at=datetime(2024, 11, 1, tzinfo=UTC),
+        facts=_original_identity_facts() if facts is None else facts,
+        **selectors,
+    )
+
+
+def test_resolve_original_security_without_supplied_identity_or_current_directory():
+    facts = _class_scoped_original()
+    identity = _resolve_original(facts)
+    assert identity == IdentityV1(
+        issuer_id="0000320193",
+        issuer_name="Apple Inc.",
+        security_id="AAPL",
+        share_class="Common Stock",
+        domicile="US",
+        reporting_basis="us-gaap",
+        currency="USD",
+    )
+    assert _resolve_original(tuple(reversed(facts))) == identity
+    assert _resolve_original((*facts, *facts)) == identity
+    assert (
+        _resolve_original(facts, ticker="AAPL", share_class="common stock") == identity
+    )
+
+
+def _two_original_securities(*, reuse_ticker=False):
+    facts = _class_scoped_original()
+    common = tuple(f for f in facts if f.context_id == "common-class")
+    return (
+        *facts,
+        *(
+            fact.model_copy(
+                update={
+                    "context_id": "second-listed-class",
+                    "dimensions": (
+                        ("us-gaap:StatementClassOfStockAxis", "issuer:ClassBMember"),
+                    ),
+                    "value": ("AAPL" if reuse_ticker else "AAPL.B")
+                    if fact.concept == "dei:TradingSymbol"
+                    else "Class B Common Stock",
+                }
+            )
+            for fact in common
+        ),
+    )
+
+
+def test_multiple_original_securities_require_explicit_selection():
+    facts = _two_original_securities()
+    with pytest.raises(IdentityResolutionError) as error:
+        _resolve_original(facts)
+    assert error.value.code == "HISTORICAL_SECURITY_SELECTION_REQUIRED"
+    assert (
+        _resolve_original(facts, ticker="AAPL.B").share_class == "Class B Common Stock"
+    )
+    assert _resolve_original(facts, ticker="AAPL").share_class == "Common Stock"
+    with pytest.raises(IdentityResolutionError) as absent:
+        _resolve_original(facts, ticker="CURRENT")
+    assert absent.value.code == "HISTORICAL_IDENTITY_MISMATCH"
+
+
+def test_reused_original_ticker_requires_title_and_keeps_ambiguous_context_refusal():
+    facts = _two_original_securities(reuse_ticker=True)
+    with pytest.raises(IdentityResolutionError) as error:
+        _resolve_original(facts, ticker="AAPL")
+    assert error.value.code == "HISTORICAL_SECURITY_SELECTION_REQUIRED"
+    assert (
+        _resolve_original(facts, share_class="Common Stock").share_class
+        == "Common Stock"
+    )
+    assert (
+        _resolve_original(facts, share_class="Class B Common Stock").share_class
+        == "Class B Common Stock"
+    )
+    common = tuple(f for f in facts if f.context_id == "common-class")
+    with pytest.raises(IdentityResolutionError) as conflict:
+        _resolve_original(
+            (
+                *facts,
+                *(
+                    f.model_copy(update={"context_id": "duplicate-class"})
+                    for f in common
+                ),
+            ),
+            share_class="Common Stock",
+        )
+    assert conflict.value.code == "HISTORICAL_IDENTITY_CONFLICT"
+
+
+@pytest.mark.parametrize(
+    "selector",
+    [{"ticker": "aapl"}, {"ticker": ""}, {"share_class": ""}, {"share_class": "   "}],
+)
+def test_original_resolution_rejects_invalid_selectors(selector):
+    with pytest.raises(IdentityResolutionError) as error:
+        _resolve_original(**selector)
+    assert error.value.code == "HISTORICAL_IDENTITY_SCOPE_UNSUPPORTED"
+
+
+@pytest.mark.parametrize(
+    "concept",
+    [
+        "EntityRegistrantName",
+        "TradingSymbol",
+        "Security12bTitle",
+        "EntityCentralIndexKey",
+    ],
+)
+def test_original_resolution_preserves_missing_identity_roles(concept):
+    with pytest.raises(IdentityResolutionError) as error:
+        _resolve_original(
+            tuple(
+                f for f in _original_identity_facts() if f.concept != f"dei:{concept}"
+            )
+        )
+    assert error.value.code == "HISTORICAL_IDENTITY_MISSING"
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"namespace_uri": "http://example.test/dei/2024"},
+        {"entity_scheme": "http://example.test/CIK"},
+        {"entity_identifier": "0000320194"},
+        {"period_end": date(2025, 9, 28)},
+        {"period_start": None},
+        {"unit": "iso4217:USD"},
+        {"is_numeric": True},
+        {"dimensions": (("us-gaap:StatementBusinessSegmentsAxis", "issuer:USA"),)},
+    ],
+)
+def test_original_resolution_cannot_bypass_ingestion_identity_scope(change):
+    facts = tuple(
+        f.model_copy(update=change) if f.concept == "dei:Security12bTitle" else f
+        for f in _original_identity_facts()
+    )
+    with pytest.raises(IdentityResolutionError) as error:
+        _resolve_original(facts)
+    assert error.value.code in {
+        "HISTORICAL_IDENTITY_SCOPE_UNSUPPORTED",
+        "HISTORICAL_IDENTITY_MISSING",
+    }
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"unit": "iso4217:EUR"},
+        {"namespace_uri": "http://example.test/us-gaap/2024"},
+        {"entity_identifier": "0000320194"},
+        {"consolidation_scope": "unknown"},
+        {"period_end": date(2023, 9, 28)},
+    ],
+)
+def test_original_resolution_requires_source_proof_of_usd_gaap_scope(change):
+    facts = _original_identity_facts()
+    with pytest.raises(IdentityResolutionError) as error:
+        _resolve_original((*facts[:-1], facts[-1].model_copy(update=change)))
+    assert error.value.code == "HISTORICAL_IDENTITY_SCOPE_UNSUPPORTED"
+
+
+def test_original_resolution_rejects_conflicting_issuer_name_or_security_title():
+    facts = _original_identity_facts()
+    for concept in ("dei:EntityRegistrantName", "dei:Security12bTitle"):
+        original = next(f for f in facts if f.concept == concept)
+        with pytest.raises(IdentityResolutionError) as error:
+            _resolve_original(
+                (*facts, original.model_copy(update={"value": "Different name"}))
+            )
+        assert error.value.code in {
+            "HISTORICAL_IDENTITY_CONFLICT",
+            "HISTORICAL_SECURITY_SELECTION_REQUIRED",
+        }
+    with pytest.raises(IdentityResolutionError) as mismatch:
+        _resolve_original(share_class="Unproved preferred stock")
+    assert mismatch.value.code == "HISTORICAL_IDENTITY_MISMATCH"
+
+
+@pytest.mark.parametrize("cik", ["", "320193", "0000320194", "００００３２０１９３"])
+def test_original_resolution_requires_the_requested_original_cik(cik):
+    with pytest.raises(IdentityResolutionError) as error:
+        resolve_original_filing_identity(
+            cik=cik,
+            accepted_at=datetime(2024, 11, 1, tzinfo=UTC),
+            facts=_original_identity_facts(),
+        )
+    assert error.value.code in {
+        "HISTORICAL_IDENTITY_SCOPE_UNSUPPORTED",
+        "HISTORICAL_IDENTITY_MISMATCH",
+    }
