@@ -10,6 +10,7 @@ import sys
 import tempfile
 from datetime import datetime
 from pathlib import Path
+from time import monotonic
 
 from .annual_discovery import AnnualDiscoveryParametersV1
 from .original_preparation import OriginalSecuritySelectionV1
@@ -22,17 +23,27 @@ from .replay import ArtifactRecordV1
 from .serialization import canonical_bytes
 
 
-def _run_module(module: str, arguments: list[str]) -> subprocess.CompletedProcess[str]:
+def _run_module(
+    module: str, arguments: list[str], *, timeout_seconds: float
+) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [sys.executable, "-m", module, *arguments],
         check=False,
         capture_output=True,
         text=True,
+        timeout=timeout_seconds,
     )
 
 
-def _run_child(module: str, arguments: list[str]) -> dict[str, object]:
-    result = _run_module(module, arguments)
+def _run_child(
+    module: str, arguments: list[str], *, timeout_seconds: float
+) -> dict[str, object]:
+    try:
+        result = _run_module(module, arguments, timeout_seconds=timeout_seconds)
+    except subprocess.TimeoutExpired as error:
+        raise RuntimeError(
+            f"{module} exceeded the issuer preparation deadline"
+        ) from error
     if result.returncode:
         raise RuntimeError(
             f"{module} failed with exit {result.returncode}: {result.stderr.strip()}"
@@ -61,7 +72,15 @@ def _timeout_seconds(value: str) -> int:
     return seconds
 
 
+def _remaining_seconds(deadline: float) -> float:
+    remaining = deadline - monotonic()
+    if remaining <= 0:
+        raise TimeoutError("issuer preparation exceeded its total timeout")
+    return remaining
+
+
 def _execute(args: argparse.Namespace) -> dict[str, object]:
+    deadline = monotonic() + args.timeout_seconds
     parameters = AnnualDiscoveryParametersV1(
         cik=args.cik.zfill(10),
         valuation_timestamp=datetime.fromisoformat(args.valuation_timestamp),
@@ -91,7 +110,7 @@ def _execute(args: argparse.Namespace) -> dict[str, object]:
         "--lookback-days",
         str(parameters.lookback_days),
         "--timeout-seconds",
-        str(args.timeout_seconds),
+        str(max(1, int(_remaining_seconds(deadline)))),
         "--prepare-originals",
         "--source-plan-configuration",
         str(args.source_plan_configuration),
@@ -108,7 +127,9 @@ def _execute(args: argparse.Namespace) -> dict[str, object]:
         )
 
     discovery = _run_child(
-        "fundamental_service.annual_discovery_runner", discovery_arguments
+        "fundamental_service.annual_discovery_runner",
+        discovery_arguments,
+        timeout_seconds=_remaining_seconds(deadline),
     )
     evidence_value = discovery.get("evidence")
     if not isinstance(evidence_value, dict):
@@ -216,7 +237,7 @@ def _execute(args: argparse.Namespace) -> dict[str, object]:
             "--organization",
             args.organization,
             "--timeout-seconds",
-            str(args.timeout_seconds),
+            str(max(1, int(_remaining_seconds(deadline)))),
             "--machine-private-key",
             str(args.machine_private_key),
         ]
@@ -234,7 +255,9 @@ def _execute(args: argparse.Namespace) -> dict[str, object]:
                 )
             )
         preparation = _run_child(
-            "fundamental_service.preparation_runner", preparation_arguments
+            "fundamental_service.preparation_runner",
+            preparation_arguments,
+            timeout_seconds=_remaining_seconds(deadline),
         )
     publication = preparation.get("artifact")
     if not isinstance(publication, dict):

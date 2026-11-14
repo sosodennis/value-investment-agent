@@ -1,10 +1,11 @@
 """Issuer-entry workflow delegates to the existing source owners."""
 
 import json
+import subprocess
 from pathlib import Path
 from types import SimpleNamespace
 
-from fundamental_service.issuer_preparation_runner import _execute
+from fundamental_service.issuer_preparation_runner import _execute, _run_child
 from fundamental_service.original_source_plan import OriginalSourcePlanEvidenceV1
 from fundamental_service.serialization import canonical_bytes
 from test_original_source_plan import compiler_case, configuration
@@ -79,11 +80,18 @@ def test_issuer_entry_compiles_then_runs_formal_preparation(tmp_path, monkeypatc
     compiler, request = compiler_case(original_case, prepared)
     evidence, _ = compiler.execute(request)
     calls = []
+    clock_ticks = iter(range(100, 200))
     run_number = 0
 
-    def invoke(module, arguments):
+    monkeypatch.setattr(
+        "fundamental_service.issuer_preparation_runner.monotonic",
+        lambda: next(clock_ticks),
+    )
+
+    def invoke(module, arguments, *, timeout_seconds):
         nonlocal run_number
-        calls.append((module, arguments))
+        assert 0 < timeout_seconds <= 120
+        calls.append((module, arguments, timeout_seconds))
         if module.endswith("annual_discovery_runner"):
             run_number += 1
             assert "--cik" in arguments
@@ -112,10 +120,11 @@ def test_issuer_entry_compiles_then_runs_formal_preparation(tmp_path, monkeypatc
     result = _execute(_args(tmp_path, original_case.annual_request))
     repeated = _execute(_args(tmp_path, original_case.annual_request))
 
-    assert [module.rsplit(".", 1)[-1] for module, _ in calls[:2]] == [
+    assert [module.rsplit(".", 1)[-1] for module, _, _ in calls[:2]] == [
         "annual_discovery_runner",
         "preparation_runner",
     ]
+    assert [timeout for _, _, timeout in calls] == [118, 116, 118, 116]
     assert result["status"] == "preparation_attempted"
     assert result["original_preparation_artifact_id"] == prepared.artifact_id
     assert result["source_plan_ref"].content_hash == evidence.plan.digest
@@ -150,7 +159,8 @@ def test_incomplete_original_evidence_is_retained_without_running_preparation(
     )
     calls = []
 
-    def invoke(module, arguments):
+    def invoke(module, arguments, *, timeout_seconds):
+        assert 0 < timeout_seconds <= 120
         calls.append(module)
         return _discovery_result(blocked, prepared)
 
@@ -173,7 +183,9 @@ def test_configuration_digest_is_checked_before_source_commands(tmp_path, monkey
     args.configuration_digest = "0" * 64
     monkeypatch.setattr(
         "fundamental_service.issuer_preparation_runner._run_child",
-        lambda *_: (_ for _ in ()).throw(AssertionError("unexpected child call")),
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("unexpected child call")
+        ),
     )
 
     try:
@@ -182,3 +194,26 @@ def test_configuration_digest_is_checked_before_source_commands(tmp_path, monkey
         assert str(error) == "source-plan configuration digest differs"
     else:
         raise AssertionError("mismatched configuration digest was accepted")
+
+
+def test_child_timeout_is_bounded_and_classified(monkeypatch):
+    observed = {}
+
+    def expire(command, **kwargs):
+        observed["timeout"] = kwargs["timeout"]
+        raise subprocess.TimeoutExpired(command, kwargs["timeout"])
+
+    monkeypatch.setattr(
+        "fundamental_service.issuer_preparation_runner.subprocess.run", expire
+    )
+
+    try:
+        _run_child("fundamental_service.test_child", [], timeout_seconds=2.5)
+    except RuntimeError as error:
+        assert str(error) == (
+            "fundamental_service.test_child exceeded the issuer preparation deadline"
+        )
+    else:
+        raise AssertionError("timed-out child was accepted")
+
+    assert observed == {"timeout": 2.5}
