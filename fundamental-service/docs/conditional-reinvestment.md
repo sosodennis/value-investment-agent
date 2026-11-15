@@ -39,7 +39,7 @@ Existing exact valuation profiles retain their roles and digests. The explicit
 conditional release profile requires the four core annual flows and the existing
 observed capital roles. Excluded historical reinvestment roles remain supporting
 evidence, with their original mapping failures retained. This profile does not
-register automatic source-plan compilation or authorize full valuation preparation.
+register automatic source-plan compilation.
 
 `conditional_reinvestment_release.py` owns immutable release admission. Policies
 cover every declared security snapshot exactly once in canonical order and pin
@@ -61,9 +61,7 @@ The read-only release canary reproduces the bound policy and formal operating
 forecasts, recording the resulting output digests in its content report and
 signed-verification-bound canary digest. These checks grant no source entitlement,
 mapping approval or caller approval. Existing manifests omit the new fields when
-unused, preserving their canonical identity. Full composer and automatic-plan
-integration must still put the same assumptions, limitations and sensitivity into
-the exact caller input.
+unused, preserving their canonical identity.
 
 `valuation_preparation.compose_conditional_operating_forecasts` is the internal
 operating forecast boundary. It reproduces the source-bound policy assessment,
@@ -78,10 +76,27 @@ and the existing forecast growth bounds still refuse. Supplying only core
 metrics to the existing historical forecast route still fails without an
 explicit reinvestment hypothesis.
 
-This operating result is neither a full valuation input nor an approved
-policy/release. Capital claims, award dilution, market policy, entitled quote,
-trusted release/canary, exact caller approval and calculator/result persistence
-remain the full valuation's separate mandatory boundaries.
+The full `prepare_automatic_valuation` composer accepts the admitted policy as an
+explicit alternate input. It reuses that operating result and the existing capital,
+dilution and market-policy boundaries. `fcff-conditional-reinvestment-composer-v1`
+identifies this route. The returned preparation includes the operating assessment,
+limitations and all three forward scenarios; the exact valuation input binds its
+output digest and retained assumption document digest in provenance. The base
+reinvestment evidence is a noneditable policy hypothesis, never a derived historical
+rate. Unknown historical metrics remain absent and quality remains provisional.
+
+The composer joins capital and reinvestment hypotheses by the exact scenario names
+`base`, `downside` and `upside`. Each joint scenario contains the appropriate capital
+bridge and each forward reinvestment rate. It asserts no probability, independent
+combination coverage or economic bound. Existing calculator and uncertainty owners
+execute these inputs. Manual overrides cannot bypass the immutable policy. Before
+calculation, the application reloads the release document, recomposes the complete
+input and compares all operands, scenarios, quality and provenance; caller approval
+must still bind that exact input and authenticated caller.
+
+This implementation does not establish real-source completeness, quote entitlement,
+real caller approval or numerical delivery. Automatic-plan integration, real company
+execution and the original replay/restart/restore acceptance remain required.
 
 ## Shared accounting rules and candidate evidence
 

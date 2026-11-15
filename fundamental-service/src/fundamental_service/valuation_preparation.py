@@ -25,6 +25,7 @@ from .conditional_capital_contracts import (
 )
 from .conditional_capital import ConditionalCapitalError, assess_conditional_capital
 from .conditional_reinvestment import (
+    ConditionalReinvestmentError,
     assess_conditional_reinvestment,
     reinvestment_history_requirements_profile,
 )
@@ -87,6 +88,7 @@ from .valuation_requirements import (
     valuation_requirements_profile,
     composite_working_capital_requirements_profile,
     conditional_capital_requirements_profile,
+    conditional_reinvestment_requirements_profile,
 )
 from .working_capital import (
     CompositeWorkingCapitalAssessmentV1,
@@ -103,6 +105,7 @@ _MAX_REINVESTMENT_RATE = Decimal("1.00")
 _FORECAST_PERIODS = 5
 FORECAST_COMPOSER_VERSION = "fcff-forecast-composer-v5"
 CONDITIONAL_FORECAST_COMPOSER_VERSION = "fcff-conditional-capital-composer-v1"
+CONDITIONAL_REINVESTMENT_COMPOSER_VERSION = "fcff-conditional-reinvestment-composer-v1"
 
 
 class PreparationError(ValueError):
@@ -326,6 +329,9 @@ class AutomaticValuationPreparationV1(StrictModel):
         default=None, exclude_if=lambda value: value is None
     )
     conditional_quote: CommonShareQuoteV1 | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
+    conditional_operating: ConditionalOperatingForecastsV1 | None = Field(
         default=None, exclude_if=lambda value: value is None
     )
     preparation_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
@@ -828,6 +834,11 @@ def apply_manual_override(
 ) -> AutomaticValuationPreparationV1:
     """Apply one supported override and bind it to the automatic preparation."""
 
+    if preparation.conditional_operating is not None:
+        raise PreparationError(
+            "CONDITIONAL_REINVESTMENT_OVERRIDE_UNSUPPORTED",
+            "forward inputs require the exact retained policy and joint scenarios",
+        )
     if preparation.conditional_capital is not None:
         raise PreparationError(
             "CONDITIONAL_CAPITAL_OVERRIDE_UNSUPPORTED",
@@ -1120,11 +1131,17 @@ def _prepare_automatic_valuation(
     working_capital_inputs: tuple[CompositeWorkingCapitalInputV1, ...] = (),
     conditional_capital_policy: ConditionalCapitalPolicyV1 | None = None,
     conditional_quote: CommonShareQuoteV1 | None = None,
+    conditional_reinvestment_policy: ConditionalReinvestmentPolicyV1 | None = None,
 ) -> AutomaticValuationPreparationV1:
     """Compose a deterministic valuation request or an explicit gate outcome."""
 
+    facts = tuple(facts)
     profile = (
-        conditional_capital_requirements_profile(
+        conditional_reinvestment_requirements_profile(
+            model_id, conditional_capital=conditional_capital_policy is not None
+        )
+        if conditional_reinvestment_policy is not None
+        else conditional_capital_requirements_profile(
             model_id, composite_inputs=bool(working_capital_inputs)
         )
         if conditional_capital_policy is not None
@@ -1143,6 +1160,20 @@ def _prepare_automatic_valuation(
             fact_id for item in working_capital_inputs for fact_id in item.fact_ids
         ),
     )
+    if conditional_reinvestment_policy is not None and working_capital_inputs:
+        return _blocked_preparation(
+            status="abstained",
+            quality=QualityStatus.ABSTAIN,
+            profile=profile,
+            model_id=model_id,
+            model_version=model_version,
+            policy_id=policy_id,
+            policy_version=policy_version,
+            issues=("CONDITIONAL_REINVESTMENT_POLICY_CONFLICT",),
+            missing=(),
+            facts=selected.facts,
+            snapshot=snapshot,
+        )
     if any(item.mapping_version != mapping_version for item in working_capital_inputs):
         return _blocked_preparation(
             status="abstained",
@@ -1196,16 +1227,44 @@ def _prepare_automatic_valuation(
                 facts=selected.facts,
                 snapshot=snapshot,
             )
+    conditional_operating = None
     try:
-        history = resolve_annual_history(
-            selected.facts,
-            snapshot=snapshot,
-            valuation_timestamp=snapshot.valuation_timestamp,
-            profile=profile,
-            working_capital_inputs=working_capital_inputs,
-        )
-        metrics = derive_historical_metrics(history)
-    except (PreparationError, AnnualHistoryError) as error:
+        if conditional_reinvestment_policy is not None:
+            if (
+                conditional_reinvestment_policy.recipe.model_id,
+                conditional_reinvestment_policy.recipe.model_version,
+            ) != (model_id, model_version):
+                raise PreparationError(
+                    "CONDITIONAL_REINVESTMENT_MODEL_MISMATCH",
+                    "forward hypotheses require the exact composer model/version",
+                )
+            conditional_operating = compose_conditional_operating_forecasts(
+                conditional_reinvestment_policy,
+                facts,
+                snapshot=snapshot,
+                mapping_version=mapping_version,
+            )
+            history = resolve_annual_history(
+                conditional_operating.assessment.source_facts,
+                snapshot=snapshot,
+                valuation_timestamp=snapshot.valuation_timestamp,
+                profile=reinvestment_history_requirements_profile(model_id),
+            )
+            metrics = conditional_operating.historical_metrics
+        else:
+            history = resolve_annual_history(
+                selected.facts,
+                snapshot=snapshot,
+                valuation_timestamp=snapshot.valuation_timestamp,
+                profile=profile,
+                working_capital_inputs=working_capital_inputs,
+            )
+            metrics = derive_historical_metrics(history)
+    except (
+        PreparationError,
+        AnnualHistoryError,
+        ConditionalReinvestmentError,
+    ) as error:
         metrics = HistoricalMetricsV1(
             profile_id=profile.profile_id,
             profile_digest=profile.digest,
@@ -1237,7 +1296,11 @@ def _prepare_automatic_valuation(
             snapshot=snapshot,
         )
     try:
-        forecast = compose_forecast_assumptions(history, metrics)
+        forecast = (
+            conditional_operating.scenarios[0].forecast
+            if conditional_operating is not None
+            else compose_forecast_assumptions(history, metrics)
+        )
     except PreparationError as error:
         return _blocked_from_metrics(
             metrics.model_copy(
@@ -1459,6 +1522,14 @@ def _prepare_automatic_valuation(
                 *(item.output_digest for item in metrics.working_capital_assessments),
                 *(
                     (
+                        conditional_operating.output_digest,
+                        conditional_operating.assessment.policy.recipe.assumption_document_digest,
+                    )
+                    if conditional_operating is not None
+                    else ()
+                ),
+                *(
+                    (
                         conditional_assessment.output_digest,
                         conditional_quote.content_hash,
                     )
@@ -1511,7 +1582,9 @@ def _prepare_automatic_valuation(
             taxonomy_version=snapshot.taxonomy_manifest_id or "sec-taxonomy-v1",
             policy_version=policy_version,
             preparation_version=(
-                CONDITIONAL_FORECAST_COMPOSER_VERSION
+                CONDITIONAL_REINVESTMENT_COMPOSER_VERSION
+                if conditional_operating is not None
+                else CONDITIONAL_FORECAST_COMPOSER_VERSION
                 if conditional_assessment is not None
                 else FORECAST_COMPOSER_VERSION
             ),
@@ -1525,22 +1598,68 @@ def _prepare_automatic_valuation(
         model_version=model_version,
         policy_id=policy_id,
     ).with_digest()
-    if conditional_assessment is not None:
+    if conditional_assessment is not None or conditional_operating is not None:
+        scenario_names: tuple[Literal["base", "downside", "upside"], ...] = (
+            "base",
+            "downside",
+            "upside",
+        )
+        capital_scenarios = (
+            {
+                row.hypothesis.name: row.bridge
+                for row in conditional_assessment.scenarios
+            }
+            if conditional_assessment is not None
+            else {}
+        )
+        operating_scenarios = (
+            {
+                row.hypothesis.name: row.forecast
+                for row in conditional_operating.scenarios
+            }
+            if conditional_operating is not None
+            else {}
+        )
+        if (
+            capital_scenarios
+            and operating_scenarios
+            and capital_scenarios.keys() != operating_scenarios.keys()
+        ):
+            raise PreparationError(
+                "CONDITIONAL_SCENARIO_NAMES_MISMATCH",
+                "joint hypotheses must share all three exact scenario names",
+            )
         request = request.model_copy(
             update={
                 "uncertainty": UncertaintyV1(
                     mode="scenarios",
                     scenarios=tuple(
                         ScenarioInputV1(
-                            name=row.hypothesis.name,
+                            name=name,
                             assumptions={
-                                f"assumptions.capital_bridge.{field}": getattr(
-                                    row.bridge, field
-                                )
-                                for field in CapitalBridgeAssumptionsV1.model_fields
+                                **(
+                                    {
+                                        f"assumptions.capital_bridge.{field}": getattr(
+                                            capital_scenarios[name], field
+                                        )
+                                        for field in CapitalBridgeAssumptionsV1.model_fields
+                                    }
+                                    if capital_scenarios
+                                    else {}
+                                ),
+                                **(
+                                    {
+                                        f"assumptions.forecast.reinvestment_rate[{index}]": value
+                                        for index, value in enumerate(
+                                            operating_scenarios[name].reinvestment_rate
+                                        )
+                                    }
+                                    if operating_scenarios
+                                    else {}
+                                ),
                             },
                         )
-                        for row in conditional_assessment.scenarios
+                        for name in scenario_names
                     ),
                 ),
             }
@@ -1722,17 +1841,21 @@ def _prepare_automatic_valuation(
             )
             for index in range(_FORECAST_PERIODS)
         ),
-        *tuple(
-            _assumption_evidence(
-                f"assumptions.forecast.reinvestment_rate[{index}]",
-                forecast.reinvestment_rate[index],
-                "derived",
-                "clamp(mean(historical reinvestment_rate), -1, 1)",
-                facts=reinvestment_facts,
-                policy_version=policy_version,
-                as_of=latest_fact_time(reinvestment_facts),
+        *(
+            _conditional_reinvestment_assumptions_evidence(conditional_operating)
+            if conditional_operating is not None
+            else tuple(
+                _assumption_evidence(
+                    f"assumptions.forecast.reinvestment_rate[{index}]",
+                    forecast.reinvestment_rate[index],
+                    "derived",
+                    "clamp(mean(historical reinvestment_rate), -1, 1)",
+                    facts=reinvestment_facts,
+                    policy_version=policy_version,
+                    as_of=latest_fact_time(reinvestment_facts),
+                )
+                for index in range(_FORECAST_PERIODS)
             )
-            for index in range(_FORECAST_PERIODS)
         ),
         _assumption_evidence(
             "assumptions.wacc.tax_rate",
@@ -1781,6 +1904,8 @@ def _prepare_automatic_valuation(
             conditional_capital=conditional_assessment,
             conditional_quote=conditional_quote,
         )
+    if conditional_operating is not None:
+        digest_payload["conditional_operating"] = conditional_operating
     digest = sha256_digest(digest_payload)
     return AutomaticValuationPreparationV1(
         status="prepared",
@@ -1800,6 +1925,7 @@ def _prepare_automatic_valuation(
         equity_dilution=dilution,
         conditional_capital=conditional_assessment,
         conditional_quote=conditional_quote,
+        conditional_operating=conditional_operating,
     )
 
 
@@ -1819,6 +1945,7 @@ def prepare_automatic_valuation(
     working_capital_inputs: tuple[CompositeWorkingCapitalInputV1, ...] = (),
     conditional_capital_policy: ConditionalCapitalPolicyV1 | None = None,
     conditional_quote: CommonShareQuoteV1 | None = None,
+    conditional_reinvestment_policy: ConditionalReinvestmentPolicyV1 | None = None,
 ) -> AutomaticValuationPreparationV1:
     """Compose exact or explicitly versioned composite inputs; retain all refusals."""
 
@@ -1837,6 +1964,7 @@ def prepare_automatic_valuation(
         working_capital_inputs=inputs,
         conditional_capital_policy=conditional_capital_policy,
         conditional_quote=conditional_quote,
+        conditional_reinvestment_policy=conditional_reinvestment_policy,
     )
     if not inputs:
         return result
@@ -1849,6 +1977,30 @@ def prepare_automatic_valuation(
     }
     return AutomaticValuationPreparationV1.model_validate(
         {**payload, "preparation_digest": sha256_digest(payload)}
+    )
+
+
+def _conditional_reinvestment_assumptions_evidence(
+    operating: ConditionalOperatingForecastsV1,
+) -> tuple[AssumptionEvidenceV1, ...]:
+    policy = operating.assessment.policy
+    return tuple(
+        _assumption_evidence(
+            f"assumptions.forecast.reinvestment_rate[{index}]",
+            value,
+            "approved_policy",
+            "source-bound base forward hypothesis; historical reinvestment remains unknown",
+            facts=operating.assessment.source_facts,
+            trace=TraceV1(
+                source_refs=(
+                    operating.output_digest,
+                    policy.recipe.assumption_document_digest,
+                )
+            ),
+            policy_version=policy.protocol + ":" + policy.digest,
+            as_of=policy.valuation_timestamp,
+        ).model_copy(update={"editable": False})
+        for index, value in enumerate(operating.scenarios[0].forecast.reinvestment_rate)
     )
 
 

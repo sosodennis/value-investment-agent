@@ -380,6 +380,7 @@ def _reviewed_candidate(fixture, *, quote_providers=None):
                     EQUITY_QUOTE_SOURCE_ROLE,
                     QUOTE_ADMISSION_ROLE,
                     QUOTE_TERMS_ROLE,
+                    "conditional-reinvestment-assumptions-v1",
                 }
             ),
         ),

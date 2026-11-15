@@ -115,6 +115,7 @@ from ..uncertainty import (
 )
 from ..valuation_preparation import (
     CONDITIONAL_FORECAST_COMPOSER_VERSION,
+    CONDITIONAL_REINVESTMENT_COMPOSER_VERSION,
     ApprovedMarketPolicyInputsV1,
     AutomaticValuationPreparationV1,
     ManualValuationOverrideRequestV1,
@@ -128,6 +129,9 @@ from ..valuation_release_inputs import (
     valuation_release_conditional_capital,
     valuation_release_requirements,
     valuation_release_working_capital_inputs,
+)
+from ..conditional_reinvestment_release import (
+    valuation_release_conditional_reinvestment,
 )
 
 
@@ -1367,6 +1371,13 @@ class FundamentalApplication:
                 error.code, str(error), status_code=422, retryable=False
             ) from error
         try:
+            reinvestment = valuation_release_conditional_reinvestment(
+                manifest,
+                snapshot,
+                evidence.facts,
+                mapping_version=evidence.mapping_version or "sec-canonical-mapping-v1",
+                artifacts=self.artifact_store,
+            )
             conditional = valuation_release_conditional_capital(
                 manifest,
                 snapshot,
@@ -1418,6 +1429,9 @@ class FundamentalApplication:
             if conditional is not None
             else None,
             conditional_quote=conditional_quote,
+            conditional_reinvestment_policy=reinvestment.policy
+            if reinvestment is not None
+            else None,
         )
 
     def apply_manual_override(
@@ -1799,11 +1813,16 @@ class FundamentalApplication:
         manifest = self._data_release_manifest(
             value.valuation_context.data_release_manifest_digest
         )
-        tagged = (
-            value.provenance.preparation_version
-            == CONDITIONAL_FORECAST_COMPOSER_VERSION
-        )
-        if manifest is None or not manifest.conditional_capital_policies:
+        reinvestment = bool(manifest and manifest.conditional_reinvestment_policies)
+        prefix = "CONDITIONAL_REINVESTMENT" if reinvestment else "CONDITIONAL_CAPITAL"
+        tagged = value.provenance.preparation_version in {
+            CONDITIONAL_FORECAST_COMPOSER_VERSION,
+            CONDITIONAL_REINVESTMENT_COMPOSER_VERSION,
+        }
+        if manifest is None or not (
+            manifest.conditional_capital_policies
+            or manifest.conditional_reinvestment_policies
+        ):
             if tagged:
                 raise ServiceError(
                     "CONDITIONAL_CAPITAL_RELEASE_MISSING",
@@ -1814,8 +1833,8 @@ class FundamentalApplication:
             return False
         if value.model_id != "fcff_dcf" and value.model_id != "transition_fcff_dcf":
             raise ServiceError(
-                "CONDITIONAL_CAPITAL_MODEL_MISMATCH",
-                "conditional capital requires a released FCFF composer",
+                f"{prefix}_MODEL_MISMATCH",
+                "conditional inputs require a released FCFF composer",
                 status_code=422,
                 retryable=False,
             )
@@ -1838,7 +1857,7 @@ class FundamentalApplication:
             value.model_dump(exclude={"input_digest", "caller_approval"})
         ):
             raise ServiceError(
-                "CONDITIONAL_CAPITAL_INPUT_MISMATCH",
+                f"{prefix}_INPUT_MISMATCH",
                 "conditional calculation requires the exact recomposed release input and joint scenarios",
                 status_code=422,
                 retryable=False,
