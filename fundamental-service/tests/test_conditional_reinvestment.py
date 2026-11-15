@@ -332,6 +332,61 @@ def test_context_must_match_the_observed_period_currency_and_identity(updates):
     assert caught.value.code == "CONDITIONAL_REINVESTMENT_SOURCE_INVALID"
 
 
+def test_nonannual_core_candidate_is_refused_alongside_complete_history():
+    recipe, facts, snapshot = _case()
+    assert _bind(recipe, facts, snapshot).fiscal_years == (2023, 2024, 2025)
+    quarter = facts[0].model_copy(
+        update={
+            "fact_id": "quarterly-core-flow",
+            "period_start": date(2023, 10, 1),
+            "context": facts[0].context.model_copy(
+                update={"start_date": date(2023, 10, 1)}
+            ),
+        }
+    )
+    with pytest.raises(ConditionalReinvestmentError) as caught:
+        _bind(recipe, (*facts, quarter), snapshot)
+    assert caught.value.code == "CONDITIONAL_REINVESTMENT_SOURCE_INVALID"
+
+
+def test_original_cannot_be_available_before_period_end():
+    recipe, facts, snapshot = _case()
+    assert _bind(recipe, facts, snapshot).fiscal_years == (2023, 2024, 2025)
+    sources = {
+        source.content_hash: source.model_copy(
+            update={"available_at": datetime(2023 + index, 12, 30, tzinfo=UTC)}
+        )
+        for index, source in enumerate(snapshot.source_records)
+    }
+    early = tuple(
+        fact.model_copy(
+            update={
+                "available_at": sources[fact.source.content_hash].available_at,
+                "source": fact.source.model_copy(
+                    update={
+                        "available_at": sources[fact.source.content_hash].available_at
+                    }
+                ),
+            }
+        )
+        for fact in facts
+    )
+    snapshot = _with_sources(snapshot, sources.values())
+    with pytest.raises(ConditionalReinvestmentError) as caught:
+        _bind(recipe, early, snapshot)
+    assert caught.value.code == "CONDITIONAL_REINVESTMENT_SOURCE_INVALID"
+
+
+def test_failed_original_http_receipt_is_refused():
+    recipe, facts, snapshot = _case()
+    assert _bind(recipe, facts, snapshot).fiscal_years == (2023, 2024, 2025)
+    source = snapshot.source_records[0].model_copy(update={"http_status": 403})
+    snapshot = _with_sources(snapshot, (source, *snapshot.source_records[1:]))
+    with pytest.raises(ConditionalReinvestmentError) as caught:
+        _bind(recipe, facts, snapshot)
+    assert caught.value.code == "CONDITIONAL_REINVESTMENT_SOURCE_INVALID"
+
+
 @pytest.mark.parametrize(
     "field,code",
     (

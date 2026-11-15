@@ -9,7 +9,12 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
-from .annual_history import AnnualHistoryError, AnnualHistoryV1, resolve_annual_history
+from .annual_history import (
+    AnnualHistoryError,
+    AnnualHistoryV1,
+    is_annual_duration_fact,
+    resolve_annual_history,
+)
 from .conditional_reinvestment_contracts import (
     CONDITIONAL_REINVESTMENT_POLICY,
     REINVESTMENT_CORE_FIELDS,
@@ -231,6 +236,7 @@ def _resolve_history(
             or source.source_id != "sec-filing"
             or source.role is not SourceRole.FILING
             or source.form != "10-K"
+            or source.http_status != 200
             or source.is_amendment
             or source.available_at > snapshot.valuation_timestamp
             or fact.issuer_id != snapshot.identity.issuer_id
@@ -245,8 +251,10 @@ def _resolve_history(
             or fact.source.source_role is not SourceRole.FILING
             or fact.available_at != source.available_at
             or fact.source.available_at != source.available_at
+            or source.available_at.date() < fact.period_end
             or fact.period_end > snapshot.valuation_timestamp.date()
             or fact.period_start is None
+            or not is_annual_duration_fact(fact)
             or fact.instant is not None
             or fact.context.period_type is not PeriodType.DURATION
             or fact.context.start_date != fact.period_start

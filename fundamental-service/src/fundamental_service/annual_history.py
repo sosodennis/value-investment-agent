@@ -30,6 +30,18 @@ _MIN_ANNUAL_DAYS = 300
 _MAX_ANNUAL_DAYS = 380
 
 
+def is_annual_duration_fact(fact: CanonicalFactV1) -> bool:
+    """Apply the shared FCFF annual-duration window to a candidate fact."""
+
+    return (
+        fact.context.period_type.value == "duration"
+        and fact.period_start is not None
+        and _MIN_ANNUAL_DAYS
+        <= (fact.period_end - fact.period_start).days
+        <= _MAX_ANNUAL_DAYS
+    )
+
+
 class AnnualHistoryError(ValueError):
     def __init__(self, code: str, message: str) -> None:
         super().__init__(message)
@@ -154,12 +166,8 @@ def resolve_annual_history(
             fact
             for fact in eligible
             if fact.normalized_field == field
-            and fact.context.period_type.value == "duration"
-            and fact.period_start is not None
+            and is_annual_duration_fact(fact)
             and fact.period_end <= valuation_timestamp.date()
-            and _MIN_ANNUAL_DAYS
-            <= (fact.period_end - fact.period_start).days
-            <= _MAX_ANNUAL_DAYS
         )
         by_year: dict[int, list[CanonicalFactV1]] = {}
         for fact in field_facts:
@@ -362,5 +370,6 @@ __all__ = [
     "AnnualHistoryError",
     "AnnualHistoryPeriodV1",
     "AnnualHistoryV1",
+    "is_annual_duration_fact",
     "resolve_annual_history",
 ]

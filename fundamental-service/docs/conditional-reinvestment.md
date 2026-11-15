@@ -28,7 +28,9 @@ revenue, operating income, pre-tax income and tax expense. Each period's four
 flows must share one original. The shared history resolver handles period
 alignment, concept conflicts and latest-available selection. Assessment rejects
 stale fact references and invalid source, context, mapping, unit or date
-bindings; it cannot select away an invalid supplied core candidate. Canonical
+bindings. Every supplied core candidate must be annual under the shared history
+window, and its original must have an HTTP 200 receipt and be available on or
+after its period-end. It cannot select away an invalid supplied core candidate. Canonical
 ordering makes replay independent of input order. `supported_history_threshold`
 stays null and assessments remain provisional.
 
