@@ -64,8 +64,8 @@ from .serialization import sha256_digest
 from .taxonomy_evidence import require_original_taxonomy
 
 AUTOMATIC_MAPPING_INPUT_ROLE = "automatic-mapping-input-v1"
-AutomaticMappingPolicyVersion = Literal["source-bound-us-gaap-v26"]
-AUTOMATIC_MAPPING_POLICY: AutomaticMappingPolicyVersion = "source-bound-us-gaap-v26"
+AutomaticMappingPolicyVersion = Literal["source-bound-us-gaap-v27"]
+AUTOMATIC_MAPPING_POLICY: AutomaticMappingPolicyVersion = "source-bound-us-gaap-v27"
 _GAAP_NAMESPACE = re.compile(
     r"http://(?:fasb\.org|xbrl\.us)/us-gaap/\d{4}(?:-\d{2}-\d{2})?"
 )
@@ -81,6 +81,8 @@ class DirectMappingRule:
         "iso4217:USD/xbrli:shares",
     ] = "iso4217:USD"
     alternative_concepts: tuple[str, ...] = ()
+    namespace_uris: tuple[str, ...] = ()
+    nonnegative: bool = False
 
     @property
     def concepts(self) -> tuple[str, ...]:
@@ -129,6 +131,15 @@ _RULES = {
     ),
     "cash_and_equivalents": DirectMappingRule(
         "us-gaap:CashAndCashEquivalentsAtCarryingValue", "instant"
+    ),
+    "long_term_interest_bearing_debt": DirectMappingRule(
+        "us-gaap:LongTermDebtNoncurrent",
+        "instant",
+        namespace_uris=(
+            "http://fasb.org/us-gaap/2024",
+            "http://fasb.org/us-gaap/2025",
+        ),
+        nonnegative=True,
     ),
     "current_operating_lease_liabilities": DirectMappingRule(
         "us-gaap:OperatingLeaseLiabilityCurrent", "instant"
@@ -193,6 +204,15 @@ def automatic_mapping_policy_digest() -> str:
     )
 
 
+def _direct_debt_present(
+    original: OriginalIssuerEvidenceV1, normalized_field: str
+) -> bool:
+    return normalized_field == "long_term_interest_bearing_debt" and any(
+        fact.concept == "us-gaap:LongTermDebtNoncurrent" and not fact.dimensions
+        for fact in original.report.facts
+    )
+
+
 class AutomaticMappingSourceV1(ReleaseModel):
     source_revision: str = Field(pattern=r"^[0-9a-f]{40}$")
     evaluator_id: str = Field(min_length=1)
@@ -236,7 +256,11 @@ def automatic_mapping_proposal(
         else None
     )
     liability_residual = (
-        normalized_field in LIABILITY_RESIDUAL_ROLES and lease_concept is None
+        normalized_field in LIABILITY_RESIDUAL_ROLES
+        and lease_concept is None
+        and not (
+            original is not None and _direct_debt_present(original, normalized_field)
+        )
     )
     if option_cost and (
         original is None
@@ -412,7 +436,9 @@ def _observation_rejection(
     fact: ParsedXbrlFactV1, request: AutomaticMappingRequestV1, rule: DirectMappingRule
 ) -> str | None:
     original = request.original
-    if not _GAAP_NAMESPACE.fullmatch(fact.namespace_uri or ""):
+    if not _GAAP_NAMESPACE.fullmatch(fact.namespace_uri or "") or (
+        rule.namespace_uris and fact.namespace_uri not in rule.namespace_uris
+    ):
         return "MAPPING_NAMESPACE_UNSUPPORTED"
     if (
         fact.entity_scheme != "http://www.sec.gov/CIK"
@@ -429,7 +455,8 @@ def _observation_rejection(
     if not fact.is_numeric or fact.unit != rule.unit:
         return "MAPPING_UNIT_UNSUPPORTED"
     try:
-        if not Decimal(fact.value).is_finite():
+        value = Decimal(fact.value)
+        if not value.is_finite() or (rule.nonnegative and value < 0):
             return "MAPPING_VALUE_INVALID"
     except InvalidOperation:
         return "MAPPING_VALUE_INVALID"
@@ -585,6 +612,8 @@ def evaluate_automatic_mapping(
                 p.period.period_end for p in leases.rules.periods
             )
     if liability_residual:
+        if _direct_debt_present(original, proposal.normalized_field):
+            reasons.add("MAPPING_DEBT_DIRECT_REPRESENTATION_REQUIRED")
         liabilities = select_registered_liability_residual(
             original,
             proposal.normalized_field,

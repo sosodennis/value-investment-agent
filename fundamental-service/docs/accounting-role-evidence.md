@@ -562,6 +562,32 @@ provider request, valuation formula, financial selector, public schema or agent
 implementation changes. The remaining accounting/award/market gaps still block
 complete numerical valuation; supported-history thresholds stay null.
 
+### Standard noncurrent debt carrying amount
+
+Automatic policy `source-bound-us-gaap-v27` supports consolidated instant
+`us-gaap:LongTermDebtNoncurrent` in the FASB 2024 and 2025 namespaces. The
+[2024](https://xbrl.fasb.org/us-gaap/2024/elts/us-gaap-doc-2024.xml) and
+[2025](https://xbrl.fasb.org/us-gaap/2025/elts/us-gaap-doc-2025.xml) official
+definitions specify long-term debt classified as noncurrent, after unamortized
+premium/discount and issuance costs, excluding lease obligations. Retained
+document SHA-256 values are
+`96b321b294493af54253a45e3694e85d501857cb4029ba2529089ad9d7880872` and
+`27f1d4ba06b0dcb0c91225db2ac746d5adefc167518fa3948abbdfb944dab019`.
+
+This reusable rule selects reported carrying amounts without an issuer/accession
+allowlist. Existing original-integrity, taxonomy, SEC entity, USD, consolidation,
+instant, availability and precision gates apply; negative amounts and other
+namespace versions refuse. Conflicting observations abstain. The approved scope
+binds exact original/parser/report/observation identities, and machine-signed
+replay reproduces the same mapping. A residual proposal cannot override a
+reported consolidated noncurrent-debt representation.
+
+Current debt, total debt and lease-inclusive `DebtCurrent` cannot supply this
+role. A missing balance remains unknown. This mapping establishes neither a
+market value of debt, complete current debt, convertible treatment, award
+completeness nor a full capital bridge. Reported rounding remains in the facts;
+no accounting or valuation formula changes.
+
 ### Registered NVE noncurrent liability partition
 
 Automatic policy `source-bound-us-gaap-v10` also registers the same two complete
