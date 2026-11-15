@@ -29,6 +29,14 @@ from .automatic_mapping_batch import (
     AutomaticMappingBatchRequestV1,
 )
 from .automatic_source_mapping import AutomaticSourceMappingAuthority
+from .automatic_data_release import (
+    AutomaticDataReleasePolicyV1,
+    AutomaticDataReleaseService,
+)
+from .preparation_release import (
+    assemble_preparation_release,
+    read_preparation_release_artifact,
+)
 
 from .application import FundamentalApplication
 from .annual_history import AnnualHistoryError, resolve_annual_history
@@ -158,6 +166,9 @@ class SourcePreparationEvidenceV1(StrictModel):
     market_policy_deployment_ref: ArtifactRefV1 | None = Field(
         default=None, exclude_if=lambda value: value is None
     )
+    automatic_release_ref: ArtifactRefV1 | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
     status: Literal["approval_required", "blocked", "calculated", "release_required"]
     snapshot_id: str | None = None
     snapshot_manifest_digest: str | None = Field(
@@ -185,6 +196,17 @@ class SourcePreparationEvidenceV1(StrictModel):
 
     @model_validator(mode="after")
     def outcome_matches_evidence(self) -> SourcePreparationEvidenceV1:
+        automatic = self.automatic_release_ref
+        if automatic is not None and (
+            automatic.role
+            not in {
+                "automatic-release-decision-v1",
+                "automatic-release-assembly-failure-v1",
+            }
+            or automatic.media_type != "application/json"
+            or self.snapshot_id is None
+        ):
+            raise ValueError("automatic release decision requires its exact snapshot")
         capital = self.conditional_capital_binding_ref
         if capital is not None and (
             capital.role != "conditional-capital-binding-v1"
@@ -308,6 +330,8 @@ class SourcePreparationRunner:
         public_admission: PublicSourceAdmission | None = None,
         issuer_market_preparation: IssuerMarketPreparation | None = None,
         market_policy_deployment: MarketPolicyDeployment | None = None,
+        automatic_release: AutomaticDataReleaseService | None = None,
+        automatic_release_policy: AutomaticDataReleasePolicyV1 | None = None,
     ) -> None:
         self._application = application
         self._metadata = metadata
@@ -318,6 +342,10 @@ class SourcePreparationRunner:
         self._public_acquisition = public_acquisition
         self._public_admission = public_admission
         self._issuer_market_preparation = issuer_market_preparation
+        if (automatic_release is None) != (automatic_release_policy is None):
+            raise ValueError("automatic release requires its deployment policy")
+        self._automatic_release = automatic_release
+        self._automatic_release_policy = automatic_release_policy
 
     def _plan_mappings(
         self, plan: SourcePreparationPlan
@@ -460,9 +488,18 @@ class SourcePreparationRunner:
         if groups is None:
             return False
         references = {item.decision_id: item for group in groups for item in group}
-        if not references.keys() <= released.keys():
+        if isinstance(plan, AutomaticSourcePreparationPlanV1):
+            mappings_match = released.keys() <= references.keys()
+        else:
+            mappings_match = references.keys() <= released.keys()
+        if not mappings_match:
             return False
         for key, reference in sorted(references.items()):
+            if (
+                isinstance(plan, AutomaticSourcePreparationPlanV1)
+                and key not in released
+            ):
+                continue
             mapping = self._metadata.get_mapping(key)
             if mapping.decision_id != key or sha256_digest(mapping) != released[key]:
                 raise ServiceError(
@@ -756,7 +793,17 @@ class SourcePreparationRunner:
     def _persist(
         self, plan: SourcePreparationPlan, evidence: SourcePreparationEvidenceV1
     ) -> ArtifactPublicationV1:
-        if plan.issuer_market_policy is not None and evidence.snapshot_id is not None:
+        assembly_failed = (
+            evidence.status == "blocked"
+            and evidence.automatic_release_ref is not None
+            and evidence.automatic_release_ref.role
+            == "automatic-release-assembly-failure-v1"
+        )
+        if (
+            not assembly_failed
+            and plan.issuer_market_policy is not None
+            and evidence.snapshot_id is not None
+        ):
             market, publication = self._prepare_issuer_market(
                 plan,
                 self._application.snapshot(evidence.snapshot_id),
@@ -798,7 +845,8 @@ class SourcePreparationRunner:
         )
         binding_ref = None
         if (
-            plan.valuation_working_capital_recipe is not None
+            not assembly_failed
+            and plan.valuation_working_capital_recipe is not None
             and evidence.snapshot_id is not None
             and self._plan_mappings(plan) is not None
         ):
@@ -819,7 +867,8 @@ class SourcePreparationRunner:
             )
         capital_ref = None
         if (
-            plan.conditional_capital_recipe is not None
+            not assembly_failed
+            and plan.conditional_capital_recipe is not None
             and evidence.snapshot_id is not None
             and self._plan_mappings(plan) is not None
         ):
@@ -894,6 +943,8 @@ class SourcePreparationRunner:
             dependencies += (evidence.issuer_market_preparation_ref.content_hash,)
         if evidence.market_policy_deployment_ref is not None:
             dependencies += (evidence.market_policy_deployment_ref.content_hash,)
+        if evidence.automatic_release_ref is not None:
+            dependencies += (evidence.automatic_release_ref.content_hash,)
         if evidence.snapshot_manifest_digest is not None:
             dependencies += (evidence.snapshot_manifest_digest,)
         if evidence.data_release_manifest_digest is not None:
@@ -1166,6 +1217,81 @@ class SourcePreparationRunner:
             role="automatic-mapping-batch-decision-v1",
         )
 
+    def _automatic_candidate(
+        self,
+        plan: AutomaticSourcePreparationPlanV1,
+        snapshot: SourceSnapshotV1,
+        outcomes: tuple[SourceAcquisitionOutcomeV1, ...],
+        admissions: tuple[PublicSourceAdmissionEvidenceV1, ...],
+    ) -> tuple[
+        DataReleaseCandidatePublishRequestV1 | None, ArtifactRefV1, tuple[str, ...]
+    ]:
+        assert self._automatic_release is not None
+        assert self._automatic_release_policy is not None
+        groups = self._plan_mappings(plan)
+        if groups is None:
+            raise DataReleaseError(
+                "AUTOMATIC_PREPARATION_MAPPING_EVIDENCE_MISSING",
+                "release assembly requires retained automatic source mappings",
+            )
+        working = self._bind_working_capital(plan, snapshot)
+        capital = self._bind_conditional_capital(plan, snapshot)
+        refs = tuple(ref for outcome in admissions for ref in outcome.release_refs)
+        if plan.issuer_market_policy is not None:
+            market, _ = self._prepare_issuer_market(plan, snapshot, admissions)
+            if market.issue_codes:
+                raise DataReleaseError(
+                    "AUTOMATIC_PREPARATION_MARKET_EVIDENCE_INVALID",
+                    ",".join(market.issue_codes),
+                )
+            refs += market.release_refs
+        request = assemble_preparation_release(
+            plan=plan,
+            snapshot=snapshot,
+            facts=self._plan_facts(plan, snapshot),
+            mappings=tuple(
+                self._metadata.get_mapping(key)
+                for key in sorted(
+                    {item.decision_id for group in groups for item in group}
+                )
+            ),
+            batch_refs=tuple(
+                item.mapping_evidence_ref
+                for item in outcomes
+                if item.mapping_evidence_ref is not None
+            ),
+            artifacts=self._application.artifact_store,
+            policy=self._automatic_release_policy,
+            working_capital_policy=working.policy
+            if working is not None
+            else plan.valuation_working_capital_policy,
+            conditional_capital_policy=capital.policy if capital is not None else None,
+            prepared_refs=refs,
+        )
+        receipt = self._automatic_release.verify_and_sign(request)
+        decision = receipt.decision_publication.artifact
+        ref = ArtifactRefV1(
+            artifact_id=decision.artifact_id,
+            content_hash=decision.content_hash,
+            media_type=decision.media_type,
+            role="automatic-release-decision-v1",
+        )
+        if receipt.candidate_publication is None:
+            return None, ref, receipt.decision.issue_codes
+        candidate_record = receipt.candidate_publication.artifact
+        candidate = read_preparation_release_artifact(
+            self._application.artifact_store,
+            ArtifactRefV1(
+                artifact_id=candidate_record.artifact_id,
+                content_hash=candidate_record.content_hash,
+                media_type=candidate_record.media_type,
+                role="automatic-release-candidate-v1",
+            ),
+            DataReleaseCandidatePublishRequestV1,
+        )
+        self.validate_candidate(plan, candidate)
+        return candidate, ref, ()
+
     def _acquire_public_sources(
         self, plan: SourcePreparationPlan, *, deadline_at: datetime
     ) -> tuple[PublicSourceAcquisitionEvidenceV1, ...]:
@@ -1296,6 +1422,20 @@ class SourcePreparationRunner:
         if deadline_at.tzinfo is None or deadline_at <= received_at:
             raise ValueError("runner deadline must be an unexpired zoned timestamp")
         guard_caller_approval(approval, caller_id=actor_id, received_at=received_at)
+        if self._automatic_release is not None and (
+            not isinstance(plan, AutomaticSourcePreparationPlanV1)
+            or candidate is not None
+        ):
+            raise ValueError(
+                "automatic release requires an automatic plan without an external candidate"
+            )
+        if (
+            self._automatic_release is not None
+            and market_policy_authorization is not None
+        ):
+            raise ValueError(
+                "automatic release requires an already deployed effective market policy"
+            )
         if (market_policy_authorization is None) != (
             market_policy_authorization_digest is None
         ):
@@ -1307,6 +1447,7 @@ class SourcePreparationRunner:
                 "market policy publication requires a signed candidate and deployment authority"
             )
         deployment_ref = None
+        automatic_release_ref = None
         if (
             plan.issuer_market_policy is not None
             and self._issuer_market_preparation is None
@@ -1535,7 +1676,11 @@ class SourcePreparationRunner:
             }:
                 raise ValueError("candidate does not contain the acquired snapshot")
             resolution = self._resolve(plan)
-            if candidate is None and resolution is None:
+            if (
+                candidate is None
+                and resolution is None
+                and self._automatic_release is None
+            ):
                 return self._persist(
                     plan,
                     SourcePreparationEvidenceV1(
@@ -1551,6 +1696,74 @@ class SourcePreparationRunner:
                         source_outcomes=outcomes,
                     ),
                 )
+        if outcomes:
+            # Recover provenance even if activation succeeds before the flow report.
+            self._persist_acquisitions(plan, outcomes)
+        if self._automatic_release is not None and resolution is None:
+            assert isinstance(plan, AutomaticSourcePreparationPlanV1)
+            try:
+                candidate, automatic_release_ref, release_issues = (
+                    self._automatic_candidate(
+                        plan, snapshot, outcomes, admission_outcomes
+                    )
+                )
+            except (
+                DataReleaseError,
+                SnapshotError,
+                ValueError,
+                OSError,
+                KeyError,
+            ) as error:
+                if (
+                    isinstance(error, (DataReleaseError, SnapshotError))
+                    and error.retryable
+                ):
+                    raise
+                code = (
+                    error.code
+                    if isinstance(error, (DataReleaseError, SnapshotError))
+                    else "AUTOMATIC_PREPARATION_EVIDENCE_INVALID"
+                )
+                failure = {
+                    "protocol": "automatic-release-assembly-failure-v1",
+                    "plan_digest": plan.digest,
+                    "snapshot_manifest_digest": snapshot.manifest_digest,
+                    "code": code,
+                    "message": str(error),
+                }
+                publication = self._artifacts.put_with_receipt(
+                    "automatic-release-assembly-failure-" + sha256_digest(failure),
+                    failure,
+                    (plan.digest, snapshot.manifest_digest),
+                )
+                automatic_release_ref = ArtifactRefV1(
+                    artifact_id=publication.artifact.artifact_id,
+                    content_hash=publication.artifact.content_hash,
+                    media_type=publication.artifact.media_type,
+                    role="automatic-release-assembly-failure-v1",
+                )
+                release_issues = (code,)
+                candidate = None
+            if candidate is None:
+                return self._persist(
+                    plan,
+                    SourcePreparationEvidenceV1(
+                        source_revision=plan.source_revision,
+                        plan_digest=plan.digest,
+                        status="blocked",
+                        snapshot_id=snapshot.snapshot_id,
+                        snapshot_manifest_digest=snapshot.manifest_digest,
+                        issue_codes=release_issues,
+                        source_outcomes=outcomes,
+                        public_source_outcomes=public_outcomes,
+                        public_source_cutoff=plan.public_source_cutoff,
+                        source_admission_outcomes=admission_outcomes,
+                        automatic_release_ref=automatic_release_ref,
+                    ),
+                )
+            # Successful provenance is retained by the stored signed verification.
+            # Serving an already active release must produce the same flow artifact.
+            automatic_release_ref = None
         if plan.issuer_market_policy is not None:
             market_manifest: DataReleaseManifestV1 | None
             if candidate is not None:
@@ -1589,6 +1802,7 @@ class SourcePreparationRunner:
                         public_source_cutoff=plan.public_source_cutoff,
                         source_admission_outcomes=admission_outcomes,
                         status="blocked",
+                        automatic_release_ref=automatic_release_ref,
                         snapshot_id=market_snapshot.snapshot_id,
                         snapshot_manifest_digest=market_snapshot.manifest_digest,
                         issue_codes=market_issues,
@@ -1626,6 +1840,7 @@ class SourcePreparationRunner:
                             snapshot_manifest_digest=deployment_snapshot.manifest_digest,
                             data_release_manifest_digest=candidate.manifest.manifest_digest,
                             issue_codes=(error.code,),
+                            automatic_release_ref=automatic_release_ref,
                             source_outcomes=outcomes,
                         ),
                     )
@@ -1675,6 +1890,7 @@ class SourcePreparationRunner:
                         ).manifest_digest,
                         data_release_manifest_digest=resolution.data_release_manifest_digest,
                         market_policy_deployment_ref=deployment_ref,
+                        automatic_release_ref=automatic_release_ref,
                         issue_codes=("SOURCE_ADMISSION_RELEASE_MISMATCH",),
                         source_outcomes=outcomes,
                     ),
@@ -1707,6 +1923,7 @@ class SourcePreparationRunner:
                     snapshot_manifest_digest=snapshot_digest,
                     data_release_manifest_digest=resolution.data_release_manifest_digest,
                     market_policy_deployment_ref=deployment_ref,
+                    automatic_release_ref=automatic_release_ref,
                     issue_codes=(error.code,),
                     source_outcomes=outcomes,
                 ),
@@ -1725,6 +1942,7 @@ class SourcePreparationRunner:
                     snapshot_manifest_digest=snapshot_digest,
                     data_release_manifest_digest=resolution.data_release_manifest_digest,
                     market_policy_deployment_ref=deployment_ref,
+                    automatic_release_ref=automatic_release_ref,
                     issue_codes=preparation.issue_codes,
                     missing_evidence=preparation.missing_evidence,
                     source_outcomes=outcomes,
@@ -1745,6 +1963,7 @@ class SourcePreparationRunner:
                     snapshot_manifest_digest=snapshot_digest,
                     data_release_manifest_digest=resolution.data_release_manifest_digest,
                     market_policy_deployment_ref=deployment_ref,
+                    automatic_release_ref=automatic_release_ref,
                     source_outcomes=outcomes,
                     preparation=preparation,
                 ),
@@ -1765,6 +1984,7 @@ class SourcePreparationRunner:
                     snapshot_manifest_digest=snapshot_digest,
                     data_release_manifest_digest=resolution.data_release_manifest_digest,
                     market_policy_deployment_ref=deployment_ref,
+                    automatic_release_ref=automatic_release_ref,
                     issue_codes=("CALLER_APPROVAL_REJECTED",),
                     source_outcomes=outcomes,
                     preparation=preparation,
@@ -1802,6 +2022,7 @@ class SourcePreparationRunner:
                 snapshot_manifest_digest=snapshot_digest,
                 data_release_manifest_digest=resolution.data_release_manifest_digest,
                 market_policy_deployment_ref=deployment_ref,
+                automatic_release_ref=automatic_release_ref,
                 issue_codes=preparation.issue_codes,
                 missing_evidence=preparation.missing_evidence,
                 source_outcomes=outcomes,
@@ -1931,6 +2152,49 @@ async def _run_command(args: argparse.Namespace) -> ArtifactPublicationV1:
                 taxonomy_cache_dir=acquisition.settings.taxonomy_cache_dir,
                 taxonomy_cache_sha256=acquisition.settings.taxonomy_cache_sha256,
             )
+        automatic_release = None
+        automatic_release_policy = None
+        if (args.automatic_release_policy is None) != (
+            args.release_private_key is None
+        ):
+            raise ValueError(
+                "automatic release requires deployment policy and signing key"
+            )
+        if args.automatic_release_policy is not None:
+            if (
+                not isinstance(plan, AutomaticSourcePreparationPlanV1)
+                or not trust_roots_file
+                or not args.runtime_source_revision
+                or candidate is not None
+                or application.snapshot_repository is None
+                or application.fact_repository is None
+            ):
+                raise ValueError(
+                    "automatic release requires automatic source preparation and configured trust"
+                )
+            release_key = serialization.load_pem_private_key(
+                args.release_private_key.read_bytes(), password=None
+            )
+            if not isinstance(release_key, Ed25519PrivateKey):
+                raise ValueError("automatic release requires an Ed25519 deployment key")
+            automatic_release_policy = AutomaticDataReleasePolicyV1.model_validate_json(
+                args.automatic_release_policy.read_bytes()
+            )
+            automatic_release = AutomaticDataReleaseService(
+                snapshots=application.snapshot_repository,
+                facts=application.fact_repository,
+                mappings=app.state.metadata_store,
+                artifacts=application.artifact_store,
+                trust_roots=DataReleaseTrustRootsV1.from_file(Path(trust_roots_file)),
+                policy=automatic_release_policy,
+                private_key=release_key,
+                source_revision=args.runtime_source_revision,
+                quote_providers=application.quote_providers,
+                macro_providers=application.macro_providers,
+                reference_providers=application.reference_providers,
+                source_use_policy=application.source_use_policy,
+                policy_registry=application.policy_registry,
+            )
         public_acquisition = None
         if plan.public_sources:
             user_agent = os.getenv("FUNDAMENTAL_PUBLIC_SOURCE_USER_AGENT") or os.getenv(
@@ -2007,6 +2271,8 @@ async def _run_command(args: argparse.Namespace) -> ArtifactPublicationV1:
             issuer_market_preparation=_runtime_issuer_market_preparation(application)
             if plan.issuer_market_policy is not None
             else None,
+            automatic_release=automatic_release,
+            automatic_release_policy=automatic_release_policy,
         )
         runner.validate_candidate(plan, candidate)
         selected = None
@@ -2074,6 +2340,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--market-policy-authorization-digest")
     parser.add_argument("--approval", type=Path)
     parser.add_argument("--machine-private-key", type=Path)
+    parser.add_argument("--automatic-release-policy", type=Path)
+    parser.add_argument("--release-private-key", type=Path)
     parser.add_argument("--runtime-source-revision")
     parser.add_argument("--actor", required=True)
     parser.add_argument("--organization", required=True)

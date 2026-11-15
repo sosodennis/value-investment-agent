@@ -50,6 +50,8 @@ def _args(tmp_path, annual_request):
         organization="test-organization",
         machine_private_key=tmp_path / "machine-key.pem",
         candidate=None,
+        automatic_release_policy=None,
+        release_private_key=None,
         approval=None,
         market_policy_authorization=None,
         market_policy_authorization_digest=None,
@@ -92,7 +94,10 @@ def _discovery_result(evidence, prepared, *, wrote=False):
     }
 
 
-def test_issuer_entry_compiles_then_runs_formal_preparation(tmp_path, monkeypatch):
+@pytest.mark.parametrize("automatic_release", (False, True))
+def test_issuer_entry_compiles_then_runs_formal_preparation(
+    tmp_path, monkeypatch, automatic_release
+):
     original_case = case(tmp_path, monkeypatch)
     prepared, _ = execute(original_case)
     compiler, request = compiler_case(original_case, prepared)
@@ -123,6 +128,8 @@ def test_issuer_entry_compiles_then_runs_formal_preparation(tmp_path, monkeypatc
         assert arguments[arguments.index("--actor") + 1] == "service-operator"
         assert arguments[arguments.index("--organization") + 1] == "test-organization"
         assert "--approval" not in arguments
+        assert ("--automatic-release-policy" in arguments) == automatic_release
+        assert ("--release-private-key" in arguments) == automatic_release
         return {
             "artifact": {
                 "artifact_id": "source-preparation:abc",
@@ -135,8 +142,12 @@ def test_issuer_entry_compiles_then_runs_formal_preparation(tmp_path, monkeypatc
     monkeypatch.setattr(
         "fundamental_service.issuer_preparation_runner._run_child", invoke
     )
-    result = _execute(_args(tmp_path, original_case.annual_request))
-    repeated = _execute(_args(tmp_path, original_case.annual_request))
+    args = _args(tmp_path, original_case.annual_request)
+    if automatic_release:
+        args.automatic_release_policy = tmp_path / "deployment-policy.json"
+        args.release_private_key = tmp_path / "release-key.pem"
+    result = _execute(args)
+    repeated = _execute(args)
 
     assert [module.rsplit(".", 1)[-1] for module, _, _ in calls[:2]] == [
         "annual_discovery_runner",
