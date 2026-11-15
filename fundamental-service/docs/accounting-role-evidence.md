@@ -906,7 +906,7 @@ independent completeness proof.
 
 ### Original printed security-title representation
 
-Original identity selection policy `original-dei-paired-common-stock-v4` is the
+Original identity selection policy `original-dei-paired-common-stock-v5` is the
 default for automatic source preparation. The v3 policy extends the v2 printed common-stock
 dollar-par forms to allow an omitted `per share` suffix, for example
 `Common Stock, par value $1`. The exact original printed title is retained.
@@ -935,6 +935,23 @@ DEI `tradingSymbolItemType` limit of25 characters (for example `BOND 27`).
 The selected common-stock ticker retains its strict15-character provider form.
 All original scope checks still run on each note pair. This preserves a source
 symbol; it does not translate symbols, retrieve note prices or value debt.
+
+v5 additionally accepts a supported fixed-coupon note whose class context has
+an explicit true `dei:NoTradingSymbolFlag` and no `dei:TradingSymbol`. SEC's
+[DEI2026 definition](https://xbrl.sec.gov/dei/2026/dei-2026_doc.xsd) is
+"Boolean flag that is true only for a security having no trading symbol."
+The reviewed 2023–2026 definitions agree. The retained 2026 documentation and
+schema SHA-256 values are
+`b279fd36631237dc974fde3150cfe0e043e64c39ce5a26ec8783303d4de75a4c`
+and `678f0bb9560a5c6a6679ecc134ead63e3a3b999946d1b8cfe59b29002098756e`.
+
+The flag and note title must share a reviewed DEI namespace, issuer and annual
+duration with the selected common security, with a distinct class dimension and
+no numeric unit or instant. Missing, false, conflicting, orphan or misplaced flags
+refuse automatic selection, as do unknown or additional equity titles. No note
+symbol is invented. The common-stock ticker and all symbol-bearing note pairs
+still pass their existing complete identity checks. v1–v4 retain their explicit
+historical behavior; v39 automatic mapping binds this identity implementation.
 
 ### Standard common-equity component shares
 

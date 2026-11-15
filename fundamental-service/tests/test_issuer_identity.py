@@ -166,6 +166,135 @@ def _class_scoped_original():
     )
 
 
+def _note_with_no_trading_symbol():
+    facts = _class_scoped_original()
+    note = facts[-1]
+    return (
+        *facts,
+        note.model_copy(update={"concept": "dei:NoTradingSymbolFlag", "value": "true"}),
+    )
+
+
+def test_explicit_no_symbol_note_does_not_obscure_unique_common_stock():
+    facts = _note_with_no_trading_symbol()
+    identity = _resolve_original(
+        facts, security_selection_policy="original-dei-paired-common-stock-v5"
+    )
+    assert identity.security_id == "AAPL"
+    assert identity.share_class == "Common Stock"
+    assert (
+        _resolve_original(
+            tuple(reversed((*facts, *facts))),
+            security_selection_policy="original-dei-paired-common-stock-v5",
+        )
+        == identity
+    )
+
+
+@pytest.mark.parametrize(
+    "policy",
+    (
+        "original-dei-paired-common-stock-v2",
+        "original-dei-paired-common-stock-v3",
+        "original-dei-paired-common-stock-v4",
+    ),
+)
+def test_old_paired_policies_keep_no_symbol_note_refusal(policy):
+    with pytest.raises(IdentityResolutionError) as error:
+        _resolve_original(
+            _note_with_no_trading_symbol(), security_selection_policy=policy
+        )
+    assert error.value.code == "HISTORICAL_SECURITY_SELECTION_REQUIRED"
+
+
+@pytest.mark.parametrize(
+    "change",
+    (
+        {"value": "false"},
+        {"value": "0"},
+        {"value": "1"},
+        {"value": " true "},
+        {"value": "TRUE"},
+        {"value": ""},
+        {"entity_identifier": "0000320194"},
+        {"entity_scheme": "https://example.test/CIK"},
+        {"namespace_uri": "https://example.test/dei/2024"},
+        {"namespace_uri": "http://xbrl.sec.gov/dei/2027"},
+        {"namespace_uri": "http://xbrl.sec.gov/dei/2025"},
+        {"period_end": date(2025, 9, 28)},
+        {"period_start": None},
+        {"unit": "xbrli:shares"},
+        {"is_numeric": True},
+        {"instant": date(2024, 9, 28)},
+        {"context_id": "orphan-flag"},
+        {"dimensions": ()},
+    ),
+)
+def test_invalid_no_symbol_evidence_keeps_automatic_selection_unknown(change):
+    facts = _note_with_no_trading_symbol()
+    facts = (*facts[:-1], facts[-1].model_copy(update=change))
+    with pytest.raises(IdentityResolutionError) as error:
+        _resolve_original(
+            facts, security_selection_policy=DEFAULT_ORIGINAL_SECURITY_POLICY
+        )
+    assert error.value.code == "HISTORICAL_SECURITY_SELECTION_REQUIRED"
+
+
+@pytest.mark.parametrize("contradiction", ("missing", "false_duplicate", "symbol"))
+def test_no_symbol_note_requires_explicit_uncontradicted_evidence(contradiction):
+    facts = _note_with_no_trading_symbol()
+    if contradiction == "missing":
+        facts = facts[:-1]
+    elif contradiction == "false_duplicate":
+        facts = (*facts, facts[-1].model_copy(update={"value": "false"}))
+    else:
+        facts = (
+            *facts,
+            facts[-1].model_copy(
+                update={"concept": "dei:TradingSymbol", "value": "NOTE27"}
+            ),
+        )
+    with pytest.raises(IdentityResolutionError):
+        _resolve_original(
+            facts, security_selection_policy=DEFAULT_ORIGINAL_SECURITY_POLICY
+        )
+
+
+@pytest.mark.parametrize(
+    "title", ("Class B Common Stock", "Preferred Stock", "Unknown security")
+)
+def test_no_symbol_flag_does_not_classify_another_equity_or_unknown_instrument(title):
+    facts = tuple(
+        f.model_copy(update={"value": title})
+        if f.context_id == "listed-note" and f.concept == "dei:Security12bTitle"
+        else f
+        for f in _note_with_no_trading_symbol()
+    )
+    with pytest.raises(IdentityResolutionError):
+        _resolve_original(
+            facts, security_selection_policy=DEFAULT_ORIGINAL_SECURITY_POLICY
+        )
+
+
+def test_no_symbol_note_cannot_reuse_the_common_stock_class_dimension():
+    facts = tuple(
+        f.model_copy(
+            update={
+                "dimensions": (
+                    ("us-gaap:StatementClassOfStockAxis", "us-gaap:CommonStockMember"),
+                )
+            }
+        )
+        if f.context_id == "listed-note"
+        else f
+        for f in _note_with_no_trading_symbol()
+    )
+    with pytest.raises(IdentityResolutionError):
+        _resolve_original(
+            facts, security_selection_policy=DEFAULT_ORIGINAL_SECURITY_POLICY
+        )
+
+
 def test_original_identity_selects_ticker_and_title_in_one_class_context():
     facts = _class_scoped_original()
     _check_original(facts)
@@ -1198,7 +1327,11 @@ def test_v3_preserves_selected_ticker_and_unselected_symbol_boundaries(context, 
     "title", ("Common stock, no par value", "COMMON STOCK, NO PAR VALUE")
 )
 @pytest.mark.parametrize("representation", ("single", "distinct_note", "reused_note"))
-def test_paired_v4_selects_explicit_no_par_common_stock(title, representation):
+@pytest.mark.parametrize(
+    "policy",
+    ("original-dei-paired-common-stock-v4", "original-dei-paired-common-stock-v5"),
+)
+def test_paired_v4_selects_explicit_no_par_common_stock(title, representation, policy):
     source = {
         "single": _original_identity_facts,
         "distinct_note": _common_and_distinct_note,
@@ -1210,15 +1343,13 @@ def test_paired_v4_selects_explicit_no_par_common_stock(title, representation):
         else f
         for f in source
     )
-    assert DEFAULT_ORIGINAL_SECURITY_POLICY == "original-dei-paired-common-stock-v4"
-    identity = _resolve_original(
-        facts, security_selection_policy=DEFAULT_ORIGINAL_SECURITY_POLICY
-    )
+    assert DEFAULT_ORIGINAL_SECURITY_POLICY == "original-dei-paired-common-stock-v5"
+    identity = _resolve_original(facts, security_selection_policy=policy)
     assert identity.security_id == "AAPL" and identity.share_class == title
     assert (
         _resolve_original(
             tuple(reversed((*facts, *facts))),
-            security_selection_policy=DEFAULT_ORIGINAL_SECURITY_POLICY,
+            security_selection_policy=policy,
         )
         == identity
     )
@@ -1244,7 +1375,11 @@ def test_paired_v4_selects_explicit_no_par_common_stock(title, representation):
         "Common stock, no par value\nCommon stock",
     ),
 )
-def test_paired_v4_requires_the_complete_supported_printed_title(title):
+@pytest.mark.parametrize(
+    "policy",
+    ("original-dei-paired-common-stock-v4", "original-dei-paired-common-stock-v5"),
+)
+def test_paired_v4_requires_the_complete_supported_printed_title(title, policy):
     facts = tuple(
         f.model_copy(update={"value": title})
         if f.concept == "dei:Security12bTitle"
@@ -1252,7 +1387,5 @@ def test_paired_v4_requires_the_complete_supported_printed_title(title):
         for f in _original_identity_facts()
     )
     with pytest.raises(IdentityResolutionError) as error:
-        _resolve_original(
-            facts, security_selection_policy=DEFAULT_ORIGINAL_SECURITY_POLICY
-        )
+        _resolve_original(facts, security_selection_policy=policy)
     assert error.value.code == "HISTORICAL_SECURITY_SELECTION_REQUIRED"

@@ -32,15 +32,17 @@ OriginalSecuritySelectionPolicy = Literal[
     "original-dei-paired-common-stock-v2",
     "original-dei-paired-common-stock-v3",
     "original-dei-paired-common-stock-v4",
+    "original-dei-paired-common-stock-v5",
 ]
 DEFAULT_ORIGINAL_SECURITY_POLICY: OriginalSecuritySelectionPolicy = (
-    "original-dei-paired-common-stock-v4"
+    "original-dei-paired-common-stock-v5"
 )
 _PAIRED_SECURITY_POLICIES = frozenset(
     {
         "original-dei-paired-common-stock-v2",
         "original-dei-paired-common-stock-v3",
         "original-dei-paired-common-stock-v4",
+        "original-dei-paired-common-stock-v5",
     }
 )
 OriginalHistoryIdentityPolicy = Literal["original-history-name-format-v1"]
@@ -167,11 +169,92 @@ def _single_standard_common_title(
     return common[0]
 
 
+def _no_symbol_note_contexts(
+    facts: tuple[ParsedXbrlFactV1, ...],
+) -> frozenset[_SecurityContext] | None:
+    flags = tuple(f for f in facts if f.concept == "dei:NoTradingSymbolFlag")
+    if not flags:
+        return frozenset()
+    symbols = tuple(f for f in facts if f.concept == "dei:TradingSymbol")
+    scope = {
+        (
+            f.entity_scheme,
+            f.entity_identifier,
+            f.period_start,
+            f.period_end,
+            f.namespace_uri,
+        )
+        for f in symbols
+    }
+    if len(scope) != 1:
+        return None
+    reference = next(iter(scope))
+    contexts = frozenset(
+        (f.context_id, f.period_start, f.period_end, f.dimensions) for f in flags
+    )
+    for context in contexts:
+        members = tuple(
+            f
+            for f in facts
+            if f.concept
+            in {"dei:NoTradingSymbolFlag", "dei:Security12bTitle", "dei:TradingSymbol"}
+            and (f.context_id, f.period_start, f.period_end, f.dimensions) == context
+        )
+        titles = {
+            " ".join(f.value.split())
+            for f in members
+            if f.concept == "dei:Security12bTitle"
+        }
+        if (
+            len(titles) != 1
+            or context[3] in {f.dimensions for f in symbols}
+            or re.fullmatch(
+                r"[0-9]+(?:\.[0-9]+)?% notes due [0-9]{4}",
+                next(iter(titles)).casefold(),
+            )
+            is None
+            or any(f.concept == "dei:TradingSymbol" for f in members)
+            or any(
+                f.value != "true"
+                for f in members
+                if f.concept == "dei:NoTradingSymbolFlag"
+            )
+            or any(
+                (
+                    f.entity_scheme,
+                    f.entity_identifier,
+                    f.period_start,
+                    f.period_end,
+                    f.namespace_uri,
+                )
+                != reference
+                or f.namespace_uri
+                not in {
+                    f"http://xbrl.sec.gov/dei/{year}"
+                    for year in (2023, 2024, 2025, 2026)
+                }
+                or f.unit is not None
+                or f.is_numeric
+                or f.instant is not None
+                or f.period_start is None
+                or f.period_end is None
+                or f.period_start > f.period_end
+                or len(f.dimensions) != 1
+                or f.dimensions[0][0] != "us-gaap:StatementClassOfStockAxis"
+                or not f.dimensions[0][1]
+                for f in members
+            )
+        ):
+            return None
+    return contexts
+
+
 def _paired_common_security(
     facts: tuple[ParsedXbrlFactV1, ...],
     *,
     allow_omitted_per_share: bool,
     allow_no_par_value: bool,
+    allow_no_symbol_notes: bool,
 ) -> tuple[str, str, tuple[tuple[str, str], ...]] | None:
     """Classify paired printed DEI titles, without interpreting custom member names."""
 
@@ -183,9 +266,13 @@ def _paired_common_security(
         context = (fact.context_id, fact.period_start, fact.period_end, fact.dimensions)
         target = symbols if fact.concept == "dei:TradingSymbol" else titles
         target.setdefault(context, set()).add(" ".join(fact.value.split()))
+    no_symbol_notes = (
+        _no_symbol_note_contexts(facts) if allow_no_symbol_notes else frozenset()
+    )
     if (
         not symbols
-        or symbols.keys() != titles.keys()
+        or no_symbol_notes is None
+        or symbols.keys() != titles.keys() - no_symbol_notes
         or any(
             len(values) != 1 or "" in values
             for values in (*symbols.values(), *titles.values())
@@ -243,6 +330,7 @@ def resolve_original_filing_identity(
             "original-dei-paired-common-stock-v2",
             "original-dei-paired-common-stock-v3",
             "original-dei-paired-common-stock-v4",
+            "original-dei-paired-common-stock-v5",
         )
     ):
         raise refuse(
@@ -264,9 +352,15 @@ def resolve_original_filing_identity(
             in {
                 "original-dei-paired-common-stock-v3",
                 "original-dei-paired-common-stock-v4",
+                "original-dei-paired-common-stock-v5",
             },
             allow_no_par_value=security_selection_policy
-            == "original-dei-paired-common-stock-v4",
+            in {
+                "original-dei-paired-common-stock-v4",
+                "original-dei-paired-common-stock-v5",
+            },
+            allow_no_symbol_notes=security_selection_policy
+            == "original-dei-paired-common-stock-v5",
         )
         if security_selection_policy in _PAIRED_SECURITY_POLICIES
         else None
@@ -364,6 +458,7 @@ def resolve_original_filing_identity(
         if security_selection_policy in {
             "original-dei-paired-common-stock-v3",
             "original-dei-paired-common-stock-v4",
+            "original-dei-paired-common-stock-v5",
         } and (symbol, title) != (ticker, identity.share_class):
             symbol_pattern = r"[A-Z0-9][A-Z0-9. -]{0,24}"
         if not re.fullmatch(symbol_pattern, symbol):
