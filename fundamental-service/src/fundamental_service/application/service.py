@@ -679,6 +679,8 @@ class FundamentalApplication:
                     )
                 facts.append(fact)
         except SnapshotError as error:
+            if error.code != "FACT_NOT_FOUND":
+                raise _snapshot_error(error) from error
             raise ServiceError(
                 "FACT_NOT_FOUND",
                 "a release-declared canonical fact is unavailable",

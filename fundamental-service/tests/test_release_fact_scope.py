@@ -21,6 +21,7 @@ from fundamental_service.metadata import (
 from fundamental_service.operations import ServiceError
 from fundamental_service.replay import CacheLifecycle
 from fundamental_service.serialization import canonical_bytes
+from fundamental_service.snapshots import SnapshotError
 from test_preparation_runner import _fixture
 
 
@@ -96,7 +97,11 @@ def release_facts_case(tmp_path, request):
 
     try:
         yield SimpleNamespace(
-            fixture=fixture, facts=facts, change_payload=change_payload, read=read
+            fixture=fixture,
+            facts=facts,
+            store=request.param,
+            change_payload=change_payload,
+            read=read,
         )
     finally:
         if metadata is not None:
@@ -155,6 +160,34 @@ def test_declared_fact_damage_is_refused_including_after_cache_hit(
     with pytest.raises(ServiceError) as error:
         case.read(operation)
 
-    assert error.value.code == (
-        "DATA_RELEASE_FACT_MISMATCH" if damage == "changed" else "FACT_NOT_FOUND"
+    expected_code = (
+        "DATA_RELEASE_FACT_MISMATCH"
+        if damage == "changed"
+        else "METADATA_CORRUPT"
+        if damage == "corrupt" and case.store == "postgres"
+        else "FACT_NOT_FOUND"
     )
+    assert error.value.code == expected_code
+
+
+@pytest.mark.parametrize("operation", ("default", "fiscal", "facts", "valuation"))
+def test_temporary_release_fact_failure_preserves_retryability(
+    release_facts_case, operation, monkeypatch
+):
+    case = release_facts_case
+    expected = case.read(operation)
+    assert case.read(operation) == expected
+
+    def unavailable(_fact_id):
+        raise SnapshotError(
+            "METADATA_NOT_READY", "metadata is temporarily unavailable", retryable=True
+        )
+
+    monkeypatch.setattr(case.facts, "get", unavailable)
+
+    with pytest.raises(ServiceError) as error:
+        case.read(operation)
+
+    assert error.value.code == "METADATA_NOT_READY"
+    assert error.value.status_code == 503
+    assert error.value.retryable is True
