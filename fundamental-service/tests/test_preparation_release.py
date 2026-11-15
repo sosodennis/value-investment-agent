@@ -500,9 +500,22 @@ def test_automatic_runner_reuses_active_release_and_retains_pre_activation_sourc
         ingestions=(request,),
     )
     acquisition = _acquisition(fixture)
-    acquisition.retained_acquisition = lambda _: SimpleNamespace(
-        canonical_fact_ids=tuple(fact.fact_id for fact in fixture.facts.list())
-    )
+    completed = []
+    execute = acquisition.execute
+
+    def capture(request, **kwargs):
+        result = execute(request, **kwargs).model_copy(
+            update={
+                "canonical_fact_ids": tuple(
+                    fact.fact_id for fact in fixture.facts.list()
+                )
+            }
+        )
+        completed.append(result)
+        return result
+
+    acquisition.execute = capture
+    acquisition.retained_acquisition = lambda _: completed[-1] if completed else None
     runner = SourcePreparationRunner(
         application=fixture.application,
         metadata=fixture.metadata,

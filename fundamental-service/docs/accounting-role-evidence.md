@@ -1018,3 +1018,25 @@ The report is additive and omitted when the exact-plan snapshot or mappings are
 unavailable. It uses no company registrations, source downloads, separate
 mapping approvals or valuation formulas. The existing authenticated artifact API
 returns the inventory as part of the source preparation evidence.
+
+## Source preparation role diagnostics
+
+The existing `source-fact-evidence-inventory-v1` now attaches optional
+`mapping_refusals` to each role. Each entry identifies the exact SEC original
+content hash and accession, retained automatic-mapping batch artifact, proposal
+index (zero is the primary proposal), and refusal reason codes. Secondary
+proposals remain visible even when another representation supplies an observation.
+Multiple annual originals retain their separate diagnostic entries.
+
+The preparation runner validates the batch artifact bytes and its input digest,
+then binds the original to its stored source snapshot. Inventory assembly requires
+the original accession/hash to belong to an available filing in the aggregate
+snapshot and the role to belong to the service model requirements. Entries are
+deduplicated and ordered deterministically. An empty diagnostic field is omitted
+so previously retained inventories retain their canonical serialization.
+
+These entries explain automatic mapping abstentions; they do not grant source
+admission, validate financial completeness, allocate award compensation, infer
+absent claims, or turn a missing observation into zero. An observation and a
+refused alternative may coexist. Financial sufficiency and exact or conditional
+model eligibility remain with the accounting, capital, dilution and model owners.

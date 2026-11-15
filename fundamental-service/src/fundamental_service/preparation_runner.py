@@ -100,6 +100,7 @@ from .conditional_reinvestment_preparation import (
 from .conditional_reinvestment_release import validate_reinvestment_assumption_document
 from .valuation_release_inputs import valuation_input_requirements
 from .valuation_fact_evidence import (
+    SourceMappingRefusalV1,
     SourceFactEvidenceInventoryV1,
     build_source_fact_inventory,
 )
@@ -810,7 +811,33 @@ class SourcePreparationRunner:
         except SnapshotError as error:
             if error.code != "ARTIFACT_NOT_FOUND":
                 raise
-            return ()
+            if not isinstance(plan, AutomaticSourcePreparationPlanV1):
+                return ()
+            assert self._acquisition is not None
+            outcomes = []
+            for request in plan.ingestions:
+                acquired = self._acquisition.retained_acquisition(request)
+                if acquired is None or acquired.snapshot_id is None:
+                    return ()
+                snapshot = self._application.snapshot(acquired.snapshot_id)
+                if snapshot.manifest_digest != acquired.manifest_digest:
+                    raise ValueError("retained acquisition differs from its snapshot")
+                outcomes.append(
+                    SourceAcquisitionOutcomeV1(
+                        request_digest=sha256_digest(request),
+                        accession_number=request.filing.accession_number,
+                        quality_status=acquired.quality_status,
+                        snapshot_id=acquired.snapshot_id,
+                        manifest_digest=acquired.manifest_digest,
+                        issue_codes=tuple(sorted(set(acquired.issue_codes))),
+                        missing_evidence=tuple(sorted(set(acquired.missing_evidence))),
+                        source_coverage_status=snapshot.coverage_status,
+                        mapping_evidence_ref=self._mapping_evidence_ref(
+                            acquired.mapping_evidence_ref
+                        ),
+                    )
+                )
+            return tuple(outcomes)
         if (
             record.status != "valid"
             or record.retention != "evidence"
@@ -1025,6 +1052,7 @@ class SourcePreparationRunner:
                     self._plan_facts(plan, inventory_snapshot),
                     snapshot=inventory_snapshot,
                     profile=plan.requirements_profile,
+                    mapping_refusals=self._mapping_refusals(evidence.source_outcomes),
                 )
         evidence = SourcePreparationEvidenceV1.model_validate(
             {
@@ -1366,6 +1394,56 @@ class SourcePreparationRunner:
             media_type=record.media_type,
             role="automatic-mapping-batch-decision-v1",
         )
+
+    def _mapping_refusals(
+        self, outcomes: tuple[SourceAcquisitionOutcomeV1, ...]
+    ) -> tuple[SourceMappingRefusalV1, ...]:
+        """Project retained batch reasons after the plan-mapping boundary validates pins."""
+        refusals = []
+        for outcome in outcomes:
+            if outcome.mapping_evidence_ref is None or outcome.snapshot_id is None:
+                continue
+            snapshot = self._application.snapshot(outcome.snapshot_id)
+            batch = read_preparation_release_artifact(
+                self._application.artifact_store,
+                outcome.mapping_evidence_ref,
+                AutomaticMappingBatchDecisionV1,
+            )
+            batch_input = AutomaticMappingBatchRequestV1.model_validate_json(
+                self._application.artifact_store.read(
+                    "automatic-mapping-batch-input-" + batch.input_digest
+                )
+            )
+            source = batch_input.original.source
+            if (
+                snapshot.manifest_digest != outcome.manifest_digest
+                or sha256_digest(batch_input) != batch.input_digest
+                or source.cik != snapshot.identity.issuer_id
+                or source.accession_number != outcome.accession_number
+                or not any(
+                    record.role is SourceRole.FILING
+                    and record.accession_number == source.accession_number
+                    and record.content_hash == source.content_hash
+                    for record in snapshot.source_records
+                )
+            ):
+                raise ValueError(
+                    "mapping diagnostics require their exact original snapshot"
+                )
+            for role in batch.roles:
+                for index, proposal in enumerate(role.proposal_decisions()):
+                    if proposal.status == "abstain":
+                        refusals.append(
+                            SourceMappingRefusalV1(
+                                normalized_field=role.normalized_field,
+                                accession_number=source.accession_number,
+                                source_content_hash=source.content_hash,
+                                batch_ref=outcome.mapping_evidence_ref,
+                                proposal_index=index,
+                                reason_codes=tuple(sorted(set(proposal.reason_codes))),
+                            )
+                        )
+        return tuple(refusals)
 
     def _automatic_candidate(
         self,

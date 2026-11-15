@@ -5,7 +5,8 @@ from typing import Literal
 
 from pydantic import Field, model_validator
 
-from .contracts import CanonicalFactV1, SourceSnapshotV1, StrictModel
+from .contracts import CanonicalFactV1, SourceRole, SourceSnapshotV1, StrictModel
+from .data_releases import ArtifactRefV1
 from .facts import canonical_fact_digest
 from .serialization import sha256_digest
 from .valuation_requirements import (
@@ -29,12 +30,37 @@ class MappedFactObservationV1(FactEvidenceReferenceV1):
     unit: str
 
 
+class SourceMappingRefusalV1(StrictModel):
+    normalized_field: str = Field(min_length=1)
+    accession_number: str = Field(pattern=r"^[0-9]{10}-[0-9]{2}-[0-9]{6}$")
+    source_content_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    batch_ref: ArtifactRefV1
+    proposal_index: int = Field(ge=0)
+    reason_codes: tuple[str, ...] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def refusal_identifies_retained_mapping(self) -> "SourceMappingRefusalV1":
+        if (
+            self.batch_ref.role != "automatic-mapping-batch-decision-v1"
+            or self.batch_ref.media_type != "application/json"
+        ):
+            raise ValueError("mapping refusals require their retained batch reference")
+        if self.reason_codes != tuple(sorted(set(self.reason_codes))) or any(
+            not code for code in self.reason_codes
+        ):
+            raise ValueError("mapping refusal reasons must be nonempty and canonical")
+        return self
+
+
 class FactRoleEvidenceV1(StrictModel):
     normalized_field: str
     required: bool
     state: Literal["observations_available", "unknown"]
     observations: tuple[MappedFactObservationV1, ...]
     rejected_candidates: tuple[FactEvidenceReferenceV1, ...]
+    mapping_refusals: tuple[SourceMappingRefusalV1, ...] = Field(
+        default=(), exclude_if=lambda value: not value
+    )
 
     @model_validator(mode="after")
     def state_matches_observations(self) -> "FactRoleEvidenceV1":
@@ -44,6 +70,14 @@ class FactRoleEvidenceV1(StrictModel):
             item.fact_digest for item in self.rejected_candidates
         }:
             raise ValueError("a fact cannot be both accepted and rejected")
+        if any(
+            item.normalized_field != self.normalized_field
+            for item in self.mapping_refusals
+        ):
+            raise ValueError("mapping refusal must belong to its fact role")
+        keys = tuple(sha256_digest(item) for item in self.mapping_refusals)
+        if keys != tuple(sorted(set(keys))):
+            raise ValueError("mapping refusals must be distinct and ordered")
         return self
 
 
@@ -85,6 +119,7 @@ def build_source_fact_inventory(
     *,
     snapshot: SourceSnapshotV1,
     profile: ValuationRequirementsProfileV1,
+    mapping_refusals: tuple[SourceMappingRefusalV1, ...] = (),
 ) -> SourceFactEvidenceInventoryV1:
     """Retain every eligible observation, including unresolved duplicate groups.
 
@@ -93,6 +128,21 @@ def build_source_fact_inventory(
     """
     required = set(profile.required_fact_fields)
     roles = sorted(required | set(profile.supporting_fact_fields))
+    sources = {
+        (record.accession_number, record.content_hash)
+        for record in snapshot.source_records
+        if record.role is SourceRole.FILING
+        and record.available_at <= snapshot.valuation_timestamp
+    }
+    refusals = {sha256_digest(item): item for item in mapping_refusals}
+    if any(
+        item.normalized_field not in roles
+        or (item.accession_number, item.source_content_hash) not in sources
+        for item in refusals.values()
+    ):
+        raise ValueError(
+            "mapping refusals must bind available snapshot sources and roles"
+        )
     inputs = {canonical_fact_digest(fact): fact for fact in facts}
     relevant = tuple(inputs[key] for key in sorted(inputs))
     selection = select_released_facts(
@@ -140,6 +190,11 @@ def build_source_fact_inventory(
                 state="observations_available" if observations else "unknown",
                 observations=tuple(observations),
                 rejected_candidates=tuple(rejected),
+                mapping_refusals=tuple(
+                    item
+                    for _, item in sorted(refusals.items())
+                    if item.normalized_field == role
+                ),
             )
         )
     return SourceFactEvidenceInventoryV1(
