@@ -402,6 +402,79 @@ def test_command_does_not_print_credentials(monkeypatch, tmp_path, capsys):
     assert "secret" not in capsys.readouterr().err
 
 
+@pytest.mark.parametrize(
+    ("table", "identity_column", "digest_column"),
+    (
+        ("canonical_facts", "fact_id", "fact_digest"),
+        ("mapping_decisions", "mapping_id", "mapping_digest"),
+        ("snapshot_manifests", "snapshot_id", "manifest_digest"),
+    ),
+)
+def test_command_identifies_invalid_record_without_disclosing_payload(
+    monkeypatch, tmp_path, capsys, table, identity_column, digest_column
+):
+    identity = "private-record-identity"
+    source_hash = "a" * 64
+    payload = json.dumps(
+        {"source": {"content_hash": source_hash}, "private": "private-payload"}
+    )
+    path = tmp_path / "tables" / f"{table}.jsonl"
+    path.parent.mkdir()
+    path.write_bytes(canonical_bytes([identity, "b" * 64, payload]) + b"\n")
+    manifest = PersistenceBackupV1(
+        source_revision="1" * 40,
+        migration_digest="2" * 64,
+        schema_digest="3" * 64,
+        postgres_major=16,
+        tables=(
+            recovery.BackupTableV1(
+                name=table,
+                columns=(identity_column, digest_column, "payload"),
+                row_count=1,
+                file=recovery._file_record(path, tmp_path),
+            ),
+        ),
+        objects=(
+            recovery.BackupFileV1(
+                path=f"content/aa/{source_hash}.bin",
+                digest=source_hash,
+                byte_length=0,
+            ),
+        ),
+    )
+
+    async def refuse(*args, **kwargs):
+        recovery._verify_rows(tmp_path, manifest)
+        pytest.fail("invalid backup record was accepted")
+
+    monkeypatch.setattr(recovery, "export_backup", refuse)
+    monkeypatch.setenv("FUNDAMENTAL_SERVICE_DATABASE_URL", "private-database-url")
+    monkeypatch.setenv("FUNDAMENTAL_SERVICE_DATA_ROOT", str(tmp_path))
+    before = _inventory(tmp_path)
+    assert (
+        main(
+            [
+                "export",
+                "--destination",
+                str(tmp_path / "backup"),
+                "--source-revision",
+                "1" * 40,
+            ]
+        )
+        == 2
+    )
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "private-" not in captured.err
+    assert json.loads(captured.err) == {
+        "protocol": "fundamental-persistence-error-v1",
+        "code": "BACKUP_RECORD_CONTRACT_INVALID",
+        "table": table,
+        "record_identity_digest": sha256_digest(identity),
+    }
+    assert _inventory(tmp_path) == before
+
+
 def test_manifest_rejects_path_traversal():
     with pytest.raises(ValueError, match="match its digest"):
         PersistenceBackupV1.model_validate_json(

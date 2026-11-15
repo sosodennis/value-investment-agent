@@ -14,10 +14,10 @@ import sys
 import tempfile
 from importlib import resources
 from pathlib import Path
-from typing import Literal
+from typing import Literal, TypeVar
 
 import asyncpg
-from pydantic import Field, model_validator
+from pydantic import BaseModel, Field, ValidationError, model_validator
 
 from .contracts import CanonicalFactV1, SourceSnapshotV1, StrictModel
 from .facts import (
@@ -33,6 +33,30 @@ from .snapshots import SnapshotError
 
 class RecoveryError(RuntimeError):
     """A backup or target failed validation; existing evidence is retained."""
+
+
+BackupRecordTable = Literal[
+    "canonical_facts", "mapping_decisions", "snapshot_manifests"
+]
+RecordT = TypeVar("RecordT", bound=BaseModel)
+
+
+class RecoveryRecordError(RecoveryError):
+    """Identify a refused record without retaining its payload or raw identity."""
+
+    def __init__(self, table: BackupRecordTable, identity: str) -> None:
+        super().__init__("backup record does not satisfy the installed contract")
+        self.table = table
+        self.record_identity_digest = sha256_digest(identity)
+
+
+def _validate_backup_record(
+    model: type[RecordT], payload: str, *, table: BackupRecordTable, identity: str
+) -> RecordT:
+    try:
+        return model.model_validate_json(payload)
+    except ValidationError:
+        raise RecoveryRecordError(table, identity) from None
 
 
 class BackupFileV1(StrictModel):
@@ -327,7 +351,12 @@ def _verify_rows(root: Path, manifest: PersistenceBackupV1) -> None:
             elif table.name == "artifact_references":
                 require_content(row["content_hash"], row["media_type"])
             elif table.name == "snapshot_manifests":
-                snapshot = SourceSnapshotV1.model_validate_json(row["payload"])
+                snapshot = _validate_backup_record(
+                    SourceSnapshotV1,
+                    row["payload"],
+                    table="snapshot_manifests",
+                    identity=row["snapshot_id"],
+                )
                 if (
                     snapshot.manifest_digest != row["manifest_digest"]
                     or snapshot.snapshot_id != row["snapshot_id"]
@@ -339,9 +368,14 @@ def _verify_rows(root: Path, manifest: PersistenceBackupV1) -> None:
                 for source in snapshot.source_records:
                     require_content(source.content_hash, source.media_type)
             elif table.name == "canonical_facts":
-                if json.loads(row["payload"])["source"]["content_hash"] not in hashes:
+                fact = _validate_backup_record(
+                    CanonicalFactV1,
+                    row["payload"],
+                    table="canonical_facts",
+                    identity=row["fact_id"],
+                )
+                if fact.source.content_hash not in hashes:
                     raise RecoveryError("canonical fact source is absent from backup")
-                fact = CanonicalFactV1.model_validate_json(row["payload"])
                 if (
                     fact.fact_id != row["fact_id"]
                     or canonical_fact_digest(fact) != row["fact_digest"]
@@ -352,7 +386,12 @@ def _verify_rows(root: Path, manifest: PersistenceBackupV1) -> None:
                 if fact.accounting_evidence is not None:
                     accounting_facts.append(fact)
             elif table.name == "mapping_decisions":
-                mapping = CanonicalMappingV1.model_validate_json(row["payload"])
+                mapping = _validate_backup_record(
+                    CanonicalMappingV1,
+                    row["payload"],
+                    table="mapping_decisions",
+                    identity=row["mapping_id"],
+                )
                 if (
                     mapping.decision_id != row["mapping_id"]
                     or sha256_digest(mapping) != row["mapping_digest"]
@@ -692,6 +731,19 @@ def main(argv: list[str] | None = None) -> int:
                     manifest_digest=args.manifest_digest,
                 )
             )
+    except RecoveryRecordError as error:
+        print(
+            canonical_bytes(
+                {
+                    "protocol": "fundamental-persistence-error-v1",
+                    "code": "BACKUP_RECORD_CONTRACT_INVALID",
+                    "table": error.table,
+                    "record_identity_digest": error.record_identity_digest,
+                }
+            ).decode("utf-8"),
+            file=sys.stderr,
+        )
+        return 2
     except (
         RecoveryError,
         SnapshotError,
