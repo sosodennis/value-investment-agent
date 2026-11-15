@@ -3,7 +3,14 @@
 from __future__ import annotations
 
 from datetime import date, timedelta
-from decimal import Context, Decimal, InvalidOperation, localcontext, ROUND_HALF_EVEN
+from decimal import (
+    Context,
+    Decimal,
+    DecimalException,
+    InvalidOperation,
+    localcontext,
+    ROUND_HALF_EVEN,
+)
 import re
 from typing import Literal
 
@@ -736,6 +743,24 @@ def accounting_reported_decimals(
 ) -> int | None:
     if rule.disclosed_amount is not None:
         return rule.disclosed_amount.reported_decimals
+    if (
+        rule.disposition == "classified"
+        and len(rule.components) == 1
+        and isinstance(component := rule.components[0], AccountingComponentV1)
+        and component.sign == 1
+        and len(source_facts) == 1
+        and sha256_digest(fact := source_facts[0]) == component.parsed_fact_digest
+        and fact.is_numeric
+        and fact.decimals is not None
+        and re.fullmatch(r"-?[0-9]+", fact.decimals) is not None
+    ):
+        try:
+            amount = Decimal(fact.value)
+            with localcontext(Context(prec=34, rounding=ROUND_HALF_EVEN)):
+                if amount.is_finite() and +amount == amount:
+                    return int(fact.decimals)
+        except DecimalException:
+            return None
     disclosed = tuple(
         component
         for component in rule.components

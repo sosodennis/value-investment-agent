@@ -444,6 +444,16 @@ precision selector; the sum retains the coarsest known component precision, or
 unknown precision when a numeric component has no reported precision. The full
 narrative remains in canonical evidence and survives persistence/restore checks.
 
+Automatic policy `source-bound-us-gaap-v29` preserves reported decimals for a
+single numeric `classified` component when its amount is unchanged by the
+accounting evaluator's fixed 34-digit arithmetic. Reclassifying a reported lease
+balance from its current balance-sheet location changes no amount or unit, so
+its canonical fact retains the source decimals. Canonical decoding rechecks this
+metadata against the retained component. Missing, invalid or `INF` source
+decimals do not create a finite precision; neither does a rounded result.
+General sums, residuals and confirmed absence retain their existing behavior.
+Coarsest component resolution is not an error bound for a sum of rounded values.
+
 `complete_component=true` declares completeness only for the cited component;
 it cannot claim `complete_role`. Token membership validates transcription and
 date spelling, while a supported policy or retained independent review must

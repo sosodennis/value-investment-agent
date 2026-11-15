@@ -19,6 +19,7 @@ from fundamental_service.automatic_mapping_batch import (
     AutomaticMappingBatchDecisionV1,
 )
 from fundamental_service.automatic_mapping_runner import approve_mapping_batch
+from fundamental_service.contracts import CanonicalFactV1, QualityStatus
 from fundamental_service.data_releases import ArtifactRefV1, AutomaticMappingApprovalV1
 from fundamental_service.lease_liability_mapping import select_lease_liability
 from fundamental_service.original_issuer import evaluate_original_issuer
@@ -138,14 +139,15 @@ def lease_case(
 
 
 @pytest.mark.parametrize("kind", ["finance", "operating"])
+@pytest.mark.parametrize("decimals", ["-6", "0", "2", "INF"])
 @pytest.mark.parametrize(
     "noncurrent,expected", [(False, Decimal("20")), (True, Decimal("80"))]
 )
 def test_classified_lease_approval_rebuilds_and_replays_without_scope_loss(
-    tmp_path, kind, noncurrent, expected
+    tmp_path, kind, noncurrent, expected, decimals
 ):
     request, store, roots, role, _, current = lease_case(
-        tmp_path, kind=kind, noncurrent=noncurrent
+        tmp_path, kind=kind, noncurrent=noncurrent, change={"decimals": decimals}
     )
     receipt = approve(request, store, roots)
     decision = AutomaticMappingDecisionV1.model_validate_json(
@@ -163,6 +165,18 @@ def test_classified_lease_approval_rebuilds_and_replays_without_scope_loss(
         mapping=mapping,
     )
     assert len(candidates) == 1 and candidates[0].value == expected
+    expected_decimals = None if noncurrent or decimals == "INF" else int(decimals)
+    assert candidates[0].decimals == expected_decimals
+    fact = candidates[0].canonical_fact(quality=QualityStatus.VERIFIED)
+    assert CanonicalFactV1.model_validate_json(canonical_bytes(fact)) == fact
+    with pytest.raises(ValueError, match="computed role fact differs"):
+        CanonicalFactV1.model_validate_json(
+            canonical_bytes(
+                fact.model_copy(
+                    update={"decimals": 0 if expected_decimals is None else None}
+                )
+            )
+        )
     assert current in candidates[0].accounting_evidence.source_facts
     assert candidates[0].dimensions == ()
     approval = AutomaticMappingApprovalV1.model_validate_json(

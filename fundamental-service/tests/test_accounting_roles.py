@@ -12,6 +12,7 @@ from fundamental_service.accounting_roles import (
     AccountingRoleEvidenceV1,
     AccountingRoleRuleSetV1,
     DisclosedAmountV1,
+    accounting_reported_decimals,
 )
 from fundamental_service.arelle_parser import (
     ArelleParseReportV1,
@@ -31,6 +32,41 @@ from fundamental_service.snapshots import SnapshotError
 from test_history_composition import _changed, _original
 from test_valuation_preparation import _facts
 from test_postgres_metadata import DATABASE_URL
+
+
+@pytest.mark.parametrize(
+    "value,decimals",
+    [
+        ("12345678901234567890123456789012345", "0"),
+        ("20", None),
+        ("20", "INF"),
+        ("20", "invalid"),
+    ],
+)
+def test_classified_precision_does_not_invent_a_finite_output_precision(
+    value, decimals
+):
+    fact = ParsedXbrlFactV1(
+        concept="us-gaap:FinanceLeaseLiability",
+        context_id="classified-current",
+        value=value,
+        decimals=decimals,
+        is_numeric=True,
+        instant=date(2023, 12, 31),
+        unit="iso4217:USD",
+    )
+    rule = AccountingPeriodRuleV1(
+        period=AccountingPeriodV1(period_end=fact.instant, instant=True),
+        disposition="classified",
+        components=(
+            AccountingComponentV1(
+                parsed_fact_digest=sha256_digest(fact),
+                balance_sheet_location="other_current_liabilities",
+            ),
+        ),
+        rationale="Retain precision only when classification preserves the amount.",
+    )
+    assert accounting_reported_decimals(rule, (fact,)) is None
 
 
 def _fixture(*, disposition="derived", altered_fact=None, altered_passage=None):
