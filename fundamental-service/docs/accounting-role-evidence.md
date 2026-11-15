@@ -634,6 +634,22 @@ foreign namespaces, partial balances and missing roles still refuse. It does not
 classify issuer-extension concepts, combine current debt components, establish
 D&A/reinvestment scope or change the history threshold.
 
+### Standard 2026 balance concepts
+
+Automatic policy `source-bound-us-gaap-v38` extends the two direct balance rules
+above to FASB 2026. The [official 2026 definitions](https://xbrl.fasb.org/us-gaap/2026/elts/us-gaap-doc-2026.xml)
+are identical to their reviewed 2025 definitions. The [2026 XSD](https://xbrl.fasb.org/us-gaap/2026/elts/us-gaap-2026.xsd)
+also retains each concept's monetary item type, instant period, nillability and
+debit/credit balance. Retained documentation and XSD SHA-256 values are
+`320b4eb074533a8f939d3db104153e9870c24a20e89fb32037ac30b44d07abb2`
+and `5df2d5054b8a37ef1a00bbbad621317833e7c2cb65a421a283128efbd707da7e`.
+
+The same source-bound scope, issuer, unit, precision, conflict and signed-replay
+checks apply across reviewed years. Unreviewed years and foreign namespaces
+refuse. Noncurrent debt excludes leases; the cash/investment total is a composite
+exclusion, not pure cash or all non-operating assets. These representations
+establish neither complete capital claims nor model readiness.
+
 ### Registered NVE noncurrent liability partition
 
 Automatic policy `source-bound-us-gaap-v10` also registers the same two complete

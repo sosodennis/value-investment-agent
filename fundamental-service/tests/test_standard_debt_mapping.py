@@ -49,7 +49,7 @@ def debt_case(tmp_path, *, change=None, duplicate_value=None):
     )
 
 
-@pytest.mark.parametrize("year", (2023, 2024, 2025))
+@pytest.mark.parametrize("year", (2023, 2024, 2025, 2026))
 def test_standard_noncurrent_debt_rebuilds_and_replays_without_new_writes(
     tmp_path, year
 ):
@@ -103,6 +103,10 @@ def test_standard_noncurrent_debt_rebuilds_and_replays_without_new_writes(
     (
         (
             {"namespace_uri": "http://fasb.org/us-gaap/2022"},
+            "MAPPING_NAMESPACE_UNSUPPORTED",
+        ),
+        (
+            {"namespace_uri": "http://fasb.org/us-gaap/2027"},
             "MAPPING_NAMESPACE_UNSUPPORTED",
         ),
         (

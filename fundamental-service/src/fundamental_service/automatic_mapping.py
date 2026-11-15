@@ -66,8 +66,8 @@ from .taxonomy_evidence import require_original_taxonomy
 from .standard_accounting_representations import standard_accounting_representation
 
 AUTOMATIC_MAPPING_INPUT_ROLE = "automatic-mapping-input-v1"
-AutomaticMappingPolicyVersion = Literal["source-bound-us-gaap-v37"]
-AUTOMATIC_MAPPING_POLICY: AutomaticMappingPolicyVersion = "source-bound-us-gaap-v37"
+AutomaticMappingPolicyVersion = Literal["source-bound-us-gaap-v38"]
+AUTOMATIC_MAPPING_POLICY: AutomaticMappingPolicyVersion = "source-bound-us-gaap-v38"
 _GAAP_NAMESPACE = re.compile(
     r"http://(?:fasb\.org|xbrl\.us)/us-gaap/\d{4}(?:-\d{2}-\d{2})?"
 )
@@ -141,6 +141,7 @@ _RULES = {
             "http://fasb.org/us-gaap/2023",
             "http://fasb.org/us-gaap/2024",
             "http://fasb.org/us-gaap/2025",
+            "http://fasb.org/us-gaap/2026",
         ),
         nonnegative=True,
     ),
@@ -151,6 +152,7 @@ _RULES = {
             "http://fasb.org/us-gaap/2023",
             "http://fasb.org/us-gaap/2024",
             "http://fasb.org/us-gaap/2025",
+            "http://fasb.org/us-gaap/2026",
         ),
         nonnegative=True,
     ),

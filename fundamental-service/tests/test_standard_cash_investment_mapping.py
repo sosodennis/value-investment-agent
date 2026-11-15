@@ -29,7 +29,7 @@ def cash_case(tmp_path, *, change=None, duplicate_value=None):
     return request, store, roots, bundle
 
 
-@pytest.mark.parametrize("year", (2023, 2024, 2025))
+@pytest.mark.parametrize("year", (2023, 2024, 2025, 2026))
 def test_reported_total_supplies_one_cash_and_current_investment_exclusion(
     tmp_path, year
 ):
@@ -61,6 +61,14 @@ def test_reported_total_supplies_one_cash_and_current_investment_exclusion(
     (
         (
             {"namespace_uri": "http://fasb.org/us-gaap/2022"},
+            "MAPPING_NAMESPACE_UNSUPPORTED",
+        ),
+        (
+            {"namespace_uri": "http://fasb.org/us-gaap/2027"},
+            "MAPPING_NAMESPACE_UNSUPPORTED",
+        ),
+        (
+            {"namespace_uri": "https://example.test/us-gaap/2026"},
             "MAPPING_NAMESPACE_UNSUPPORTED",
         ),
         ({"value": "-1"}, "MAPPING_VALUE_INVALID"),
