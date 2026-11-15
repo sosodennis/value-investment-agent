@@ -55,9 +55,7 @@ class _Facts:
     def __init__(self, fact: CanonicalFactV1) -> None:
         self.fact = fact
 
-    def resolve(self, *, snapshot, valuation_timestamp, required_fields):
-        _ = snapshot, valuation_timestamp
-        assert required_fields == (self.fact.normalized_field,)
+    def list(self):
         return (self.fact,)
 
     def get(self, fact_id):
@@ -372,6 +370,59 @@ def test_release_canary_retains_all_declared_annual_periods(tmp_path: Path) -> N
 
     assert report.checked_fact_digests == tuple(
         sorted(canonical_fact_digest(fact) for fact in repository.list())
+    )
+
+
+@pytest.mark.parametrize("concept", ["us-gaap:Revenues", "us-gaap:SalesRevenueNet"])
+def test_release_canary_isolated_from_other_mapping_interpretations(
+    tmp_path: Path, concept: str
+) -> None:
+    runner, manifest, verification, repository = _history_candidate(tmp_path)
+    before = runner.validate(manifest, verification)
+    current = repository.get("fact-revenue")
+    repository.publish(
+        current.model_copy(
+            update={
+                "fact_id": "other-mapping-revenue",
+                "mapping_decision_id": "other-mapping",
+                "concept": concept,
+                "context": current.context.model_copy(
+                    update={"concept_qname": concept}
+                ),
+                "value": Decimal(999),
+            }
+        )
+    )
+
+    after = runner.validate(manifest, verification)
+
+    assert after == before
+    assert repository.get("other-mapping-revenue").value == Decimal(999)
+
+
+@pytest.mark.parametrize("newer", [False, True], ids=["conflict", "newer-winner"])
+def test_release_canary_rejects_undeclared_candidates_in_released_mapping(
+    tmp_path: Path, newer: bool
+) -> None:
+    runner, manifest, verification, repository = _history_candidate(tmp_path)
+    current = repository.get("fact-revenue")
+    updates = {"fact_id": "undeclared-revenue", "value": Decimal(999)}
+    if newer:
+        available = current.available_at + timedelta(days=1)
+        updates.update(
+            available_at=available,
+            filed_at=available,
+            source=current.source.model_copy(
+                update={"available_at": available, "filed_at": available}
+            ),
+        )
+    repository.publish(current.model_copy(update=updates))
+
+    with pytest.raises(DataReleaseError) as caught:
+        runner.validate(manifest, verification)
+
+    assert caught.value.code == (
+        "DATA_RELEASE_FACT_MISMATCH" if newer else "DATA_RELEASE_CANARY_FAILED"
     )
 
 

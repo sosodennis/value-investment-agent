@@ -785,7 +785,11 @@ class DataReleaseCanaryRunner:
                 for field in manifest.required_fields
                 if field not in AWARD_FACT_FIELDS
             )
-            resolved = self._resolve_facts(snapshot, base_fields) if base_fields else ()
+            resolved = (
+                self._resolve_facts(snapshot, base_fields, mappings)
+                if base_fields
+                else ()
+            )
             declared = {item.fact_id: item.fact_digest for item in reference.facts}
             actual = {item.fact_id: canonical_fact_digest(item) for item in resolved}
             if any(
@@ -999,9 +1003,15 @@ class DataReleaseCanaryRunner:
         self,
         snapshot: SourceSnapshotV1 | IssuerOperatingSourceV1,
         required_fields: tuple[str, ...],
+        mappings: dict[str, CanonicalMappingV1],
     ) -> tuple[CanonicalFactV1, ...]:
         try:
-            return self._facts.resolve(
+            return resolve_canonical_facts(
+                (
+                    fact
+                    for fact in self._facts.list()
+                    if fact.mapping_decision_id in mappings
+                ),
                 snapshot=snapshot,
                 valuation_timestamp=snapshot.valuation_timestamp,
                 required_fields=required_fields,
