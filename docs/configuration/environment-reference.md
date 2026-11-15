@@ -119,6 +119,7 @@ policy inputs, not secrets.
 | `FUNDAMENTAL_SEC_TAXONOMY_MANIFEST_ID`, `FUNDAMENTAL_SEC_TAXONOMY_VERSION` | Compose defaults | Change only when the approved taxonomy bundle changes. |
 | `FUNDAMENTAL_SEC_SUPPORTED_FILING_YEARS`, `FUNDAMENTAL_SEC_SUPPORTED_FILING_FORMS` | Compose defaults | Keep them aligned with the captured evidence cohort. |
 | `FUNDAMENTAL_SEC_PARSER_MAX_MEMORY_BYTES`, `FUNDAMENTAL_SEC_PARSER_MAX_CONCURRENCY` | Compose defaults | Increase only with measured resource evidence. |
+| `FUNDAMENTAL_SEC_PARSER_SLOT_DIRECTORY` | Private absolute directory; SEC Compose sets a container-local default | Shares parser concurrency across API and CLI processes in one container. All callers must use the same capacity and directory. |
 | `FUNDAMENTAL_SERVICE_INGESTION_ORGANIZATIONS`, `FUNDAMENTAL_SERVICE_INGESTION_RATE_LIMIT_PER_MINUTE`, `FUNDAMENTAL_SERVICE_MAX_INGESTION_MS` | Compose defaults | Set the allowed organizations and bounded SEC acquisition budget. |
 | `FUNDAMENTAL_SERVICE_MAX_CALCULATION_SAMPLES`, `FUNDAMENTAL_SERVICE_MAX_REQUEST_MS` | Compose defaults | Keep deterministic calculation and request budgets bounded. |
 | `FUNDAMENTAL_SERVICE_RELEASE_ACTIVATION_ORGANIZATIONS`, `FUNDAMENTAL_SERVICE_RELEASE_PUBLISH_ORGANIZATIONS` | Compose defaults | Set the organization policy for release activation and publication. |
@@ -198,6 +199,7 @@ consumer. A key that exists only in an example is not a supported setting.
 - `FUNDAMENTAL_SEC_HISTORY_TAXONOMY_CACHE_SHA256`
 - `FUNDAMENTAL_SEC_PARSER_MAX_CONCURRENCY`
 - `FUNDAMENTAL_SEC_PARSER_MAX_MEMORY_BYTES`
+- `FUNDAMENTAL_SEC_PARSER_SLOT_DIRECTORY`
 - `FUNDAMENTAL_SEC_SUPPORTED_FILING_FORMS`
 - `FUNDAMENTAL_SEC_SUPPORTED_FILING_YEARS`
 - `FUNDAMENTAL_SEC_TAXONOMY_CACHE_HOST_DIR`

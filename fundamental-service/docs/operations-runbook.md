@@ -156,7 +156,26 @@ The pinned Arelle/EFM/DQC worker runs in a child process and shares the
 Fundamental service cgroup with the API process. The parser applies a child
 virtual-memory budget through `FUNDAMENTAL_SEC_PARSER_MAX_MEMORY_BYTES` and
 limits concurrent workers through `FUNDAMENTAL_SEC_PARSER_MAX_CONCURRENCY`.
-The defaults are 768 MiB and one worker. A resource or concurrency refusal
+The defaults are 768 MiB and one worker per caller process. Set
+`FUNDAMENTAL_SEC_PARSER_SLOT_DIRECTORY` to a private absolute directory shared
+by all parser callers in the container to enforce the same concurrency limit
+across the API and separate CLI processes. The SEC verification Compose overlay
+sets `/tmp/fundamental-sec-parser-slots`; each container has its own namespace.
+All callers sharing a directory must use the same concurrency policy. Change
+the directory only when every old worker has stopped. The dedicated worker
+claims a nonblocking OS file lock before loading Arelle and retains it until
+process exit. A worker watchdog terminates orphaned workers and enforces the
+original deadline through result serialization, releasing the slot even when
+the CLI parent is killed. Do not unlink live slot files.
+Results use an anonymous temporary file, read only after a normal worker exit;
+interrupted/partial output is discarded. Large reports do not cross a queue
+whose feeder or partial frame could block process teardown or parent deadlines.
+The OS releases the anonymous output on process death; the worker disables
+bytecode writes. A private worker directory contains temporary plugin roots.
+The parent cleans that directory after worker exit, including forced worker
+termination; the watchdog cleans it when the parent disappears or times out.
+This protects one container, not multiple replicas with separate filesystems.
+A resource or concurrency refusal
 returns a retryable typed error and publishes no snapshot or facts. The
 verification Compose stack still needs enough cgroup memory for the API,
 PostgreSQL client, and the selected parser budget.

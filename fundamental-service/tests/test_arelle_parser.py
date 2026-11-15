@@ -1,7 +1,6 @@
 import hashlib
 import json
 import os
-import queue
 import socket
 import subprocess
 import sys
@@ -79,18 +78,17 @@ def test_parser_uses_deadline_worker_for_isolated_replay():
     assert any(fact.concept.endswith("Revenue") for fact in report.facts)
 
 
-def test_parser_maps_resource_worker_exit_to_typed_failure(
+@pytest.mark.parametrize(
+    ("exit_code", "expected_code"),
+    [(-9, "PARSER_RESOURCE_EXHAUSTED"), (124, "REQUEST_DEADLINE_EXCEEDED")],
+)
+def test_parser_maps_worker_exit_to_typed_failure(
     monkeypatch: pytest.MonkeyPatch,
+    exit_code: int,
+    expected_code: str,
 ):
-    class _EmptyQueue:
-        def get(self, *, timeout):
-            raise queue.Empty
-
-        def close(self):
-            return None
-
     class _DeadProcess:
-        exitcode = -9
+        exitcode = exit_code
 
         def start(self):
             return None
@@ -102,9 +100,6 @@ def test_parser_maps_resource_worker_exit_to_typed_failure(
             return None
 
     class _Context:
-        def Queue(self, maxsize):
-            return _EmptyQueue()
-
         def Process(self, **kwargs):
             return _DeadProcess()
 
@@ -119,7 +114,7 @@ def test_parser_maps_resource_worker_exit_to_typed_failure(
             profile=ArelleValidationProfileV1(profile_id="sec-efm-us-gaap-v1"),
             taxonomy_version="fixture-taxonomy-v1",
         )
-    assert failure.value.code == "PARSER_RESOURCE_EXHAUSTED"
+    assert failure.value.code == expected_code
 
 
 def test_parser_resource_policy_rejects_invalid_limits():

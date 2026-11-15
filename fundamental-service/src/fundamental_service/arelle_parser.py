@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import ast
+import errno
 import hashlib
 import json
 import multiprocessing
 import os
-import queue
 import re
+import shutil
 import signal
 import sys
 import tempfile
@@ -18,6 +19,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from importlib.metadata import PackageNotFoundError, version
+from multiprocessing.connection import Connection, wait as wait_for_process
 from pathlib import Path
 from typing import Any, Literal
 
@@ -52,6 +54,7 @@ _PLUGIN_ROOT_LOCK = threading.Lock()
 _PLUGIN_ROOTS: dict[str, tuple[tempfile.TemporaryDirectory[str], Path]] = {}
 _PARSER_GATE = threading.Condition()
 _ACTIVE_PARSER_WORKERS = 0
+_PARSER_DEADLINE_EXIT = 124
 
 
 @dataclass(frozen=True)
@@ -60,6 +63,7 @@ class ParserResourcePolicy:
 
     max_memory_bytes: int = 768 * 1024 * 1024
     max_concurrency: int = 1
+    slot_directory: Path | None = None
 
     @classmethod
     def from_env(cls) -> "ParserResourcePolicy":
@@ -92,6 +96,9 @@ class ParserResourcePolicy:
                 1,
                 1,
             ),
+            slot_directory=Path(raw_directory)
+            if (raw_directory := os.getenv("FUNDAMENTAL_SEC_PARSER_SLOT_DIRECTORY"))
+            else None,
         )
 
     def validate(self) -> "ParserResourcePolicy":
@@ -104,6 +111,11 @@ class ParserResourcePolicy:
             raise ArelleParserError(
                 "PARSER_RESOURCE_POLICY_INVALID",
                 "parser concurrency must be at least one",
+            )
+        if self.slot_directory is not None and not self.slot_directory.is_absolute():
+            raise ArelleParserError(
+                "PARSER_RESOURCE_POLICY_INVALID",
+                "the shared parser slot directory must be absolute",
             )
         return self
 
@@ -139,6 +151,60 @@ def _parser_slot(max_concurrency: int):
         with _PARSER_GATE:
             _ACTIVE_PARSER_WORKERS -= 1
             _PARSER_GATE.notify_all()
+
+
+def _claim_parser_process_slot(directory: Path | None, capacity: int) -> int | None:
+    """Claim a container-wide slot; its dedicated worker owns the fd until exit."""
+    if directory is None:
+        return None
+    try:
+        import fcntl
+
+        directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+        if directory.is_symlink() or directory.stat().st_uid != os.getuid():
+            raise OSError("parser slot directory must be owned by its runtime user")
+        if directory.stat().st_mode & 0o077:
+            raise OSError("parser slot directory must be private to its runtime user")
+        for slot in range(capacity):
+            descriptor = os.open(
+                directory / f"slot-{slot}.lock",
+                os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW,
+                0o600,
+            )
+            try:
+                fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except OSError as error:
+                os.close(descriptor)
+                if error.errno not in {errno.EACCES, errno.EAGAIN}:
+                    raise
+            else:
+                return descriptor
+    except (ImportError, OSError) as error:
+        raise ArelleParserError(
+            "PARSER_RESOURCE_POLICY_UNAVAILABLE",
+            "the shared parser slot directory could not enforce its budget",
+        ) from error
+    raise ArelleParserError(
+        "PARSER_CONCURRENCY_EXHAUSTED",
+        "the shared SEC parser concurrency budget is exhausted",
+    )
+
+
+def _watch_parser_parent(
+    parent_sentinel: int, deadline_at: datetime, scratch_directory: str
+) -> None:
+    """Bound worker teardown when the caller disappears or times out."""
+    remaining = max(0, (deadline_at - datetime.now(timezone.utc)).total_seconds())
+    try:
+        parent_exited = bool(wait_for_process((parent_sentinel,), timeout=remaining))
+    except OSError:
+        parent_exited = True
+    # Do not race creation of plugin roots while reclaiming this worker's files.
+    with _PLUGIN_ROOT_LOCK:
+        try:
+            shutil.rmtree(scratch_directory, ignore_errors=True)
+        finally:
+            os._exit(125 if parent_exited else _PARSER_DEADLINE_EXIT)
 
 
 def _apply_worker_memory_limit(max_memory_bytes: int) -> None:
@@ -686,23 +752,45 @@ def _missing_dqc_error(
     )
 
 
+def _store_worker_result(result_file: Connection, payload: object) -> None:
+    with os.fdopen(os.dup(result_file.fileno()), "w", encoding="utf-8") as output:
+        output.seek(0)
+        output.truncate()
+        json.dump(payload, output)
+
+
 def _parse_worker(
-    result_queue: multiprocessing.Queue,
+    result_file: Connection,
     filing_path: str,
     profile_data: dict[str, Any],
     taxonomy_version: str,
     taxonomy_cache_dir: str | None,
     expected_source_hash: str | None,
     max_memory_bytes: int,
+    slot_directory: str | None,
+    max_concurrency: int,
+    deadline_at: datetime,
+    scratch_directory: str,
 ) -> None:
     attempted_network = 0
-    bytecode_cache: tempfile.TemporaryDirectory[str] | None = None
     try:
-        _apply_worker_memory_limit(max_memory_bytes)
-        bytecode_cache = tempfile.TemporaryDirectory(
-            prefix="fundamental-arelle-pycache-"
+        tempfile.tempdir = scratch_directory
+        parent = multiprocessing.parent_process()
+        if parent is None:
+            raise ArelleParserError(
+                "PARSER_PROCESS_START_FAILED", "parser worker requires its caller"
+            )
+        threading.Thread(
+            target=_watch_parser_parent,
+            args=(parent.sentinel, deadline_at, scratch_directory),
+            daemon=True,
+        ).start()
+        # Keep the raw fd through OS teardown, including result serialization.
+        _slot_fd = _claim_parser_process_slot(
+            Path(slot_directory) if slot_directory else None, max_concurrency
         )
-        sys.pycache_prefix = bytecode_cache.name
+        _apply_worker_memory_limit(max_memory_bytes)
+        sys.dont_write_bytecode = True
         import socket
 
         def block_network(*args: Any, **kwargs: Any) -> None:
@@ -719,21 +807,24 @@ def _parse_worker(
             Path(taxonomy_cache_dir) if taxonomy_cache_dir else None,
             expected_source_hash,
         )
-        result_queue.put(
+        _store_worker_result(
+            result_file,
             report.model_copy(
                 update={"network_attempt_count": attempted_network}
-            ).model_dump(mode="json")
+            ).model_dump(mode="json"),
         )
     except MemoryError:
-        result_queue.put(
+        _store_worker_result(
+            result_file,
             {
                 "error": "PARSER_RESOURCE_EXHAUSTED",
                 "message": "offline SEC parser exceeded its child memory budget",
                 "network_attempt_count": attempted_network,
-            }
+            },
         )
     except ArelleParserError as error:
-        result_queue.put(
+        _store_worker_result(
+            result_file,
             {
                 "error": error.code,
                 "message": str(error),
@@ -741,19 +832,17 @@ def _parse_worker(
                 "validation_failure": error.validation_failure.model_dump(mode="json")
                 if error.validation_failure is not None
                 else None,
-            }
+            },
         )
     except Exception as error:
-        result_queue.put(
+        _store_worker_result(
+            result_file,
             {
                 "error": getattr(error, "code", "XBRL_PARSE_FAILED"),
                 "message": str(error),
                 "network_attempt_count": attempted_network,
-            }
+            },
         )
-    finally:
-        if bytecode_cache is not None:
-            bytecode_cache.cleanup()
 
 
 def _parse_in_process(
@@ -1285,19 +1374,27 @@ def parse_filing_offline(
             "REQUEST_DEADLINE_EXCEEDED",
             "SEC acquisition deadline expired before parsing",
         )
-    with _parser_slot(policy.max_concurrency):
+    with (
+        _parser_slot(policy.max_concurrency),
+        tempfile.TemporaryDirectory(prefix="fundamental-parser-worker-") as scratch,
+        tempfile.TemporaryFile() as output,
+        Connection(os.dup(output.fileno())) as result_file,
+    ):
         ctx = multiprocessing.get_context("spawn")
-        result_queue = ctx.Queue(maxsize=1)
         process = ctx.Process(
             target=_parse_worker,
             args=(
-                result_queue,
+                result_file,
                 str(filing_path),
                 profile.model_dump(mode="json"),
                 taxonomy_version,
                 str(taxonomy_cache_dir) if taxonomy_cache_dir else None,
                 source_content_hash,
                 policy.max_memory_bytes,
+                str(policy.slot_directory) if policy.slot_directory else None,
+                policy.max_concurrency,
+                deadline_at,
+                scratch,
             ),
             daemon=True,
         )
@@ -1310,38 +1407,37 @@ def parse_filing_offline(
             ) from error
         monotonic_deadline = time.monotonic() + remaining
         try:
-            result = None
-            while result is None:
+            while process.is_alive():
                 remaining = monotonic_deadline - time.monotonic()
                 if remaining <= 0:
                     raise ArelleParserError(
                         "REQUEST_DEADLINE_EXCEEDED",
                         "offline SEC parser exceeded the acquisition deadline",
                     )
-                try:
-                    result = result_queue.get(timeout=min(0.1, remaining))
-                except queue.Empty:
-                    if not process.is_alive():
-                        exit_code = process.exitcode
-                        if exit_code in {
-                            -signal.SIGKILL,
-                            -signal.SIGSEGV,
-                            -signal.SIGXCPU,
-                        }:
-                            raise ArelleParserError(
-                                "PARSER_RESOURCE_EXHAUSTED",
-                                "offline SEC parser exceeded its child resource budget",
-                            )
-                        raise ArelleParserError(
-                            "XBRL_PARSE_FAILED",
-                            "offline SEC parser exited without a result",
-                        )
-            process.join(timeout=max(0, monotonic_deadline - time.monotonic()))
-            if process.is_alive():
+                process.join(timeout=min(0.1, remaining))
+            if process.exitcode == _PARSER_DEADLINE_EXIT:
                 raise ArelleParserError(
                     "REQUEST_DEADLINE_EXCEEDED",
                     "offline SEC parser exceeded the acquisition deadline",
                 )
+            if process.exitcode in {-signal.SIGKILL, -signal.SIGSEGV, -signal.SIGXCPU}:
+                raise ArelleParserError(
+                    "PARSER_RESOURCE_EXHAUSTED",
+                    "offline SEC parser exceeded its child resource budget",
+                )
+            if process.exitcode != 0:
+                raise ArelleParserError(
+                    "XBRL_PARSE_FAILED", "offline SEC parser exited without a result"
+                )
+            try:
+                output.seek(0)
+                result = json.load(output)
+                if not isinstance(result, dict):
+                    raise ValueError("parser result must be an object")
+            except (OSError, ValueError) as error:
+                raise ArelleParserError(
+                    "XBRL_PARSE_FAILED", "offline SEC parser result is unavailable"
+                ) from error
         finally:
             if process.is_alive():
                 process.terminate()
@@ -1349,7 +1445,6 @@ def parse_filing_offline(
                 if process.is_alive() and hasattr(process, "kill"):
                     process.kill()
                     process.join(timeout=0.2)
-            result_queue.close()
     if result.get("network_attempt_count", 0) != 0:
         raise ArelleParserError(
             "OFFLINE_NETWORK_ATTEMPT",
