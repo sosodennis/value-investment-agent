@@ -17,7 +17,7 @@ _SUM_CONCEPTS = {
 }
 _RENDERED_CONTEXT = re.compile(
     r"\nPeriod :(?P<period>[0-9]{4}-[0-9]{2}-[0-9]{2})"
-    r"\nDimensions :[ \t]*\nUnit : (?P<currency>[A-Z]{3})"
+    r"(?:\nDimensions :(?P<dimensions>[ \t]*))?\nUnit : (?P<currency>[A-Z]{3})"
     r"\nDecimals: (?P<decimals>inf|-?[0-9]+)"
     r"\n\nRule Element Id:(?P<rule>9374|9375)\nRule version: 31\.0\.3\Z"
 )
@@ -77,8 +77,19 @@ def _matches_rendered_context(fact: object, signature: re.Match[str]) -> bool:
         and getattr(measures[0][0], "namespaceURI", None)
         == "http://www.xbrl.org/2003/iso4217"
         and getattr(measures[0][0], "localName", None) == signature["currency"]
-        and str(getattr(fact, "decimals", None)).lower() == signature["decimals"]
+        and _matches_rendered_decimals(fact, signature["decimals"])
     )
+
+
+def _matches_rendered_decimals(fact: object, rendered: str) -> bool:
+    decimals = getattr(fact, "decimals", None)
+    if decimals == "INF":
+        return rendered == "inf"
+    if not isinstance(decimals, str) or re.fullmatch(r"[+-]?[0-9]+", decimals) is None:
+        return False
+    digits = decimals.lstrip("+-").lstrip("0") or "0"
+    normalized = ("-" if decimals.startswith("-") and digits != "0" else "") + digits
+    return normalized == rendered
 
 
 def _original_model_matches(
@@ -86,6 +97,8 @@ def _original_model_matches(
 ) -> list[object]:
     signature = _RENDERED_CONTEXT.search(message)
     if signature is None or not message_code.endswith("." + signature["rule"]):
+        return []
+    if (signature["dimensions"] is not None) != (signature["rule"] == "9374"):
         return []
     models = {
         id(model): model

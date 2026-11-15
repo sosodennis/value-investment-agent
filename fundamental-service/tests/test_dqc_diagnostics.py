@@ -194,7 +194,9 @@ def _document_type_only_diagnostic(
     message = (
         f"The element us-gaap:{name} with a value of 545,906 should be equal "
         "to the sum of the reported components. A difference of 27,200.\n"
-        "Period :2023-03-31\nDimensions : \nUnit : USD\nDecimals: inf\n\n"
+        "Period :2023-03-31\n"
+        + ("Dimensions : \n" if rule == "9374" else "")
+        + "Unit : USD\nDecimals: inf\n\n"
         f"Rule Element Id:{rule}\nRule version: 31.0.3"
     )
     return fact, document_type, message
@@ -225,6 +227,51 @@ def test_document_type_reference_binds_unique_original_fact_and_preserves_error(
         "unitID": "USD",
         "fundamental_rule_severity": "error",
     }
+
+
+@pytest.mark.parametrize(
+    "lexical,rendered", [("+0", "0"), ("00", "0"), ("-03", "-3"), ("-0", "0")]
+)
+def test_original_model_binding_matches_xbrl_decimals_after_xule_normalization(
+    lexical, rendered
+):
+    fact, document_type, message = _document_type_only_diagnostic()
+    fact.decimals = lexical
+    parameters = {}
+    message_parameters(
+        "DQC.US.0090.9374",
+        message.replace("Decimals: inf", f"Decimals: {rendered}"),
+        [document_type],
+        parameters,
+    )
+    assert parameters == {"contextID": "E23Q1", "unitID": "USD"}
+
+
+@pytest.mark.parametrize("lexical", [None, "inf", "-3.0", "3e0", "unknown"])
+def test_original_model_binding_refuses_invalid_xbrl_decimals_lexical_form(lexical):
+    fact, document_type, message = _document_type_only_diagnostic()
+    fact.decimals = lexical
+    with pytest.raises(ArelleParserError) as failure:
+        message_parameters("DQC.US.0090.9374", message, [document_type], {})
+    assert failure.value.code == "DQC_DIAGNOSTIC_BINDING_UNAVAILABLE"
+
+
+@pytest.mark.parametrize(
+    "rule,name",
+    [
+        ("9374", "LesseeOperatingLeaseLiabilityPaymentsDue"),
+        ("9375", "FinanceLeaseLiabilityPaymentsDue"),
+    ],
+)
+def test_original_model_binding_refuses_wrong_rule_dimensions_message_shape(rule, name):
+    _, document_type, message = _document_type_only_diagnostic(rule, name)
+    if rule == "9374":
+        message = message.replace("Dimensions : \n", "")
+    else:
+        message = message.replace("Unit : USD", "Dimensions : \nUnit : USD")
+    with pytest.raises(ArelleParserError) as failure:
+        message_parameters(f"DQC.US.0090.{rule}", message, [document_type], {})
+    assert failure.value.code == "DQC_DIAGNOSTIC_BINDING_UNAVAILABLE"
 
 
 @pytest.mark.parametrize(
