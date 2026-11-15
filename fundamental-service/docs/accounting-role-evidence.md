@@ -913,3 +913,44 @@ DEI `tradingSymbolItemType` limit of25 characters (for example `BOND 27`).
 The selected common-stock ticker retains its strict15-character provider form.
 All original scope checks still run on each note pair. This preserves a source
 symbol; it does not translate symbols, retrieve note prices or value debt.
+
+### Standard common-equity component shares
+
+Automatic policy `source-bound-us-gaap-v35` adds
+`standard-common-equity-component-shares-v1`, anchored to
+`classified:CommonStockEquityComponent`. The shared typed representation
+dispatcher selects this rule, current-debt totals and classified leases; each
+selector retains its own accounting scope and refusal reasons. No company,
+accession or original digest requires registration in code.
+
+The [FASB definitions](https://xbrl.fasb.org/us-gaap/2025/elts/us-gaap-doc-2025.xml)
+define `CommonStockSharesOutstanding` as the number of common shares outstanding,
+`StatementEquityComponentsAxis` as information by equity component, and
+`CommonStockMember` as stock subordinate to the issuer's other stock. These
+definitions are unchanged in the inspected FASB2023–2026 taxonomies. The rule
+supports exactly this concept with this axis/member pair, and its equivalent
+dimensionless issuer total. A stock-class, operating-segment, custom or additional
+dimension cannot substitute for the issuer common-stock component.
+
+Eligible observations require the exact issuer, SEC entity scheme, supported
+namespace, shares unit, aligned instant, nonnegative finite value and finite
+reported decimals. Every instant must be no later than the original's report
+period. Whole-set OIM duplicate consistency applies to all observations of the
+two equivalent representations at an instant before deterministic selection of
+the most precise original. Mixed namespaces, incompatible duplicates, missing
+precision and unsupported scope refuse. Unknown quantities remain unknown;
+an explicit disclosed zero is allowed.
+
+The accounting rule retains the selected original's exact dimensions, context,
+precision and digest; the signed mapping input retains the complete original
+parser report and its alternative observations. Rebuild and replay verify that
+source-bound classification. `equity_component="common_stock"` is positive-only,
+requires one component, and cannot combine with lease or exclusion flags. The
+accounting owner validates the permitted representations independently of the
+automatic selector.
+
+This is an issuer common-stock count. It does not prove that the selected
+security has all economic rights, that no other stock class exists, or that
+preferred, convertible, noncontrolling or award claims are absent. Those remain
+separate capital completeness and release gates. No share-price pairing,
+dilution distribution or valuation formula is inferred here.

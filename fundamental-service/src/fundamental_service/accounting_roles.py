@@ -120,6 +120,9 @@ class DiscontinuedDepreciationExclusionV1(RoleModel):
 class AccountingComponentV1(RoleModel):
     parsed_fact_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
     sign: Literal[-1, 1] = 1
+    equity_component: Literal["common_stock"] | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
     balance_sheet_location: Literal["other_current_liabilities"] | None = Field(
         default=None, exclude_if=lambda value: value is None
     )
@@ -136,6 +139,14 @@ class AccountingComponentV1(RoleModel):
 
     @model_validator(mode="after")
     def swap_is_an_exclusion(self) -> AccountingComponentV1:
+        if self.equity_component is not None and (
+            self.sign != 1
+            or self.balance_sheet_location is not None
+            or self.finance_lease_expense_location is not None
+            or self.accrued_interest_swap_exclusion is not None
+            or self.discontinued_depreciation_exclusion is not None
+        ):
+            raise ValueError("common equity scope requires one positive classification")
         if self.discontinued_depreciation_exclusion is not None and (
             self.sign != -1
             or self.balance_sheet_location is not None
@@ -328,7 +339,10 @@ class AccountingPeriodRuleV1(RoleModel):
                 len(self.components) != 1
                 or not isinstance(self.components[0], AccountingComponentV1)
                 or self.components[0].sign != 1
-                or self.components[0].balance_sheet_location is None
+                or (
+                    self.components[0].balance_sheet_location is None
+                    and self.components[0].equity_component is None
+                )
                 or self.absence_passages
                 or self.disclosed_amount
             ):
@@ -469,6 +483,49 @@ class AccountingRoleEvidenceV1(RoleModel):
         return self
 
 
+def _validate_common_equity_classification(
+    rules: AccountingRoleRules,
+    rule: AccountingPeriodRuleV1,
+    component: AccountingComponentV1,
+    fact: ParsedXbrlFactV1,
+) -> None:
+    if (
+        rules.normalized_field != "common_shares_outstanding"
+        or rules.unit != "xbrli:shares"
+        or rules.currency is not None
+        or rule.disposition != "classified"
+        or not rule.period.instant
+        or len(rule.components) != 1
+        or component.sign != 1
+        or fact.concept != "us-gaap:CommonStockSharesOutstanding"
+        or fact.namespace_uri
+        not in {f"http://fasb.org/us-gaap/{year}" for year in range(2023, 2027)}
+        or fact.entity_scheme != "http://www.sec.gov/CIK"
+        or not (
+            (
+                fact.dimensions
+                == (
+                    (
+                        "us-gaap:StatementEquityComponentsAxis",
+                        "us-gaap:CommonStockMember",
+                    ),
+                )
+                and fact.consolidation_scope == "segmented"
+                and fact.security_scope == "segmented"
+            )
+            or (
+                not fact.dimensions
+                and fact.consolidation_scope == "consolidated"
+                and fact.security_scope in {"issuer", "unspecified"}
+            )
+        )
+    ):
+        raise AccountingRoleError(
+            "ACCOUNTING_ROLE_SCOPE_MISMATCH",
+            "common shares require their exact standard common equity component",
+        )
+
+
 def evaluate_period_rule(
     rules: AccountingRoleRules,
     rule: AccountingPeriodRuleV1,
@@ -513,6 +570,13 @@ def evaluate_period_rule(
             isinstance(component, AccountingComponentV1)
             and component.finance_lease_expense_location is not None
         )
+        classified_equity = (
+            isinstance(component, AccountingComponentV1)
+            and component.equity_component is not None
+        )
+        if classified_equity:
+            assert isinstance(component, AccountingComponentV1)
+            _validate_common_equity_classification(rules, rule, component, fact)
         if classified_expense:
             assert isinstance(component, AccountingComponentV1)
             _validate_finance_lease_expense_classification(rules, rule, component, fact)
@@ -543,6 +607,7 @@ def evaluate_period_rule(
             or (
                 not classified_location
                 and not classified_expense
+                and not classified_equity
                 and not derivative_scope
                 and (fact.dimensions or fact.consolidation_scope != "consolidated")
             )
@@ -551,6 +616,7 @@ def evaluate_period_rule(
                 and not derivative_scope
                 and not classified_location
                 and not classified_expense
+                and not classified_equity
                 and fact.security_scope not in {"issuer", "consolidated", "unspecified"}
             )
         ):
