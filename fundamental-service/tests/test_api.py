@@ -1631,6 +1631,13 @@ def test_runtime_injects_deployment_data_release_trust_roots(
     monkeypatch.setenv(
         "FUNDAMENTAL_DATA_RELEASE_TRUST_ROOTS_FILE", str(trust_roots_file)
     )
+    from fundamental_service.source_admission import SourceUsePolicyV1
+
+    source_use_policy = SourceUsePolicyV1(policy_version="synthetic-empty-catalog-v1")
+    source_use_file = tmp_path / "source-use-policy.json"
+    source_use_file.write_text(source_use_policy.model_dump_json())
+    monkeypatch.setenv("FUNDAMENTAL_SOURCE_USE_POLICY_FILE", str(source_use_file))
+    monkeypatch.setenv("FUNDAMENTAL_SOURCE_USE_POLICY_DIGEST", source_use_policy.digest)
 
     captured: dict[str, object] = {}
     monkeypatch.setattr(
@@ -1663,6 +1670,7 @@ def test_runtime_injects_deployment_data_release_trust_roots(
     roots = DataReleaseTrustRootsV1.from_file(trust_roots_file)
     assert captured["data_release_trust_roots"] == roots
     assert composed["metadata_store"] is not None
+    assert composed["source_use_policy"] == source_use_policy
 
 
 def test_snapshot_resolution_pins_only_active_release_facts():

@@ -473,8 +473,23 @@ def test_release_canary_blocks_point_in_time_fact_mismatch() -> None:
 
 @pytest.mark.parametrize("corruption", [None, "signature", "digest", "envelope"])
 def test_cli_reads_canonical_json_and_repeats_or_refuses_tampering(
-    tmp_path, capsys, corruption
+    tmp_path, capsys, corruption, monkeypatch
 ):
+    from fundamental_service import release_runner
+    from fundamental_service.source_admission import SourceUsePolicyV1
+
+    selected = SourceUsePolicyV1(policy_version="synthetic-revoked-catalog-v1")
+    source_use_file = tmp_path / "source-use-policy.json"
+    source_use_file.write_text(selected.model_dump_json())
+    monkeypatch.setenv("FUNDAMENTAL_SOURCE_USE_POLICY_FILE", str(source_use_file))
+    monkeypatch.setenv("FUNDAMENTAL_SOURCE_USE_POLICY_DIGEST", selected.digest)
+    original_runner = DataReleaseCanaryRunner
+
+    def runner(**kwargs):
+        assert kwargs["source_use_policy"] == selected
+        return original_runner(**kwargs)
+
+    monkeypatch.setattr(release_runner, "DataReleaseCanaryRunner", runner)
     manifest, verification, snapshots, facts, mappings, artifacts, roots = _candidate()
     FilesystemSnapshotRepository(tmp_path / "snapshots").publish(snapshots.snapshot)
     FilesystemCanonicalFactRepository(tmp_path / "facts").publish(facts.fact)

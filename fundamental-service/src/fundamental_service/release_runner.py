@@ -1106,8 +1106,8 @@ def main(argv: list[str] | None = None) -> int:
     from .free_source_policy import (
         default_macro_providers,
         default_reference_providers,
-        free_market_source_policy,
     )
+    from .source_use_deployment import load_runtime_source_use_policy
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--candidate", type=Path, required=True)
@@ -1119,6 +1119,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--policies-root", type=Path)
     args = parser.parse_args(argv)
     try:
+        source_use_policy = load_runtime_source_use_policy()
         manifest, verification = _load_candidate(args.candidate)
         report = DataReleaseCanaryRunner(
             snapshot_repository=FilesystemSnapshotRepository(args.snapshots_root),
@@ -1129,7 +1130,7 @@ def main(argv: list[str] | None = None) -> int:
             quote_providers=default_quote_providers(),
             macro_providers=default_macro_providers(),
             reference_providers=default_reference_providers(),
-            source_use_policy=free_market_source_policy(),
+            source_use_policy=source_use_policy,
             policy_registry=PolicyRegistry(
                 repository=FilesystemPolicyRepository(args.policies_root),
                 models=initial_model_specs(),

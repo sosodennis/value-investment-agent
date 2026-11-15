@@ -287,6 +287,19 @@ redirects and responses over 1 MiB, and reuses saved captures without I/O.
 Source-use admission separately checks the retained terms and policy. The
 built-in free market policy contains no Yahoo authorization.
 
+Production API, issuer/source commands and the standalone release canary load
+the same optional deployment catalog from `FUNDAMENTAL_SOURCE_USE_POLICY_FILE`.
+Set `FUNDAMENTAL_SOURCE_USE_POLICY_DIGEST` to the canonical `SourceUsePolicyV1.digest`
+of that file. Both values are required together; unreadable or invalid files and
+digest mismatches stop composition before source I/O. Mount the file read-only
+inside each service/command container and supply both environment values there.
+The file replaces the complete built-in catalog, including any macro/reference
+rules still needed. An empty rule set revokes all source uses. Omitting both
+values retains the built-in free market catalog. Request payloads cannot install
+a catalog, and changing the file without changing its deployment pin fails.
+Use the same policy version/digest in source-plan templates. This configuration
+records deployment-approved rights; it cannot create provider permission.
+
 ## Source preparation command
 
 The acquisition owner also accepts `AutomaticSecIngestionRequestV1` with exact

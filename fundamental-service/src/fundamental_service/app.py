@@ -53,6 +53,7 @@ from .free_source_policy import (
 from .macro_series import MacroSeriesProviderPort
 from .market_reference import MarketReferenceProviderPort
 from .source_admission import SourceUsePolicyV1
+from .source_use_deployment import load_runtime_source_use_policy
 from .governance import ModelInventory
 from .interface.transport import (
     EmptyOperationInputV1,
@@ -1004,10 +1005,13 @@ def create_runtime_app() -> FastAPI:
     """Build production with PostgreSQL metadata and a content-only volume."""
 
     config = OperationsConfig.from_env()
+    source_use_policy = load_runtime_source_use_policy()
     root_value = os.getenv("FUNDAMENTAL_SERVICE_DATA_ROOT")
     database_url = os.getenv("FUNDAMENTAL_SERVICE_DATABASE_URL")
     if not root_value or not database_url:
-        return create_app(config=config, require_metadata=True)
+        return create_app(
+            config=config, require_metadata=True, source_use_policy=source_use_policy
+        )
     root = Path(root_value)
     data_release_trust_roots_file = os.getenv(
         "FUNDAMENTAL_DATA_RELEASE_TRUST_ROOTS_FILE"
@@ -1090,6 +1094,7 @@ def create_runtime_app() -> FastAPI:
         ),
         sec_acquisition=sec_acquisition,
         identity_resolution=identity_resolution,
+        source_use_policy=source_use_policy,
     )
 
 
