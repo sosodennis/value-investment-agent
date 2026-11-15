@@ -693,6 +693,36 @@ mixing `INF` and finite precision with
 by the direct observation boundary. This policy does not invent a second
 precision ranking or treat exact values as imprecise observations.
 
+### Standard classified finance-lease balances
+
+Automatic policy `source-bound-us-gaap-v32` admits the standard
+`FinanceLeaseLiabilityCurrent` and `FinanceLeaseLiabilityNoncurrent` concepts for
+the corresponding current and noncurrent finance-lease roles. The official
+[FASB2023](https://xbrl.fasb.org/us-gaap/2023/elts/us-gaap-doc-2023.xml),
+[2024](https://xbrl.fasb.org/us-gaap/2024/elts/us-gaap-doc-2024.xml),
+[2025](https://xbrl.fasb.org/us-gaap/2025/elts/us-gaap-doc-2025.xml) and
+[2026](https://xbrl.fasb.org/us-gaap/2026/elts/us-gaap-doc-2026.xml) definitions
+describe discounted present-value lease-payment obligations, classified by
+balance-sheet maturity. These four namespace versions are explicitly supported;
+other versions require separate definition validation. No issuer or accession
+registration is required.
+
+Admission requires a nonnegative consolidated USD instant observation within
+the original period, available reported precision and the existing original,
+taxonomy and security evidence. Canonical direct precision selection applies;
+equally precise conflicts refuse. Total `FinanceLeaseLiability`, undiscounted
+payments and lease-inclusive `DebtCurrent` cannot directly substitute for either
+classified role.
+The existing classified current-location route retains precedence and checks
+alternate direct representations for disagreement. A disclosed direct balance
+cannot be replaced by a registered zero residual; missing disclosure alone
+still supplies no zero.
+
+This evidence establishes only the disclosed classified carrying balances. It
+does not prove annual lease expense, other capital-claim completeness or a
+complete valuation. The machine approval and signed replay must bind the new
+executable policy digest; earlier certificates do not approve v32.
+
 ### Registered NVE current liability principal partition
 
 Automatic policy `source-bound-us-gaap-v11` moves the shared residual evaluator

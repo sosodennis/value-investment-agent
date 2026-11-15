@@ -66,8 +66,8 @@ from .snapshots import SnapshotError
 from .taxonomy_evidence import require_original_taxonomy
 
 AUTOMATIC_MAPPING_INPUT_ROLE = "automatic-mapping-input-v1"
-AutomaticMappingPolicyVersion = Literal["source-bound-us-gaap-v31"]
-AUTOMATIC_MAPPING_POLICY: AutomaticMappingPolicyVersion = "source-bound-us-gaap-v31"
+AutomaticMappingPolicyVersion = Literal["source-bound-us-gaap-v32"]
+AUTOMATIC_MAPPING_POLICY: AutomaticMappingPolicyVersion = "source-bound-us-gaap-v32"
 _GAAP_NAMESPACE = re.compile(
     r"http://(?:fasb\.org|xbrl\.us)/us-gaap/\d{4}(?:-\d{2}-\d{2})?"
 )
@@ -159,6 +159,28 @@ _RULES = {
     ),
     "long_term_operating_lease_liabilities": DirectMappingRule(
         "us-gaap:OperatingLeaseLiabilityNoncurrent", "instant"
+    ),
+    "current_finance_lease_liabilities": DirectMappingRule(
+        "us-gaap:FinanceLeaseLiabilityCurrent",
+        "instant",
+        namespace_uris=(
+            "http://fasb.org/us-gaap/2023",
+            "http://fasb.org/us-gaap/2024",
+            "http://fasb.org/us-gaap/2025",
+            "http://fasb.org/us-gaap/2026",
+        ),
+        nonnegative=True,
+    ),
+    "long_term_finance_lease_liabilities": DirectMappingRule(
+        "us-gaap:FinanceLeaseLiabilityNoncurrent",
+        "instant",
+        namespace_uris=(
+            "http://fasb.org/us-gaap/2023",
+            "http://fasb.org/us-gaap/2024",
+            "http://fasb.org/us-gaap/2025",
+            "http://fasb.org/us-gaap/2026",
+        ),
+        nonnegative=True,
     ),
     "common_shares_outstanding": DirectMappingRule(
         "us-gaap:CommonStockSharesOutstanding", "instant", "xbrli:shares"
