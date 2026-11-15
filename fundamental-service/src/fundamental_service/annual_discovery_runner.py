@@ -12,7 +12,10 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from .annual_discovery import AnnualDiscoveryParametersV1, AnnualDiscoveryRequestV1
 from .annual_discovery_service import AnnualDiscovery
-from .issuer_identity import DEFAULT_ORIGINAL_SECURITY_POLICY
+from .issuer_identity import (
+    DEFAULT_ORIGINAL_HISTORY_IDENTITY_POLICY,
+    DEFAULT_ORIGINAL_SECURITY_POLICY,
+)
 from .operations import ServiceError
 from .original_preparation import (
     OriginalPreparation,
@@ -324,6 +327,7 @@ def main(argv: list[str] | None = None) -> int:
             ticker=args.ticker,
             share_class=args.share_class,
             security_selection_policy=DEFAULT_ORIGINAL_SECURITY_POLICY,
+            history_identity_policy=DEFAULT_ORIGINAL_HISTORY_IDENTITY_POLICY,
         )
         result = asyncio.run(_run_command(args))
     except (SnapshotError, ServiceError) as error:

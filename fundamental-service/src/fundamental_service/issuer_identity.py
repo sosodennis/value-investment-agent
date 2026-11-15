@@ -33,6 +33,10 @@ OriginalSecuritySelectionPolicy = Literal[
 DEFAULT_ORIGINAL_SECURITY_POLICY: OriginalSecuritySelectionPolicy = (
     "original-dei-paired-common-stock-v2"
 )
+OriginalHistoryIdentityPolicy = Literal["original-history-name-format-v1"]
+DEFAULT_ORIGINAL_HISTORY_IDENTITY_POLICY: OriginalHistoryIdentityPolicy = (
+    "original-history-name-format-v1"
+)
 _SecurityContext = tuple[str, date | None, date | None, tuple[tuple[str, str], ...]]
 
 
@@ -105,6 +109,16 @@ class IdentityResolutionError(ValueError):
         super().__init__(message)
         self.code = code
         self.status_code = status_code
+
+
+def original_history_identity_key(
+    identity: IdentityV1, policy: OriginalHistoryIdentityPolicy | None
+) -> IdentityV1:
+    if policy is None:
+        return identity
+    if policy != DEFAULT_ORIGINAL_HISTORY_IDENTITY_POLICY:
+        raise ValueError("unsupported original history identity policy")
+    return identity.model_copy(update={"issuer_name": _name(identity.issuer_name)})
 
 
 def _single_standard_common_title(

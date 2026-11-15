@@ -28,6 +28,7 @@ from .contracts import (
 from .data_releases import ArtifactRefV1
 from .issuer_country_crosswalk import CountryCrosswalkPolicyV1
 from .issuer_classification import IssuerClassificationRequestV1
+from .issuer_identity import original_history_identity_key
 from .issuer_market_policy_plan import IssuerMarketReferencePlanPolicyV1
 from .issuer_market_preparation import IssuerMarketPreparationRequestV1
 from .automatic_market_policy import AutomaticMarketPolicyPolicyV1
@@ -466,7 +467,11 @@ class OriginalSourcePlan:
         if not prepared.filings:
             codes.add("ORIGINAL_SOURCE_PLAN_FILINGS_MISSING")
         identities = {
-            sha256_digest(item.identity)
+            sha256_digest(
+                original_history_identity_key(
+                    item.identity, prepared.request.history_identity_policy
+                )
+            )
             for item in prepared.filings
             if item.identity is not None
         }
@@ -497,6 +502,7 @@ class OriginalSourcePlan:
             )
             runtime = prepared.request.runtime
             ingestions = []
+            history_identities: dict[tuple[date, datetime, str], IdentityV1] = {}
             recipe_filings: list[tuple[str, date]] = []
             market_context = None
             market_original: tuple[str, date] | None = None
@@ -508,6 +514,13 @@ class OriginalSourcePlan:
                     raise SnapshotError(
                         "ORIGINAL_SOURCE_PLAN_INVALID", "original identity is missing"
                     )
+                history_identities[
+                    (
+                        original.filing.report_period_end,
+                        original.filing.accepted_at,
+                        original.filing.accession_number,
+                    )
+                ] = identity
                 ingestions.append(
                     AutomaticSecIngestionRequestV1(
                         contract_version="fundamental.v1",
@@ -571,6 +584,12 @@ class OriginalSourcePlan:
                             original.filing.report_period_end,
                         )
                     )
+            if prepared.request.history_identity_policy is not None:
+                plan_identity = history_identities[max(history_identities)]
+                ingestions = [
+                    ingestion.model_copy(update={"identity": plan_identity})
+                    for ingestion in ingestions
+                ]
             recipe = None
             if recipe_template is not None:
                 if any(

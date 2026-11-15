@@ -23,7 +23,9 @@ from .contracts import (
 from .data_releases import ArtifactRefV1
 from .issuer_identity import (
     IdentityResolutionError,
+    OriginalHistoryIdentityPolicy,
     OriginalSecuritySelectionPolicy,
+    original_history_identity_key,
     resolve_original_filing_identity,
 )
 from .original_issuer import OriginalIssuerEvidenceV1
@@ -207,6 +209,9 @@ class OriginalSecuritySelectionV1(StrictModel):
     ticker: str | None = Field(default=None, pattern=r"^[A-Z0-9][A-Z0-9.-]{0,14}$")
     share_class: str | None = Field(default=None, min_length=1, max_length=512)
     security_selection_policy: OriginalSecuritySelectionPolicy | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
+    history_identity_policy: OriginalHistoryIdentityPolicy | None = Field(
         default=None, exclude_if=lambda value: value is None
     )
 
@@ -463,7 +468,17 @@ class OriginalPreparation:
                 )
             )
         if (
-            len({sha256_digest(f.identity) for f in filings if f.identity is not None})
+            len(
+                {
+                    sha256_digest(
+                        original_history_identity_key(
+                            f.identity, request.history_identity_policy
+                        )
+                    )
+                    for f in filings
+                    if f.identity is not None
+                }
+            )
             > 1
         ):
             codes.add("ORIGINAL_HISTORY_IDENTITY_CONFLICT")

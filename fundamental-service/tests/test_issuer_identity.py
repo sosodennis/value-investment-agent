@@ -9,8 +9,10 @@ from fundamental_service.contracts import (
     IdentitySourceEvidenceV1,
 )
 from fundamental_service.issuer_identity import (
+    DEFAULT_ORIGINAL_HISTORY_IDENTITY_POLICY,
     DEFAULT_ORIGINAL_SECURITY_POLICY,
     IdentityResolutionError,
+    original_history_identity_key,
     resolve_issuer_identity,
     resolve_original_filing_identity,
     validate_original_filing_identity,
@@ -18,6 +20,51 @@ from fundamental_service.issuer_identity import (
 from fundamental_service.arelle_parser import ParsedXbrlFactV1
 from fundamental_service.serialization import sha256_digest
 from pydantic import ValidationError
+
+
+@pytest.mark.parametrize(
+    "field,changed",
+    [
+        ("issuer_name", "Apple, Inc."),
+        ("issuer_name", "Other Inc."),
+        ("issuer_id", "0000000001"),
+        ("domicile", "CA"),
+        ("reporting_basis", "ifrs"),
+        ("security_id", "OTHER"),
+        ("share_class", "Class B common stock"),
+        ("currency", "CAD"),
+    ],
+)
+def test_history_name_policy_preserves_every_substantive_identity_difference(
+    field, changed
+):
+    identity = resolve_original_filing_identity(
+        cik="0000320193",
+        accepted_at=datetime(2024, 11, 1, tzinfo=UTC),
+        facts=_original_identity_facts(),
+    )
+    policy = DEFAULT_ORIGINAL_HISTORY_IDENTITY_POLICY
+    different = identity.model_copy(update={field: changed})
+    assert original_history_identity_key(
+        identity, policy
+    ) != original_history_identity_key(different, policy)
+
+
+def test_history_name_format_policy_is_explicit_and_does_not_change_original():
+    identity = resolve_original_filing_identity(
+        cik="0000320193",
+        accepted_at=datetime(2024, 11, 1, tzinfo=UTC),
+        facts=_original_identity_facts(),
+    )
+    formatted = identity.model_copy(update={"issuer_name": "  APPLE\tINC.  "})
+    assert original_history_identity_key(identity, None) == identity
+    assert original_history_identity_key(identity, None) != formatted
+    policy = DEFAULT_ORIGINAL_HISTORY_IDENTITY_POLICY
+    assert original_history_identity_key(
+        identity, policy
+    ) == original_history_identity_key(formatted, policy)
+    assert formatted.issuer_name == "  APPLE\tINC.  "
+    assert identity.issuer_name == "Apple Inc."
 
 
 def _original_identity_facts():

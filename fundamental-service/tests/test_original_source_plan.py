@@ -36,6 +36,7 @@ from fundamental_service.treasury_source import (
     TREASURY_TERMS,
 )
 from fundamental_service.arelle_parser import ArelleParserError
+from fundamental_service.issuer_identity import DEFAULT_ORIGINAL_HISTORY_IDENTITY_POLICY
 from fundamental_service.operations import ServiceError
 from fundamental_service.original_source_plan import (
     AutomaticMarketSourceTemplateV1,
@@ -335,6 +336,76 @@ def compiler_case(value, prepared, config=None):
         runtime_source_revision=value.annual_request.declared_source_revision,
     )
     return compiler, request
+
+
+@pytest.mark.parametrize("reverse", [False, True])
+@pytest.mark.parametrize("versioned", [False, True])
+def test_history_compiler_retains_names_and_uses_latest_original_for_common_identity(
+    tmp_path, monkeypatch, reverse, versioned
+):
+    value = case(tmp_path, monkeypatch)
+    saved, _ = execute(value)
+    first = saved.filings[0]
+    validation = value.service.read_validation(first.validation.artifact_id)
+    original = validation.request
+    older_validation = validation.model_copy(
+        update={
+            "request": original.model_copy(
+                update={
+                    "filing": original.filing.model_copy(
+                        update={
+                            "accession_number": "0000000001-26-999999",
+                            "report_period_end": original.filing.report_period_end
+                            - timedelta(days=365),
+                            "accepted_at": original.filing.accepted_at
+                            - timedelta(days=365),
+                        }
+                    )
+                }
+            )
+        }
+    )
+    older = first.model_copy(
+        update={
+            "validation": first.validation.model_copy(
+                update={"artifact_id": "older-original-validation"}
+            ),
+            "identity": first.identity.model_copy(
+                update={"issuer_name": first.identity.issuer_name.upper()}
+            ),
+        }
+    )
+    prepared = saved.model_copy(
+        update={
+            "request": saved.request.model_copy(
+                update={
+                    "history_identity_policy": DEFAULT_ORIGINAL_HISTORY_IDENTITY_POLICY
+                    if versioned
+                    else None
+                }
+            ),
+            "filings": (first, older) if reverse else (older, first),
+        }
+    )
+    # The compiler boundary consumes already-validated original evidence.
+    monkeypatch.setattr(value.service, "read", lambda _: prepared)
+    monkeypatch.setattr(
+        value.service,
+        "read_validation",
+        lambda artifact_id: older_validation
+        if artifact_id == older.validation.artifact_id
+        else validation,
+    )
+    compiler, request = compiler_case(value, saved)
+    result = compiler._compile(request)
+    assert prepared.filings == ((first, older) if reverse else (older, first))
+    if versioned:
+        assert not result.issue_codes and result.plan is not None
+        assert len(result.plan.ingestions) == 2
+        assert all(item.identity == first.identity for item in result.plan.ingestions)
+    else:
+        assert result.plan is None
+        assert result.issue_codes == ("ORIGINAL_HISTORY_IDENTITY_CONFLICT",)
 
 
 @pytest.mark.parametrize(

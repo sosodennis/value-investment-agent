@@ -13,7 +13,10 @@ from fundamental_service.annual_discovery import AnnualDiscoveryRequestV1
 from fundamental_service.annual_discovery_service import AnnualDiscovery
 from fundamental_service.arelle_parser import ArelleParserError
 from fundamental_service.operations import ServiceError
-from fundamental_service.issuer_identity import DEFAULT_ORIGINAL_SECURITY_POLICY
+from fundamental_service.issuer_identity import (
+    DEFAULT_ORIGINAL_HISTORY_IDENTITY_POLICY,
+    DEFAULT_ORIGINAL_SECURITY_POLICY,
+)
 from fundamental_service.original_preparation import (
     OriginalPreparation,
     OriginalPreparationRequestV1,
@@ -200,30 +203,45 @@ def test_changed_security_selector_reuses_original_validation_and_retains_refusa
     assert not repeat.wrote and _inventory(tmp_path) == before
 
 
-def test_versioned_security_policy_reuses_validation_and_preserves_legacy_request(
-    tmp_path, monkeypatch
+@pytest.mark.parametrize(
+    "policy_field,policy",
+    [
+        ("security_selection_policy", DEFAULT_ORIGINAL_SECURITY_POLICY),
+        ("history_identity_policy", DEFAULT_ORIGINAL_HISTORY_IDENTITY_POLICY),
+    ],
+)
+def test_versioned_identity_policy_reuses_validation_and_preserves_legacy_request(
+    tmp_path, monkeypatch, policy_field, policy
 ):
     value = case(tmp_path, monkeypatch)
     old_bytes = canonical_bytes(value.request)
-    assert "security_selection_policy" not in json.loads(old_bytes)
+    assert policy_field not in json.loads(old_bytes)
     original, _ = execute(value)
     calls = value.state.provider_calls, value.state.parser_calls
-    request = value.request.model_copy(
-        update={"security_selection_policy": DEFAULT_ORIGINAL_SECURITY_POLICY}
-    )
+    request = value.request.model_copy(update={policy_field: policy})
     prepared, publication = execute(value, request)
     assert publication.wrote and not prepared.issue_codes
     assert request.digest != value.request.digest
     assert prepared.filings == original.filings
-    assert (
-        prepared.request.security_selection_policy == DEFAULT_ORIGINAL_SECURITY_POLICY
-    )
+    assert getattr(prepared.request, policy_field) == policy
     assert (value.state.provider_calls, value.state.parser_calls) == calls
     before = _inventory(tmp_path)
     repeated, receipt = execute(value, request)
     assert repeated == prepared and not receipt.wrote
     assert value.service.read(original.artifact_id) == original
     assert canonical_bytes(value.request) == old_bytes
+    assert _inventory(tmp_path) == before
+
+
+def test_history_identity_policy_rejects_unknown_version_before_storage(
+    tmp_path, monkeypatch
+):
+    value = case(tmp_path, monkeypatch)
+    before = _inventory(tmp_path)
+    with pytest.raises(ValueError):
+        type(value.request).model_validate(
+            {**value.request.model_dump(), "history_identity_policy": "unknown-v2"}
+        )
     assert _inventory(tmp_path) == before
 
 
@@ -506,6 +524,10 @@ def test_existing_command_prepares_originals_and_retrieves_without_io(
     assert annual_discovery_runner.main(args) == 0
     first = json.loads(capsys.readouterr().out)
     assert first["wrote"] and not first["evidence"]["issue_codes"]
+    assert (
+        first["evidence"]["request"]["history_identity_policy"]
+        == DEFAULT_ORIGINAL_HISTORY_IDENTITY_POLICY
+    )
     before, calls = _inventory(tmp_path), value.state.provider_calls
     assert annual_discovery_runner.main(args) == 0
     second = json.loads(capsys.readouterr().out)
