@@ -303,6 +303,7 @@ def assemble_preparation_release(
     )
     return AutomaticDataReleaseRequestV1(
         manifest=manifest,
+        source_plan=plan,
         content=DataReleaseContentRequestV1(
             source_revision=plan.source_revision,
             evidence_refs=refs,

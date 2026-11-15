@@ -24,7 +24,11 @@ from fundamental_service.automatic_release_evidence import (
     require_automatic_release_sources,
 )
 from fundamental_service.issuer_operating_release import _FactReader, _SourceReader
-from fundamental_service.policies import PolicyRegistry, initial_model_specs
+from fundamental_service.policies import (
+    FilesystemPolicyRepository,
+    PolicyRegistry,
+    initial_model_specs,
+)
 from fundamental_service.release_runner import DataReleaseCanaryRunner
 from fundamental_service.replay import ArtifactStore
 from fundamental_service.serialization import canonical_bytes, sha256_digest
@@ -390,3 +394,49 @@ def test_security_market_plans_must_select_the_composers_effective_model(tmp_pat
     with pytest.raises(DataReleaseError) as caught:
         AutomaticDataReleaseService(**options)._require_market_model(manifest)
     assert caught.value.code == "AUTOMATIC_RELEASE_MARKET_MODEL_MISMATCH"
+
+
+@pytest.mark.parametrize("refuse_content", (False, True))
+def test_staged_policy_publication_waits_for_all_release_checks_and_replays(
+    tmp_path, monkeypatch, refuse_content
+):
+    _, store, request, options = _case(tmp_path / "machine")
+    policy = _bound()[2]
+    repository = FilesystemPolicyRepository(tmp_path / "policies")
+    registry = PolicyRegistry(initial_model_specs(), repository=repository)
+    options["policy_registry"] = registry
+    # Isolate publication order from the separately tested policy authority.
+    monkeypatch.setattr(
+        AutomaticDataReleaseService,
+        "_market_registry",
+        lambda self, request: (
+            PolicyRegistry(initial_model_specs(), (policy,)),
+            (policy,),
+        ),
+    )
+    if refuse_content:
+        request = request.model_copy(
+            update={
+                "content": request.content.model_copy(update={"mapping_reviews": ()})
+            }
+        )
+    first = AutomaticDataReleaseService(**options).verify_and_sign(request)
+    if refuse_content:
+        assert first.decision.status == "blocked"
+        assert repository.list() == ()
+        assert first.candidate_publication is first.canary_publication is None
+    else:
+        assert first.decision.status == "passed"
+        assert repository.get(policy.policy_id) == policy
+        assert first.canary_publication is not None
+    before = inventory(tmp_path)
+    reopened = PolicyRegistry(
+        initial_model_specs(),
+        repository=FilesystemPolicyRepository(tmp_path / "policies"),
+    )
+    repeated = AutomaticDataReleaseService(
+        **(options | {"policy_registry": reopened})
+    ).verify_and_sign(request)
+    assert first.input_digest == repeated.input_digest
+    assert first.output_digest == repeated.output_digest
+    assert not repeated.wrote and inventory(tmp_path) == before

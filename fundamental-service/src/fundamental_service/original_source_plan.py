@@ -41,7 +41,7 @@ from .public_admission import PublicSourceAdmissionRequestV1
 from .original_preparation import OriginalPreparation
 from .quote_admission import QUOTE_METRIC
 from .quote_source_plan import AutomaticDailyQuoteRequestTemplateV1
-from .policies import initial_model_specs
+from .policies import ModelSpecV1, initial_model_specs
 from .source_plan_contracts import AutomaticSourcePreparationPlanV1
 from .replay import ArtifactPublicationV1
 from .serialization import canonical_bytes, sha256_digest
@@ -397,6 +397,52 @@ class OriginalSourcePlanRequestV1(StrictModel):
         return sha256_digest(self)
 
 
+def compile_issuer_market_request(
+    request: OriginalSourcePlanRequestV1,
+    *,
+    model: ModelSpecV1,
+    classification: IssuerClassificationRequestV1,
+) -> IssuerMarketPreparationRequestV1:
+    """Expand approved template pins without granting deployment authority."""
+    configuration = request.configuration
+    template = configuration.issuer_market_policy_template
+    if template is None or configuration.model_id != model.model_id:
+        raise ValueError(
+            "issuer market compilation requires the configured model/template"
+        )
+    terminal = TerminalGrowthPlanV1(
+        issuer_id=classification.issuer_id,
+        policy_id=template.terminal_growth_policy_id,
+        valuation_at=classification.valuation_at,
+        currency="USD",
+        gdp_horizon_years=template.gdp_horizon_years,
+        maximum_gdp_period_age_days=template.maximum_gdp_period_age_days,
+        risk_free_policy=template.risk_free_policy,
+    )
+    return IssuerMarketPreparationRequestV1(
+        source_revision=request.runtime_source_revision,
+        classification_provider_id=template.classification_provider_id,
+        classification_request=classification,
+        country_policy=template.country_policy,
+        industry_policy=template.industry_policy,
+        reference_policy=template.reference_policy,
+        market_policy=AutomaticMarketPolicyPolicyV1(
+            policy_version=template.market_policy_version,
+            currency="USD",
+            risk_free_policy=template.risk_free_policy,
+            terminal_growth_plan=terminal,
+        ),
+    ).with_policy_identity(
+        AutomaticMarketPolicyIdentityV1(
+            namespace=template.terminal_growth_policy_id,
+            model_id=configuration.model_id,
+            model_version=model.model_version,
+            profile_id=model.profile_id,
+            compiler_request_digest=request.digest,
+        )
+    )
+
+
 class OriginalSourcePlanEvidenceV1(StrictModel):
     protocol: Literal["original-source-plan-v1"] = "original-source-plan-v1"
     request: OriginalSourcePlanRequestV1
@@ -654,47 +700,15 @@ class OriginalSourcePlan:
                     assert market_original is not None
                     issuer_id, valuation_at = market_context
                     accession, period_end = market_original
-                    terminal_plan = TerminalGrowthPlanV1(
-                        issuer_id=issuer_id,
-                        policy_id=market_template.terminal_growth_policy_id,
-                        valuation_at=valuation_at,
-                        currency="USD",
-                        gdp_horizon_years=market_template.gdp_horizon_years,
-                        maximum_gdp_period_age_days=(
-                            market_template.maximum_gdp_period_age_days
+                    market_policy_request = compile_issuer_market_request(
+                        request,
+                        model=model,
+                        classification=IssuerClassificationRequestV1(
+                            issuer_id=issuer_id,
+                            accession_number=accession,
+                            report_period_end=period_end,
+                            valuation_at=valuation_at,
                         ),
-                        risk_free_policy=market_template.risk_free_policy,
-                    )
-                    classification_request = IssuerClassificationRequestV1(
-                        issuer_id=issuer_id,
-                        accession_number=accession,
-                        report_period_end=period_end,
-                        valuation_at=valuation_at,
-                    )
-                    market_policy = AutomaticMarketPolicyPolicyV1(
-                        policy_version=market_template.market_policy_version,
-                        currency="USD",
-                        risk_free_policy=market_template.risk_free_policy,
-                        terminal_growth_plan=terminal_plan,
-                    )
-                    market_policy_request = IssuerMarketPreparationRequestV1(
-                        source_revision=request.runtime_source_revision,
-                        classification_provider_id=(
-                            market_template.classification_provider_id
-                        ),
-                        classification_request=classification_request,
-                        country_policy=market_template.country_policy,
-                        industry_policy=market_template.industry_policy,
-                        reference_policy=market_template.reference_policy,
-                        market_policy=market_policy,
-                    ).with_policy_identity(
-                        AutomaticMarketPolicyIdentityV1(
-                            namespace=market_template.terminal_growth_policy_id,
-                            model_id=configuration.model_id,
-                            model_version=model.model_version,
-                            profile_id=model.profile_id,
-                            compiler_request_digest=request.digest,
-                        )
                     )
                     public_sources, source_admissions = _market_source_requests(
                         market_template.source_plan_template, valuation_at=valuation_at

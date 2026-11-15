@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import sys
+from functools import partial
 from importlib.metadata import version
 from pathlib import Path
 from typing import Literal
@@ -12,6 +13,11 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from pydantic import Field
 
 from .automatic_release_evidence import require_automatic_release_sources
+from .automatic_market_authority import (
+    AutomaticMarketAuthorityRuntime,
+    AutomaticMarketPolicyAuthorizationV1,
+    authorize_compiled_market_policy,
+)
 from .command_artifacts import EvidenceArtifactStore
 from .contracts import InitialModelId
 from .contracts import SourceSnapshotV1
@@ -32,7 +38,7 @@ from .macro_series import MacroSeriesProviderPort
 from .market_reference import MarketReferenceProviderPort
 from .market_reference_evidence import read_release_market_reference_plan
 from .terminal_growth_evidence import read_release_terminal_growth_plan
-from .policies import PolicyError, PolicyRegistry, initial_model_specs
+from .policies import PolicyError, PolicyRecordV1, PolicyRegistry, initial_model_specs
 from .quote_providers import QuoteSourceProviderPort
 from .release_runner import (
     DataReleaseCanaryRunner,
@@ -43,6 +49,8 @@ from .replay import ArtifactPublicationV1
 from .serialization import canonical_bytes, sha256_digest
 from .snapshots import SnapshotError
 from .source_admission import SourceUsePolicyV1
+from .source_admission_evidence import load_release_source_admissions
+from .source_plan_contracts import AutomaticSourcePreparationPlanV1
 from .valuation_release_inputs import valuation_release_requirements
 from .valuation_requirements import (
     composite_working_capital_requirements_profile,
@@ -88,11 +96,17 @@ class AutomaticDataReleasePolicyV1(ReleaseModel):
     validation_profile_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
     verifier_id: str = Field(min_length=1)
     workflow_identity: str = Field(min_length=1)
+    market_policy_authorization: AutomaticMarketPolicyAuthorizationV1 | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
 
 
 class AutomaticDataReleaseRequestV1(ReleaseModel):
     manifest: IssuerOperatingReleaseManifestV1 | DataReleaseManifestV1
     content: DataReleaseContentRequestV1
+    source_plan: AutomaticSourcePreparationPlanV1 | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
 
 
 class AutomaticDataReleaseCandidateV1(ReleaseModel):
@@ -139,6 +153,7 @@ class AutomaticDataReleaseService:
         reference_providers: tuple[MarketReferenceProviderPort, ...] = (),
         source_use_policy: SourceUsePolicyV1 | None = None,
         policy_registry: PolicyRegistry | None = None,
+        market_authority: AutomaticMarketAuthorityRuntime | None = None,
     ) -> None:
         self._snapshots, self._mappings, self._artifacts = (
             snapshots,
@@ -155,7 +170,11 @@ class AutomaticDataReleaseService:
         self._revision = source_revision
         self._source_use_policy = source_use_policy
         self._policy_registry = policy_registry
-        self._runner = DataReleaseCanaryRunner(
+        self._market_authority = market_authority
+        self._macro_providers = macro_providers
+        self._reference_providers = reference_providers
+        self._canary = partial(
+            DataReleaseCanaryRunner,
             snapshot_repository=snapshots,
             fact_repository=facts,
             mapping_reader=mappings,
@@ -165,8 +184,72 @@ class AutomaticDataReleaseService:
             macro_providers=macro_providers,
             reference_providers=reference_providers,
             source_use_policy=source_use_policy,
-            policy_registry=policy_registry,
         )
+
+    def _market_registry(
+        self, request: AutomaticDataReleaseRequestV1
+    ) -> tuple[PolicyRegistry | None, tuple[PolicyRecordV1, ...]]:
+        authorization = self._policy.market_policy_authorization
+        if authorization is None:
+            return self._policy_registry, ()
+        if (
+            self._policy.scope != "security"
+            or self._policy_registry is None
+            or self._market_authority is None
+            or self._source_use_policy is None
+            or request.source_plan is None
+        ):
+            raise DataReleaseError(
+                "AUTOMATIC_MARKET_AUTHORITY_UNAVAILABLE",
+                "automatic market authority requires configured deployment owners",
+            )
+        model = self._policy_registry.model(
+            self._policy.model_id, self._policy.model_version
+        )
+        if model is None:
+            raise DataReleaseError("MODEL_UNSUPPORTED", "deployment model unavailable")
+        admissions = load_release_source_admissions(
+            request.manifest,
+            artifacts=self._artifacts,
+            policy=self._source_use_policy,
+            macro_providers=self._macro_providers,
+            reference_providers=self._reference_providers,
+        )
+        policies = []
+        for ref in request.manifest.snapshot_refs:
+            snapshot = self._snapshots.get(ref.snapshot_id)
+            if not isinstance(snapshot, SourceSnapshotV1):
+                raise DataReleaseError(
+                    "AUTOMATIC_RELEASE_POLICY_MISMATCH",
+                    "automatic market authority requires a security snapshot",
+                )
+            policy = authorize_compiled_market_policy(
+                request.manifest,
+                authorization=authorization,
+                model=model,
+                snapshot=snapshot,
+                admissions=admissions,
+                artifacts=self._artifacts,
+                owners=self._market_authority,
+                source_plan=request.source_plan,
+                source_revision=self._revision,
+            )
+            existing = self._policy_registry.policy(policy.policy_id)
+            if existing is not None and existing != policy:
+                raise DataReleaseError("POLICY_IMMUTABLE", "policy identity conflict")
+            policies.append(policy)
+        staged = PolicyRegistry(
+            self._policy_registry.models(),
+            (
+                *tuple(
+                    item
+                    for item in self._policy_registry.policies()
+                    if item.policy_id not in {policy.policy_id for policy in policies}
+                ),
+                *policies,
+            ),
+        )
+        return staged, tuple(policies)
 
     def _require_policy(self, request: AutomaticDataReleaseRequestV1) -> None:
         policy, manifest = self._policy, request.manifest
@@ -245,14 +328,20 @@ class AutomaticDataReleaseService:
                 "release mapping is unavailable from its configured repository",
             ) from error
 
-    def _require_market_model(self, manifest: DataReleaseManifestV1) -> tuple[str, ...]:
+    def _require_market_model(
+        self,
+        manifest: DataReleaseManifestV1,
+        *,
+        registry: PolicyRegistry | None = None,
+    ) -> tuple[str, ...]:
         if self._policy.scope != "security":
             return ()
         plans = (
             read_release_market_reference_plan(manifest, artifacts=self._artifacts),
             read_release_terminal_growth_plan(manifest, artifacts=self._artifacts),
         )
-        if self._policy_registry is None or any(plan is None for plan in plans):
+        registry = registry or self._policy_registry
+        if registry is None or any(plan is None for plan in plans):
             raise DataReleaseError(
                 "AUTOMATIC_RELEASE_MARKET_POLICY_MISSING",
                 "machine security releases require both deployed market selection plans",
@@ -267,7 +356,7 @@ class AutomaticDataReleaseService:
                     "market policy requires a security snapshot",
                 )
             try:
-                effective = self._policy_registry.select_policy(
+                effective = registry.select_policy(
                     model_id=self._policy.model_id,
                     model_version=self._policy.model_version,
                     valuation_timestamp=snapshot.valuation_timestamp,
@@ -291,6 +380,14 @@ class AutomaticDataReleaseService:
         request = AutomaticDataReleaseRequestV1.model_validate_json(
             canonical_bytes(request)
         )
+        preparation_error = None
+        registry = self._policy_registry
+        staged_policies: tuple[PolicyRecordV1, ...] = ()
+        try:
+            self._require_policy(request)
+            registry, staged_policies = self._market_registry(request)
+        except (DataReleaseError, SnapshotError, ValueError) as error:
+            preparation_error = error
         payload = {
             "policy": self._policy,
             "request": request,
@@ -303,10 +400,12 @@ class AutomaticDataReleaseService:
                 "market_registry_digest": sha256_digest(
                     {
                         "policies": tuple(
-                            sorted(
+                            item
+                            for item in sorted(
                                 self._policy_registry.policies(),
                                 key=lambda item: item.policy_id,
                             )
+                            if item not in staged_policies
                         ),
                         "models": tuple(
                             sorted(
@@ -332,9 +431,13 @@ class AutomaticDataReleaseService:
         publications = [input_pub]
         candidate_pub = canary_pub = None
         try:
-            self._require_policy(request)
-            content = self._runner.validate_content(request.manifest, request.content)
-            market_policies = self._require_market_model(request.manifest)
+            if preparation_error is not None:
+                raise preparation_error
+            runner = self._canary(policy_registry=registry)
+            content = runner.validate_content(request.manifest, request.content)
+            market_policies = self._require_market_model(
+                request.manifest, registry=registry
+            )
             if self._policy.scope == "security" and len(
                 content.market_policy_checks
             ) != len(request.manifest.snapshot_refs):
@@ -396,7 +499,7 @@ class AutomaticDataReleaseService:
                 },
                 self._key,
             )
-            canary = self._runner.validate(request.manifest, verification)
+            canary = runner.validate(request.manifest, verification)
             canary_pub = self._artifacts.put_with_receipt(
                 "automatic-release-canary-" + canary.canary_digest,
                 canary,
@@ -406,6 +509,13 @@ class AutomaticDataReleaseService:
                 ),
             )
             publications.append(canary_pub)
+            if staged_policies:
+                assert self._policy_registry is not None
+                for staged_policy in staged_policies:
+                    try:
+                        self._policy_registry.add_policy(staged_policy)
+                    except PolicyError as error:
+                        raise DataReleaseError(error.code, str(error)) from error
             candidate = AutomaticDataReleaseCandidateV1(
                 manifest=request.manifest, verification=verification
             )

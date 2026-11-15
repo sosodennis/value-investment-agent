@@ -2394,6 +2394,11 @@ async def _run_command(args: argparse.Namespace) -> ArtifactPublicationV1:
             )
         automatic_release = None
         automatic_release_policy = None
+        market_preparation = (
+            _runtime_issuer_market_preparation(application)
+            if plan.issuer_market_policy is not None
+            else None
+        )
         if (args.automatic_release_policy is None) != (
             args.release_private_key is None
         ):
@@ -2419,21 +2424,6 @@ async def _run_command(args: argparse.Namespace) -> ArtifactPublicationV1:
                 raise ValueError("automatic release requires an Ed25519 deployment key")
             automatic_release_policy = AutomaticDataReleasePolicyV1.model_validate_json(
                 args.automatic_release_policy.read_bytes()
-            )
-            automatic_release = AutomaticDataReleaseService(
-                snapshots=application.snapshot_repository,
-                facts=application.fact_repository,
-                mappings=app.state.metadata_store,
-                artifacts=application.artifact_store,
-                trust_roots=DataReleaseTrustRootsV1.from_file(Path(trust_roots_file)),
-                policy=automatic_release_policy,
-                private_key=release_key,
-                source_revision=args.runtime_source_revision,
-                quote_providers=application.quote_providers,
-                macro_providers=application.macro_providers,
-                reference_providers=application.reference_providers,
-                source_use_policy=application.source_use_policy,
-                policy_registry=application.policy_registry,
             )
         public_acquisition = None
         if plan.public_sources:
@@ -2472,6 +2462,70 @@ async def _run_command(args: argparse.Namespace) -> ArtifactPublicationV1:
                 reference_providers=application.reference_providers,
                 quote_providers=application.quote_providers,
             )
+        if automatic_release_policy is not None:
+            market_authority = None
+            if automatic_release_policy.market_policy_authorization is not None:
+                if (
+                    public_acquisition is None
+                    or public_admission is None
+                    or market_preparation is None
+                    or app.state.sec_acquisition is None
+                    or application.content_store is None
+                ):
+                    raise ValueError(
+                        "automatic market authority requires all configured source owners"
+                    )
+                from .annual_discovery_service import AnnualDiscovery
+                from .automatic_market_authority import AutomaticMarketAuthorityRuntime
+                from .original_preparation import OriginalPreparation
+                from .original_source_plan import OriginalSourcePlan
+
+                source_lock = PostgresPublicCaptureLock(app.state.metadata_store)
+                originals = OriginalPreparation(
+                    discovery=AnnualDiscovery(
+                        provider=app.state.sec_acquisition.adapter,
+                        artifacts=application.artifact_store,
+                        content=application.content_store,
+                        capture_lock=source_lock,
+                    ),
+                    validator=app.state.sec_acquisition,
+                    artifacts=application.artifact_store,
+                    content=application.content_store,
+                    capture_lock=source_lock,
+                )
+                market_authority = AutomaticMarketAuthorityRuntime(
+                    compiler=OriginalSourcePlan(
+                        originals=originals,
+                        artifacts=application.artifact_store,
+                        compilation_lock=source_lock,
+                    ),
+                    current=CurrentSourcePreparation(
+                        acquisitions=public_acquisition,
+                        artifacts=application.artifact_store,
+                        selection_lock=source_lock,
+                    ),
+                    acquisitions=public_acquisition,
+                    admissions=public_admission,
+                    preparation=market_preparation,
+                )
+            assert trust_roots_file is not None
+            assert isinstance(release_key, Ed25519PrivateKey)
+            automatic_release = AutomaticDataReleaseService(
+                snapshots=application.snapshot_repository,
+                facts=application.fact_repository,
+                mappings=app.state.metadata_store,
+                artifacts=application.artifact_store,
+                trust_roots=DataReleaseTrustRootsV1.from_file(Path(trust_roots_file)),
+                policy=automatic_release_policy,
+                private_key=release_key,
+                source_revision=args.runtime_source_revision,
+                quote_providers=application.quote_providers,
+                macro_providers=application.macro_providers,
+                reference_providers=application.reference_providers,
+                source_use_policy=application.source_use_policy,
+                policy_registry=application.policy_registry,
+                market_authority=market_authority,
+            )
         policy_deployment = None
         if authorization is not None:
             if (
@@ -2508,9 +2562,7 @@ async def _run_command(args: argparse.Namespace) -> ArtifactPublicationV1:
             market_policy_deployment=policy_deployment,
             public_acquisition=public_acquisition,
             public_admission=public_admission,
-            issuer_market_preparation=_runtime_issuer_market_preparation(application)
-            if plan.issuer_market_policy is not None
-            else None,
+            issuer_market_preparation=market_preparation,
             automatic_release=automatic_release,
             automatic_release_policy=automatic_release_policy,
         )
