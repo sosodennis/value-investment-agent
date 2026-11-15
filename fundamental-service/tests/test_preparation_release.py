@@ -7,6 +7,7 @@ from types import SimpleNamespace
 import pytest
 
 from fundamental_service.automatic_data_release import AutomaticDataReleasePolicyV1
+from fundamental_service.automatic_mapping_batch import AutomaticMappingBatchRequestV1
 from fundamental_service.automatic_release_evidence import (
     require_automatic_release_sources,
 )
@@ -114,6 +115,136 @@ def test_assembly_reuses_exact_originals_approvals_taxonomy_and_observed_facts(
     assert all(canonical_bytes(item) == canonical_bytes(request) for item in repeats)
     assert before == inventory(options["artifacts"].root)
     assert acquire(options["plan"].ingestions[0], acquisition).reused
+
+
+def test_regulatory_coverage_does_not_require_a_selected_mapping_from_every_original(
+    tmp_path, monkeypatch
+):
+    options, _, _ = assembly_case(tmp_path, monkeypatch)
+    request = assemble_preparation_release(**options)
+    # Isolate original coverage after all its observations are superseded.
+    # Numerical content still requires the approvals for every selected fact.
+    content = request.content.model_copy(update={"mapping_reviews": ()})
+    assert require_automatic_release_sources(
+        request.manifest,
+        content,
+        snapshots=SimpleNamespace(get=lambda _: options["snapshot"]),
+        mappings=SimpleNamespace(get_mapping=lambda _: pytest.fail("unused mapping")),
+        artifacts=options["artifacts"],
+        validation_profile_digest=options["policy"].validation_profile_digest,
+    )
+
+
+@pytest.mark.parametrize(
+    "defect,code",
+    [
+        ("missing_input", "AUTOMATIC_RELEASE_REGULATORY_EVIDENCE_MISSING"),
+        ("input_hash", "AUTOMATIC_RELEASE_ORIGINAL_ARTIFACT_MISMATCH"),
+        ("revision", "AUTOMATIC_RELEASE_ORIGINAL_EVIDENCE_MISMATCH"),
+        ("closure", "AUTOMATIC_RELEASE_ORIGINAL_EVIDENCE_MISMATCH"),
+        ("raw_bytes", "AUTOMATIC_RELEASE_ORIGINAL_ARTIFACT_MISMATCH"),
+        ("profile", "AUTOMATIC_RELEASE_SOURCE_PROFILE_MISMATCH"),
+        ("future", "AUTOMATIC_RELEASE_SOURCE_PROFILE_MISMATCH"),
+        ("issuer", "AUTOMATIC_RELEASE_SOURCE_PROFILE_MISMATCH"),
+        ("ambiguous", "AUTOMATIC_RELEASE_REGULATORY_EVIDENCE_MISSING"),
+    ],
+)
+def test_retained_original_coverage_refuses_invalid_evidence_without_used_mapping(
+    tmp_path, monkeypatch, defect, code
+):
+    from fundamental_service.original_issuer import evaluate_original_issuer
+
+    options, _, _ = assembly_case(tmp_path, monkeypatch)
+    request = assemble_preparation_release(**options)
+    content = request.content.model_copy(update={"mapping_reviews": ()})
+    refs = content.evidence_refs
+    batch_ref = next(
+        ref for ref in refs if ref.role == "automatic-mapping-batch-input-v1"
+    )
+    store = options["artifacts"]
+    batch = AutomaticMappingBatchRequestV1.model_validate_json(
+        store.read(batch_ref.artifact_id)
+    )
+    snapshot = options["snapshot"]
+    profile = options["policy"].validation_profile_digest
+    if defect == "missing_input":
+        refs = tuple(ref for ref in refs if ref != batch_ref)
+    elif defect == "input_hash":
+        refs = tuple(
+            ref.model_copy(update={"content_hash": "0" * 64})
+            if ref == batch_ref
+            else ref
+            for ref in refs
+        )
+    elif defect in {"revision", "ambiguous"}:
+        if defect == "revision":
+            changed = batch.model_copy(update={"source_revision": "b" * 40})
+        else:
+            original = batch.original
+            changed = batch.model_copy(
+                update={
+                    "original": evaluate_original_issuer(
+                        original.report,
+                        source=original.source,
+                        decision_at=original.decision_at + timedelta(seconds=1),
+                    )
+                }
+            )
+        publication = store.put_with_receipt("changed-original-input", changed)
+        changed_ref = batch_ref.model_copy(
+            update={
+                "artifact_id": publication.artifact.artifact_id,
+                "content_hash": publication.artifact.content_hash,
+            }
+        )
+        refs = (
+            (*refs, changed_ref)
+            if defect == "ambiguous"
+            else tuple(changed_ref if ref == batch_ref else ref for ref in refs)
+        )
+    elif defect == "closure":
+        refs = tuple(ref for ref in refs if ref != batch.evidence_refs[0])
+    elif defect == "raw_bytes":
+        raw_ref = next(
+            ref
+            for ref in batch.evidence_refs
+            if ref.content_hash == batch.integrity.raw_content_hash
+        )
+        store = SimpleNamespace(
+            read=lambda artifact_id: b"corrupted"
+            if artifact_id == raw_ref.artifact_id
+            else options["artifacts"].read(artifact_id)
+        )
+    elif defect == "profile":
+        profile = "0" * 64
+    elif defect == "future":
+        snapshot = snapshot.model_copy(
+            update={
+                "valuation_timestamp": batch.original.source.available_at
+                - timedelta(seconds=1)
+            }
+        )
+    elif defect == "issuer":
+        snapshot = snapshot.model_copy(
+            update={
+                "identity": snapshot.identity.model_copy(
+                    update={"issuer_id": "0000000002"}
+                )
+            }
+        )
+    content = content.model_copy(update={"evidence_refs": refs})
+    with pytest.raises(DataReleaseError) as failure:
+        require_automatic_release_sources(
+            request.manifest,
+            content,
+            snapshots=SimpleNamespace(get=lambda _: snapshot),
+            mappings=SimpleNamespace(
+                get_mapping=lambda _: pytest.fail("unused mapping")
+            ),
+            artifacts=store,
+            validation_profile_digest=profile,
+        )
+    assert failure.value.code == code
 
 
 @pytest.mark.parametrize(

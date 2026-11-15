@@ -2,7 +2,13 @@
 
 from __future__ import annotations
 
-from .automatic_mapping import verify_automatic_mapping_replay
+import hashlib
+
+from .automatic_mapping import (
+    AutomaticMappingSourceV1,
+    verify_automatic_mapping_replay,
+)
+from .automatic_mapping_batch import AutomaticMappingBatchRequestV1
 from .contracts import (
     QualityStatus,
     SecHistoryIntegrityEvidenceV1,
@@ -14,7 +20,7 @@ from .data_releases import (
     DataReleaseError,
     DataReleaseManifestV1,
 )
-from .issuer_release_evidence import verify_original_integrity
+from .issuer_release_evidence import verify_original_bytes, verify_original_integrity
 from .original_issuer import IssuerOperatingSourceV1, OriginalIssuerEvidenceV1
 from .release_runner import (
     ReleaseArtifactReader,
@@ -22,6 +28,58 @@ from .release_runner import (
     ReleaseSnapshotReader,
 )
 from .serialization import canonical_bytes, sha256_digest
+from .taxonomy_evidence import require_original_taxonomy
+
+
+def _retained_original_inputs(
+    request: DataReleaseContentRequestV1,
+    *,
+    artifacts: ReleaseArtifactReader,
+    parser_version: str,
+) -> tuple[AutomaticMappingBatchRequestV1, ...]:
+    sources = []
+    for ref in request.evidence_refs:
+        if ref.role != "automatic-mapping-batch-input-v1":
+            continue
+        raw = artifacts.read(ref.artifact_id)
+        if (
+            ref.media_type != "application/json"
+            or hashlib.sha256(raw).hexdigest() != ref.content_hash
+        ):
+            raise DataReleaseError(
+                "AUTOMATIC_RELEASE_ORIGINAL_ARTIFACT_MISMATCH",
+                "retained original inputs require exact JSON evidence bytes",
+            )
+        source = AutomaticMappingBatchRequestV1.model_validate_json(raw)
+        if (
+            source.source_revision != request.source_revision
+            or source.original.status != "matched"
+            or any(item not in request.evidence_refs for item in source.evidence_refs)
+        ):
+            raise DataReleaseError(
+                "AUTOMATIC_RELEASE_ORIGINAL_EVIDENCE_MISMATCH",
+                "retained originals must bind the release revision and evidence closure",
+            )
+        contents = {}
+        for item in source.evidence_refs:
+            content = artifacts.read(item.artifact_id)
+            if hashlib.sha256(content).hexdigest() != item.content_hash:
+                raise DataReleaseError(
+                    "AUTOMATIC_RELEASE_ORIGINAL_ARTIFACT_MISMATCH",
+                    "retained original source bytes differ from their references",
+                )
+            contents[item.content_hash] = content
+        verify_original_integrity(
+            source.original, source.integrity, parser_version=parser_version
+        )
+        require_original_taxonomy(
+            source.original.report.taxonomy_cache_hash or "",
+            source.evidence_refs,
+            contents,
+        )
+        verify_original_bytes(source.integrity, contents)
+        sources.append(source)
+    return tuple(sources)
 
 
 def require_automatic_release_sources(
@@ -44,11 +102,14 @@ def require_automatic_release_sources(
         for review in request.mapping_reviews
         if isinstance(review, AutomaticMappingApprovalV1)
     )
-    sources = tuple(
+    sources: tuple[AutomaticMappingSourceV1, ...] = tuple(
         verify_automatic_mapping_replay(
             review, mappings.get_mapping(review.mapping_id), artifacts=artifacts
         )
         for review in automatic
+    )
+    sources += _retained_original_inputs(
+        request, artifacts=artifacts, parser_version=manifest.parser_version
     )
     evidence: set[str] = set()
     for reference in manifest.snapshot_refs:
@@ -135,6 +196,15 @@ def require_automatic_release_sources(
                 "machine signing cannot accept an empty original set",
             )
         for original, integrity in pairs:
+            if (
+                original.source.cik != snapshot.identity.issuer_id
+                or original.source.available_at > snapshot.valuation_timestamp
+                or original.decision_at > snapshot.valuation_timestamp
+            ):
+                raise DataReleaseError(
+                    "AUTOMATIC_RELEASE_SOURCE_PROFILE_MISMATCH",
+                    "original must match the snapshot issuer and valuation cutoff",
+                )
             verify_original_integrity(
                 original, integrity, parser_version=manifest.parser_version
             )
