@@ -887,3 +887,29 @@ lease balance, credit facility availability, capital/award inventory, unreported
 debt amount, complete valuation input or release. Other disclosure representations
 require their own supported scope rule; calculation-tree agreement is not an
 independent completeness proof.
+
+### Original printed security-title representation
+
+Original identity selection policy `original-dei-paired-common-stock-v3` is the
+default for automatic source preparation. It extends the v2 printed common-stock
+dollar-par forms to allow an omitted `per share` suffix, for example
+`Common Stock, par value $1`. The exact original printed title is retained.
+SEC's [DEI2025 schema](https://xbrl.sec.gov/dei/2025/dei-2025.xsd) defines
+`Security12bTitle` as a normalized string of 1–150 characters; the suffix was an
+application restriction. This change classifies the title only and infers no
+par-value balance, share count, price or economic rights.
+
+v1/v2 remain explicit historical policies with their existing behavior. v3
+requests have a distinct policy identity and preparation digest. Complete paired
+DEI contexts, one supported common-stock pair, supported fixed-coupon note
+alternatives, and the existing namespace, entity, period, units and dimensions
+checks still apply. Unknown, unpaired, conflicting, preferred and multiple common
+classes refuse automatic selection. The rule interprets printed titles without
+company/accession registration or inference from custom member names.
+
+For unselected fixed-coupon-note pairs, v3 supports bounded uppercase
+alphanumeric source symbols with periods, hyphens and spaces, up to the SEC
+DEI `tradingSymbolItemType` limit of25 characters (for example `BOND 27`).
+The selected common-stock ticker retains its strict15-character provider form.
+All original scope checks still run on each note pair. This preserves a source
+symbol; it does not translate symbols, retrieve note prices or value debt.
