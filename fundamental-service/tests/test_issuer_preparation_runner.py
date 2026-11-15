@@ -186,11 +186,15 @@ def test_company_date_command_derives_history_count_from_configured_model(
 
     def discovery(module, arguments, *, timeout_seconds):
         assert module == "fundamental_service.annual_discovery_runner"
+        assert timeout_seconds == 900
         observed.append(int(arguments[arguments.index("--original-count") + 1]))
         raise RuntimeError("stop after validated discovery parameters")
 
     monkeypatch.setattr(
         "fundamental_service.issuer_preparation_runner._run_child", discovery
+    )
+    monkeypatch.setattr(
+        "fundamental_service.issuer_preparation_runner.monotonic", lambda: 100
     )
     arguments = [
         "--cik",

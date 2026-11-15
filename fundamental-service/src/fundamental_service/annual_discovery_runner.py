@@ -242,7 +242,12 @@ def main(argv: list[str] | None = None) -> int:
         help="original annuals (default: configured model minimum, or 2 for catalog only)",
     )
     parser.add_argument("--lookback-days", type=int, default=3650)
-    parser.add_argument("--timeout-seconds", type=int, default=120)
+    parser.add_argument(
+        "--timeout-seconds",
+        type=int,
+        default=900,
+        help="total discovery/preparation deadline in seconds (1..900; default: 900)",
+    )
     parser.add_argument("--artifact-id")
     parser.add_argument("--prepare-originals", action="store_true")
     parser.add_argument("--source-plan-configuration", type=Path)

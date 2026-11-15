@@ -390,7 +390,12 @@ def main(argv: list[str] | None = None) -> int:
         help="original annuals to acquire (default: selected model's minimum history)",
     )
     parser.add_argument("--lookback-days", type=int, default=3650)
-    parser.add_argument("--timeout-seconds", type=_timeout_seconds, default=120)
+    parser.add_argument(
+        "--timeout-seconds",
+        type=_timeout_seconds,
+        default=900,
+        help="total workflow deadline in seconds (1..900; default: 900)",
+    )
     parser.add_argument("--ticker")
     parser.add_argument("--share-class")
     parser.add_argument(

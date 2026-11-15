@@ -481,6 +481,7 @@ def test_discovery_command_uses_model_history_only_when_configured(
     observed = []
 
     async def run(args):
+        assert args.timeout_seconds == 900
         observed.append(args.request)
         return {"request": args.request}
 
