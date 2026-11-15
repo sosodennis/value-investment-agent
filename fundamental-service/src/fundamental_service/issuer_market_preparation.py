@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Literal, Protocol
 
 from pydantic import Field, model_validator
@@ -19,7 +19,7 @@ from .classification_crosswalk import (
     IndustryCrosswalkEvidenceV1,
     apply_industry_crosswalk,
 )
-from .contracts import SourceSnapshotV1, StrictModel
+from .contracts import InitialModelId, SourceSnapshotV1, StrictModel
 from .data_releases import ArtifactRefV1
 from .issuer_classification import (
     IssuerClassificationEvidenceV1,
@@ -47,6 +47,14 @@ from .source_evidence import RetainedSourceV1
 from .terminal_growth_evidence import TERMINAL_GROWTH_PLAN_ROLE
 
 
+class AutomaticMarketPolicyIdentityV1(StrictModel):
+    namespace: str = Field(min_length=1)
+    model_id: InitialModelId
+    model_version: str = Field(min_length=1)
+    profile_id: str = Field(min_length=1)
+    compiler_request_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
 class IssuerMarketPreparationRequestV1(StrictModel):
     protocol: Literal["issuer-market-preparation-request-v1"] = (
         "issuer-market-preparation-request-v1"
@@ -58,6 +66,9 @@ class IssuerMarketPreparationRequestV1(StrictModel):
     industry_policy: ClassificationCrosswalkPolicyV1
     reference_policy: IssuerMarketReferencePlanPolicyV1
     market_policy: AutomaticMarketPolicyPolicyV1
+    automatic_policy_identity: AutomaticMarketPolicyIdentityV1 | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
 
     @model_validator(mode="after")
     def same_context(self) -> IssuerMarketPreparationRequestV1:
@@ -67,17 +78,68 @@ class IssuerMarketPreparationRequestV1(StrictModel):
             or terminal.valuation_at != self.classification_request.valuation_at
         ):
             raise ValueError("issuer market preparation must pin one issuer and date")
+        if self.automatic_policy_identity is not None and terminal.policy_id != (
+            self._automatic_policy_id(
+                self.automatic_policy_identity, terminal.valuation_at
+            )
+        ):
+            raise ValueError("automatic market policy identity differs from its inputs")
         return self
 
     @property
     def digest(self) -> str:
         return sha256_digest(self)
 
+    def _automatic_policy_id(
+        self, identity: AutomaticMarketPolicyIdentityV1, valuation_at: datetime
+    ) -> str:
+        if valuation_at.tzinfo is None or valuation_at.utcoffset() is None:
+            raise ValueError("automatic market policy requires a valuation timezone")
+        classification = self.classification_request.model_dump()
+        classification["valuation_at"] = valuation_at.astimezone(UTC)
+        terminal = self.market_policy.terminal_growth_plan.model_dump(
+            exclude={"issuer_id", "valuation_at", "policy_id"}
+        )
+        digest = sha256_digest(
+            {
+                "protocol": "issuer-market-policy-identity-v1",
+                "identity": identity,
+                "source_revision": self.source_revision,
+                "classification_request": classification,
+                "classification_provider_id": self.classification_provider_id,
+                "country_policy": self.country_policy,
+                "industry_policy": self.industry_policy,
+                "reference_policy": self.reference_policy,
+                "market_policy": self.market_policy.model_dump(
+                    exclude={"terminal_growth_plan"}
+                ),
+                "terminal_policy": terminal,
+            }
+        )
+        return f"{identity.namespace}:{digest}"
+
+    def with_policy_identity(
+        self, identity: AutomaticMarketPolicyIdentityV1
+    ) -> IssuerMarketPreparationRequestV1:
+        """Scope an automatic plan identity without granting policy authority."""
+        payload = self.model_dump()
+        payload["automatic_policy_identity"] = identity.model_dump()
+        payload["market_policy"]["terminal_growth_plan"]["policy_id"] = (
+            self._automatic_policy_id(
+                identity, self.classification_request.valuation_at
+            )
+        )
+        return IssuerMarketPreparationRequestV1.model_validate(payload)
+
     def at(self, valuation_at: datetime) -> IssuerMarketPreparationRequestV1:
         """Freeze all dependent decision times together in explicit current mode."""
         payload = self.model_dump()
         payload["classification_request"]["valuation_at"] = valuation_at
         payload["market_policy"]["terminal_growth_plan"]["valuation_at"] = valuation_at
+        if self.automatic_policy_identity is not None:
+            payload["market_policy"]["terminal_growth_plan"]["policy_id"] = (
+                self._automatic_policy_id(self.automatic_policy_identity, valuation_at)
+            )
         return IssuerMarketPreparationRequestV1.model_validate(payload)
 
 

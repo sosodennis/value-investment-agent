@@ -171,6 +171,14 @@ The resulting plan carries those exact service policy pins into the existing
 issuer-market preparation owner; conflicting original identities and
 non-USD identities refuse compilation. Templates do not contain market values,
 capture receipts, source-use permissions or issuer-specific selections.
+For these automatic plans, `terminal_growth_policy_id` supplies a deployment
+namespace. The compiler derives an immutable policy ID from that namespace,
+the installed model/profile, complete compilation request, original
+classification request, source revision and policy pins. The compilation
+request binds the full original history and source-use/capture configuration.
+Freezing a current cutoff updates the ID with the dependent timestamps.
+Explicit plans that select an existing deployed policy retain its exact ID.
+An automatically generated identity grants no policy or release authority.
 
 The same template pins the source-use policy and provider-neutral capture
 templates for nominal GDP, the selected risk-free series, country ERP, industry

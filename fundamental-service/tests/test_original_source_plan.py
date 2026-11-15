@@ -613,8 +613,18 @@ def test_issuer_market_template_derives_identity_accession_and_date_from_saved_o
     assert market_request.reference_policy == template.reference_policy
     assert market_request.market_policy.currency == identity.currency
     assert market_request.market_policy.policy_version == template.market_policy_version
-    assert market_request.market_policy.terminal_growth_plan.policy_id == (
+    assert market_request.market_policy.terminal_growth_plan.policy_id != (
         template.terminal_growth_policy_id
+    )
+    identity_context = market_request.automatic_policy_identity
+    assert identity_context is not None
+    assert identity_context.namespace == template.terminal_growth_policy_id
+    assert identity_context.model_id == result.plan.model_id
+    assert identity_context.model_version == result.plan.ingestions[0].model_version
+    assert identity_context.compiler_request_digest == request.digest
+    later = market_request.at(original.valuation_timestamp + timedelta(seconds=1))
+    assert later.market_policy.terminal_growth_plan.policy_id != (
+        market_request.market_policy.terminal_growth_plan.policy_id
     )
     assert market_request.market_policy.terminal_growth_plan.issuer_id == (
         identity.issuer_id
@@ -649,6 +659,33 @@ def test_issuer_market_template_derives_identity_accession_and_date_from_saved_o
         for item in result.plan.source_admissions
     )
     assert not compiler.execute(request)[1].wrote
+
+    rebound = market_request.with_policy_identity(
+        identity_context.model_copy(update={"model_version": "other"})
+    )
+    payload = result.plan.model_dump()
+    payload["issuer_market_policy"] = rebound.model_dump()
+    with pytest.raises(ValueError, match="automatic market identity.*model"):
+        SOURCE_PREPARATION_PLAN.validate_python(payload)
+
+    rebound = market_request.with_policy_identity(
+        identity_context.model_copy(update={"compiler_request_digest": "b" * 64})
+    )
+    payload = result.model_dump()
+    payload["plan"]["issuer_market_policy"] = rebound.model_dump()
+    with pytest.raises(ValueError, match="automatic market identity.*compilation"):
+        type(result).model_validate(payload)
+
+    changed_configuration = request.configuration.model_copy(
+        update={"policy_version": "another-source-preparation-v1"}
+    )
+    changed, _ = compiler.execute(
+        request.model_copy(update={"configuration": changed_configuration})
+    )
+    assert changed.plan is not None
+    assert (
+        changed.plan.issuer_market_policy.market_policy != market_request.market_policy
+    )
 
 
 @pytest.mark.parametrize(

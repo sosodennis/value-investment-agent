@@ -292,6 +292,13 @@ class AutomaticSourcePreparationPlanV1(
     @model_validator(mode="after")
     def automatic_pins_match(self) -> AutomaticSourcePreparationPlanV1:
         first = self.ingestions[0]
+        market = self.issuer_market_policy
+        identity = market.automatic_policy_identity if market is not None else None
+        if identity is not None and (
+            identity.model_id != self.model_id
+            or identity.model_version != first.model_version
+        ):
+            raise ValueError("automatic market identity must pin the source plan model")
         for request in self.ingestions:
             if (
                 request.source_revision != self.source_revision

@@ -30,7 +30,10 @@ from .issuer_country_crosswalk import CountryCrosswalkPolicyV1
 from .issuer_classification import IssuerClassificationRequestV1
 from .issuer_identity import original_history_identity_key
 from .issuer_market_policy_plan import IssuerMarketReferencePlanPolicyV1
-from .issuer_market_preparation import IssuerMarketPreparationRequestV1
+from .issuer_market_preparation import (
+    AutomaticMarketPolicyIdentityV1,
+    IssuerMarketPreparationRequestV1,
+)
 from .automatic_market_policy import AutomaticMarketPolicyPolicyV1
 from .market_source_selection import DailyMarketRatePolicyV1
 from .public_acquisition import PublicSourceAcquisitionRequestV1
@@ -409,6 +412,15 @@ class OriginalSourcePlanEvidenceV1(StrictModel):
             self.plan is not None and self.retryable
         ):
             raise ValueError("source compilation needs a plan or retained refusal")
+        if self.plan is not None and self.plan.issuer_market_policy is not None:
+            identity = self.plan.issuer_market_policy.automatic_policy_identity
+            template = self.request.configuration.issuer_market_policy_template
+            if identity is not None and (
+                identity.compiler_request_digest != self.request.digest
+                or template is None
+                or identity.namespace != template.terminal_growth_policy_id
+            ):
+                raise ValueError("automatic market identity must pin its compilation")
         return self
 
     @property
@@ -675,6 +687,14 @@ class OriginalSourcePlan:
                         industry_policy=market_template.industry_policy,
                         reference_policy=market_template.reference_policy,
                         market_policy=market_policy,
+                    ).with_policy_identity(
+                        AutomaticMarketPolicyIdentityV1(
+                            namespace=market_template.terminal_growth_policy_id,
+                            model_id=configuration.model_id,
+                            model_version=model.model_version,
+                            profile_id=model.profile_id,
+                            compiler_request_digest=request.digest,
+                        )
                     )
                     public_sources, source_admissions = _market_source_requests(
                         market_template.source_plan_template, valuation_at=valuation_at

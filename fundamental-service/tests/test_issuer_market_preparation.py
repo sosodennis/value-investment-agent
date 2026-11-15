@@ -1,7 +1,7 @@
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
-from datetime import timedelta
+from datetime import timedelta, timezone
 from hashlib import sha256
 from types import SimpleNamespace
 
@@ -28,6 +28,7 @@ from fundamental_service.issuer_market_policy_plan import (
     IssuerMarketReferencePlanPolicyV1,
 )
 from fundamental_service.issuer_market_preparation import (
+    AutomaticMarketPolicyIdentityV1,
     IssuerMarketPreparation,
     IssuerMarketPreparationEvidenceV1,
     IssuerMarketPreparationRequestV1,
@@ -108,6 +109,87 @@ def market_request(at=AT, *, issuer_id="0000320193", accession=None):
         reference_policy=IssuerMarketReferencePlanPolicyV1(),
         market_policy=market,
     )
+
+
+def automatic_policy_identity():
+    return AutomaticMarketPolicyIdentityV1(
+        namespace="deployed-usd-v1",
+        model_id="fcff_dcf",
+        model_version="fcff_dcf-v2",
+        profile_id="fcff-profile-v1",
+        compiler_request_digest="c" * 64,
+    )
+
+
+def test_automatic_policy_identity_follows_issuer_date_and_deployment_pins():
+    original = market_request().with_policy_identity(automatic_policy_identity())
+    policy_id = original.market_policy.terminal_growth_plan.policy_id
+    same_instant = AT.astimezone(timezone(timedelta(hours=8)))
+    assert original.at(AT) == original
+    assert original.at(same_instant).market_policy.terminal_growth_plan.policy_id == (
+        policy_id
+    )
+    later = original.at(AT + timedelta(seconds=1))
+    assert later.market_policy.terminal_growth_plan.policy_id != policy_id
+    assert later.at(AT) == original
+    variants = (
+        market_request(issuer_id="0000789019"),
+        market_request(accession="0000320193-26-000002"),
+        original.model_copy(update={"source_revision": "b" * 40}),
+        original.model_copy(
+            update={
+                "reference_policy": original.reference_policy.model_copy(
+                    update={"maximum_age_days": 100}
+                )
+            }
+        ),
+    )
+    ids = {
+        value.with_policy_identity(
+            automatic_policy_identity()
+        ).market_policy.terminal_growth_plan.policy_id
+        for value in variants
+    }
+    assert len(ids) == len(variants) and policy_id not in ids
+    for change in (
+        {"namespace": "deployed-usd-v2"},
+        {"model_id": "transition_fcff_dcf"},
+        {"model_version": "fcff_dcf-v3"},
+        {"profile_id": "other-profile"},
+        {"compiler_request_digest": "d" * 64},
+    ):
+        identity = automatic_policy_identity().model_copy(update=change)
+        assert (
+            original.with_policy_identity(identity).market_policy
+            != original.market_policy
+        )
+
+
+@pytest.mark.parametrize("change", ("id", "date", "namespace", "pins"))
+def test_automatic_policy_identity_rejects_stale_or_rebound_context(change):
+    original = market_request().with_policy_identity(automatic_policy_identity())
+    payload = original.model_dump()
+    if change == "id":
+        payload["market_policy"]["terminal_growth_plan"]["policy_id"] = "other"
+    elif change == "date":
+        later = AT + timedelta(seconds=1)
+        payload["classification_request"]["valuation_at"] = later
+        payload["market_policy"]["terminal_growth_plan"]["valuation_at"] = later
+    elif change == "namespace":
+        payload["automatic_policy_identity"]["namespace"] = "other"
+    else:
+        payload["country_policy"]["mapping_digest"] = "a" * 64
+    with pytest.raises(ValidationError, match="automatic market policy identity"):
+        IssuerMarketPreparationRequestV1.model_validate(payload)
+
+
+def test_explicit_deployed_policy_identity_is_retained_in_current_mode():
+    original = market_request()
+    later = original.at(AT + timedelta(seconds=1))
+    assert later.market_policy.terminal_growth_plan.policy_id == (
+        original.market_policy.terminal_growth_plan.policy_id
+    )
+    assert "automatic_policy_identity" not in original.model_dump(mode="json")
 
 
 def preparer(artifacts, content):
