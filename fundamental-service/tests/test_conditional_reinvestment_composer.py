@@ -40,8 +40,8 @@ from test_preparation_runner import _reviewed_candidate
 from test_valuation_release_inputs import _client, _manifest_with, _prepare
 
 
-def _fixture(tmp_path):
-    fixture = _conditional_fixture(tmp_path)
+def _fixture(tmp_path, *, sec_profile=False):
+    fixture = _conditional_fixture(tmp_path, sec_profile=sec_profile)
     payload = fixture.snapshot.model_dump(exclude={"manifest_digest"})
     payload["source_records"] = tuple(
         source.model_copy(update={"form": "10-K"})

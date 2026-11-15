@@ -16,6 +16,7 @@ from .automatic_mapping import automatic_mapping_policy_digest
 from .automatic_source_mapping import AutomaticSecIngestionRequestV1
 from .classification_crosswalk import ClassificationCrosswalkPolicyV1
 from .conditional_capital_contracts import ConditionalCapitalRecipeV1
+from .conditional_reinvestment_contracts import ConditionalReinvestmentRecipeV1
 from .command_artifacts import EvidenceArtifactStore
 from .contracts import (
     FiscalPeriodSelectorV1,
@@ -331,18 +332,29 @@ class AutomaticSourcePlanConfigurationV1(StrictModel):
     conditional_capital_recipe: ConditionalCapitalRecipeV1 | None = Field(
         default=None, exclude_if=lambda value: value is None
     )
+    conditional_reinvestment_recipe: ConditionalReinvestmentRecipeV1 | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
 
     @model_validator(mode="after")
     def supported_model(self) -> AutomaticSourcePlanConfigurationV1:
-        source_preparation_requirements_profile(self.model_id)
-        capital = self.conditional_capital_recipe
-        if capital is not None and (
-            capital.model_id != self.model_id
-            or capital.mapping_version != self.mapping_version
+        source_preparation_requirements_profile(
+            self.model_id,
+            composite_inputs=self.working_capital_recipe_template is not None,
+            conditional_capital=self.conditional_capital_recipe is not None,
+            conditional_reinvestment=self.conditional_reinvestment_recipe is not None,
+        )
+        for conditional in (
+            self.conditional_capital_recipe,
+            self.conditional_reinvestment_recipe,
         ):
-            raise ValueError(
-                "capital recipe must pin the configured model and mapping version"
-            )
+            if conditional is not None and (
+                conditional.model_id != self.model_id
+                or conditional.mapping_version != self.mapping_version
+            ):
+                raise ValueError(
+                    "conditional recipe must pin the configured model and mapping version"
+                )
         if self.working_capital_recipe_template is not None:
             composite_working_capital_requirements_profile(
                 self.model_id, operating_only=False
@@ -474,6 +486,8 @@ class OriginalSourcePlan:
                 configuration.model_id,
                 composite_inputs=recipe_template is not None,
                 conditional_capital=configuration.conditional_capital_recipe
+                is not None,
+                conditional_reinvestment=configuration.conditional_reinvestment_recipe
                 is not None,
             )
             model = next(
@@ -674,6 +688,7 @@ class OriginalSourcePlan:
                         source_admissions=source_admissions,
                         valuation_working_capital_recipe=recipe,
                         conditional_capital_recipe=configuration.conditional_capital_recipe,
+                        conditional_reinvestment_recipe=configuration.conditional_reinvestment_recipe,
                         issuer_market_policy=market_policy_request,
                     )
         return OriginalSourcePlanEvidenceV1(

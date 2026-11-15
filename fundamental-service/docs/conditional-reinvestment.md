@@ -94,9 +94,23 @@ calculation, the application reloads the release document, recomposes the comple
 input and compares all operands, scenarios, quality and provenance; caller approval
 must still bind that exact input and authenticated caller.
 
+`AutomaticSourcePlanConfigurationV1.conditional_reinvestment_recipe` carries the
+deployment recipe into the automatically compiled source plan. Its source profile
+retains observed capital requirements and historical reinvestment supporting roles.
+It cannot also select a historical working-capital policy or recipe. The caller
+still supplies only company/CIK and valuation date once deployment is configured.
+
+Preparation reads the retained assumption bytes, uses the existing PIT selector
+and source assessor, and saves a `conditional-reinvestment-binding-v1` artifact.
+That artifact preserves exact recipe/snapshot/fact/document identities or explicit
+refusal codes, missing evidence and failure reasons. Automatic release assembly
+carries the bound policy and assumption reference to the existing admission and
+trusted signing owners. Reuse checks the recipe, re-reads the document and rebinds
+the selected source facts; it cannot reuse a release with substituted assumptions.
+
 This implementation does not establish real-source completeness, quote entitlement,
-real caller approval or numerical delivery. Automatic-plan integration, real company
-execution and the original replay/restart/restore acceptance remain required.
+real caller approval or numerical delivery. Real company execution and the original
+replay/restart/restore acceptance remain required.
 
 ## Shared accounting rules and candidate evidence
 

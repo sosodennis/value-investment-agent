@@ -204,6 +204,10 @@ class AutomaticDataReleaseService:
             versions = {
                 item.model_version for item in manifest.conditional_capital_policies
             }
+            versions.update(
+                item.recipe.model_version
+                for item in manifest.conditional_reinvestment_policies
+            )
             working = manifest.valuation_working_capital_policy
             if working is not None:
                 versions.add(working.model_version)

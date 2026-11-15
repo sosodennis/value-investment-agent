@@ -17,7 +17,7 @@ from .conditional_reinvestment_contracts import (
     ConditionalReinvestmentRecipeV1,
 )
 from .contracts import CanonicalFactV1, SourceSnapshotV1
-from .data_releases import DataReleaseError, DataReleaseManifestV1
+from .data_releases import ArtifactRefV1, DataReleaseError, DataReleaseManifestV1
 from .facts import canonical_fact_digest
 from .serialization import canonical_bytes
 from .valuation_requirements import (
@@ -175,10 +175,28 @@ def valuation_release_conditional_reinvestment(
             "DATA_RELEASE_REINVESTMENT_FACT_MISMATCH",
             "forward assessment requires the entire exact released fact set",
         )
-    recipe = policy.recipe
+    validate_reinvestment_assumption_document(
+        policy.recipe, manifest.artifact_refs, artifacts=artifacts
+    )
+    try:
+        return assess_conditional_reinvestment(
+            policy, facts, snapshot=snapshot, mapping_version=mapping_version
+        )
+    except ConditionalReinvestmentError as error:
+        raise DataReleaseError(error.code, str(error)) from error
+
+
+def validate_reinvestment_assumption_document(
+    recipe: ConditionalReinvestmentRecipeV1,
+    references: tuple[ArtifactRefV1, ...],
+    *,
+    artifacts: ReinvestmentArtifactReader,
+) -> None:
+    """Re-read the exact retained deployment assumptions for preparation and release."""
+
     refs = tuple(
         ref
-        for ref in manifest.artifact_refs
+        for ref in references
         if recipe.assumption_document_uri == f"artifact://{ref.artifact_id}"
     )
     if len(refs) != 1 or (refs[0].role, refs[0].media_type, refs[0].content_hash) != (
@@ -207,9 +225,3 @@ def valuation_release_conditional_reinvestment(
             "DATA_RELEASE_REINVESTMENT_DOCUMENT_MISMATCH",
             "retained document must reproduce the exact versioned assumptions and limitations",
         )
-    try:
-        return assess_conditional_reinvestment(
-            policy, facts, snapshot=snapshot, mapping_version=mapping_version
-        )
-    except ConditionalReinvestmentError as error:
-        raise DataReleaseError(error.code, str(error)) from error

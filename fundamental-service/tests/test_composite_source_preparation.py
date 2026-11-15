@@ -17,6 +17,9 @@ from fundamental_service.source_plan_contracts import (
 )
 from fundamental_service.serialization import canonical_bytes, sha256_digest
 from fundamental_service.working_capital import canonical_working_capital_inputs
+from fundamental_service.valuation_requirements import (
+    source_preparation_requirements_profile,
+)
 from test_postgres_metadata import _sec_ingestion_request
 from test_automatic_source_mapping import source_case
 from test_preparation_runner import (
@@ -36,8 +39,17 @@ from test_valuation_release_inputs import (
 from test_issuer_operating_release import inventory
 
 
-def _plan(fixture, *, conditional_capital_recipe=None):
+def _plan(
+    fixture, *, conditional_capital_recipe=None, conditional_reinvestment_recipe=None
+):
     snapshot = fixture.snapshot
+    profile = source_preparation_requirements_profile(
+        "fcff_dcf",
+        composite_inputs=fixture.manifest.valuation_working_capital_policy is not None,
+        conditional_capital=conditional_capital_recipe is not None,
+        conditional_reinvestment=conditional_reinvestment_recipe is not None,
+    )
+    allowed = {*profile.required_fact_fields, *profile.supporting_fact_fields}
     base = _sec_ingestion_request()
     request = type(base)(
         **(
@@ -62,6 +74,7 @@ def _plan(fixture, *, conditional_capital_recipe=None):
                     sorted(
                         mapping.normalized_field
                         for mapping in fixture.mappings.values()
+                        if mapping.normalized_field in allowed
                     )
                 ),
                 "filing": base.filing.model_copy(
@@ -77,6 +90,7 @@ def _plan(fixture, *, conditional_capital_recipe=None):
                         normalized_field=mapping.normalized_field,
                     )
                     for mapping in fixture.mappings.values()
+                    if mapping.normalized_field in allowed
                 ),
             }
         )
@@ -88,6 +102,7 @@ def _plan(fixture, *, conditional_capital_recipe=None):
         ingestions=(request,),
         valuation_working_capital_policy=fixture.manifest.valuation_working_capital_policy,
         conditional_capital_recipe=conditional_capital_recipe,
+        conditional_reinvestment_recipe=conditional_reinvestment_recipe,
     )
 
 

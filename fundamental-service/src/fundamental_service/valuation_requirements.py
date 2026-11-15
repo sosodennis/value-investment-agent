@@ -345,10 +345,22 @@ def conditional_capital_requirements_profile(
 
 
 def source_preparation_requirements_profile(
-    model_id: str, *, composite_inputs: bool = False, conditional_capital: bool = False
+    model_id: str,
+    *,
+    composite_inputs: bool = False,
+    conditional_capital: bool = False,
+    conditional_reinvestment: bool = False,
 ) -> ValuationRequirementsProfileV1:
     """Acquire optional exclusion roles while retaining every unsupported role."""
 
+    if conditional_reinvestment:
+        if composite_inputs:
+            raise ValueError(
+                "forward reinvestment excludes historical composite inputs"
+            )
+        return conditional_reinvestment_requirements_profile(
+            model_id, conditional_capital=conditional_capital
+        )
     if not composite_inputs and not conditional_capital:
         return valuation_requirements_profile(model_id)
     profile = (
@@ -427,6 +439,14 @@ def automatic_source_requirements_profile(
             )
             if profile.digest == requirements_digest:
                 return profile
+    for conditional_capital in (False, True):
+        profile = source_preparation_requirements_profile(
+            model_id,
+            conditional_capital=conditional_capital,
+            conditional_reinvestment=True,
+        )
+        if profile.digest == requirements_digest:
+            return profile
     raise ValueError("automatic acquisition requires exact service model requirements")
 
 

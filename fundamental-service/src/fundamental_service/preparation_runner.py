@@ -93,6 +93,11 @@ from .conditional_capital_preparation import (
     ConditionalCapitalBindingV1,
     bind_conditional_capital_recipe,
 )
+from .conditional_reinvestment_preparation import (
+    ConditionalReinvestmentBindingV1,
+    prepare_conditional_reinvestment,
+)
+from .conditional_reinvestment_release import validate_reinvestment_assumption_document
 from .valuation_release_inputs import valuation_input_requirements
 from .working_capital import assess_composite_working_capital
 from .working_capital_preparation import (
@@ -160,6 +165,9 @@ class SourcePreparationEvidenceV1(StrictModel):
     conditional_capital_binding_ref: ArtifactRefV1 | None = Field(
         default=None, exclude_if=lambda value: value is None
     )
+    conditional_reinvestment_binding_ref: ArtifactRefV1 | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
     issuer_market_preparation_ref: ArtifactRefV1 | None = Field(
         default=None, exclude_if=lambda value: value is None
     )
@@ -214,6 +222,13 @@ class SourcePreparationEvidenceV1(StrictModel):
             or self.snapshot_id is None
         ):
             raise ValueError("capital binding requires its snapshot and JSON artifact")
+        reinvestment = self.conditional_reinvestment_binding_ref
+        if reinvestment is not None and (
+            reinvestment.role != "conditional-reinvestment-binding-v1"
+            or reinvestment.media_type != "application/json"
+            or self.snapshot_id is None
+        ):
+            raise ValueError("forward binding requires its snapshot and JSON artifact")
         deployment = self.market_policy_deployment_ref
         if deployment is not None and (
             deployment.role != "market-policy-deployment-v1"
@@ -464,7 +479,7 @@ class SourcePreparationRunner:
         plan: SourcePreparationPlan,
         manifest: DataReleaseManifestV1,
         *,
-        require_capital_binding: bool = True,
+        require_source_bindings: bool = True,
     ) -> bool:
         policy = manifest.valuation_working_capital_policy
         recipe = plan.valuation_working_capital_recipe
@@ -537,8 +552,24 @@ class SourcePreparationRunner:
                 for policy in manifest.conditional_capital_policies
             ):
                 return False
-            if not require_capital_binding:
-                return True
+        reinvestment_recipe = plan.conditional_reinvestment_recipe
+        if reinvestment_recipe is None:
+            if manifest.conditional_reinvestment_policies:
+                return False
+        else:
+            if not manifest.conditional_reinvestment_policies or any(
+                item.recipe != reinvestment_recipe
+                for item in manifest.conditional_reinvestment_policies
+            ):
+                return False
+            validate_reinvestment_assumption_document(
+                reinvestment_recipe,
+                manifest.artifact_refs,
+                artifacts=self._application.artifact_store,
+            )
+        if require_source_bindings and (
+            capital_recipe is not None or reinvestment_recipe is not None
+        ):
             matched = False
             for snapshot_ref in manifest.snapshot_refs:
                 try:
@@ -548,14 +579,24 @@ class SourcePreparationRunner:
                         raise
                     continue
                 if self._matches_plan(plan, snapshot):
-                    capital_binding = self._bind_conditional_capital(plan, snapshot)
-                    assert capital_binding is not None
-                    if (
-                        capital_binding.policy is None
-                        or capital_binding.policy
-                        not in manifest.conditional_capital_policies
-                    ):
-                        return False
+                    if capital_recipe is not None:
+                        capital_binding = self._bind_conditional_capital(plan, snapshot)
+                        assert capital_binding is not None
+                        if (
+                            capital_binding.policy is None
+                            or capital_binding.policy
+                            not in manifest.conditional_capital_policies
+                        ):
+                            return False
+                    if reinvestment_recipe is not None:
+                        forward = self._bind_conditional_reinvestment(plan, snapshot)
+                        assert forward is not None
+                        if (
+                            forward.policy is None
+                            or forward.policy
+                            not in manifest.conditional_reinvestment_policies
+                        ):
+                            return False
                     matched = True
             if not matched:
                 return False
@@ -910,11 +951,60 @@ class SourcePreparationRunner:
                 )
         if evidence.source_outcomes:
             self._persist_acquisitions(plan, evidence.source_outcomes)
+        reinvestment_ref = None
+        if (
+            not assembly_failed
+            and plan.conditional_reinvestment_recipe is not None
+            and evidence.snapshot_id is not None
+            and self._plan_mappings(plan) is not None
+        ):
+            forward = self._bind_conditional_reinvestment(
+                plan, self._application.snapshot(evidence.snapshot_id)
+            )
+            assert forward is not None
+            bound_forward = self._artifacts.put_with_receipt(
+                f"conditional-reinvestment-binding:{forward.digest}",
+                forward,
+                (
+                    plan.digest,
+                    forward.recipe_digest,
+                    forward.snapshot_manifest_digest,
+                    *forward.input_fact_digests,
+                    *(
+                        (forward.assumption_document_ref.content_hash,)
+                        if forward.assumption_document_ref is not None
+                        else ()
+                    ),
+                ),
+            )
+            reinvestment_ref = ArtifactRefV1(
+                artifact_id=bound_forward.artifact.artifact_id,
+                content_hash=bound_forward.artifact.content_hash,
+                media_type=bound_forward.artifact.media_type,
+                role=forward.protocol,
+            )
+            if forward.issue_codes:
+                evidence = SourcePreparationEvidenceV1.model_validate(
+                    evidence.model_dump()
+                    | {
+                        "status": "blocked",
+                        "issue_codes": tuple(
+                            sorted(set(evidence.issue_codes) | set(forward.issue_codes))
+                        ),
+                        "missing_evidence": tuple(
+                            sorted(
+                                set(evidence.missing_evidence)
+                                | set(forward.missing_evidence)
+                            )
+                        ),
+                    }
+                )
         evidence = SourcePreparationEvidenceV1.model_validate(
             {
                 **evidence.model_dump(),
                 "working_capital_binding_ref": binding_ref,
                 "conditional_capital_binding_ref": capital_ref,
+                "conditional_reinvestment_binding_ref": reinvestment_ref,
                 "source_plan_ref": ArtifactRefV1(
                     artifact_id=publication.artifact.artifact_id,
                     content_hash=publication.artifact.content_hash,
@@ -939,6 +1029,8 @@ class SourcePreparationRunner:
             dependencies += (binding_ref.content_hash,)
         if capital_ref is not None:
             dependencies += (capital_ref.content_hash,)
+        if reinvestment_ref is not None:
+            dependencies += (reinvestment_ref.content_hash,)
         if evidence.issuer_market_preparation_ref is not None:
             dependencies += (evidence.issuer_market_preparation_ref.content_hash,)
         if evidence.market_policy_deployment_ref is not None:
@@ -1157,6 +1249,9 @@ class SourcePreparationRunner:
         capital = self._bind_conditional_capital(plan, snapshot)
         if capital is not None and capital.issue_codes:
             return capital.issue_codes, capital.missing_evidence
+        forward = self._bind_conditional_reinvestment(plan, snapshot)
+        if forward is not None:
+            return forward.issue_codes, forward.missing_evidence
         binding = self._bind_working_capital(plan, snapshot)
         if binding is not None and binding.missing_evidence:
             return (
@@ -1218,6 +1313,19 @@ class SourcePreparationRunner:
             snapshot=snapshot,
         )
 
+    def _bind_conditional_reinvestment(
+        self, plan: SourcePreparationPlan, snapshot: SourceSnapshotV1
+    ) -> ConditionalReinvestmentBindingV1 | None:
+        if plan.conditional_reinvestment_recipe is None:
+            return None
+        return prepare_conditional_reinvestment(
+            plan.conditional_reinvestment_recipe,
+            self._plan_facts(plan, snapshot),
+            snapshot=snapshot,
+            artifacts=self._application.artifact_store,
+            conditional_capital=plan.conditional_capital_recipe is not None,
+        )
+
     def _mapping_evidence_ref(self, artifact_id: str | None) -> ArtifactRefV1 | None:
         if artifact_id is None:
             return None
@@ -1250,7 +1358,10 @@ class SourcePreparationRunner:
             )
         working = self._bind_working_capital(plan, snapshot)
         capital = self._bind_conditional_capital(plan, snapshot)
+        forward = self._bind_conditional_reinvestment(plan, snapshot)
         refs = tuple(ref for outcome in admissions for ref in outcome.release_refs)
+        if forward is not None and forward.assumption_document_ref is not None:
+            refs += (forward.assumption_document_ref,)
         if plan.issuer_market_policy is not None:
             market, _ = self._prepare_issuer_market(plan, snapshot, admissions)
             if market.issue_codes:
@@ -1280,6 +1391,9 @@ class SourcePreparationRunner:
             if working is not None
             else plan.valuation_working_capital_policy,
             conditional_capital_policy=capital.policy if capital is not None else None,
+            conditional_reinvestment_policy=forward.policy
+            if forward is not None
+            else None,
             prepared_refs=refs,
         )
         receipt = self._automatic_release.verify_and_sign(request)
@@ -1410,7 +1524,7 @@ class SourcePreparationRunner:
                 candidate.manifest.required_fields
             )
             or not self._matches_release_mappings(
-                plan, candidate.manifest, require_capital_binding=False
+                plan, candidate.manifest, require_source_bindings=False
             )
         ):
             raise ValueError(
@@ -1634,6 +1748,7 @@ class SourcePreparationRunner:
                     len(snapshots) > 1
                     or plan.valuation_working_capital_recipe is not None
                     or plan.conditional_capital_recipe is not None
+                    or plan.conditional_reinvestment_recipe is not None
                 ):
                     issues, missing = self._assess_history_requirements(plan, snapshot)
                     if issues:

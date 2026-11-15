@@ -17,6 +17,7 @@ from .automatic_mapping_batch import (
 )
 from .command_artifacts import EvidenceArtifactStore
 from .conditional_capital_contracts import ConditionalCapitalPolicyV1
+from .conditional_reinvestment_contracts import ConditionalReinvestmentPolicyV1
 from .contracts import CanonicalFactV1, SourceSnapshotV1
 from .data_releases import (
     ArtifactRefV1,
@@ -124,6 +125,7 @@ def assemble_preparation_release(
     working_capital_policy: ValuationWorkingCapitalPolicyV1 | None,
     conditional_capital_policy: ConditionalCapitalPolicyV1 | None,
     prepared_refs: tuple[ArtifactRefV1, ...],
+    conditional_reinvestment_policy: ConditionalReinvestmentPolicyV1 | None = None,
 ) -> AutomaticDataReleaseRequestV1:
     """Compile identities only; owning content validators decide release eligibility."""
     if len(batch_refs) != len(plan.ingestions):
@@ -281,6 +283,21 @@ def assemble_preparation_release(
         payload["valuation_working_capital_policy"] = working_capital_policy
     if conditional_capital_policy is not None:
         payload["conditional_capital_policies"] = (conditional_capital_policy,)
+    if (plan.conditional_reinvestment_recipe is None) != (
+        conditional_reinvestment_policy is None
+    ) or (
+        conditional_reinvestment_policy is not None
+        and conditional_reinvestment_policy.recipe
+        != plan.conditional_reinvestment_recipe
+    ):
+        raise DataReleaseError(
+            "AUTOMATIC_PREPARATION_REINVESTMENT_UNBOUND",
+            "release assembly requires the plan's exact bound forward policy",
+        )
+    if conditional_reinvestment_policy is not None:
+        payload["conditional_reinvestment_policies"] = (
+            conditional_reinvestment_policy,
+        )
     manifest = DataReleaseManifestV1.model_validate(
         payload | {"manifest_digest": sha256_digest(payload)}
     )
