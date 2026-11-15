@@ -37,7 +37,7 @@ class ValuationRequirementsProfileV1(StrictModel):
     profile_version: str = Field(min_length=1)
     model_id: InitialModelId
     annual_duration_fields: tuple[str, ...] = Field(min_length=1)
-    annual_instant_fields: tuple[str, ...] = Field(min_length=1)
+    annual_instant_fields: tuple[str, ...]
     point_in_time_fact_fields: tuple[str, ...] = ()
     market_policy_input_roles: tuple[str, ...] = ()
     supporting_fact_fields: tuple[str, ...] = ()
