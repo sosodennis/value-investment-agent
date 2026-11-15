@@ -617,6 +617,23 @@ Existing original-bound component classifications remain available where this
 direct representation is absent. The total does not classify long-term assets,
 establish an entirely operating residual or supply a complete capital bridge.
 
+### Standard 2023 balance concepts
+
+Automatic policy `source-bound-us-gaap-v30` extends only the two standard direct
+balance rules above to the FASB 2023 namespace. The [official 2023 definitions](https://xbrl.fasb.org/us-gaap/2023/elts/us-gaap-doc-2023.xml)
+(retrieved SHA-256
+`288ed00809b3f84f62ee82c93db6f063d4db09bdc4ee6d1654207a1865ded5e7`)
+are identical to their 2024 and 2025 definitions. The corresponding XSD elements
+also have identical monetary types, instant periods, nillability and debit/credit
+balances. The 2023 XSD SHA-256 is
+`5b23edf9ea3f1a6e35a50214e72d8a21acc2c262c6490d606a72cee0c3fb342e`.
+
+This is a shared taxonomy rule, with the same original-bound observation and
+strict scope, issuer, precision, conflict and signature checks. Unreviewed years,
+foreign namespaces, partial balances and missing roles still refuse. It does not
+classify issuer-extension concepts, combine current debt components, establish
+D&A/reinvestment scope or change the history threshold.
+
 ### Registered NVE noncurrent liability partition
 
 Automatic policy `source-bound-us-gaap-v10` also registers the same two complete
