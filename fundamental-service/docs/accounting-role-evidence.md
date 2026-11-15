@@ -588,6 +588,25 @@ market value of debt, complete current debt, convertible treatment, award
 completeness nor a full capital bridge. Reported rounding remains in the facts;
 no accounting or valuation formula changes.
 
+### Standard cash and short-term investment total
+
+Automatic policy `source-bound-us-gaap-v28` additionally supports consolidated
+instant `us-gaap:CashCashEquivalentsAndShortTermInvestments` in the same FASB
+2024/2025 namespaces. The official documents above define cash, cash equivalents
+and short-term investments together; short-term investments exclude cash
+equivalents and generally comprise securities intended for sale within a year
+or the longer operating cycle. This total supplies the existing composite
+working-capital recipe's `cash_and_short_term_investments` exclusion.
+
+The direct observation retains original precision, source identities and the
+existing USD/issuer/scope/instant/PIT gates. Negative, conflicting or unsupported
+observations refuse. A registered component proposal cannot override a reported
+consolidated total. Cash alone or a current-securities balance alone cannot
+implicitly supply the whole total. No missing component is assigned zero.
+Existing original-bound component classifications remain available where this
+direct representation is absent. The total does not classify long-term assets,
+establish an entirely operating residual or supply a complete capital bridge.
+
 ### Registered NVE noncurrent liability partition
 
 Automatic policy `source-bound-us-gaap-v10` also registers the same two complete

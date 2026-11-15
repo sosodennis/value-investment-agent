@@ -64,8 +64,8 @@ from .serialization import sha256_digest
 from .taxonomy_evidence import require_original_taxonomy
 
 AUTOMATIC_MAPPING_INPUT_ROLE = "automatic-mapping-input-v1"
-AutomaticMappingPolicyVersion = Literal["source-bound-us-gaap-v27"]
-AUTOMATIC_MAPPING_POLICY: AutomaticMappingPolicyVersion = "source-bound-us-gaap-v27"
+AutomaticMappingPolicyVersion = Literal["source-bound-us-gaap-v28"]
+AUTOMATIC_MAPPING_POLICY: AutomaticMappingPolicyVersion = "source-bound-us-gaap-v28"
 _GAAP_NAMESPACE = re.compile(
     r"http://(?:fasb\.org|xbrl\.us)/us-gaap/\d{4}(?:-\d{2}-\d{2})?"
 )
@@ -131,6 +131,15 @@ _RULES = {
     ),
     "cash_and_equivalents": DirectMappingRule(
         "us-gaap:CashAndCashEquivalentsAtCarryingValue", "instant"
+    ),
+    "cash_and_short_term_investments": DirectMappingRule(
+        "us-gaap:CashCashEquivalentsAndShortTermInvestments",
+        "instant",
+        namespace_uris=(
+            "http://fasb.org/us-gaap/2024",
+            "http://fasb.org/us-gaap/2025",
+        ),
+        nonnegative=True,
     ),
     "long_term_interest_bearing_debt": DirectMappingRule(
         "us-gaap:LongTermDebtNoncurrent",
@@ -204,11 +213,12 @@ def automatic_mapping_policy_digest() -> str:
     )
 
 
-def _direct_debt_present(
+def _direct_balance_present(
     original: OriginalIssuerEvidenceV1, normalized_field: str
 ) -> bool:
-    return normalized_field == "long_term_interest_bearing_debt" and any(
-        fact.concept == "us-gaap:LongTermDebtNoncurrent" and not fact.dimensions
+    rule = _RULES.get(normalized_field)
+    return rule is not None and any(
+        fact.concept == rule.concept and not fact.dimensions
         for fact in original.report.facts
     )
 
@@ -248,7 +258,9 @@ def automatic_mapping_proposal(
     rule = _RULES.get(normalized_field)
     disclosed = normalized_field == "stock_based_compensation"
     option_cost = normalized_field == "equity_award_unrecognized_compensation"
-    investment_assets = normalized_field in INVESTMENT_ASSET_ROLES
+    investment_assets = normalized_field in INVESTMENT_ASSET_ROLES and not (
+        original is not None and _direct_balance_present(original, normalized_field)
+    )
     noncontrolling_equity = normalized_field == "noncontrolling_interests"
     lease_concept = (
         lease_liability_concept(original, normalized_field)
@@ -259,7 +271,7 @@ def automatic_mapping_proposal(
         normalized_field in LIABILITY_RESIDUAL_ROLES
         and lease_concept is None
         and not (
-            original is not None and _direct_debt_present(original, normalized_field)
+            original is not None and _direct_balance_present(original, normalized_field)
         )
     )
     if option_cost and (
@@ -612,7 +624,7 @@ def evaluate_automatic_mapping(
                 p.period.period_end for p in leases.rules.periods
             )
     if liability_residual:
-        if _direct_debt_present(original, proposal.normalized_field):
+        if _direct_balance_present(original, proposal.normalized_field):
             reasons.add("MAPPING_DEBT_DIRECT_REPRESENTATION_REQUIRED")
         liabilities = select_registered_liability_residual(
             original,
@@ -639,6 +651,8 @@ def evaluate_automatic_mapping(
         selected.extend(equity.selected)
         accounting_rules = equity.rules
     if investment_assets:
+        if _direct_balance_present(original, proposal.normalized_field):
+            reasons.add("MAPPING_INVESTMENT_DIRECT_REPRESENTATION_REQUIRED")
         assets = select_registered_investment_assets(
             original,
             proposal.normalized_field,
