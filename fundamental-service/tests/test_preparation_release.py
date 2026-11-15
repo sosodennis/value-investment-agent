@@ -14,9 +14,14 @@ from fundamental_service.automatic_release_evidence import (
 )
 from fundamental_service.contracts import QualityStatus
 from fundamental_service.data_releases import ArtifactRefV1, DataReleaseError
+from fundamental_service.facts import (
+    FilesystemCanonicalFactRepository,
+    canonical_fact_digest,
+)
 from fundamental_service.preparation_release import assemble_preparation_release
 from fundamental_service.preparation_release import select_preparation_release_facts
-from fundamental_service.serialization import canonical_bytes
+from fundamental_service.release_runner import DataReleaseCanaryRunner
+from fundamental_service.serialization import canonical_bytes, sha256_digest
 from test_automatic_source_acquisition import acquisition_case, acquire
 from test_automatic_source_preparation import automatic_plan
 from test_issuer_operating_release import inventory
@@ -134,6 +139,80 @@ def test_regulatory_coverage_does_not_require_a_selected_mapping_from_every_orig
         artifacts=options["artifacts"],
         validation_profile_digest=options["policy"].validation_profile_digest,
     )
+
+
+@pytest.mark.parametrize("tamper", (False, True))
+def test_approved_observations_replay_despite_other_missing_mapping_roles(
+    tmp_path, monkeypatch, tamper
+):
+    """Validate an expense-only source release, without claiming valuation coverage."""
+    options, acquisition, acquired = assembly_case(tmp_path, monkeypatch)
+    request = assemble_preparation_release(**options)
+    assert "MAPPING_AUTOMATIC_RULE_UNSUPPORTED" in acquired.issue_codes
+    assert acquired.missing_evidence
+    facts = tuple(
+        fact
+        for fact in options["facts"]
+        if fact.normalized_field == "stock_based_compensation"
+    )
+    assert facts
+    repository = FilesystemCanonicalFactRepository(tmp_path / "released-facts")
+    for fact in facts:
+        if tamper:
+            fact = fact.model_copy(update={"issue_codes": ("UNREPRODUCED_DIAGNOSTIC",)})
+        repository.publish(fact)
+    mapping_ids = {fact.mapping_decision_id for fact in facts}
+    references = tuple(
+        ref.model_copy(
+            update={"fact_digest": canonical_fact_digest(repository.get(ref.fact_id))}
+        )
+        for ref in request.manifest.snapshot_refs[0].facts
+        if ref.fact_id in {fact.fact_id for fact in facts}
+    )
+    payload = request.manifest.model_dump(exclude={"manifest_digest"})
+    payload.update(
+        required_fields=("stock_based_compensation",),
+        mapping_refs=tuple(
+            ref
+            for ref in request.manifest.mapping_refs
+            if ref.mapping_id in mapping_ids
+        ),
+        snapshot_refs=(
+            request.manifest.snapshot_refs[0].model_copy(
+                update={
+                    "facts": references,
+                    "fact_set_digest": sha256_digest(references),
+                }
+            ),
+        ),
+    )
+    manifest = type(request.manifest)(**payload, manifest_digest=sha256_digest(payload))
+    content = request.content.model_copy(
+        update={
+            "mapping_reviews": tuple(
+                review
+                for review in request.content.mapping_reviews
+                if review.mapping_id in mapping_ids
+            )
+        }
+    )
+    mappings = {item.decision_id: item for item in options["mappings"]}
+    runner = DataReleaseCanaryRunner(
+        snapshot_repository=SimpleNamespace(get=lambda _: options["snapshot"]),
+        fact_repository=repository,
+        mapping_reader=SimpleNamespace(get_mapping=mappings.__getitem__),
+        artifact_reader=options["artifacts"],
+        trust_roots=acquisition.automatic_mapping_authority.trust_roots,
+    )
+    if not tamper:
+        checked = runner.validate_content(manifest, content)
+        assert checked.checked_fact_digests == tuple(
+            sorted(canonical_fact_digest(fact) for fact in facts)
+        )
+    else:
+        with pytest.raises(DataReleaseError) as error:
+            runner.validate_content(manifest, content)
+        assert error.value.code == "DATA_RELEASE_MAPPING_OBSERVATION_MISMATCH"
 
 
 def test_two_original_assembly_keeps_coverage_after_pit_prunes_older_mappings(

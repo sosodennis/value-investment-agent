@@ -1036,9 +1036,6 @@ class SecIngestionService:
                             "quality": quality,
                             "mapping_decision_id": mapping.decision_id,
                             "mapping_confidence": mapping.confidence,
-                            "issue_codes": tuple(
-                                sorted({issue.code for issue in issues})
-                            ),
                         }
                     )
                 )
