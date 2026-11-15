@@ -936,7 +936,7 @@ class SourcePreparationRunner:
             )
             assert binding is not None
             bound = self._artifacts.put_with_receipt(
-                f"working-capital-binding:{binding.digest}",
+                f"working-capital-binding:{plan.digest}:{binding.digest}",
                 binding,
                 (plan.digest, binding.recipe_digest, binding.snapshot_manifest_digest),
             )
@@ -958,7 +958,7 @@ class SourcePreparationRunner:
             )
             assert capital is not None
             bound_capital = self._artifacts.put_with_receipt(
-                f"conditional-capital-binding:{capital.digest}",
+                f"conditional-capital-binding:{plan.digest}:{capital.digest}",
                 capital,
                 (
                     plan.digest,
@@ -1003,7 +1003,7 @@ class SourcePreparationRunner:
             )
             assert forward is not None
             bound_forward = self._artifacts.put_with_receipt(
-                f"conditional-reinvestment-binding:{forward.digest}",
+                f"conditional-reinvestment-binding:{plan.digest}:{forward.digest}",
                 forward,
                 (
                     plan.digest,
