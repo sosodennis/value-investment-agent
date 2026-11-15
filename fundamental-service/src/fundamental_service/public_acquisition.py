@@ -181,6 +181,74 @@ class PublicAcquisitionArtifactStore(Protocol):
     ) -> ArtifactPublicationV1: ...
 
 
+def read_public_source_acquisition(
+    artifact_id: str,
+    *,
+    artifacts: PublicAcquisitionArtifactStore,
+    content: ContentAddressedStore,
+) -> PublicSourceAcquisitionEvidenceV1:
+    record = artifacts.get(artifact_id)
+    if (
+        record.status != "valid"
+        or record.retention != "evidence"
+        or record.media_type != "application/json"
+    ):
+        raise SnapshotError(
+            "PUBLIC_CAPTURE_INVALID", "capture receipt is not valid evidence"
+        )
+    raw = artifacts.read(artifact_id)
+    try:
+        evidence = PublicSourceAcquisitionEvidenceV1.model_validate_json(raw)
+    except ValueError as error:
+        raise SnapshotError(
+            "PUBLIC_CAPTURE_INVALID", "capture receipt violates its contract"
+        ) from error
+    dependencies = tuple(
+        sorted(
+            set(
+                (evidence.request.digest,)
+                + ((evidence.source.content_sha256,) if evidence.source else ())
+            )
+        )
+    )
+    if (
+        canonical_bytes(evidence) != raw
+        or sha256(raw).hexdigest() != record.content_hash
+        or record.dependency_hashes != dependencies
+        or artifact_id != evidence.artifact_id
+    ):
+        raise SnapshotError(
+            "PUBLIC_CAPTURE_IDENTITY_MISMATCH", "capture receipt differs from key"
+        )
+    if evidence.source is not None:
+        read_retained_public_source(evidence, content=content)
+    return evidence
+
+
+def read_retained_public_source(
+    evidence: PublicSourceAcquisitionEvidenceV1, *, content: ContentAddressedStore
+) -> RetainedSourceV1:
+    if evidence.source is None or evidence.media_type is None:
+        raise SnapshotError("PUBLIC_CAPTURE_FAILED", "capture has no source bytes")
+    source = evidence.source
+    raw = content.get(source.content_sha256, media_type=evidence.media_type)
+    if (
+        sha256(raw).hexdigest() != source.content_sha256
+        or len(raw) != evidence.received_size
+    ):
+        raise SnapshotError(
+            "PUBLIC_CAPTURE_HASH_MISMATCH", "retained original failed verification"
+        )
+    return RetainedSourceV1(
+        source_id=source.source_id,
+        uri=source.uri,
+        source_version=source.source_version,
+        terms_reference=source.terms_reference,
+        content=raw,
+        captured_at=source.captured_at,
+    )
+
+
 class PublicSourceAcquisition:
     """Reuse verified receipts; capture availability never grants source admission."""
 
@@ -198,65 +266,14 @@ class PublicSourceAcquisition:
         self._capture_lock = capture_lock
 
     def read(self, artifact_id: str) -> PublicSourceAcquisitionEvidenceV1:
-        record = self._artifacts.get(artifact_id)
-        if (
-            record.status != "valid"
-            or record.retention != "evidence"
-            or record.media_type != "application/json"
-        ):
-            raise SnapshotError(
-                "PUBLIC_CAPTURE_INVALID", "capture receipt is not valid evidence"
-            )
-        raw = self._artifacts.read(artifact_id)
-        try:
-            evidence = PublicSourceAcquisitionEvidenceV1.model_validate_json(raw)
-        except ValueError as error:
-            raise SnapshotError(
-                "PUBLIC_CAPTURE_INVALID", "capture receipt violates its contract"
-            ) from error
-        dependencies = tuple(
-            sorted(
-                set(
-                    (evidence.request.digest,)
-                    + ((evidence.source.content_sha256,) if evidence.source else ())
-                )
-            )
+        return read_public_source_acquisition(
+            artifact_id, artifacts=self._artifacts, content=self._content
         )
-        if (
-            canonical_bytes(evidence) != raw
-            or sha256(raw).hexdigest() != record.content_hash
-            or record.dependency_hashes != dependencies
-            or artifact_id != evidence.artifact_id
-        ):
-            raise SnapshotError(
-                "PUBLIC_CAPTURE_IDENTITY_MISMATCH", "capture receipt differs from key"
-            )
-        if evidence.source is not None:
-            self.retained_source(evidence)
-        return evidence
 
     def retained_source(
         self, evidence: PublicSourceAcquisitionEvidenceV1
     ) -> RetainedSourceV1:
-        if evidence.source is None or evidence.media_type is None:
-            raise SnapshotError("PUBLIC_CAPTURE_FAILED", "capture has no source bytes")
-        source = evidence.source
-        raw = self._content.get(source.content_sha256, media_type=evidence.media_type)
-        if (
-            sha256(raw).hexdigest() != source.content_sha256
-            or len(raw) != evidence.received_size
-        ):
-            raise SnapshotError(
-                "PUBLIC_CAPTURE_HASH_MISMATCH", "retained original failed verification"
-            )
-        return RetainedSourceV1(
-            source_id=source.source_id,
-            uri=source.uri,
-            source_version=source.source_version,
-            terms_reference=source.terms_reference,
-            content=raw,
-            captured_at=source.captured_at,
-        )
+        return read_retained_public_source(evidence, content=self._content)
 
     def _completed(
         self, request: PublicSourceAcquisitionRequestV1

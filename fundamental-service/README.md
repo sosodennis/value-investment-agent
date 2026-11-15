@@ -159,6 +159,10 @@ filing, including annuals retained only on historical submissions pages. CIK,
 cutoff, security, accession and installed runtime must still match; caller-supplied
 filing metadata cannot replace that evidence. Direct pinned requests without this
 optional reference retain their existing selection contract.
+In current mode, the ingestion also retains the plan's `public_source_cutoff`:
+the SEC selection stays bound to `requested_at`, while the final valuation uses
+`valuation_at`, the last actual public capture. Acquisition replays the retained
+public receipts and bytes before accepting that transition.
 
 When the optional recipe template is present, compilation selects composite
 requirements and expands the configured exclusions and explicit asset/liability

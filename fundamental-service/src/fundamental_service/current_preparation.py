@@ -11,6 +11,7 @@ from typing import Literal, Protocol
 from pydantic import Field, model_validator
 
 from .contracts import StrictModel
+from .automatic_source_mapping import AutomaticSecIngestionRequestV1
 from .source_plan_contracts import SOURCE_PREPARATION_PLAN, SourcePreparationPlan
 from .public_acquisition import (
     CURRENT_REQUEST_WINDOW,
@@ -63,7 +64,16 @@ def _freeze_plan(
     )
     payload = request.template.model_dump()
     payload["ingestions"] = tuple(
-        {**item.model_dump(), "valuation_timestamp": cutoff.valuation_at}
+        {
+            **item.model_dump(),
+            "valuation_timestamp": cutoff.valuation_at,
+            **(
+                {"public_source_cutoff": cutoff}
+                if isinstance(item, AutomaticSecIngestionRequestV1)
+                and item.original_preparation is not None
+                else {}
+            ),
+        }
         for item in request.template.ingestions
     )
     payload["source_admissions"] = tuple(

@@ -63,6 +63,7 @@ from .original_preparation import (
     OriginalValidationRuntimeV1,
 )
 from .original_issuer import OriginalOperatingSourceV1, evaluate_original_issuer
+from .public_acquisition import read_public_source_acquisition
 from .sec_capture import RetainedSecSourceAdapter, SecCaptureScopeV1
 from .sec_submissions import SecRecentFilingsV1, SecSubmissionsV1
 from .sec_source import (
@@ -812,6 +813,22 @@ class SecAcquisitionUseCase:
         )
         if originals.reference(reference.artifact_id, reference.role) != reference:
             raise SnapshotError("ORIGINAL_PREPARATION_INVALID", "reference differs")
+        cutoff = request.public_source_cutoff
+        selection_at = request.valuation_timestamp
+        if cutoff is not None:
+            for capture in cutoff.captures:
+                if (
+                    read_public_source_acquisition(
+                        capture.artifact_id,
+                        artifacts=self.capture_store,
+                        content=self.content_store,
+                    )
+                    != capture
+                ):
+                    raise SnapshotError(
+                        "CURRENT_CAPTURE_MISMATCH", "current capture differs"
+                    )
+            selection_at = cutoff.requested_at
         prepared = originals.read(reference.artifact_id)
         runtime = self.original_validation_runtime(
             declared_source_revision=request.source_revision,
@@ -836,7 +853,7 @@ class SecAcquisitionUseCase:
             policy = prepared.request.history_identity_policy
             if (
                 original.cik != request.cik
-                or original.valuation_timestamp != request.valuation_timestamp
+                or original.valuation_timestamp != selection_at
                 or original.source_selection_policy != request.source_selection_policy
                 or item.identity is None
                 or original_history_identity_key(item.identity, policy)

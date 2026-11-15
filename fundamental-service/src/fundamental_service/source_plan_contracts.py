@@ -150,6 +150,13 @@ class _SourcePreparationPlan(StrictModel, Generic[SourceRequestT]):
         ):
             raise ValueError("issuer market request must pin the source plan context")
         cutoff = self.public_source_cutoff
+        if any(
+            isinstance(item, AutomaticSecIngestionRequestV1)
+            and item.original_preparation is not None
+            and item.public_source_cutoff != cutoff
+            for item in self.ingestions
+        ):
+            raise ValueError("original-bound ingestions must retain the plan cutoff")
         if cutoff is not None and (
             cutoff.valuation_at != first.valuation_timestamp
             or tuple(item.request for item in cutoff.captures) != self.public_sources

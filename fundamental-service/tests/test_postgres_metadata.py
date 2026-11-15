@@ -388,8 +388,10 @@ def _cross_process_ingestion_contenders(
         correlation_id: str,
         deadline_at: datetime,
         validation_profile,
+        prepared_filing=None,
     ) -> SecIngestionResponseV1:
         _ = deadline_at
+        assert prepared_filing is None
         if (
             _runtime_acquisition_payload(acquisition_request, use_case.settings)
             != key_payload

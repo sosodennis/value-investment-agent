@@ -120,6 +120,7 @@ def test_optional_original_reference_preserves_existing_pinned_request_identity(
     request, *_ = source_case(tmp_path)
     assert request.original_preparation is None
     assert b"original_preparation" not in canonical_bytes(request)
+    assert b"public_source_cutoff" not in canonical_bytes(request)
     assert canonical_bytes(request) == canonical_bytes(
         request.model_dump(exclude={"original_preparation"})
     )

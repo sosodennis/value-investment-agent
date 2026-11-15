@@ -32,6 +32,7 @@ from .ingestion_mapping import (
     ValidatedOriginalV1,
 )
 from .policies import initial_model_specs
+from .public_acquisition import PublicSourceCutoffV1
 from .serialization import sha256_digest
 from .snapshots import ContentAddressedStore, SnapshotError
 from .taxonomy_evidence import (
@@ -52,6 +53,9 @@ class AutomaticSecIngestionRequestV1(SecSourceRequestV1):
     model_version: str = Field(min_length=1, max_length=128)
     requirements_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
     original_preparation: ArtifactRefV1 | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
+    public_source_cutoff: PublicSourceCutoffV1 | None = Field(
         default=None, exclude_if=lambda value: value is None
     )
 
@@ -87,6 +91,11 @@ class AutomaticSecIngestionRequestV1(SecSourceRequestV1):
             raise ValueError(
                 "automatic acquisition requires original preparation evidence"
             )
+        if self.public_source_cutoff is not None and (
+            self.original_preparation is None
+            or self.public_source_cutoff.valuation_at != self.valuation_timestamp
+        ):
+            raise ValueError("current acquisition must bind its original and cutoff")
         return self
 
 
