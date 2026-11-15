@@ -147,28 +147,23 @@ def inline_document_metadata(content: bytes) -> tuple[bool, tuple[str, ...]]:
     return is_inline, tuple(references)
 
 
-def select_inline_document_set(
-    submission: bytes, index: bytes, primary_document: str
-) -> tuple[tuple[str, ...], str | None]:
-    """Select every inline member of the single supported default target."""
+def submission_html_documents(submission: bytes) -> tuple[tuple[str, bytes], ...]:
+    """Read a complete bounded SEC HTML inventory, preserving document bytes."""
     if len(submission) > 64_000_000:
         raise InlineDocumentSetError("SEC submission exceeds byte limit")
     documents = re.findall(rb"(?ms)^<DOCUMENT>\s*\n(.*?)^</DOCUMENT>\s*$", submission)
     if (
         not documents
+        or len(re.findall(rb"(?m)^<SEC-DOCUMENT>", submission)) != 1
+        or len(re.findall(rb"(?m)^</SEC-DOCUMENT>[ \t]*\r?$", submission)) != 1
         or len(documents) > 4096
         or len(documents) != len(re.findall(rb"(?m)^<DOCUMENT>[ \t]*\r?$", submission))
         or len(documents) != len(re.findall(rb"(?m)^</DOCUMENT>[ \t]*\r?$", submission))
         or not re.search(rb"(?m)^</SEC-DOCUMENT>\s*\Z", submission)
     ):
         raise InlineDocumentSetError("SEC submission document inventory is incomplete")
-    try:
-        names = [item["name"] for item in json.loads(index)["directory"]["item"]]
-    except (ValueError, KeyError, TypeError) as error:
-        raise InlineDocumentSetError("SEC document index is invalid") from error
-    selected = []
+    result = []
     seen = set()
-    schemas: set[str] = set()
     for document in documents:
         filenames = re.findall(rb"(?m)^<FILENAME>([^\r\n]+)\r?$", document)
         if len(filenames) != 1:
@@ -189,9 +184,27 @@ def select_inline_document_set(
         if len(texts) != 1:
             raise InlineDocumentSetError("SEC HTML document body is incomplete")
         body = texts[0]
-        wrapper = re.fullmatch(rb"<XBRL>\s*\n(.*?)\s*</XBRL>\s*", body, re.S)
+        wrapper = re.fullmatch(
+            rb"<XBRL>[ \t]*\r?\n(.*?)^</XBRL>[ \t]*\r?\n?", body, re.S | re.M
+        )
         if wrapper is not None:
             body = wrapper[1]
+        result.append((filename, body))
+    return tuple(result)
+
+
+def select_inline_document_set(
+    submission: bytes, index: bytes, primary_document: str
+) -> tuple[tuple[str, ...], str | None]:
+    """Select every inline member of the single supported default target."""
+    documents = submission_html_documents(submission)
+    try:
+        names = [item["name"] for item in json.loads(index)["directory"]["item"]]
+    except (ValueError, KeyError, TypeError) as error:
+        raise InlineDocumentSetError("SEC document index is invalid") from error
+    selected = []
+    schemas: set[str] = set()
+    for filename, body in documents:
         inline, references = inline_document_metadata(body)
         if not inline:
             continue

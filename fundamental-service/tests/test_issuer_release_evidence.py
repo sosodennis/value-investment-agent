@@ -8,6 +8,10 @@ import pytest
 from fundamental_service.data_releases import DataReleaseError
 from fundamental_service.arelle_parser import fact_semantic_digest
 from fundamental_service.issuer_release_evidence import original_rebuilt_facts
+from fundamental_service.issuer_release_evidence import verify_original_bytes
+from fundamental_service.contracts import SecIntegrityEvidenceV1
+from fundamental_service.sec_integrity import assess_filing_response
+from test_sec_integrity import _submission_padding_sources
 from fundamental_service.facts import canonical_fact_digest
 from fundamental_service.original_issuer import (
     compose_issuer_operating_source,
@@ -60,6 +64,74 @@ def test_invalid_integrity_retains_typed_refusal(tmp_path):
     with pytest.raises(DataReleaseError) as error:
         service.publish(bundle)
     assert error.value.code == "DATA_RELEASE_ORIGINAL_INTEGRITY_INVALID"
+
+
+@pytest.mark.parametrize("mutation", (None, "missing", "corrupt", "unbound"))
+def test_release_repeats_submission_padding_proof(tmp_path, mutation):
+    _, _, evidence, _, _ = fixture(tmp_path)
+    base = SecIntegrityEvidenceV1.model_validate_json(
+        evidence.read("synthetic-integrity")
+    )
+    raw, index, archive, submission, member = _submission_padding_sources()
+    assessment = assess_filing_response(
+        raw_response=raw,
+        archive_index=index,
+        archive=archive,
+        submission_source=submission,
+    )
+    integrity = SecIntegrityEvidenceV1.model_validate(
+        base.model_dump()
+        | {
+            "accession_number": raw.accession_number,
+            "primary_document_uri": raw.uri,
+            "archive_index_uri": index.uri,
+            "archive_uri": archive.uri,
+            "archive_size": len(archive.content),
+            "raw_received_size": len(raw.content),
+            "archive_member_size": len(member),
+            "normalized_content_size": len(member),
+            "integrity_relation": assessment.relation,
+            "parser_input_hash": assessment.normalized_content_hash,
+            **{
+                name: getattr(assessment, name)
+                for name in (
+                    "archive_index_hash",
+                    "declared_primary_size",
+                    "raw_content_hash",
+                    "archive_hash",
+                    "archive_member_name",
+                    "archive_member_hash",
+                    "normalized_content_hash",
+                    "normalization_policy_id",
+                    "normalization_rule_signature",
+                    "normalization_reason",
+                    "removed_ranges",
+                    "submission_content_hash",
+                )
+            },
+            "raw_response_headers": raw.response_headers,
+        }
+    )
+    contents = {
+        assessment.raw_content_hash: raw.content,
+        assessment.archive_index_hash: index.content,
+        assessment.archive_hash: archive.content,
+        assessment.normalized_content_hash: member,
+        assessment.submission_content_hash: submission.content,
+    }
+    if mutation == "missing":
+        del contents[assessment.submission_content_hash]
+    elif mutation == "corrupt":
+        contents[assessment.submission_content_hash] = submission.content.replace(
+            b"123", b"124"
+        )
+    elif mutation == "unbound":
+        integrity = integrity.model_copy(update={"submission_content_hash": None})
+    if mutation is None:
+        verify_original_bytes(integrity, contents)
+    else:
+        with pytest.raises(DataReleaseError):
+            verify_original_bytes(integrity, contents)
 
 
 def test_taxonomy_artifact_must_be_original_parser_manifest(tmp_path):

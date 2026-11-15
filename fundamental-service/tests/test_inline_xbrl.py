@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import re
 from pathlib import Path
 from datetime import UTC, datetime
 from io import BytesIO
@@ -24,6 +25,7 @@ from fundamental_service.inline_xbrl import (
     select_inline_document_set,
     archive_inline_document_names,
     inline_document_metadata,
+    submission_html_documents,
 )
 from fundamental_service.serialization import canonical_bytes
 
@@ -103,6 +105,14 @@ def stage(tmp_path, encoded_namespace=False):
     ) as archive:
         archive.extractall(cache)
     return path, manifest, cache
+
+
+def test_submission_reader_preserves_html_bytes_including_terminal_whitespace():
+    members = {"cover.htm": b"<html><body>value \t\n</body></html>\n"}
+    submission, _ = submission_and_index(members)
+    assert dict(submission_html_documents(submission)) == {
+        name: raw + b"\n" for name, raw in members.items()
+    }
 
 
 def test_submission_selects_complete_set_and_exhibit_schema_without_issuer_rules():
@@ -326,17 +336,19 @@ def test_manifest_rejects_duplicate_members_and_path_traversal():
 
 
 @pytest.mark.parametrize(
-    ("fault", "encoded_namespace"),
+    ("fault", "encoded_namespace", "padding_member"),
     (
-        (None, False),
-        (None, True),
-        ("omit_member", False),
-        ("omit_all", False),
-        ("corrupt_member", False),
+        (None, False, None),
+        (None, True, None),
+        (None, False, "cover.htm"),
+        (None, False, "financials.htm"),
+        ("omit_member", False, None),
+        ("omit_all", False, None),
+        ("corrupt_member", False, None),
     ),
 )
 def test_ingestion_and_release_bind_every_document_and_manifest(
-    tmp_path, monkeypatch, fault, encoded_namespace
+    tmp_path, monkeypatch, fault, encoded_namespace, padding_member
 ):
     """Mock regulatory completion only; real acquisition-byte and release guards run."""
     from fundamental_service.contracts import IdentityV1, SourceRole
@@ -357,6 +369,23 @@ def test_ingestion_and_release_bind_every_document_and_manifest(
     from test_source_acquisition import _validation_profile
 
     path, manifest, cache = stage(tmp_path, encoded_namespace)
+    if padding_member is not None:
+        padded = tmp_path / padding_member
+        padded.write_bytes(
+            padded.read_bytes().replace(b"</body>", b"<p>Note \t\n</p>\n</body>")
+        )
+        manifest = InlineDocumentSetInputV1(
+            documents=tuple(
+                InlineDocumentInputV1(
+                    filename=d.filename,
+                    content_hash=hashlib.sha256(
+                        (tmp_path / d.filename).read_bytes()
+                    ).hexdigest(),
+                )
+                for d in manifest.documents
+            )
+        )
+        path.write_bytes(canonical_bytes(manifest))
     actual = parse_filing_offline(
         path,
         profile=ArelleValidationProfileV1(profile_id="inline-set-offline-fixture-v1"),
@@ -372,7 +401,12 @@ def test_ingestion_and_release_bind_every_document_and_manifest(
             members["financials.htm"],
             members["cover.htm"],
         )
-    submission, _ = submission_and_index(members)
+    direct_members = dict(members)
+    if padding_member is not None:
+        direct_members[padding_member] = re.sub(
+            rb"[ \t]+(?=\n)", b"", members[padding_member]
+        )
+    submission, _ = submission_and_index(direct_members)
     buffer = BytesIO()
     with ZipFile(buffer, "w") as archive:
         for name, raw in members.items():
@@ -385,7 +419,14 @@ def test_ingestion_and_release_bind_every_document_and_manifest(
         {
             "directory": {
                 "item": [
-                    {"name": n, "size": str(len(raw))}
+                    {
+                        "name": n,
+                        "size": str(
+                            len(direct_members[n]) + 1
+                            if n == padding_member
+                            else len(raw)
+                        ),
+                    }
                     for n, raw in (members | {archive_name: archive_bytes}).items()
                 ]
             }
@@ -441,9 +482,25 @@ def test_ingestion_and_release_bind_every_document_and_manifest(
 
         def capture_filing(self, *, primary_document, **kwargs):
             raw = members[primary_document]
+            if primary_document == padding_member:
+                raw = (direct_members[primary_document] + b"\n").replace(
+                    b"</body>",
+                    b'<script type="text/javascript" src="/edge/path/token"></script></body>',
+                )
             if fault == "corrupt_member" and primary_document == "financials.htm":
                 raw = raw.replace(b">200<", b">201<")
-            return captured(primary_document, raw, "sec-filing", SourceRole.FILING)
+            result = captured(primary_document, raw, "sec-filing", SourceRole.FILING)
+            if primary_document == padding_member:
+                from dataclasses import replace
+
+                result = replace(
+                    result,
+                    response_headers=(
+                        *result.response_headers,
+                        ("x-akamai-transformed", "0 - 0 -"),
+                    ),
+                )
+            return result
 
     adapter = Adapter()
     package = object.__new__(SecAcquisitionUseCase)._capture_original_package(
@@ -518,6 +575,36 @@ def test_ingestion_and_release_bind_every_document_and_manifest(
     }
     contents = {p.stem: p.read_bytes() for p in (tmp_path / "objects").glob("*/*")}
     verify_original_bytes(integrity, contents)
+    if padding_member is not None:
+        submission_hash = hashlib.sha256(submission).hexdigest()
+        assert integrity.submission_content_hashes == (submission_hash,)
+        assert integrity.submission_content_hash == (
+            submission_hash if padding_member == "cover.htm" else None
+        )
+        member = next(
+            d
+            for d in integrity.inline_documents
+            if d.document.filename == padding_member
+        )
+        assert member.submission_content_hash == submission_hash
+        with pytest.raises(DataReleaseError):
+            verify_original_bytes(
+                integrity, {k: v for k, v in contents.items() if k != submission_hash}
+            )
+    mixed_submission = integrity.model_copy(
+        update={
+            "inline_documents": tuple(
+                member.model_copy(
+                    update={"submission_content_hash": "a" * 64 if i == 0 else "b" * 64}
+                )
+                for i, member in enumerate(integrity.inline_documents)
+            )
+        }
+    )
+    with pytest.raises(ValidationError, match="one complete submission"):
+        type(integrity).model_validate(mixed_submission.model_dump())
+    with pytest.raises(DataReleaseError, match="same complete submission"):
+        verify_original_bytes(mixed_submission, contents)
     single_claim = integrity.model_copy(
         update={
             "inline_documents": (),
@@ -572,10 +659,14 @@ def test_ingestion_and_release_bind_every_document_and_manifest(
                 if k != manifest.documents[1].content_hash
             },
         )
-    with pytest.raises(DataReleaseError, match="SEC direct response differs"):
+    with pytest.raises(DataReleaseError) as corrupt_bytes:
         verify_original_bytes(
             integrity, contents | {manifest.documents[1].content_hash: b"changed"}
         )
+    assert corrupt_bytes.value.code in {
+        "SOURCE_INTEGRITY_MISMATCH",
+        "DATA_RELEASE_ORIGINAL_BYTES_MISMATCH",
+    }
     prepared = service.prepare_filing(
         **args,
         valuation_timestamp=now,

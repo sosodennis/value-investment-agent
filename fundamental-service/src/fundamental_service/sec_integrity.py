@@ -16,6 +16,7 @@ from xml.etree import ElementTree
 from zipfile import BadZipFile, ZipFile, ZipInfo
 
 from .contracts import RemovedByteRangeV1
+from .inline_xbrl import InlineDocumentSetError, submission_html_documents
 from .serialization import sha256_digest
 from .snapshots import SnapshotError
 
@@ -70,6 +71,14 @@ _HTML_TAG_NBSP_PADDING_RULE = (
     "with the SEC index"
 )
 _HTML_TAG_NBSP_SUFFIX = re.compile(rb">(?:[ \t]*&#160;)+$")
+_HTML_SUBMISSION_PADDING_POLICY_ID = "sec-edgar-submission-html-line-padding-v1"
+_HTML_SUBMISSION_PADDING_RULE = (
+    "use the unchanged accession-matched ZIP HTML only when removing every "
+    "ASCII SP/TAB suffix before LF and appending one terminal LF reproduces "
+    "both the complete submission document and the indexed direct response "
+    "after its exact terminal Akamai script is removed; retain the submission "
+    "hash and every archive padding offset and hash as independent byte proof"
+)
 _MAX_STAGED_GRAPHICS_BYTES = 32 * 1024 * 1024
 _XML_LINE_END_POLICY_ID = "sec-edgar-xbrl-xml10-line-ends-v1"
 _XML_LINE_END_RULE = (
@@ -223,6 +232,7 @@ class SecIntegrityAssessment:
     normalization_policy_id: str | None
     normalization_rule_signature: str | None
     normalization_reason: str | None
+    submission_content_hash: str | None = None
 
 
 def _digest(content: bytes) -> str:
@@ -237,6 +247,7 @@ def _html_tag_line_padding(
     member_name: str,
     member: bytes,
     declared_size: int,
+    submission_source: FilingIntegritySource | None,
 ) -> SecIntegrityAssessment | None:
     raw = raw_response.content
     if (
@@ -258,14 +269,16 @@ def _html_tag_line_padding(
     padding_ranges = []
     position = 0
     has_nbsp_suffix = False
+    needs_submission = False
     for padding in re.finditer(rb"[ \t]+(?=\n)", member):
         start, end = padding.span()
         line_start = member.rfind(b"\n", 0, start) + 1
         prefix = member[line_start:start]
         if prefix and not prefix.endswith(b">"):
             if _HTML_TAG_NBSP_SUFFIX.search(prefix) is None:
-                return None
-            has_nbsp_suffix = True
+                needs_submission = True
+            else:
+                has_nbsp_suffix = True
         chunks.append(member[position:start])
         padding_ranges.append((start, end, _digest(padding.group())))
         position = end
@@ -275,12 +288,38 @@ def _html_tag_line_padding(
     if b"".join(chunks) + b"\n" != without_script:
         return None
 
+    submission_hash = None
+    if needs_submission:
+        accession = raw_response.accession_number
+        if (
+            submission_source is None
+            or not accession
+            or re.fullmatch(r"[0-9]{10}-[0-9]{2}-[0-9]{6}", accession) is None
+            or submission_source.accession_number != accession
+            or submission_source.uri
+            != archive_index.uri.rsplit("/", 1)[0] + f"/{accession}.txt"
+            or not re.match(
+                rb"<SEC-DOCUMENT>" + re.escape(accession.encode()) + rb"\.txt[\s:]",
+                submission_source.content,
+            )
+        ):
+            return None
+        try:
+            documents = dict(submission_html_documents(submission_source.content))
+        except InlineDocumentSetError:
+            return None
+        if documents.get(member_name) != without_script:
+            return None
+        submission_hash = _digest(submission_source.content)
+
     raw_hash = _digest(raw)
     index_hash = _digest(archive_index.content)
     archive_hash = _digest(archive.content)
     member_hash = _digest(member)
     policy_id, rule = (
-        (_HTML_TAG_NBSP_PADDING_POLICY_ID, _HTML_TAG_NBSP_PADDING_RULE)
+        (_HTML_SUBMISSION_PADDING_POLICY_ID, _HTML_SUBMISSION_PADDING_RULE)
+        if needs_submission
+        else (_HTML_TAG_NBSP_PADDING_POLICY_ID, _HTML_TAG_NBSP_PADDING_RULE)
         if has_nbsp_suffix
         else (_HTML_TAG_PADDING_POLICY_ID, _HTML_TAG_PADDING_RULE)
     )
@@ -302,6 +341,8 @@ def _html_tag_line_padding(
         rule_payload["permitted_nbsp_suffix"] = _HTML_TAG_NBSP_SUFFIX.pattern.decode(
             "ascii"
         )
+    if submission_hash is not None:
+        rule_payload["submission_content_hash"] = submission_hash
     return SecIntegrityAssessment(
         relation="normalized",
         normalized_content=member,
@@ -326,6 +367,7 @@ def _html_tag_line_padding(
         normalization_policy_id=policy_id,
         normalization_rule_signature=sha256_digest(rule_payload),
         normalization_reason=rule,
+        submission_content_hash=submission_hash,
     )
 
 
@@ -334,6 +376,7 @@ def assess_filing_response(
     raw_response: FilingIntegritySource,
     archive_index: FilingIntegritySource,
     archive: FilingIntegritySource,
+    submission_source: FilingIntegritySource | None = None,
 ) -> SecIntegrityAssessment:
     """Match raw response, SEC archive index, and XBRL ZIP member.
 
@@ -525,6 +568,7 @@ def assess_filing_response(
         member_name=member_name,
         member=member,
         declared_size=declared_size,
+        submission_source=submission_source,
     )
     if html_padding is not None:
         return html_padding

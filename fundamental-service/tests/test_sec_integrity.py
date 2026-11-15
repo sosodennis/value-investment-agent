@@ -452,6 +452,123 @@ def test_html_tag_line_padding_reconstructs_unchanged_original_archive():
     )
 
 
+def _submission_padding_sources():
+    member = b"<html><body> \nRevenue \t\n<div>123</div> \n</body>\n</html>"
+    script = b'<script type="text/javascript" src="/edge/path/token"></script>'
+    body = b"<html><body>\nRevenue\n<div>123</div>\n</body>\n</html>\n"
+    direct = body.replace(b"</body>", script + b"</body>")
+    raw, index, archive = _fixtures(
+        direct=direct,
+        member=member,
+        declared_size=len(body),
+        headers=(("x-akamai-transformed", "0 - 0 -"),),
+    )
+    submission = _source(
+        source_id="sec-filing-submission",
+        uri=f"{BASE_URI}/{ACCESSION}.txt",
+        role=SourceRole.FILING,
+        accession_number=ACCESSION,
+        content=(
+            f"<SEC-DOCUMENT>{ACCESSION}.txt\n<DOCUMENT>\n"
+            f"<TYPE>10-K\n<FILENAME>{PRIMARY_NAME}\n<TEXT>\n<XBRL>\n".encode()
+            + body
+            + b"</XBRL>\n</TEXT>\n</DOCUMENT>\n</SEC-DOCUMENT>\n"
+        ),
+    )
+    return raw, index, archive, submission, member
+
+
+def test_text_line_padding_requires_exact_independent_submission_and_preserves_zip():
+    raw, index, archive, submission, member = _submission_padding_sources()
+    result = assess_filing_response(
+        raw_response=raw,
+        archive_index=index,
+        archive=archive,
+        submission_source=submission,
+    )
+    assert result.normalized_content == result.archive_member == member
+    assert (
+        result.submission_content_hash == hashlib.sha256(submission.content).hexdigest()
+    )
+    assert result.normalization_policy_id == "sec-edgar-submission-html-line-padding-v1"
+    assert result == assess_filing_response(
+        raw_response=raw,
+        archive_index=index,
+        archive=archive,
+        submission_source=submission,
+    )
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    (
+        "missing",
+        "uri",
+        "accession",
+        "header",
+        "incomplete",
+        "duplicate",
+        "submission-value",
+        "direct-value",
+        "interior-space",
+        "partial-trim",
+        "size",
+    ),
+)
+def test_submission_padding_refuses_every_unproved_delta(mutation):
+    raw, index, archive, submission, _ = _submission_padding_sources()
+    if mutation == "missing":
+        submission = None
+    elif mutation == "uri":
+        submission = replace(submission, uri=f"{BASE_URI}/other.txt")
+    elif mutation == "accession":
+        submission = replace(submission, accession_number="0000320193-25-000123")
+    elif mutation == "header":
+        submission = replace(
+            submission,
+            content=submission.content.replace(
+                ACCESSION.encode(), b"0000320193-25-000123"
+            ),
+        )
+    elif mutation == "incomplete":
+        submission = replace(
+            submission, content=submission.content.replace(b"</SEC-DOCUMENT>", b"")
+        )
+    elif mutation == "duplicate":
+        start = submission.content.index(b"<DOCUMENT>")
+        end = submission.content.index(b"</SEC-DOCUMENT>")
+        submission = replace(
+            submission, content=submission.content[:end] + submission.content[start:]
+        )
+    elif mutation == "submission-value":
+        submission = replace(
+            submission, content=submission.content.replace(b"123", b"124")
+        )
+    elif mutation == "direct-value":
+        raw = replace(raw, content=raw.content.replace(b"123", b"124"))
+    elif mutation == "interior-space":
+        raw = replace(raw, content=raw.content.replace(b"Revenue", b"Re venue"))
+        submission = replace(
+            submission, content=submission.content.replace(b"Revenue", b"Re venue")
+        )
+    elif mutation == "partial-trim":
+        raw = replace(raw, content=raw.content.replace(b"Revenue\n", b"Revenue \n"))
+        submission = replace(
+            submission, content=submission.content.replace(b"Revenue\n", b"Revenue \n")
+        )
+    elif mutation == "size":
+        data = json.loads(index.content)
+        data["directory"]["item"][0]["size"] = "1"
+        index = replace(index, content=json.dumps(data).encode())
+    with pytest.raises(SnapshotError):
+        assess_filing_response(
+            raw_response=raw,
+            archive_index=index,
+            archive=archive,
+            submission_source=submission,
+        )
+
+
 def test_html_padding_after_exact_nbsp_reference_preserves_original_archive():
     member = b"<html><body> \n<p><em>no</em> discontinued operations.</p> &#160; \t\n</body>\n</html>"
     script = b'<script type="text/javascript" src="/edge/path/token"></script>'

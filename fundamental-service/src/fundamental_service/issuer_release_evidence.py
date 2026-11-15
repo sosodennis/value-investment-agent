@@ -127,11 +127,26 @@ def verify_original_bytes(
     integrity: SecIntegrityEvidenceV1, contents: dict[str, bytes]
 ) -> None:
     """Replay the ingestion byte policy without inventing acquisition receipts."""
+    if len(integrity.submission_content_hashes) > 1:
+        raise DataReleaseError(
+            "DATA_RELEASE_ORIGINAL_DOCUMENT_SET_MISMATCH",
+            "all inline members must retain the same complete submission",
+        )
     try:
         raw = contents[integrity.raw_content_hash]
         archive = contents[integrity.archive_hash]
         index = contents[integrity.archive_index_hash]
         parser_input = contents[integrity.parser_input_hash]
+        submission_source = (
+            _RetainedIntegritySource(
+                integrity.archive_index_uri.rsplit("/", 1)[0]
+                + f"/{integrity.accession_number}.txt",
+                contents[integrity.submission_content_hash],
+                integrity.accession_number,
+            )
+            if integrity.submission_content_hash is not None
+            else None
+        )
         if PurePosixPath(integrity.primary_document_uri).suffix.lower() in {
             ".htm",
             ".html",
@@ -173,6 +188,16 @@ def verify_original_bytes(
                     archive=_RetainedIntegritySource(
                         integrity.archive_uri, archive, integrity.accession_number
                     ),
+                    submission_source=(
+                        _RetainedIntegritySource(
+                            integrity.archive_index_uri.rsplit("/", 1)[0]
+                            + f"/{integrity.accession_number}.txt",
+                            contents[member.submission_content_hash],
+                            integrity.accession_number,
+                        )
+                        if member.submission_content_hash is not None
+                        else None
+                    ),
                 )
                 if (
                     member_assessment.normalized_content != member_parser_input
@@ -188,6 +213,8 @@ def verify_original_bytes(
                     or member_assessment.raw_content_hash != member.raw_content_hash
                     or member_assessment.archive_member_hash
                     != member.archive_member_hash
+                    or member_assessment.submission_content_hash
+                    != member.submission_content_hash
                     or member_assessment.normalization_policy_id
                     != member.normalization_policy_id
                     or member_assessment.normalization_rule_signature
@@ -214,6 +241,7 @@ def verify_original_bytes(
             archive=_RetainedIntegritySource(
                 integrity.archive_uri, archive, integrity.accession_number
             ),
+            submission_source=submission_source,
         )
     except KeyError as error:
         raise DataReleaseError(
@@ -236,6 +264,7 @@ def verify_original_bytes(
         or len(assessment.archive_member) != integrity.archive_member_size
         or len(parser_input) != integrity.normalized_content_size
         or assessment.archive_member_hash != integrity.archive_member_hash
+        or assessment.submission_content_hash != integrity.submission_content_hash
         or assessment.normalization_policy_id != integrity.normalization_policy_id
         or assessment.normalization_rule_signature
         != integrity.normalization_rule_signature

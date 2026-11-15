@@ -162,6 +162,15 @@ class OriginalValidationEvidenceV1(StrictModel):
             response = responses.get(uri)
             if response is None or response.content_hash != content_hash:
                 raise ValueError("validated original requires exact retained receipts")
+        submission_hashes = set(integrity.submission_content_hashes)
+        if submission_hashes:
+            submission_uri = (
+                integrity.archive_index_uri.rsplit("/", 1)[0]
+                + f"/{integrity.accession_number}.txt"
+            )
+            submission = responses.get(submission_uri)
+            if submission is None or submission_hashes != {submission.content_hash}:
+                raise ValueError("integrity requires its exact submission receipt")
         require_sec_validation_evidence(report)
         codes = set(original.issue_codes)
         if original.status == "matched" and (

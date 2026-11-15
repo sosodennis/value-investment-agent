@@ -496,6 +496,7 @@ class SecIngestionService:
             raw_response=source,
             archive_index=index_source,
             archive=archive_source,
+            submission_source=submission_source,
         )
         inline_assessments = (
             tuple(
@@ -505,6 +506,7 @@ class SecIngestionService:
                         raw_response=item,
                         archive_index=index_source,
                         archive=archive_source,
+                        submission_source=submission_source,
                     ),
                 )
                 for item in (source, *inline_sources)
@@ -514,6 +516,7 @@ class SecIngestionService:
         )
         inline_integrity = tuple(
             SecInlineDocumentIntegrityV1(
+                submission_content_hash=item_assessment.submission_content_hash,
                 document=InlineDocumentInputV1(
                     filename=item_assessment.archive_member_name,
                     content_hash=item_assessment.normalized_content_hash,
@@ -656,6 +659,7 @@ class SecIngestionService:
             )
         integrity_evidence = SecIntegrityEvidenceV1(
             accession_number=accession_number,
+            submission_content_hash=assessment.submission_content_hash,
             dqc_filing_context=report.dqc_filing_context,
             primary_document_uri=source.uri,
             captured_at=source.captured_at or captured_at,

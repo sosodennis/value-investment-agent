@@ -517,6 +517,9 @@ class SecInlineDocumentIntegrityV1(StrictModel):
     """Independent response/index/archive integrity for an inline-set member."""
 
     document: InlineDocumentInputV1
+    submission_content_hash: str | None = Field(
+        default=None, pattern=r"^[0-9a-f]{64}$", exclude_if=lambda value: value is None
+    )
     declared_primary_size: int = Field(ge=0)
     raw_content_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
     raw_received_size: int = Field(ge=0)
@@ -553,6 +556,9 @@ class SecIntegrityEvidenceV1(StrictModel):
     """Reproducible link from SEC response bytes to parser and fact evidence."""
 
     accession_number: str = Field(min_length=1)
+    submission_content_hash: str | None = Field(
+        default=None, pattern=r"^[0-9a-f]{64}$", exclude_if=lambda value: value is None
+    )
     dqc_filing_context: DqcFilingContextV1 | None = Field(
         default=None, exclude_if=lambda value: value is None
     )
@@ -601,6 +607,24 @@ class SecIntegrityEvidenceV1(StrictModel):
     quality_decision: Literal["pass", "block"]
 
     @property
+    def submission_content_hashes(self) -> tuple[str, ...]:
+        return tuple(
+            sorted(
+                {
+                    value
+                    for value in (
+                        self.submission_content_hash,
+                        *(
+                            member.submission_content_hash
+                            for member in self.inline_documents
+                        ),
+                    )
+                    if value is not None
+                }
+            )
+        )
+
+    @property
     def parser_content_hashes(self) -> tuple[str, ...]:
         return tuple(
             sorted(
@@ -614,6 +638,8 @@ class SecIntegrityEvidenceV1(StrictModel):
 
     @model_validator(mode="after")
     def timestamps_have_timezone(self) -> SecIntegrityEvidenceV1:
+        if len(self.submission_content_hashes) > 1:
+            raise ValueError("all inline members must bind one complete submission")
         if self.captured_at.tzinfo is None or self.captured_at.utcoffset() is None:
             raise ValueError("captured_at must include a timezone")
         expected_input_hash = self.normalized_content_hash
@@ -634,6 +660,7 @@ class SecIntegrityEvidenceV1(StrictModel):
                 or primary.raw_content_hash != self.raw_content_hash
                 or primary.archive_member_hash != self.archive_member_hash
                 or primary.integrity_relation != self.integrity_relation
+                or primary.submission_content_hash != self.submission_content_hash
             ):
                 raise ValueError(
                     "inline primary integrity differs from filing evidence"
