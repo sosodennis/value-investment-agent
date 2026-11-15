@@ -291,7 +291,6 @@ def test_acquisition_retries_after_parser_failure_reuse_all_original_responses(
 
     from fundamental_service.source_acquisition import SecAcquisitionUseCase
     from test_source_acquisition import (
-        _inline_original,
         _runtime_settings,
         _sec_request,
         _validation_profile,
@@ -306,6 +305,19 @@ def test_acquisition_retries_after_parser_failure_reuse_all_original_responses(
             }
         )
     primary = "msft-20240630.htm"
+    primary_content = (
+        '<html xmlns:link="http://www.xbrl.org/2003/linkbase" '
+        'xmlns:xlink="http://www.w3.org/1999/xlink" '
+        'xmlns:ix="http://www.xbrl.org/2013/inlineXBRL"><head>'
+        '<link:schemaRef xlink:type="simple" xlink:href="msft-20240630.xsd"/>'
+        "</head><body><ix:header/></body></html>"
+    ).encode()
+    submission = (
+        f"<SEC-DOCUMENT>{accession}.txt\n"
+        f"<DOCUMENT>\n<TYPE>10-K\n<FILENAME>{primary}\n<TEXT>\n".encode()
+        + primary_content
+        + b"\n</TEXT>\n</DOCUMENT>\n</SEC-DOCUMENT>\n"
+    )
     files = (primary, "msft-20240630.xsd", f"{accession}-xbrl.zip")
     submissions = {
         "cik": int(request.cik),
@@ -337,8 +349,10 @@ def test_acquisition_retries_after_parser_failure_reuse_all_original_responses(
                     }
                 ).encode()
                 if uri.endswith("index.json")
-                else _inline_original("msft-20240630.xsd")
+                else primary_content
                 if uri.endswith("/" + primary)
+                else submission
+                if uri.endswith(f"/{accession}.txt")
                 else b"original-filing-fixture"
             )
             return replace(self.response, content=payload, declared_size=len(payload))
