@@ -27,6 +27,7 @@ from fundamental_service.arelle_parser import (
     parse_filing_offline,
 )
 from fundamental_service.contracts import SourceRole
+from fundamental_service.regulatory_validation import require_sec_validation_evidence
 from fundamental_service.sec_integrity import assess_filing_response
 from fundamental_service.snapshots import CapturedSource
 
@@ -221,10 +222,7 @@ def test_apple_sec_efm_dqc_replay_with_pinned_runtime(
 
     assert len(report.facts) >= 1000
     assert report.validation_engines == ("sec-efm", "dqc-us")
-    assert report.validation_evidence == (
-        "strict-sec-efm-profile-selected",
-        "dqc-dqcrt-checks-completed",
-    )
+    require_sec_validation_evidence(report)
     assert "EFM.5.02.05.disallowedElement" in report.blocking_finding_codes()
 
 
@@ -280,10 +278,7 @@ def test_microsoft_sec_efm_dqc_replay_uses_canonical_sec_archive_bytes(
 
     assert len(report.facts) >= 1800
     assert report.validation_engines == ("sec-efm", "dqc-us")
-    assert report.validation_evidence == (
-        "strict-sec-efm-profile-selected",
-        "dqc-dqcrt-checks-completed",
-    )
+    require_sec_validation_evidence(report)
     assert report.blocking_finding_codes() == ()
     assert report.taxonomy_version == "us-gaap-2023-2024"
     assert attempted_network == []
@@ -701,10 +696,7 @@ def test_aapl_sec_efm_dqc_replay_resolves_archived_images_without_network(
 
     assert len(report.facts) >= 1000
     assert report.validation_engines == ("sec-efm", "dqc-us")
-    assert report.validation_evidence == (
-        "strict-sec-efm-profile-selected",
-        "dqc-dqcrt-checks-completed",
-    )
+    require_sec_validation_evidence(report)
     assert report.network_attempt_count == 0
     assert report.replay_digest() == replay.replay_digest()
     assert "EFM.5.02.05.graphicFileError" not in report.finding_codes
