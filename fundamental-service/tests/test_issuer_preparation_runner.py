@@ -15,11 +15,12 @@ from fundamental_service.current_preparation import (
     CurrentSourcePreparationPublicationV1,
     CurrentSourcePreparationRequestV1,
 )
-from fundamental_service.issuer_preparation_runner import _execute, _run_child
+from fundamental_service.issuer_preparation_runner import _execute, _run_child, main
 from fundamental_service.original_source_plan import OriginalSourcePlanEvidenceV1
 from fundamental_service.serialization import canonical_bytes, sha256_digest
 from fundamental_service.snapshots import CapturedSource, SnapshotError
 from fundamental_service.source_capture import SourceCaptureRequest
+from fundamental_service.valuation_requirements import valuation_requirements_profile
 from test_original_source_plan import (
     compiler_case,
     configuration,
@@ -171,6 +172,47 @@ def test_issuer_entry_compiles_then_runs_formal_preparation(
         == result["source_plan_compilation_digest"]
     )
     assert all(not stage["wrote"] for stage in repeated["lineage"].values())
+
+
+@pytest.mark.parametrize("model_id", ("fcff_dcf", "transition_fcff_dcf"))
+@pytest.mark.parametrize("original_count", (None, 1, 2, 6))
+def test_company_date_command_derives_history_count_from_configured_model(
+    tmp_path, monkeypatch, capsys, model_id, original_count
+):
+    config = configuration(model_id=model_id)
+    path = tmp_path / "configuration.json"
+    path.write_bytes(canonical_bytes(config))
+    observed = []
+
+    def discovery(module, arguments, *, timeout_seconds):
+        assert module == "fundamental_service.annual_discovery_runner"
+        observed.append(int(arguments[arguments.index("--original-count") + 1]))
+        raise RuntimeError("stop after validated discovery parameters")
+
+    monkeypatch.setattr(
+        "fundamental_service.issuer_preparation_runner._run_child", discovery
+    )
+    arguments = [
+        "--cik",
+        "724910",
+        "--valuation-timestamp",
+        "2025-06-01T00:00:00Z",
+        "--source-revision",
+        "a" * 40,
+        "--source-plan-configuration",
+        str(path),
+        "--configuration-digest",
+        config.digest,
+    ]
+    if original_count is not None:
+        arguments.extend(("--original-count", str(original_count)))
+    assert main(arguments) == 2
+    assert "stop after validated discovery parameters" in capsys.readouterr().err
+    assert observed == [
+        original_count
+        if original_count is not None
+        else valuation_requirements_profile(model_id).candidate_minimum_complete_years
+    ]
 
 
 @pytest.mark.parametrize("mode", ("success", "missing", "different_template"))

@@ -23,6 +23,7 @@ from .original_source_plan import (
 from .source_plan_contracts import SOURCE_PREPARATION_PLAN
 from .replay import ArtifactRecordV1
 from .serialization import canonical_bytes
+from .valuation_requirements import valuation_requirements_profile
 
 
 def _run_module(
@@ -101,18 +102,24 @@ def _execute(args: argparse.Namespace) -> dict[str, object]:
             "automatic release requires an already deployed effective market policy"
         )
     deadline = monotonic() + args.timeout_seconds
-    parameters = AnnualDiscoveryParametersV1(
-        cik=args.cik.zfill(10),
-        valuation_timestamp=datetime.fromisoformat(args.valuation_timestamp),
-        declared_source_revision=args.source_revision,
-        original_count=args.original_count,
-        lookback_days=args.lookback_days,
-    )
     configuration = AutomaticSourcePlanConfigurationV1.model_validate_json(
         args.source_plan_configuration.read_bytes()
     )
     if configuration.digest != args.configuration_digest:
         raise ValueError("source-plan configuration digest differs")
+    parameters = AnnualDiscoveryParametersV1(
+        cik=args.cik.zfill(10),
+        valuation_timestamp=datetime.fromisoformat(args.valuation_timestamp),
+        declared_source_revision=args.source_revision,
+        original_count=(
+            args.original_count
+            if args.original_count is not None
+            else valuation_requirements_profile(
+                configuration.model_id
+            ).candidate_minimum_complete_years
+        ),
+        lookback_days=args.lookback_days,
+    )
     if args.current and (
         configuration.issuer_market_policy_template is None
         or configuration.issuer_market_policy_template.source_plan_template is None
@@ -377,7 +384,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--source-revision", required=True)
     parser.add_argument("--source-plan-configuration", type=Path, required=True)
     parser.add_argument("--configuration-digest", required=True)
-    parser.add_argument("--original-count", type=int, default=2)
+    parser.add_argument(
+        "--original-count",
+        type=int,
+        help="original annuals to acquire (default: selected model's minimum history)",
+    )
     parser.add_argument("--lookback-days", type=int, default=3650)
     parser.add_argument("--timeout-seconds", type=_timeout_seconds, default=120)
     parser.add_argument("--ticker")

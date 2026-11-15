@@ -442,3 +442,93 @@ def test_invalid_command_input_is_rejected_before_service_storage(monkeypatch, c
     assert json.loads(capsys.readouterr().err) == {
         "error_code": "ANNUAL_DISCOVERY_INPUT_INVALID"
     }
+
+
+@pytest.mark.parametrize("model_id", ("fcff_dcf", "transition_fcff_dcf", None))
+@pytest.mark.parametrize("original_count", (None, 1, 2, 6))
+def test_discovery_command_uses_model_history_only_when_configured(
+    tmp_path, monkeypatch, capsys, model_id, original_count
+):
+    from fundamental_service import annual_discovery_runner
+    from fundamental_service.valuation_requirements import (
+        valuation_requirements_profile,
+    )
+    from test_original_source_plan import configuration
+
+    arguments = [
+        "--cik",
+        "724910",
+        "--valuation-timestamp",
+        "2025-06-01T00:00:00Z",
+        "--source-revision",
+        "a" * 40,
+    ]
+    if model_id is not None:
+        config = configuration(model_id=model_id)
+        path = tmp_path / "configuration.json"
+        path.write_bytes(canonical_bytes(config))
+        arguments.extend(
+            (
+                "--prepare-originals",
+                "--source-plan-configuration",
+                str(path),
+                "--configuration-digest",
+                config.digest,
+            )
+        )
+    if original_count is not None:
+        arguments.extend(("--original-count", str(original_count)))
+    observed = []
+
+    async def run(args):
+        observed.append(args.request)
+        return {"request": args.request}
+
+    monkeypatch.setattr(annual_discovery_runner, "_run_command", run)
+    assert annual_discovery_runner.main(arguments) == 0
+    result = json.loads(capsys.readouterr().out)
+    expected = original_count
+    if expected is None:
+        expected = (
+            valuation_requirements_profile(model_id).candidate_minimum_complete_years
+            if model_id is not None
+            else 2
+        )
+    assert result["request"]["original_count"] == expected
+    assert observed[0].original_count == expected
+
+
+def test_invalid_configuration_digest_prevents_discovery_io(
+    tmp_path, monkeypatch, capsys
+):
+    from fundamental_service import annual_discovery_runner
+    from test_original_source_plan import configuration
+
+    path = tmp_path / "configuration.json"
+    path.write_bytes(canonical_bytes(configuration()))
+
+    async def forbidden(_):
+        raise AssertionError("invalid configuration opened service storage")
+
+    monkeypatch.setattr(annual_discovery_runner, "_run_command", forbidden)
+    assert (
+        annual_discovery_runner.main(
+            [
+                "--cik",
+                "724910",
+                "--valuation-timestamp",
+                "2025-06-01T00:00:00Z",
+                "--source-revision",
+                "a" * 40,
+                "--prepare-originals",
+                "--source-plan-configuration",
+                str(path),
+                "--configuration-digest",
+                "f" * 64,
+            ]
+        )
+        == 2
+    )
+    assert json.loads(capsys.readouterr().err) == {
+        "error_code": "ANNUAL_DISCOVERY_INPUT_INVALID"
+    }

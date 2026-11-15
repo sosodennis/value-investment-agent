@@ -27,6 +27,7 @@ from .original_source_plan import (
 from .public_acquisition import PostgresPublicCaptureLock
 from .serialization import canonical_bytes
 from .snapshots import SnapshotError
+from .valuation_requirements import valuation_requirements_profile
 
 
 async def _run_command(args: argparse.Namespace) -> object:
@@ -235,7 +236,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--cik")
     parser.add_argument("--valuation-timestamp")
     parser.add_argument("--source-revision")
-    parser.add_argument("--original-count", type=int, default=2)
+    parser.add_argument(
+        "--original-count",
+        type=int,
+        help="original annuals (default: configured model minimum, or 2 for catalog only)",
+    )
     parser.add_argument("--lookback-days", type=int, default=3650)
     parser.add_argument("--timeout-seconds", type=int, default=120)
     parser.add_argument("--artifact-id")
@@ -278,22 +283,6 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("security/profile selectors require --prepare-originals")
     try:
         # Validate caller-controlled fields before opening service storage.
-        args.request = (
-            None
-            if args.artifact_id
-            else AnnualDiscoveryParametersV1(
-                cik=args.cik.zfill(10),
-                valuation_timestamp=datetime.fromisoformat(args.valuation_timestamp),
-                declared_source_revision=args.source_revision,
-                original_count=args.original_count,
-                lookback_days=args.lookback_days,
-            )
-        )
-        args.security_selection = OriginalSecuritySelectionV1(
-            ticker=args.ticker,
-            share_class=args.share_class,
-            security_selection_policy=DEFAULT_ORIGINAL_SECURITY_POLICY,
-        )
         args.source_plan_configuration = (
             AutomaticSourcePlanConfigurationV1.model_validate_json(
                 args.source_plan_configuration.read_bytes()
@@ -306,6 +295,31 @@ def main(argv: list[str] | None = None) -> int:
             and args.source_plan_configuration.digest != args.configuration_digest
         ):
             raise ValueError("source plan configuration digest differs")
+        original_count = args.original_count
+        if original_count is None:
+            original_count = (
+                valuation_requirements_profile(
+                    args.source_plan_configuration.model_id
+                ).candidate_minimum_complete_years
+                if args.source_plan_configuration is not None
+                else 2
+            )
+        args.request = (
+            None
+            if args.artifact_id
+            else AnnualDiscoveryParametersV1(
+                cik=args.cik.zfill(10),
+                valuation_timestamp=datetime.fromisoformat(args.valuation_timestamp),
+                declared_source_revision=args.source_revision,
+                original_count=original_count,
+                lookback_days=args.lookback_days,
+            )
+        )
+        args.security_selection = OriginalSecuritySelectionV1(
+            ticker=args.ticker,
+            share_class=args.share_class,
+            security_selection_policy=DEFAULT_ORIGINAL_SECURITY_POLICY,
+        )
         result = asyncio.run(_run_command(args))
     except (SnapshotError, ServiceError) as error:
         print(
