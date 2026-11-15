@@ -1114,9 +1114,23 @@ class SourcePreparationRunner:
             for source in snapshot.source_records
             if source.role is SourceRole.FILING
         }
+        if isinstance(plan, AutomaticSourcePreparationPlanV1):
+            assert self._acquisition is not None
+            fact_ids: set[str] = set()
+            for request in plan.ingestions:
+                retained = self._acquisition.retained_acquisition(request)
+                if retained is None:
+                    raise SnapshotError(
+                        "HISTORY_MAPPING_EVIDENCE_UNAVAILABLE",
+                        "history assessment requires retained plan acquisitions",
+                    )
+                fact_ids.update(retained.canonical_fact_ids)
+            candidates = tuple(facts.get(fact_id) for fact_id in sorted(fact_ids))
+        else:
+            candidates = facts.list()
         return tuple(
             fact
-            for fact in facts.list()
+            for fact in candidates
             if fact.source.content_hash in sources
             and fact.mapping_decision_id is not None
             and (

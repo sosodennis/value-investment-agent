@@ -41,6 +41,7 @@ PROXY_BYTES = b"<html><body>synthetic definitive proxy</body></html>"
 class MemoryAcquisitions:
     def __init__(self):
         self.acquisitions = {}
+        self.facts = {}
         self.mappings = {}
         self.audits = []
         self.snapshots = {}
@@ -62,6 +63,7 @@ class MemoryAcquisitions:
         return self.acquisitions.get(key)
 
     def publish_sec_ingestion(self, **value):
+        self.facts.update((fact.fact_id, fact) for fact in value["facts"])
         self.snapshots[value["snapshot"].snapshot_id] = value["snapshot"]
         self.acquisitions[value["acquisition_key"]] = value["result"]
         return value["result"]
