@@ -749,6 +749,26 @@ compatible lower-precision observations retain their existing dispositions.
 The helper source is included in the executable mapping-policy digest. No
 issuer rule, fact identity, valuation formula or source-integrity gate changes.
 
+### Exact DQC assertion-date evidence
+
+The official v31 executable assertion `DQC.US.0231.10924` binds its effective
+date through the official `effective_dates.csv` entry10924:2026-06-01. The
+adjacent official rule document names a different assertion10804; a family match
+cannot authorize that date. The existing offline
+`scripts/build_dqc_effective_dates.py` verifies the complete pinned Git tree,
+the four2023–2026 XULE sources and their resources before producing the exact
+assertion binding. The pinned source commit remains
+`cd82706519e384fb209d74f13ccbe535be42da4b`; table SHA256 remains
+`98dde485be1cc5814cb3f6a7cd6ebd9152742bfb42c314ba6fa876a82f2e4da8`.
+
+The extended catalog retains0228.10921 and adds0231.10924. Existing filing-date
+policy preserves the finding and its original error severity, classifies it as
+future before2026-06-01, and blocks on or after that date. Conflicting or unknown
+dates remain blocking. Its changed catalog pin creates a new validation-policy
+digest; previously rejected originals remain retained evidence and require a
+distinct validation replay. This supplies no mapping, release or completeness
+approval, including when a calculation network passes.
+
 ### Registered NVE current liability principal partition
 
 Automatic policy `source-bound-us-gaap-v11` moves the shared residual evaluator

@@ -18,7 +18,7 @@ _TABLE_CATALOG_PATH = (
     Path(__file__).with_name("resources") / "dqc-v31-assertion-date-table.json"
 )
 _TABLE_CATALOG_SHA256 = (
-    "acb381df1e069ad8e87ff07ad956bedd798aab6435316cdc8950af1c454ad828"
+    "18beabf159df10733c21451e1c114f0095586ac7674747ba738387549a39bf40"
 )
 _OFFICIAL_COMMIT = "cd82706519e384fb209d74f13ccbe535be42da4b"
 

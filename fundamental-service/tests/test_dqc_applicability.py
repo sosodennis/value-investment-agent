@@ -265,3 +265,39 @@ def test_corrupt_official_catalog_refuses(tmp_path, monkeypatch):
             )
     finally:
         policy._document_dates.cache_clear()
+
+
+@pytest.mark.parametrize(
+    "filed,blocks,status",
+    (
+        (date(2024, 2, 9), False, "future"),
+        (date(2026, 5, 31), False, "future"),
+        (date(2026, 6, 1), True, "active"),
+        (date(2026, 11, 14), True, "active"),
+    ),
+)
+def test_aggregate_sibling_assertion_uses_exact_official_date_binding(
+    filed, blocks, status
+):
+    finding = _finding("DQC.US.0231.10924")
+    bound = bind_dqc_filing_context(_report([finding]), _context(filed))
+    assert bool(bound.blocking_finding_codes()) == blocks
+    assert bound.findings == (finding,)
+    decision = bound.finding_applicability(finding)
+    assert decision.status == status
+    assert decision.effective_date == date(2026, 6, 1)
+    assert decision.date_source == "official-rule-date-table"
+    assert decision.document_sha256 is None
+    assert (
+        decision.date_table_sha256
+        == "98dde485be1cc5814cb3f6a7cd6ebd9152742bfb42c314ba6fa876a82f2e4da8"
+    )
+    assert len(decision.rule_source_sha256) == 8
+    assert len(set(decision.rule_source_sha256)) == 7
+
+
+def test_aggregate_sibling_conflicting_emitted_date_remains_blocking():
+    finding = _finding("DQC.US.0231.10924", rule_effective_date=date(2025, 4, 15))
+    bound = bind_dqc_filing_context(_report([finding]), _context(date(2024, 2, 9)))
+    assert bound.blocking_finding_codes() == (finding.code,)
+    assert bound.finding_applicability(finding).status == "conflict"
