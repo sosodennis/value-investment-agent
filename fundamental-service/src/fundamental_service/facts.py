@@ -41,6 +41,7 @@ from .original_issuer import (
     fact_matches_original_source,
 )
 from .snapshots import SnapshotError
+from .xbrl_precision import numeric_duplicate_issue
 
 
 CANONICAL_FACT_DERIVED_DEFAULTS = {
@@ -564,6 +565,39 @@ def select_fact(
             if item.available_at
             == max(candidate.available_at for candidate in filing_candidates)
         )
+        numeric = tuple(
+            (item.value, item.decimals)
+            for item in available_in_filing
+            if isinstance(item.value, Decimal)
+        )
+        numeric_issue = (
+            numeric_duplicate_issue(numeric)
+            if len(numeric) == len(available_in_filing)
+            else None
+        )
+        if numeric_issue:
+            rejected_reasons.update(
+                {
+                    item.candidate_id: "inconsistent_numeric_duplicates_in_filing"
+                    for item in available_in_filing
+                }
+            )
+            return FactSelection(
+                None,
+                tuple(sorted(rejected_reasons)),
+                (
+                    IssueV1(
+                        code=numeric_issue,
+                        severity=Severity.FATAL,
+                        message="numeric duplicates lack proven whole-set precision consistency",
+                        field=available_in_filing[0].normalized_field,
+                    ),
+                ),
+                tuple(
+                    CandidateRejectionV1(candidate_id=key, reason=value)
+                    for key, value in sorted(rejected_reasons.items())
+                ),
+            )
         precision = max(_precision(item) for item in available_in_filing)
         precise_in_filing = tuple(
             item for item in available_in_filing if _precision(item) == precision
@@ -936,6 +970,19 @@ def _select_canonical_fact_key(
                 if fact.available_at < latest_available
             }
         )
+        numeric = tuple(
+            (fact.value, fact.decimals)
+            for fact in latest
+            if isinstance(fact.value, Decimal)
+        )
+        numeric_issue = (
+            numeric_duplicate_issue(numeric) if len(numeric) == len(latest) else None
+        )
+        if numeric_issue:
+            raise SnapshotError(
+                numeric_issue,
+                "numeric duplicates lack proven whole-set precision consistency",
+            )
         precision = max(_canonical_precision(fact) for fact in latest)
         precise = tuple(
             fact for fact in latest if _canonical_precision(fact) == precision

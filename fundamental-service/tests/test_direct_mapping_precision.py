@@ -117,6 +117,21 @@ def test_equal_precision_disagreement_still_refuses(tmp_path):
     decision = evaluate(request, store)
     assert decision.status == "abstain" and decision.mapping is None
     assert "MAPPING_OBSERVATION_CONFLICT" in decision.reason_codes
+    assert {item.reason_code for item in decision.rejected_observations} == {
+        "MAPPING_OBSERVATION_CONFLICT"
+    }
+    assert approve(request, store, roots).approval_publication is None
+
+
+def test_incompatible_lower_precision_original_cannot_be_signed(tmp_path):
+    (_, _, _, _), _, rounded = precision_case(tmp_path / "seed")
+    (request, store, roots, _), _, _ = precision_case(
+        tmp_path / "actual",
+        extra=(rounded.model_copy(update={"value": "10000000000", "decimals": "-9"}),),
+    )
+    decision = evaluate(request, store)
+    assert decision.status == "abstain" and decision.mapping is None
+    assert "MAPPING_OBSERVATION_CONFLICT" in decision.reason_codes
     assert approve(request, store, roots).approval_publication is None
 
 

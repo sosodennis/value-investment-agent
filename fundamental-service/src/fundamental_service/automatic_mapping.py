@@ -66,8 +66,8 @@ from .snapshots import SnapshotError
 from .taxonomy_evidence import require_original_taxonomy
 
 AUTOMATIC_MAPPING_INPUT_ROLE = "automatic-mapping-input-v1"
-AutomaticMappingPolicyVersion = Literal["source-bound-us-gaap-v32"]
-AUTOMATIC_MAPPING_POLICY: AutomaticMappingPolicyVersion = "source-bound-us-gaap-v32"
+AutomaticMappingPolicyVersion = Literal["source-bound-us-gaap-v33"]
+AUTOMATIC_MAPPING_POLICY: AutomaticMappingPolicyVersion = "source-bound-us-gaap-v33"
 _GAAP_NAMESPACE = re.compile(
     r"http://(?:fasb\.org|xbrl\.us)/us-gaap/\d{4}(?:-\d{2}-\d{2})?"
 )
@@ -225,6 +225,7 @@ def automatic_mapping_policy_digest() -> str:
                     "accounting_roles.py",
                     "arelle_parser.py",
                     "facts.py",
+                    "xbrl_precision.py",
                     "sec_rebuild.py",
                     "issuer_release_evidence.py",
                     "issuer_identity.py",
@@ -503,7 +504,21 @@ def _prefer_direct_precision(
             reasons.add(error.code)
             continue
         if selection.fact is None:
-            reasons.add("MAPPING_OBSERVATION_CONFLICT")
+            reason = (
+                "MAPPING_PRECISION_UNAVAILABLE"
+                if any(
+                    issue.code == "FACT_PRECISION_UNAVAILABLE"
+                    for issue in selection.issues
+                )
+                else "MAPPING_OBSERVATION_CONFLICT"
+            )
+            reasons.add(reason)
+            rejected.extend(
+                MappingObservationRejectionV1(
+                    observation_digest=sha256_digest(fact), reason_code=reason
+                )
+                for fact in facts
+            )
             continue
         for fact in facts:
             decimals = None if fact.decimals == "INF" else int(fact.decimals or "0")

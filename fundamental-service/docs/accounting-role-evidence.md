@@ -723,6 +723,32 @@ does not prove annual lease expense, other capital-claim completeness or a
 complete valuation. The machine approval and signed replay must bind the new
 executable policy digest; earlier certificates do not approve v32.
 
+### Whole-set duplicate consistency before precision selection
+
+Automatic policy `source-bound-us-gaap-v33` requires numeric duplicates in the
+same filing and availability group to pass
+[OIM section6.2](https://www.xbrl.org/Specification/oim/REC-2021-10-13/oim-REC-2021-10-13.html#sec-consistent-duplicates)
+before selecting the most precise observation. Both candidate selection and
+canonical fact resolution use `xbrl_precision.numeric_duplicate_issue` with the
+pinned Arelle `ValidateXbrlCalcs.rangeValue` implementation. Every reported
+interval must share a common closed intersection; every equal-decimals subgroup
+must report the same value. A wide interval cannot connect otherwise disjoint
+facts. This is duplicate consistency, not proof of an accounting perimeter.
+
+The adapter uses a fixed28-digit Decimal context and traps rounded or inexact
+interval arithmetic. Unsupported arithmetic or differing values with unknown
+precision refuse with `FACT_PRECISION_UNAVAILABLE`. The existing automatic
+mixed `INF`/finite refusal remains because canonical nullable decimals do not
+distinguish exact from missing precision. Arelle's
+[CLI duplicate validation and consistent-set deduplication](https://arelle.readthedocs.io/en/latest/command_line.html)
+also implement the standard; pair deduplication is insufficient for this gate.
+
+All original observations stay in retained input evidence. An inconsistent
+set retains rejection reasons and receives no automatic mapping certificate;
+compatible lower-precision observations retain their existing dispositions.
+The helper source is included in the executable mapping-policy digest. No
+issuer rule, fact identity, valuation formula or source-integrity gate changes.
+
 ### Registered NVE current liability principal partition
 
 Automatic policy `source-bound-us-gaap-v11` moves the shared residual evaluator
