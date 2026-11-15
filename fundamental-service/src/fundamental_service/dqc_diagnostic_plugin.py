@@ -4,20 +4,105 @@ from __future__ import annotations
 
 import re
 from collections.abc import Callable
+from datetime import datetime, time, timedelta
 from decimal import Decimal
 from typing import Any, Protocol
 
 from fundamental_service.arelle_parser import ArelleParserError
 
-DIAGNOSTIC_POLICY = "dqc-0090-bound-diagnostics-v1"
+DIAGNOSTIC_POLICY = "dqc-0090-bound-diagnostics-v2"
 _SUM_CONCEPTS = {
     "DQC.US.0090.9374": "LesseeOperatingLeaseLiabilityPaymentsDue",
     "DQC.US.0090.9375": "FinanceLeaseLiabilityPaymentsDue",
 }
+_RENDERED_CONTEXT = re.compile(
+    r"\nPeriod :(?P<period>[0-9]{4}-[0-9]{2}-[0-9]{2})"
+    r"\nDimensions :[ \t]*\nUnit : (?P<currency>[A-Z]{3})"
+    r"\nDecimals: (?P<decimals>inf|-?[0-9]+)"
+    r"\n\nRule Element Id:(?P<rule>9374|9375)\nRule version: 31\.0\.3\Z"
+)
 
 
 class DqcModel(Protocol):
     log: Callable[..., None]
+
+
+def _is_sum_fact(fact: object, concept: str) -> bool:
+    qname = getattr(fact, "qname", None)
+    return (
+        getattr(qname, "localName", None) == concept
+        and re.fullmatch(
+            r"http://fasb\.org/us-gaap/20[0-9]{2}(?:-[0-9]{2}-[0-9]{2})?",
+            getattr(qname, "namespaceURI", ""),
+        )
+        is not None
+        and bool(getattr(fact, "isNumeric", False))
+        and not getattr(fact, "isNil", True)
+    )
+
+
+def _has_rendered_value(fact: object, message: str) -> bool:
+    value = getattr(fact, "xValue", None)
+    numeric = (
+        isinstance(value, int)
+        and not isinstance(value, bool)
+        or isinstance(value, Decimal)
+        and value.is_finite()
+    )
+    return numeric and message.startswith(
+        f"The element {getattr(fact, 'qname', None)} with a value of {value:,} "
+    )
+
+
+def _matches_rendered_context(fact: object, signature: re.Match[str]) -> bool:
+    context = getattr(fact, "context", None)
+    instant = getattr(context, "instantDatetime", None)
+    measures = getattr(getattr(fact, "unit", None), "measures", None)
+    if measures is None:
+        return False
+    return (
+        getattr(context, "isInstantPeriod", False)
+        and isinstance(instant, datetime)
+        and instant.tzinfo is None
+        and instant.time() == time()
+        and instant > datetime.min
+        # Arelle represents an XBRL instant as the following day's midnight.
+        and (instant - timedelta(days=1)).date().isoformat() == signature["period"]
+        and getattr(context, "qnameDims", None) == {}
+        and getattr(context, "segNonDimValues", None) == []
+        and getattr(context, "scenNonDimValues", None) == []
+        and len(measures) == 2
+        and len(measures[0]) == 1
+        and not measures[1]
+        and getattr(measures[0][0], "namespaceURI", None)
+        == "http://www.xbrl.org/2003/iso4217"
+        and getattr(measures[0][0], "localName", None) == signature["currency"]
+        and str(getattr(fact, "decimals", None)).lower() == signature["decimals"]
+    )
+
+
+def _original_model_matches(
+    message_code: str, message: str, model_objects: list[object], concept: str
+) -> list[object]:
+    signature = _RENDERED_CONTEXT.search(message)
+    if signature is None or not message_code.endswith("." + signature["rule"]):
+        return []
+    models = {
+        id(model): model
+        for obj in model_objects
+        if (model := getattr(obj, "modelXbrl", None)) is not None
+    }
+    if len(models) != 1:
+        return []
+    model = next(iter(models.values()))
+    return [
+        fact
+        for fact in getattr(model, "facts", ())
+        if getattr(fact, "modelXbrl", None) is model
+        and _is_sum_fact(fact, concept)
+        and _has_rendered_value(fact, message)
+        and _matches_rendered_context(fact, signature)
+    ]
 
 
 def preserve_rule_severity(
@@ -47,17 +132,9 @@ def message_parameters(
     concept = _SUM_CONCEPTS.get(message_code)
     if concept is None:
         return message
-    matches = [
-        fact
-        for fact in model_objects
-        if getattr(getattr(fact, "qname", None), "localName", None) == concept
-        and re.fullmatch(
-            r"http://fasb\.org/us-gaap/20[0-9]{2}(?:-[0-9]{2}-[0-9]{2})?",
-            getattr(fact.qname, "namespaceURI", ""),
-        )
-        and getattr(fact, "isNumeric", False)
-        and not getattr(fact, "isNil", True)
-    ]
+    matches = [fact for fact in model_objects if _is_sum_fact(fact, concept)]
+    if not matches and "name" not in parameters:
+        matches = _original_model_matches(message_code, message, model_objects, concept)
     if (
         len(matches) != 1
         or not getattr(matches[0], "contextID", None)
@@ -71,16 +148,7 @@ def message_parameters(
     if "name" in parameters:
         name_matches = parameters["name"] == concept
     else:
-        value = getattr(fact, "xValue", None)
-        numeric = (
-            isinstance(value, int)
-            and not isinstance(value, bool)
-            or isinstance(value, Decimal)
-            and value.is_finite()
-        )
-        name_matches = numeric and message.startswith(
-            f"The element {fact.qname} with a value of {value:,} "
-        )
+        name_matches = _has_rendered_value(fact, message)
     if not name_matches:
         raise ArelleParserError(
             "DQC_DIAGNOSTIC_BINDING_UNAVAILABLE",
@@ -93,7 +161,7 @@ def message_parameters(
 
 __pluginInfo__ = {
     "name": "Fundamental bound DQC lease diagnostics",
-    "version": "1.0.0",
+    "version": "2.0.0",
     "CntlrCmdLine.Xbrl.Loaded": preserve_rule_severity,
     "Logging.Message.Parameters": message_parameters,
 }

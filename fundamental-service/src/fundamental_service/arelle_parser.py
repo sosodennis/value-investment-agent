@@ -922,7 +922,7 @@ def _parse_in_process(
                 controller.preloadedPlugins[name] = loaded_plugin
                 plugin_names.append(name)
                 diagnostic_evidence = (
-                    "dqc-0090-bound-diagnostics-v1:"
+                    "dqc-0090-bound-diagnostics-v2:"
                     + hashlib.sha256(diagnostic_plugin.read_bytes()).hexdigest(),
                 )
                 controller._pluginManager.pluginMethodsForClasses.clear()

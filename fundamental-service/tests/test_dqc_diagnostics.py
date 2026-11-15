@@ -1,6 +1,6 @@
 from decimal import Decimal
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 from types import SimpleNamespace
 
 import pytest
@@ -170,6 +170,152 @@ def test_full_xule_message_with_invalid_numeric_fact_refuses(value):
     fact.xValue = value
     with pytest.raises(ArelleParserError) as failure:
         message_parameters("DQC.US.0090.9374", "unknown message", [fact], {})
+    assert failure.value.code == "DQC_DIAGNOSTIC_BINDING_UNAVAILABLE"
+
+
+def _document_type_only_diagnostic(
+    rule="9374", name="LesseeOperatingLeaseLiabilityPaymentsDue"
+):
+    fact = _fact(name, context="E23Q1")
+    fact.context = SimpleNamespace(
+        isInstantPeriod=True,
+        instantDatetime=datetime(2023, 4, 1),
+        qnameDims={},
+        segNonDimValues=[],
+        scenNonDimValues=[],
+    )
+    fact.unit = SimpleNamespace(
+        measures=([_QName("USD", "http://www.xbrl.org/2003/iso4217")], [])
+    )
+    fact.decimals = "INF"
+    model = SimpleNamespace(facts=[fact])
+    fact.modelXbrl = model
+    document_type = SimpleNamespace(modelXbrl=model)
+    message = (
+        f"The element us-gaap:{name} with a value of 545,906 should be equal "
+        "to the sum of the reported components. A difference of 27,200.\n"
+        "Period :2023-03-31\nDimensions : \nUnit : USD\nDecimals: inf\n\n"
+        f"Rule Element Id:{rule}\nRule version: 31.0.3"
+    )
+    return fact, document_type, message
+
+
+@pytest.mark.parametrize(
+    "rule,name",
+    [
+        ("9374", "LesseeOperatingLeaseLiabilityPaymentsDue"),
+        ("9375", "FinanceLeaseLiabilityPaymentsDue"),
+    ],
+)
+def test_document_type_reference_binds_unique_original_fact_and_preserves_error(
+    rule, name
+):
+    _, document_type, message = _document_type_only_diagnostic(rule, name)
+    parameters = {
+        "contextID": "stale-document-type-context",
+        "unitID": "stale-unit",
+        "fundamental_rule_severity": "error",
+    }
+    assert (
+        message_parameters(f"DQC.US.0090.{rule}", message, [document_type], parameters)
+        == message
+    )
+    assert parameters == {
+        "contextID": "E23Q1",
+        "unitID": "USD",
+        "fundamental_rule_severity": "error",
+    }
+
+
+@pytest.mark.parametrize(
+    "before,after",
+    [
+        ("545,906", "545,907"),
+        ("2023-03-31", "2023-04-01"),
+        ("2023-03-31", "2023-02-30"),
+        ("Dimensions : ", "Dimensions : issuer:Axis=issuer:Member"),
+        ("Unit : USD", "Unit : EUR"),
+        ("Decimals: inf", "Decimals: -3"),
+        ("Rule Element Id:9374", "Rule Element Id:9375"),
+        ("Rule version: 31.0.3", "Rule version: 99.0.0"),
+        (
+            "us-gaap:LesseeOperatingLeaseLiabilityPaymentsDue",
+            "issuer:LesseeOperatingLeaseLiabilityPaymentsDue",
+        ),
+    ],
+)
+def test_original_model_binding_refuses_altered_or_unsupported_rendered_signature(
+    before, after
+):
+    _, document_type, message = _document_type_only_diagnostic()
+    parameters = {"contextID": "unchanged"}
+    with pytest.raises(ArelleParserError) as failure:
+        message_parameters(
+            "DQC.US.0090.9374",
+            message.replace(before, after),
+            [document_type],
+            parameters,
+        )
+    assert failure.value.code == "DQC_DIAGNOSTIC_BINDING_UNAVAILABLE"
+    assert parameters == {"contextID": "unchanged"}
+
+
+@pytest.mark.parametrize(
+    "defect",
+    [
+        "missing",
+        "duplicate",
+        "cross_model",
+        "multiple_models",
+        "nil",
+        "extension",
+        "duration",
+        "instant_time",
+        "dimension",
+        "segment",
+        "scenario",
+        "unit_namespace",
+        "divided_unit",
+        "decimals",
+    ],
+)
+def test_original_model_binding_refuses_ambiguous_or_mismatched_original_fact(defect):
+    fact, document_type, message = _document_type_only_diagnostic()
+    references = [document_type]
+    if defect == "missing":
+        document_type.modelXbrl.facts = []
+    elif defect == "duplicate":
+        from copy import copy
+
+        document_type.modelXbrl.facts.append(copy(fact))
+    elif defect == "cross_model":
+        fact.modelXbrl = SimpleNamespace()
+    elif defect == "multiple_models":
+        references.append(SimpleNamespace(modelXbrl=SimpleNamespace(facts=[])))
+    elif defect == "nil":
+        fact.isNil = True
+    elif defect == "extension":
+        fact.qname.namespaceURI = "http://issuer.example/2023"
+    elif defect == "duration":
+        fact.context.isInstantPeriod = False
+    elif defect == "instant_time":
+        fact.context.instantDatetime = datetime(2023, 4, 1, 12)
+    elif defect == "dimension":
+        fact.context.qnameDims = {"issuer:Axis": "issuer:Member"}
+    elif defect == "segment":
+        fact.context.segNonDimValues = ["unmodeled-segment"]
+    elif defect == "scenario":
+        fact.context.scenNonDimValues = ["unmodeled-scenario"]
+    elif defect == "unit_namespace":
+        fact.unit.measures[0][0].namespaceURI = "http://issuer.example/unit"
+    elif defect == "divided_unit":
+        fact.unit.measures[1].append(
+            _QName("shares", "http://www.xbrl.org/2003/instance")
+        )
+    elif defect == "decimals":
+        fact.decimals = "-3"
+    with pytest.raises(ArelleParserError) as failure:
+        message_parameters("DQC.US.0090.9374", message, references, {})
     assert failure.value.code == "DQC_DIAGNOSTIC_BINDING_UNAVAILABLE"
 
 
