@@ -19,6 +19,11 @@ from .automatic_mapping_disclosures import (
     STOCK_COMPENSATION_DISCLOSURE,
 )
 from .contracts import IdentityV1, SecIntegrityEvidenceV1
+from .current_debt_mapping import (
+    CURRENT_DEBT,
+    current_debt_components_present,
+    select_current_debt,
+)
 from .data_releases import (
     ArtifactRefV1,
     AutomaticMappingApprovalV1,
@@ -66,8 +71,8 @@ from .snapshots import SnapshotError
 from .taxonomy_evidence import require_original_taxonomy
 
 AUTOMATIC_MAPPING_INPUT_ROLE = "automatic-mapping-input-v1"
-AutomaticMappingPolicyVersion = Literal["source-bound-us-gaap-v33"]
-AUTOMATIC_MAPPING_POLICY: AutomaticMappingPolicyVersion = "source-bound-us-gaap-v33"
+AutomaticMappingPolicyVersion = Literal["source-bound-us-gaap-v34"]
+AUTOMATIC_MAPPING_POLICY: AutomaticMappingPolicyVersion = "source-bound-us-gaap-v34"
 _GAAP_NAMESPACE = re.compile(
     r"http://(?:fasb\.org|xbrl\.us)/us-gaap/\d{4}(?:-\d{2}-\d{2})?"
 )
@@ -226,6 +231,7 @@ def automatic_mapping_policy_digest() -> str:
                     "arelle_parser.py",
                     "facts.py",
                     "xbrl_precision.py",
+                    "current_debt_mapping.py",
                     "sec_rebuild.py",
                     "issuer_release_evidence.py",
                     "issuer_identity.py",
@@ -294,9 +300,15 @@ def automatic_mapping_proposal(
         if original is not None
         else None
     )
+    current_debt = (
+        normalized_field == "current_interest_bearing_debt"
+        and original is not None
+        and current_debt_components_present(original)
+    )
     liability_residual = (
         normalized_field in LIABILITY_RESIDUAL_ROLES
         and lease_concept is None
+        and not current_debt
         and not (
             original is not None and _direct_balance_present(original, normalized_field)
         )
@@ -330,6 +342,7 @@ def automatic_mapping_proposal(
         and not liability_residual
         and not option_cost
         and lease_concept is None
+        and not current_debt
     ):
         return None
     concept = STOCK_COMPENSATION_DISCLOSURE
@@ -337,6 +350,8 @@ def automatic_mapping_proposal(
         concept = investment_asset_concept(normalized_field)
     if lease_concept is not None:
         concept = lease_concept
+    elif current_debt:
+        concept = CURRENT_DEBT
     elif liability_residual:
         concept = liability_residual_concept(normalized_field)
     elif noncontrolling_equity:
@@ -673,6 +688,10 @@ def evaluate_automatic_mapping(
         and proposal.source_concept
         == liability_residual_concept(proposal.normalized_field)
     )
+    current_debt = (
+        proposal.normalized_field == "current_interest_bearing_debt"
+        and proposal.source_concept == CURRENT_DEBT
+    )
     computed = (
         disclosed
         or adjusted
@@ -681,6 +700,7 @@ def evaluate_automatic_mapping(
         or liability_residual
         or option_cost
         or lease_liability
+        or current_debt
     )
     if (
         (
@@ -717,7 +737,10 @@ def evaluate_automatic_mapping(
                 p.period.period_end for p in leases.rules.periods
             )
     if liability_residual:
-        if _direct_balance_present(original, proposal.normalized_field):
+        if _direct_balance_present(original, proposal.normalized_field) or (
+            proposal.normalized_field == "current_interest_bearing_debt"
+            and current_debt_components_present(original)
+        ):
             reasons.add("MAPPING_DEBT_DIRECT_REPRESENTATION_REQUIRED")
         liabilities = select_registered_liability_residual(
             original,
@@ -731,6 +754,16 @@ def evaluate_automatic_mapping(
         reasons.update(liabilities.reason_codes)
         selected.extend(liabilities.selected)
         accounting_rules = liabilities.rules
+    if current_debt:
+        debt = select_current_debt(
+            original,
+            security_id=request.security_identity.security_id
+            if request.security_identity is not None
+            else None,
+        )
+        reasons.update(debt.reason_codes)
+        selected.extend(debt.selected)
+        accounting_rules = debt.rules
     if noncontrolling_equity:
         equity = select_registered_noncontrolling_equity(
             original,
@@ -867,6 +900,7 @@ def evaluate_automatic_mapping(
             or liability_residual
             or option_cost
             or lease_liability
+            or current_debt
             or fact.concept != proposal.source_concept
         ):
             continue
@@ -966,6 +1000,8 @@ def evaluate_automatic_mapping(
             elif lease_liability:
                 assert lease_concept is not None
                 anchor = lease_concept
+            elif current_debt:
+                anchor = CURRENT_DEBT
             payload.update(
                 {
                     "anchor_concept": anchor,

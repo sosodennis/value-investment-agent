@@ -850,3 +850,40 @@ The annual option aggregate and the proxy's named-executive statements cannot
 alone establish all those claims. Treasury-stock arithmetic, forecasts and
 valuation remain with the existing formal composer/calculator; unsupported
 history thresholds remain null.
+
+### Standard current debt original-term totals
+
+Automatic policy `source-bound-us-gaap-v34` admits one generic representation of
+`current_interest_bearing_debt`: `LongTermDebtCurrent + ShortTermBorrowings`.
+The owning accounting rule is
+`standard-current-debt-original-term-totals-v1`; the proposal and provenance
+anchor are `components:CurrentDebtOriginalTermTotals`. No issuer or accession
+registration is required.
+
+The [official FASB definitions](https://xbrl.fasb.org/us-gaap/2025/elts/us-gaap-doc-2025.xml)
+describe `LongTermDebtCurrent` as the current carrying portion of long-term debt,
+excluding lease obligations, and `ShortTermBorrowings` as the total carrying
+amount of debt with initial terms shorter than one year or the operating cycle.
+Those initial-term categories are disjoint. The inspected 2023–2026 definitions
+are identical; only these exact FASB namespaces are supported. `CommercialPaper`
+is a subtotal and cannot replace total short-term borrowings. `DebtCurrent`
+includes leases and cannot substitute for this lease-exclusive representation.
+
+Both explicit totals must exist at every selected instant, including an
+explicit zero if applicable. They must share issuer, date, USD unit, taxonomy,
+consolidated dimensionless scope and finite reported precision. Whole-set OIM
+duplicate consistency precedes deterministic highest-precision selection for
+each component. The existing accounting evaluator adds the two source-bound
+components, retaining source precision in the accounting evidence; derived
+reported decimals remain unknown under the existing arithmetic policy.
+Original facts, all duplicate
+contexts, selected digests, full parser digest and executable policy remain
+bound to the retained input and signed decision.
+
+Missing/partial, conflicting, invalid, mixed-namespace, future or unsupported
+evidence refuses; partial standard totals also prevent a residual-zero fallback.
+This proves only the two defined carrying-debt categories. It establishes no
+lease balance, credit facility availability, capital/award inventory, unreported
+debt amount, complete valuation input or release. Other disclosure representations
+require their own supported scope rule; calculation-tree agreement is not an
+independent completeness proof.
