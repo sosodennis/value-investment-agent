@@ -99,6 +99,10 @@ from .conditional_reinvestment_preparation import (
 )
 from .conditional_reinvestment_release import validate_reinvestment_assumption_document
 from .valuation_release_inputs import valuation_input_requirements
+from .valuation_fact_evidence import (
+    SourceFactEvidenceInventoryV1,
+    build_source_fact_inventory,
+)
 from .working_capital import assess_composite_working_capital
 from .working_capital_preparation import (
     WorkingCapitalBindingV1,
@@ -199,11 +203,20 @@ class SourcePreparationEvidenceV1(StrictModel):
     public_source_cutoff: PublicSourceCutoffV1 | None = Field(
         default=None, exclude_if=lambda value: value is None
     )
+    fact_evidence_inventory: SourceFactEvidenceInventoryV1 | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
     preparation: AutomaticValuationPreparationV1 | None = None
     calculation: UncertaintyReportV1 | None = None
 
     @model_validator(mode="after")
     def outcome_matches_evidence(self) -> SourcePreparationEvidenceV1:
+        inventory = self.fact_evidence_inventory
+        if inventory is not None and (
+            self.snapshot_manifest_digest is None
+            or inventory.snapshot_manifest_digest != self.snapshot_manifest_digest
+        ):
+            raise ValueError("fact evidence inventory requires its exact snapshot")
         automatic = self.automatic_release_ref
         if automatic is not None and (
             automatic.role
@@ -999,12 +1012,27 @@ class SourcePreparationRunner:
                         ),
                     }
                 )
+        fact_inventory = None
+        if (
+            not assembly_failed
+            and isinstance(plan, AutomaticSourcePreparationPlanV1)
+            and evidence.snapshot_id is not None
+            and self._plan_mappings(plan) is not None
+        ):
+            inventory_snapshot = self._application.snapshot(evidence.snapshot_id)
+            if inventory_snapshot.coverage_status is QualityStatus.VERIFIED:
+                fact_inventory = build_source_fact_inventory(
+                    self._plan_facts(plan, inventory_snapshot),
+                    snapshot=inventory_snapshot,
+                    profile=plan.requirements_profile,
+                )
         evidence = SourcePreparationEvidenceV1.model_validate(
             {
                 **evidence.model_dump(),
                 "working_capital_binding_ref": binding_ref,
                 "conditional_capital_binding_ref": capital_ref,
                 "conditional_reinvestment_binding_ref": reinvestment_ref,
+                "fact_evidence_inventory": fact_inventory,
                 "source_plan_ref": ArtifactRefV1(
                     artifact_id=publication.artifact.artifact_id,
                     content_hash=publication.artifact.content_hash,

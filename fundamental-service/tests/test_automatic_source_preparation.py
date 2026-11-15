@@ -53,6 +53,7 @@ def runner_case(tmp_path, monkeypatch):
     application = SimpleNamespace(
         resolve_snapshot=missing_release,
         artifact_store=artifacts,
+        fact_repository=SimpleNamespace(get=metadata.facts.__getitem__),
         snapshot=metadata.snapshots.__getitem__,
         prepare_valuation=forbidden,
         calculate_valuation=forbidden,
@@ -104,6 +105,13 @@ def test_mapping_free_plan_retains_full_blocked_result_and_reuses_everything(
     )
     assert artifacts.read(outcome.mapping_evidence_ref.artifact_id)
     assert "non_operating_assets" in outcome.missing_evidence
+    fact_inventory = report.fact_evidence_inventory
+    assert fact_inventory is not None
+    assert fact_inventory.requirements_digest == plan.requirements_profile.digest
+    roles = {row.normalized_field: row for row in fact_inventory.roles}
+    assert roles["non_operating_assets"].state == "unknown"
+    assert not roles["non_operating_assets"].observations
+    assert roles["stock_based_compensation"].observations
     assert metadata.mappings and len(metadata.acquisitions) == 1
     before = inventory(artifacts.root)
     audits = tuple(metadata.audits)

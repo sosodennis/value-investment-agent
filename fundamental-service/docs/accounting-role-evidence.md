@@ -960,3 +960,28 @@ security has all economic rights, that no other stock class exists, or that
 preferred, convertible, noncontrolling or award claims are absent. Those remain
 separate capital completeness and release gates. No share-price pairing,
 dilution distribution or valuation formula is inferred here.
+
+### Automatic preparation fact inventory
+
+An automatic source preparation report with a verified snapshot and retained
+plan mappings includes `fact_evidence_inventory`. The versioned inventory binds
+the snapshot manifest, configured requirements and canonical input fact digests.
+It lists every required and supporting fact role. Each accepted observation
+references its canonical fact, source, mapping decision, period and unit, and
+retains whether it was observed, derived or supported by an explicit absence
+rule. A disclosed numeric zero remains observed. An empty role is `unknown`;
+ineligible candidates remain referenced separately.
+
+The shared released-fact selector owns identity, source membership, availability
+and quality checks. The inventory retains all eligible observations, including
+conflicting candidates, for the accounting and model owners to resolve. Its
+scope is `mapped_observations_not_completeness_or_model_readiness`: presence
+does not establish a complete history, instrument inventory, component scope,
+agreement, quote permission or release approval. A conditional model's unknown
+historical supporting roles remain unknown. Existing binding, release, composer
+and exact-input caller approval gates determine whether calculation can proceed.
+
+The report is additive and omitted when the exact-plan snapshot or mappings are
+unavailable. It uses no company registrations, source downloads, separate
+mapping approvals or valuation formulas. The existing authenticated artifact API
+returns the inventory as part of the source preparation evidence.
