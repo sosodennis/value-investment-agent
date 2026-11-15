@@ -1253,6 +1253,20 @@ Use these external references and verification channels:
 
 The acceptance claim is therefore bounded: the system can prove that it followed the declared data, model, formula, and uncertainty contracts. It cannot prove that an intrinsic value equals a future market price.
 
+DQC applicability uses the original SEC filing date. When an assertion does not
+emit an effective date, the existing exact final-document catalog or a verified
+XULE/date-table binding can establish it. The offline
+`scripts/build_dqc_effective_dates.py --rule-sources ... --effective-dates ...`
+path reconstructs every Git tree under the pinned official root, verifies the
+rule, its resource definition and date-table blobs, and accepts only a single
+exact assertion whose numeric element ID selects an explicit table date.
+The runtime pins the derived catalog and retains those source hashes in the
+applicability evidence. An assertion family or a similarly named document
+cannot supply another assertion's date. Active, unknown, conflicting and
+critical/fatal findings remain blocking; future findings remain in the report.
+This rule applies across issuers and does not establish accounting completeness
+or authorize an incomplete mapping or valuation.
+
 ### 25.5 Target-compatible service contract chain
 
 The isolated service must create the contracts that the enterprise stage will consume from its first release. It must not expose a temporary payload and plan to replace it later.

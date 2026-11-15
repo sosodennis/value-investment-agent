@@ -100,6 +100,82 @@ def test_not_yet_effective_assertion_stays_in_persisted_replay():
     assert restored.replay_digest() != original.replay_digest()
 
 
+@pytest.mark.parametrize(
+    "filed,expected",
+    [
+        (date(2024, 10, 9), ()),
+        (date(2025, 10, 8), ()),
+        (date(2026, 5, 31), ()),
+        (date(2026, 6, 1), ("DQC.US.0228.10921",)),
+        (date(2026, 6, 2), ("DQC.US.0228.10921",)),
+    ],
+)
+def test_official_xule_and_date_table_bind_exact_assertion(filed, expected):
+    finding = _finding("DQC.US.0228.10921")
+    bound = bind_dqc_filing_context(_report([finding]), _context(filed))
+    assert bound.findings == (finding,)
+    assert bound.blocking_finding_codes() == expected
+    decision = bound.finding_applicability(finding)
+    assert decision.effective_date == date(2026, 6, 1)
+    assert decision.date_source == "official-rule-date-table"
+    assert decision.document_sha256 is None
+    assert decision.date_table_sha256 == (
+        "98dde485be1cc5814cb3f6a7cd6ebd9152742bfb42c314ba6fa876a82f2e4da8"
+    )
+    assert len(decision.rule_source_sha256) == 8
+    restored = ArelleParseReportV1.model_validate_json(bound.model_dump_json())
+    assert restored.replay_digest() == bound.replay_digest()
+
+
+@pytest.mark.parametrize(
+    "finding",
+    [
+        _finding("DQC.US.0238.10921"),
+        _finding("DQC.US.0228.10801"),
+        _finding("DQC.US.0228.10921", rule_effective_date=date(2026, 6, 2)),
+        _finding("DQC.US.0228.10921", rule_severity="critical"),
+        _finding("DQC.US.0228.10921", rule_severity="fatal"),
+    ],
+)
+def test_date_table_does_not_approve_other_assertions_or_critical_errors(finding):
+    bound = bind_dqc_filing_context(_report([finding]), _context(date(2024, 1, 1)))
+    assert bound.blocking_finding_codes() == (finding.code,)
+
+
+def test_date_table_and_document_conflict_stays_blocking(monkeypatch):
+    import fundamental_service.dqc_applicability as policy
+
+    monkeypatch.setattr(
+        policy,
+        "_document_dates",
+        lambda: {"DQC.US.0228.10921": (date(2026, 6, 2), "a" * 64)},
+    )
+    finding = _finding("DQC.US.0228.10921")
+    bound = bind_dqc_filing_context(_report([finding]), _context())
+    assert bound.blocking_finding_codes() == (finding.code,)
+    decision = bound.finding_applicability(finding)
+    assert decision.status == "conflict"
+    assert decision.effective_date is None
+    assert decision.document_sha256 == "a" * 64
+    assert decision.date_table_sha256 is not None
+
+
+def test_corrupt_assertion_date_catalog_refuses(tmp_path, monkeypatch):
+    import fundamental_service.dqc_applicability as policy
+
+    corrupt = tmp_path / "table.json"
+    corrupt.write_bytes(b"{}")
+    policy._assertion_dates.cache_clear()
+    monkeypatch.setattr(policy, "_TABLE_CATALOG_PATH", corrupt)
+    try:
+        with pytest.raises(ValueError, match="date table hash"):
+            evaluate_dqc_applicability(
+                code="DQC.US.0228.10921", emitted_date=None, context=_context()
+            )
+    finally:
+        policy._assertion_dates.cache_clear()
+
+
 @pytest.mark.parametrize("level", ["critical", "fatal"])
 def test_critical_or_fatal_validation_remains_blocking(level):
     finding = _finding(rule_severity=level)
