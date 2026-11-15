@@ -1,6 +1,7 @@
 """Compile retained source identities without implying complete source coverage."""
 
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import replace
 from datetime import timedelta
 from types import SimpleNamespace
 
@@ -21,9 +22,9 @@ from test_automatic_source_preparation import automatic_plan
 from test_issuer_operating_release import inventory
 
 
-def assembly_case(tmp_path, monkeypatch):
+def assembly_case(tmp_path, monkeypatch, **acquisition_options):
     request, acquisition, _, metadata, artifacts = acquisition_case(
-        tmp_path, monkeypatch
+        tmp_path, monkeypatch, **acquisition_options
     )
     facts = []
     publish = metadata.publish_sec_ingestion
@@ -133,6 +134,129 @@ def test_regulatory_coverage_does_not_require_a_selected_mapping_from_every_orig
         artifacts=options["artifacts"],
         validation_profile_digest=options["policy"].validation_profile_digest,
     )
+
+
+def test_two_original_assembly_keeps_coverage_after_pit_prunes_older_mappings(
+    tmp_path, monkeypatch
+):
+    import test_automatic_source_acquisition as acquisition_fixtures
+
+    from fundamental_service.history_composition import compose_original_history
+    from fundamental_service.original_issuer import evaluate_original_issuer
+    from fundamental_service.snapshots import FilesystemSnapshotRepository
+
+    latest, acquisition, _ = assembly_case(tmp_path / "latest", monkeypatch)
+    source_case = acquisition_fixtures.source_case
+
+    def earlier_source_case(path):
+        request, authority, validated, artifacts, mappings = source_case(path)
+        original = validated.original
+        accession = original.source.accession_number[:-6] + "000000"
+        source = original.source.model_copy(
+            update={
+                "accession_number": accession,
+                "uri": original.source.uri.replace(
+                    original.source.accession_number.replace("-", ""),
+                    accession.replace("-", ""),
+                ),
+                "available_at": original.source.available_at - timedelta(days=1),
+            }
+        )
+        original = evaluate_original_issuer(
+            original.report, source=source, decision_at=original.decision_at
+        )
+        request = request.model_copy(
+            update={
+                "filing": request.filing.model_copy(
+                    update={"accession_number": accession}
+                )
+            }
+        )
+        return (
+            request,
+            authority,
+            replace(validated, original=original),
+            artifacts,
+            mappings,
+        )
+
+    monkeypatch.setattr(acquisition_fixtures, "source_case", earlier_source_case)
+    earlier, _, _ = assembly_case(
+        tmp_path / "earlier",
+        monkeypatch,
+        metadata=acquisition.metadata,
+        artifacts=latest["artifacts"],
+        content=acquisition.content_store,
+    )
+    repository = FilesystemSnapshotRepository(tmp_path / "history")
+    for options in (earlier, latest):
+        repository.publish(options["snapshot"])
+    snapshot = compose_original_history(
+        repository,
+        (earlier["snapshot"].snapshot_id, latest["snapshot"].snapshot_id),
+        valuation_timestamp=latest["snapshot"].valuation_timestamp,
+        fiscal_period_selector=latest["snapshot"].fiscal_period_selector,
+    )
+    plan = latest["plan"].model_copy(
+        update={"ingestions": (*earlier["plan"].ingestions, *latest["plan"].ingestions)}
+    )
+    request = assemble_preparation_release(
+        **{
+            **latest,
+            "plan": type(plan).model_validate(plan.model_dump()),
+            "snapshot": snapshot,
+            "facts": (*earlier["facts"], *latest["facts"]),
+            "mappings": earlier["mappings"],
+            "batch_refs": (*earlier["batch_refs"], *latest["batch_refs"]),
+        }
+    )
+    assert earlier["facts"] and latest["facts"]
+    assert {ref.fact_id for ref in request.manifest.snapshot_refs[0].facts} == {
+        fact.fact_id for fact in latest["facts"]
+    }
+    selected_mappings = {item.decision_id for item in latest["mappings"]}
+    assert {
+        ref.mapping_id for ref in request.manifest.mapping_refs
+    } == selected_mappings
+    assert {
+        review.mapping_id for review in request.content.mapping_reviews
+    } == selected_mappings
+    pruned_mappings = {
+        item.decision_id for item in earlier["mappings"]
+    } - selected_mappings
+    assert pruned_mappings
+    mappings = {item.decision_id: item for item in earlier["mappings"]}
+    evidence = require_automatic_release_sources(
+        request.manifest,
+        request.content,
+        snapshots=repository,
+        mappings=SimpleNamespace(get_mapping=mappings.__getitem__),
+        artifacts=latest["artifacts"],
+        validation_profile_digest=latest["policy"].validation_profile_digest,
+    )
+    assert len(evidence) == 2
+    # The unused original remains required even though none of its mappings do.
+    import json
+
+    retained = tuple(
+        ref
+        for ref in request.content.evidence_refs
+        if ref.role != "automatic-mapping-batch-input-v1"
+        or json.loads(latest["artifacts"].read(ref.artifact_id))["original"]["source"][
+            "accession_number"
+        ]
+        == latest["plan"].ingestions[0].filing.accession_number
+    )
+    with pytest.raises(DataReleaseError) as failure:
+        require_automatic_release_sources(
+            request.manifest,
+            request.content.model_copy(update={"evidence_refs": retained}),
+            snapshots=repository,
+            mappings=SimpleNamespace(get_mapping=mappings.__getitem__),
+            artifacts=latest["artifacts"],
+            validation_profile_digest=latest["policy"].validation_profile_digest,
+        )
+    assert failure.value.code == "AUTOMATIC_RELEASE_REGULATORY_EVIDENCE_MISSING"
 
 
 @pytest.mark.parametrize(
