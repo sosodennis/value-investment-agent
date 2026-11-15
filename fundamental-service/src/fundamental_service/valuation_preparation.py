@@ -22,6 +22,16 @@ from .conditional_capital_contracts import (
     ConditionalCapitalAssessmentV1,
 )
 from .conditional_capital import ConditionalCapitalError, assess_conditional_capital
+from .conditional_reinvestment import (
+    assess_conditional_reinvestment,
+    reinvestment_history_requirements_profile,
+)
+from .conditional_reinvestment_contracts import (
+    REINVESTMENT_CORE_FIELDS,
+    ConditionalReinvestmentAssessmentV1,
+    ConditionalReinvestmentPolicyV1,
+    ReinvestmentHypothesisV1,
+)
 from .capital_bridge_policy import (
     CapitalBridgePolicyError,
     require_disjoint_non_operating_assets,
@@ -130,6 +140,27 @@ class HistoricalMetricsV1(StrictModel):
     working_capital_inputs: tuple[CompositeWorkingCapitalInputV1, ...] = Field(
         default=(), exclude_if=lambda value: not value
     )
+
+
+class ConditionalOperatingScenarioV1(StrictModel):
+    hypothesis: ReinvestmentHypothesisV1
+    forecast: ForecastAssumptionsV1
+
+
+class ConditionalOperatingForecastsV1(StrictModel):
+    """Operating assumptions only; not a released or caller-approved valuation."""
+
+    protocol: Literal["conditional-operating-forecasts-v1"] = (
+        "conditional-operating-forecasts-v1"
+    )
+    assessment: ConditionalReinvestmentAssessmentV1
+    historical_metrics: HistoricalMetricsV1
+    scenarios: tuple[ConditionalOperatingScenarioV1, ...]
+    input_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+    @property
+    def output_digest(self) -> str:
+        return sha256_digest(self)
 
 
 class ApprovedMarketPolicyInputsV1(StrictModel):
@@ -346,6 +377,17 @@ def derive_historical_metrics(
 ) -> HistoricalMetricsV1:
     """Derive reviewed FCFF historical metrics without numeric placeholders."""
 
+    return _derive_historical_metrics(
+        history, estimated_inputs=estimated_inputs, observed_reinvestment=True
+    )
+
+
+def _derive_historical_metrics(
+    history: AnnualHistoryV1,
+    *,
+    estimated_inputs: tuple[EstimatedOperatingInputsV1, ...] = (),
+    observed_reinvestment: bool,
+) -> HistoricalMetricsV1:
     if history.quality is QualityStatus.ABSTAIN:
         return HistoricalMetricsV1(
             profile_id=history.requirements_profile_id,
@@ -371,18 +413,14 @@ def derive_historical_metrics(
         issue_codes.append("SCENARIO_INPUTS_ASSUMED")
     missing: list[str] = []
     for index, period in enumerate(history.periods):
-        candidates = {
-            field: period.fact(field)
-            for field in (
-                "revenue",
-                "operating_income",
-                "income_before_tax",
-                "income_tax_expense",
+        required_fields = REINVESTMENT_CORE_FIELDS
+        if observed_reinvestment:
+            required_fields += (
                 "capital_expenditure",
                 "depreciation_and_amortization",
                 *(WORKING_CAPITAL_FIELDS if period.working_capital is None else ()),
             )
-        }
+        candidates = {field: period.fact(field) for field in required_fields}
         estimate = estimates.get(period.fiscal_year)
         if estimate is not None and isinstance(
             estimate.capital_expenditure, UnconsumedBaselineCapexV1
@@ -473,6 +511,16 @@ def derive_historical_metrics(
             continue
         if previous_revenue.value <= _ZERO_TOLERANCE:
             issue_codes.append("METRIC_GROWTH_DENOMINATOR_UNSTABLE")
+            continue
+        growth = _metric(
+            "revenue_growth",
+            period,
+            revenue / previous_revenue.value - Decimal("1"),
+            "revenue / prior_revenue - 1",
+            (fields["revenue"], previous_revenue),
+        )
+        if not observed_reinvestment:
+            metrics.append(growth)
             continue
         current_working_capital: Decimal | None
         previous_working_capital: Decimal | None
@@ -568,13 +616,7 @@ def derive_historical_metrics(
         realized_facts = realized_fact_candidates
         metrics.extend(
             (
-                _metric(
-                    "revenue_growth",
-                    period,
-                    revenue / previous_revenue.value - Decimal("1"),
-                    "revenue / prior_revenue - 1",
-                    (fields["revenue"], previous_revenue),
-                ),
+                growth,
                 _metric(
                     "delta_operating_working_capital",
                     period,
@@ -922,6 +964,8 @@ def _transition_filing_evidence(
 def compose_forecast_assumptions(
     history: AnnualHistoryV1,
     metrics: HistoricalMetricsV1,
+    *,
+    reinvestment_hypothesis: ReinvestmentHypothesisV1 | None = None,
 ) -> ForecastAssumptionsV1:
     """Compose the shared #352 operating assumptions without valuation claims."""
 
@@ -931,25 +975,35 @@ def compose_forecast_assumptions(
     growth = [item.value for item in metric_by_name.get("revenue_growth", ())]
     margins = [item.value for item in metric_by_name.get("operating_margin", ())]
     reinvestment = [item.value for item in metric_by_name.get("reinvestment_rate", ())]
-    if len(growth) < 2 or len(margins) < 3 or len(reinvestment) < 2:
+    if (
+        len(growth) < 2
+        or len(margins) < 3
+        or (reinvestment_hypothesis is None and len(reinvestment) < 2)
+    ):
         raise PreparationError(
             "FORECAST_HISTORY_INSUFFICIENT",
-            "forecast requires three margins and two growth/reinvestment periods",
+            "forecast requires three margins, two growth periods and a reinvestment basis",
             missing=("forecast_history",),
         )
     latest_revenue = history.periods[-1].fact("revenue")
     assert latest_revenue is not None and isinstance(latest_revenue.value, Decimal)
     mean_growth = sum(growth, Decimal("0")) / Decimal(len(growth))
     mean_margin = sum(margins[-3:], Decimal("0")) / Decimal(min(3, len(margins)))
-    mean_reinvestment = sum(reinvestment, Decimal("0")) / Decimal(len(reinvestment))
     if not _MIN_REVENUE_GROWTH <= mean_growth <= _MAX_REVENUE_GROWTH:
         raise PreparationError(
             "FORECAST_GROWTH_OUT_OF_BOUNDS", "mean revenue growth exceeds policy bounds"
         )
-    bounded_reinvestment = min(
-        _MAX_REINVESTMENT_RATE,
-        max(_MIN_REINVESTMENT_RATE, mean_reinvestment),
-    )
+    if reinvestment_hypothesis is None:
+        mean_reinvestment = sum(reinvestment, Decimal("0")) / Decimal(len(reinvestment))
+        bounded_reinvestment = min(
+            _MAX_REINVESTMENT_RATE,
+            max(_MIN_REINVESTMENT_RATE, mean_reinvestment),
+        )
+    else:
+        hypothesis = ReinvestmentHypothesisV1.model_validate_json(
+            reinvestment_hypothesis.model_dump_json()
+        )
+        bounded_reinvestment = hypothesis.reinvestment_rate
     forecast_growth = tuple(
         mean_growth * (Decimal(_FORECAST_PERIODS - index) / Decimal(_FORECAST_PERIODS))
         for index in range(_FORECAST_PERIODS)
@@ -959,6 +1013,66 @@ def compose_forecast_assumptions(
         revenue_growth=forecast_growth,
         operating_margin=(mean_margin,) * _FORECAST_PERIODS,
         reinvestment_rate=(bounded_reinvestment,) * _FORECAST_PERIODS,
+    )
+
+
+@using_valuation_context
+def compose_conditional_operating_forecasts(
+    policy: ConditionalReinvestmentPolicyV1,
+    facts: Iterable[CanonicalFactV1],
+    *,
+    snapshot: SourceSnapshotV1,
+    mapping_version: str,
+) -> ConditionalOperatingForecastsV1:
+    """Reuse formal operating formulas with explicitly assumed forward rates."""
+
+    assessment = assess_conditional_reinvestment(
+        policy, facts, snapshot=snapshot, mapping_version=mapping_version
+    )
+    history = resolve_annual_history(
+        assessment.source_facts,
+        snapshot=snapshot,
+        valuation_timestamp=snapshot.valuation_timestamp,
+        profile=reinvestment_history_requirements_profile(policy.recipe.model_id),
+    )
+    metrics = _derive_historical_metrics(history, observed_reinvestment=False)
+    if metrics.quality_status is QualityStatus.ABSTAIN or any(
+        code.startswith("METRIC_") for code in metrics.issue_codes
+    ):
+        raise PreparationError(
+            "CONDITIONAL_OPERATING_METRICS_INVALID",
+            "core operating metrics cannot support a forward forecast",
+            missing=metrics.issue_codes,
+        )
+    metrics = metrics.model_copy(
+        update={
+            "issue_codes": (
+                *metrics.issue_codes,
+                "CONDITIONAL_FORWARD_REINVESTMENT_HYPOTHESES",
+            ),
+            "missing_evidence": tuple(
+                sorted(set(metrics.missing_evidence) | set(policy.unknowns))
+            ),
+        }
+    )
+    return ConditionalOperatingForecastsV1(
+        assessment=assessment,
+        historical_metrics=metrics,
+        scenarios=tuple(
+            ConditionalOperatingScenarioV1(
+                hypothesis=hypothesis,
+                forecast=compose_forecast_assumptions(
+                    history, metrics, reinvestment_hypothesis=hypothesis
+                ),
+            )
+            for hypothesis in policy.recipe.scenarios
+        ),
+        input_digest=sha256_digest(
+            {
+                "protocol": "conditional-operating-forecasts-v1",
+                "assessment_digest": assessment.output_digest,
+            }
+        ),
     )
 
 

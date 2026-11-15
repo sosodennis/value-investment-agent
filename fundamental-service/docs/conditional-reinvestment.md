@@ -42,6 +42,21 @@ Subsequent integration must retain excluded historical-role failures, verify
 the assumption document bytes, reproduce the policy in the release canary and
 put the same assumptions and sensitivity into the exact caller input.
 
+`valuation_preparation.compose_conditional_operating_forecasts` is the internal
+operating forecast boundary. It reproduces the source-bound policy assessment,
+uses the same core metric and forecast formulas as the existing composer, and
+returns three forecast assumptions plus their assessment and historical core
+metrics. The result retains unknown historical reinvestment roles. It emits no
+historical reinvestment-rate or realized-FCFF metrics. Invalid core denominators
+and the existing forecast growth bounds still refuse. Supplying only core
+metrics to the existing historical forecast route still fails without an
+explicit reinvestment hypothesis.
+
+This operating result is neither a full valuation input nor an approved
+policy/release. Capital claims, award dilution, market policy, entitled quote,
+trusted release/canary, exact caller approval and calculator/result persistence
+remain the full valuation's separate mandatory boundaries.
+
 ## Shared accounting rules and candidate evidence
 
 The current gaps are semantic classes, not issuer exceptions:
