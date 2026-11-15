@@ -890,8 +890,8 @@ independent completeness proof.
 
 ### Original printed security-title representation
 
-Original identity selection policy `original-dei-paired-common-stock-v3` is the
-default for automatic source preparation. It extends the v2 printed common-stock
+Original identity selection policy `original-dei-paired-common-stock-v4` is the
+default for automatic source preparation. The v3 policy extends the v2 printed common-stock
 dollar-par forms to allow an omitted `per share` suffix, for example
 `Common Stock, par value $1`. The exact original printed title is retained.
 SEC's [DEI2025 schema](https://xbrl.sec.gov/dei/2025/dei-2025.xsd) defines
@@ -899,7 +899,13 @@ SEC's [DEI2025 schema](https://xbrl.sec.gov/dei/2025/dei-2025.xsd) defines
 application restriction. This change classifies the title only and infers no
 par-value balance, share count, price or economic rights.
 
-v1/v2 remain explicit historical policies with their existing behavior. v3
+v4 additionally accepts the complete printed title `Common Stock, no par value`,
+case-insensitively after existing whitespace normalization. It does not classify
+preferred stock, named common classes, convertible terms or other title suffixes.
+The retained original title remains the security identity; no par-value amount,
+economic rights or equivalence between different printed titles is inferred.
+
+v1/v2/v3 remain explicit historical policies with their existing behavior. v4
 requests have a distinct policy identity and preparation digest. Complete paired
 DEI contexts, one supported common-stock pair, supported fixed-coupon note
 alternatives, and the existing namespace, entity, period, units and dimensions
@@ -907,7 +913,7 @@ checks still apply. Unknown, unpaired, conflicting, preferred and multiple commo
 classes refuse automatic selection. The rule interprets printed titles without
 company/accession registration or inference from custom member names.
 
-For unselected fixed-coupon-note pairs, v3 supports bounded uppercase
+For unselected fixed-coupon-note pairs, v3/v4 support bounded uppercase
 alphanumeric source symbols with periods, hyphens and spaces, up to the SEC
 DEI `tradingSymbolItemType` limit of25 characters (for example `BOND 27`).
 The selected common-stock ticker retains its strict15-character provider form.

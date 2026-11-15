@@ -31,12 +31,17 @@ OriginalSecuritySelectionPolicy = Literal[
     "original-dei-single-common-stock-v1",
     "original-dei-paired-common-stock-v2",
     "original-dei-paired-common-stock-v3",
+    "original-dei-paired-common-stock-v4",
 ]
 DEFAULT_ORIGINAL_SECURITY_POLICY: OriginalSecuritySelectionPolicy = (
-    "original-dei-paired-common-stock-v3"
+    "original-dei-paired-common-stock-v4"
 )
 _PAIRED_SECURITY_POLICIES = frozenset(
-    {"original-dei-paired-common-stock-v2", "original-dei-paired-common-stock-v3"}
+    {
+        "original-dei-paired-common-stock-v2",
+        "original-dei-paired-common-stock-v3",
+        "original-dei-paired-common-stock-v4",
+    }
 )
 OriginalHistoryIdentityPolicy = Literal["original-history-name-format-v1"]
 DEFAULT_ORIGINAL_HISTORY_IDENTITY_POLICY: OriginalHistoryIdentityPolicy = (
@@ -166,6 +171,7 @@ def _paired_common_security(
     facts: tuple[ParsedXbrlFactV1, ...],
     *,
     allow_omitted_per_share: bool,
+    allow_no_par_value: bool,
 ) -> tuple[str, str, tuple[tuple[str, str], ...]] | None:
     """Classify paired printed DEI titles, without interpreting custom member names."""
 
@@ -193,9 +199,10 @@ def _paired_common_security(
         )
     )
     per_share = r"(?: per share)?" if allow_omitted_per_share else r" per share"
+    no_par_value = r"|no par value" if allow_no_par_value else ""
     common_title = (
         rf"common stock(?:, (?:\$[0-9]+(?:\.[0-9]+)? par value{per_share}"
-        rf"|par value \$[0-9]+(?:\.[0-9]+)?{per_share}))?"
+        rf"|par value \$[0-9]+(?:\.[0-9]+)?{per_share}{no_par_value}))?"
     )
     common = tuple(
         pair for pair in pairs if re.fullmatch(common_title, pair[1].casefold())
@@ -235,6 +242,7 @@ def resolve_original_filing_identity(
             "original-dei-single-common-stock-v1",
             "original-dei-paired-common-stock-v2",
             "original-dei-paired-common-stock-v3",
+            "original-dei-paired-common-stock-v4",
         )
     ):
         raise refuse(
@@ -253,7 +261,12 @@ def resolve_original_filing_identity(
         _paired_common_security(
             facts,
             allow_omitted_per_share=security_selection_policy
-            == "original-dei-paired-common-stock-v3",
+            in {
+                "original-dei-paired-common-stock-v3",
+                "original-dei-paired-common-stock-v4",
+            },
+            allow_no_par_value=security_selection_policy
+            == "original-dei-paired-common-stock-v4",
         )
         if security_selection_policy in _PAIRED_SECURITY_POLICIES
         else None
@@ -348,10 +361,10 @@ def resolve_original_filing_identity(
     )
     for symbol, title in selected_pairs:
         symbol_pattern = r"[A-Z0-9][A-Z0-9.-]{0,14}"
-        if security_selection_policy == "original-dei-paired-common-stock-v3" and (
-            symbol,
-            title,
-        ) != (ticker, identity.share_class):
+        if security_selection_policy in {
+            "original-dei-paired-common-stock-v3",
+            "original-dei-paired-common-stock-v4",
+        } and (symbol, title) != (ticker, identity.share_class):
             symbol_pattern = r"[A-Z0-9][A-Z0-9. -]{0,24}"
         if not re.fullmatch(symbol_pattern, symbol):
             raise refuse(

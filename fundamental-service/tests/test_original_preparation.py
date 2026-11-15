@@ -245,6 +245,57 @@ def test_history_identity_policy_rejects_unknown_version_before_storage(
     assert _inventory(tmp_path) == before
 
 
+def test_no_par_policy_reuses_validation_and_preserves_prior_refusal(
+    tmp_path, monkeypatch
+):
+    from fundamental_service import ingestion
+
+    value = case(tmp_path, monkeypatch)
+    parser = ingestion.parse_filing_offline
+    title = "Common stock, no par value"
+
+    def no_par_parser(*args, **kwargs):
+        report = parser(*args, **kwargs)
+        return report.model_copy(
+            update={
+                "facts": tuple(
+                    f.model_copy(update={"value": title})
+                    if f.concept == "dei:Security12bTitle"
+                    else f
+                    for f in report.facts
+                )
+            }
+        )
+
+    monkeypatch.setattr(ingestion, "parse_filing_offline", no_par_parser)
+    old_request = value.request.model_copy(
+        update={"security_selection_policy": "original-dei-paired-common-stock-v3"}
+    )
+    refused, _ = execute(value, old_request)
+    assert refused.issue_codes == ("HISTORICAL_SECURITY_SELECTION_REQUIRED",)
+    assert refused.filings[0].identity is None
+    calls = value.state.provider_calls, value.state.parser_calls
+    request = type(value.request).model_validate(
+        {
+            **value.request.model_dump(),
+            "security_selection_policy": DEFAULT_ORIGINAL_SECURITY_POLICY,
+        }
+    )
+    prepared, publication = execute(value, request)
+    assert request.digest != old_request.digest
+    assert publication.wrote and not prepared.issue_codes
+    assert prepared.filings[0].identity == value.expected_identity.model_copy(
+        update={"share_class": title}
+    )
+    assert prepared.filings[0].validation == refused.filings[0].validation
+    assert (value.state.provider_calls, value.state.parser_calls) == calls
+    before = _inventory(tmp_path)
+    again, repeated = execute(value, request)
+    assert again == prepared and not repeated.wrote
+    assert value.service.read(refused.artifact_id) == refused
+    assert _inventory(tmp_path) == before
+
+
 def test_concurrent_requests_publish_once_and_parse_once(tmp_path, monkeypatch):
     value = case(tmp_path, monkeypatch)
     with ThreadPoolExecutor(max_workers=3) as pool:

@@ -1094,21 +1094,23 @@ def test_original_resolution_requires_the_requested_original_cik(cik):
         "Common Stock, par value $0.001",
     ),
 )
-def test_paired_v3_accepts_printed_dollar_par_without_per_share(title):
+@pytest.mark.parametrize(
+    "policy",
+    ("original-dei-paired-common-stock-v3", "original-dei-paired-common-stock-v4"),
+)
+def test_paired_v3_accepts_printed_dollar_par_without_per_share(title, policy):
     facts = tuple(
         f.model_copy(update={"value": title})
         if f.context_id == "common-class" and f.concept == "dei:Security12bTitle"
         else f
         for f in _common_and_distinct_note()
     )
-    identity = _resolve_original(
-        facts, security_selection_policy=DEFAULT_ORIGINAL_SECURITY_POLICY
-    )
+    identity = _resolve_original(facts, security_selection_policy=policy)
     assert identity.security_id == "AAPL" and identity.share_class == title
     assert (
         _resolve_original(
             tuple(reversed((*facts, *facts))),
-            security_selection_policy=DEFAULT_ORIGINAL_SECURITY_POLICY,
+            security_selection_policy=policy,
         )
         == identity
     )
@@ -1145,8 +1147,13 @@ def test_paired_v3_does_not_relax_class_economic_or_currency_scope(title):
 
 
 @pytest.mark.parametrize("symbol", ("BOND 27", "OTHER 33", "X" * 25))
+@pytest.mark.parametrize(
+    "policy",
+    ("original-dei-paired-common-stock-v3", "original-dei-paired-common-stock-v4"),
+)
 def test_v3_retains_unselected_note_source_symbol_without_stock_ticker_conversion(
     symbol,
+    policy,
 ):
     facts = tuple(
         f.model_copy(update={"value": symbol})
@@ -1154,9 +1161,7 @@ def test_v3_retains_unselected_note_source_symbol_without_stock_ticker_conversio
         else f
         for f in _common_and_distinct_note()
     )
-    identity = _resolve_original(
-        facts, security_selection_policy=DEFAULT_ORIGINAL_SECURITY_POLICY
-    )
+    identity = _resolve_original(facts, security_selection_policy=policy)
     assert identity.security_id == "AAPL" and identity.share_class == "Common Stock"
     with pytest.raises(IdentityResolutionError):
         _resolve_original(
@@ -1187,3 +1192,67 @@ def test_v3_preserves_selected_ticker_and_unselected_symbol_boundaries(context, 
             facts, security_selection_policy=DEFAULT_ORIGINAL_SECURITY_POLICY
         )
     assert error.value.code == "HISTORICAL_IDENTITY_SCOPE_UNSUPPORTED"
+
+
+@pytest.mark.parametrize(
+    "title", ("Common stock, no par value", "COMMON STOCK, NO PAR VALUE")
+)
+@pytest.mark.parametrize("representation", ("single", "distinct_note", "reused_note"))
+def test_paired_v4_selects_explicit_no_par_common_stock(title, representation):
+    source = {
+        "single": _original_identity_facts,
+        "distinct_note": _common_and_distinct_note,
+        "reused_note": _common_and_reused_note,
+    }[representation]()
+    facts = tuple(
+        f.model_copy(update={"value": title})
+        if f.concept == "dei:Security12bTitle" and "Notes" not in f.value
+        else f
+        for f in source
+    )
+    assert DEFAULT_ORIGINAL_SECURITY_POLICY == "original-dei-paired-common-stock-v4"
+    identity = _resolve_original(
+        facts, security_selection_policy=DEFAULT_ORIGINAL_SECURITY_POLICY
+    )
+    assert identity.security_id == "AAPL" and identity.share_class == title
+    assert (
+        _resolve_original(
+            tuple(reversed((*facts, *facts))),
+            security_selection_policy=DEFAULT_ORIGINAL_SECURITY_POLICY,
+        )
+        == identity
+    )
+    for policy in (
+        "original-dei-paired-common-stock-v2",
+        "original-dei-paired-common-stock-v3",
+    ):
+        with pytest.raises(IdentityResolutionError) as error:
+            _resolve_original(facts, security_selection_policy=policy)
+        assert error.value.code == "HISTORICAL_SECURITY_SELECTION_REQUIRED"
+
+
+@pytest.mark.parametrize(
+    "title",
+    (
+        "Class A Common stock, no par value",
+        "Preferred stock, no par value",
+        "Common stock, no par value convertible",
+        "Common stock, no par value per unit",
+        "Common stock, no par value $1",
+        "Common stock, par value",
+        "Common stock, no stated value",
+        "Common stock, no par value\nCommon stock",
+    ),
+)
+def test_paired_v4_requires_the_complete_supported_printed_title(title):
+    facts = tuple(
+        f.model_copy(update={"value": title})
+        if f.concept == "dei:Security12bTitle"
+        else f
+        for f in _original_identity_facts()
+    )
+    with pytest.raises(IdentityResolutionError) as error:
+        _resolve_original(
+            facts, security_selection_policy=DEFAULT_ORIGINAL_SECURITY_POLICY
+        )
+    assert error.value.code == "HISTORICAL_SECURITY_SELECTION_REQUIRED"
