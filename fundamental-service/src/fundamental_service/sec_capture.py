@@ -123,6 +123,10 @@ class RetainedSecSourceAdapter(SecEdgarSourceAdapter):
                 retryable=True,
             )
         artifact_id = sec_response_artifact_id(self.scope, uri)
+        receipt = self.read_retained_response(uri)
+        if receipt is not None:
+            self._observed[uri] = receipt
+            return self._response(receipt)
         key = artifact_id.removeprefix("sec-response:")
         archive_key = self._archive_key(uri)
         with self._capture_lock(archive_key or key):

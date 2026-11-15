@@ -16,6 +16,8 @@ from fundamental_service.sec_source import (
 )
 from fundamental_service.serialization import sha256_digest
 from fundamental_service.snapshots import FilesystemContentStore, SnapshotError
+from fundamental_service.public_acquisition import PostgresPublicCaptureLock
+from test_public_acquisition import BusyCaptureMetadata, inventory
 
 AT = datetime(2016, 1, 12, 19, 35, 54, tzinfo=UTC)
 
@@ -86,6 +88,28 @@ def test_restart_after_capture_reuses_exact_original_and_writes_nothing(
     assert len(provider.calls) == 1
     assert after == before
     assert len(ArtifactStore(tmp_path / "receipts")._records) == 1
+
+
+def test_completed_sec_response_verifies_bytes_without_busy_writer_lease(tmp_path):
+    provider = _Provider()
+    first = _adapter(tmp_path, provider).capture_submissions("0001539778")
+    before = inventory(tmp_path)
+    reopened = _adapter(
+        tmp_path,
+        provider,
+        capture_lock=PostgresPublicCaptureLock(BusyCaptureMetadata()),
+    )
+    assert reopened.capture_submissions("0001539778") == first
+    assert len(reopened.observed_responses) == 1
+    assert inventory(tmp_path) == before and len(provider.calls) == 1
+    receipt = reopened.observed_responses[0]
+    FilesystemContentStore(tmp_path / "content")._path(
+        receipt.content_hash, receipt.media_type
+    ).write_bytes(b"corrupt")
+    with pytest.raises(SnapshotError) as failure:
+        reopened.capture_submissions("0001539778")
+    assert failure.value.code != "PUBLIC_CAPTURE_IN_PROGRESS"
+    assert len(provider.calls) == 1
 
 
 def test_restart_reuses_original_filing_submission_without_download_or_rewrite(

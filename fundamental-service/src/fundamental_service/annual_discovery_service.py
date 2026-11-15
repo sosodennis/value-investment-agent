@@ -269,31 +269,44 @@ class AnnualDiscovery:
             ) from error
         return evidence
 
+    def _completed(
+        self, request: AnnualDiscoveryRequestV1
+    ) -> tuple[AnnualDiscoveryEvidenceV1, ArtifactPublicationV1] | None:
+        artifact_id = f"annual-discovery:{request.digest}"
+        try:
+            record = self._artifacts.get(artifact_id)
+        except SnapshotError as error:
+            if error.code != "ARTIFACT_NOT_FOUND":
+                raise
+            return None
+        evidence = self.read(artifact_id)
+        if evidence.request != request:
+            raise SnapshotError(
+                "ANNUAL_DISCOVERY_INVALID", "annual request identity differs"
+            )
+        return evidence, ArtifactPublicationV1(artifact=record, wrote=False)
+
+    def _before_deadline(self, deadline_at: datetime) -> datetime:
+        now = self._clock()
+        if now.tzinfo is None or deadline_at.tzinfo is None or deadline_at <= now:
+            raise SecSourceError(
+                "REQUEST_DEADLINE_EXCEEDED",
+                "annual discovery deadline expired",
+                retryable=True,
+            )
+        return now
+
     def execute(
         self, request: AnnualDiscoveryRequestV1, *, deadline_at: datetime
     ) -> tuple[AnnualDiscoveryEvidenceV1, ArtifactPublicationV1]:
         request = AnnualDiscoveryRequestV1.model_validate_json(canonical_bytes(request))
+        self._before_deadline(deadline_at)
+        if completed := self._completed(request):
+            return completed
         with self._capture_lock(sha256_digest(("annual-discovery", request.digest))):
-            now = self._clock()
-            if now.tzinfo is None or deadline_at.tzinfo is None or deadline_at <= now:
-                raise SecSourceError(
-                    "REQUEST_DEADLINE_EXCEEDED",
-                    "annual discovery deadline expired",
-                    retryable=True,
-                )
-            artifact_id = f"annual-discovery:{request.digest}"
-            try:
-                record = self._artifacts.get(artifact_id)
-            except SnapshotError as error:
-                if error.code != "ARTIFACT_NOT_FOUND":
-                    raise
-            else:
-                evidence = self.read(artifact_id)
-                if evidence.request != request:
-                    raise SnapshotError(
-                        "ANNUAL_DISCOVERY_INVALID", "annual request identity differs"
-                    )
-                return evidence, ArtifactPublicationV1(artifact=record, wrote=False)
+            now = self._before_deadline(deadline_at)
+            if completed := self._completed(request):
+                return completed
             if request.valuation_timestamp > now:
                 raise SecSourceError(
                     "ANNUAL_VALUATION_TIME_INVALID",

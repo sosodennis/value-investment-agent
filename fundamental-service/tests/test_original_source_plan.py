@@ -53,6 +53,8 @@ from fundamental_service.preparation_runner import (
 )
 from fundamental_service.source_plan_contracts import SOURCE_PREPARATION_PLAN
 from fundamental_service.replay import ArtifactStore
+from fundamental_service.public_acquisition import PostgresPublicCaptureLock
+from test_public_acquisition import BusyCaptureMetadata
 from fundamental_service.sec_source import SecSourceError
 from fundamental_service.serialization import canonical_bytes, sha256_digest
 from fundamental_service.sec_sic_damodaran_crosswalk import (
@@ -420,6 +422,31 @@ def test_repeat_reopened_and_concurrent_compilers_publish_once_without_io(
     again, publication = reopened.execute(request)
     assert again == expected and not publication.wrote
     assert _inventory(tmp_path) == before
+
+
+def test_completed_plan_reuses_verified_dependencies_while_writer_is_busy(
+    tmp_path, monkeypatch
+):
+    value = case(tmp_path, monkeypatch)
+    prepared, _ = execute(value)
+    compiler, request = compiler_case(value, prepared)
+    expected, first = compiler.execute(request)
+    before = _inventory(tmp_path)
+    calls = value.state.provider_calls, value.state.parser_calls
+    monkeypatch.setattr(
+        compiler, "_lock", PostgresPublicCaptureLock(BusyCaptureMetadata())
+    )
+    repeated, publication = compiler.execute(request)
+    assert repeated == expected and publication.artifact == first.artifact
+    assert not publication.wrote and _inventory(tmp_path) == before
+    record = value.artifacts.get(prepared.artifact_id)
+    value.artifacts._artifact_path(record.content_hash, record.media_type).write_bytes(
+        b"corrupt"
+    )
+    with pytest.raises(SnapshotError) as failure:
+        compiler.execute(request)
+    assert failure.value.code != "PUBLIC_CAPTURE_IN_PROGRESS"
+    assert calls == (value.state.provider_calls, value.state.parser_calls)
 
 
 def test_recipe_template_expands_saved_original_and_pins_composite_requirements(

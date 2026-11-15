@@ -729,28 +729,34 @@ class OriginalSourcePlan:
             )
         return evidence
 
+    def _completed(
+        self, request: OriginalSourcePlanRequestV1
+    ) -> tuple[OriginalSourcePlanEvidenceV1, ArtifactPublicationV1] | None:
+        artifact_id = f"original-source-plan:{request.digest}"
+        try:
+            record = self._artifacts.get(artifact_id)
+        except SnapshotError as error:
+            if error.code != "ARTIFACT_NOT_FOUND":
+                raise
+            return None
+        evidence = self.read(artifact_id)
+        if evidence.request != request:
+            raise SnapshotError(
+                "ORIGINAL_SOURCE_PLAN_INVALID", "source plan request differs"
+            )
+        return evidence, ArtifactPublicationV1(artifact=record, wrote=False)
+
     def execute(
         self, request: OriginalSourcePlanRequestV1
     ) -> tuple[OriginalSourcePlanEvidenceV1, ArtifactPublicationV1]:
         request = OriginalSourcePlanRequestV1.model_validate_json(
             canonical_bytes(request)
         )
+        if completed := self._completed(request):
+            return completed
         with self._lock(sha256_digest(("original-source-plan", request.digest))):
-            artifact_id = f"original-source-plan:{request.digest}"
-            try:
-                self._artifacts.get(artifact_id)
-            except SnapshotError as error:
-                if error.code != "ARTIFACT_NOT_FOUND":
-                    raise
-            else:
-                evidence = self.read(artifact_id)
-                if evidence.request != request:
-                    raise SnapshotError(
-                        "ORIGINAL_SOURCE_PLAN_INVALID", "source plan request differs"
-                    )
-                return evidence, ArtifactPublicationV1(
-                    artifact=self._artifacts.get(artifact_id), wrote=False
-                )
+            if completed := self._completed(request):
+                return completed
             evidence = self._compile(request)
             self._artifacts.put_with_receipt(
                 f"original-source-plan-request:{request.digest}", request

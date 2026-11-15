@@ -11,7 +11,10 @@ from fundamental_service.current_preparation import (
     CurrentSourcePreparationPublicationV1,
 )
 from fundamental_service.source_plan_contracts import SOURCE_PREPARATION_PLAN
-from fundamental_service.public_acquisition import PublicSourceCutoffV1
+from fundamental_service.public_acquisition import (
+    PublicSourceCutoffV1,
+    PostgresPublicCaptureLock,
+)
 from fundamental_service.snapshots import SnapshotError
 from fundamental_service.serialization import sha256_digest
 from test_preparation_runner import (
@@ -21,7 +24,14 @@ from test_preparation_runner import (
     _run,
     _runner,
 )
-from test_public_acquisition import Provider, acquisition, file_lock, inventory, request
+from test_public_acquisition import (
+    BusyCaptureMetadata,
+    Provider,
+    acquisition,
+    file_lock,
+    inventory,
+    request,
+)
 
 
 def current_fixture(tmp_path, *, artifacts=None):
@@ -254,6 +264,35 @@ def test_saved_selection_reopens_days_later_without_retiming_or_writes(tmp_path)
         )
     assert failure.value.code == "REQUEST_DEADLINE_EXCEEDED"
     assert inventory(tmp_path) == before
+
+
+def test_completed_current_selection_checks_deadline_and_bytes_before_busy_lease(
+    tmp_path, monkeypatch
+):
+    fixture = current_fixture(tmp_path)
+    selected, first = select(fixture)
+    selector = fixture.selector()
+    monkeypatch.setattr(
+        selector, "_selection_lock", PostgresPublicCaptureLock(BusyCaptureMetadata())
+    )
+    before = inventory(tmp_path)
+    repeated, publication = selector.execute(
+        fixture.request, deadline_at=fixture.deadline_at
+    )
+    assert repeated == selected and publication.artifact == first.artifact
+    assert not publication.wrote and inventory(tmp_path) == before
+    with pytest.raises(SnapshotError) as failure:
+        selector.execute(fixture.request, deadline_at=VALUATION_TIME)
+    assert failure.value.code == "REQUEST_DEADLINE_EXCEEDED"
+    assert selected.plan is not None
+    record = fixture.artifacts.get(f"source-preparation-plan:{selected.plan.digest}")
+    fixture.artifacts._artifact_path(
+        record.content_hash, record.media_type
+    ).write_bytes(b"corrupt")
+    with pytest.raises(SnapshotError) as failure:
+        selector.execute(fixture.request, deadline_at=fixture.deadline_at)
+    assert failure.value.code != "PUBLIC_CAPTURE_IN_PROGRESS"
+    assert len(fixture.provider.calls) == 1
 
 
 def test_current_concurrency_selects_one_plan_and_downloads_once(tmp_path):

@@ -19,6 +19,8 @@ from fundamental_service.sec_source import (
 )
 from fundamental_service.serialization import canonical_bytes
 from fundamental_service.snapshots import FilesystemContentStore, SnapshotError
+from fundamental_service.public_acquisition import PostgresPublicCaptureLock
+from test_public_acquisition import BusyCaptureMetadata
 
 CIK = "0000724910"
 RECENT = f"CIK{CIK}.json"
@@ -168,6 +170,40 @@ def test_concurrent_discovery_has_one_publication_and_one_capture_per_page(tmp_p
     assert len({evidence.digest for evidence, _ in results}) == 1
     assert sum(publication.wrote for _, publication in results) == 1
     assert provider.calls == [RECENT, HISTORY]
+
+
+def test_completed_discovery_verifies_originals_without_busy_writer_lease(tmp_path):
+    provider = Provider()
+    first, publication = _service(tmp_path, provider).execute(
+        _request(), deadline_at=DEADLINE
+    )
+    before = _inventory(tmp_path)
+    reopened = _service(
+        tmp_path, provider, locks=PostgresPublicCaptureLock(BusyCaptureMetadata())
+    )
+    second, repeated = reopened.execute(_request(), deadline_at=DEADLINE)
+    assert second == first and repeated.artifact == publication.artifact
+    assert not repeated.wrote and _inventory(tmp_path) == before
+    assert provider.calls == [RECENT, HISTORY]
+    receipt = first.sources[0].receipt
+    FilesystemContentStore(tmp_path / "content")._path(
+        receipt.content_hash, receipt.media_type
+    ).write_bytes(b"corrupt")
+    with pytest.raises(SnapshotError) as failure:
+        reopened.execute(_request(), deadline_at=DEADLINE)
+    assert failure.value.code != "PUBLIC_CAPTURE_IN_PROGRESS"
+    assert provider.calls == [RECENT, HISTORY]
+
+
+def test_cold_discovery_still_refuses_busy_writer_without_provider_io(tmp_path):
+    provider = Provider()
+    service = _service(
+        tmp_path, provider, locks=PostgresPublicCaptureLock(BusyCaptureMetadata())
+    )
+    with pytest.raises(SnapshotError) as failure:
+        service.execute(_request(), deadline_at=DEADLINE)
+    assert failure.value.code == "PUBLIC_CAPTURE_IN_PROGRESS"
+    assert not provider.calls and not service._artifacts._records
 
 
 def test_retry_retains_failure_and_reuses_successful_capture(tmp_path):

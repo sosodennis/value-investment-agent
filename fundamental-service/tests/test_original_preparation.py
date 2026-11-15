@@ -2,7 +2,7 @@
 
 import json
 from concurrent.futures import ThreadPoolExecutor
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, contextmanager
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
@@ -20,8 +20,10 @@ from fundamental_service.original_preparation import (
 )
 from fundamental_service.replay import ArtifactStore
 from fundamental_service.sec_source import SecSourceError, _SecResponse
-from fundamental_service.serialization import canonical_bytes
+from fundamental_service.serialization import canonical_bytes, sha256_digest
 from fundamental_service.snapshots import SnapshotError
+from fundamental_service.public_acquisition import PostgresPublicCaptureLock
+from test_public_acquisition import BusyCaptureMetadata
 from test_annual_discovery_service import Locks, _inventory
 from test_automatic_source_acquisition import acquisition_case
 from test_automatic_source_mapping import source_case
@@ -232,6 +234,37 @@ def test_concurrent_requests_publish_once_and_parse_once(tmp_path, monkeypatch):
     assert len({e.digest for e, _ in results}) == 1
     assert sum(p.wrote for _, p in results) == 1 and value.state.parser_calls == 1
     assert value.state.provider_calls == 5
+
+
+def test_completed_preparation_and_validation_do_not_need_busy_writer_leases(
+    tmp_path, monkeypatch
+):
+    value = case(tmp_path, monkeypatch)
+    prepared, first = execute(value)
+    before = _inventory(tmp_path)
+    calls = value.state.provider_calls, value.state.parser_calls
+    busy = PostgresPublicCaptureLock(BusyCaptureMetadata())
+    monkeypatch.setattr(value.service, "_lock", busy)
+    again, repeated = execute(value)
+    assert again == prepared and repeated.artifact == first.artifact
+    assert not repeated.wrote and _inventory(tmp_path) == before
+
+    @contextmanager
+    def only_validation_busy(key):
+        if key == sha256_digest(("original-preparation", selected.digest)):
+            yield
+        else:
+            with busy(key):
+                yield
+
+    selected = value.request.model_copy(update={"ticker": "OTHER"})
+    monkeypatch.setattr(value.service, "_lock", only_validation_busy)
+    refused, publication = execute(value, selected)
+    assert publication.wrote and refused.issue_codes == (
+        "HISTORICAL_IDENTITY_MISMATCH",
+    )
+    assert refused.filings[0].validation == prepared.filings[0].validation
+    assert calls == (value.state.provider_calls, value.state.parser_calls)
 
 
 def test_interrupted_aggregate_publication_reuses_completed_validation(

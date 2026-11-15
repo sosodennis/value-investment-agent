@@ -367,23 +367,29 @@ class OriginalPreparation:
             self._bytes(evidence.failure_evidence)
         return evidence
 
+    def _completed_validation(
+        self, request: OriginalValidationRequestV1
+    ) -> OriginalValidationEvidenceV1 | None:
+        artifact_id = f"original-validation:{request.digest}"
+        try:
+            self._artifacts.get(artifact_id)
+        except SnapshotError as error:
+            if error.code != "ARTIFACT_NOT_FOUND":
+                raise
+            return None
+        evidence = self.read_validation(artifact_id)
+        if evidence.request != request:
+            raise SnapshotError("ORIGINAL_PREPARATION_INVALID", "request differs")
+        return evidence
+
     def _validation(
         self, request: OriginalValidationRequestV1, deadline_at: datetime
     ) -> OriginalValidationEvidenceV1:
+        if completed := self._completed_validation(request):
+            return completed
         with self._lock(sha256_digest(("original-validation", request.digest))):
-            artifact_id = f"original-validation:{request.digest}"
-            try:
-                self._artifacts.get(artifact_id)
-            except SnapshotError as error:
-                if error.code != "ARTIFACT_NOT_FOUND":
-                    raise
-            else:
-                evidence = self.read_validation(artifact_id)
-                if evidence.request != request:
-                    raise SnapshotError(
-                        "ORIGINAL_PREPARATION_INVALID", "request differs"
-                    )
-                return evidence
+            if completed := self._completed_validation(request):
+                return completed
             self._artifacts.put_with_receipt(
                 f"original-validation-request:{request.digest}", request
             )
@@ -500,27 +506,33 @@ class OriginalPreparation:
             raise SnapshotError("ORIGINAL_PREPARATION_INVALID", "preparation differs")
         return evidence
 
+    def _completed(
+        self, request: OriginalPreparationRequestV1
+    ) -> tuple[OriginalPreparationEvidenceV1, ArtifactPublicationV1] | None:
+        artifact_id = f"original-preparation:{request.digest}"
+        try:
+            record = self._artifacts.get(artifact_id)
+        except SnapshotError as error:
+            if error.code != "ARTIFACT_NOT_FOUND":
+                raise
+            return None
+        evidence = self.read(artifact_id)
+        if evidence.request != request:
+            raise SnapshotError("ORIGINAL_PREPARATION_INVALID", "request differs")
+        return evidence, ArtifactPublicationV1(artifact=record, wrote=False)
+
     def execute(
         self, request: OriginalPreparationRequestV1, *, deadline_at: datetime
     ) -> tuple[OriginalPreparationEvidenceV1, ArtifactPublicationV1]:
         request = OriginalPreparationRequestV1.model_validate_json(
             canonical_bytes(request)
         )
+        if completed := self._completed(request):
+            return completed
         with self._lock(sha256_digest(("original-preparation", request.digest))):
             annual = self._annual(request)
-            artifact_id = f"original-preparation:{request.digest}"
-            try:
-                record = self._artifacts.get(artifact_id)
-            except SnapshotError as error:
-                if error.code != "ARTIFACT_NOT_FOUND":
-                    raise
-            else:
-                evidence = self.read(artifact_id)
-                if evidence.request != request:
-                    raise SnapshotError(
-                        "ORIGINAL_PREPARATION_INVALID", "request differs"
-                    )
-                return evidence, ArtifactPublicationV1(artifact=record, wrote=False)
+            if completed := self._completed(request):
+                return completed
             self._artifacts.put_with_receipt(
                 f"original-preparation-request:{request.digest}", request
             )

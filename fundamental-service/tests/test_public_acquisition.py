@@ -95,6 +95,48 @@ def inventory(root):
     }
 
 
+class BusyCaptureMetadata:
+    def try_acquire_ingestion_lock(self, key):
+        return None
+
+
+def test_completed_capture_reuses_verified_bytes_while_writer_lease_is_busy(tmp_path):
+    provider = Provider()
+    first = acquisition(tmp_path, provider).execute(request())
+    before = inventory(tmp_path)
+    reopened = acquisition(
+        tmp_path, provider, lock=PostgresPublicCaptureLock(BusyCaptureMetadata())
+    )
+    second = reopened.execute(request())
+    assert second.artifact == first.artifact and not second.wrote
+    assert inventory(tmp_path) == before and len(provider.calls) == 1
+    outcome = reopened.read(first.artifact.artifact_id)
+    FilesystemContentStore(tmp_path / "content")._path(
+        outcome.source.content_sha256, outcome.media_type
+    ).write_bytes(b"corrupt")
+    with pytest.raises(SnapshotError) as failure:
+        reopened.execute(request())
+    assert failure.value.code != "PUBLIC_CAPTURE_IN_PROGRESS"
+    assert len(provider.calls) == 1
+
+
+def test_publication_between_lookup_and_lease_is_reused_without_provider_io(tmp_path):
+    provider = Provider()
+    publications = []
+
+    @contextmanager
+    def publish_before_lease(_key):
+        publications.append(acquisition(tmp_path, provider).execute(request()))
+        yield
+
+    repeated = acquisition(tmp_path, provider, lock=publish_before_lease).execute(
+        request()
+    )
+    assert publications[0].wrote and not repeated.wrote
+    assert repeated.artifact == publications[0].artifact
+    assert len(provider.calls) == 1
+
+
 def test_reopened_repeat_reuses_original_without_download_or_any_file_write(tmp_path):
     provider = Provider()
     first = acquisition(tmp_path, provider).execute(request())

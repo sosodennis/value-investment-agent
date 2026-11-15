@@ -275,36 +275,49 @@ class CurrentSourcePreparation:
                 )
         return selected
 
+    def _completed(
+        self, request: CurrentSourcePreparationRequestV1
+    ) -> tuple[CurrentSourcePreparationSelectionV1, ArtifactPublicationV1] | None:
+        artifact_id = f"current-source-preparation:{request.digest}"
+        try:
+            record = self._artifacts.get(artifact_id)
+        except SnapshotError as error:
+            if error.code != "ARTIFACT_NOT_FOUND":
+                raise
+            return None
+        selected = self.read(artifact_id)
+        if selected.request != request:
+            raise SnapshotError(
+                "CURRENT_SELECTION_INVALID",
+                "current request differs from retained identity",
+            )
+        return selected, ArtifactPublicationV1(artifact=record, wrote=False)
+
+    def _before_deadline(self, deadline_at: datetime) -> datetime:
+        now = self._clock()
+        if now.tzinfo is None or deadline_at.tzinfo is None or deadline_at <= now:
+            raise SnapshotError(
+                "REQUEST_DEADLINE_EXCEEDED",
+                "current preparation deadline expired",
+                retryable=True,
+            )
+        return now
+
     def execute(
         self,
         request: CurrentSourcePreparationRequestV1,
         *,
         deadline_at: datetime,
     ) -> tuple[CurrentSourcePreparationSelectionV1, ArtifactPublicationV1]:
+        self._before_deadline(deadline_at)
+        if completed := self._completed(request):
+            return completed
         with self._selection_lock(
             sha256_digest(("current-preparation", request.digest))
         ):
-            now = self._clock()
-            if now.tzinfo is None or deadline_at.tzinfo is None or deadline_at <= now:
-                raise SnapshotError(
-                    "REQUEST_DEADLINE_EXCEEDED",
-                    "current preparation deadline expired",
-                    retryable=True,
-                )
-            artifact_id = f"current-source-preparation:{request.digest}"
-            try:
-                record = self._artifacts.get(artifact_id)
-            except SnapshotError as error:
-                if error.code != "ARTIFACT_NOT_FOUND":
-                    raise
-            else:
-                selected = self.read(artifact_id)
-                if selected.request != request:
-                    raise SnapshotError(
-                        "CURRENT_SELECTION_INVALID",
-                        "current request differs from retained identity",
-                    )
-                return selected, ArtifactPublicationV1(artifact=record, wrote=False)
+            now = self._before_deadline(deadline_at)
+            if completed := self._completed(request):
+                return completed
             if request.requested_at > now:
                 raise SnapshotError(
                     "CURRENT_REQUEST_TIME_INVALID",

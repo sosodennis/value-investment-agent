@@ -258,25 +258,32 @@ class PublicSourceAcquisition:
             captured_at=source.captured_at,
         )
 
+    def _completed(
+        self, request: PublicSourceAcquisitionRequestV1
+    ) -> ArtifactPublicationV1 | None:
+        self.validate_request(request)
+        artifact_id = f"public-source-acquisition:{request.digest}"
+        try:
+            record = self._artifacts.get(artifact_id)
+        except SnapshotError as error:
+            if error.code != "ARTIFACT_NOT_FOUND":
+                raise
+            return None
+        evidence = self.read(artifact_id)
+        if evidence.request != request:
+            raise SnapshotError(
+                "PUBLIC_CAPTURE_IDENTITY_MISMATCH", "capture request changed"
+            )
+        return ArtifactPublicationV1(artifact=record, wrote=False)
+
     def execute(
         self, request: PublicSourceAcquisitionRequestV1
     ) -> ArtifactPublicationV1:
+        if completed := self._completed(request):
+            return completed
         with self._capture_lock(request.digest):
-            artifact_id = f"public-source-acquisition:{request.digest}"
-            # Recheck current deployment restrictions even when original bytes exist.
-            self.validate_request(request)
-            try:
-                record = self._artifacts.get(artifact_id)
-            except SnapshotError as error:
-                if error.code != "ARTIFACT_NOT_FOUND":
-                    raise
-            else:
-                evidence = self.read(artifact_id)
-                if evidence.request != request:
-                    raise SnapshotError(
-                        "PUBLIC_CAPTURE_IDENTITY_MISMATCH", "capture request changed"
-                    )
-                return ArtifactPublicationV1(artifact=record, wrote=False)
+            if completed := self._completed(request):
+                return completed
             try:
                 source = self._provider.capture(request.source_id, request.uri)
             except SnapshotError as error:
