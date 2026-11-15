@@ -23,6 +23,10 @@ from .conditional_capital_contracts import (
     CONDITIONAL_CAPITAL_POLICY,
     UNRESOLVED_CAPITAL_FIELDS,
 )
+from .conditional_reinvestment_contracts import (
+    CONDITIONAL_REINVESTMENT_POLICY,
+    REINVESTMENT_CORE_FIELDS,
+)
 from .original_issuer import IssuerOperatingSourceV1, fact_matches_operating_identity
 from .working_capital import (
     WORKING_CAPITAL_EXCLUSION_FIELDS,
@@ -382,6 +386,33 @@ def source_preparation_requirements_profile(
     )
 
 
+def conditional_reinvestment_requirements_profile(
+    model_id: str, *, conditional_capital: bool = False
+) -> ValuationRequirementsProfileV1:
+    """Keep observed capital requirements; retain unknown historical roles as support."""
+
+    exact = (
+        conditional_capital_requirements_profile(model_id)
+        if conditional_capital
+        else valuation_requirements_profile(model_id)
+    )
+    removed = (set(exact.annual_duration_fields) - set(REINVESTMENT_CORE_FIELDS)) | set(
+        exact.annual_instant_fields
+    )
+    return ValuationRequirementsProfileV1.model_validate(
+        exact.model_dump()
+        | {
+            "profile_id": f"{exact.profile_id}-{CONDITIONAL_REINVESTMENT_POLICY}",
+            "profile_version": CONDITIONAL_REINVESTMENT_POLICY,
+            "annual_duration_fields": REINVESTMENT_CORE_FIELDS,
+            "annual_instant_fields": (),
+            "supporting_fact_fields": tuple(
+                sorted(set(exact.supporting_fact_fields) | removed)
+            ),
+        }
+    )
+
+
 def automatic_source_requirements_profile(
     model_id: str, requirements_digest: str
 ) -> ValuationRequirementsProfileV1:
@@ -405,6 +436,7 @@ __all__ = [
     "ValuationRequirementsProfileV1",
     "operating_forecast_requirements_profile",
     "composite_working_capital_requirements_profile",
+    "conditional_reinvestment_requirements_profile",
     "select_released_facts",
     "valuation_requirements_profile",
     "source_preparation_requirements_profile",

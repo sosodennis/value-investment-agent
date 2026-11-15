@@ -18,6 +18,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from .serialization import canonical_bytes, sha256_digest
 from .conditional_capital_contracts import ConditionalCapitalPolicyV1
+from .conditional_reinvestment_contracts import ConditionalReinvestmentPolicyV1
 from .working_capital import (
     CompositeWorkingCapitalInputV1,
     ValuationWorkingCapitalPolicyV1,
@@ -99,6 +100,9 @@ class DataReleaseManifestV1(ReleaseModel):
     conditional_capital_policies: tuple[ConditionalCapitalPolicyV1, ...] = Field(
         default=(), exclude_if=lambda value: not value
     )
+    conditional_reinvestment_policies: tuple[ConditionalReinvestmentPolicyV1, ...] = (
+        Field(default=(), exclude_if=lambda value: not value)
+    )
     manifest_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
 
     @field_validator("created_at")
@@ -142,6 +146,10 @@ class IssuerOperatingReleaseManifestV1(DataReleaseManifestV1):
 
     @model_validator(mode="after")
     def composite_policy_matches_requirements(self) -> IssuerOperatingReleaseManifestV1:
+        if self.conditional_reinvestment_policies:
+            raise ValueError(
+                "issuer operating releases cannot carry conditional valuation inputs"
+            )
         if self.conditional_capital_policies:
             raise ValueError(
                 "issuer operating releases cannot carry conditional equity inputs"

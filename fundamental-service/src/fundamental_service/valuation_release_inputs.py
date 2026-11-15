@@ -13,6 +13,7 @@ from .conditional_capital import (
     assess_conditional_capital,
 )
 from .data_releases import DataReleaseError, DataReleaseManifestV1
+from .conditional_reinvestment_release import reinvestment_release_requirements
 from .policies import initial_model_specs
 from .serialization import canonical_bytes
 from .valuation_requirements import (
@@ -30,6 +31,11 @@ from .working_capital import (
 def valuation_release_requirements(
     manifest: DataReleaseManifestV1, model_id: str
 ) -> ValuationRequirementsProfileV1:
+    if manifest.conditional_reinvestment_policies:
+        profile = reinvestment_release_requirements(manifest, model_id)
+        if manifest.conditional_capital_policies:
+            _conditional_release_policies(manifest)
+        return profile
     profile = valuation_input_requirements(
         manifest.valuation_working_capital_policy, model_id
     )

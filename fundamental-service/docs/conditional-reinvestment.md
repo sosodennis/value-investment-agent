@@ -35,12 +35,35 @@ ordering makes replay independent of input order. `supported_history_threshold`
 stays null and assessments remain provisional.
 
 The generic requirements contract permits duration-only history profiles.
-Registered valuation requirements retain their existing instant and duration
-roles and exact digests. This first increment does not register the new profile
-with source-plan compilation, trusted releases or valuation preparation.
-Subsequent integration must retain excluded historical-role failures, verify
-the assumption document bytes, reproduce the policy in the release canary and
-put the same assumptions and sensitivity into the exact caller input.
+Existing exact valuation profiles retain their roles and digests. The explicit
+conditional release profile requires the four core annual flows and the existing
+observed capital roles. Excluded historical reinvestment roles remain supporting
+evidence, with their original mapping failures retained. This profile does not
+register automatic source-plan compilation or authorize full valuation preparation.
+
+`conditional_reinvestment_release.py` owns immutable release admission. Policies
+cover every declared security snapshot exactly once in canonical order and pin
+their core observations to exact released fact digests. Assessment requires the
+entire released fact set, including supporting observations. It refuses mixed
+model/mapping versions, a conflicting historical working-capital policy and any
+weakening of the service-owned required field profile.
+
+The assumption document must be retained under an exact `artifact://` identity
+in the manifest with role `conditional-reinvestment-assumptions-v1` and media
+type `application/json`. `reinvestment_assumption_document` produces its canonical
+bytes from the recipe's model/version, mapping, interpretation, limitations and
+three explicit scenarios, excluding the document's own URI/hash. Admission reads
+the actual bytes, verifies their SHA256 and compares the complete document to the
+bound recipe. A URI, a hash label, an unrelated JSON document or a candidate role
+cannot substitute for this evidence.
+
+The read-only release canary reproduces the bound policy and formal operating
+forecasts, recording the resulting output digests in its content report and
+signed-verification-bound canary digest. These checks grant no source entitlement,
+mapping approval or caller approval. Existing manifests omit the new fields when
+unused, preserving their canonical identity. Full composer and automatic-plan
+integration must still put the same assumptions, limitations and sensitivity into
+the exact caller input.
 
 `valuation_preparation.compose_conditional_operating_forecasts` is the internal
 operating forecast boundary. It reproduces the source-bound policy assessment,

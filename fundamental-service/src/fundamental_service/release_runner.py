@@ -102,6 +102,12 @@ from .valuation_release_inputs import (
     valuation_release_requirements,
     valuation_release_working_capital_inputs,
 )
+from .conditional_reinvestment_release import valuation_release_conditional_reinvestment
+from .valuation_preparation import (
+    PreparationError,
+    compose_conditional_operating_forecasts,
+)
+from .conditional_reinvestment import ConditionalReinvestmentError
 
 
 class ReleaseMappingReader(Protocol):
@@ -143,6 +149,9 @@ class DataReleaseCanaryReportV1(BaseModel):
     market_policy_checks: tuple[str, ...] = Field(
         default=(), exclude_if=lambda value: not value
     )
+    checked_operating_forecast_digests: tuple[str, ...] = Field(
+        default=(), exclude_if=lambda value: not value
+    )
     canary_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
 
     @model_validator(mode="after")
@@ -161,6 +170,12 @@ class DataReleaseCanaryReportV1(BaseModel):
             ):
                 raise ValueError("market policy checks are not canonical")
             payload["market_policy_checks"] = self.market_policy_checks
+        if self.checked_operating_forecast_digests:
+            if self.checked_operating_forecast_digests != tuple(
+                sorted(set(self.checked_operating_forecast_digests))
+            ):
+                raise ValueError("operating forecast checks are not canonical")
+            payload["operating_forecasts"] = self.checked_operating_forecast_digests
         if sha256_digest(payload) != self.canary_digest:
             raise ValueError("canary_digest does not match report evidence")
         return self
@@ -180,6 +195,9 @@ class DataReleaseContentReportV1(BaseModel):
     checked_fact_digests: tuple[str, ...]
     checked_artifact_digests: tuple[str, ...]
     market_policy_checks: tuple[str, ...] = ()
+    checked_operating_forecast_digests: tuple[str, ...] = Field(
+        default=(), exclude_if=lambda value: not value
+    )
 
     @property
     def digest(self) -> str:
@@ -238,6 +256,10 @@ class DataReleaseCanaryRunner:
         }
         if content.market_policy_checks:
             canary_payload["market_policy_checks"] = content.market_policy_checks
+        if content.checked_operating_forecast_digests:
+            canary_payload["operating_forecasts"] = (
+                content.checked_operating_forecast_digests
+            )
         return DataReleaseCanaryReportV1(
             verification=verification,
             candidate_manifest_digest=manifest.manifest_digest,
@@ -245,6 +267,7 @@ class DataReleaseCanaryRunner:
             checked_fact_digests=content.checked_fact_digests,
             checked_artifact_digests=content.checked_artifact_digests,
             market_policy_checks=content.market_policy_checks,
+            checked_operating_forecast_digests=content.checked_operating_forecast_digests,
             canary_digest=sha256_digest(canary_payload),
         )
 
@@ -271,6 +294,10 @@ class DataReleaseCanaryRunner:
         if manifest.conditional_capital_policies:
             valuation_release_requirements(
                 manifest, manifest.conditional_capital_policies[0].model_id
+            )
+        if manifest.conditional_reinvestment_policies:
+            valuation_release_requirements(
+                manifest, manifest.conditional_reinvestment_policies[0].recipe.model_id
             )
         self._verify_artifacts(manifest, request)
         admissions = load_release_source_admissions(
@@ -436,8 +463,8 @@ class DataReleaseCanaryRunner:
                     raise DataReleaseError(error.code, str(error)) from error
         mappings = self._verify_mappings(manifest.mapping_refs)
         self._verify_automatic_mappings(manifest, request, mappings)
-        checked_snapshots, checked_facts = self._verify_snapshots_and_facts(
-            manifest, mappings
+        checked_snapshots, checked_facts, checked_forecasts = (
+            self._verify_snapshots_and_facts(manifest, mappings)
         )
         self._verify_equity_dilution(manifest)
 
@@ -448,6 +475,7 @@ class DataReleaseCanaryRunner:
             checked_fact_digests=checked_facts,
             checked_artifact_digests=self._artifact_digests(manifest, request),
             market_policy_checks=tuple(sorted(set(market_policy_checks))),
+            checked_operating_forecast_digests=checked_forecasts,
         )
 
     def _verify_automatic_mappings(
@@ -694,9 +722,10 @@ class DataReleaseCanaryRunner:
 
     def _verify_snapshots_and_facts(
         self, manifest: DataReleaseManifestV1, mappings: dict[str, CanonicalMappingV1]
-    ) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    ) -> tuple[tuple[str, ...], tuple[str, ...], tuple[str, ...]]:
         snapshot_ids: list[str] = []
         fact_digests: list[str] = []
+        forecast_digests: list[str] = []
         declared_fields = set(manifest.required_fields)
         checked_composite_inputs: set[str] = set()
         valuation_input_policy = manifest.valuation_working_capital_policy
@@ -770,6 +799,36 @@ class DataReleaseCanaryRunner:
                     f"release snapshot {reference.snapshot_id} does not cover required fields",
                 )
             history = self._verify_declared_history(snapshot, reference.facts, mappings)
+            if manifest.conditional_reinvestment_policies:
+                if not isinstance(snapshot, SourceSnapshotV1):
+                    raise DataReleaseError(
+                        "DATA_RELEASE_SOURCE_SCOPE_MISMATCH",
+                        "forward valuation inputs require a security snapshot",
+                    )
+                versions = {mapping.mapping_version for mapping in mappings.values()}
+                if len(versions) != 1:
+                    raise DataReleaseError(
+                        "DATA_RELEASE_MAPPING_VERSION_MISMATCH",
+                        "forward inputs require one coherent release mapping",
+                    )
+                reinvestment = valuation_release_conditional_reinvestment(
+                    manifest,
+                    snapshot,
+                    history,
+                    mapping_version=next(iter(versions)),
+                    artifacts=self._artifacts,
+                )
+                assert reinvestment is not None
+                try:
+                    forecast = compose_conditional_operating_forecasts(
+                        reinvestment.policy,
+                        history,
+                        snapshot=snapshot,
+                        mapping_version=next(iter(versions)),
+                    )
+                except (PreparationError, ConditionalReinvestmentError) as error:
+                    raise DataReleaseError(error.code, str(error)) from error
+                forecast_digests.append(forecast.output_digest)
             if manifest.conditional_capital_policies:
                 if not isinstance(snapshot, SourceSnapshotV1):
                     raise DataReleaseError(
@@ -827,7 +886,9 @@ class DataReleaseCanaryRunner:
             if not isinstance(manifest, IssuerOperatingReleaseManifestV1):
                 allowed_supporting_fields.update(AWARD_FACT_FIELDS)
                 models = (
-                    (manifest.conditional_capital_policies[0].model_id,)
+                    (manifest.conditional_reinvestment_policies[0].recipe.model_id,)
+                    if manifest.conditional_reinvestment_policies
+                    else (manifest.conditional_capital_policies[0].model_id,)
                     if manifest.conditional_capital_policies
                     else (valuation_input_policy.model_id,)
                     if valuation_input_policy is not None
@@ -855,7 +916,11 @@ class DataReleaseCanaryRunner:
                 "DATA_RELEASE_WORKING_CAPITAL_UNBOUND",
                 "every composite input must bind a release source and its mapped facts",
             )
-        return tuple(snapshot_ids), tuple(sorted(fact_digests))
+        return (
+            tuple(snapshot_ids),
+            tuple(sorted(fact_digests)),
+            tuple(sorted(set(forecast_digests))),
+        )
 
     def _verify_declared_history(
         self,
