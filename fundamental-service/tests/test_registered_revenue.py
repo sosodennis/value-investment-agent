@@ -42,13 +42,18 @@ def revenue_case(tmp_path, monkeypatch, *, changes=None, register=True, extra=()
     if register:
         scope = revenue.OriginalRevenueScope(
             original.source.parser_input_hash,
-            fact_semantic_digest(original.report),
+            revenue.revenue_observations_digest(original.report),
             tuple(
-                (f.period_start, f.period_end)
-                for f in original.report.facts
-                if f.concept == revenue.CONTRACT_REVENUE
-                and f.period_start is not None
-                and f.period_end is not None
+                sorted(
+                    {
+                        (f.period_start, f.period_end)
+                        for f in original.report.facts
+                        if f.concept == revenue.CONTRACT_REVENUE
+                        and not f.dimensions
+                        and f.period_start is not None
+                        and f.period_end is not None
+                    }
+                )
             ),
         )
         monkeypatch.setitem(
@@ -125,7 +130,7 @@ def test_registered_total_revenue_is_planned_signed_rebuilt_and_reused(
     )
 
 
-@pytest.mark.parametrize("field", ("parser_input_hash", "fact_digest"))
+@pytest.mark.parametrize("field", ("parser_input_hash", "revenue_facts_digest"))
 def test_changed_original_cannot_reuse_a_total_revenue_classification(
     tmp_path, monkeypatch, field
 ):
@@ -251,4 +256,125 @@ def test_total_revenue_mapping_retains_exact_report_observations(tmp_path, monke
             for f in request.original.report.facts
             if f.concept == revenue.CONTRACT_REVENUE
         )
+    )
+
+
+@pytest.mark.parametrize("same_concept", [False, True])
+def test_unrelated_dimension_namespace_enrichment_preserves_only_base_revenue_scope(
+    tmp_path, monkeypatch, same_concept
+):
+    seed, _, _ = revenue_case(tmp_path / "seed", monkeypatch)
+    fact = next(
+        f for f in seed.original.report.facts if f.concept == revenue.CONTRACT_REVENUE
+    )
+    dimensioned = fact.model_copy(
+        update={
+            "concept": revenue.CONTRACT_REVENUE if same_concept else "us-gaap:Assets",
+            "context_id": "dimensional-context",
+            "dimensions": (
+                ("us-gaap:StatementBusinessSegmentsAxis", "issuer:Segment"),
+            ),
+        }
+    )
+    enriched = dimensioned.model_copy(
+        update={
+            "dimension_namespace_uris": (
+                (
+                    "us-gaap:StatementBusinessSegmentsAxis",
+                    "http://fasb.org/us-gaap/2026",
+                    "https://example.test/issuer/2026",
+                ),
+            )
+        }
+    )
+    before, before_store, before_roots = revenue_case(
+        tmp_path / "before", monkeypatch, extra=(dimensioned,)
+    )
+    key = before.original.source.cik, before.original.source.accession_number
+    pinned_scope = revenue._ORIGINALS[key]
+    after, after_store, after_roots = revenue_case(
+        tmp_path / "after", monkeypatch, extra=(enriched,)
+    )
+    assert revenue._ORIGINALS[key] == pinned_scope
+    assert revenue.revenue_observations_digest(before.original.report) == (
+        revenue.revenue_observations_digest(after.original.report)
+    )
+    assert fact_semantic_digest(before.original.report) != fact_semantic_digest(
+        after.original.report
+    )
+    assert (
+        before.original.report.replay_digest() != after.original.report.replay_digest()
+    )
+    first = approve(before, before_store, before_roots)
+    second = approve(after, after_store, after_roots)
+    assert first.input_digest != second.input_digest
+    assert first.output_digest != second.output_digest
+    decision = AutomaticMappingDecisionV1.model_validate_json(
+        after_store.read(second.decision_publication.artifact.artifact_id)
+    )
+    assert decision.status == "approved"
+    approval = AutomaticMappingApprovalV1.model_validate_json(
+        after_store.read(second.approval_publication.artifact.artifact_id)
+    )
+    assert (
+        verify_automatic_mapping_replay(
+            approval, decision.mapping, artifacts=after_store
+        )
+        == after
+    )
+    selection = revenue.select_registered_revenue(after.original)
+    assert selection.selected and all(not f.dimensions for f in selection.selected)
+    if same_concept:
+        assert (enriched, "MAPPING_SCOPE_UNSUPPORTED") in selection.rejected
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"value": "42"},
+        {"namespace_uri": "https://example.test/rebound"},
+        {"unit": "iso4217:EUR"},
+        {"decimals": "-3"},
+        {"entity_identifier": "9999999999"},
+        {"period_end": date(2000, 1, 1)},
+        {"dimensions": (("issuer:SegmentAxis", "issuer:Segment"),)},
+        {"concept": "us-gaap:Assets"},
+    ],
+)
+def test_scoped_pin_still_rejects_every_changed_revenue_observation(
+    tmp_path, monkeypatch, change
+):
+    request, _, _ = revenue_case(tmp_path, monkeypatch)
+    report = request.original.report
+    facts = tuple(
+        fact.model_copy(update=change)
+        if fact.concept == revenue.CONTRACT_REVENUE
+        else fact
+        for fact in report.facts
+    )
+    changed = request.original.model_copy(
+        update={"report": report.model_copy(update={"facts": facts})}
+    )
+
+    result = revenue.select_registered_revenue(changed)
+
+    assert not result.selected
+    assert result.reason_codes == ("MAPPING_REVENUE_SOURCE_MISMATCH",)
+
+
+@pytest.mark.parametrize("added", [False, True])
+def test_scoped_pin_rejects_missing_or_added_base_revenue(tmp_path, monkeypatch, added):
+    request, _, _ = revenue_case(tmp_path, monkeypatch)
+    report = request.original.report
+    fact = next(f for f in report.facts if f.concept == revenue.CONTRACT_REVENUE)
+    facts = (
+        (*report.facts, fact.model_copy(update={"context_id": "new-base-context"}))
+        if added
+        else tuple(f for f in report.facts if f != fact)
+    )
+    changed = request.original.model_copy(
+        update={"report": report.model_copy(update={"facts": facts})}
+    )
+    assert revenue.select_registered_revenue(changed).reason_codes == (
+        "MAPPING_REVENUE_SOURCE_MISMATCH",
     )
