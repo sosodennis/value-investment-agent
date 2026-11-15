@@ -87,9 +87,7 @@ def _matches_rendered_decimals(fact: object, rendered: str) -> bool:
         return rendered == "inf"
     if not isinstance(decimals, str) or re.fullmatch(r"[+-]?[0-9]+", decimals) is None:
         return False
-    digits = decimals.lstrip("+-").lstrip("0") or "0"
-    normalized = ("-" if decimals.startswith("-") and digits != "0" else "") + digits
-    return normalized == rendered
+    return Decimal(decimals) == Decimal(rendered)
 
 
 def _original_model_matches(

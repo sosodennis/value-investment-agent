@@ -230,7 +230,8 @@ def test_document_type_reference_binds_unique_original_fact_and_preserves_error(
 
 
 @pytest.mark.parametrize(
-    "lexical,rendered", [("+0", "0"), ("00", "0"), ("-03", "-3"), ("-0", "0")]
+    "lexical,rendered",
+    [("+0", "0"), ("00", "0"), ("-03", "-3"), ("-0", "0"), ("-0", "-0")],
 )
 def test_original_model_binding_matches_xbrl_decimals_after_xule_normalization(
     lexical, rendered
