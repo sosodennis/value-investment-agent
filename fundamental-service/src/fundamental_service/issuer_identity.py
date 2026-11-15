@@ -27,9 +27,11 @@ _DEI_NAMESPACE = re.compile(r"http://xbrl\.(?:sec\.gov|us)/dei/\d{4}(?:-\d{2}-\d
 _GAAP_NAMESPACE = re.compile(
     r"http://(?:fasb\.org|xbrl\.us)/us-gaap/\d{4}(?:-\d{2}-\d{2})?"
 )
-OriginalSecuritySelectionPolicy = Literal["original-dei-single-common-stock-v1"]
+OriginalSecuritySelectionPolicy = Literal[
+    "original-dei-single-common-stock-v1", "original-dei-paired-common-stock-v2"
+]
 DEFAULT_ORIGINAL_SECURITY_POLICY: OriginalSecuritySelectionPolicy = (
-    "original-dei-single-common-stock-v1"
+    "original-dei-paired-common-stock-v2"
 )
 _SecurityContext = tuple[str, date | None, date | None, tuple[tuple[str, str], ...]]
 
@@ -141,6 +143,52 @@ def _single_standard_common_title(
     return common[0]
 
 
+def _paired_common_security(
+    facts: tuple[ParsedXbrlFactV1, ...],
+) -> tuple[str, str, tuple[tuple[str, str], ...]] | None:
+    """Classify paired printed DEI titles, without interpreting custom member names."""
+
+    symbols: dict[_SecurityContext, set[str]] = {}
+    titles: dict[_SecurityContext, set[str]] = {}
+    for fact in facts:
+        if fact.concept not in {"dei:TradingSymbol", "dei:Security12bTitle"}:
+            continue
+        context = (fact.context_id, fact.period_start, fact.period_end, fact.dimensions)
+        target = symbols if fact.concept == "dei:TradingSymbol" else titles
+        target.setdefault(context, set()).add(" ".join(fact.value.split()))
+    if (
+        not symbols
+        or symbols.keys() != titles.keys()
+        or any(
+            len(values) != 1 or "" in values
+            for values in (*symbols.values(), *titles.values())
+        )
+    ):
+        return None
+    pairs = tuple(
+        sorted(
+            (next(iter(values)), next(iter(titles[context])))
+            for context, values in symbols.items()
+        )
+    )
+    common = tuple(
+        pair
+        for pair in pairs
+        if re.fullmatch(
+            r"common stock(?:, (?:\$[0-9]+(?:\.[0-9]+)? par value per share|par value \$[0-9]+(?:\.[0-9]+)? per share))?",
+            pair[1].casefold(),
+        )
+    )
+    if len(common) != 1 or any(
+        pair != common[0]
+        and re.fullmatch(r"[0-9]+(?:\.[0-9]+)?% notes due [0-9]{4}", pair[1].casefold())
+        is None
+        for pair in pairs
+    ):
+        return None
+    return (*common[0], pairs)
+
+
 def resolve_original_filing_identity(
     *,
     cik: str,
@@ -160,7 +208,12 @@ def resolve_original_filing_identity(
         or accepted_at.tzinfo is None
         or accepted_at.utcoffset() is None
         or (share_class is not None and not share_class.strip())
-        or security_selection_policy not in (None, DEFAULT_ORIGINAL_SECURITY_POLICY)
+        or security_selection_policy
+        not in (
+            None,
+            "original-dei-single-common-stock-v1",
+            "original-dei-paired-common-stock-v2",
+        )
     ):
         raise refuse(
             "HISTORICAL_IDENTITY_SCOPE_UNSUPPORTED",
@@ -174,13 +227,32 @@ def resolve_original_filing_identity(
         raise refuse(
             "HISTORICAL_IDENTITY_MISSING", "original filing lacks a trading symbol"
         )
+    paired = (
+        _paired_common_security(facts)
+        if security_selection_policy == "original-dei-paired-common-stock-v2"
+        else None
+    )
+    if (
+        security_selection_policy == "original-dei-paired-common-stock-v2"
+        and ticker is None
+        and share_class is None
+        and paired is None
+    ):
+        raise refuse(
+            "HISTORICAL_SECURITY_SELECTION_REQUIRED",
+            "automatic common-stock selection requires complete eligible security pairs",
+        )
+    selected_pairs: tuple[tuple[str, str], ...] = ()
     if ticker is None:
         if len(symbols) != 1:
-            raise refuse(
-                "HISTORICAL_SECURITY_SELECTION_REQUIRED",
-                "multiple original securities require an explicit ticker",
-            )
-        ticker = next(iter(symbols))
+            if paired is None or share_class is not None:
+                raise refuse(
+                    "HISTORICAL_SECURITY_SELECTION_REQUIRED",
+                    "multiple original securities require an explicit ticker",
+                )
+            ticker, share_class, selected_pairs = paired
+        else:
+            ticker = next(iter(symbols))
     if not re.fullmatch(r"[A-Z0-9][A-Z0-9.-]{0,14}", ticker):
         raise refuse(
             "HISTORICAL_IDENTITY_SCOPE_UNSUPPORTED", "unsupported original ticker"
@@ -206,12 +278,11 @@ def resolve_original_filing_identity(
         raise refuse(
             "HISTORICAL_IDENTITY_MISSING", "original security lacks a paired title"
         )
-    if (
-        share_class is None
-        and len(titles) > 1
-        and security_selection_policy == DEFAULT_ORIGINAL_SECURITY_POLICY
-    ):
-        share_class = _single_standard_common_title(facts, contexts)
+    if share_class is None and len(titles) > 1:
+        if security_selection_policy == "original-dei-single-common-stock-v1":
+            share_class = _single_standard_common_title(facts, contexts)
+        elif paired is not None and paired[0] == ticker:
+            _, share_class, selected_pairs = paired
     if share_class is not None:
         titles = {title for title in titles if _name(title) == _name(share_class)}
         if not titles:
@@ -249,6 +320,18 @@ def resolve_original_filing_identity(
     validate_original_filing_identity(
         identity, cik=cik, ticker=ticker, accepted_at=accepted_at, facts=facts
     )
+    for symbol, title in selected_pairs:
+        if not re.fullmatch(r"[A-Z0-9][A-Z0-9.-]{0,14}", symbol):
+            raise refuse(
+                "HISTORICAL_IDENTITY_SCOPE_UNSUPPORTED", "unsupported original ticker"
+            )
+        validate_original_filing_identity(
+            identity.model_copy(update={"security_id": symbol, "share_class": title}),
+            cik=cik,
+            ticker=symbol,
+            accepted_at=accepted_at,
+            facts=facts,
+        )
     return identity
 
 

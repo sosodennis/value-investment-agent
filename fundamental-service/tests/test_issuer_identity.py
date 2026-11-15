@@ -700,7 +700,7 @@ def test_common_policy_still_validates_the_unselected_note_context(change):
     assert error.value.code == "HISTORICAL_IDENTITY_SCOPE_UNSUPPORTED"
 
 
-def test_common_policy_requires_the_standard_common_member_and_complete_pairs():
+def test_v1_common_policy_requires_the_standard_common_member_and_complete_pairs():
     facts = _common_and_reused_note()
     changed = tuple(
         fact.model_copy(
@@ -721,9 +721,183 @@ def test_common_policy_requires_the_standard_common_member_and_complete_pairs():
     for observed in (changed, incomplete):
         with pytest.raises(IdentityResolutionError) as error:
             _resolve_original(
-                observed, security_selection_policy=DEFAULT_ORIGINAL_SECURITY_POLICY
+                observed,
+                security_selection_policy="original-dei-single-common-stock-v1",
             )
         assert error.value.code == "HISTORICAL_SECURITY_SELECTION_REQUIRED"
+
+
+def _common_and_distinct_note():
+    return tuple(
+        fact.model_copy(update={"value": "AAPL28"})
+        if fact.context_id == "listed-note" and fact.concept == "dei:TradingSymbol"
+        else fact
+        for fact in _common_and_reused_note()
+    )
+
+
+@pytest.mark.parametrize(
+    "title", ["Preferred Stock", "Unclassified security", "2.000% Notes due 2027"]
+)
+def test_paired_common_policy_refuses_single_non_common_without_explicit_selector(
+    title,
+):
+    facts = tuple(
+        f.model_copy(update={"value": title})
+        if f.concept == "dei:Security12bTitle"
+        else f
+        for f in _original_identity_facts()
+    )
+    with pytest.raises(IdentityResolutionError) as caught:
+        _resolve_original(
+            facts, security_selection_policy=DEFAULT_ORIGINAL_SECURITY_POLICY
+        )
+    assert caught.value.code == "HISTORICAL_SECURITY_SELECTION_REQUIRED"
+    for policy in (None, "original-dei-single-common-stock-v1"):
+        assert (
+            _resolve_original(facts, security_selection_policy=policy).share_class
+            == title
+        )
+    assert (
+        _resolve_original(
+            facts,
+            ticker="AAPL",
+            security_selection_policy=DEFAULT_ORIGINAL_SECURITY_POLICY,
+        ).share_class
+        == title
+    )
+
+
+@pytest.mark.parametrize(
+    "title",
+    [
+        "Common Stock",
+        "Common Stock, par value $0.10 per share",
+        "Common Stock, $0.0001 par value per share",
+    ],
+)
+def test_paired_common_policy_uses_printed_title_for_custom_members_and_distinct_tickers(
+    title,
+):
+    facts = tuple(
+        fact.model_copy(
+            update={
+                "dimensions": (
+                    (
+                        "us-gaap:StatementClassOfStockAxis",
+                        "issuer:UniquePrintedStockMember",
+                    ),
+                ),
+                **({"value": title} if fact.concept == "dei:Security12bTitle" else {}),
+            }
+        )
+        if fact.context_id == "common-class"
+        else fact
+        for fact in _common_and_distinct_note()
+    )
+    identity = _resolve_original(
+        facts, security_selection_policy=DEFAULT_ORIGINAL_SECURITY_POLICY
+    )
+    assert identity.security_id == "AAPL" and identity.share_class == title
+    assert (
+        _resolve_original(
+            tuple(reversed((*facts, *facts))),
+            security_selection_policy=DEFAULT_ORIGINAL_SECURITY_POLICY,
+        )
+        == identity
+    )
+    for legacy in (None, "original-dei-single-common-stock-v1"):
+        with pytest.raises(IdentityResolutionError) as caught:
+            _resolve_original(facts, security_selection_policy=legacy)
+        assert caught.value.code == "HISTORICAL_SECURITY_SELECTION_REQUIRED"
+    assert (
+        _resolve_original(
+            facts,
+            ticker="AAPL28",
+            security_selection_policy=DEFAULT_ORIGINAL_SECURITY_POLICY,
+        ).share_class
+        == "2.000% Notes due 2027"
+    )
+
+
+@pytest.mark.parametrize(
+    "fault",
+    [
+        "unpaired_title",
+        "unpaired_symbol",
+        "conflicting_symbol",
+        "conflicting_title",
+        "unknown",
+        "preferred",
+        "second_common",
+    ],
+)
+def test_paired_common_policy_requires_complete_unambiguous_security_pairs(fault):
+    facts = _common_and_distinct_note()
+    note_symbol = next(
+        f
+        for f in facts
+        if f.context_id == "listed-note" and f.concept == "dei:TradingSymbol"
+    )
+    note_title = next(
+        f
+        for f in facts
+        if f.context_id == "listed-note" and f.concept == "dei:Security12bTitle"
+    )
+    if fault == "unpaired_title":
+        facts = tuple(f for f in facts if f != note_title)
+    elif fault == "unpaired_symbol":
+        facts = tuple(f for f in facts if f != note_symbol)
+    elif fault == "conflicting_symbol":
+        facts = (*facts, note_symbol.model_copy(update={"value": "OTHER"}))
+    elif fault == "conflicting_title":
+        facts = (
+            *facts,
+            note_title.model_copy(update={"value": "3.000% Notes due 2027"}),
+        )
+    else:
+        title = {
+            "unknown": "Unclassified security",
+            "preferred": "Preferred Stock",
+            "second_common": "Common Stock",
+        }[fault]
+        facts = tuple(
+            f.model_copy(update={"value": title}) if f == note_title else f
+            for f in facts
+        )
+    with pytest.raises(IdentityResolutionError) as caught:
+        _resolve_original(
+            facts, security_selection_policy=DEFAULT_ORIGINAL_SECURITY_POLICY
+        )
+    assert caught.value.code == "HISTORICAL_SECURITY_SELECTION_REQUIRED"
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"namespace_uri": "http://example.test/dei/2024"},
+        {"entity_identifier": "0000320194"},
+        {"period_end": date(2023, 9, 28)},
+        {"unit": "iso4217:USD"},
+        {"dimensions": (("us-gaap:StatementBusinessSegmentsAxis", "issuer:USA"),)},
+        {"value": "invalid symbol"},
+    ],
+)
+def test_paired_common_policy_validates_unselected_distinct_ticker_context(change):
+    facts = tuple(
+        f.model_copy(update=change)
+        if f.context_id == "listed-note" and f.concept == "dei:TradingSymbol"
+        else f
+        for f in _common_and_distinct_note()
+    )
+    with pytest.raises(IdentityResolutionError) as caught:
+        _resolve_original(
+            facts, security_selection_policy=DEFAULT_ORIGINAL_SECURITY_POLICY
+        )
+    assert caught.value.code in {
+        "HISTORICAL_SECURITY_SELECTION_REQUIRED",
+        "HISTORICAL_IDENTITY_SCOPE_UNSUPPORTED",
+    }
 
 
 def test_reused_original_ticker_requires_title_and_keeps_ambiguous_context_refusal():
@@ -737,6 +911,14 @@ def test_reused_original_ticker_requires_title_and_keeps_ambiguous_context_refus
     )
     assert (
         _resolve_original(facts, share_class="Class B Common Stock").share_class
+        == "Class B Common Stock"
+    )
+    assert (
+        _resolve_original(
+            facts,
+            share_class="Class B Common Stock",
+            security_selection_policy=DEFAULT_ORIGINAL_SECURITY_POLICY,
+        ).share_class
         == "Class B Common Stock"
     )
     common = tuple(f for f in facts if f.context_id == "common-class")
