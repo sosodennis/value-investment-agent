@@ -11,6 +11,7 @@ from fundamental_service.conditional_reinvestment import (
 from fundamental_service.conditional_reinvestment_contracts import REINVESTMENT_UNKNOWNS
 from fundamental_service.contracts import QualityStatus
 from fundamental_service.serialization import canonical_bytes
+from fundamental_service import valuation_preparation
 from fundamental_service.valuation_preparation import (
     PreparationError,
     compose_conditional_operating_forecasts,
@@ -169,3 +170,49 @@ def test_forward_composition_is_independent_of_ambient_decimal_precision():
         context.prec = 4
         actual = _compose(recipe, facts, snapshot)
     assert actual.output_digest == expected.output_digest
+
+
+def test_policy_order_is_canonicalized_before_composing_scenarios():
+    recipe, facts, snapshot = _operating_case()
+    policy = bind_conditional_reinvestment_recipe(
+        recipe, facts, snapshot=snapshot
+    ).policy
+    original = compose_conditional_operating_forecasts(
+        policy, facts, snapshot=snapshot, mapping_version=recipe.mapping_version
+    )
+    reordered = policy.model_copy(
+        update={
+            "recipe": policy.recipe.model_copy(
+                update={"scenarios": tuple(reversed(policy.recipe.scenarios))}
+            )
+        }
+    )
+    result = compose_conditional_operating_forecasts(
+        reordered, facts, snapshot=snapshot, mapping_version=recipe.mapping_version
+    )
+    assert result.assessment.output_digest == original.assessment.output_digest
+    assert result.input_digest == original.input_digest
+    assert result.output_digest == original.output_digest
+
+
+@pytest.mark.parametrize(
+    "version", ("FORECAST_COMPOSER_VERSION", "VALUATION_NUMERICAL_POLICY")
+)
+def test_composer_and_numerical_identity_are_part_of_forecast_input(
+    version, monkeypatch
+):
+    recipe, facts, snapshot = _operating_case()
+    original = _compose(recipe, facts, snapshot)
+    assert original.composer_version == valuation_preparation.FORECAST_COMPOSER_VERSION
+    assert (
+        original.numerical_policy_version
+        == valuation_preparation.VALUATION_NUMERICAL_POLICY
+    )
+    monkeypatch.setattr(
+        valuation_preparation, version, "different-executable-policy", raising=False
+    )
+    changed = _compose(recipe, facts, snapshot)
+    assert changed.assessment.output_digest == original.assessment.output_digest
+    assert changed.composer_digest != original.composer_digest
+    assert changed.input_digest != original.input_digest
+    assert changed.output_digest != original.output_digest

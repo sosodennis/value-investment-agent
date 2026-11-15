@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import hashlib
 import re
 from collections.abc import Iterable
 from datetime import datetime
 from decimal import Decimal
+from pathlib import Path
 from typing import Literal
 
 from pydantic import Field, model_validator
@@ -56,7 +58,7 @@ from .contracts import (
     ValuationInputV1,
     WaccAssumptionsV1,
 )
-from .numerical_policy import using_valuation_context
+from .numerical_policy import VALUATION_NUMERICAL_POLICY, using_valuation_context
 from .equity_award_evidence import (
     EquityDilutionEvidenceV1,
     verify_dilution_fact_bindings,
@@ -153,6 +155,9 @@ class ConditionalOperatingForecastsV1(StrictModel):
     protocol: Literal["conditional-operating-forecasts-v1"] = (
         "conditional-operating-forecasts-v1"
     )
+    composer_version: str = Field(min_length=1)
+    numerical_policy_version: str = Field(min_length=1)
+    composer_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
     assessment: ConditionalReinvestmentAssessmentV1
     historical_metrics: HistoricalMetricsV1
     scenarios: tuple[ConditionalOperatingScenarioV1, ...]
@@ -1016,6 +1021,21 @@ def compose_forecast_assumptions(
     )
 
 
+def _conditional_operating_composer_digest() -> str:
+    root = Path(__file__).parent
+    return sha256_digest(
+        {
+            "protocol": "conditional-operating-forecasts-v1",
+            "composer_version": FORECAST_COMPOSER_VERSION,
+            "numerical_policy_version": VALUATION_NUMERICAL_POLICY,
+            "sources": {
+                name: hashlib.sha256((root / name).read_bytes()).hexdigest()
+                for name in ("valuation_preparation.py", "numerical_policy.py")
+            },
+        }
+    )
+
+
 @using_valuation_context
 def compose_conditional_operating_forecasts(
     policy: ConditionalReinvestmentPolicyV1,
@@ -1029,6 +1049,7 @@ def compose_conditional_operating_forecasts(
     assessment = assess_conditional_reinvestment(
         policy, facts, snapshot=snapshot, mapping_version=mapping_version
     )
+    policy = assessment.policy
     history = resolve_annual_history(
         assessment.source_facts,
         snapshot=snapshot,
@@ -1055,7 +1076,11 @@ def compose_conditional_operating_forecasts(
             ),
         }
     )
+    composer_digest = _conditional_operating_composer_digest()
     return ConditionalOperatingForecastsV1(
+        composer_version=FORECAST_COMPOSER_VERSION,
+        numerical_policy_version=VALUATION_NUMERICAL_POLICY,
+        composer_digest=composer_digest,
         assessment=assessment,
         historical_metrics=metrics,
         scenarios=tuple(
@@ -1070,6 +1095,9 @@ def compose_conditional_operating_forecasts(
         input_digest=sha256_digest(
             {
                 "protocol": "conditional-operating-forecasts-v1",
+                "composer_version": FORECAST_COMPOSER_VERSION,
+                "numerical_policy_version": VALUATION_NUMERICAL_POLICY,
+                "composer_digest": composer_digest,
                 "assessment_digest": assessment.output_digest,
             }
         ),
