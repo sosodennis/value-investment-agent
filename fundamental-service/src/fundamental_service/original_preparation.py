@@ -191,9 +191,7 @@ class OriginalValidationEvidenceV1(StrictModel):
             *(s.content_hash for s in self.captured_sources),
         }
         if self.integrity is not None:
-            values.update(
-                (self.integrity.parser_input_hash, self.integrity.archive_member_hash)
-            )
+            values.update(self.integrity.parser_content_hashes)
         if self.failure_evidence is not None:
             values.add(self.failure_evidence.content_hash)
         return tuple(sorted(values))
@@ -355,14 +353,13 @@ class OriginalPreparation:
             if hashlib.sha256(payload).hexdigest() != content_hash:
                 raise SnapshotError("ORIGINAL_PREPARATION_INVALID", "source differs")
         if evidence.integrity is not None:
-            for digest in (
-                evidence.integrity.parser_input_hash,
-                evidence.integrity.archive_member_hash,
-            ):
+            for digest in evidence.integrity.parser_content_hashes:
                 payload = self._content.get(
                     digest,
-                    media_type=evidence.primary_media_type
-                    or "application/octet-stream",
+                    media_type="application/json"
+                    if evidence.integrity.inline_documents
+                    and digest == evidence.integrity.parser_input_hash
+                    else evidence.primary_media_type or "application/octet-stream",
                 )
                 if hashlib.sha256(payload).hexdigest() != digest:
                     raise SnapshotError(

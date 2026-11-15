@@ -66,8 +66,8 @@ from .taxonomy_evidence import require_original_taxonomy
 from .standard_accounting_representations import standard_accounting_representation
 
 AUTOMATIC_MAPPING_INPUT_ROLE = "automatic-mapping-input-v1"
-AutomaticMappingPolicyVersion = Literal["source-bound-us-gaap-v35"]
-AUTOMATIC_MAPPING_POLICY: AutomaticMappingPolicyVersion = "source-bound-us-gaap-v35"
+AutomaticMappingPolicyVersion = Literal["source-bound-us-gaap-v36"]
+AUTOMATIC_MAPPING_POLICY: AutomaticMappingPolicyVersion = "source-bound-us-gaap-v36"
 _GAAP_NAMESPACE = re.compile(
     r"http://(?:fasb\.org|xbrl\.us)/us-gaap/\d{4}(?:-\d{2}-\d{2})?"
 )
@@ -224,6 +224,7 @@ def automatic_mapping_policy_digest() -> str:
                     "lease_liability_mapping.py",
                     "accounting_roles.py",
                     "arelle_parser.py",
+                    "inline_xbrl.py",
                     "facts.py",
                     "xbrl_precision.py",
                     "current_debt_mapping.py",

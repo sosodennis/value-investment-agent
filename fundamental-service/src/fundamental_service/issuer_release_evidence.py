@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from hashlib import sha256
 
 from .arelle_parser import fact_semantic_digest
 from .contracts import CanonicalFactV1, QualityStatus, SecIntegrityEvidenceV1
@@ -18,12 +19,18 @@ from .original_issuer import IssuerOperatingSourceV1, OriginalIssuerEvidenceV1
 from .regulatory_validation import require_sec_validation_evidence
 from .sec_rebuild import parsed_facts_to_candidates
 from .sec_integrity import assess_filing_response
-from .serialization import sha256_digest
+from .serialization import canonical_bytes, sha256_digest
 from .valuation_requirements import (
     operating_forecast_requirements_profile,
     composite_working_capital_requirements_profile,
 )
 from .snapshots import SnapshotError
+from .inline_xbrl import (
+    InlineDocumentSetError,
+    InlineDocumentSetInputV1,
+    archive_inline_document_names,
+)
+from pathlib import PurePosixPath
 from .working_capital import working_capital_policy_digest
 
 
@@ -125,6 +132,75 @@ def verify_original_bytes(
         archive = contents[integrity.archive_hash]
         index = contents[integrity.archive_index_hash]
         parser_input = contents[integrity.parser_input_hash]
+        if PurePosixPath(integrity.primary_document_uri).suffix.lower() in {
+            ".htm",
+            ".html",
+            ".xhtml",
+        }:
+            archive_inline = archive_inline_document_names(archive)
+            expected_inline = archive_inline if len(archive_inline) > 1 else ()
+            if expected_inline != tuple(
+                d.document.filename for d in integrity.inline_documents
+            ):
+                raise DataReleaseError(
+                    "DATA_RELEASE_ORIGINAL_DOCUMENT_SET_MISMATCH",
+                    "inline release omits or changes the archive inventory",
+                )
+        if integrity.inline_documents:
+            manifest = InlineDocumentSetInputV1(
+                documents=tuple(d.document for d in integrity.inline_documents)
+            )
+            if canonical_bytes(manifest) != parser_input:
+                raise DataReleaseError(
+                    "DATA_RELEASE_ORIGINAL_BYTES_MISMATCH",
+                    "inline parser input differs from its document set",
+                )
+            for member in integrity.inline_documents:
+                member_raw = contents[member.raw_content_hash]
+                member_parser_input = contents[member.document.content_hash]
+                member_assessment = assess_filing_response(
+                    raw_response=_RetainedIntegritySource(
+                        integrity.primary_document_uri.rsplit("/", 1)[0]
+                        + "/"
+                        + member.document.filename,
+                        member_raw,
+                        integrity.accession_number,
+                        member.raw_response_headers,
+                    ),
+                    archive_index=_RetainedIntegritySource(
+                        integrity.archive_index_uri, index, integrity.accession_number
+                    ),
+                    archive=_RetainedIntegritySource(
+                        integrity.archive_uri, archive, integrity.accession_number
+                    ),
+                )
+                if (
+                    member_assessment.normalized_content != member_parser_input
+                    or sha256(member_parser_input).hexdigest()
+                    != member.document.content_hash
+                    or member_assessment.relation != member.integrity_relation
+                    or member_assessment.declared_primary_size
+                    != member.declared_primary_size
+                    or member_assessment.archive_member_name != member.document.filename
+                    or len(member_raw) != member.raw_received_size
+                    or len(member_assessment.archive_member)
+                    != member.archive_member_size
+                    or member_assessment.raw_content_hash != member.raw_content_hash
+                    or member_assessment.archive_member_hash
+                    != member.archive_member_hash
+                    or member_assessment.normalization_policy_id
+                    != member.normalization_policy_id
+                    or member_assessment.normalization_rule_signature
+                    != member.normalization_rule_signature
+                    or member_assessment.normalization_reason
+                    != member.normalization_reason
+                    or member_assessment.removed_ranges != member.removed_ranges
+                ):
+                    raise DataReleaseError(
+                        "DATA_RELEASE_ORIGINAL_BYTES_MISMATCH",
+                        "inline member bytes differ from their integrity evidence",
+                    )
+            parser_input = contents[integrity.normalized_content_hash]
         assessment = assess_filing_response(
             raw_response=_RetainedIntegritySource(
                 integrity.primary_document_uri,
@@ -146,6 +222,10 @@ def verify_original_bytes(
         ) from error
     except SnapshotError as error:
         raise DataReleaseError(error.code, str(error)) from error
+    except InlineDocumentSetError as error:
+        raise DataReleaseError(
+            "DATA_RELEASE_ORIGINAL_DOCUMENT_SET_MISMATCH", str(error)
+        ) from error
     if (
         assessment.relation != integrity.integrity_relation
         or assessment.normalized_content != parser_input

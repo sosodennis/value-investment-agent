@@ -656,6 +656,18 @@ def _partial_acquisition_fixture(tmp_path, *, empty=False, schema="msft-20240630
     state = SimpleNamespace(provider_calls=0, parser_calls=0, parser_kwargs=None)
     primary = "msft-20240630.htm"
     accession = request.filing.accession_number
+    primary_bytes = _inline_original(schema).replace(
+        b"<body>",
+        b'<body><ix:nonNumeric xmlns:ix="http://www.xbrl.org/2013/inlineXBRL" '
+        b'name="dei:DocumentType" contextRef="c1">10-K</ix:nonNumeric>',
+    )
+    submission_bytes = (
+        b"<SEC-DOCUMENT>synthetic.txt\n<DOCUMENT>\n<TYPE>10-K\n<FILENAME>"
+        + primary.encode()
+        + b"\n<TEXT>\n"
+        + primary_bytes
+        + b"\n</TEXT>\n</DOCUMENT>\n</SEC-DOCUMENT>\n"
+    )
     submissions = {
         "cik": int(request.cik),
         "tickers": [request.ticker],
@@ -678,7 +690,9 @@ def _partial_acquisition_fixture(tmp_path, *, empty=False, schema="msft-20240630
             raw = (
                 json.dumps(submissions).encode()
                 if "/submissions/" in uri
-                else _inline_original(schema)
+                else submission_bytes
+                if uri.endswith("/" + accession + ".txt")
+                else primary_bytes
                 if uri.endswith("/" + primary)
                 else _entrypoint_index(primary, schema, f"{accession}-xbrl.zip")
             )

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ast
 import hashlib
+import json
 import multiprocessing
 import os
 import queue
@@ -28,6 +29,11 @@ from .historical_dqc import (
     historical_profile,
 )
 from .serialization import sha256_digest
+from .inline_xbrl import (
+    InlineDocumentSetError,
+    inline_document_metadata,
+    read_inline_document_input,
+)
 from .dqc_rulesets import DqcRulesetCatalogV1
 from .dqc_applicability import (
     DqcFilingContextV1,
@@ -776,7 +782,26 @@ def _parse_in_process(
             f"installed Arelle {installed_version} does not match "
             f"{profile.arelle_version}",
         )
-    if filing_path.suffix.lower() in {".htm", ".html"} and taxonomy_cache_dir is None:
+    inline_manifest = None
+    inline_paths: tuple[Path, ...] = ()
+    if filing_path.name.endswith(".ixds.json"):
+        try:
+            inline_manifest = read_inline_document_input(filing_path)
+            inline_paths = inline_manifest.paths(filing_path.parent)
+            if any(
+                not inline_document_metadata(path.read_bytes())[0]
+                for path in inline_paths
+            ):
+                raise InlineDocumentSetError(
+                    "every inline input member must be inline XBRL"
+                )
+        except (ValueError, OSError) as error:
+            raise ArelleParserError(
+                "INLINE_DOCUMENT_SET_INVALID", str(error)
+            ) from error
+    if (
+        inline_manifest is not None or filing_path.suffix.lower() in {".htm", ".html"}
+    ) and taxonomy_cache_dir is None:
         raise ArelleParserError(
             "TAXONOMY_CACHE_REQUIRED",
             "inline SEC filings require a captured taxonomy cache for offline parsing",
@@ -894,6 +919,21 @@ def _parse_in_process(
             }
             # Listing XULE directly registers a second validator alongside EDGAR's.
             plugin_names = ["EDGAR/validate"]
+            if inline_manifest is not None:
+                import arelle
+
+                inline_plugin = str(
+                    Path(arelle.__file__).parent / "plugin/inlineXbrlDocumentSet.py"
+                )
+                loaded_plugin = controller._pluginManager.addPluginModule(inline_plugin)
+                if loaded_plugin is None:
+                    raise ArelleParserError(
+                        "INLINE_DOCUMENT_SET_INVALID",
+                        "pinned Arelle IXDS plugin did not load",
+                    )
+                controller.preloadedPlugins[inline_plugin] = loaded_plugin
+                plugin_names.append(inline_plugin)
+                controller._pluginManager.pluginMethodsForClasses.clear()
             diagnostic_evidence: tuple[str, ...] = ()
             if profile.dqc_ruleset_catalog is not None:
                 ruleset_plugin = str(Path(__file__).with_name("dqc_ruleset_plugin.py"))
@@ -975,7 +1015,16 @@ def _parse_in_process(
                         else {}
                     ),
                 },
-                entrypointFile=str(filing_path),
+                entrypointFile=json.dumps(
+                    [
+                        {
+                            "ixds": [{"file": str(path)} for path in inline_paths],
+                            "ixdsTarget": "(default)",
+                        }
+                    ]
+                )
+                if inline_manifest is not None
+                else str(filing_path),
                 plugins="|".join(plugin_names),
                 validate=True,
                 disclosureSystemName=profile.efm_profile,
@@ -1013,7 +1062,24 @@ def _parse_in_process(
                             "TAXONOMY_CACHE_UNAVAILABLE", str(taxonomy_cache_dir)
                         )
                     controller.webCache.cacheDir = str(taxonomy_cache_dir)
-            model = manager.load(str(filing_path))
+            entrypoint = str(filing_path)
+            if inline_manifest is not None:
+                import arelle
+                from arelle.UrlUtil import IXDS_DOC_SEPARATOR, IXDS_SURROGATE
+
+                plugin = str(
+                    Path(arelle.__file__).parent / "plugin/inlineXbrlDocumentSet.py"
+                )
+                if controller._pluginManager.addPluginModule(plugin) is None:
+                    raise ArelleParserError(
+                        "INLINE_DOCUMENT_SET_INVALID",
+                        "pinned Arelle IXDS plugin did not load",
+                    )
+                controller._pluginManager.pluginMethodsForClasses.clear()
+                entrypoint = str(
+                    filing_path.parent / IXDS_SURROGATE
+                ) + IXDS_DOC_SEPARATOR.join(str(path) for path in inline_paths)
+            model = manager.load(entrypoint)
         if model is None:
             raise ArelleParserError("XBRL_PARSE_FAILED", "Arelle returned no model")
         model_errors = tuple(sorted({str(code) for code in model.errors}))
@@ -1166,7 +1232,12 @@ def _parse_in_process(
             findings=findings,
             finding_codes=tuple(sorted({item.code for item in findings})),
             validation_engines=validation_engines,
-            validation_evidence=validation_evidence,
+            validation_evidence=validation_evidence
+            + (
+                (f"sec-inline-document-set-v1:{inline_manifest.digest}",)
+                if inline_manifest is not None
+                else ()
+            ),
             parsed_at=datetime.now(timezone.utc),
             offline=profile.offline,
             source_content_hash=actual_source_hash,

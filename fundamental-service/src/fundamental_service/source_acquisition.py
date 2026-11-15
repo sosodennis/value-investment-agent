@@ -15,7 +15,6 @@ from pathlib import Path
 from importlib.metadata import version
 from typing import Literal
 
-from lxml import etree, html
 from pydantic import BaseModel, ConfigDict, ValidationError
 
 from .arelle_parser import ArelleParserError, ArelleValidationProfileV1, _directory_hash
@@ -43,6 +42,11 @@ from .data_releases import ArtifactRefV1, DataReleaseError
 from .facts import CanonicalFactRepository, CanonicalMappingV1
 from .historical_dqc import historical_profile
 from .ingestion import SecIngestionService
+from .inline_xbrl import (
+    InlineDocumentSetError,
+    inline_document_metadata,
+    select_inline_document_set,
+)
 from .issuer_identity import (
     IdentityResolutionError,
     resolve_issuer_cik,
@@ -217,6 +221,7 @@ class _OriginalPackage:
     xbrl_entrypoint: str
     dts_filenames: tuple[str, ...]
     archive_filename: str
+    inline_documents: tuple[str, ...] = ()
 
 
 class SecIdentityResolutionUseCase:
@@ -685,6 +690,7 @@ class SecAcquisitionUseCase:
                 reference_sources=(package.index_source,),
                 submission_source=package.submission_source,
                 dts_filenames=package.dts_filenames,
+                inline_documents=package.inline_documents,
                 profile=self._profile_for_id(runtime.validation_profile_id),
                 form=filing.form,
                 deadline_at=deadline_at,
@@ -1139,6 +1145,7 @@ class SecAcquisitionUseCase:
             additional_issues=supplemental_issues,
             submission_source=submission_source,
             dts_filenames=dts_filenames,
+            inline_documents=package.inline_documents,
             profile=validation_profile,
             form=filing.form,
             is_amendment=filing.is_amendment,
@@ -1266,6 +1273,7 @@ class SecAcquisitionUseCase:
             is_inline_xbrl=filing.is_inline_xbrl,
         )
         schema_filename = None
+        inline_documents: tuple[str, ...] = ()
         if Path(xbrl_entrypoint).suffix.lower() in {".htm", ".html", ".xhtml"}:
             primary_source = adapter.capture_filing(
                 cik=cik,
@@ -1278,7 +1286,20 @@ class SecAcquisitionUseCase:
                 amendment_scope="unknown" if filing.is_amendment else None,
                 deadline_at=deadline_at,
             )
-            schema_filename = self._inline_schema_filename(primary_source.content)
+            try:
+                inline_documents, set_schema = select_inline_document_set(
+                    submission_source.content, index_source.content, xbrl_entrypoint
+                )
+            except InlineDocumentSetError as error:
+                raise ServiceError(
+                    "XBRL_DOCUMENT_SET_UNRESOLVED",
+                    str(error),
+                    status_code=422,
+                    retryable=False,
+                ) from error
+            schema_filename = set_schema or self._inline_schema_filename(
+                primary_source.content
+            )
         dts_filenames = self._select_dts_filenames(
             index_source.content, xbrl_entrypoint, schema_filename=schema_filename
         )
@@ -1291,6 +1312,7 @@ class SecAcquisitionUseCase:
             xbrl_entrypoint=xbrl_entrypoint,
             dts_filenames=dts_filenames,
             archive_filename=filing_archive_filename,
+            inline_documents=inline_documents,
         )
 
     def _resolve_mappings(
@@ -1905,46 +1927,11 @@ class SecAcquisitionUseCase:
 
     @staticmethod
     def _inline_schema_filename(content: bytes) -> str:
-        def namespace(element: etree._Element, prefix: str) -> str | None:
-            for ancestor in (element, *element.iterancestors()):
-                value = ancestor.get(f"xmlns:{prefix}")
-                if value is not None:
-                    return value
-            return None
-
-        references = []
         try:
-            document = html.fromstring(content, parser=html.HTMLParser(no_network=True))
-            for element in document.iter():
-                if not isinstance(element.tag, str):
-                    continue
-                prefix, separator, local_name = element.tag.partition(":")
-                if (
-                    not separator
-                    or local_name != "schemaref"
-                    or namespace(element, prefix) != "http://www.xbrl.org/2003/linkbase"
-                ):
-                    continue
-                if any(
-                    ancestor.get("xml:base") is not None
-                    for ancestor in (element, *element.iterancestors())
-                ):
-                    raise ValueError("schemaRef must use the accession base URI")
-                hrefs = [
-                    value
-                    for name, value in element.attrib.items()
-                    if name.endswith(":href")
-                    and namespace(element, name.partition(":")[0])
-                    == "http://www.w3.org/1999/xlink"
-                ]
-                if len(hrefs) != 1:
-                    raise ValueError("schemaRef requires one bound href")
-                references.append(hrefs[0])
-        except (etree.ParserError, ValueError):
-            references = []
-        if len(references) != 1 or not re.fullmatch(
-            r"[A-Za-z0-9_][A-Za-z0-9_.-]{0,195}\.xsd", references[0]
-        ):
+            _, references = inline_document_metadata(content)
+        except InlineDocumentSetError:
+            references = ()
+        if len(references) != 1:
             raise ServiceError(
                 "XBRL_SCHEMA_UNRESOLVED",
                 "inline SEC original must reference one local taxonomy schema",

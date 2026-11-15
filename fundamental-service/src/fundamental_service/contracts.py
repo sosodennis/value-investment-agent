@@ -21,6 +21,7 @@ from .numerical_policy import using_valuation_context
 from .serialization import is_digest, sha256_digest
 from .accounting_roles import AccountingRoleEvidenceV1, accounting_reported_decimals
 from .dqc_applicability import DqcFilingContextV1, DqcRuleApplicabilityV1
+from .inline_xbrl import InlineDocumentInputV1, InlineDocumentSetInputV1
 
 _MANIFEST_STRINGS = TypeAdapter(tuple[str, ...])
 
@@ -512,6 +513,42 @@ class ArelleFindingEvidenceV1(StrictModel):
     )
 
 
+class SecInlineDocumentIntegrityV1(StrictModel):
+    """Independent response/index/archive integrity for an inline-set member."""
+
+    document: InlineDocumentInputV1
+    declared_primary_size: int = Field(ge=0)
+    raw_content_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    raw_received_size: int = Field(ge=0)
+    raw_response_headers: tuple[tuple[str, str], ...] = ()
+    declared_response_size: int | None = Field(default=None, ge=0)
+    archive_member_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    archive_member_size: int = Field(ge=0)
+    integrity_relation: Literal["exact", "normalized"]
+    normalization_policy_id: str | None = None
+    normalization_rule_signature: str | None = Field(
+        default=None, pattern=r"^[0-9a-f]{64}$"
+    )
+    normalization_reason: str | None = None
+    removed_ranges: tuple[RemovedByteRangeV1, ...] = ()
+
+    @model_validator(mode="after")
+    def bound_normalization(self) -> SecInlineDocumentIntegrityV1:
+        if self.document.content_hash != self.archive_member_hash:
+            raise ValueError("inline member must preserve the exact archive bytes")
+        if self.integrity_relation == "exact" and (
+            self.removed_ranges
+            or self.raw_content_hash != self.archive_member_hash
+            or self.raw_received_size != self.archive_member_size
+        ):
+            raise ValueError("exact inline member must have identical original bytes")
+        if self.integrity_relation == "normalized" and (
+            not self.normalization_policy_id or not self.normalization_rule_signature
+        ):
+            raise ValueError("normalized inline member requires policy evidence")
+        return self
+
+
 class SecIntegrityEvidenceV1(StrictModel):
     """Reproducible link from SEC response bytes to parser and fact evidence."""
 
@@ -548,6 +585,9 @@ class SecIntegrityEvidenceV1(StrictModel):
     archive_fact_count: int = Field(ge=0)
     archive_fact_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
     parser_input_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    inline_documents: tuple[SecInlineDocumentIntegrityV1, ...] = Field(
+        default=(), max_length=8, exclude_if=lambda value: not value
+    )
     validation_profile_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
     validation_engines: tuple[str, ...] = ()
     validation_evidence: tuple[str, ...] = ()
@@ -560,11 +600,51 @@ class SecIntegrityEvidenceV1(StrictModel):
     findings: tuple[ArelleFindingEvidenceV1, ...] = ()
     quality_decision: Literal["pass", "block"]
 
+    @property
+    def parser_content_hashes(self) -> tuple[str, ...]:
+        return tuple(
+            sorted(
+                {
+                    self.parser_input_hash,
+                    self.archive_member_hash,
+                    *(d.document.content_hash for d in self.inline_documents),
+                }
+            )
+        )
+
     @model_validator(mode="after")
     def timestamps_have_timezone(self) -> SecIntegrityEvidenceV1:
         if self.captured_at.tzinfo is None or self.captured_at.utcoffset() is None:
             raise ValueError("captured_at must include a timezone")
-        if self.parser_input_hash != self.normalized_content_hash:
+        expected_input_hash = self.normalized_content_hash
+        if self.inline_documents:
+            manifest = InlineDocumentSetInputV1(
+                documents=tuple(d.document for d in self.inline_documents)
+            )
+            primary = next(
+                (
+                    d
+                    for d in self.inline_documents
+                    if d.document.filename == self.archive_member_name
+                ),
+                None,
+            )
+            if primary is None or (
+                primary.document.content_hash != self.normalized_content_hash
+                or primary.raw_content_hash != self.raw_content_hash
+                or primary.archive_member_hash != self.archive_member_hash
+                or primary.integrity_relation != self.integrity_relation
+            ):
+                raise ValueError(
+                    "inline primary integrity differs from filing evidence"
+                )
+            expected_input_hash = manifest.digest
+            if (
+                f"sec-inline-document-set-v1:{manifest.digest}"
+                not in self.validation_evidence
+            ):
+                raise ValueError("inline set lacks matching parser validation evidence")
+        if self.parser_input_hash != expected_input_hash:
             raise ValueError("parser input hash must match normalized source hash")
         if self.network_attempt_count != 0:
             raise ValueError("offline SEC validation cannot contain network attempts")

@@ -212,13 +212,14 @@ class _AutomaticSourceMappingResolver:
                     role="sec-original-source-v1",
                 )
             )
-        for digest in sorted(
-            {integrity.parser_input_hash, integrity.archive_member_hash}
-        ):
+        for digest in integrity.parser_content_hashes:
             refs.append(
                 authority._retain_bytes(
                     digest,
-                    media_type=validated.primary_media_type,
+                    media_type="application/json"
+                    if integrity.inline_documents
+                    and digest == integrity.parser_input_hash
+                    else validated.primary_media_type,
                     role="sec-parser-input-v1",
                 )
             )

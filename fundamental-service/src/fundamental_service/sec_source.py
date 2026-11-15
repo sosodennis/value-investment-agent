@@ -257,6 +257,9 @@ def sec_source_register() -> SourceRegister:
             ),
             LegalSource("sec-filing", SourceRole.FILING, SEC_TERMS, "indefinite"),
             LegalSource(
+                "sec-inline-document", SourceRole.FILING, SEC_TERMS, "indefinite"
+            ),
+            LegalSource(
                 "sec-supplemental-filing", SourceRole.FILING, SEC_TERMS, "indefinite"
             ),
             LegalSource(
