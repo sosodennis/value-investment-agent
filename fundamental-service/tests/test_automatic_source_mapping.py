@@ -114,6 +114,17 @@ def source_case(tmp_path):
     return request, authority, validated, artifacts, mappings
 
 
+def test_optional_original_reference_preserves_existing_pinned_request_identity(
+    tmp_path,
+):
+    request, *_ = source_case(tmp_path)
+    assert request.original_preparation is None
+    assert b"original_preparation" not in canonical_bytes(request)
+    assert canonical_bytes(request) == canonical_bytes(
+        request.model_dump(exclude={"original_preparation"})
+    )
+
+
 @pytest.mark.parametrize("policy", [None, "sec-equity-award-proxy.v1"])
 def test_automatic_request_requires_a_versioned_award_source_policy(tmp_path, policy):
     request, *_ = source_case(tmp_path)

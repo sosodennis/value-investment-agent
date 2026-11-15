@@ -18,6 +18,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, ValidationError
 
 from .arelle_parser import ArelleParserError, ArelleValidationProfileV1, _directory_hash
+from .annual_discovery_service import AnnualDiscovery, AnnualDiscoveryArtifacts
 from .dqc_rulesets import DqcRulesetCatalogV1
 from .dqc_applicability import dqc_applicability_policy_digest
 from .automatic_source_mapping import (
@@ -51,16 +52,18 @@ from .issuer_identity import (
     IdentityResolutionError,
     resolve_issuer_cik,
     resolve_issuer_identity,
+    original_history_identity_key,
 )
 from .metadata import PostgresArtifactStore, PostgresContentStore, PostgresMetadataStore
 from .operations import ServiceError
 from .original_preparation import (
+    OriginalPreparation,
     OriginalValidationEvidenceV1,
     OriginalValidationRequestV1,
     OriginalValidationRuntimeV1,
 )
 from .original_issuer import OriginalOperatingSourceV1, evaluate_original_issuer
-from .sec_capture import RetainedSecSourceAdapter, SecCaptureScopeV1, SecCaptureStore
+from .sec_capture import RetainedSecSourceAdapter, SecCaptureScopeV1
 from .sec_submissions import SecRecentFilingsV1, SecSubmissionsV1
 from .sec_source import (
     SecEdgarSourceAdapter,
@@ -476,7 +479,7 @@ class SecAcquisitionUseCase:
         content_store: ContentAddressedStore,
         settings: SecAcquisitionSettings,
         authorized_organizations: frozenset[str],
-        capture_store: SecCaptureStore | None = None,
+        capture_store: AnnualDiscoveryArtifacts | None = None,
         automatic_mapping_authority: AutomaticSourceMappingAuthority | None = None,
     ) -> None:
         self.adapter = adapter
@@ -647,25 +650,7 @@ class SecAcquisitionUseCase:
         try:
             self._require_before_deadline(deadline_at)
             annual = request.filing
-            if (
-                annual.accepted_at > request.valuation_timestamp
-                or annual.filing_date > request.valuation_timestamp.date()
-                or annual.filing_date.year not in runtime.supported_filing_years
-                or annual.form not in runtime.supported_filing_forms
-                or not annual.is_xbrl
-            ):
-                raise SnapshotError(
-                    "ORIGINAL_FILING_NOT_ELIGIBLE",
-                    "catalog original is unavailable at the cutoff or unsupported",
-                )
-            filing = _SelectedFiling(
-                accession_number=annual.accession_number,
-                form=annual.form,
-                filing_date=annual.filing_date,
-                accepted_at=annual.accepted_at,
-                primary_document=annual.primary_document,
-                is_inline_xbrl=annual.is_inline_xbrl,
-            )
+            filing = self._catalog_filing(request)
             package = self._capture_original_package(
                 adapter=adapter, cik=request.cik, filing=filing, deadline_at=deadline_at
             )
@@ -777,11 +762,104 @@ class SecAcquisitionUseCase:
                 retryable=retryable,
             )
 
+    @staticmethod
+    def _catalog_filing(request: OriginalValidationRequestV1) -> _SelectedFiling:
+        annual, runtime = request.filing, request.runtime
+        if (
+            annual.accepted_at > request.valuation_timestamp
+            or annual.filing_date > request.valuation_timestamp.date()
+            or annual.filing_date.year not in runtime.supported_filing_years
+            or annual.form not in runtime.supported_filing_forms
+            or not annual.is_xbrl
+        ):
+            raise SnapshotError(
+                "ORIGINAL_FILING_NOT_ELIGIBLE",
+                "catalog original is unavailable at the cutoff or unsupported",
+            )
+        return _SelectedFiling(
+            accession_number=annual.accession_number,
+            form=annual.form,
+            filing_date=annual.filing_date,
+            accepted_at=annual.accepted_at,
+            primary_document=annual.primary_document,
+            is_inline_xbrl=annual.is_inline_xbrl,
+        )
+
+    def _prepared_filing(
+        self, request: SecIngestionRequestV1 | AutomaticSecIngestionRequestV1
+    ) -> _SelectedFiling | None:
+        if not isinstance(request, AutomaticSecIngestionRequestV1):
+            return None
+        reference = request.original_preparation
+        if reference is None:
+            return None
+        if self.capture_store is None:
+            raise SnapshotError(
+                "SEC_CAPTURE_STORE_UNAVAILABLE",
+                "original evidence store is unavailable",
+            )
+        originals = OriginalPreparation(
+            discovery=AnnualDiscovery(
+                provider=self.adapter,
+                artifacts=self.capture_store,
+                content=self.content_store,
+                capture_lock=self._capture_lock,
+            ),
+            validator=self,
+            artifacts=self.capture_store,
+            content=self.content_store,
+            capture_lock=self._capture_lock,
+        )
+        if originals.reference(reference.artifact_id, reference.role) != reference:
+            raise SnapshotError("ORIGINAL_PREPARATION_INVALID", "reference differs")
+        prepared = originals.read(reference.artifact_id)
+        runtime = self.original_validation_runtime(
+            declared_source_revision=request.source_revision,
+            validation_profile_id=request.validation_profile_id,
+        )
+        if (
+            prepared.issue_codes
+            or prepared.retryable
+            or prepared.request.runtime != runtime
+            or request.parser_version != runtime.arelle_version
+            or request.taxonomy_manifest_id != runtime.taxonomy_manifest_id
+            or request.taxonomy_version != runtime.taxonomy_version
+        ):
+            raise SnapshotError(
+                "ORIGINAL_PREPARATION_INVALID", "prepared runtime or outcome differs"
+            )
+        for item in prepared.filings:
+            validation = originals.read_validation(item.validation.artifact_id)
+            original = validation.request
+            if original.filing.accession_number != request.filing.accession_number:
+                continue
+            policy = prepared.request.history_identity_policy
+            if (
+                original.cik != request.cik
+                or original.valuation_timestamp != request.valuation_timestamp
+                or original.source_selection_policy != request.source_selection_policy
+                or item.identity is None
+                or original_history_identity_key(item.identity, policy)
+                != original_history_identity_key(request.identity, policy)
+                or original.filing.filing_date
+                < request.valuation_timestamp.date()
+                - timedelta(days=request.filing.lookback_days)
+            ):
+                raise SnapshotError(
+                    "ORIGINAL_PREPARATION_INVALID", "pinned original scope differs"
+                )
+            return self._catalog_filing(original)
+        raise SnapshotError(
+            "ORIGINAL_PREPARATION_INVALID",
+            "pinned accession is absent from preparation",
+        )
+
     def retained_acquisition(
         self, request: SecIngestionRequestV1 | AutomaticSecIngestionRequestV1
     ) -> SecIngestionResponseV1 | None:
         """Read a completed exact-runtime acquisition without provider/parser I/O."""
         payload = self._runtime_key_payload(request, self._validation_profile(request))
+        self._prepared_filing(request)
         return self.metadata.get_sec_ingestion(
             sha256_digest(payload), expected_acquisition_payload=payload
         )
@@ -832,6 +910,20 @@ class SecAcquisitionUseCase:
                 status_code=422,
                 retryable=False,
             )
+        try:
+            prepared_filing = self._prepared_filing(request)
+        except SnapshotError as error:
+            self.metadata.publish_source_audit(
+                acquisition_key=acquisition_key,
+                caller_principal=caller_principal,
+                organization_id=organization_id,
+                correlation_id=correlation_id,
+                source_hashes=(),
+                outcome=error.code,
+            )
+            raise ServiceError(
+                error.code, error.message, status_code=422, retryable=error.retryable
+            ) from error
         existing = self.metadata.get_sec_ingestion(
             acquisition_key, expected_acquisition_payload=key_payload
         )
@@ -886,6 +978,7 @@ class SecAcquisitionUseCase:
                     correlation_id=correlation_id,
                     deadline_at=deadline_at,
                     validation_profile=validation_profile,
+                    prepared_filing=prepared_filing,
                 )
                 self.metadata.publish_source_audit(
                     acquisition_key=acquisition_key,
@@ -1031,6 +1124,7 @@ class SecAcquisitionUseCase:
         correlation_id: str,
         deadline_at: datetime,
         validation_profile: ArelleValidationProfileV1,
+        prepared_filing: _SelectedFiling | None = None,
     ) -> SecIngestionResponseV1:
         mapping_resolver = (
             self._automatic_authority().resolver_for(request)
@@ -1065,7 +1159,7 @@ class SecAcquisitionUseCase:
             submissions_source.content, media_type=submissions_source.media_type
         )
         submissions = self._decode_submissions(submissions_source.content, request)
-        filing = self._select_filing(
+        filing = prepared_filing or self._select_filing(
             submissions,
             request.filing,
             request.valuation_timestamp,

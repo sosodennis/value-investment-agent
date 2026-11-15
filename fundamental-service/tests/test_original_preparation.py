@@ -32,15 +32,21 @@ from test_automatic_source_acquisition import acquisition_case
 from test_automatic_source_mapping import source_case
 
 
-def case(tmp_path, monkeypatch, *, multiple_originals=False):
+def case(tmp_path, monkeypatch, *, multiple_originals=False, historical_annual=False):
     source, acquisition, state, metadata, artifacts = acquisition_case(
         tmp_path, monkeypatch
     )
     _, _, original, _, _ = source_case(tmp_path / "expected")
     delegate = acquisition.adapter._request
+    history_filename = f"CIK{source.cik}-submissions-002.json"
 
     def request(uri, *, deadline_at=None):
-        response = delegate(uri, deadline_at=deadline_at)
+        response = delegate(
+            f"https://data.sec.gov/submissions/CIK{source.cik}.json"
+            if uri.endswith(history_filename)
+            else uri,
+            deadline_at=deadline_at,
+        )
         if "/submissions/" not in uri:
             return response
         payload = json.loads(response.content)
@@ -65,6 +71,28 @@ def case(tmp_path, monkeypatch, *, multiple_originals=False):
             for key, values in rows.items():
                 values.append(older[key])
         payload["tickers"] = ["UNTRUSTED-CURRENT-TICKER"]
+        if historical_annual:
+            annual_indices = [
+                i for i, form in enumerate(rows["form"]) if form == "10-K"
+            ]
+            history = {
+                key: [values[i] for i in annual_indices] for key, values in rows.items()
+            }
+            if uri.endswith(history_filename):
+                payload = history
+            else:
+                payload["filings"]["recent"] = {
+                    key: [v for i, v in enumerate(values) if i not in annual_indices]
+                    for key, values in rows.items()
+                }
+                payload["filings"]["files"] = [
+                    {
+                        "name": history_filename,
+                        "filingCount": len(annual_indices),
+                        "filingFrom": min(history["filingDate"]),
+                        "filingTo": max(history["filingDate"]),
+                    }
+                ]
         raw = canonical_bytes(payload)
         return _SecResponse(
             raw, 200, "application/json", response.available_at, (), len(raw)

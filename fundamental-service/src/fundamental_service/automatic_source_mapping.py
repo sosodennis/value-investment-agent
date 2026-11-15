@@ -51,6 +51,9 @@ class AutomaticSecIngestionRequestV1(SecSourceRequestV1):
     model_id: InitialModelId
     model_version: str = Field(min_length=1, max_length=128)
     requirements_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    original_preparation: ArtifactRefV1 | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
 
     @model_validator(mode="after")
     def automatic_source_is_pinned(self) -> AutomaticSecIngestionRequestV1:
@@ -76,6 +79,13 @@ class AutomaticSecIngestionRequestV1(SecSourceRequestV1):
         ):
             raise ValueError(
                 "automatic acquisition requires exact service model requirements"
+            )
+        if self.original_preparation is not None and (
+            self.original_preparation.role != "sec-original-preparation-v1"
+            or self.original_preparation.media_type != "application/json"
+        ):
+            raise ValueError(
+                "automatic acquisition requires original preparation evidence"
             )
         return self
 

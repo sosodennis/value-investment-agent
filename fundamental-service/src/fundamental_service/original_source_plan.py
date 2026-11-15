@@ -621,6 +621,7 @@ class OriginalSourcePlan:
                         model_id=configuration.model_id,
                         model_version=model.model_version,
                         requirements_digest=profile.digest,
+                        original_preparation=request.original_preparation,
                     )
                 )
                 market_template = configuration.issuer_market_policy_template

@@ -73,6 +73,8 @@ from fundamental_service.working_capital_preparation import (
 )
 from test_annual_discovery_service import _inventory
 from test_automatic_source_preparation import run
+from test_automatic_source_acquisition import acquire
+from test_automatic_mapping import EVALUATOR
 from test_original_preparation import case, execute
 from test_automatic_market_policy import _market_policy
 from test_public_admission import admission_fixture
@@ -336,6 +338,89 @@ def compiler_case(value, prepared, config=None):
         runtime_source_revision=value.annual_request.declared_source_revision,
     )
     return compiler, request
+
+
+def test_compiled_historical_annual_executes_and_reuses_the_frozen_selection(
+    tmp_path, monkeypatch
+):
+    value = case(tmp_path, monkeypatch, historical_annual=True)
+    prepared, _ = execute(value)
+    assert not prepared.issue_codes
+    compiler, request = compiler_case(
+        value, prepared, configuration().model_copy(update={"evaluator_id": EVALUATOR})
+    )
+    compiled, _ = compiler.execute(request)
+    assert compiled.plan is not None
+    ingestion = compiled.plan.ingestions[0]
+    assert ingestion.original_preparation == request.original_preparation
+    result = acquire(ingestion, value.acquisition)
+    assert result.snapshot_id and result.canonical_fact_ids
+    calls = (value.state.provider_calls, value.state.parser_calls)
+    again = acquire(ingestion, value.acquisition, "replay")
+    assert again.reused and again.snapshot_id == result.snapshot_id
+    assert (value.state.provider_calls, value.state.parser_calls) == calls
+
+
+@pytest.mark.parametrize(
+    "change",
+    ("reference", "cik", "cutoff", "security", "accession", "runtime", "source"),
+)
+def test_compiled_original_binding_rejects_tampering_before_provider_or_parser(
+    tmp_path, monkeypatch, change
+):
+    value = case(tmp_path, monkeypatch, historical_annual=True)
+    prepared, _ = execute(value)
+    compiler, request = compiler_case(
+        value, prepared, configuration().model_copy(update={"evaluator_id": EVALUATOR})
+    )
+    compiled, _ = compiler.execute(request)
+    ingestion = compiled.plan.ingestions[0]
+    updates = {}
+    if change == "reference":
+        updates["original_preparation"] = ingestion.original_preparation.model_copy(
+            update={"content_hash": "0" * 64}
+        )
+    elif change == "cik":
+        updates["cik"] = "0000000002"
+        updates["identity"] = ingestion.identity.model_copy(
+            update={"issuer_id": "0000000002"}
+        )
+    elif change == "cutoff":
+        updates["valuation_timestamp"] = ingestion.valuation_timestamp + timedelta(
+            days=1
+        )
+    elif change == "security":
+        updates["identity"] = ingestion.identity.model_copy(
+            update={"security_id": "OTHER"}
+        )
+        updates["ticker"] = "OTHER"
+    elif change == "accession":
+        updates["filing"] = ingestion.filing.model_copy(
+            update={"accession_number": "0000000001-26-999999"}
+        )
+    elif change == "runtime":
+        value.acquisition.settings.supported_filing_years = (2025, 2026)
+    else:
+        original_get = value.acquisition.content_store.get
+        validation = value.service.read_validation(
+            prepared.filings[0].validation.artifact_id
+        )
+        source_hash = validation.original.source.content_hash
+
+        def corrupt(digest, **kwargs):
+            return (
+                b"corrupt" if digest == source_hash else original_get(digest, **kwargs)
+            )
+
+        monkeypatch.setattr(value.acquisition.content_store, "get", corrupt)
+    changed = type(ingestion).model_validate(ingestion.model_dump() | updates)
+    calls = (value.state.provider_calls, value.state.parser_calls)
+    with pytest.raises(ServiceError) as failure:
+        acquire(changed, value.acquisition)
+    assert failure.value.code == "ORIGINAL_PREPARATION_INVALID"
+    assert (value.state.provider_calls, value.state.parser_calls) == calls
+    assert not value.metadata.acquisitions and not value.metadata.facts
+    assert value.metadata.audits[-1]["outcome"] == "ORIGINAL_PREPARATION_INVALID"
 
 
 @pytest.mark.parametrize("reverse", [False, True])

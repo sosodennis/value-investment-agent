@@ -153,6 +153,13 @@ existing mapping/release/caller gates remain required. Identical compilation and
 saved retrieval return the same evidence and `wrote=false` without source/parser
 I/O. Interrupted publication reuses completed artifacts; corruption refuses.
 
+Compiled ingestion requests bind the saved `original_preparation` reference.
+Execution replays its catalog and validation evidence before using the selected
+filing, including annuals retained only on historical submissions pages. CIK,
+cutoff, security, accession and installed runtime must still match; caller-supplied
+filing metadata cannot replace that evidence. Direct pinned requests without this
+optional reference retain their existing selection contract.
+
 When the optional recipe template is present, compilation selects composite
 requirements and expands the configured exclusions and explicit asset/liability
 scenarios over each validated original's accession and report period. The recipe
