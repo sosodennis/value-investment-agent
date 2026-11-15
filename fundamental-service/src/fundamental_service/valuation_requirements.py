@@ -20,6 +20,7 @@ from .contracts import (
 )
 from .serialization import sha256_digest
 from .equity_dilution import AWARD_FACT_FIELDS
+from .award_disclosures import AWARD_DISCLOSURE_FIELDS, AWARD_DISCLOSURE_POLICY
 from .conditional_capital_contracts import (
     CONDITIONAL_CAPITAL_POLICY,
     UNRESOLVED_CAPITAL_FIELDS,
@@ -335,11 +336,12 @@ def conditional_capital_requirements_profile(
     ) or not set(hypothetical_balance_fields) <= set(CAPITAL_BALANCE_ROLES):
         raise ValueError("hypothetical balances require canonical supported roles")
     unknowns = (*UNRESOLVED_CAPITAL_FIELDS, *hypothetical_balance_fields)
-    version = (
+    capital_version = (
         f"{CAPITAL_BALANCE_HYPOTHESES}-{'-'.join(hypothetical_balance_fields)}"
         if hypothetical_balance_fields
         else CONDITIONAL_CAPITAL_POLICY
     )
+    version = f"{capital_version}-{AWARD_DISCLOSURE_POLICY}"
     exact = (
         composite_working_capital_requirements_profile(model_id, operating_only=False)
         if composite_inputs
@@ -357,6 +359,7 @@ def conditional_capital_requirements_profile(
             ),
             "supporting_fact_fields": (
                 *exact.supporting_fact_fields,
+                *AWARD_DISCLOSURE_FIELDS,
                 *unknowns,
             ),
         }

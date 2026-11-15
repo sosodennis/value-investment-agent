@@ -17,6 +17,11 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .arelle_parser import ParsedXbrlFactV1
+from .award_disclosures import (
+    AWARD_DISCLOSURE_ROLES,
+    AWARD_DISCLOSURE_SCOPE,
+    matches_award_disclosure,
+)
 from .serialization import sha256_digest
 
 
@@ -123,6 +128,9 @@ class AccountingComponentV1(RoleModel):
     equity_component: Literal["common_stock"] | None = Field(
         default=None, exclude_if=lambda value: value is None
     )
+    award_disclosure_scope: Literal["restricted_stock_nonvested_aggregate"] | None = (
+        Field(default=None, exclude_if=lambda value: value is None)
+    )
     balance_sheet_location: Literal["other_current_liabilities"] | None = Field(
         default=None, exclude_if=lambda value: value is None
     )
@@ -139,6 +147,15 @@ class AccountingComponentV1(RoleModel):
 
     @model_validator(mode="after")
     def swap_is_an_exclusion(self) -> AccountingComponentV1:
+        if self.award_disclosure_scope is not None and (
+            self.sign != 1
+            or self.equity_component is not None
+            or self.balance_sheet_location is not None
+            or self.finance_lease_expense_location is not None
+            or self.accrued_interest_swap_exclusion is not None
+            or self.discontinued_depreciation_exclusion is not None
+        ):
+            raise ValueError("award disclosure requires one positive classification")
         if self.equity_component is not None and (
             self.sign != 1
             or self.balance_sheet_location is not None
@@ -342,6 +359,7 @@ class AccountingPeriodRuleV1(RoleModel):
                 or (
                     self.components[0].balance_sheet_location is None
                     and self.components[0].equity_component is None
+                    and self.components[0].award_disclosure_scope is None
                 )
                 or self.absence_passages
                 or self.disclosed_amount
@@ -526,6 +544,31 @@ def _validate_common_equity_classification(
         )
 
 
+def _validate_award_disclosure_classification(
+    rules: AccountingRoleRules,
+    rule: AccountingPeriodRuleV1,
+    component: AccountingComponentV1,
+    fact: ParsedXbrlFactV1,
+) -> None:
+    definition = AWARD_DISCLOSURE_ROLES.get(rules.normalized_field)
+    if (
+        definition is None
+        or component.award_disclosure_scope != AWARD_DISCLOSURE_SCOPE
+        or rule.disposition != "classified"
+        or not rule.period.instant
+        or len(rule.components) != 1
+        or component.sign != 1
+        or (rules.unit, rules.currency) != (definition.unit, definition.currency)
+        or not matches_award_disclosure(
+            fact, role=rules.normalized_field, issuer_id=rules.issuer_id
+        )
+    ):
+        raise AccountingRoleError(
+            "ACCOUNTING_ROLE_SCOPE_MISMATCH",
+            "aggregate award evidence requires its exact standard disclosure scope",
+        )
+
+
 def evaluate_period_rule(
     rules: AccountingRoleRules,
     rule: AccountingPeriodRuleV1,
@@ -574,6 +617,13 @@ def evaluate_period_rule(
             isinstance(component, AccountingComponentV1)
             and component.equity_component is not None
         )
+        classified_award = (
+            isinstance(component, AccountingComponentV1)
+            and component.award_disclosure_scope is not None
+        )
+        if classified_award:
+            assert isinstance(component, AccountingComponentV1)
+            _validate_award_disclosure_classification(rules, rule, component, fact)
         if classified_equity:
             assert isinstance(component, AccountingComponentV1)
             _validate_common_equity_classification(rules, rule, component, fact)
@@ -608,6 +658,7 @@ def evaluate_period_rule(
                 not classified_location
                 and not classified_expense
                 and not classified_equity
+                and not classified_award
                 and not derivative_scope
                 and (fact.dimensions or fact.consolidation_scope != "consolidated")
             )
@@ -617,6 +668,7 @@ def evaluate_period_rule(
                 and not classified_location
                 and not classified_expense
                 and not classified_equity
+                and not classified_award
                 and fact.security_scope not in {"issuer", "consolidated", "unspecified"}
             )
         ):

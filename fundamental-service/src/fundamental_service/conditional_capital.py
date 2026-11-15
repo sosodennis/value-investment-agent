@@ -12,6 +12,7 @@ from .capital_bridge_policy import (
 )
 from .conditional_capital_balances import CapitalBalanceRole
 from .conditional_capital_contracts import (
+    CAPITAL_SUPPORTING_AWARD_FIELDS,
     ConditionalCapitalPolicyV1,
     ConditionalCapitalAssessmentV1,
     ConditionalCapitalScenarioV1,
@@ -28,7 +29,6 @@ from .contracts import (
     SourceSnapshotV1,
 )
 from .facts import canonical_fact_digest
-from .equity_dilution import AWARD_FACT_FIELDS
 from .numerical_policy import using_valuation_context
 from .serialization import sha256_digest
 
@@ -81,7 +81,9 @@ def assess_conditional_capital(
         )
     by_id = {fact.fact_id: fact for fact in facts}
     if {ref.fact_id for ref in policy.supporting_observations} != {
-        fact.fact_id for fact in facts if fact.normalized_field in AWARD_FACT_FIELDS
+        fact.fact_id
+        for fact in facts
+        if fact.normalized_field in CAPITAL_SUPPORTING_AWARD_FIELDS
     }:
         raise ConditionalCapitalError(
             "CONDITIONAL_CAPITAL_AWARD_OBSERVATIONS_UNBOUND",

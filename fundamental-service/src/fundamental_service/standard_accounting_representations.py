@@ -6,6 +6,8 @@ from typing import Protocol
 
 from .accounting_roles import AccountingRoleRules
 from .arelle_parser import ParsedXbrlFactV1
+from .award_disclosures import AWARD_DISCLOSURE_ROLES
+from .award_disclosure_mapping import select_award_disclosure
 from .common_stock_mapping import (
     COMMON_STOCK,
     common_stock_component_present,
@@ -39,6 +41,13 @@ class AccountingRepresentation:
 def standard_accounting_representation(
     original: OriginalIssuerEvidenceV1, normalized_field: str
 ) -> AccountingRepresentation | None:
+    if normalized_field in AWARD_DISCLOSURE_ROLES:
+        return AccountingRepresentation(
+            f"classified:{normalized_field}",
+            lambda evidence, security: select_award_disclosure(
+                evidence, normalized_field, security_id=security
+            ),
+        )
     if (
         normalized_field == "current_interest_bearing_debt"
         and current_debt_components_present(original)

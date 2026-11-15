@@ -382,10 +382,24 @@ class ParsedXbrlFactV1(BaseModel):
     period_end: date | None = None
     instant: date | None = None
     dimensions: tuple[tuple[str, str], ...] = ()
+    dimension_namespace_uris: tuple[tuple[str, str | None, str | None], ...] = Field(
+        default=(), exclude_if=lambda value: not value
+    )
     is_numeric: bool = False
     scale: int = 0
     consolidation_scope: str = "unknown"
     security_scope: str = "unknown"
+
+    @model_validator(mode="after")
+    def dimension_namespaces_match_context(self) -> "ParsedXbrlFactV1":
+        if self.dimension_namespace_uris and (
+            tuple(item[0] for item in self.dimension_namespace_uris)
+            != tuple(sorted(axis for axis, _ in self.dimensions))
+            or len({item[0] for item in self.dimension_namespace_uris})
+            != len(self.dimension_namespace_uris)
+        ):
+            raise ValueError("dimension namespaces must cover the exact context axes")
+        return self
 
 
 class ArelleFindingV1(BaseModel):
@@ -1256,6 +1270,7 @@ def _parse_in_process(
                 else None
             )
             dimensions: list[tuple[str, str]] = []
+            dimension_namespace_uris: list[tuple[str, str | None, str | None]] = []
             for dimension, member in sorted(
                 getattr(model_context, "qnameDims", {}).items(),
                 key=lambda item: str(item[0]),
@@ -1268,6 +1283,13 @@ def _parse_in_process(
                         str(member_name)
                         if member_name is not None
                         else str(typed_member),
+                    )
+                )
+                dimension_namespace_uris.append(
+                    (
+                        str(dimension),
+                        getattr(dimension, "namespaceURI", None),
+                        getattr(member_name, "namespaceURI", None),
                     )
                 )
             model_unit = getattr(fact, "unit", None)
@@ -1305,6 +1327,7 @@ def _parse_in_process(
                     if instant_datetime is not None
                     else None,
                     dimensions=tuple(dimensions),
+                    dimension_namespace_uris=tuple(dimension_namespace_uris),
                     is_numeric=bool(getattr(fact, "isNumeric", False)),
                     scale=int(getattr(fact, "scale", 0) or 0),
                     consolidation_scope="segmented" if dimensions else "consolidated",

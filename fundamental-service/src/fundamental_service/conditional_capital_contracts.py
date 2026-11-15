@@ -11,6 +11,10 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from .contracts import CanonicalFactV1, CapitalBridgeAssumptionsV1
 from .conditional_capital_balances import CapitalBalanceHypothesesV1, CapitalBalanceRole
 from .serialization import sha256_digest
+from .award_disclosures import AWARD_DISCLOSURE_FIELDS
+from .equity_dilution import AWARD_FACT_FIELDS
+
+CAPITAL_SUPPORTING_AWARD_FIELDS = (*AWARD_FACT_FIELDS, *AWARD_DISCLOSURE_FIELDS)
 
 CONDITIONAL_CAPITAL_POLICY: Literal["conditional-capital-hypotheses-v1"] = (
     "conditional-capital-hypotheses-v1"

@@ -75,3 +75,32 @@ scenario inputs and requires the real caller's approval of their exact input
 before the existing calculator runs. No company-specific registration is needed
 for this input representation. Real source/model sufficiency and end-to-end
 acceptance must still be established separately.
+
+### Supporting aggregate award disclosures
+
+Conditional capital profiles include two optional roles for the standard FASB
+2025 `AwardTypeAxis` / `RestrictedStockMember` disclosure: nonvested instrument
+quantity excluding options, and aggregate unrecognized compensation cost. The
+versioned `standard-restricted-stock-aggregate-disclosures-v1` rule retains the
+original dimensions, instant, unit, precision and source identity in classified
+accounting evidence. The parser also retains each axis/member namespace URI;
+both must match the supported taxonomy. Prefix strings alone, including old
+reports without this evidence, cannot authorize the new scope. Duplicate facts
+must be consistent as a complete group;
+selection uses the existing deterministic precision policy. Other dimensions,
+taxonomy versions or units require their own supported rule and remain refused.
+
+These roles are supporting observations. Restricted stock may include performance
+conditions, and its aggregate cost may cover multiple economic instruments. The
+roles do not establish RSU/PSU composition, settlement, issued-share inclusion,
+maximum delivery, compensation allocation or complete inventory. They cannot be
+used as exact instrument quantity, exercise price or allocated compensation.
+The conditional policy binds every released supporting award observation while
+retaining these unknowns and its explicit hypothetical dilution operands.
+
+The added support changes conditional profile identities and automatic mapping
+policy version/digest. Regenerate conditional source plans against the new
+profiles; the ordinary exact V4 profiles and dilution contracts retain their
+existing identities and evidence requirements. Real numerical acceptance still
+requires the eligible quote, market policy, trusted release and exact-input
+caller approval.

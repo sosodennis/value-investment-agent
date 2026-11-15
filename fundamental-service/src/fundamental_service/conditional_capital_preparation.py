@@ -6,6 +6,7 @@ from pydantic import Field, ValidationError, model_validator
 
 from .conditional_capital import ConditionalCapitalError, assess_conditional_capital
 from .conditional_capital_contracts import (
+    CAPITAL_SUPPORTING_AWARD_FIELDS,
     CAPITAL_UNKNOWNS,
     OBSERVED_CAPITAL_FIELDS,
     CapitalObservationRefV1,
@@ -14,7 +15,6 @@ from .conditional_capital_contracts import (
     ConditionalCapitalRecipeV1,
 )
 from .contracts import CanonicalFactV1, SourceSnapshotV1, StrictModel
-from .equity_dilution import AWARD_FACT_FIELDS
 from .facts import canonical_fact_digest
 from .serialization import canonical_bytes, sha256_digest
 
@@ -83,7 +83,11 @@ def bind_conditional_capital_recipe(
             issues.add("CONDITIONAL_CAPITAL_BINDING_AMBIGUOUS")
         else:
             selected[role] = matches[0]
-    awards = tuple(fact for fact in facts if fact.normalized_field in AWARD_FACT_FIELDS)
+    awards = tuple(
+        fact
+        for fact in facts
+        if fact.normalized_field in CAPITAL_SUPPORTING_AWARD_FIELDS
+    )
     if not awards:
         missing.add("supporting_award_observations")
         issues.add("CONDITIONAL_CAPITAL_BINDING_MISSING")

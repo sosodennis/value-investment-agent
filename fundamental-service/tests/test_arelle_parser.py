@@ -67,6 +67,52 @@ def test_pinned_arelle_parses_captured_xbrl_without_network():
     assert any(fact.concept.endswith("Revenue") for fact in report.facts)
 
 
+@pytest.mark.parametrize(
+    "axis_uri, member_uri",
+    (
+        ("http://fasb.org/us-gaap/2025", "http://fasb.org/us-gaap/2025"),
+        ("https://example.test/rebound-axis", "http://fasb.org/us-gaap/2025"),
+        ("http://fasb.org/us-gaap/2025", "https://example.test/rebound-member"),
+    ),
+)
+def test_parser_preserves_locally_bound_dimension_namespaces(
+    tmp_path, axis_uri, member_uri
+):
+    fixture = Path(__file__).parent / "fixtures"
+    (tmp_path / "simple.xsd").write_bytes((fixture / "simple.xsd").read_bytes())
+    template = (fixture / "simple.xbrl").read_text()
+    segment = (
+        '<xbrli:segment xmlns:xbrldi="http://xbrl.org/2006/xbrldi">'
+        f'<xbrldi:explicitMember xmlns:us-gaap="{axis_uri}" dimension="us-gaap:AwardTypeAxis"'
+        f' xmlns:award="{member_uri}">award:RestrictedStockMember</xbrldi:explicitMember>'
+        "</xbrli:segment>"
+    )
+    path = tmp_path / "dimensions.xbrl"
+    path.write_text(template.replace("</xbrli:entity>", segment + "</xbrli:entity>"))
+    report = parse_filing_offline(
+        path,
+        profile=ArelleValidationProfileV1(profile_id="sec-efm-us-gaap-v1"),
+        taxonomy_version="fixture-taxonomy-v1",
+    )
+    fact = next(f for f in report.facts if f.concept.endswith("Revenue"))
+    assert fact.dimensions == (
+        ("us-gaap:AwardTypeAxis", "award:RestrictedStockMember"),
+    )
+    assert fact.dimension_namespace_uris == (
+        ("us-gaap:AwardTypeAxis", axis_uri, member_uri),
+    )
+    altered = fact.model_copy(
+        update={
+            "dimension_namespace_uris": (
+                ("us-gaap:AwardTypeAxis", "https://example.test/altered", member_uri),
+            )
+        }
+    )
+    assert fact_semantic_digest(report) != fact_semantic_digest(
+        report.model_copy(update={"facts": (altered,)})
+    )
+
+
 def test_parser_uses_deadline_worker_for_isolated_replay():
     report = parse_filing_offline(
         Path(__file__).parent / "fixtures" / "simple.xbrl",

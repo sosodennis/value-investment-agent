@@ -13,6 +13,11 @@ from fundamental_service.conditional_capital_preparation import (
     bind_conditional_capital_recipe,
 )
 from fundamental_service.contracts import CallerApprovalEnvelopeV1
+from fundamental_service.award_disclosures import AWARD_DISCLOSURE_FIELDS
+from fundamental_service.conditional_capital import (
+    ConditionalCapitalError,
+    assess_conditional_capital,
+)
 from fundamental_service.facts import FilesystemCanonicalFactRepository
 from fundamental_service.original_source_plan import AutomaticSourcePlanConfigurationV1
 from fundamental_service.serialization import canonical_bytes, sha256_digest
@@ -64,6 +69,40 @@ def test_automatic_binding_retains_all_hypotheses_and_order_independent_digests(
     second = bind_conditional_capital_recipe(value, facts[::-1], snapshot=snapshot)
     assert canonical_bytes(first) == canonical_bytes(second)
     assert b"fact_id" not in canonical_bytes(value)
+
+
+def test_aggregate_award_support_does_not_assert_complete_inventory_or_allocate_cost():
+    policy, facts, snapshot = _case()
+    instrument = next(f for f in facts if f.normalized_field == "equity_award_quantity")
+    aggregates = tuple(
+        instrument.model_copy(update={"fact_id": field, "normalized_field": field})
+        for field in AWARD_DISCLOSURE_FIELDS
+    )
+    facts = (*tuple(f for f in facts if f != instrument), *aggregates)
+    binding = bind_conditional_capital_recipe(recipe(policy), facts, snapshot=snapshot)
+    assert not binding.issue_codes
+    assert {ref.fact_id for ref in binding.policy.supporting_observations} == {
+        fact.fact_id for fact in aggregates
+    }
+    assert binding.policy.complete_award_inventory is False
+    assert {
+        "complete_award_inventory",
+        "compensation_allocation",
+        "per_strike_inventory",
+    } <= set(binding.policy.unknowns)
+    # Supporting aggregates never change the explicit hypothetical share operands.
+    assert binding.policy.scenarios == policy.scenarios
+    assert binding == bind_conditional_capital_recipe(
+        recipe(policy), facts[::-1], snapshot=snapshot
+    )
+    dropped = binding.policy.model_copy(
+        update={"supporting_observations": binding.policy.supporting_observations[:1]}
+    )
+    with pytest.raises(ConditionalCapitalError) as error:
+        assess_conditional_capital(
+            dropped, facts, snapshot=snapshot, mapping_version=policy.mapping_version
+        )
+    assert error.value.code == "CONDITIONAL_CAPITAL_AWARD_OBSERVATIONS_UNBOUND"
 
 
 @pytest.mark.parametrize(
@@ -137,6 +176,9 @@ def test_conditional_source_profile_keeps_observed_roles_required(composite):
         UNRESOLVED_CAPITAL_FIELDS
     )
     assert set(UNRESOLVED_CAPITAL_FIELDS) <= set(profile.supporting_fact_fields)
+    assert set(AWARD_DISCLOSURE_FIELDS) <= set(profile.supporting_fact_fields)
+    assert not set(AWARD_DISCLOSURE_FIELDS) & set(legacy.supporting_fact_fields)
+    assert profile.profile_id != legacy.profile_id
     assert automatic_source_requirements_profile("fcff_dcf", profile.digest) == profile
     assert profile.supported_history_threshold is None
 

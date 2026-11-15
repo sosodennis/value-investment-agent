@@ -22,6 +22,7 @@ from .contracts import (
     SourceSnapshotV1,
     SourceRecordV1,
 )
+from .conditional_capital_contracts import CAPITAL_SUPPORTING_AWARD_FIELDS
 from .automatic_mapping import verify_automatic_mapping_replay
 from .automatic_market_policy_evidence import (
     AUTOMATIC_MARKET_POLICY_ROLE,
@@ -611,7 +612,8 @@ class DataReleaseCanaryRunner:
                 ) from error
             return
         has_award_facts = any(
-            self._facts.get(ref.fact_id).normalized_field in AWARD_FACT_FIELDS
+            self._facts.get(ref.fact_id).normalized_field
+            in CAPITAL_SUPPORTING_AWARD_FIELDS
             for snapshot in manifest.snapshot_refs
             for ref in snapshot.facts
         )
@@ -638,7 +640,7 @@ class DataReleaseCanaryRunner:
                 declared_awards = {
                     fact.fact_id
                     for fact in facts
-                    if fact.normalized_field in AWARD_FACT_FIELDS
+                    if fact.normalized_field in CAPITAL_SUPPORTING_AWARD_FIELDS
                 }
                 if evidence is None:
                     if declared_awards:

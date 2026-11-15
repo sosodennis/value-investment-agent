@@ -66,8 +66,8 @@ from .taxonomy_evidence import require_original_taxonomy
 from .standard_accounting_representations import standard_accounting_representation
 
 AUTOMATIC_MAPPING_INPUT_ROLE = "automatic-mapping-input-v1"
-AutomaticMappingPolicyVersion = Literal["source-bound-us-gaap-v39"]
-AUTOMATIC_MAPPING_POLICY: AutomaticMappingPolicyVersion = "source-bound-us-gaap-v39"
+AutomaticMappingPolicyVersion = Literal["source-bound-us-gaap-v40"]
+AUTOMATIC_MAPPING_POLICY: AutomaticMappingPolicyVersion = "source-bound-us-gaap-v40"
 _GAAP_NAMESPACE = re.compile(
     r"http://(?:fasb\.org|xbrl\.us)/us-gaap/\d{4}(?:-\d{2}-\d{2})?"
 )
@@ -231,6 +231,8 @@ def automatic_mapping_policy_digest() -> str:
                     "xbrl_precision.py",
                     "current_debt_mapping.py",
                     "common_stock_mapping.py",
+                    "award_disclosures.py",
+                    "award_disclosure_mapping.py",
                     "standard_accounting_representations.py",
                     "sec_rebuild.py",
                     "issuer_release_evidence.py",
