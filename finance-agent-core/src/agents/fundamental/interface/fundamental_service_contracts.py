@@ -17,8 +17,6 @@ from pydantic import (
     model_validator,
 )
 
-from src.shared.internal_services import INTERNAL_CONTRACT_VERSION
-
 
 class FundamentalIdentityResolutionRequestV1(BaseModel):
     """Agent-owned request projection for selected-ticker identity resolution."""
@@ -121,7 +119,7 @@ class FundamentalServiceResponseV1(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     correlation_id: str = Field(min_length=1, max_length=128)
-    contract_version: Literal[INTERNAL_CONTRACT_VERSION]
+    contract_version: Literal["internal.v1"]
     schema_version: Literal["fundamental.v1"]
     result: dict[str, object]
 
@@ -132,7 +130,7 @@ class FundamentalServiceErrorV1(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     correlation_id: str = Field(min_length=1, max_length=128)
-    contract_version: Literal[INTERNAL_CONTRACT_VERSION]
+    contract_version: Literal["internal.v1"]
     error: dict[str, object]
 
 
@@ -290,6 +288,15 @@ class FundamentalValuationPreparationResultV1(BaseModel):
     input: dict[str, object] | None = None
     preparation_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
     equity_dilution: dict[str, object] | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
+    conditional_capital: dict[str, JsonValue] | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
+    conditional_quote: dict[str, JsonValue] | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
+    conditional_operating: dict[str, JsonValue] | None = Field(
         default=None, exclude_if=lambda value: value is None
     )
 

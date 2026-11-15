@@ -48,6 +48,13 @@ jobs:
           PYTHONHASHSEED: "0"
         run: uv run --frozen --extra dev --project fundamental-service pytest fundamental-service/tests -ra
 
+      - name: Verify Fundamental Service and typed caller preparation boundary
+        env:
+          PYTHONPATH: finance-agent-core:fundamental-service/tests
+        run: >
+          uv run --frozen --extra dev --project fundamental-service pytest
+          scripts/tests/test_fundamental_preparation_boundary.py -q
+
       - name: Check Fundamental Service lint
         run: uvx --from ruff==0.14.10 ruff check fundamental-service
 
