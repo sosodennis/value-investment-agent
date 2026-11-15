@@ -668,6 +668,31 @@ expense: a lease paid off during the year could have expense and no closing
 balance. No award, market input, release, caller approval or verified valuation
 is inferred. The remaining gaps stay visible and history thresholds remain null.
 
+### Direct observations at reported precision
+
+Automatic policy `source-bound-us-gaap-v31` uses the existing
+`sec_rebuild.parsed_facts_to_candidates` and `facts.select_fact` owners before
+admitting direct observations of the same concept and period. A filing can
+report a rounded narrative amount alongside a more precise statement amount.
+The canonical selector determines the admitted value and precision; equally
+precise disagreement still refuses. Lower-precision observations retain their
+original bytes and an explicit `MAPPING_OBSERVATION_LOWER_PRECISION` disposition.
+Equivalent contexts at the selected precision remain source evidence.
+
+This rule runs after the existing namespace, issuer, unit, period and dimension
+checks. It does not weaken original integrity, taxonomy or security validation,
+the separate conflict check across alternative concepts, or computed accounting
+perimeters. It adds no issuer or accession registration. New machine signatures
+must bind the executable v31 policy digest; an older approval cannot authorize
+the new decision.
+
+The canonical candidate contract currently represents both an unavailable
+decimals value and XBRL `INF` as `None`. Admission therefore refuses a group
+mixing `INF` and finite precision with
+`MAPPING_PRECISION_MIXED_EXACT_UNSUPPORTED`. Missing precision is already rejected
+by the direct observation boundary. This policy does not invent a second
+precision ranking or treat exact values as imprecise observations.
+
 ### Registered NVE current liability principal partition
 
 Automatic policy `source-bound-us-gaap-v11` moves the shared residual evaluator

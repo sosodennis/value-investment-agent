@@ -25,7 +25,7 @@ from .data_releases import (
     DataReleaseError,
     ReleaseModel,
 )
-from .facts import CanonicalMappingV1, MappingObservationScopeV1
+from .facts import CanonicalMappingV1, MappingObservationScopeV1, select_fact
 from .issuer_release_evidence import verify_original_bytes, verify_original_integrity
 from .issuer_identity import IdentityResolutionError, validate_original_filing_identity
 from .lease_liability_mapping import lease_liability_concept, select_lease_liability
@@ -61,11 +61,13 @@ from .registered_revenue import (
     select_registered_revenue,
 )
 from .serialization import sha256_digest
+from .sec_rebuild import parsed_facts_to_candidates
+from .snapshots import SnapshotError
 from .taxonomy_evidence import require_original_taxonomy
 
 AUTOMATIC_MAPPING_INPUT_ROLE = "automatic-mapping-input-v1"
-AutomaticMappingPolicyVersion = Literal["source-bound-us-gaap-v30"]
-AUTOMATIC_MAPPING_POLICY: AutomaticMappingPolicyVersion = "source-bound-us-gaap-v30"
+AutomaticMappingPolicyVersion = Literal["source-bound-us-gaap-v31"]
+AUTOMATIC_MAPPING_POLICY: AutomaticMappingPolicyVersion = "source-bound-us-gaap-v31"
 _GAAP_NAMESPACE = re.compile(
     r"http://(?:fasb\.org|xbrl\.us)/us-gaap/\d{4}(?:-\d{2}-\d{2})?"
 )
@@ -446,6 +448,58 @@ class AutomaticMappingDecisionV1(ReleaseModel):
         return self
 
 
+def _prefer_direct_precision(
+    request: AutomaticMappingRequestV1, observations: list[ParsedXbrlFactV1]
+) -> tuple[list[ParsedXbrlFactV1], list[MappingObservationRejectionV1], set[str]]:
+    groups: dict[
+        tuple[str, date | None, date | None, date | None], list[ParsedXbrlFactV1]
+    ] = {}
+    for fact in observations:
+        key = (fact.concept, fact.period_start, fact.period_end, fact.instant)
+        groups.setdefault(key, []).append(fact)
+    selected: list[ParsedXbrlFactV1] = []
+    rejected: list[MappingObservationRejectionV1] = []
+    reasons: set[str] = set()
+    original = request.original
+    for facts in groups.values():
+        if any(fact.decimals == "INF" for fact in facts) and any(
+            fact.decimals != "INF" for fact in facts
+        ):
+            reasons.add("MAPPING_PRECISION_MIXED_EXACT_UNSUPPORTED")
+            continue
+        try:
+            candidates = parsed_facts_to_candidates(
+                original.report.model_copy(update={"facts": tuple(facts)}),
+                source=original.source,
+                issuer_id=original.source.cik,
+                normalized_field=request.proposal.normalized_field,
+            )
+            selection = select_fact(
+                candidates, valuation_timestamp=original.decision_at
+            )
+        except SnapshotError as error:
+            reasons.add(error.code)
+            continue
+        if selection.fact is None:
+            reasons.add("MAPPING_OBSERVATION_CONFLICT")
+            continue
+        for fact in facts:
+            decimals = None if fact.decimals == "INF" else int(fact.decimals or "0")
+            if (
+                Decimal(fact.value) == selection.fact.value
+                and decimals == selection.fact.decimals
+            ):
+                selected.append(fact)
+            else:
+                rejected.append(
+                    MappingObservationRejectionV1(
+                        observation_digest=sha256_digest(fact),
+                        reason_code="MAPPING_OBSERVATION_LOWER_PRECISION",
+                    )
+                )
+    return selected, rejected, reasons
+
+
 def _observation_rejection(
     fact: ParsedXbrlFactV1, request: AutomaticMappingRequestV1, rule: DirectMappingRule
 ) -> str | None:
@@ -802,6 +856,12 @@ def evaluate_automatic_mapping(
             selected.append(fact)
     if not selected:
         reasons.add("MAPPING_NO_ELIGIBLE_OBSERVATIONS")
+    if not computed and selected and not reasons:
+        selected, precision_rejections, precision_reasons = _prefer_direct_precision(
+            request, selected
+        )
+        rejected.extend(precision_rejections)
+        reasons.update(precision_reasons)
     periods: dict[tuple[object, ...], set[Decimal]] = {}
     for fact in () if computed else selected:
         key = (fact.period_start, fact.period_end, fact.instant)
