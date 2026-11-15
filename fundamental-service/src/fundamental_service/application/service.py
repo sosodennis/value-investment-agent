@@ -18,6 +18,7 @@ from ..calculator import (
 )
 from ..contracts import (
     ArtifactReferenceV1,
+    CanonicalFactV1,
     CalculationArtifactV1,
     CalculationEvidenceV1,
     CalculationTraceV1,
@@ -50,6 +51,7 @@ from ..data_releases import (
 from ..facts import (
     CanonicalFactRepository,
     canonical_fact_digest,
+    resolve_canonical_facts,
     verify_accounting_role_evidence,
 )
 from ..equity_award_evidence import (
@@ -642,6 +644,49 @@ class FundamentalApplication:
             )
         return ActiveDataReleaseWithManifestV1(active=active, manifest=manifest)
 
+    def _release_snapshot_facts(
+        self, manifest: DataReleaseManifestV1, snapshot: SourceSnapshotV1
+    ) -> tuple[CanonicalFactV1, ...]:
+        assert self.fact_repository is not None
+        declared_snapshot = next(
+            (
+                reference
+                for reference in manifest.snapshot_refs
+                if reference.snapshot_id == snapshot.snapshot_id
+            ),
+            None,
+        )
+        if (
+            declared_snapshot is None
+            or declared_snapshot.manifest_digest != snapshot.manifest_digest
+        ):
+            raise ServiceError(
+                "DATA_RELEASE_SNAPSHOT_MISMATCH",
+                "the snapshot does not match the pinned data release",
+                status_code=409,
+                retryable=False,
+            )
+        facts = []
+        try:
+            for reference in declared_snapshot.facts:
+                fact = self.fact_repository.get(reference.fact_id)
+                if canonical_fact_digest(fact) != reference.fact_digest:
+                    raise ServiceError(
+                        "DATA_RELEASE_FACT_MISMATCH",
+                        "a canonical fact does not match the pinned data release",
+                        status_code=409,
+                        retryable=False,
+                    )
+                facts.append(fact)
+        except SnapshotError as error:
+            raise ServiceError(
+                "FACT_NOT_FOUND",
+                "a release-declared canonical fact is unavailable",
+                status_code=404,
+                retryable=False,
+            ) from error
+        return tuple(facts)
+
     @staticmethod
     def _verify_release_snapshot_and_facts(
         manifest: DataReleaseManifestV1,
@@ -1056,17 +1101,25 @@ class FundamentalApplication:
                 retryable=True,
             )
         snapshot = self.snapshot(request.snapshot_id)
-        try:
-            facts = self.fact_repository.resolve(
-                snapshot=snapshot,
-                valuation_timestamp=snapshot.valuation_timestamp,
-                required_fields=request.required_fields,
-            )
-        except SnapshotError as error:
-            raise _snapshot_error(error) from error
         release_manifest = self._data_release_manifest(
             request.data_release_manifest_digest
         )
+        try:
+            if release_manifest is None:
+                facts = self.fact_repository.resolve(
+                    snapshot=snapshot,
+                    valuation_timestamp=snapshot.valuation_timestamp,
+                    required_fields=request.required_fields,
+                )
+            else:
+                facts = resolve_canonical_facts(
+                    self._release_snapshot_facts(release_manifest, snapshot),
+                    snapshot=snapshot,
+                    valuation_timestamp=snapshot.valuation_timestamp,
+                    required_fields=request.required_fields,
+                )
+        except SnapshotError as error:
+            raise _snapshot_error(error) from error
         if release_manifest is not None:
             self._verify_release_snapshot_and_facts(
                 release_manifest,
@@ -1106,24 +1159,7 @@ class FundamentalApplication:
             raise ServiceError(
                 error.code, str(error), status_code=422, retryable=False
             ) from error
-        declared_snapshot = next(
-            (
-                reference
-                for reference in manifest.snapshot_refs
-                if reference.snapshot_id == snapshot.snapshot_id
-            ),
-            None,
-        )
-        if (
-            declared_snapshot is None
-            or declared_snapshot.manifest_digest != snapshot.manifest_digest
-        ):
-            raise ServiceError(
-                "DATA_RELEASE_SNAPSHOT_MISMATCH",
-                "the snapshot does not match the pinned data release",
-                status_code=409,
-                retryable=False,
-            )
+        facts = self._release_snapshot_facts(manifest, snapshot)
 
         try:
             working_capital_inputs = valuation_release_working_capital_inputs(
@@ -1132,32 +1168,6 @@ class FundamentalApplication:
         except DataReleaseError as error:
             raise ServiceError(
                 error.code, str(error), status_code=422, retryable=False
-            ) from error
-
-        facts = []
-        declared_digests = {
-            reference.fact_id: reference.fact_digest
-            for reference in declared_snapshot.facts
-        }
-        try:
-            for fact_id, expected_digest in declared_digests.items():
-                fact = self.fact_repository.get(fact_id)
-                if canonical_fact_digest(fact) != expected_digest:
-                    raise ServiceError(
-                        "DATA_RELEASE_FACT_MISMATCH",
-                        "a canonical fact does not match the pinned data release",
-                        status_code=409,
-                        retryable=False,
-                    )
-                facts.append(fact)
-        except ServiceError:
-            raise
-        except SnapshotError as error:
-            raise ServiceError(
-                "FACT_NOT_FOUND",
-                "a release-declared canonical fact is unavailable",
-                status_code=404,
-                retryable=False,
             ) from error
 
         selection = select_released_facts(
@@ -1562,7 +1572,9 @@ class FundamentalApplication:
             if cache_status == "hit" and isinstance(
                 cached_resolution, SnapshotResolutionV1
             ):
-                self.snapshot(cached_resolution.snapshot_id)
+                self._release_snapshot_facts(
+                    manifest, self.snapshot(cached_resolution.snapshot_id)
+                )
                 self.metrics.increment("cache_hit_total")
                 return cached_resolution
             if cache_status == "hit":
@@ -1602,27 +1614,25 @@ class FundamentalApplication:
         selector_requested = request.fiscal_period_selector is not None
         for snapshot in candidates:
             snapshot = self.snapshot(snapshot.snapshot_id)
-            declared_snapshot = (
-                None
-                if declared_snapshots is None
-                else declared_snapshots[snapshot.snapshot_id]
+            released_facts = (
+                self._release_snapshot_facts(active_release.manifest, snapshot)
+                if active_release is not None
+                else None
             )
-            if (
-                declared_snapshot is not None
-                and snapshot.manifest_digest != declared_snapshot.manifest_digest
-            ):
-                raise ServiceError(
-                    "DATA_RELEASE_SNAPSHOT_MISMATCH",
-                    "a release snapshot does not match its declared manifest",
-                    status_code=409,
-                    retryable=False,
-                )
             try:
-                facts = self.fact_repository.resolve(
-                    snapshot=snapshot,
-                    valuation_timestamp=request.valuation_timestamp,
-                    required_fields=request.required_fields,
-                )
+                if released_facts is None:
+                    facts = self.fact_repository.resolve(
+                        snapshot=snapshot,
+                        valuation_timestamp=request.valuation_timestamp,
+                        required_fields=request.required_fields,
+                    )
+                else:
+                    facts = resolve_canonical_facts(
+                        released_facts,
+                        snapshot=snapshot,
+                        valuation_timestamp=request.valuation_timestamp,
+                        required_fields=request.required_fields,
+                    )
             except SnapshotError as error:
                 if error.code == "FACT_NOT_FOUND":
                     continue
@@ -1630,16 +1640,20 @@ class FundamentalApplication:
             period_resolution = None
             resolved_periods: tuple[ResolvedFiscalPeriodV1, ...] = ()
             if selector_requested:
-                list_facts = getattr(self.fact_repository, "list", None)
-                if not callable(list_facts):
-                    raise ServiceError(
-                        "FISCAL_PERIODS_UNAVAILABLE",
-                        "the fact repository cannot resolve issuer fiscal periods",
-                        status_code=503,
-                        retryable=True,
-                    )
+                if released_facts is None:
+                    list_facts = getattr(self.fact_repository, "list", None)
+                    if not callable(list_facts):
+                        raise ServiceError(
+                            "FISCAL_PERIODS_UNAVAILABLE",
+                            "the fact repository cannot resolve issuer fiscal periods",
+                            status_code=503,
+                            retryable=True,
+                        )
+                    period_facts = list_facts()
+                else:
+                    period_facts = released_facts
                 selection = resolve_fiscal_periods(
-                    list_facts(),
+                    period_facts,
                     snapshot=snapshot,
                     valuation_timestamp=request.valuation_timestamp,
                     selector=fiscal_selector,
@@ -1656,8 +1670,7 @@ class FundamentalApplication:
                         retryable=False,
                     )
                 facts = selection.facts
-            if declared_snapshot is not None:
-                assert active_release is not None
+            if active_release is not None:
                 self._verify_release_snapshot_and_facts(
                     active_release.manifest,
                     snapshot,

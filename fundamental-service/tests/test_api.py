@@ -103,6 +103,8 @@ class _SnapshotRepository:
                 SimpleNamespace(
                     content_hash="a" * 64,
                     available_at=datetime(2025, 1, 1, tzinfo=UTC),
+                    is_amendment=False,
+                    amendment_scope=None,
                 ),
             ),
             manifest_digest="b" * 64,
@@ -1734,7 +1736,7 @@ def test_snapshot_resolution_pins_only_active_release_facts():
     )
     app = create_app(
         _ReleaseSnapshotRepository(decoy, snapshot),
-        fact_repository=_FactRepository(),
+        fact_repository=_CanonicalFactRepository(),
         metadata_store=metadata,
         config=OperationsConfig(service_token=TEST_SERVICE_TOKEN),
     )
@@ -2031,9 +2033,13 @@ def test_snapshot_resolution_cache_isolated_by_active_release_dependencies():
         )
     )
     fact_repository = SimpleNamespace(
+        get={
+            first_fact.fact_id: first_fact,
+            second_fact.fact_id: second_fact,
+        }.__getitem__,
         resolve=lambda *, snapshot, valuation_timestamp, required_fields: (
             facts_by_snapshot[snapshot.snapshot_id]
-        )
+        ),
     )
     app = create_app(
         _ReleaseSnapshotRepository(first_snapshot, second_snapshot),
