@@ -67,6 +67,8 @@ def bind_conditional_capital_recipe(
     if len({fact.fact_id for fact in facts}) != len(facts):
         issues.add("CONDITIONAL_CAPITAL_FACT_CONFLICT")
     for role in OBSERVED_CAPITAL_FIELDS:
+        if role in recipe.hypothetical_balance_fields:
+            continue
         candidates = tuple(fact for fact in facts if fact.normalized_field == role)
         instants = tuple(
             fact.instant for fact in candidates if fact.instant is not None
@@ -114,7 +116,7 @@ def bind_conditional_capital_recipe(
                 period_end=period,
                 observations={role: reference(fact) for role, fact in selected.items()},
                 supporting_observations=tuple(reference(fact) for fact in awards),
-                unknowns=CAPITAL_UNKNOWNS,
+                unknowns=(*CAPITAL_UNKNOWNS, *recipe.hypothetical_balance_fields),
             )
             assessment = assess_conditional_capital(
                 policy, facts, snapshot=snapshot, mapping_version=recipe.mapping_version

@@ -6,6 +6,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
+from itertools import combinations
 
 from pydantic import Field, model_validator
 
@@ -22,6 +23,11 @@ from .equity_dilution import AWARD_FACT_FIELDS
 from .conditional_capital_contracts import (
     CONDITIONAL_CAPITAL_POLICY,
     UNRESOLVED_CAPITAL_FIELDS,
+)
+from .conditional_capital_balances import (
+    CAPITAL_BALANCE_HYPOTHESES,
+    CAPITAL_BALANCE_ROLES,
+    CapitalBalanceRole,
 )
 from .conditional_reinvestment_contracts import (
     CONDITIONAL_REINVESTMENT_POLICY,
@@ -317,10 +323,23 @@ def composite_working_capital_requirements_profile(
 
 
 def conditional_capital_requirements_profile(
-    model_id: str, *, composite_inputs: bool = False
+    model_id: str,
+    *,
+    composite_inputs: bool = False,
+    hypothetical_balance_fields: tuple[CapitalBalanceRole, ...] = (),
 ) -> ValuationRequirementsProfileV1:
     """Require observed balances while retaining unresolved claims as evidence."""
 
+    if hypothetical_balance_fields != tuple(
+        sorted(set(hypothetical_balance_fields))
+    ) or not set(hypothetical_balance_fields) <= set(CAPITAL_BALANCE_ROLES):
+        raise ValueError("hypothetical balances require canonical supported roles")
+    unknowns = (*UNRESOLVED_CAPITAL_FIELDS, *hypothetical_balance_fields)
+    version = (
+        f"{CAPITAL_BALANCE_HYPOTHESES}-{'-'.join(hypothetical_balance_fields)}"
+        if hypothetical_balance_fields
+        else CONDITIONAL_CAPITAL_POLICY
+    )
     exact = (
         composite_working_capital_requirements_profile(model_id, operating_only=False)
         if composite_inputs
@@ -329,16 +348,16 @@ def conditional_capital_requirements_profile(
     return ValuationRequirementsProfileV1.model_validate(
         exact.model_dump()
         | {
-            "profile_id": f"{exact.profile_id}-{CONDITIONAL_CAPITAL_POLICY}",
-            "profile_version": CONDITIONAL_CAPITAL_POLICY,
+            "profile_id": f"{exact.profile_id}-{version}",
+            "profile_version": version,
             "point_in_time_fact_fields": tuple(
                 field
                 for field in exact.point_in_time_fact_fields
-                if field not in UNRESOLVED_CAPITAL_FIELDS
+                if field not in unknowns
             ),
             "supporting_fact_fields": (
                 *exact.supporting_fact_fields,
-                *UNRESOLVED_CAPITAL_FIELDS,
+                *unknowns,
             ),
         }
     )
@@ -350,22 +369,29 @@ def source_preparation_requirements_profile(
     composite_inputs: bool = False,
     conditional_capital: bool = False,
     conditional_reinvestment: bool = False,
+    hypothetical_balance_fields: tuple[CapitalBalanceRole, ...] = (),
 ) -> ValuationRequirementsProfileV1:
     """Acquire optional exclusion roles while retaining every unsupported role."""
 
+    if hypothetical_balance_fields and not conditional_capital:
+        raise ValueError("hypothetical balances require a conditional capital policy")
     if conditional_reinvestment:
         if composite_inputs:
             raise ValueError(
                 "forward reinvestment excludes historical composite inputs"
             )
         return conditional_reinvestment_requirements_profile(
-            model_id, conditional_capital=conditional_capital
+            model_id,
+            conditional_capital=conditional_capital,
+            hypothetical_balance_fields=hypothetical_balance_fields,
         )
     if not composite_inputs and not conditional_capital:
         return valuation_requirements_profile(model_id)
     profile = (
         conditional_capital_requirements_profile(
-            model_id, composite_inputs=composite_inputs
+            model_id,
+            composite_inputs=composite_inputs,
+            hypothetical_balance_fields=hypothetical_balance_fields,
         )
         if conditional_capital
         else composite_working_capital_requirements_profile(
@@ -399,12 +425,19 @@ def source_preparation_requirements_profile(
 
 
 def conditional_reinvestment_requirements_profile(
-    model_id: str, *, conditional_capital: bool = False
+    model_id: str,
+    *,
+    conditional_capital: bool = False,
+    hypothetical_balance_fields: tuple[CapitalBalanceRole, ...] = (),
 ) -> ValuationRequirementsProfileV1:
     """Keep observed capital requirements; retain unknown historical roles as support."""
 
+    if hypothetical_balance_fields and not conditional_capital:
+        raise ValueError("hypothetical balances require a conditional capital policy")
     exact = (
-        conditional_capital_requirements_profile(model_id)
+        conditional_capital_requirements_profile(
+            model_id, hypothetical_balance_fields=hypothetical_balance_fields
+        )
         if conditional_capital
         else valuation_requirements_profile(model_id)
     )
@@ -430,23 +463,29 @@ def automatic_source_requirements_profile(
 ) -> ValuationRequirementsProfileV1:
     """Resolve a digest against the service-owned source profiles only."""
 
-    for composite_inputs in (False, True):
-        for conditional_capital in (False, True):
+    scopes = tuple(
+        combination
+        for size in range(len(CAPITAL_BALANCE_ROLES) + 1)
+        for combination in combinations(CAPITAL_BALANCE_ROLES, size)
+    )
+    for composite_inputs, conditional_reinvestment in (
+        (False, False),
+        (True, False),
+        (False, True),
+    ):
+        for conditional_capital, scope in (
+            (False, ()),
+            *((True, scope) for scope in scopes),
+        ):
             profile = source_preparation_requirements_profile(
                 model_id,
                 composite_inputs=composite_inputs,
                 conditional_capital=conditional_capital,
+                conditional_reinvestment=conditional_reinvestment,
+                hypothetical_balance_fields=scope,
             )
             if profile.digest == requirements_digest:
                 return profile
-    for conditional_capital in (False, True):
-        profile = source_preparation_requirements_profile(
-            model_id,
-            conditional_capital=conditional_capital,
-            conditional_reinvestment=True,
-        )
-        if profile.digest == requirements_digest:
-            return profile
     raise ValueError("automatic acquisition requires exact service model requirements")
 
 

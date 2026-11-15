@@ -4,11 +4,13 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from decimal import Decimal
+from typing import Literal
 
 from .capital_bridge_policy import (
     CapitalBridgePolicyError,
     require_disjoint_non_operating_assets,
 )
+from .conditional_capital_balances import CapitalBalanceRole
 from .conditional_capital_contracts import (
     ConditionalCapitalPolicyV1,
     ConditionalCapitalAssessmentV1,
@@ -200,8 +202,17 @@ def assess_conditional_capital(
                 )
         selected.append(fact)
     if any(
-        fact.normalized_field in UNRESOLVED_CAPITAL_FIELDS
-        and fact.instant == policy.period_end
+        (
+            fact.normalized_field in UNRESOLVED_CAPITAL_FIELDS
+            and fact.instant == policy.period_end
+            or fact.normalized_field in policy.hypothetical_balance_fields
+            and fact.instant is not None
+            and fact.instant >= policy.period_end
+            and fact.instant <= policy.valuation_timestamp.date()
+            and fact.available_at <= policy.valuation_timestamp
+            and fact.source.available_at <= policy.valuation_timestamp
+            and fact.source.content_hash in sources
+        )
         and fact.quality is QualityStatus.VERIFIED
         and isinstance(fact.value, Decimal)
         for fact in facts
@@ -210,21 +221,37 @@ def assess_conditional_capital(
             "CONDITIONAL_CAPITAL_OBSERVED_CLAIM_CONFLICT",
             "an observed claim cannot be replaced by an unresolved hypothesis",
         )
-    try:
-        require_disjoint_non_operating_assets(
-            {role: by_id[ref.fact_id] for role, ref in policy.observations.items()},
-            facts,
-            snapshot,
+    if "non_operating_assets" in policy.observations:
+        try:
+            require_disjoint_non_operating_assets(
+                {role: by_id[ref.fact_id] for role, ref in policy.observations.items()},
+                facts,
+                snapshot,
+            )
+        except CapitalBridgePolicyError as error:
+            raise ConditionalCapitalError(error.code, str(error)) from error
+    balances = (
+        {row.name: row.values for row in policy.balance_hypotheses.scenarios}
+        if policy.balance_hypotheses is not None
+        else {}
+    )
+
+    def amount(
+        role: CapitalBalanceRole, scenario: Literal["base", "downside", "upside"]
+    ) -> Decimal:
+        return (
+            balances[scenario][role]
+            if role in policy.hypothetical_balance_fields
+            else values[role]
         )
-    except CapitalBridgePolicyError as error:
-        raise ConditionalCapitalError(error.code, str(error)) from error
+
     scenarios = tuple(
         ConditionalCapitalScenarioV1(
             hypothesis=scenario,
             bridge=CapitalBridgeAssumptionsV1(
                 cash=values["cash_and_equivalents"],
-                non_operating_assets=values["non_operating_assets"],
-                debt=values["current_interest_bearing_debt"]
+                non_operating_assets=amount("non_operating_assets", scenario.name),
+                debt=amount("current_interest_bearing_debt", scenario.name)
                 + values["long_term_interest_bearing_debt"]
                 + (
                     scenario.convertible.additional_debt
@@ -234,7 +261,9 @@ def assess_conditional_capital(
                 preferred_stock=scenario.preferred_claims,
                 lease_liabilities=values["current_finance_lease_liabilities"]
                 + values["long_term_finance_lease_liabilities"],
-                non_controlling_interest=values["noncontrolling_interests"],
+                non_controlling_interest=amount(
+                    "noncontrolling_interests", scenario.name
+                ),
                 diluted_shares=values["common_shares_outstanding"]
                 + scenario.incremental_award_shares
                 + scenario.other_common_equivalent_shares

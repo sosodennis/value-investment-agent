@@ -1138,11 +1138,19 @@ def _prepare_automatic_valuation(
     facts = tuple(facts)
     profile = (
         conditional_reinvestment_requirements_profile(
-            model_id, conditional_capital=conditional_capital_policy is not None
+            model_id,
+            conditional_capital=conditional_capital_policy is not None,
+            hypothetical_balance_fields=(
+                conditional_capital_policy.hypothetical_balance_fields
+                if conditional_capital_policy is not None
+                else ()
+            ),
         )
         if conditional_reinvestment_policy is not None
         else conditional_capital_requirements_profile(
-            model_id, composite_inputs=bool(working_capital_inputs)
+            model_id,
+            composite_inputs=bool(working_capital_inputs),
+            hypothetical_balance_fields=conditional_capital_policy.hypothetical_balance_fields,
         )
         if conditional_capital_policy is not None
         else composite_working_capital_requirements_profile(

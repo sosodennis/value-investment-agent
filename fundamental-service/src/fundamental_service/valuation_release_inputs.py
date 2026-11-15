@@ -49,6 +49,7 @@ def valuation_release_requirements(
         profile = conditional_capital_requirements_profile(
             model_id,
             composite_inputs=manifest.valuation_working_capital_policy is not None,
+            hypothetical_balance_fields=policies[0].hypothetical_balance_fields,
         )
     if (
         manifest.valuation_working_capital_policy is not None
@@ -76,6 +77,11 @@ def _conditional_release_policies(
         ) from error
     digests = tuple(policy.snapshot_manifest_digest for policy in policies)
     declared = {ref.manifest_digest: ref for ref in manifest.snapshot_refs}
+    if len({policy.hypothetical_balance_fields for policy in policies}) != 1:
+        raise DataReleaseError(
+            "DATA_RELEASE_CONDITIONAL_CAPITAL_POLICY_MISMATCH",
+            "release snapshots require the same hypothetical balance roles",
+        )
     if (
         digests != tuple(sorted(set(digests)))
         or set(digests) != set(declared)

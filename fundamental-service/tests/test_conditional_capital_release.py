@@ -41,7 +41,8 @@ from test_preparation_runner import _reviewed_candidate
 from test_valuation_release_inputs import _valuation_fixture, _manifest_with
 
 
-def _conditional_fixture(tmp_path, *, sec_profile=False):
+def _conditional_fixture(tmp_path, *, sec_profile=False, balance_hypotheses=None):
+    balance_fields = balance_hypotheses.unknown_fields if balance_hypotheses else ()
     fixture = _valuation_fixture(tmp_path, sec_profile=sec_profile)
     payload = fixture.snapshot.model_dump(exclude={"manifest_digest"})
     payload["source_records"] = tuple(
@@ -56,7 +57,11 @@ def _conditional_fixture(tmp_path, *, sec_profile=False):
     )
     facts = []
     for fact in fixture.stored:
-        if fact.normalized_field in (*UNRESOLVED_CAPITAL_FIELDS, *AWARD_FACT_FIELDS):
+        if fact.normalized_field in (
+            *UNRESOLVED_CAPITAL_FIELDS,
+            *AWARD_FACT_FIELDS,
+            *balance_fields,
+        ):
             continue
         payload = fact.model_dump()
         payload["context"]["entity_scope"] = snapshot.identity.issuer_id
@@ -91,6 +96,7 @@ def _conditional_fixture(tmp_path, *, sec_profile=False):
             key=lambda fact: fact.instant,
         )
         for field in OBSERVED_CAPITAL_FIELDS
+        if field not in balance_fields
     }
 
     def reference(fact):
@@ -112,10 +118,12 @@ def _conditional_fixture(tmp_path, *, sec_profile=False):
                 for fact in facts
                 if fact.normalized_field in AWARD_FACT_FIELDS
             ),
+            "balance_hypotheses": balance_hypotheses,
+            "unknowns": (*template.unknowns, *balance_fields),
         }
     )
     profile = conditional_capital_requirements_profile(
-        "fcff_dcf", composite_inputs=True
+        "fcff_dcf", composite_inputs=True, hypothetical_balance_fields=balance_fields
     )
     fixture.manifest = _manifest_with(
         _release_manifest_for(snapshot, facts),

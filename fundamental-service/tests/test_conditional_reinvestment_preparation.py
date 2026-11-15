@@ -189,8 +189,17 @@ def test_configuration_refuses_incompatible_forward_recipe(tmp_path, fault):
         )
 
 
-def test_source_runner_binds_prepares_and_resumes_joint_forward_input(tmp_path):
-    fixture = composer_fixture(tmp_path, sec_profile=True)
+@pytest.mark.parametrize("with_balances", [False, True])
+def test_source_runner_binds_prepares_and_resumes_joint_forward_input(
+    tmp_path, with_balances
+):
+    from test_conditional_capital_balances import balance_hypotheses
+
+    fixture = composer_fixture(
+        tmp_path,
+        sec_profile=True,
+        balance_hypotheses=balance_hypotheses() if with_balances else None,
+    )
     plan = _plan(
         fixture,
         conditional_capital_recipe=capital_recipe(fixture.capital_policy),

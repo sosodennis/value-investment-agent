@@ -47,6 +47,7 @@ def recipe(policy):
                 "max_quote_age_seconds",
                 "limitations",
                 "scenarios",
+                "balance_hypotheses",
             }
         )
     )
@@ -140,15 +141,21 @@ def test_conditional_source_profile_keeps_observed_roles_required(composite):
     assert profile.supported_history_threshold is None
 
 
+@pytest.mark.parametrize("with_balances", [False, True])
 def test_saved_original_compiler_carries_deployment_recipe_without_fact_ids(
-    tmp_path, monkeypatch
+    tmp_path, monkeypatch, with_balances
 ):
+    from test_conditional_capital_balances import balance_hypotheses
+
     value = case(tmp_path, monkeypatch)
     prepared, _ = execute(value)
     policy, _, _ = _case()
     configured = configuration()
     capital = recipe(policy).model_copy(
-        update={"mapping_version": configured.mapping_version}
+        update={
+            "mapping_version": configured.mapping_version,
+            "balance_hypotheses": balance_hypotheses() if with_balances else None,
+        }
     )
     configured = type(configured).model_validate(
         configured.model_dump() | {"conditional_capital_recipe": capital}
@@ -160,7 +167,7 @@ def test_saved_original_compiler_carries_deployment_recipe_without_fact_ids(
         first.plan.ingestions[0].requirements_digest
         == first.plan.requirements_profile.digest
     )
-    assert not set(UNRESOLVED_CAPITAL_FIELDS) & set(
+    assert not {*UNRESOLVED_CAPITAL_FIELDS, *capital.hypothetical_balance_fields} & set(
         first.plan.ingestions[0].required_fields
     )
     assert not compiler.execute(request)[1].wrote

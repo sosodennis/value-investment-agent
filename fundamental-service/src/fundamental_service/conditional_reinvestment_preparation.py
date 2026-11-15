@@ -9,6 +9,7 @@ from .conditional_reinvestment import (
     ConditionalReinvestmentError,
     bind_conditional_reinvestment_recipe,
 )
+from .conditional_capital_balances import CapitalBalanceRole
 from .conditional_reinvestment_contracts import (
     REINVESTMENT_CORE_FIELDS,
     ConditionalReinvestmentAssessmentV1,
@@ -82,6 +83,7 @@ def prepare_conditional_reinvestment(
     snapshot: SourceSnapshotV1,
     artifacts: EvidenceArtifactStore,
     conditional_capital: bool = False,
+    hypothetical_balance_fields: tuple[CapitalBalanceRole, ...] = (),
 ) -> ConditionalReinvestmentBindingV1:
     """Use the owning source assessor and verify real assumption bytes on every call."""
 
@@ -134,7 +136,9 @@ def prepare_conditional_reinvestment(
         requirements = select_released_facts(
             selected,
             profile=conditional_reinvestment_requirements_profile(
-                recipe.model_id, conditional_capital=conditional_capital
+                recipe.model_id,
+                conditional_capital=conditional_capital,
+                hypothetical_balance_fields=hypothetical_balance_fields,
             ),
             snapshot=snapshot,
             valuation_timestamp=snapshot.valuation_timestamp,

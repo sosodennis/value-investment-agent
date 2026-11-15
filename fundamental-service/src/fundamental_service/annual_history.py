@@ -12,6 +12,7 @@ from .contracts import (
     QualityStatus,
     SourceSnapshotV1,
 )
+from .conditional_capital_balances import CAPITAL_BALANCE_ROLES
 from .operating_scenario_policy import UnconsumedBaselineCapexV1
 from .original_issuer import IssuerOperatingSourceV1, fact_matches_operating_identity
 from .valuation_requirements import (
@@ -119,7 +120,13 @@ def resolve_annual_history(
         profile.profile_version == WORKING_CAPITAL_INPUT_POLICY
         or profile
         == conditional_capital_requirements_profile(
-            profile.model_id, composite_inputs=True
+            profile.model_id,
+            composite_inputs=True,
+            hypothetical_balance_fields=tuple(
+                role
+                for role in CAPITAL_BALANCE_ROLES
+                if role not in profile.point_in_time_fact_fields
+            ),
         )
     )
     if working_capital_inputs and not aggregate_policy:

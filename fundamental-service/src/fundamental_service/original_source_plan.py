@@ -344,6 +344,11 @@ class AutomaticSourcePlanConfigurationV1(StrictModel):
             composite_inputs=self.working_capital_recipe_template is not None,
             conditional_capital=self.conditional_capital_recipe is not None,
             conditional_reinvestment=self.conditional_reinvestment_recipe is not None,
+            hypothetical_balance_fields=(
+                self.conditional_capital_recipe.hypothetical_balance_fields
+                if self.conditional_capital_recipe is not None
+                else ()
+            ),
         )
         for conditional in (
             self.conditional_capital_recipe,
@@ -494,6 +499,11 @@ class OriginalSourcePlan:
                 is not None,
                 conditional_reinvestment=configuration.conditional_reinvestment_recipe
                 is not None,
+                hypothetical_balance_fields=(
+                    configuration.conditional_capital_recipe.hypothetical_balance_fields
+                    if configuration.conditional_capital_recipe is not None
+                    else ()
+                ),
             )
             model = next(
                 model

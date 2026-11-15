@@ -119,7 +119,13 @@ def reinvestment_release_requirements(
             "capital and forward inputs must share one model/version and mapping",
         )
     profile = conditional_reinvestment_requirements_profile(
-        model_id, conditional_capital=bool(manifest.conditional_capital_policies)
+        model_id,
+        conditional_capital=bool(manifest.conditional_capital_policies),
+        hypothetical_balance_fields=(
+            manifest.conditional_capital_policies[0].hypothetical_balance_fields
+            if manifest.conditional_capital_policies
+            else ()
+        ),
     )
     if set(manifest.required_fields) != set(profile.required_fact_fields):
         raise DataReleaseError(

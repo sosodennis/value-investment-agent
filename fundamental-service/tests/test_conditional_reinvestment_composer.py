@@ -40,8 +40,11 @@ from test_preparation_runner import _reviewed_candidate
 from test_valuation_release_inputs import _client, _manifest_with, _prepare
 
 
-def _fixture(tmp_path, *, sec_profile=False):
-    fixture = _conditional_fixture(tmp_path, sec_profile=sec_profile)
+def _fixture(tmp_path, *, sec_profile=False, balance_hypotheses=None):
+    fixture = _conditional_fixture(
+        tmp_path, sec_profile=sec_profile, balance_hypotheses=balance_hypotheses
+    )
+    balance_fields = fixture.capital_policy.hypothetical_balance_fields
     payload = fixture.snapshot.model_dump(exclude={"manifest_digest"})
     payload["source_records"] = tuple(
         source.model_copy(update={"form": "10-K"})
@@ -55,7 +58,7 @@ def _fixture(tmp_path, *, sec_profile=False):
     )
     exact = valuation_requirements_profile("fcff_dcf")
     profile = conditional_reinvestment_requirements_profile(
-        "fcff_dcf", conditional_capital=True
+        "fcff_dcf", conditional_capital=True, hypothetical_balance_fields=balance_fields
     )
     allowed = {*profile.required_fact_fields, *profile.supporting_fact_fields}
     removed = {
@@ -106,7 +109,7 @@ def _fixture(tmp_path, *, sec_profile=False):
         recipe, facts, snapshot=snapshot
     ).policy
     profile = conditional_reinvestment_requirements_profile(
-        "fcff_dcf", conditional_capital=True
+        "fcff_dcf", conditional_capital=True, hypothetical_balance_fields=balance_fields
     )
     fixture.manifest = _manifest_with(
         fixture.manifest,
@@ -129,8 +132,8 @@ def _fixture(tmp_path, *, sec_profile=False):
     return fixture
 
 
-def _prepared(tmp_path):
-    fixture = _fixture(tmp_path)
+def _prepared(tmp_path, *, balance_hypotheses=None):
+    fixture = _fixture(tmp_path, balance_hypotheses=balance_hypotheses)
     candidate, canary = _reviewed_candidate(fixture)
     canary.validate(candidate.manifest, candidate.verification)
     client = _client(fixture)

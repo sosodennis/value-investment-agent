@@ -82,6 +82,11 @@ class _SourcePreparationPlan(StrictModel, Generic[SourceRequestT]):
             composite_inputs=self.working_capital_spec is not None,
             conditional_capital=self.conditional_capital_recipe is not None,
             conditional_reinvestment=self.conditional_reinvestment_recipe is not None,
+            hypothetical_balance_fields=(
+                self.conditional_capital_recipe.hypothetical_balance_fields
+                if self.conditional_capital_recipe is not None
+                else ()
+            ),
         )
 
     @model_validator(mode="after")

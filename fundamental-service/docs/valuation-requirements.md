@@ -40,3 +40,38 @@ and verify its new requirements digest. Retained V3 artifacts are preserved.
 This change supplies no accounting classification, source approval, verified
 quality or history threshold. The existing typed provider ports and official
 composer/calculator own acquisition and arithmetic respectively.
+
+### Explicit hypotheses for unresolved capital balances
+
+The optional `balance_hypotheses` in a conditional capital recipe/policy uses
+`conditional-capital-balance-hypotheses-v1`. It can designate a nonempty subset of
+`current_interest_bearing_debt`, `non_operating_assets` and
+`noncontrolling_interests` as unknown hypothetical operands. It requires every
+designated role in the ordered base/downside/upside scenarios, finite nonnegative
+amounts, a separate explanation for each role, limitations and sensitivity for
+each unknown. These are conditional what-if values, not observed amounts,
+calibrated estimates, probability intervals or proven economic bounds.
+
+Non-operating asset assumptions exclude cash and operating assets. Current debt
+assumptions exclude noncurrent debt and the additional convertible exposure
+declared elsewhere. Every amount represents the complete hypothetical role;
+partial disclosed components do not establish its total. The extension does not
+change financial formulas or grant source, mapping, release or caller approval.
+
+Without this extension the original ten observed balance requirements remain.
+With it, source profiles keep designated roles as supporting evidence and the
+bound policy keeps them in `unknowns`. Available verified observations at or after
+the policy balance date cannot be replaced by hypotheses. Other observed roles,
+source/snapshot/fact bindings and quote eligibility remain required. Composite
+working-capital policies still need their observed exclusions; hypothetical
+current debt cannot replace an exclusion fact. A joint forward reinvestment
+policy can instead retain unknown historical reinvestment under its own explicit
+what-if assumptions.
+
+The recipe is bound into the source configuration/plan digests and the complete
+policy is covered by trusted release signatures and assessment digests. The
+formal composer retains these digests and all unknown roles, prepares provisional
+scenario inputs and requires the real caller's approval of their exact input
+before the existing calculator runs. No company-specific registration is needed
+for this input representation. Real source/model sufficiency and end-to-end
+acceptance must still be established separately.

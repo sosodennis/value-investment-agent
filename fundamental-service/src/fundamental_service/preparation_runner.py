@@ -1380,6 +1380,11 @@ class SourcePreparationRunner:
             snapshot=snapshot,
             artifacts=self._application.artifact_store,
             conditional_capital=plan.conditional_capital_recipe is not None,
+            hypothetical_balance_fields=(
+                plan.conditional_capital_recipe.hypothetical_balance_fields
+                if plan.conditional_capital_recipe is not None
+                else ()
+            ),
         )
 
     def _mapping_evidence_ref(self, artifact_id: str | None) -> ArtifactRefV1 | None:

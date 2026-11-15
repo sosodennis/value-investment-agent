@@ -9,6 +9,7 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from .contracts import CanonicalFactV1, CapitalBridgeAssumptionsV1
+from .conditional_capital_balances import CapitalBalanceHypothesesV1, CapitalBalanceRole
 from .serialization import sha256_digest
 
 CONDITIONAL_CAPITAL_POLICY: Literal["conditional-capital-hypotheses-v1"] = (
@@ -130,6 +131,13 @@ class ConditionalCapitalRecipeV1(_CapitalModel):
     max_quote_age_seconds: int = Field(gt=0)
     limitations: tuple[str, ...] = Field(min_length=1)
     scenarios: tuple[CapitalHypothesisV1, ...] = Field(min_length=3, max_length=3)
+    balance_hypotheses: CapitalBalanceHypothesesV1 | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
+
+    @property
+    def hypothetical_balance_fields(self) -> tuple[CapitalBalanceRole, ...]:
+        return self.balance_hypotheses.unknown_fields if self.balance_hypotheses else ()
 
     @field_validator("scenarios")
     @classmethod
@@ -175,6 +183,13 @@ class ConditionalCapitalPolicyV1(_CapitalModel):
     unknowns: tuple[str, ...]
     limitations: tuple[str, ...] = Field(min_length=1)
     scenarios: tuple[CapitalHypothesisV1, ...] = Field(min_length=3, max_length=3)
+    balance_hypotheses: CapitalBalanceHypothesesV1 | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
+
+    @property
+    def hypothetical_balance_fields(self) -> tuple[CapitalBalanceRole, ...]:
+        return self.balance_hypotheses.unknown_fields if self.balance_hypotheses else ()
 
     @field_validator("valuation_timestamp")
     @classmethod
@@ -206,14 +221,15 @@ class ConditionalCapitalPolicyV1(_CapitalModel):
             )
         if self.period_end > self.valuation_timestamp.date():
             raise ValueError("capital observations cannot have a future balance date")
-        if set(self.observations) != set(OBSERVED_CAPITAL_FIELDS):
+        if set(self.observations) != set(OBSERVED_CAPITAL_FIELDS) - set(
+            self.hypothetical_balance_fields
+        ):
             raise ValueError("conditional capital requires every observed capital role")
         references = (*self.observations.values(), *self.supporting_observations)
         if len({item.fact_id for item in references}) != len(references):
             raise ValueError("capital observations cannot repeat a fact")
-        if len(self.unknowns) != len(CAPITAL_UNKNOWNS) or set(self.unknowns) != set(
-            CAPITAL_UNKNOWNS
-        ):
+        unknowns = (*CAPITAL_UNKNOWNS, *self.hypothetical_balance_fields)
+        if len(self.unknowns) != len(unknowns) or set(self.unknowns) != set(unknowns):
             raise ValueError(
                 "conditional capital must retain every unresolved claim and award role"
             )

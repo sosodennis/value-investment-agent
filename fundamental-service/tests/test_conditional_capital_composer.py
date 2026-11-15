@@ -35,8 +35,8 @@ from test_valuation_release_inputs import _client, _manifest_with, _prepare
 from equity_award_fixtures import award_evidence
 
 
-def _prepared_case(tmp_path):
-    fixture = _conditional_fixture(tmp_path)
+def _prepared_case(tmp_path, *, balance_hypotheses=None):
+    fixture = _conditional_fixture(tmp_path, balance_hypotheses=balance_hypotheses)
     candidate, canary = _reviewed_candidate(fixture)
     canary.validate(candidate.manifest, candidate.verification)
     client = _client(fixture)
