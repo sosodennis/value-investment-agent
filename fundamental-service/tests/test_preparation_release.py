@@ -500,7 +500,9 @@ def test_automatic_runner_reuses_active_release_and_retains_pre_activation_sourc
         ingestions=(request,),
     )
     acquisition = _acquisition(fixture)
-    acquisition.retained_acquisition = lambda _: None
+    acquisition.retained_acquisition = lambda _: SimpleNamespace(
+        canonical_fact_ids=tuple(fact.fact_id for fact in fixture.facts.list())
+    )
     runner = SourcePreparationRunner(
         application=fixture.application,
         metadata=fixture.metadata,
@@ -545,6 +547,7 @@ def test_automatic_runner_reuses_active_release_and_retains_pre_activation_sourc
     report = _reader(fixture, first)
     assert report.status == "approval_required" and report.calculation is None
     assert len(report.source_outcomes) == 1 and report.automatic_release_ref is None
+    assert report.fact_evidence_inventory is not None
     second = _run(runner, plan)
     assert second.artifact == first.artifact and not second.wrote
     assert len(calls) == 1 and len(acquisition.calls) == 1

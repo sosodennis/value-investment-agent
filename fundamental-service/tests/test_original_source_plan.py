@@ -926,6 +926,7 @@ def test_compiled_plan_runs_existing_automatic_preparation_and_retains_missing_r
         application=SimpleNamespace(
             resolve_snapshot=missing,
             artifact_store=value.artifacts,
+            fact_repository=SimpleNamespace(get=value.metadata.facts.__getitem__),
             snapshot=value.metadata.snapshots.__getitem__,
             prepare_valuation=forbidden,
             calculate_valuation=forbidden,
@@ -942,6 +943,7 @@ def test_compiled_plan_runs_existing_automatic_preparation_and_retains_missing_r
     assert evidence.status == "blocked"
     assert evidence.source_outcomes[0].mapping_evidence_ref
     assert evidence.source_plan_ref == result.plan_ref
+    assert evidence.fact_evidence_inventory is not None
     assert value.metadata.mappings
     before = _inventory(tmp_path)
     assert not run(runner, result.plan).wrote
