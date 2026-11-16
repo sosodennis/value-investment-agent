@@ -1359,6 +1359,11 @@ def _parse_in_process(
         )
     except ArelleParserError:
         raise
+    except MemoryError as error:
+        raise ArelleParserError(
+            "PARSER_RESOURCE_EXHAUSTED",
+            "offline SEC parser exceeded its child memory budget",
+        ) from error
     except Exception as error:
         raise ArelleParserError(
             "XBRL_PARSE_FAILED", "Arelle failed to parse or validate captured filing"

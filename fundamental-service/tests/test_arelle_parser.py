@@ -169,6 +169,33 @@ def test_parser_resource_policy_rejects_invalid_limits():
     assert failure.value.code == "PARSER_RESOURCE_POLICY_INVALID"
 
 
+@pytest.mark.parametrize(
+    ("failure_type", "expected_code"),
+    [(MemoryError, "PARSER_RESOURCE_EXHAUSTED"), (ValueError, "XBRL_PARSE_FAILED")],
+)
+def test_inner_parser_preserves_resource_failure_classification(
+    monkeypatch, failure_type, expected_code
+):
+    from arelle import ModelManager
+    from fundamental_service.arelle_parser import _parse_in_process
+
+    def unavailable(*args, **kwargs):
+        raise failure_type("controlled parser failure detail")
+
+    monkeypatch.setattr(ModelManager, "initialize", unavailable)
+    with pytest.raises(ArelleParserError) as failure:
+        _parse_in_process(
+            Path(__file__).parent / "fixtures" / "simple.xbrl",
+            ArelleValidationProfileV1(profile_id="sec-efm-us-gaap-v1"),
+            "fixture-taxonomy-v1",
+            None,
+            None,
+        )
+    assert failure.value.code == expected_code
+    assert isinstance(failure.value.__cause__, failure_type)
+    assert "controlled parser failure detail" not in str(failure.value)
+
+
 @pytest.mark.skipif(sys.platform != "linux", reason="Linux worker memory enforcement")
 @pytest.mark.parametrize("inherited", ["unlimited", "stricter", "stricter-soft"])
 def test_worker_enforces_memory_budget_without_raising_inherited_limits(inherited):
