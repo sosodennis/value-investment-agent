@@ -367,6 +367,15 @@ the operation. Withdrawing only the shared report therefore blocks preparation
 and calculation even when the envelope and canonical facts remain readable.
 Dependency hashes are not interpreted as arbitrary artifact IDs. Independent
 canary replay continues to verify the complete original and mapping semantics.
+PostgreSQL batches artifact and content-registration metadata for one retained
+release check. It streams and hashes each object's bytes, loads indirect report
+records when discovered, then rereads the complete metadata set before the
+check returns. Changed or missing records refuse; a closed reader cannot be
+reused. Only metadata stays in that scope, so large report bytes do not collect
+in another cache. Preparation and calculation each start their own check.
+Persisted release verification reads also bind the requested manifest and SQL
+verification digest, then authenticate the verifier, suite, workflow and mapping
+approvals against deployment trust roots. This does not rerun the canary.
 Source preparation carries its checked mapping groups and canonical facts
 through release matching, candidate selection and activation within the same
 run. The stage is bound to the exact plan and snapshot digests. Working-capital,

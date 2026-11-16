@@ -12,6 +12,8 @@ import asyncio
 import hashlib
 import json
 from concurrent.futures import Future
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime
 from importlib import resources
@@ -20,7 +22,7 @@ from threading import Event, Lock, Thread
 from typing import Any, Literal
 from uuid import uuid4
 
-from sqlalchemy import text
+from sqlalchemy import bindparam, text
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine, create_async_engine
 
 from .contracts import (
@@ -1549,6 +1551,42 @@ class PostgresMetadataStore:
             )
         return ArtifactRecordV1.model_validate_json(canonical_bytes(payload))
 
+    def retained_artifact_records(
+        self, artifact_ids: tuple[str, ...]
+    ) -> dict[str, tuple[ArtifactRecordV1, int | None]]:
+        self._require_ready()
+        if not artifact_ids:
+            return {}
+        rows = self._runner.run(self._retained_artifact_records(artifact_ids))
+        return {
+            row["artifact_id"]: (
+                ArtifactRecordV1.model_validate(
+                    {key: value for key, value in row.items() if key != "byte_length"}
+                ),
+                row["byte_length"],
+            )
+            for row in rows
+        }
+
+    async def _retained_artifact_records(
+        self, artifact_ids: tuple[str, ...]
+    ) -> list[dict[str, Any]]:
+        async with self._runner._engine.connect() as connection:
+            rows = await connection.execute(
+                text(
+                    "SELECT artifact.artifact_id, artifact.content_hash, "
+                    "artifact.media_type, artifact.dependency_hashes, "
+                    "artifact.status, artifact.retention, content.byte_length "
+                    "FROM fundamental.artifact_references AS artifact "
+                    "LEFT JOIN fundamental.content_objects AS content "
+                    "ON artifact.content_hash=content.content_hash "
+                    "AND artifact.media_type=content.media_type "
+                    "WHERE artifact.artifact_id IN :artifact_ids"
+                ).bindparams(bindparam("artifact_ids", expanding=True)),
+                {"artifact_ids": artifact_ids},
+            )
+            return [dict(row) for row in rows.mappings()]
+
     async def _get_artifact_payload(self, artifact_id: str) -> dict[str, Any] | None:
         async with self._runner._engine.connect() as connection:
             row = (
@@ -1810,11 +1848,93 @@ class PostgresArtifactStore:
         record = self.get(artifact_id)
         return self._content.get(record.content_hash, media_type=record.media_type)
 
+    @contextmanager
+    def retained_read_operation(
+        self, artifact_ids: tuple[str, ...]
+    ) -> Iterator[_RetainedPostgresArtifactReads]:
+        try:
+            reader = _RetainedPostgresArtifactReads(self, artifact_ids)
+        except Exception as error:
+            raise DataReleaseError(
+                "DATA_RELEASE_ARTIFACT_UNAVAILABLE",
+                "release artifact metadata is unavailable",
+            ) from error
+        try:
+            yield reader
+        except BaseException:
+            reader.close()
+            raise
+        else:
+            try:
+                reader.finish()
+            except DataReleaseError:
+                raise
+            except Exception as error:
+                raise DataReleaseError(
+                    "DATA_RELEASE_ARTIFACT_UNAVAILABLE",
+                    "release artifact metadata is unavailable",
+                ) from error
+
     def has_content_hash(self, content_hash: str) -> bool:
         return self._metadata.has_content_hash(content_hash)
 
     def reset_operational_cache(self) -> None:
         return None
+
+
+class _RetainedPostgresArtifactReads:
+    """Metadata snapshot for one verification; bytes stay streamed and rehashed."""
+
+    def __init__(
+        self, artifacts: PostgresArtifactStore, artifact_ids: tuple[str, ...]
+    ) -> None:
+        self._artifacts = artifacts
+        self._ids = set(artifact_ids)
+        self._records = artifacts._metadata.retained_artifact_records(
+            tuple(sorted(self._ids))
+        )
+        self._closed = False
+
+    def get(self, artifact_id: str) -> ArtifactRecordV1:
+        if self._closed:
+            raise RuntimeError("retained artifact read operation has ended")
+        if artifact_id not in self._ids:
+            self._ids.add(artifact_id)
+            self._records.update(
+                self._artifacts._metadata.retained_artifact_records((artifact_id,))
+            )
+        entry = self._records.get(artifact_id)
+        if entry is None:
+            raise SnapshotError(
+                "ARTIFACT_NOT_FOUND", f"artifact {artifact_id} is unavailable"
+            )
+        return entry[0]
+
+    def read(self, artifact_id: str) -> bytes:
+        record = self.get(artifact_id)
+        raw = self._artifacts._content._filesystem.get(
+            record.content_hash, media_type=record.media_type
+        )
+        if self._records[artifact_id][1] != len(raw):
+            raise SnapshotError(
+                "CONTENT_METADATA_MISMATCH",
+                "retained content registration differs from its checked bytes",
+            )
+        return raw
+
+    def finish(self) -> None:
+        self.close()
+        current = self._artifacts._metadata.retained_artifact_records(
+            tuple(sorted(self._ids))
+        )
+        if current != self._records:
+            raise DataReleaseError(
+                "ARTIFACT_EVIDENCE_CHANGED",
+                "release artifact metadata changed during its read operation",
+            )
+
+    def close(self) -> None:
+        self._closed = True
 
 
 __all__ = [

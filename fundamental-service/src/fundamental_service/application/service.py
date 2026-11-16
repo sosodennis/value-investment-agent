@@ -42,6 +42,7 @@ from ..contracts import (
 )
 from ..data_releases import (
     ActiveDataReleaseWithManifestV1,
+    ArtifactRefV1,
     DataReleaseActivationCommandV1,
     DataReleaseActivationRequestV1,
     DataReleaseCandidateReceiptV1,
@@ -50,7 +51,11 @@ from ..data_releases import (
     DataReleaseVerificationV1,
     ReleaseResolutionCacheKeyV1,
 )
-from ..artifact_evidence import read_retained_artifact
+from ..artifact_evidence import (
+    EvidenceArtifactReader,
+    read_retained_artifact,
+    retained_artifact_operation,
+)
 from ..mapping_input_storage import (
     mapping_input_report_dependency,
     require_mapping_report_record,
@@ -641,6 +646,21 @@ class FundamentalApplication:
                 for ref in review.evidence_refs
             ),
         ]
+        with retained_artifact_operation(
+            self.artifact_store, tuple(ref.artifact_id for ref in refs)
+        ) as artifacts:
+            self._verify_retained_release_artifacts(
+                artifacts, refs, deadline_at=deadline_at
+            )
+        guard_execution_deadline(deadline_at)
+
+    @staticmethod
+    def _verify_retained_release_artifacts(
+        artifacts: EvidenceArtifactReader,
+        refs: list[ArtifactRefV1],
+        *,
+        deadline_at: datetime | None = None,
+    ) -> None:
         seen: dict[str, tuple[str, str]] = {}
         report_dependencies: dict[str, tuple[str, ...]] = {}
         expanded_inputs: set[str] = set()
@@ -663,7 +683,7 @@ class FundamentalApplication:
                     and reference.artifact_id in report_dependencies
                 ):
                     require_mapping_report_record(
-                        self.artifact_store.get(reference.artifact_id),
+                        artifacts.get(reference.artifact_id),
                         reference,
                         report_dependencies[reference.artifact_id],
                     )
@@ -673,7 +693,7 @@ class FundamentalApplication:
                     continue
                 seen[reference.artifact_id] = identity
                 raw = read_retained_artifact(
-                    self.artifact_store,
+                    artifacts,
                     reference,
                     dependency_hashes=report_dependencies.get(reference.artifact_id),
                 )

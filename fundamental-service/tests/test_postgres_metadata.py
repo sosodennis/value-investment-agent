@@ -1201,6 +1201,101 @@ def test_artifact_publication_is_concurrent_and_hash_verified(
     assert path.read_bytes() == b"tampered"
 
 
+@pytest.mark.parametrize("fault", ("status", "dependency", "missing"))
+def test_retained_artifact_operation_rejects_metadata_changes(
+    metadata: PostgresMetadataStore, tmp_path: Path, fault: str
+):
+    from fundamental_service.artifact_evidence import read_retained_artifact
+    from fundamental_service.data_releases import ArtifactRefV1
+
+    artifacts = PostgresArtifactStore(
+        metadata, PostgresContentStore(tmp_path / "content", metadata)
+    )
+    record = artifacts.put(f"batch-{uuid4().hex}", {"retained": True})
+    ref = ArtifactRefV1(
+        artifact_id=record.artifact_id,
+        content_hash=record.content_hash,
+        media_type=record.media_type,
+        role="retained-test",
+    )
+
+    async def change() -> None:
+        async with metadata._runner._engine.begin() as connection:
+            query = (
+                "DELETE FROM fundamental.artifact_references WHERE artifact_id=:id"
+                if fault == "missing"
+                else "UPDATE fundamental.artifact_references "
+                + (
+                    "SET status='invalidated' "
+                    if fault == "status"
+                    else "SET dependency_hashes=CAST(:dependencies AS jsonb) "
+                )
+                + "WHERE artifact_id=:id"
+            )
+            await connection.execute(
+                text(query),
+                {"id": record.artifact_id, "dependencies": json.dumps(["f" * 64])},
+            )
+
+    with pytest.raises(DataReleaseError) as error:
+        with artifacts.retained_read_operation((record.artifact_id,)) as reader:
+            assert read_retained_artifact(reader, ref) == b'{"retained":true}'
+            metadata._runner.run(change())
+    assert error.value.code == "ARTIFACT_EVIDENCE_CHANGED"
+    with pytest.raises(RuntimeError, match="ended"):
+        reader.read(record.artifact_id)
+
+
+def test_retained_artifact_operation_rechecks_bytes_and_indirect_records(
+    metadata: PostgresMetadataStore, tmp_path: Path
+):
+    content = PostgresContentStore(tmp_path / "content", metadata)
+    artifacts = PostgresArtifactStore(metadata, content)
+    first = artifacts.put(f"batch-{uuid4().hex}", {"first": True})
+    indirect = artifacts.put(f"batch-{uuid4().hex}", {"indirect": True})
+    with artifacts.retained_read_operation((first.artifact_id,)) as reader:
+        assert reader.get(first.artifact_id) == first
+        assert reader.read(indirect.artifact_id) == b'{"indirect":true}'
+    path = content._filesystem._path(indirect.content_hash, indirect.media_type)
+    path.write_bytes(b"corrupt")
+    with pytest.raises(SnapshotError, match="verification"):
+        with artifacts.retained_read_operation((first.artifact_id,)) as reader:
+            reader.read(indirect.artifact_id)
+
+
+@pytest.mark.parametrize("failure_at", ("entry", "exit", "body"))
+def test_retained_artifact_operation_preserves_failure_reasons(
+    metadata: PostgresMetadataStore, tmp_path: Path, monkeypatch, failure_at: str
+):
+    artifacts = PostgresArtifactStore(
+        metadata, PostgresContentStore(tmp_path / "content", metadata)
+    )
+    record = artifacts.put(f"batch-{uuid4().hex}", {"retained": True})
+    original = metadata.retained_artifact_records
+    calls = []
+
+    def unavailable(ids):
+        calls.append(ids)
+        if failure_at == "entry" or len(calls) == 2:
+            raise TimeoutError("controlled metadata failure")
+        return original(ids)
+
+    monkeypatch.setattr(metadata, "retained_artifact_records", unavailable)
+    expected = SnapshotError if failure_at == "body" else DataReleaseError
+    with pytest.raises(expected) as error:
+        with artifacts.retained_read_operation((record.artifact_id,)) as reader:
+            if failure_at == "body":
+                raise SnapshotError("SOURCE_HASH_MISMATCH", "controlled byte failure")
+            assert reader.read(record.artifact_id) == b'{"retained":true}'
+    assert error.value.code == (
+        "SOURCE_HASH_MISMATCH"
+        if failure_at == "body"
+        else "DATA_RELEASE_ARTIFACT_UNAVAILABLE"
+    )
+    if failure_at == "body":
+        assert len(calls) == 1
+
+
 def test_distinct_sec_acquisition_keys_hold_independent_postgres_locks(
     metadata: PostgresMetadataStore,
 ):

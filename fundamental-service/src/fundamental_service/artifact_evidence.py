@@ -1,5 +1,7 @@
 """Require current retained metadata when consuming immutable release bytes."""
 
+from contextlib import contextmanager
+from collections.abc import Iterator
 from typing import Protocol
 
 from .data_releases import ArtifactRefV1, DataReleaseError
@@ -10,6 +12,19 @@ class EvidenceArtifactReader(Protocol):
     def get(self, artifact_id: str) -> ArtifactRecordV1: ...
 
     def read(self, artifact_id: str) -> bytes: ...
+
+
+@contextmanager
+def retained_artifact_operation(
+    artifacts: EvidenceArtifactReader, artifact_ids: tuple[str, ...]
+) -> Iterator[EvidenceArtifactReader]:
+    """Let a repository batch one check, retaining its end-of-read state guard."""
+    operation = getattr(artifacts, "retained_read_operation", None)
+    if callable(operation):
+        with operation(artifact_ids) as reader:
+            yield reader
+    else:
+        yield artifacts
 
 
 def read_retained_artifact(
