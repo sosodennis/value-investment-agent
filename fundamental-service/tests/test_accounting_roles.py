@@ -1092,7 +1092,11 @@ def test_signed_canary_and_http_read_recheck_accounting_bindings(mutation, dispo
         Ed25519PrivateKey.from_private_bytes(b"verifier-key".ljust(32, b"0")),
     )
     snapshots = SimpleNamespace(get=lambda _id: snapshot)
-    facts = SimpleNamespace(get=lambda _id: fact, resolve=lambda **_kwargs: (fact,))
+    facts = SimpleNamespace(
+        get=lambda _id: fact,
+        list=lambda: (fact,),
+        resolve=lambda **_kwargs: (fact,),
+    )
     mappings = SimpleNamespace(get_mapping=lambda _id: mapping)
     runner = DataReleaseCanaryRunner(
         snapshot_repository=snapshots,
