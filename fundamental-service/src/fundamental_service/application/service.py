@@ -616,6 +616,8 @@ class FundamentalApplication:
         guard_execution_deadline(deadline_at)
         try:
             verification = verification_reader(manifest.manifest_digest)
+        except DataReleaseError:
+            raise
         except Exception as error:  # pragma: no cover - adapter boundary
             raise DataReleaseError(
                 "DATA_RELEASE_VERIFICATION_UNAVAILABLE",

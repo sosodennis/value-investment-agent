@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import json
 import multiprocessing
 import os
 import time
@@ -721,6 +722,71 @@ def test_data_release_activation_is_fenced_and_v2_compatible(
         assert old_version_reader.get_active_data_release(manifest.profile_id) == active
     finally:
         old_version_reader.close()
+
+
+@pytest.mark.parametrize(
+    "fault,code",
+    (
+        ("signature", "DATA_RELEASE_VERIFICATION_SIGNATURE_INVALID"),
+        ("row_digest", "DATA_RELEASE_VERIFICATION_MISMATCH"),
+        ("manifest", "DATA_RELEASE_VERIFICATION_MISMATCH"),
+        ("closure", "DATA_RELEASE_VERIFICATION_SIGNATURE_INVALID"),
+        ("mapping_signature", "DATA_RELEASE_MAPPING_REVIEW_SIGNATURE_INVALID"),
+    ),
+)
+def test_retained_release_verification_requires_current_trust(
+    metadata: PostgresMetadataStore, fault: str, code: str
+):
+    manifest, verification = _data_release_candidate(uuid4().hex)
+    metadata.publish_data_release_candidate(manifest, verification)
+    payload = verification.model_dump(mode="json")
+    row_digest = verification.verification_digest
+    if fault == "signature":
+        payload["signature"] = "0" * 128
+    elif fault == "row_digest":
+        row_digest = "0" * 64
+    else:
+        unsigned = verification.model_dump(
+            mode="python", exclude={"signature", "verification_digest"}
+        )
+        if fault == "manifest":
+            unsigned["manifest_digest"] = "0" * 64
+        elif fault == "closure":
+            unsigned["evidence_refs"] = (
+                verification.evidence_refs[0].model_copy(
+                    update={"artifact_id": "substituted-verification-evidence"}
+                ),
+            )
+        else:
+            review = verification.mapping_reviews[0].model_copy(
+                update={"signature": "0" * 128}
+            )
+            unsigned["mapping_reviews"] = (review,)
+        changed = sign_data_release_verification(unsigned, RELEASE_TEST_RUNNER_KEY)
+        payload = changed.model_dump(mode="json")
+        row_digest = changed.verification_digest
+        if fault == "closure":
+            payload["signature"] = verification.signature
+
+    async def corrupt() -> None:
+        async with metadata._runner._engine.begin() as connection:
+            await connection.execute(
+                text(
+                    "UPDATE fundamental.data_release_verifications "
+                    "SET payload=CAST(:payload AS jsonb), verification_digest=:digest "
+                    "WHERE manifest_digest=:manifest"
+                ),
+                {
+                    "payload": json.dumps(payload),
+                    "digest": row_digest,
+                    "manifest": manifest.manifest_digest,
+                },
+            )
+
+    metadata._runner.run(corrupt())
+    with pytest.raises(DataReleaseError) as error:
+        metadata.get_data_release_verification(manifest.manifest_digest)
+    assert error.value.code == code
 
 
 def test_data_release_candidate_is_not_persisted_without_trust_roots():

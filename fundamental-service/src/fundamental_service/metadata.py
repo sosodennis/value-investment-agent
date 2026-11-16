@@ -849,16 +849,49 @@ class PostgresMetadataStore:
         self, manifest_digest: str
     ) -> DataReleaseVerificationV1 | None:
         async with self._runner._engine.connect() as connection:
-            payload = await connection.scalar(
-                text(
-                    "SELECT payload FROM fundamental.data_release_verifications "
-                    "WHERE manifest_digest=:manifest_digest"
-                ),
-                {"manifest_digest": manifest_digest},
+            row = (
+                (
+                    await connection.execute(
+                        text(
+                            "SELECT verification.payload, verification.verification_digest, "
+                            "manifest.payload AS manifest_payload "
+                            "FROM fundamental.data_release_verifications AS verification "
+                            "JOIN fundamental.data_release_manifests AS manifest "
+                            "USING (manifest_digest) "
+                            "WHERE verification.manifest_digest=:manifest_digest"
+                        ),
+                        {"manifest_digest": manifest_digest},
+                    )
+                )
+                .mappings()
+                .one_or_none()
             )
-        if payload is None:
+        if row is None:
             return None
-        return DataReleaseVerificationV1.model_validate_json(canonical_bytes(payload))
+        verification = DataReleaseVerificationV1.model_validate_json(
+            canonical_bytes(row["payload"])
+        )
+        manifest = DataReleaseManifestV1.model_validate_json(
+            canonical_bytes(row["manifest_payload"])
+        )
+        if (
+            verification.verification_digest != row["verification_digest"]
+            or verification.manifest_digest != manifest_digest
+            or manifest.manifest_digest != manifest_digest
+        ):
+            raise DataReleaseError(
+                "DATA_RELEASE_VERIFICATION_MISMATCH",
+                "stored release verification differs from its persisted identity",
+            )
+        if self._data_release_trust_roots is None:
+            raise DataReleaseError(
+                "DATA_RELEASE_TRUST_ROOTS_UNCONFIGURED",
+                "data release trust roots are required to read verification evidence",
+            )
+        verify_data_release_candidate(
+            manifest, verification, self._data_release_trust_roots
+        )
+        return verification
 
     async def _get_data_release_manifest(
         self, manifest_digest: str
