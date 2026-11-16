@@ -607,3 +607,69 @@ failure remains retained and is not counted as a Service pass. The Service
 gate covers arithmetic/replay/refusals, while deployment SEC source/release,
 caller, numerical retrieval and recovery acceptance remain separate required
 work. The new CI job itself must still execute on the resulting committed SHA.
+
+## Real release continuation and deadline correction
+
+Exact `e20b9f86` passed 297 PostgreSQL cases, zero skips, types/lint/guards/diff;
+CI 43856618084 passed all thirteen executed jobs, including the actual Service
+release gate. Its legacy agent release gate remained skipped and is not a pass.
+All 174 installed Python files matched source digest
+`3aae914fc3d81ecae210dae156952beb337f92d7f3e7f5fe95f0a65c1425a0eb`;
+SEC preflight passed and unrelated running containers were unchanged.
+
+The fixed MSFT/date cold request exhausted its existing 900-second total budget
+after retaining source, mapping, market and release-input progress. Same-input
+continuation completed in 631.45 seconds without increasing that budget.
+Discovery, original preparation, compilation and current selection reported
+`wrote=false`. Automatic trusted release
+`a1e5420b23667dd33cfe08701b3e049e98534e43b062594e1cb25853d68e190b`
+reached the formal composer: source report
+`81e32b0e5e1aedb1e5a8b7d714544e856f8be4183e71141c3b089eeaa35ce111`,
+status `approval_required`, exact input
+`481804b9e577b1016fee6697bd55cbd751b295f2591809af031ef38a418cc872`.
+Authenticated content GET200 reproduced its hash; unsigned GET401. No calculation
+ran. Both the failed cold receipt and successful continuation remain retained.
+
+Actual company/date negatives retained explicit refusal evidence: six annuals
+in a 400-day window, AAPL ticker with MSFT CIK, and Alphabet without common-share
+class selection. Their respective codes include `ANNUAL_SOURCE_COUNT_INSUFFICIENT`,
+`HISTORICAL_IDENTITY_MISMATCH` and `HISTORICAL_SECURITY_SELECTION_REQUIRED`.
+All three refusal artifacts were retrieved with GET200/hash-exact and unsigned401.
+These are genuine installed-runtime source checks; final corrected-source
+acceptance and numerical M2/M3 are still required.
+
+Bounded independent static review identified missing deadline propagation in the
+formal runner and metadata-status omissions in market/quote consumers. The
+latter is a separate unresolved correction. Financial/source review found no
+high-confidence actionable issue in its inspected scope; the large PR is not
+claimed wholly reviewed. No reviewer executed tests, imports, runtime or GitHub.
+
+The runner now preserves its original deadline through automatic signing,
+activation, composition and calculation. Checks after expensive verification
+prevent subsequent publication/activation or calculation when the budget is
+exhausted. Three deterministic expiry regressions first failed with
+`DID NOT RAISE ServiceError`, then pass; separate signing-stage cases reject
+expiry after content and post-sign canary verification. Optional signing
+deadlines preserve the existing direct caller contract. This does not claim to
+interrupt arbitrary in-process CPU work; the issuer CLI retains its outer process
+deadline. Publication checks also stop between staged policy installations and
+before the trusted candidate write. Market-policy deployment receives the same
+deadline and checks after its canary and policy write. Four additional expiry
+cases cover these boundaries; fixture assertions preserve previously installed
+policies rather than assuming the repository starts empty.
+
+The corrected increment passes 322 PostgreSQL-backed related cases with zero
+skips, changed-source mypy, whole-package Ruff, changed-file format, both
+architecture guards and diff checks. The temporary test database was removed.
+Full command outputs and input/output digests are retained in
+`deadline-verified-checks-receipt.json` outside Git. Earlier failing receipts
+remain retained and do not count as acceptance. Runtime remains on `e20b9f86`;
+this increment is not yet installed-runtime acceptance.
+
+A read-only live stack sample caught actual continuation work in
+`replay_digest -> canonical_bytes` during activation mapping replay. Static review
+also confirms repeated full-request hashing and fresh scopes across release
+passes. These observations motivate the next performance correction; a stack
+sample alone is not a measured speedup. Raw receipts, stack sample, review findings
+and full source evidence remain outside Git in the current issuer audit folder.
+M1/M2/M3 remain incomplete, supported history threshold null and PR370 draft.

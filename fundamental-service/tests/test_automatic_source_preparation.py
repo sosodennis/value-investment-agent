@@ -182,7 +182,7 @@ def test_existing_release_without_plan_report_retains_mapping_refusals_without_r
     def no_reacquisition(*args, **kwargs):
         pytest.fail("compatible active release must reuse its completed acquisition")
 
-    def incomplete_preparation(_request):
+    def incomplete_preparation(_request, *, deadline_at=None):
         raise ServiceError(
             "VALUATION_REQUIRED_FACTS_MISSING",
             "synthetic compatible release remains financially incomplete",

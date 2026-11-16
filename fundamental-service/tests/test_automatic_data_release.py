@@ -2,7 +2,8 @@
 
 import base64
 from concurrent.futures import ThreadPoolExecutor
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 
 import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
@@ -31,6 +32,7 @@ from fundamental_service.policies import (
 )
 from fundamental_service.release_runner import DataReleaseCanaryRunner
 from fundamental_service.replay import ArtifactStore
+from fundamental_service.operations import ServiceError
 from fundamental_service.serialization import canonical_bytes, sha256_digest
 from fundamental_service.snapshots import SnapshotError
 from test_conditional_capital_release import _conditional_fixture
@@ -147,6 +149,106 @@ def test_identical_restart_and_concurrent_runs_reuse_candidate_and_all_evidence(
             == first.candidate_publication.artifact
         )
         assert not receipt.wrote
+
+
+@pytest.mark.parametrize("stage", ("validate_content", "validate"))
+def test_expired_verification_cannot_publish_a_trusted_candidate(
+    tmp_path, monkeypatch, stage
+):
+    import fundamental_service.operations as operations
+
+    _, store, request, options = _case(tmp_path)
+    deadline = datetime.now(UTC) + timedelta(minutes=1)
+    previous = getattr(DataReleaseCanaryRunner, stage)
+
+    def exhaust_budget(*args, **kwargs):
+        result = previous(*args, **kwargs)
+        monkeypatch.setattr(
+            operations,
+            "datetime",
+            SimpleNamespace(now=lambda tz: deadline + timedelta(seconds=1)),
+        )
+        return result
+
+    monkeypatch.setattr(DataReleaseCanaryRunner, stage, exhaust_budget)
+    published = []
+    write = store.put_with_receipt
+
+    def record_write(artifact_id, *args, **kwargs):
+        published.append(artifact_id)
+        return write(artifact_id, *args, **kwargs)
+
+    monkeypatch.setattr(store, "put_with_receipt", record_write)
+    with pytest.raises(ServiceError) as error:
+        AutomaticDataReleaseService(**options).verify_and_sign(
+            request, deadline_at=deadline
+        )
+    assert error.value.code == "REQUEST_DEADLINE_EXCEEDED"
+    assert not any(
+        name.startswith("automatic-release-candidate-") for name in published
+    )
+
+
+@pytest.mark.parametrize("stage", ("canary_write", "policy_install"))
+def test_expiry_during_publication_stops_subsequent_trusted_writes(
+    tmp_path, monkeypatch, stage
+):
+    import fundamental_service.operations as operations
+
+    _, store, request, options = _case(tmp_path / "machine")
+    policy = _bound()[2]
+    second_policy = _authorization(policy, policy_id="second-staged-policy")
+    repository = FilesystemPolicyRepository(tmp_path / "policies")
+    registry = PolicyRegistry(initial_model_specs(), repository=repository)
+    options["policy_registry"] = registry
+    monkeypatch.setattr(
+        AutomaticDataReleaseService,
+        "_market_registry",
+        lambda self, request: (
+            PolicyRegistry(initial_model_specs(), (policy, second_policy)),
+            (policy, second_policy),
+        ),
+    )
+    deadline = datetime.now(UTC) + timedelta(minutes=1)
+
+    def expire():
+        monkeypatch.setattr(
+            operations,
+            "datetime",
+            SimpleNamespace(now=lambda tz: deadline + timedelta(seconds=1)),
+        )
+
+    published = []
+    write = store.put_with_receipt
+
+    def record_write(artifact_id, *args, **kwargs):
+        result = write(artifact_id, *args, **kwargs)
+        published.append(artifact_id)
+        if stage == "canary_write" and artifact_id.startswith(
+            "automatic-release-canary-"
+        ):
+            expire()
+        return result
+
+    install = registry.add_policy
+
+    def install_policy(item):
+        result = install(item)
+        if stage == "policy_install":
+            expire()
+        return result
+
+    monkeypatch.setattr(store, "put_with_receipt", record_write)
+    monkeypatch.setattr(registry, "add_policy", install_policy)
+    with pytest.raises(ServiceError) as error:
+        AutomaticDataReleaseService(**options).verify_and_sign(
+            request, deadline_at=deadline
+        )
+    assert error.value.code == "REQUEST_DEADLINE_EXCEEDED"
+    assert repository.list() == (() if stage == "canary_write" else (policy,))
+    assert not any(
+        name.startswith("automatic-release-candidate-") for name in published
+    )
 
 
 @pytest.mark.parametrize(

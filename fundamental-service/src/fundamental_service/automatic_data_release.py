@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import sys
+from datetime import datetime
 from functools import partial
 from importlib.metadata import version
 from pathlib import Path
@@ -39,6 +40,7 @@ from .market_reference import MarketReferenceProviderPort
 from .market_reference_evidence import read_release_market_reference_plan
 from .terminal_growth_evidence import read_release_terminal_growth_plan
 from .policies import PolicyError, PolicyRecordV1, PolicyRegistry, initial_model_specs
+from .operations import guard_execution_deadline
 from .quote_providers import QuoteSourceProviderPort
 from .release_runner import (
     DataReleaseCanaryRunner,
@@ -375,8 +377,12 @@ class AutomaticDataReleaseService:
         return tuple(sorted(checked))
 
     def verify_and_sign(
-        self, request: AutomaticDataReleaseRequestV1
+        self,
+        request: AutomaticDataReleaseRequestV1,
+        *,
+        deadline_at: datetime | None = None,
     ) -> AutomaticDataReleaseReceiptV1:
+        guard_execution_deadline(deadline_at)
         request = AutomaticDataReleaseRequestV1.model_validate_json(
             canonical_bytes(request)
         )
@@ -420,6 +426,7 @@ class AutomaticDataReleaseService:
             },
         }
         input_digest = sha256_digest(payload)
+        guard_execution_deadline(deadline_at)
         input_pub = self._artifacts.put_with_receipt(
             "automatic-release-input-" + input_digest,
             payload,
@@ -453,6 +460,7 @@ class AutomaticDataReleaseService:
                 artifacts=self._artifacts,
                 validation_profile_digest=self._policy.validation_profile_digest,
             )
+            guard_execution_deadline(deadline_at)
             content_pub = self._artifacts.put_with_receipt(
                 "automatic-release-content-" + content.digest,
                 content,
@@ -470,6 +478,7 @@ class AutomaticDataReleaseService:
                 regulatory_evidence_digests=regulatory,
                 market_policy_digests=market_policies,
             )
+            guard_execution_deadline(deadline_at)
             decision_pub = self._publish_decision(decision)
             publications.append(decision_pub)
             evidence = tuple(
@@ -485,6 +494,7 @@ class AutomaticDataReleaseService:
                     (decision_pub, "automatic-release-decision-v1"),
                 )
             )
+            guard_execution_deadline(deadline_at)
             verification = sign_data_release_verification(
                 {
                     "manifest_digest": request.manifest.manifest_digest,
@@ -500,6 +510,7 @@ class AutomaticDataReleaseService:
                 self._key,
             )
             canary = runner.validate(request.manifest, verification)
+            guard_execution_deadline(deadline_at)
             canary_pub = self._artifacts.put_with_receipt(
                 "automatic-release-canary-" + canary.canary_digest,
                 canary,
@@ -512,6 +523,7 @@ class AutomaticDataReleaseService:
             if staged_policies:
                 assert self._policy_registry is not None
                 for staged_policy in staged_policies:
+                    guard_execution_deadline(deadline_at)
                     try:
                         self._policy_registry.add_policy(staged_policy)
                     except PolicyError as error:
@@ -519,6 +531,7 @@ class AutomaticDataReleaseService:
             candidate = AutomaticDataReleaseCandidateV1(
                 manifest=request.manifest, verification=verification
             )
+            guard_execution_deadline(deadline_at)
             candidate_pub = self._artifacts.put_with_receipt(
                 "automatic-release-candidate-" + sha256_digest(candidate),
                 candidate,

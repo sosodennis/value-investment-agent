@@ -63,7 +63,7 @@ from .data_releases import (
     DataReleaseTrustRootsV1,
 )
 from .facts import CanonicalMappingV1, canonical_fact_digest
-from .operations import ServiceError, guard_caller_approval
+from .operations import ServiceError, guard_caller_approval, guard_execution_deadline
 from .history_composition import compose_original_history
 from .issuer_market_preparation import (
     IssuerMarketPreparation,
@@ -781,7 +781,9 @@ class SourcePreparationRunner:
         organization_id: str,
         correlation_id: str,
         plan: SourcePreparationPlan,
+        deadline_at: datetime,
     ) -> None:
+        guard_execution_deadline(deadline_at)
         config = self._application.config
         if (
             organization_id not in config.release_publish_authorized_organizations
@@ -808,10 +810,12 @@ class SourcePreparationRunner:
                 raise
             active = None
         self._canary.validate(manifest, candidate.verification)
+        guard_execution_deadline(deadline_at)
         if not self._candidate_snapshot_available(plan, candidate):
             raise ValueError(
                 "candidate does not match the requested source, date and fact mappings"
             )
+        guard_execution_deadline(deadline_at)
         self._application.publish_data_release_candidate(
             manifest, candidate.verification
         )
@@ -842,6 +846,7 @@ class SourcePreparationRunner:
             reason="validated source preparation candidate",
         )
         try:
+            guard_execution_deadline(deadline_at)
             self._application.change_active_data_release(
                 manifest.profile_id,
                 command,
@@ -1592,6 +1597,7 @@ class SourcePreparationRunner:
         admissions: tuple[PublicSourceAdmissionEvidenceV1, ...],
         *,
         prepared_facts: _PreparedPlanFacts,
+        deadline_at: datetime,
     ) -> tuple[
         DataReleaseCandidatePublishRequestV1 | None, ArtifactRefV1, tuple[str, ...]
     ]:
@@ -1639,7 +1645,9 @@ class SourcePreparationRunner:
             else None,
             prepared_refs=refs,
         )
-        receipt = self._automatic_release.verify_and_sign(request)
+        receipt = self._automatic_release.verify_and_sign(
+            request, deadline_at=deadline_at
+        )
         decision = receipt.decision_publication.artifact
         ref = ArtifactRefV1(
             artifact_id=decision.artifact_id,
@@ -1838,7 +1846,9 @@ class SourcePreparationRunner:
             for request in plan.ingestions:
                 self._acquisition.retained_acquisition(request)
         outcomes = self._retained_outcomes(plan)
+        guard_execution_deadline(deadline_at)
         self.validate_candidate(plan, candidate)
+        guard_execution_deadline(deadline_at)
         public_outcomes = self._acquire_public_sources(plan, deadline_at=deadline_at)
         admission_outcomes = self._admit_public_sources(
             plan, public_outcomes, deadline_at=deadline_at
@@ -2082,6 +2092,7 @@ class SourcePreparationRunner:
             # Recover provenance even if activation succeeds before the flow report.
             self._persist_acquisitions(plan, outcomes)
         if self._automatic_release is not None and resolution is None:
+            guard_execution_deadline(deadline_at)
             assert isinstance(plan, AutomaticSourcePreparationPlanV1)
             try:
                 if prepared_facts is None:
@@ -2101,6 +2112,7 @@ class SourcePreparationRunner:
                         outcomes,
                         admission_outcomes,
                         prepared_facts=prepared_facts,
+                        deadline_at=deadline_at,
                     )
                 )
             except (
@@ -2217,12 +2229,14 @@ class SourcePreparationRunner:
                         "policy candidate does not contain the requested snapshot"
                     )
                 try:
+                    guard_execution_deadline(deadline_at)
                     deployment, publication = self._market_policy_deployment.publish(
                         candidate,
                         authorization=market_policy_authorization,
                         authorization_digest=market_policy_authorization_digest,
                         snapshot_id=deployment_snapshot.snapshot_id,
                         organization_id=organization_id,
+                        deadline_at=deadline_at,
                     )
                 except DataReleaseError as error:
                     return self._persist(
@@ -2255,6 +2269,7 @@ class SourcePreparationRunner:
                 organization_id=organization_id,
                 correlation_id=correlation_id,
                 plan=plan,
+                deadline_at=deadline_at,
             )
             resolution = self._resolve(plan)
             if resolution is None:
@@ -2305,7 +2320,8 @@ class SourcePreparationRunner:
                     snapshot_id=resolution.snapshot_id,
                     data_release_manifest_digest=resolution.data_release_manifest_digest,
                     model_id=plan.model_id,
-                )
+                ),
+                deadline_at=deadline_at,
             )
         except ServiceError as error:
             if error.retryable or error.status_code != 422:
@@ -2329,6 +2345,7 @@ class SourcePreparationRunner:
                 ),
                 prepared_facts=prepared_facts,
             )
+        guard_execution_deadline(deadline_at)
         if preparation.status != "prepared" or preparation.input is None:
             return self._persist(
                 plan,
@@ -2397,7 +2414,9 @@ class SourcePreparationRunner:
         calculation = self._application.calculate_valuation(
             preparation.input.model_copy(update={"caller_approval": approval}),
             correlation_id=correlation_id,
+            deadline_at=deadline_at,
         )
+        guard_execution_deadline(deadline_at)
         if not isinstance(calculation, UncertaintyReportV1):
             raise TypeError(
                 "automatic preparation must retain the service uncertainty report"

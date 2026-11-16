@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Literal
 
 from pydantic import Field, model_validator
@@ -16,6 +17,7 @@ from .data_releases import (
 )
 from .macro_series import MacroSeriesProviderPort
 from .market_reference import MarketReferenceProviderPort
+from .operations import guard_execution_deadline
 from .policies import PolicyError, PolicyRecordV1, PolicyRegistry, PolicyRepository
 from .quote_providers import QuoteSourceProviderPort
 from .release_runner import (
@@ -96,7 +98,9 @@ class MarketPolicyDeployment:
         authorization_digest: str,
         snapshot_id: str,
         organization_id: str,
+        deadline_at: datetime | None = None,
     ) -> tuple[MarketPolicyDeploymentEvidenceV1, ArtifactPublicationV1]:
+        guard_execution_deadline(deadline_at)
         candidate = DataReleaseCandidatePublishRequestV1.model_validate_json(
             canonical_bytes(candidate)
         )
@@ -188,6 +192,7 @@ class MarketPolicyDeployment:
             quote_providers=self._quote_providers,
             policy_registry=staged,
         ).validate(manifest, candidate.verification)
+        guard_execution_deadline(deadline_at)
         evidence = MarketPolicyDeploymentEvidenceV1(
             source_revision=self._source_revision,
             authorization_digest=authorization_digest,
@@ -198,11 +203,13 @@ class MarketPolicyDeployment:
             policy=policy,
             canary=canary,
         )
+        guard_execution_deadline(deadline_at)
         try:
             self._policies.publish(policy)
         except PolicyError as error:
             raise DataReleaseError(error.code, str(error)) from error
         digest = sha256_digest(evidence)
+        guard_execution_deadline(deadline_at)
         publication = self._artifacts.put_with_receipt(
             f"market-policy-deployment:{digest}",
             evidence,

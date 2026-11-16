@@ -1,5 +1,6 @@
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
 import pytest
@@ -143,6 +144,38 @@ def _canary(case):
             if key not in {"authorized_organizations", "runtime_source_revision"}
         }
     )
+
+
+@pytest.mark.parametrize("stage", ("canary", "policy_write"))
+def test_expired_deployment_stops_subsequent_publications(tmp_path, monkeypatch, stage):
+    import fundamental_service.operations as operations
+
+    case = _deployment_fixture(tmp_path)
+    retained_policies = case.repository.list()
+    deadline = datetime.now(UTC) + timedelta(minutes=1)
+    owner = DataReleaseCanaryRunner if stage == "canary" else case.repository
+    method = "validate" if stage == "canary" else "publish"
+    previous = getattr(owner, method)
+
+    def exhaust_budget(*args, **kwargs):
+        result = previous(*args, **kwargs)
+        monkeypatch.setattr(
+            operations,
+            "datetime",
+            SimpleNamespace(now=lambda tz: deadline + timedelta(seconds=1)),
+        )
+        return result
+
+    monkeypatch.setattr(owner, method, exhaust_budget)
+    before = _files(case.fixture.artifacts.root)
+    with pytest.raises(ServiceError) as error:
+        _publish(case, deadline_at=deadline)
+    assert error.value.code == "REQUEST_DEADLINE_EXCEEDED"
+    expected = {item.policy_id: item for item in retained_policies}
+    if stage == "policy_write":
+        expected[case.expected.policy_id] = case.expected
+    assert {item.policy_id: item for item in case.repository.list()} == expected
+    assert _files(case.fixture.artifacts.root) == before
 
 
 def test_publication_is_scoped_and_reuses_after_concurrency_and_reopen(tmp_path):

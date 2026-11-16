@@ -890,6 +890,63 @@ def test_approved_preparation_calculates_and_repeat_is_unchanged(tmp_path):
     assert repeated.wrote is False
 
 
+@pytest.mark.parametrize("stage", ("composition", "calculation", "activation"))
+def test_expired_stage_cannot_start_the_next_valuation_or_publication(
+    tmp_path, monkeypatch, stage
+):
+    import fundamental_service.operations as operations
+
+    fixture = _fixture(tmp_path, released=stage != "activation")
+    candidate = canary = approval = None
+    if stage == "activation":
+        candidate, canary = _reviewed_candidate(fixture)
+    runner = _runner(fixture, canary=canary)
+    if stage == "calculation":
+        prepared = _reader(fixture, _run(runner, fixture.plan)).preparation
+        approval = CallerApprovalEnvelopeV1(
+            input_digest=prepared.input.input_digest,
+            decision="approved",
+            caller_id="operator",
+            decided_at=VALUATION_TIME,
+        )
+    deadline = datetime.now(UTC) + timedelta(minutes=1)
+    target, method = {
+        "composition": (runner, "_resolve"),
+        "calculation": (type(fixture.application), "prepare_valuation"),
+        "activation": (canary, "validate"),
+    }[stage]
+    previous = getattr(target, method)
+
+    def exhaust_budget(*args, **kwargs):
+        result = previous(*args, **kwargs)
+        monkeypatch.setattr(
+            operations,
+            "datetime",
+            SimpleNamespace(now=lambda tz: deadline + timedelta(seconds=1)),
+        )
+        return result
+
+    monkeypatch.setattr(target, method, exhaust_budget)
+    before = {p.relative_to(tmp_path) for p in tmp_path.rglob("*") if p.is_file()}
+    with pytest.raises(ServiceError) as error:
+        runner.run(
+            fixture.plan,
+            actor_id="operator",
+            organization_id="operators",
+            correlation_id="expired-stage",
+            deadline_at=deadline,
+            approval=approval,
+            candidate=candidate,
+        )
+    assert error.value.code == "REQUEST_DEADLINE_EXCEEDED"
+    assert {
+        p.relative_to(tmp_path) for p in tmp_path.rglob("*") if p.is_file()
+    } == before
+    if stage == "activation":
+        assert fixture.state.publications == 0
+        assert fixture.state.active is None
+
+
 def test_concurrent_preparations_publish_one_artifact(tmp_path):
     fixture = _fixture(tmp_path)
 
