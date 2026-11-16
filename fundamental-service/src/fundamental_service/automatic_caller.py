@@ -10,8 +10,6 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 
-from src.shared.internal_services import InternalPrincipal, build_internal_context
-
 from .automatic_approval import AutomaticValuationApprovalPolicyV1
 from .automatic_valuation import (
     AutomaticValuationRequestV1,
@@ -66,6 +64,17 @@ class DeploymentAutomaticCaller:
         organization_id: str,
         deadline_at: datetime,
     ) -> bytes:
+        package_root = Path(__file__).resolve().parents[2]
+        for root in (package_root, package_root.parent / "finance-agent-core"):
+            if (root / "src/shared/internal_services").is_dir() and str(
+                root
+            ) not in sys.path:
+                sys.path.insert(0, str(root))
+        from src.shared.internal_services import (
+            InternalPrincipal,
+            build_internal_context,
+        )
+
         now = datetime.now(UTC)
         seconds = (deadline_at - now).total_seconds()
         if seconds <= 0:

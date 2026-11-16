@@ -3,11 +3,13 @@
 import io
 import json
 import subprocess
+import sys
 import threading
 import time
 import urllib.error
 from datetime import UTC, datetime, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 
 import pytest
 
@@ -16,6 +18,26 @@ from fundamental_service.preparation_runner import SourcePreparationEvidenceV1
 from fundamental_service.serialization import canonical_bytes, sha256_digest
 from fundamental_service.testsupport import TEST_SERVICE_TOKEN
 from test_automatic_valuation import _case
+
+
+def test_installed_cli_import_needs_no_backend_path_at_startup(tmp_path):
+    source = Path(__file__).resolve().parents[1] / "src"
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-I",
+            "-c",
+            "import sys;sys.path.insert(0,sys.argv[1]);"
+            "from fundamental_service.issuer_preparation_runner import main;"
+            "raise SystemExit(main(['--help']))",
+            str(source),
+        ],
+        cwd=tmp_path,
+        capture_output=True,
+        timeout=15,
+    )
+    assert result.returncode == 0, result.stderr.decode()
+    assert b"--prepare-only" in result.stdout
 
 
 def _transport(client, monkeypatch):

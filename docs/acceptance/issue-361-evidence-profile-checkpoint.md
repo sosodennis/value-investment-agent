@@ -525,3 +525,24 @@ reference, Ruff/format and diff checks passed. The automatic-caller Compose
 overlay mounts an explicitly supplied policy read-only. Real installed-runtime
 acceptance, real numerical M2/M3, applicable release gate and final review/main
 delivery remain outstanding. No milestone is marked complete by this increment.
+
+## Installed issuer import correction
+
+Exact implementation `7ec988be` passed its 142 related committed-SHA cases and
+all recorded static gates, and its installed 174 Python files matched source
+digest `7e084273cfe63393e0c27b696b57117d69ded8e3f2e355f9fb71b589a65d9e3e`.
+SEC readiness/preflight passed. The first actual company/date `--prepare-only`
+invocation then failed at startup: the new caller adapter imported
+`src.shared.internal_services` before the installed CLI initialized the shared
+contract path. No source acquisition or calculation began. Failed receipt
+input/output:
+`31dfb0582e10b7ef884a2400df995a8d74b6d4e0e9a7c0a6b943e62ab425348b` /
+`b59b9800a5d2366f5c2c1e92da871183893aa6fdd52f93e4c2f44826c710b8e3`.
+
+The HTTP caller now initializes the installed shared-contract root at the
+composition boundary and imports the context builder only when it sends a
+request. An isolated Python subprocess, without backend PYTHONPATH or repository
+cwd, covers actual CLI import/help. All 42 caller/issuer tests pass, zero skips;
+Ruff, changed-source types, service architecture and diff checks pass. Raw
+`7ec988be-automatic-caller-*`, preflight and failed issuer artifacts remain in
+the ignored audit folder. Numerical acceptance still has not occurred.
