@@ -4,12 +4,13 @@ import pytest
 
 from fundamental_service import automatic_mapping_evidence as evidence
 from fundamental_service import original_issuer
+from fundamental_service.arelle_parser import ArelleParseReportV1
 from fundamental_service.automatic_mapping import evaluate_automatic_mapping
 from fundamental_service.automatic_mapping_evidence import (
     AutomaticMappingEvidenceChecks,
 )
 from fundamental_service.contracts import IdentityV1
-from fundamental_service.serialization import sha256_digest
+from fundamental_service.serialization import canonical_bytes, sha256_digest
 from test_automatic_mapping import case
 from test_automatic_mapping_batch import batch_case, read_decision, run_batch
 
@@ -54,6 +55,126 @@ def test_shared_original_checks_preserve_each_distinct_proposal(tmp_path, monkey
     assert len(calls) == 1
     assert evaluate_automatic_mapping(request, contents=contents) == expected[0]
     assert len(calls) == 2
+
+
+def test_report_replay_work_is_shared_without_changing_mapping_results(
+    tmp_path, monkeypatch
+):
+    request, store, _, _ = case(tmp_path)
+    contents = contents_for(request, store)
+    expected = evaluate_automatic_mapping(request, contents=contents)
+    calls = []
+    replay = ArelleParseReportV1.replay_digest
+
+    def observed(report):
+        if report is request.original.report:
+            calls.append(True)
+        return replay(report)
+
+    monkeypatch.setattr(ArelleParseReportV1, "replay_digest", observed)
+    shared = AutomaticMappingEvidenceChecks()
+    for _ in range(3):
+        assert (
+            evaluate_automatic_mapping(
+                request, contents=contents, evidence_checks=shared
+            )
+            == expected
+        )
+    assert len(calls) == 1
+    assert evaluate_automatic_mapping(request, contents=contents) == expected
+    assert len(calls) == 2
+
+
+def test_changed_report_copy_cannot_inherit_a_successful_fingerprint(tmp_path):
+    request, store, _, _ = case(tmp_path)
+    contents = contents_for(request, store)
+    shared = AutomaticMappingEvidenceChecks()
+    expected = evaluate_automatic_mapping(request, contents=contents)
+    assert expected.status == "approved"
+    assert (
+        evaluate_automatic_mapping(request, contents=contents, evidence_checks=shared)
+        == expected
+    )
+    report = request.original.report
+    facts = tuple(
+        fact.model_copy(update={"value": "999999999"})
+        if fact.concept == request.proposal.source_concept
+        else fact
+        for fact in report.facts
+    )
+    changed = request.model_copy(
+        update={
+            "original": request.original.model_copy(
+                update={"report": report.model_copy(update={"facts": facts})}
+            )
+        }
+    )
+    refused = evaluate_automatic_mapping(changed, contents=contents)
+    assert refused.status == "abstain"
+    assert (
+        evaluate_automatic_mapping(changed, contents=contents, evidence_checks=shared)
+        == refused
+    )
+    assert (
+        evaluate_automatic_mapping(request, contents=contents, evidence_checks=shared)
+        == expected
+    )
+
+
+@pytest.mark.parametrize(
+    "limits", ({"max_retained_report_bytes": 0}, {"max_retained_reports": 0})
+)
+def test_disabled_report_retention_preserves_fingerprints(
+    tmp_path, monkeypatch, limits
+):
+    request, _, _, _ = case(tmp_path)
+    report = request.original.report
+    expected = report.replay_digest()
+    replay = ArelleParseReportV1.replay_digest
+    calls = []
+
+    def observed(item):
+        calls.append(True)
+        return replay(item)
+
+    monkeypatch.setattr(ArelleParseReportV1, "replay_digest", observed)
+    shared = AutomaticMappingEvidenceChecks(**limits)
+    assert shared.report_replay_digest(report) == expected
+    assert shared.report_replay_digest(report) == expected
+    assert len(calls) == 2
+
+
+@pytest.mark.parametrize("limit", ("count", "bytes"))
+def test_report_eviction_recomputes_without_changing_digests(
+    tmp_path, monkeypatch, limit
+):
+    request, _, _, _ = case(tmp_path)
+    report = request.original.report
+    other = report.model_copy(update={"filing_path": report.filing_path + ".other"})
+    expected = report.replay_digest()
+    replay = ArelleParseReportV1.replay_digest
+    calls = []
+
+    def observed(item):
+        calls.append(id(item))
+        return replay(item)
+
+    monkeypatch.setattr(ArelleParseReportV1, "replay_digest", observed)
+    limits = (
+        {"max_retained_reports": 1}
+        if limit == "count"
+        else {
+            "max_retained_report_bytes": len(
+                canonical_bytes(report.model_dump(mode="json"))
+            )
+            + len(canonical_bytes(other.model_dump(mode="json")))
+            - 1
+        }
+    )
+    shared = AutomaticMappingEvidenceChecks(**limits)
+    for item in (report, other, report):
+        assert shared.report_replay_digest(item) == expected
+    assert calls == [id(report), id(other), id(report)]
 
 
 @pytest.mark.parametrize(

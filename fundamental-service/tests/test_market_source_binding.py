@@ -216,7 +216,7 @@ def test_runner_preserves_transient_and_authorization_errors(
         def __getattr__(self, name):
             return getattr(application, name)
 
-        def prepare_valuation(self, request):
+        def prepare_valuation(self, request, *, deadline_at=None):
             raise ServiceError(
                 "TEST_UNAVAILABLE", "test", status_code=status_code, retryable=retryable
             )
@@ -497,6 +497,13 @@ def _source_bound_application(tmp_path):
     previous = fixture.artifacts.read
 
     class CombinedArtifacts:
+        def get(self, name):
+            return (
+                sources.get(name)
+                if name in sources.data
+                else fixture.artifacts.get(name)
+            )
+
         def read(self, name):
             return sources.data[name] if name in sources.data else previous(name)
 

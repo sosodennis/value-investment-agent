@@ -704,3 +704,32 @@ references compatible with the new metadata requirements, output digest
 Its three shared parser reports total 29,281,378 bytes and 5,554 facts. These are
 working-set observations, not a performance comparison or new-runtime numerical
 acceptance. Deployment and M1/M2/M3 acceptance remain outstanding.
+
+## Bounded mapping report fingerprint reuse
+
+Mapping operations now retain content fingerprints and replay digests for exact
+frozen report instances. Source assessment still binds the complete report,
+original metadata, integrity, evidence references, security identity and every
+supplied byte hash. Proposals remain independently evaluated; existing public
+request digests and signed evidence meanings are unchanged. A copied report has
+a new identity and cannot inherit fingerprints. The operation keeps at most
+eight reports and 64 MiB measured by canonical serialized report bytes, with LRU
+eviction. This is a cache retention budget, not a process or heap ceiling.
+
+A regression first observed six replay-digest computations for three evaluations
+of one report. The corrected same-operation path computes it once and preserves
+the entire decision. Changed-report, independent-operation, disabled-retention
+and positive byte/count eviction checks pass. Independent static review found no
+confirmed issue in the inspected source. This is workload evidence, not an
+end-to-end speedup claim; full-request serialization and separate verifier passes
+remain work to measure in the actual flow.
+
+705 related PostgreSQL-backed cases pass with zero skips. Changed-source types,
+Ruff/format, architecture guards and diff checks pass; the temporary database was
+removed. Exact command evidence is retained outside Git in
+`report-reuse-final-checks-receipt.json`, input digest
+`40500496be132af983b4872a123ebb79ce8e9141987859020e81f240268a8773`,
+output digest `e284eadb38ccece9d08ea2b73b703fdbd5cd360432928c50f8db1403ab44a330`.
+The increment also updates old market-source test ports to accept propagated
+deadlines and supply metadata, correcting failures exposed by broader CI.
+Installed source and real numerical acceptance are the next checks.

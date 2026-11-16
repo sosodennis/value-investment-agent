@@ -933,7 +933,7 @@ def evaluate_automatic_mapping(
                 accession_number=original.source.accession_number,
                 raw_content_hash=original.source.content_hash,
                 parser_input_hash=original.source.parser_input_hash,
-                parser_replay_digest=original.report.replay_digest(),
+                parser_replay_digest=checks.report_replay_digest(original.report),
                 observation_digests=tuple(sorted({sha256_digest(f) for f in selected})),
             )
         )
@@ -949,7 +949,7 @@ def evaluate_automatic_mapping(
             "reviewer": f"automatic:{request.evaluator_id}",
             "evidence_refs": (
                 original.source.content_hash,
-                original.report.replay_digest(),
+                checks.report_replay_digest(original.report),
                 policy_digest,
             ),
             "observation_scope": scope,
